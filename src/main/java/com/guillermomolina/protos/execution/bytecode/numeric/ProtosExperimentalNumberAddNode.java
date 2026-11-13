@@ -54,8 +54,8 @@ import com.oracle.truffle.api.nodes.Node;
 abstract class ProtosExperimentalNumberAddNode extends ProtosExperimentalNumberAddFastPathsBase {
 
     @Specialization(replaces = "doLL")
-    static Object doLLOvf(long left, long right, @Bind Node node) {
-        return addOrPromote(node, left, right);
+    static Object doLLOvf(VirtualFrame frame, long left, long right, @Bind Node node) {
+        return addOrPromote(frame, node, left, right);
     }
 
     @Specialization

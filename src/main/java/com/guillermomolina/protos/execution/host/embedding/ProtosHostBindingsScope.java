@@ -141,7 +141,7 @@ final class ProtosHostBindingsScope implements TruffleObject {
                     selected.readLocalSlot(member)
                             .filter(InteropLibrary::isValidValue)
                             .orElseThrow(() -> UnknownIdentifierException.create(member));
-            return process.readSelectedMember(selected, value);
+            return ProtosHostScalarProjection.export(process.readSelectedMember(selected, value));
         } finally {
             process.exitRootActor(token);
         }

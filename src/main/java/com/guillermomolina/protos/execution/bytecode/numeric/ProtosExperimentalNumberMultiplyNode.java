@@ -35,8 +35,8 @@ abstract class ProtosExperimentalNumberMultiplyNode
         extends ProtosExperimentalNumberMultiplyFastPathsBase {
 
     @Specialization(replaces = "doLL")
-    static Object doLLOvf(long left, long right, @Bind Node node) {
-        return multiplyOrPromote(node, left, right);
+    static Object doLLOvf(VirtualFrame frame, long left, long right, @Bind Node node) {
+        return multiplyOrPromote(frame, node, left, right);
     }
 
     @Fallback

@@ -9158,15 +9158,8 @@ final class CanonicalToBytecodeLowerer {
                     "I115 '+' send scratch locals were not allocated");
         }
         OperandStager stager = this::emitBodyExpressionToLocal;
-        if (!(send.receiver() instanceof CanonicalLiteral literal
-                && literal.kind() == CanonicalLiteral.Kind.NUMBER)) {
-            /*
-             * I115: only a number literal receiver is statically numeric;
-             * any other receiver may be a String whose standard selection
-             * IsStandardAddSelection observes through the Prelude.
-             */
-            currentRootMayRequirePrelude = true;
-        }
+        // Numeric and String admission both observe the invocation's Core.
+        currentRootMayRequirePrelude = true;
         builder.beginSourceSection(
                 send.span().startOffset(), send.span().length());
         builder.beginBlock();

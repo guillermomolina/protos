@@ -22,52 +22,59 @@ import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.nodes.Node;
+import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.api.bytecode.BytecodeNode;
 
 /**
- * I115 LONG-6: GraalPy PFactory-shaped exact numeric construction.
- *
- * <p>The active language Context owns the canonical BigInteger factory.
- * A specialization never walks the guest caller stack or reads a carrier
- * admission certificate to mint a large Integer.
+ * Exact numeric construction for the Core of the executing invocation.
+ * Primitive non-overflow arithmetic never enters this cold factory. The frame
+ * header supplies ownership, independently of which Core first entered a Context.
  */
 final class ProtosNumberFactory {
     private ProtosNumberFactory() {}
 
-    private static ProtosPrelude prelude(Node node) {
-        return ProtosLanguageContext.current(node).numericFactoryPreludeForRuntime();
+    static ProtosPrelude prelude(Node node, VirtualFrame frame) {
+        ProtosBytecodeRootNode root =
+                (ProtosBytecodeRootNode) BytecodeNode.get(node).getBytecodeRootNode();
+        root.requestCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE);
+        ProtosPrelude prelude = ProtosFrameArguments.admittedPreludeOrNull(frame.getArguments());
+        if (prelude == null) {
+            throw new IllegalStateException("numeric construction requires the executing Core");
+        }
+        return prelude;
     }
 
     @TruffleBoundary
-    static Object add(Node node, long left, long right) {
+    static Object add(ProtosPrelude prelude, long left, long right) {
         return ProtosNumericValueSupport.integerFromHost(
-                BigInteger.valueOf(left).add(BigInteger.valueOf(right)), prelude(node));
+                BigInteger.valueOf(left).add(BigInteger.valueOf(right)), prelude);
     }
 
     @TruffleBoundary
-    static Object subtract(Node node, long left, long right) {
+    static Object subtract(ProtosPrelude prelude, long left, long right) {
         return ProtosNumericValueSupport.integerFromHost(
-                BigInteger.valueOf(left).subtract(BigInteger.valueOf(right)), prelude(node));
+                BigInteger.valueOf(left).subtract(BigInteger.valueOf(right)), prelude);
     }
 
     @TruffleBoundary
-    static Object multiply(Node node, long left, long right) {
+    static Object multiply(ProtosPrelude prelude, long left, long right) {
         return ProtosNumericValueSupport.integerFromHost(
-                BigInteger.valueOf(left).multiply(BigInteger.valueOf(right)), prelude(node));
+                BigInteger.valueOf(left).multiply(BigInteger.valueOf(right)), prelude);
     }
 
     @TruffleBoundary
-    static Object add(Node node, Object left, Object right) {
-        return ProtosNumericValueSupport.addIntegers(left, right, prelude(node));
+    static Object add(ProtosPrelude prelude, Object left, Object right) {
+        return ProtosNumericValueSupport.addIntegers(left, right, prelude);
     }
 
     @TruffleBoundary
-    static Object subtract(Node node, Object left, Object right) {
-        return ProtosNumericValueSupport.subtractIntegers(left, right, prelude(node));
+    static Object subtract(ProtosPrelude prelude, Object left, Object right) {
+        return ProtosNumericValueSupport.subtractIntegers(left, right, prelude);
     }
 
     @TruffleBoundary
-    static Object multiply(Node node, Object left, Object right) {
-        return ProtosNumericValueSupport.multiplyIntegers(left, right, prelude(node));
+    static Object multiply(ProtosPrelude prelude, Object left, Object right) {
+        return ProtosNumericValueSupport.multiplyIntegers(left, right, prelude);
     }
 
     /**
@@ -76,7 +83,7 @@ final class ProtosNumberFactory {
      * caller signals the guest Error.
      */
     @TruffleBoundary
-    static Object divide(Node node, Object left, Object right) {
-        return ProtosNumericValueSupport.divideIntegersExactly(left, right, prelude(node));
+    static Object divide(ProtosPrelude prelude, Object left, Object right) {
+        return ProtosNumericValueSupport.divideIntegersExactly(left, right, prelude);
     }
 }

@@ -51,10 +51,9 @@ import org.junit.jupiter.api.Test;
  * numeric result exact whatever order operand families arrive in, and every
  * non-primitive pair takes the single in-node generic route.
  *
- * <p>I115 records as a divergence that no Prelude numeric-protocol admission
- * certificate is consulted (see {@code
- * ProtosExperimentalNumberAddFastPathsBase}); the former certificate tests
- * have no observable equivalent and are not asserted here.
+ * <p>Addition guards the selected behavior through the current prototype chain;
+ * its standard primitive branch remains specialized. Exact promotion uses the
+ * executing invocation's Core, including when one Context hosts several Cores.
  */
 final class ProtosPerf040E1NumericOperationReconciliationTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
@@ -337,9 +336,8 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
      * Matrix 11, execution level: in a noncanonical Prelude whose Integer
      * prototype selects a genuinely different {@code +}, an ordinary
      * {@code +} send on Integers runs that selected method, before and at
-     * signed-64 overflow, at the same operation site. This is the specified
-     * dispatch semantics; I115 records as a divergence that the standard
-     * Integer {@code +} is assumed (see the report).
+     * signed-64 overflow, at the same operation site. The standard arithmetic
+     * fast path must not bypass this ordinary selected behavior.
      */
     @Test
     void alternativeIntegerPlusIsTheSelectedMethod() throws Exception {
@@ -574,10 +572,16 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
                 .orElseThrow();
         // The generalization accepts exactly the replaced operand domain; it
         // may additionally bind its node to reach the caller's numeric factory.
+        // Execution-frame and node bindings are not dynamic operands.
         List<Class<?>> replacedOperands = Arrays.asList(primitive.getParameterTypes());
-        List<Class<?>> operands = Arrays.asList(method.getParameterTypes())
-                .subList(0, replacedOperands.size());
-        assertEquals(replacedOperands, operands, where);
+        List<Class<?>> signature = Arrays.asList(method.getParameterTypes());
+        int offset = signature.get(0) == com.oracle.truffle.api.frame.VirtualFrame.class
+                ? 1 : 0;
+        assertEquals(offset + replacedOperands.size() + 1, signature.size(), where);
+        assertEquals(replacedOperands,
+                signature.subList(offset, offset + replacedOperands.size()), where);
+        assertSame(com.oracle.truffle.api.nodes.Node.class,
+                signature.get(signature.size() - 1), where);
         assertSame(Object.class, method.getReturnType(), where);
     }
 

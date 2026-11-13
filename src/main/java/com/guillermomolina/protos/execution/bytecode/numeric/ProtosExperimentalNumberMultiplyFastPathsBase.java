@@ -54,10 +54,10 @@ abstract class ProtosExperimentalNumberMultiplyFastPathsBase extends Node {
         return left * right;
     }
 
-    static Object multiplyOrPromote(Node node, long left, long right) {
+    static Object multiplyOrPromote(VirtualFrame frame, Node node, long left, long right) {
         long result = left * right;
         if (((Math.abs(left) | Math.abs(right)) >>> 31) != 0 && ((right != 0L && result / right != left) || (left == Long.MIN_VALUE && right == -1L))) {
-            return ProtosNumberFactory.multiply(node, left, right);
+            return ProtosNumberFactory.multiply(ProtosNumberFactory.prelude(node, frame), left, right);
         }
         return result;
     }
@@ -69,7 +69,7 @@ abstract class ProtosExperimentalNumberMultiplyFastPathsBase extends Node {
         Object argument = ProtosNumericValueSupport.guestValue(right);
         if (ProtosNumericValueSupport.isCurrentInteger(receiver)
                 && ProtosNumericValueSupport.isCurrentInteger(argument)) {
-            return ProtosNumberFactory.multiply(node, receiver, argument);
+            return ProtosNumberFactory.multiply(ProtosNumberFactory.prelude(node, frame), receiver, argument);
         }
         return ProtosI115DirectNumericFallback.send(root, frame, left, "*", right);
     }

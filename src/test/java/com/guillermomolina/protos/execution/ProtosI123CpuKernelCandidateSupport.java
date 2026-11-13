@@ -17,7 +17,6 @@
 
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosMatrixValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import java.lang.management.CompilationMXBean;
@@ -81,10 +80,10 @@ final class ProtosI123CpuKernelCandidateSupport {
                 volume);
     }
 
-    /** Eligibility scan: genuine Float carriers only; nothing is converted. */
+    /** Eligibility scan: primitive Float carriers only; nothing is converted. */
     static boolean homogeneousFloat(List<Object> elements) {
         for (Object element : elements) {
-            if (!(element instanceof ProtosFloatValue)) {
+            if (!(element instanceof Double)) {
                 return false;
             }
         }
@@ -109,7 +108,7 @@ final class ProtosI123CpuKernelCandidateSupport {
 
     /**
      * A1: keeps the R1 {@code Object[]} carriers, unboxes each Float, accumulates strictly from the
-     * first product in ascending k and boxes a fresh Float per cell. Null declines the input.
+     * first product in ascending k and boxes the Float result of each cell. Null declines the input.
      */
     static ProtosMatrixValue strictR1FloatMatmulCandidate(
             ProtosMatrixValue left, ProtosMatrixValue right) {
@@ -137,15 +136,15 @@ final class ProtosI123CpuKernelCandidateSupport {
         for (int row = 0; row < rows; row++) {
             for (int column = 0; column < columns; column++) {
                 double accumulator =
-                        ((ProtosFloatValue) left.get(row * inner)).value()
-                                * ((ProtosFloatValue) right.get(column)).value();
+                        ((Double) left.get(row * inner)).doubleValue()
+                                * ((Double) right.get(column)).doubleValue();
                 for (int k = 1; k < inner; k++) {
                     double product =
-                            ((ProtosFloatValue) left.get(row * inner + k)).value()
-                                    * ((ProtosFloatValue) right.get(k * columns + column)).value();
+                            ((Double) left.get(row * inner + k)).doubleValue()
+                                    * ((Double) right.get(k * columns + column)).doubleValue();
                     accumulator = accumulator + product;
                 }
-                cells[row * columns + column] = new ProtosFloatValue(accumulator);
+                cells[row * columns + column] = Double.valueOf(accumulator);
             }
         }
         return cells;
@@ -153,7 +152,7 @@ final class ProtosI123CpuKernelCandidateSupport {
 
     /**
      * T: the same guard as A1, then temporary {@code double[]} packing, the row/k/column kernel
-     * with one ascending-k accumulator per output column, and fresh Floats. Null declines.
+     * with one ascending-k accumulator per output column, and boxed Float results. Null declines.
      */
     static ProtosMatrixValue strictTemporaryPackedMatmulCandidate(
             ProtosMatrixValue left, ProtosMatrixValue right) {
@@ -182,7 +181,7 @@ final class ProtosI123CpuKernelCandidateSupport {
     static double[] packFloats(List<Object> elements) {
         double[] packed = new double[elements.size()];
         for (int index = 0; index < packed.length; index++) {
-            packed[index] = ((ProtosFloatValue) elements.get(index)).value();
+            packed[index] = ((Double) elements.get(index)).doubleValue();
         }
         return packed;
     }
@@ -190,7 +189,7 @@ final class ProtosI123CpuKernelCandidateSupport {
     static Object[] materializeFloats(double[] values) {
         Object[] cells = new Object[values.length];
         for (int index = 0; index < cells.length; index++) {
-            cells[index] = new ProtosFloatValue(values[index]);
+            cells[index] = Double.valueOf(values[index]);
         }
         return cells;
     }

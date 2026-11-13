@@ -35,8 +35,8 @@ abstract class ProtosExperimentalNumberSubtractNode
         extends ProtosExperimentalNumberSubtractFastPathsBase {
 
     @Specialization(replaces = "doLL")
-    static Object doLLOvf(long left, long right, @Bind Node node) {
-        return subtractOrPromote(node, left, right);
+    static Object doLLOvf(VirtualFrame frame, long left, long right, @Bind Node node) {
+        return subtractOrPromote(frame, node, left, right);
     }
 
     @Fallback

@@ -1665,117 +1665,70 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
-    /*
-     * I115: GraalPy PyNumberAddNode admission.
-     *
-     * GraalPy's NumberAdd executes its built-in int/float/TruffleString
-     * specializations and otherwise calls the selected __add__. Protos
-     * cannot send from the synchronous NumberAdd fallback, so the lowering
-     * observes the receiver's selection first, exactly once and before the
-     * right operand is evaluated (the ordinary send selection point):
-     * <ul>
-     *   <li>numeric receivers: true. KNOWN I115 TEMPORARY SEMANTIC
-     *       DIVERGENCE retained from ProtosI115DirectNumericFallback: the
-     *       standard Number '+' is assumed, a program-redefined Number '+'
-     *       is not selected;
-     *   <li>String receivers: true only when the behavior actually
-     *       selected for '+' is exactly the standard String concatenation
-     *       ({@link ProtosStandardStringProtocol#isStandardConcatenationBehavior});
-     *   <li>anything else: false, and the lowering dispatches through
-     *       GetMethod and CallUnaryMethod.
-     * </ul>
-     * Nothing is invoked here. A String cannot own slots, so the cached
-     * selection starts at the observing Prelude's String prototype and
-     * guards every Shape along the delegation chain: a later override,
-     * removal or reassignment of '+' misses the cache.
-     */
+    /** Guard the actual + selection; standard scalar hits retain NumberAdd. */
     @Operation(storeBytecodeIndex = false)
     public static final class IsStandardAddSelection {
-
-        @Specialization
-        public static boolean doLong(long receiver) {
-            return true;
-        }
-
-        @Specialization
-        public static boolean doDouble(double receiver) {
-            return true;
-        }
-
         @Specialization(
-                guards = {
-                    "stringPrototype != null",
-                    "stringPrototype == cachedStringPrototype",
-                    "selection != null",
-                    "selection.isValid()"
-                },
-                limit = "1")
-        public static boolean doStringCached(
-                ProtosStringValue receiver,
+                guards = {"prototype != null", "prelude == cachedPrelude",
+                    "prototype == cachedPrototype", "selection != null", "selection.isValid()"},
+                limit = "3")
+        public static boolean cached(
+                Object receiver,
                 @Bind VirtualFrame frame,
-                @Bind("stringPrototypeOrNull(frame)") ProtosObjectValue stringPrototype,
-                @Cached("stringPrototype") ProtosObjectValue cachedStringPrototype,
-                @Cached("selectAdd(cachedStringPrototype)")
+                @Bind("prelude(frame)") ProtosPrelude prelude,
+                @Bind("prototype(receiver, prelude)") ProtosObjectValue prototype,
+                @Cached("prelude") ProtosPrelude cachedPrelude,
+                @Cached("prototype") ProtosObjectValue cachedPrototype,
+                @Cached("selectAdd(cachedPrototype)")
                         ProtosValueLookup.StructuralSelection selection) {
-            return ProtosStandardStringProtocol.isStandardConcatenationBehavior(
-                    selection.read());
+            return standard(receiver, selection.read(), selection.home(), cachedPrelude);
         }
 
-        @Specialization(replaces = "doStringCached")
-        public static boolean doString(
-                ProtosStringValue receiver,
-                @Bind VirtualFrame frame,
-                @Bind ProtosBytecodeRootNode root) {
-            Object[] arguments = frame.getArguments();
-            ProtosPrelude prelude =
-                    ProtosFrameArguments.admittedPreludeOrNull(arguments);
-            if (prelude == null) {
-                /*
-                 * No observable Prelude: not admitted. The dispatched
-                 * GetMethod performs the real selection and its Errors.
-                 */
-                if (ProtosFrameArguments.inheritsUntransportedCallerPrelude(arguments)) {
-                    root.requestCallerNeed(NEEDS_CALLER_PRELUDE);
-                }
-                return false;
-            }
-            return selectsStandardString(receiver, prelude);
+        @Specialization(replaces = "cached")
+        public static boolean uncached(Object receiver, @Bind VirtualFrame frame) {
+            ProtosPrelude prelude = prelude(frame);
+            if (prototype(receiver, prelude) == null) return false;
+            return selectStandard(receiver, prelude);
         }
 
-        @Fallback
-        public static boolean doOther(Object receiver) {
-            return ProtosNumericValueSupport.isCurrentRealNumber(receiver);
+        static ProtosPrelude prelude(VirtualFrame frame) {
+            return ProtosFrameArguments.admittedPreludeOrNull(frame.getArguments());
         }
 
-        static ProtosObjectValue stringPrototypeOrNull(VirtualFrame frame) {
-            ProtosPrelude prelude =
-                    ProtosFrameArguments.admittedPreludeOrNull(frame.getArguments());
-            return prelude == null ? null : prelude.stringPrototype();
+        static ProtosObjectValue prototype(Object receiver, ProtosPrelude prelude) {
+            if (prelude == null || !(receiver instanceof ProtosStringValue
+                    || ProtosNumericValueSupport.isCurrentRealNumber(receiver))) return null;
+            return (ProtosObjectValue) ProtosValueLookup.delegationParent(receiver, prelude)
+                    .orElse(null);
         }
 
-        /* Specialization-time only. */
         @TruffleBoundary
-        static ProtosValueLookup.StructuralSelection selectAdd(
-                ProtosObjectValue stringPrototype) {
-            return ProtosValueLookup.selectStructural(stringPrototype, "+");
+        static ProtosValueLookup.StructuralSelection selectAdd(ProtosObjectValue prototype) {
+            return ProtosValueLookup.selectStructural(prototype, "+");
         }
 
-        /*
-         * The complete selection, observed without invoking anything. A
-         * missing or unsupported selection is not standard: the dispatched
-         * GetMethod then raises its own Error.
-         */
-        @TruffleBoundary
-        static boolean selectsStandardString(
-                ProtosStringValue receiver, ProtosPrelude prelude) {
-            try {
-                return ProtosValueLookup.lookup(receiver, "+", prelude)
-                        .map(found -> ProtosStandardStringProtocol
-                                .isStandardConcatenationBehavior(found.value()))
-                        .orElse(false);
-            } catch (UnsupportedOperationException unsupportedRepresentation) {
-                return false;
+        static boolean standard(Object receiver, Object behavior,
+                ProtosObjectValue home, ProtosPrelude prelude) {
+            if (receiver instanceof ProtosStringValue) {
+                return ProtosStandardStringProtocol.isStandardConcatenationBehavior(behavior);
             }
+            if (!(behavior instanceof ProtosClosureValue closure)) return false;
+            if (ProtosNumericValueSupport.isCurrentInteger(receiver)) {
+                return ProtosStandardIntegerProtocol.canonicalOperationForSelection(
+                        closure, home, "+", prelude)
+                        == ProtosStandardIntegerProtocol.CanonicalIntegerOperation.ADD;
+            }
+            return ProtosNumericValueSupport.isCurrentFloat(receiver)
+                    && ProtosStandardFloatProtocol.canonicalOperationForSelection(
+                            closure, home, "+", prelude)
+                            == ProtosStandardFloatProtocol.CanonicalFloatOperation.ADD;
+        }
+
+        @TruffleBoundary
+        static boolean selectStandard(Object receiver, ProtosPrelude prelude) {
+            return ProtosValueLookup.lookup(receiver, "+", prelude)
+                    .map(found -> standard(receiver, found.value(), found.home(), prelude))
+                    .orElse(false);
         }
     }
 

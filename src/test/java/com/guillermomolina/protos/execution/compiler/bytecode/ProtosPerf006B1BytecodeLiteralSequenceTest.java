@@ -25,7 +25,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.parser.ast.SurfaceSequence;
-import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.guillermomolina.protos.semantic.Canonicalizer;
@@ -86,9 +85,9 @@ final class ProtosPerf006B1BytecodeLiteralSequenceTest {
                         Double.doubleToRawLongBits(1.25d),
                         Double.doubleToRawLongBits(
                                 assertInstanceOf(
-                                                ProtosFloatValue.class,
+                                                Double.class,
                                                 executeBytecodeValue("1.25"))
-                                        .value()));
+                                        .doubleValue()));
 
                 assertEquals(Long.toString(42), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(executeBytecodeValue(
                                                 "\"discarded\"\nfalse\n0x2A")));

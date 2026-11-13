@@ -319,6 +319,27 @@ final class ProtosStandardPolyglotEmbeddingTest {
     }
 
     @Test
+    void guestFloatAndBooleanRoundTripsPreserveTheirOrigin() {
+        try (Context context = builder().build()) {
+            context.eval(ProtosLanguage.ID,
+                    "id: (x) => { x }\nfloat: 1.5\nflag: true\ngetFloat: () => { 1.5 }\ngetFlag: () => { true }\n0");
+            Value bindings = context.getBindings(ProtosLanguage.ID);
+            Value id = bindings.getMember("id");
+            assertEquals(1.5d, id.execute(bindings.getMember("float")).asDouble());
+            assertTrue(id.execute(bindings.getMember("flag")).asBoolean());
+            assertEquals(1.5d, id.execute(bindings.getMember("getFloat").execute()).asDouble());
+            assertTrue(id.execute(bindings.getMember("getFlag").execute()).asBoolean());
+            assertEquals(2.5d, id.execute(context.eval(ProtosLanguage.ID, "2.5")).asDouble());
+            assertFalse(id.execute(context.eval(ProtosLanguage.ID, "false")).asBoolean());
+            Value negativeZero = context.eval(ProtosLanguage.ID, "0.0 / (0.0 - 1.0)");
+            assertEquals(Double.doubleToRawLongBits(-0.0d),
+                    Double.doubleToRawLongBits(id.execute(negativeZero).asDouble()));
+            Value nan = context.eval(ProtosLanguage.ID, "0.0 / 0.0");
+            assertTrue(Double.isNaN(id.execute(nan).asDouble()));
+        }
+    }
+
+    @Test
     void unsupportedJavaArgumentsAreRejectedBeforeGuestExecution() {
         try (Context context = builder().build()) {
             context.eval(ProtosLanguage.ID, SCALAR_SOURCE);
@@ -358,12 +379,9 @@ final class ProtosStandardPolyglotEmbeddingTest {
         }
     }
 
-    /**
-     * I115-H6: an Error escaping a source-backed host entry reaches the host without the ordinary
-     * host-entry failure protocol, so the entry itself does not fail the RootActor.
-     */
+    /** PROCESS_IO: an unhandled outermost-entry Error terminates the RootActor and Process. */
     @Test
-    void escapingErrorIsNotMappedToRootActorFailureByTheExperimentalEntry() {
+    void escapingErrorTerminatesTheRootActorAndRejectsLaterEntry() {
         try (Context context = builder().build()) {
             context.eval(
                     ProtosLanguage.ID,
@@ -378,15 +396,15 @@ final class ProtosStandardPolyglotEmbeddingTest {
             ProtosEmbeddedProcess process = embedded(context);
 
             assertThrows(PolyglotException.class, boom::execute);
-            assertTrue(process.isLive(), "no outermost-entry failure processing");
-            assertEquals(1, safe.execute().asInt());
+            assertFalse(process.isLive(), "the outermost entry applies failure processing");
+            assertThrows(PolyglotException.class, safe::execute);
             assertSame(process, embedded(context));
         }
     }
 
-    /** I115-H6: a stopped Process is not consulted by the experimental source-backed entry. */
+    /** PROCESS_IO: retained Closure adapters cannot restart a terminated Process. */
     @Test
-    void terminatedProcessDoesNotGateSourceBackedHostEntry() {
+    void terminatedProcessRejectsSourceBackedHostEntry() {
         try (Context context = builder().build()) {
             context.eval(ProtosLanguage.ID, "safe: () => { 1 }\n0");
             Value safe = context.getBindings(ProtosLanguage.ID).getMember("safe");
@@ -395,7 +413,9 @@ final class ProtosStandardPolyglotEmbeddingTest {
             process.processForTesting().requestTerminationForRuntime();
             assertFalse(process.isLive());
 
-            assertEquals(1, safe.execute().asInt(), "no Process admission decision");
+            assertThrows(PolyglotException.class, safe::execute);
+            assertFalse(process.isLive());
+            assertSame(process, embedded(context));
         }
     }
 
@@ -477,12 +497,9 @@ final class ProtosStandardPolyglotEmbeddingTest {
         }
     }
 
-    /**
-     * I115-H6: source-backed execution does not take RootActor admission, so it is not excluded
-     * while another thread holds the RootActor token. Binding reads above remain exclusive.
-     */
+    /** PROCESS_IO: source-backed host calls obey the same RootActor exclusion as evaluations. */
     @Test
-    void sourceBackedExecutionIsNotExcludedByAHeldRootActor() throws Exception {
+    void sourceBackedExecutionIsRejectedByAHeldRootActor() throws Exception {
         try (Context context = builder().build()) {
             context.eval(ProtosLanguage.ID, "literal: () => { 8 }\nid: (x) => { x }\n0");
             Value bindings = context.getBindings(ProtosLanguage.ID);
@@ -491,11 +508,23 @@ final class ProtosStandardPolyglotEmbeddingTest {
             ProtosEmbeddedProcess process = embedded(context);
             Thread token = process.enterRootActor();
             try {
-                assertEquals(
-                        8L,
-                        CompletableFuture.supplyAsync(() -> literal.execute().asLong()).get());
-                assertEquals(
-                        3L, CompletableFuture.supplyAsync(() -> id.execute(3).asLong()).get());
+                for (int invocation = 0; invocation < 2; invocation++) {
+                    Value callable = invocation == 0 ? literal : id;
+                    Object[] supplied = invocation == 0 ? new Object[0] : new Object[] {3};
+                    Throwable rejected = CompletableFuture.supplyAsync(() -> {
+                        try {
+                            callable.execute(supplied);
+                            return (Throwable) null;
+                        } catch (PolyglotException failure) {
+                            return failure;
+                        }
+                    }).get(2, java.util.concurrent.TimeUnit.SECONDS);
+                    assertNotNull(rejected, "concurrent entry is rejected before execution");
+                    PolyglotException failure = (PolyglotException) rejected;
+                    assertFalse(failure.isInternalError());
+                    assertTrue(failure.getMessage().contains("Protos RootActor"),
+                            "a RootActor exclusion is required, not an unrelated host rejection");
+                }
                 assertFalse(
                         process.permitsUnadmittedNonSuspendingHostEntry(),
                         "the held token is untouched");
@@ -503,6 +532,8 @@ final class ProtosStandardPolyglotEmbeddingTest {
                 process.exitRootActor(token);
             }
             assertTrue(process.isLive());
+            assertEquals(8L, literal.execute().asLong(), "zero-arg call admitted after release");
+            assertEquals(3L, id.execute(3).asLong(), "one-arg call admitted after release");
         }
     }
 

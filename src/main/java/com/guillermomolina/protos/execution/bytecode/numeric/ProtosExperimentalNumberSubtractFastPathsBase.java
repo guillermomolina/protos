@@ -54,10 +54,10 @@ abstract class ProtosExperimentalNumberSubtractFastPathsBase extends Node {
         return left - right;
     }
 
-    static Object subtractOrPromote(Node node, long left, long right) {
+    static Object subtractOrPromote(VirtualFrame frame, Node node, long left, long right) {
         long result = left - right;
         if (((left ^ right) & (left ^ result)) < 0L) {
-            return ProtosNumberFactory.subtract(node, left, right);
+            return ProtosNumberFactory.subtract(ProtosNumberFactory.prelude(node, frame), left, right);
         }
         return result;
     }
@@ -69,7 +69,7 @@ abstract class ProtosExperimentalNumberSubtractFastPathsBase extends Node {
         Object argument = ProtosNumericValueSupport.guestValue(right);
         if (ProtosNumericValueSupport.isCurrentInteger(receiver)
                 && ProtosNumericValueSupport.isCurrentInteger(argument)) {
-            return ProtosNumberFactory.subtract(node, receiver, argument);
+            return ProtosNumberFactory.subtract(ProtosNumberFactory.prelude(node, frame), receiver, argument);
         }
         return ProtosI115DirectNumericFallback.send(root, frame, left, "-", right);
     }

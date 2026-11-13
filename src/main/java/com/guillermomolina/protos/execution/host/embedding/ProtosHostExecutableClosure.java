@@ -197,10 +197,10 @@ final class ProtosHostExecutableClosure implements TruffleObject {
             try {
                 if (token == null) {
                     // A nested entry is a foreign callback: ordinary synchronous invocation.
-                    return invokeGeneric(receiver.closure, supplied, receiver.caller);
+                    return hostResult(receiver, invokeGeneric(receiver.closure, supplied, receiver.caller));
                 }
-                return ProtosHostEntrySuspension.executeSelected(
-                        embedding, receiver.closure, supplied, receiver.caller);
+                return hostResult(receiver, ProtosHostEntrySuspension.executeSelected(
+                        embedding, receiver.closure, supplied, receiver.caller));
             } catch (ProtosSignalException failure) {
                 embedding.outermostEntryFailed(token, failure);
                 throw failure;
@@ -247,7 +247,7 @@ final class ProtosHostExecutableClosure implements TruffleObject {
                 if (ProtosTailCallContinuation.isPending(outcome)) {
                     outcome = drivePending(embedding, outcome);
                 }
-                return outcome;
+                return hostResult(receiver, outcome);
             } catch (ProtosSignalException failure) {
                 if (embedding != null) {
                     embedding.outermostEntryFailed(token, failure);
@@ -333,7 +333,7 @@ final class ProtosHostExecutableClosure implements TruffleObject {
             if (result instanceof Integer small) {
                 return ProtosNumericValueSupport.guestValue(small);
             }
-            return result;
+            return ProtosHostScalarProjection.export(result);
         }
 
         @TruffleBoundary
@@ -360,7 +360,11 @@ final class ProtosHostExecutableClosure implements TruffleObject {
         } else {
             for (int index = 0; index < arguments.length; index++) {
                 Object argument = arguments[index];
-                if (!ProtosValueLookup.isProtosValue(argument)) {
+                if (argument instanceof ProtosHostScalarProjection projection) {
+                    if (admitted == arguments) admitted = arguments.clone();
+                    admitted[index] = projection.value;
+                } else if (argument instanceof Double || argument instanceof Boolean
+                        || !ProtosValueLookup.isProtosValue(argument)) {
                     if (admitted == arguments) {
                         admitted = arguments.clone();
                     }

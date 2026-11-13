@@ -286,9 +286,11 @@ class ProtosForeignValueProjectionTest {
                         .scalar());
         assertEquals(TWO_POW_63, ProtosForeignAdmissionDescriptor.integral(TWO_POW_63).scalar());
         assertEquals(5L, ProtosForeignAdmissionDescriptor.integral(5).scalar());
-        // A forged guest Integer or an unnormalized host scalar is never an Integer descriptor.
+        assertEquals(1L, new ProtosForeignAdmissionDescriptor(
+                ProtosForeignAdmissionDescriptor.Kind.INTEGER, Long.valueOf(1), null, Set.of()).scalar());
+        // Reject unnormalized host scalars and non-integral source categories.
         for (Object forged : new Object[] {
-                Long.valueOf(1L), BigInteger.ONE, 1, 1.0d, "1"}) {
+                BigInteger.ONE, 1, 1.0d, "1"}) {
             assertThrows(IllegalArgumentException.class,
                     () -> new ProtosForeignAdmissionDescriptor(
                             ProtosForeignAdmissionDescriptor.Kind.INTEGER,

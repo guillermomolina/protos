@@ -80,12 +80,12 @@ abstract class ProtosExperimentalNumberAddFastPathsBase extends Node {
      * the long sum, or on signed-64 overflow the exact large Integer of the
      * caller's Prelude.
      */
-    static Object addOrPromote(Node node, long left, long right) {
+    static Object addOrPromote(VirtualFrame frame, Node node, long left, long right) {
         long sum = left + right;
         if (((left ^ sum) & (right ^ sum)) >= 0L) {
             return sum;
         }
-        return ProtosNumberFactory.add(node, left, right);
+        return ProtosNumberFactory.add(ProtosNumberFactory.prelude(node, frame), left, right);
     }
 
     /* Signed-64 overflow: the exact large Integer of the caller's Prelude. */
@@ -106,7 +106,7 @@ abstract class ProtosExperimentalNumberAddFastPathsBase extends Node {
         Object argument = ProtosNumericValueSupport.guestValue(right);
         if (ProtosNumericValueSupport.isCurrentInteger(receiver)
                 && ProtosNumericValueSupport.isCurrentInteger(argument)) {
-            return ProtosNumberFactory.add(node, receiver, argument);
+            return ProtosNumberFactory.add(ProtosNumberFactory.prelude(node, frame), receiver, argument);
         }
         return ProtosI115DirectNumericFallback.send(root, frame, left, "+", right);
     }

@@ -28,6 +28,9 @@ import com.guillermomolina.protos.runtime.ProtosIdentityMapValue;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.numeric.ProtosNumericHashKey;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
+import com.guillermomolina.protos.runtime.ProtosPrelude;
+import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -121,14 +124,16 @@ final class ProtosPerf025MapPhysicalIndexTest {
     }
 
     @Test
-    void identityMapIndexUsesSemanticIdentityHashWithoutJavaIdentityAssumption() {
+    void identityMapIndexUsesSemanticIdentityHashWithoutJavaIdentityAssumption() throws Exception {
         ProtosObjectValue parent = ProtosObjectValue.rootObject();
         ProtosIdentityMapValue map = new ProtosIdentityMapValue(parent);
 
-        Long first =
-                Long.valueOf(42);
-        Long semanticallyIdentical =
-                Long.valueOf(42);
+        // Independently minted large values retain the distinct-representation
+        // witness without depending on a primitive box cache's allocation policy.
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(Path.of("protos", "lib", "core"));
+        BigInteger exact = BigInteger.ONE.shiftLeft(64);
+        Object first = ProtosNumericValueSupport.integerFromHost(exact, prelude);
+        Object semanticallyIdentical = ProtosNumericValueSupport.integerFromHost(exact, prelude);
 
         assertNotSame(first, semanticallyIdentical);
         assertTrue(ProtosIdentity.identical(first, semanticallyIdentical));

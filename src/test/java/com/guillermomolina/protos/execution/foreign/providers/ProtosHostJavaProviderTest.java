@@ -31,7 +31,6 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActor;
 import com.guillermomolina.protos.runtime.ProtosActorValueTransfer;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
-import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -132,8 +131,8 @@ class ProtosHostJavaProviderTest {
     void javaScalarsAdmitThroughD188AndArgumentsCrossOnlyLosslessly() throws Exception {
         try (Fixture fixture = new Fixture()) {
             assertEquals("5", integer(fixture.eval(G + "G.add(2, 3)")));
-            assertEquals(1.5, ((ProtosFloatValue) fixture.eval(G + "G.half(3.0)")).value());
-            assertEquals(0.25, ((ProtosFloatValue) fixture.eval(G + "G.widen(0.25)")).value());
+            assertEquals(1.5, ((Double) fixture.eval(G + "G.half(3.0)")).doubleValue());
+            assertEquals(0.25, ((Double) fixture.eval(G + "G.widen(0.25)")).doubleValue());
             assertSame(Boolean.FALSE, fixture.eval(G + "G.negate(true)"));
             assertEquals(String.valueOf(BigInteger.TEN.pow(40)), integer(fixture.eval(G + "G.square(100000000000000000000)")));
             assertSame(ProtosNullValue.INSTANCE, fixture.eval(G + "G.nothing()"));

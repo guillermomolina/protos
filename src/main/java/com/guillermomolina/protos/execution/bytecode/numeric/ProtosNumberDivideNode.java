@@ -91,7 +91,7 @@ abstract class ProtosNumberDivideNode extends Node {
     static Object divideIntegers(ProtosBytecodeRootNode root, VirtualFrame frame,
             Node node, Object left, Object right) {
         try {
-            return ProtosNumberFactory.divide(node, left, right);
+            return ProtosNumberFactory.divide(ProtosNumberFactory.prelude(node, frame), left, right);
         } catch (ArithmeticException zeroDivisor) {
             throw ProtosI115DirectNumericFallback.unsupported(root, frame);
         }

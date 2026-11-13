@@ -27,7 +27,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosComplexNumericSupport;
-import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosIdentity;
 import com.guillermomolina.protos.runtime.ProtosMatrixValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
@@ -41,12 +40,9 @@ import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
-import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 import java.util.SplittableRandom;
 import com.guillermomolina.protos.execution.ProtosI123CpuKernelCandidateSupport.CandidateShape;
 import com.guillermomolina.protos.execution.ProtosI123CpuKernelCandidateSupport.PathPlan;
@@ -166,7 +162,7 @@ final class ProtosI123CpuKernelEligibilityTest {
                         Long.valueOf(0), Long.valueOf(1), prelude);
 
         ProtosMatrixValue fractions = generic(prelude, a, 1, 2, half, third);
-        ProtosMatrixValue mixed = generic(prelude, a, 2, 1, Long.valueOf(1), new ProtosFloatValue(1.0d));
+        ProtosMatrixValue mixed = generic(prelude, a, 2, 1, Long.valueOf(1), Double.valueOf(1.0d));
         ProtosMatrixValue exact = generic(prelude, a, 1, 2, big, Long.valueOf(1));
         ProtosMatrixValue ones = generic(prelude, a, 2, 1, Long.valueOf(1), Long.valueOf(1));
         ProtosMatrixValue imaginary = generic(prelude, a, 1, 1, complex);
@@ -336,16 +332,16 @@ final class ProtosI123CpuKernelEligibilityTest {
         double e = Math.scalb(1.0d, -27);
         Object leftComplex =
                 ProtosComplexNumericSupport.normalize(
-                        new ProtosFloatValue(1 + e), new ProtosFloatValue(1.0d), prelude);
+                        Double.valueOf(1 + e), Double.valueOf(1.0d), prelude);
         Object rightComplex =
                 ProtosComplexNumericSupport.normalize(
-                        new ProtosFloatValue(1 - e), new ProtosFloatValue(1.0d), prelude);
+                        Double.valueOf(1 - e), Double.valueOf(1.0d), prelude);
         assertTrue(ProtosComplexNumericSupport.isComplex(leftComplex));
 
         double[][] in = inputs(4, 7, 8);
         Object[] heterogeneousValues = new Object[in[0].length];
         for (int index = 0; index < heterogeneousValues.length; index++) {
-            heterogeneousValues[index] = new ProtosFloatValue(in[0][index]);
+            heterogeneousValues[index] = Double.valueOf(in[0][index]);
         }
         heterogeneousValues[heterogeneousValues.length - 1] = Long.valueOf(1);
         ProtosMatrixValue heterogeneousLast = generic(prelude, a, 4, 7, heterogeneousValues);
@@ -354,7 +350,7 @@ final class ProtosI123CpuKernelEligibilityTest {
         ProtosMatrixValue fractions = generic(prelude, a, 1, 2, half, third);
         ProtosMatrixValue ones = generic(prelude, a, 2, 1, Long.valueOf(1), Long.valueOf(1));
         ProtosMatrixValue exact = generic(prelude, a, 1, 2, big, Long.valueOf(1));
-        ProtosMatrixValue mixed = generic(prelude, a, 1, 2, Long.valueOf(1), new ProtosFloatValue(1.0d));
+        ProtosMatrixValue mixed = generic(prelude, a, 1, 2, Long.valueOf(1), Double.valueOf(1.0d));
         ProtosMatrixValue floatColumn = matrix(prelude, a, 2, 1, new double[] {1.0d, 1.0d});
         ProtosMatrixValue complexLeft = generic(prelude, a, 1, 1, leftComplex);
         ProtosMatrixValue complexRight = generic(prelude, a, 1, 1, rightComplex);
@@ -470,10 +466,10 @@ final class ProtosI123CpuKernelEligibilityTest {
                 default -> {
                     Object[] cells = new Object[expected.length];
                     for (int index = 0; index < cells.length; index++) {
-                        cells[index] = new ProtosFloatValue(expected[index]);
+                        cells[index] = Double.valueOf(expected[index]);
                     }
                     escapedResult = cells;
-                    consumed += ((ProtosFloatValue) cells[cells.length - 1]).value();
+                    consumed += ((Double) cells[cells.length - 1]).doubleValue();
                 }
             }
         }
@@ -593,7 +589,7 @@ final class ProtosI123CpuKernelEligibilityTest {
     private static double[] packFloatOnly(List<Object> elements) {
         double[] packed = new double[elements.size()];
         for (int index = 0; index < packed.length; index++) {
-            if (!(elements.get(index) instanceof ProtosFloatValue)) {
+            if (!(elements.get(index) instanceof Double)) {
                 return null;
             }
             packed[index] = ProtosNumericValueSupport.currentFloatValue(elements.get(index));
@@ -603,7 +599,7 @@ final class ProtosI123CpuKernelEligibilityTest {
 
     /**
      * Same shape, parent and cell families as the public result; Float cells bit-equal (raw bits
-     * for zeros) and fresh: no Float cell is the public result's or any {@code others} element.
+     * for zeros). Matrix identity stays fresh; scalar boxing identity is not semantic state.
      */
     private static void assertCandidateMatches(
             ProtosMatrixValue expected, ProtosMatrixValue actual, ProtosMatrixValue... others) {
@@ -612,20 +608,17 @@ final class ProtosI123CpuKernelEligibilityTest {
         assertTrue(ProtosIdentity.identical(expected.rowsValue(), actual.rowsValue()));
         assertTrue(ProtosIdentity.identical(expected.columnsValue(), actual.columnsValue()));
         assertSame(expected.parent().orElseThrow(), actual.parent().orElseThrow());
-        Set<Object> foreign = Collections.newSetFromMap(new IdentityHashMap<>());
-        foreign.addAll(expected.indexedSnapshot());
+
         for (ProtosMatrixValue other : others) {
             assertNotSame(other, actual);
-            foreign.addAll(other.indexedSnapshot());
         }
         List<Object> want = expected.indexedSnapshot();
         List<Object> got = actual.indexedSnapshot();
         assertEquals(want.size(), got.size());
         for (int index = 0; index < want.size(); index++) {
             assertEquals(want.get(index).getClass(), got.get(index).getClass());
-            if (got.get(index) instanceof ProtosFloatValue) {
+            if (got.get(index) instanceof Double) {
                 assertBits(floats(List.of(want.get(index))), floats(List.of(got.get(index))));
-                assertTrue(!foreign.contains(got.get(index)), "Float cell " + index + " is not fresh");
             } else {
                 assertTrue(ProtosIdentity.identical(want.get(index), got.get(index)));
             }
@@ -718,7 +711,7 @@ final class ProtosI123CpuKernelEligibilityTest {
             ProtosPrelude prelude, ProtosActivation a, int rows, int columns, double[] values) {
         Object[] elements = new Object[values.length];
         for (int index = 0; index < values.length; index++) {
-            elements[index] = new ProtosFloatValue(values[index]);
+            elements[index] = Double.valueOf(values[index]);
         }
         return generic(prelude, a, rows, columns, elements);
     }
@@ -741,7 +734,7 @@ final class ProtosI123CpuKernelEligibilityTest {
                 ProtosStandardModuleMemberTestSupport.member(prelude, MODULE, "Vector");
         List<Object> arguments = new ArrayList<>();
         for (double value : values) {
-            arguments.add(new ProtosFloatValue(value));
+            arguments.add(Double.valueOf(value));
         }
         return assertInstanceOf(
                 ProtosVectorValue.class,
@@ -767,7 +760,7 @@ final class ProtosI123CpuKernelEligibilityTest {
     private static double[] floats(List<Object> values) {
         double[] result = new double[values.size()];
         for (int index = 0; index < result.length; index++) {
-            assertInstanceOf(ProtosFloatValue.class, values.get(index));
+            assertInstanceOf(Double.class, values.get(index));
             result[index] = ProtosNumericValueSupport.currentFloatValue(values.get(index));
         }
         return result;

@@ -51,7 +51,7 @@ final class ProtosHostEvalRootNode extends RootNode {
 
     @TruffleBoundary
     private static Object evaluate(ProtosLanguageContext context, RootCallTarget target) {
-        return context.embeddedProcessForHostEntry().evaluate(target);
+        return ProtosHostScalarProjection.export(context.embeddedProcessForHostEntry().evaluate(target));
     }
 
     @Override
