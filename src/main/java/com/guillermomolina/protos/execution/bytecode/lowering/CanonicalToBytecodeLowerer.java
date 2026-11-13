@@ -3272,10 +3272,9 @@ final class CanonicalToBytecodeLowerer {
      * DIRECT-UNARY EMISSION.
      *
      * This is an emission category, not a proof of non-suspension.
-     * The direct path deliberately does not compose a continuation
-     * returned by the callee. This temporarily diverges from the
-     * historical Protos invocation semantics. No compatibility
-     * dispatcher or continuation-result test is installed here.
+     * The operands and invocation are emitted directly with Bytecode DSL.
+     * Nonterminal consumers compose a callee's continuation through the
+     * existing Yield/ResumeDispatchedContinuation protocol.
      */
 
     private boolean i115DirectLookup(CanonicalLookup lookup) {
@@ -3325,7 +3324,7 @@ final class CanonicalToBytecodeLowerer {
             /*
              * at and size are never stack-only operands. Their
              * selected behavior may be program-defined and may suspend, so
-             * they are staged by emitI115IndexedSend, which composes the
+             * they are staged by emitIndexedSend, which composes the
              * dispatched path with Yield/ResumeDispatchedContinuation.
              */
             return false;
@@ -3378,7 +3377,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     // GetLen, or the selected size behavior.
-    private static boolean i115IndexedSize(CanonicalSend send) {
+    private static boolean isIndexedSizeSend(CanonicalSend send) {
         return "size".equals(send.message())
                 && !send.contextual()
                 && send.arguments().isEmpty();
@@ -3388,7 +3387,7 @@ final class CanonicalToBytecodeLowerer {
      * Stage the receiver and arguments exactly once in source order, then
      * select either the standard indexed operation or its dynamic fallback.
      */
-    private void emitI115IndexedSend(
+    private void emitIndexedSend(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalSend send,
             BytecodeLocal result,
@@ -3399,7 +3398,7 @@ final class CanonicalToBytecodeLowerer {
             boolean primitiveCarrierResult) {
         if (scratch == null || childResult == null || resumeValue == null) {
             throw new AssertionError(
-                    "I115 indexed send scratch locals were not allocated");
+                    "Indexed send scratch locals were not allocated");
         }
         builder.beginSourceSection(
                 send.span().startOffset(), send.span().length());
@@ -3419,7 +3418,7 @@ final class CanonicalToBytecodeLowerer {
                     scratch, childResult, resumeValue, stager);
             operands.add(operand);
         }
-        emitI115IndexedProtocolOfLocals(
+        emitIndexedProtocolOfLocals(
                 builder, send.message(), receiver, operands, result,
                 childResult, resumeValue, primitiveCarrierResult);
         builder.endBlock();
@@ -3443,7 +3442,7 @@ final class CanonicalToBytecodeLowerer {
      * An explicit {@code atPut} send retains the selected method's result.
      * Indexed assignment passes no result local and yields its own RHS.
      */
-    private void emitI115IndexedProtocolOfLocals(
+    private void emitIndexedProtocolOfLocals(
             ProtosBytecodeRootNodeGen.Builder builder,
             String selector,
             BytecodeLocal receiver,
@@ -3490,7 +3489,7 @@ final class CanonicalToBytecodeLowerer {
                 endMutationResult(builder, selectedResult);
             }
             default -> throw new AssertionError(
-                    "Not an I115 indexed selector: " + selector);
+                    "Not an indexed selector: " + selector);
         }
         builder.endBlock();
 
@@ -3727,7 +3726,7 @@ final class CanonicalToBytecodeLowerer {
                     yield true;
                 }
                 // at/size may dispatch a suspending selected behavior.
-                if (indexedProtocolSend(send) || i115IndexedSize(send)) {
+                if (indexedProtocolSend(send) || isIndexedSizeSend(send)) {
                     yield true;
                 }
                 StaticControlSelection staticControl = classifyStaticControlSelection(send);
@@ -5686,7 +5685,7 @@ final class CanonicalToBytecodeLowerer {
             OperandStager stager) {
         if (preparedCall == null || childResult == null || resumeValue == null) {
             throw new AssertionError(
-                    "I115 indexed assignment scratch locals were not allocated");
+                    "Indexed assignment scratch locals were not allocated");
         }
         builder.beginSourceSection(
                 assign.span().startOffset(), assign.span().length());
@@ -5709,7 +5708,7 @@ final class CanonicalToBytecodeLowerer {
                 builder, assign.value(), value,
                 preparedCall, childResult, resumeValue, stager);
 
-        emitI115IndexedProtocolOfLocals(
+        emitIndexedProtocolOfLocals(
                 builder, "atPut", receiver, java.util.List.of(index, value),
                 null, childResult, resumeValue, false);
 
@@ -5970,8 +5969,8 @@ final class CanonicalToBytecodeLowerer {
                     scratch, childResult, resumeValue, false);
             return;
         }
-        if (indexedProtocolSend(send) || i115IndexedSize(send)) {
-            emitI115IndexedSend(
+        if (indexedProtocolSend(send) || isIndexedSizeSend(send)) {
+            emitIndexedSend(
                     builder, send, result, scratch, childResult, resumeValue,
                     this::emitDefaultExpressionToLocal, false);
             return;
@@ -6018,14 +6017,15 @@ final class CanonicalToBytecodeLowerer {
      * call, send and super send.
      *
      * <ol>
-     *   <li>CALL: the callee expression is evaluated into the callable.
-     *   <li>SEND: the receiver is evaluated once and kept; {@code GetMethod}
-     *       selects the method on it (a bound method carrying the receiver
-     *       and methodHome).
-     *   <li>SUPER_SEND: {@code GetSuperMethod} selects from the parent of the
-     *       current methodHome.
-     *   <li>The arguments are evaluated left to right (a spread argument
-     *       builds the positional vector).
+     *   <li>CALL: evaluate the callee expression once.
+     *   <li>SEND: evaluate the receiver once and retain it.
+     *   <li>SUPER_SEND: retain the current lexical methodHome.
+     *   <li>Evaluate all arguments left to right, constructing the complete
+     *       positional or named argument packet.
+     *   <li>Only after argument evaluation, SEND uses {@code GetMethod} to
+     *       select a bound method on the retained receiver, and SUPER_SEND
+     *       uses {@code GetSuperMethod} to select from the parent of methodHome.
+     *       CALL uses its previously evaluated callee.
      *   <li>{@code Call*Method} by arity (0..4, otherwise or with spread
      *       {@code CallVarargsMethod}) enters the shared dispatcher.
      *   <li>A pending result is composed: {@code IsResultKind(CONTINUATION)
@@ -9264,8 +9264,8 @@ final class CanonicalToBytecodeLowerer {
                     primitiveCarrierResult);
             return;
         }
-        if (indexedProtocolSend(send) || i115IndexedSize(send)) {
-            emitI115IndexedSend(
+        if (indexedProtocolSend(send) || isIndexedSizeSend(send)) {
+            emitIndexedSend(
                     builder, send, result, scratch, childResult, resumeValue,
                     this::emitBodyExpressionToLocal, primitiveCarrierResult);
             return;
@@ -9427,9 +9427,9 @@ final class CanonicalToBytecodeLowerer {
      *   <li>The receiver is evaluated exactly once into a local.
      *   <li>{@code IsStandardArrayEachSelection} observes, invoking nothing,
      *       whether {@code each} selects the standard Array behavior and the
-     *       root {@code call} selection is canonical. Otherwise GetMethod
-     *       selects {@code each} now: the ordinary selection point, after
-     *       the receiver and before the argument.
+     *       root {@code call} selection is canonical. Otherwise the literal
+     *       argument is materialized before GetMethod selects {@code each},
+     *       preserving the ordinary send's argument-first selection order.
      *   <li>Standard: evaluating the literal argument has no observable
      *       effect and its activation is proven unobservable, so no Closure
      *       is created. {@code GetArrayEachSnapshot} establishes the single
@@ -9472,14 +9472,6 @@ final class CanonicalToBytecodeLowerer {
         builder.endIsStandardArrayEachSelection();
         builder.endStoreLocal();
 
-        BytecodeLocal callable = builder.createLocal("eachMethod", null);
-        builder.beginIfThenElse();
-        builder.emitLoadLocal(standard);
-        builder.beginBlock();
-        builder.endBlock();
-        emitGetMethod(builder, "each", receiver, callable);
-        builder.endIfThenElse();
-
         builder.beginIfThenElse();
         builder.emitLoadLocal(standard);
 
@@ -9513,6 +9505,10 @@ final class CanonicalToBytecodeLowerer {
         BytecodeLocal argument = builder.createLocal("invocationArgument", null);
         stageOperand(builder, callback, argument,
                 scratch, childResult, resumeValue, stager);
+
+        // D237: form the argument packet before selecting the ordinary method.
+        BytecodeLocal callable = builder.createLocal("eachMethod", null);
+        emitGetMethod(builder, "each", receiver, callable);
         emitDispatchedCall(
                 builder, callable, java.util.List.of(argument), null,
                 childResult, result, resumeValue, false);
@@ -9562,14 +9558,6 @@ final class CanonicalToBytecodeLowerer {
         builder.endIsStandardAssociationEachSelection();
         builder.endStoreLocal();
 
-        BytecodeLocal callable = builder.createLocal("eachMethod", null);
-        builder.beginIfThenElse();
-        builder.emitLoadLocal(standard);
-        builder.beginBlock();
-        builder.endBlock();
-        emitGetMethod(builder, "each", receiver, callable);
-        builder.endIfThenElse();
-
         builder.beginIfThenElse();
         builder.emitLoadLocal(standard);
 
@@ -9606,6 +9594,10 @@ final class CanonicalToBytecodeLowerer {
         BytecodeLocal argument = builder.createLocal("invocationArgument", null);
         stageOperand(builder, callback, argument,
                 scratch, childResult, resumeValue, stager);
+
+        // D237: form the argument packet before selecting the ordinary method.
+        BytecodeLocal callable = builder.createLocal("eachMethod", null);
+        emitGetMethod(builder, "each", receiver, callable);
         emitDispatchedCall(
                 builder, callable, java.util.List.of(argument), null,
                 childResult, result, resumeValue, false);

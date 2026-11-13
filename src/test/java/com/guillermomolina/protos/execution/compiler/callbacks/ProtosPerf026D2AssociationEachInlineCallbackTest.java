@@ -520,6 +520,55 @@ final class ProtosPerf026D2AssociationEachInlineCallbackTest {
         System.out.println("PERF026_D2_CUSTOM_EACH_FALLBACK=YES");
     }
 
+    /**
+     * The nonstandard association each path must materialize the literal
+     * callback with its lexical capture before ordinary method dispatch.
+     */
+    @Test
+    void customAssociationEachPreservesCapturedObjectIdentity()
+            throws Exception {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                Probe probe = new Probe();
+                ProtosBytecodeRootNode root =
+                        lowerRoot(
+                                """
+                                run: () => {
+                                    captured: {}
+                                    custom: {
+                                        each: (block) => {
+                                            block(captured, captured)
+                                        }
+                                    }
+                                    custom.each((key, value) => {
+                                        probe(key, value)
+                                    })
+                                    captured
+                                }
+                                run()
+                                """);
+
+                Object captured = root.getCallTarget().call(probe.module());
+
+                assertEquals(1, probe.calls.get());
+                assertEquals(2, probe.arguments.get(0).size());
+                assertSame(captured, probe.arguments.get(0).get(0));
+                assertSame(captured, probe.arguments.get(0).get(1));
+
+                List<RootNode> stack = probe.stacks.get(0);
+                assertInstanceOf(ProtosBytecodeRootNode.class, stack.get(0));
+                assertSame(root, stack.get(stack.size() - 1));
+            } finally {
+                context.leave();
+            }
+        }
+
+        System.out.println(
+                "PERF026_D2_CUSTOM_EACH_CAPTURE_IDENTITY=YES");
+    }
+
     /** D1's one-parameter indexed each keeps its local loop beside D2. */
     @Test
     void indexedEachKeepsItsOneParameterLocalLoop() throws Exception {

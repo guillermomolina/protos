@@ -538,6 +538,51 @@ final class ProtosPerf026D1IndexedEachInlineCallbackTest {
     }
 
     /**
+     * A custom each receives a genuine Closure whose lexical capture remains
+     * the original object. Native Array iteration must not take this path.
+     */
+    @Test
+    void customEachPreservesCapturedObjectIdentity() throws Exception {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                Probe probe = new Probe();
+                ProtosBytecodeRootNode root =
+                        lowerRoot(
+                                """
+                                run: () => {
+                                    captured: {}
+                                    custom: {
+                                        each: (block) => {
+                                            block(captured)
+                                        }
+                                    }
+                                    custom.each((element) => {
+                                        probe(element)
+                                    })
+                                    captured
+                                }
+                                run()
+                                """);
+
+                Object captured = root.getCallTarget().call(probe.module());
+
+                assertEquals(1, probe.calls.get());
+                assertSame(captured, probe.arguments.get(0));
+
+                List<RootNode> stack = probe.stacks.get(0);
+                assertPhysicalProbeCallback(stack);
+                assertSame(root, stack.get(stack.size() - 1));
+            } finally {
+                context.leave();
+            }
+        }
+
+        System.out.println("PERF026_D1_CUSTOM_EACH_CAPTURE_IDENTITY=YES");
+    }
+
+    /**
      * The approved PLAT044 tooling delta: no distinct callback debugger frame,
      * but a breakpoint inside the inline body suspends once per element and
      * its scope is that element's activation: the callback formal, its own
