@@ -8,6 +8,41 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.38-SNAPSHOT
+
+- **I115 — secondary RootCallTarget PIC after unary Closure-identity saturation (historical).**
+  - Re-enable a secondary `callFunctionCachedCt` specialization in
+    `ProtosFunctionCallDispatchers.FunctionCachedCallNode`: once the
+    unary Closure-identity cache saturates, cache the prepared executable
+    `RootCallTarget` and its `DirectCallNode`, not the Closure instance or
+    its captured lexical environment. Different Closures sharing the
+    same source definition may therefore enter the same physical root,
+    while the current Closure and its actual captures travel in the B5
+    arguments at every call.
+  - Bound the secondary target PIC to three entries, checking the
+    entered Context, the already-prepared plan, the plan's language,
+    the need for Context-local projection, and the selected effective
+    call target. Deferred plans and foreign/projection-required plans
+    remain on the general resolver; there is no preparation in a guard.
+    The `@Megamorphic` fallback still handles other target shapes.
+  - Add a regression witness that repeatedly invokes fresh Closure
+    instances with different captured offsets and different source
+    targets beyond cache limits. The test was added in the historical
+    implementation, but was not executed in this versioned replay.
+  - **Historical semantic limitations:** this additional direct-call PIC
+    does not repair D013 / `Object.call`: an implicit source-Closure
+    invocation may bypass an instance-local `call` override, whereas an
+    explicit `object.call(...)` send still selects the override.
+    `ReturnHome`, suspension, cancellation, Task/C-prime ownership,
+    non-local control transfers and D179 C0 lexical behavior require
+    independent acceptance. The earlier Context-owned BigInteger
+    factory and D197-C numeric-prototype delegation remain separate
+    concerns. Protos uses `long`/`Long` for signed-64 Integer values;
+    nothing in this replay establishes compiled performance or full
+    semantics. No tests, build or benchmarks were run after the bump.
+  - Original implementation: `175ff17945d91e63e5e0a7b95e6eacb6ad06eae1`.
+    Both source/test blobs are reproduced exactly, without alterations.
+
 ## 0.4.37-SNAPSHOT
 
 - **I115 — GraalPy-style unary Closure PIC quickening (historical).**

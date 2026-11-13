@@ -149,6 +149,49 @@ final class ProtosI115UnaryPICConvergenceTest {
         });
     }
 
+    /**
+     * A single unary call site sees fresh Closures with distinct lexical
+     * captures, but one shared execution target per source definition.
+     * Saturating the identity PIC must never retain a previous Closure's
+     * captures when the secondary target PIC invokes the next one.
+     */
+    @Test
+    void secondaryTargetPicPreservesCurrentClosureAndDistinctTargets() throws Exception {
+        withCore(module -> {
+            evaluate("""
+                    makeA: (offset) => { (value) => { value + offset } }
+                    makeB: (offset) => { (value) => { offset - value } }
+                    callOne: (f, value) => { f(value) }
+                    """, "i115-pic-target-define.protos", module);
+
+            ProtosClosureValue a1 = closure("makeA(2)\n", module);
+            ProtosClosureValue a2 = closure("makeA(9)\n", module);
+            ProtosClosureValue b1 = closure("makeB(100)\n", module);
+            assertNotSame(a1, a2);
+            assertNotSame(a1, b1);
+            assertSame(
+                    a1.preparedExecutionPlanOrNullForRuntime(),
+                    a2.preparedExecutionPlanOrNullForRuntime());
+            assertNotSame(
+                    a1.preparedExecutionPlanOrNullForRuntime(),
+                    b1.preparedExecutionPlanOrNullForRuntime());
+            assertSame(
+                    a1.preparedExecutionPlanOrNullForRuntime()
+                            .bytecodeActivationTargetForComposition(),
+                    a2.preparedExecutionPlanOrNullForRuntime()
+                            .bytecodeActivationTargetForComposition());
+
+            for (int i = 0; i < 4 * PAST_CACHE_LIMITS; i++) {
+                assertInteger(i + 7, evaluate(
+                        "callOne(makeA(" + i + "), 7)\n",
+                        "i115-pic-target-a.protos", module));
+                assertInteger(93 + i, evaluate(
+                        "callOne(makeB(" + (100 + i) + "), 7)\n",
+                        "i115-pic-target-b.protos", module));
+            }
+        });
+    }
+
     @Test
     void megamorphicUnaryCallRetainsGenericBehavior() throws Exception {
         withCore(module -> {
