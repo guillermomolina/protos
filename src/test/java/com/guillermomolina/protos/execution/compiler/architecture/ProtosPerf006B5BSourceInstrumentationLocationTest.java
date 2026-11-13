@@ -2,7 +2,7 @@
  * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
  * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
  * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
- * DERIVATIVE WORKS BASED ON THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
  * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
  * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
  * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
@@ -12,7 +12,7 @@
  *
  * Software distributed under the License is distributed on an "AS IS" basis,
  * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
- * the specific language governing rights and limitations under the LICENSE.
+ * the specific language governing rights and limitations under the License.
  */
 
 package com.guillermomolina.protos.execution;
@@ -121,7 +121,7 @@ final class ProtosPerf006B5BSourceInstrumentationLocationTest {
 
             // PLAT042 B′: the source root is the tagged semantic root itself.
             assertEquals(1, collectTags(tree, StandardTags.RootTag.class).size());
-            assertEquals(0, collectTags(tree, StandardTags.RootBodyTag.class).size());
+            assertEquals(1, collectTags(tree, StandardTags.RootBodyTag.class).size());
             assertEquals(
                     0,
                     collectTags(tree, DebuggerTags.AlwaysHalt.class).size(),
@@ -172,6 +172,7 @@ final class ProtosPerf006B5BSourceInstrumentationLocationTest {
                         ProtosBytecodeRootNodeGen.newConfigBuilder()
                                 .addSource()
                                 .addTag(StandardTags.RootTag.class)
+                                .addTag(StandardTags.RootBodyTag.class)
                                 .build());
                 assertExplicitSemanticRootTag(mode, root, sequence, source);
                 assertSame(group, root.getRootNodes(), mode + ": group identity");
@@ -198,9 +199,9 @@ final class ProtosPerf006B5BSourceInstrumentationLocationTest {
         List<TagTree> rootTags = collectTags(tree, StandardTags.RootTag.class);
         assertEquals(1, rootTags.size(), mode + ": exactly one explicit RootTag");
         assertEquals(
-                0,
+                1,
                 collectTags(tree, StandardTags.RootBodyTag.class).size(),
-                mode + ": no RootBodyTag");
+                mode + ": exactly one physical RootBodyTag");
         SourceSection section = rootTags.get(0).getSourceSection();
         assertNotNull(section, mode + ": the RootTag must carry a SourceSection");
         assertSame(source, section.getSource());
@@ -284,7 +285,8 @@ final class ProtosPerf006B5BSourceInstrumentationLocationTest {
                     assertInstanceOf(ProtosTailCallContinuation.class, first);
             ContinuationResult child =
                     assertInstanceOf(ContinuationResult.class, parent.pendingResult());
-            activationOf(child);
+            ProtosActivation observed = activationOf(child);
+            assertSame(observed, activationOf(child), "tooling observes the same invocation");
 
             BytecodeLocation parentLocation = parent.callerLocation();
             BytecodeLocation childLocation = child.getBytecodeLocation();
@@ -456,11 +458,8 @@ final class ProtosPerf006B5BSourceInstrumentationLocationTest {
     }
 
     private static ProtosActivation activationOf(ContinuationResult continuation) {
-        Object[] arguments = continuation.getFrame().getArguments();
-        if (arguments.length == 0) {
-            throw new AssertionError("ContinuationResult frame has no invocation activation");
-        }
-        return assertInstanceOf(ProtosActivation.class, arguments[0]);
+        // The compact B5 header publishes its genuine activation only on observation.
+        return ProtosFrameArguments.activation(continuation.getFrame());
     }
 
 }

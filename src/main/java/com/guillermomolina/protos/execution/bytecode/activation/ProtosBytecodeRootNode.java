@@ -113,7 +113,7 @@ import com.oracle.truffle.api.source.Source;
  * Auxiliary structured-dispatch ({@link
  * ProtosStructuredDispatchLowerer}), Task C-prime entry and I/O C-prime roots
  * are created by their own builders and are unmarked, so they never appear
- * as guest frames. I115-H4-B EXPERIMENTAL: automatic RootTag/RootBodyTag
+ * as guest frames. Automatic RootTag/RootBodyTag
  * tagging is enabled and applies to every physical root of this single
  * configuration, auxiliary roots included; the lowerer no longer emits an
  * explicit physical-root RootTag. Inline Closure
@@ -121,7 +121,7 @@ import com.oracle.truffle.api.source.Source;
  * interpreter does not infer guest identity from the mere existence of a
  * physical root. Object bodies are lowered inline
  * and never become roots. Lexically nested Closure roots are created in the same
- * {@code BytecodeRootNodes} parse as their owner. I115: a captured Closure
+ * {@code BytecodeRootNodes} parse as their owner. A captured Closure
  * binding is a shared cell held in a local of each root that reaches it, so
  * no root reads another root's frame.
  *
@@ -138,17 +138,11 @@ import com.oracle.truffle.api.source.Source;
  * declared last.
  */
 /*
- * I115-H4-B EXPERIMENTAL (GraalPy PBytecodeDSLRootNode configuration):
- * default automatic RootTag/RootBodyTag tagging, no block scoping,
- * serialization, the bytecode index stored in the frame, an uncached
- * threshold of 4 and boolean/long/double boxing elimination. NOT PORTABLE: Materialized
- * local accesses stay enabled; illegalLocalException/Factory are not
- * configured, so uninitialized locals keep their existing behavior; the
- * root extends RootNode, not a PRootNode. With serialization enabled, every
- * mutable field of this root is transient: they hold per-parse lowering
- * facts, runtime state or a child node that the lowerer and execution
- * re-establish, and no BytecodeSerializer exists, so nothing serializes
- * them.
+ * Automatic physical root/body tags, root-scoped locals, materialized local
+ * accesses and stored bytecode indices support tooling without a second
+ * execution representation. Uninitialized locals retain their cleared state.
+ * Runtime fields remain transient and are re-established by lowering or
+ * execution; this interpreter has no BytecodeSerializer.
  */
 @GenerateBytecode(
         languageClass = ProtosLanguage.class,
@@ -180,11 +174,8 @@ import com.oracle.truffle.api.source.Source;
 @OperationProxy(value = ProtosRichCompareGeNode.class, name = "RichCompareGe")
 @OperationProxy(value = ProtosExperimentalReadGlobalNode.class, name = "ReadGlobal")
 @OperationProxy(value = ProtosExperimentalWriteGlobalNode.class, name = "SelectWriteGlobal")
-// I115: GraalPy-shaped method call and numeric operations shared by every source root.
+// Fixed-arity calls and numeric operations shared by every source root.
 @OperationProxy(value = ProtosCallNilaryMethodNode.class, name = "CallNilaryMethod")
-// PRUIBA DE I115, en algún momento esto volverá a funcionar
-// Original operation proxy:
-// @OperationProxy(value = ProtosCallUnaryMethodNode.class, name = "CallUnaryMethod")
 @OperationProxy(value = ProtosCallUnaryMethodNode.class, name = "CallUnaryMethod", forceCached = true)
 @OperationProxy(value = ProtosExperimentalGetMethodNode.class, name = "GetMethod")
 @OperationProxy(value = ProtosExperimentalCallBinaryMethodNode.class, name = "CallBinaryMethod")
@@ -618,45 +609,17 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         return lexicalFrameLayout;
     }
 
-    /**
-     * PLAT067-B / I115 tooling-only read of this root's established LOCAL
-     * and CELL bindings at {@code bytecodeIndex} of {@code frame}, in
-     * declaration order, or {@code null} when this root records none. An
-     * unestablished or removed local or cell is ABSENT and omitted; a
-     * primitive carrier is answered as its guest value. Nothing is installed,
-     * published or retained: the activation and its Context are left
-     * unchanged.
-     *
-     * <p>KNOWN I115 SEMANTIC DIVERGENCE: this view is read-only; a debugger
-     * write to these bindings through the scope does not reach the frame.
-     */
+    /** Associates a debugger's original materialized frame with its exact Closure activation. */
     @TruffleBoundary
-    final java.util.Map<String, Object> toolingBindingsOrNull(
-            BytecodeNode bytecodeNode,
+    final void ensureToolingLexicalFrameView(
+            MaterializedFrame frame,
+            BytecodeNode bytecode,
             int bytecodeIndex,
-            com.oracle.truffle.api.frame.MaterializedFrame materialized) {
+            ProtosActivation activation) {
         LexicalFrameLayout layout = lexicalFrameLayout;
-        if (layout == null || layout.size() == 0) {
-            return null;
+        if (layout != null && activation.publishedClosureLexicalAuthorityForRuntime() == null) {
+            installLexicalFrameView(frame, bytecode, bytecodeIndex, activation, layout);
         }
-        java.util.LinkedHashMap<String, Object> present = new java.util.LinkedHashMap<>();
-        for (int index = 0; index < layout.size(); index++) {
-            Object stored =
-                    bytecodeNode.getLocalValue(
-                            bytecodeIndex, materialized, layout.offset(index));
-            Object value = stored;
-            if (layout.isCell(index)) {
-                value = stored instanceof ProtosLexicalCell cell
-                        ? cell.valueOrNullForRuntime()
-                        : null;
-            }
-            if (value != null) {
-                present.put(
-                        layout.name(index),
-                        ProtosNumericValueSupport.guestValue(value));
-            }
-        }
-        return java.util.Collections.unmodifiableMap(present);
     }
 
     /*
@@ -736,7 +699,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
-    /** I115: direct return, following GraalPy's return epilogue. */
+    /** The normal-return epilogue of a source root. */
     @EpilogReturn(storeBytecodeIndex = true)
     public static final class EpilogForReturn {
         /*
@@ -749,8 +712,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 boolean value,
                 @Bind VirtualFrame frame,
                 @Bind ProtosBytecodeRootNode root,
-                @Bind BytecodeNode bytecodeNode) {
-            return perform(Boolean.valueOf(value), frame, root, bytecodeNode);
+                @Bind BytecodeNode bytecodeNode,
+                @Bind("$bytecodeIndex") int bytecodeIndex) {
+            return perform(Boolean.valueOf(value), frame, root, bytecodeNode, bytecodeIndex);
         }
 
         @Specialization(replaces = "doBoolean")
@@ -758,11 +722,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 Object value,
                 @Bind VirtualFrame frame,
                 @Bind ProtosBytecodeRootNode root,
-                @Bind BytecodeNode bytecodeNode) {
-            /*
-             * I115-H4-B EXPERIMENTAL (GraalPy EpilogForReturn). I115-H5: an
-             * experimental callee context root never projects.
-             */
+                @Bind BytecodeNode bytecodeNode,
+                @Bind("$bytecodeIndex") int bytecodeIndex) {
+            root.retainPublishedClosureFrameOnExit(frame, bytecodeNode, bytecodeIndex);
             if (root.needsTraceAndProfileInstrumentation()) {
                 root.traceOrProfileReturn(frame, bytecodeNode, value);
             }
@@ -776,9 +738,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
-     * I115-H4-B EXPERIMENTAL (GraalPy EpilogForException): the single
-     * exceptional epilogue of every root: only the internal trace probe
-     * records the exception, which is neither translated nor replaced.
+     * The exceptional root epilogue preserves published lexical state,
+     * records diagnostics and completes the root's owned return home.
+     * The original guest exception propagates unchanged.
      */
     @EpilogExceptional(storeBytecodeIndex = true)
     public static final class EpilogForException {
@@ -787,7 +749,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 AbstractTruffleException exception,
                 @Bind VirtualFrame frame,
                 @Bind ProtosBytecodeRootNode root,
-                @Bind BytecodeNode bytecodeNode) {
+                @Bind BytecodeNode bytecodeNode,
+                @Bind("$bytecodeIndex") int bytecodeIndex) {
+            root.retainPublishedClosureFrameOnExit(frame, bytecodeNode, bytecodeIndex);
             if (root.needsTraceAndProfileInstrumentation()) {
                 root.traceOrProfileException(frame, bytecodeNode, exception);
             }
@@ -1107,6 +1071,26 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return;
         }
         installLexicalFrameView(frame.materialize(), bytecode, bytecodeIndex, activation, layout);
+    }
+
+    /**
+     * A published Closure activation can outlive its physical root.
+     * Preserve its live lexical frame on normal or exceptional departure.
+     * Compact calls without a published activation stay unmaterialized.
+     */
+    private void retainPublishedClosureFrameOnExit(
+            VirtualFrame frame,
+            BytecodeNode bytecode,
+            int bytecodeIndex) {
+        if (lexicalFrameLayout == null
+                || !ProtosFrameArguments.hasPublishedActivation(frame.getArguments())) {
+            return;
+        }
+        ensureLexicalFrameView(
+                frame,
+                bytecode,
+                bytecodeIndex,
+                ProtosFrameArguments.publishedActivation(frame.getArguments()));
     }
 
     @TruffleBoundary

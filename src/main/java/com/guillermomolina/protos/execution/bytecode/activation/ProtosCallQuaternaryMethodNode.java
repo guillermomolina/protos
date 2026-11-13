@@ -64,18 +64,22 @@ abstract class ProtosCallQuaternaryMethodNode extends Node {
             Object a2,
             Object a3,
             @Bind("$node") Node inliningTarget,
+            @Bind("bytecodeOf($node)") BytecodeNode bytecode,
+            @Bind("bytecode.getBytecodeIndex(frame)") int bytecodeIndex,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
             @Cached(
                     value = "rootCallSelection()",
                     allowUncached = true)
                     ProtosStandardObjectProtocol.CanonicalRootCallSelection rootSelection,
             @Cached ProtosFunctionCallDispatchers.FunctionCachedCallNode call) {
-        return call.execute(
+        Object outcome = call.execute(
                 frame, inliningTarget, terminal, callable,
                 ProtosFrameArguments.dispatchedCall4(
                 null, ProtosFrameArguments.functionCallMarker(), null, null, null, a0, a1, a2, a3),
                 null, root,
                 ProtosFunctionCallDispatchers.currentContext(inliningTarget));
+        return ProtosTailCallContinuation.completeCall(
+                terminal, outcome, bytecode, bytecodeIndex);
     }
 
     @Specialization(guards = "isSourceFunction(method.callable())")
@@ -88,15 +92,19 @@ abstract class ProtosCallQuaternaryMethodNode extends Node {
             Object a2,
             Object a3,
             @Bind("$node") Node inliningTarget,
+            @Bind("bytecodeOf($node)") BytecodeNode bytecode,
+            @Bind("bytecode.getBytecodeIndex(frame)") int bytecodeIndex,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
             @Cached ProtosFunctionCallDispatchers.FunctionCachedCallNode call) {
         Object[] arguments = ProtosFrameArguments.dispatchedCall4(
                 null, ProtosFrameArguments.functionCallMarker(), null, null, null, a0, a1, a2, a3);
         ProtosFrameArguments.bindMethod(arguments, method.receiver(), method.methodHome());
-        return call.execute(
+        Object outcome = call.execute(
                 frame, inliningTarget, terminal, method.callable(), arguments,
                 null, root,
                 ProtosFunctionCallDispatchers.currentContext(inliningTarget));
+        return ProtosTailCallContinuation.completeCall(
+                terminal, outcome, bytecode, bytecodeIndex);
     }
 
     /* Builtins, bound builtins and generic callables: the shared CallNode. */
@@ -110,13 +118,17 @@ abstract class ProtosCallQuaternaryMethodNode extends Node {
             Object a1,
             Object a2,
             Object a3,
+            @Bind("bytecodeOf($node)") BytecodeNode bytecode,
+            @Bind("bytecode.getBytecodeIndex(frame)") int bytecodeIndex,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
             @Cached ProtosFunctionCallDispatchers.CallNode call) {
-        return call.execute(
+        Object outcome = call.execute(
                 frame, terminal, callable,
                 ProtosFrameArguments.dispatchedCall4(
                 null, ProtosFrameArguments.functionCallMarker(), null, null, null, a0, a1, a2, a3),
                 null, root);
+        return ProtosTailCallContinuation.completeCall(
+                terminal, outcome, bytecode, bytecodeIndex);
     }
 
 
@@ -151,6 +163,12 @@ abstract class ProtosCallQuaternaryMethodNode extends Node {
                         ? isSourceFunction(closure)
                         : callable instanceof ProtosBoundMethod method
                                 && isSourceFunction(method.callable());
+    }
+
+    // Proxy nodes bind through their operation node. The interpreter stores
+    // this call site's index in its frame before entering the proxy.
+    static BytecodeNode bytecodeOf(Node node) {
+        return BytecodeNode.get(node);
     }
 
     static ProtosBytecodeRootNode rootOf(Node node) {

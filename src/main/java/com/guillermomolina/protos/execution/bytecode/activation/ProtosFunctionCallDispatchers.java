@@ -75,9 +75,9 @@ import com.oracle.truffle.api.nodes.RootNode;
  *       selected by ordinary lookup and invoked as a method on the object.
  * </ul>
  *
- * <p>I115 divergence: direct and indirect invocations do not prepare
- * rich activation metadata, translate terminal suspension transport,
- * or project numeric carriers before the actual consumer boundary.
+ * <p>Direct and indirect invocations preserve their result representation.
+ * The owning bytecode call operation attaches terminal suspension provenance;
+ * numeric carriers are projected only at the actual consumer boundary.
  */
 final class ProtosFunctionCallDispatchers {
     private ProtosFunctionCallDispatchers() {}
@@ -1200,6 +1200,13 @@ final class ProtosFunctionCallDispatchers {
      * calling activation.
      */
     static Object callUncached(Object callable, Object[] arguments, ProtosActivation caller) {
+        ProtosClosureValue closure = callable instanceof ProtosClosureValue source
+                ? source : callable instanceof ProtosBoundMethod method ? method.callable() : null;
+        if (closure != null && closure.requiresContextLocalExecutionProjectionForRuntime()
+                && ProtosLanguageContext.currentIfEnteredForRuntime() == null) {
+            throw new UnsupportedOperationException(
+                    "Context-local Closure projection requires an entered Protos Context");
+        }
         // This host-side entry is an observable guest-value boundary, unlike
         // an admitted direct/indirect guest call whose caller may accept carriers.
         // The callee epilogue and internal dispatcher return carriers unchanged.

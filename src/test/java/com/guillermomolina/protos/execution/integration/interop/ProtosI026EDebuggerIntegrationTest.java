@@ -115,6 +115,133 @@ final class ProtosI026EDebuggerIntegrationTest {
     }
 
     @Test
+    void closureScopesReadExactFramesAcrossCapturePresenceAndRecreation() throws Exception {
+        Source program = source("""
+                make: (seed) => {
+                    captured: seed
+                    (argument) => {
+                        0
+                        nullable: null
+                        marker: argument
+                        0
+                        context.removeSlot("nullable")
+                        0
+                        nullable: null
+                        0
+                        captured + marker
+                    }
+                }
+                first: make(10)
+                second: make(20)
+                first(1)
+                second(2)
+                """, "debugger-closure-presence.protos");
+        ProtosActivation activation = new ProtosCoreBootstrap()
+                .bootstrap(Path.of("protos", "lib", "core")).newModuleActivation();
+        AtomicReference<Throwable> callbackFailure = new AtomicReference<>();
+        List<String> captures = new ArrayList<>();
+        List<String> arguments = new ArrayList<>();
+        AtomicInteger stops = new AtomicInteger();
+        try (ProtosPolyglotExecutionContext polyglot = open()) {
+            try (DebuggerSession session = debugger(polyglot).startSession(event -> {
+                try {
+                    stops.incrementAndGet();
+                    int line = event.getSourceSection().getStartLine();
+                    DebugScope scope = event.getTopStackFrame().getScope();
+                    assertNotNull(scope);
+                    DebugValue argument = scope.getDeclaredValue("argument");
+                    assertNotNull(argument, "the invocation's parameter is PRESENT");
+                    DebugValue captured = scope.getDeclaredValue("captured");
+                    assertNotNull(captured, "the original captured cell remains live");
+                    if (line == 4) {
+                        captures.add(captured.toDisplayString());
+                        arguments.add(argument.toDisplayString());
+                        assertNull(scope.getDeclaredValue("marker"));
+                        assertNull(scope.getDeclaredValue("nullable"));
+                    } else {
+                        DebugValue marker = scope.getDeclaredValue("marker");
+                        assertNotNull(marker);
+                        assertEquals(argument.toDisplayString(), marker.toDisplayString());
+                        DebugValue nullable = scope.getDeclaredValue("nullable");
+                        if (line == 9) {
+                            assertNull(nullable, "removal updates physical membership");
+                        } else {
+                            assertTrue(line == 7 || line == 11);
+                            assertNotNull(nullable, "guest null is PRESENT, including after recreation");
+                            assertTrue(nullable.isNull());
+                        }
+                    }
+                } catch (Throwable failure) {
+                    callbackFailure.compareAndSet(null, failure);
+                } finally {
+                    event.prepareContinue();
+                }
+            })) {
+                for (int line : List.of(4, 7, 9, 11)) {
+                    session.install(Breakpoint.newBuilder(program).lineIs(line).build());
+                }
+                ProtosExecutionOutcome outcome = polyglot.execute(program, activation);
+                assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
+            }
+        }
+        rethrowCallbackFailure(callbackFailure);
+        assertEquals(List.of("10", "20"), captures);
+        assertEquals(List.of("1", "2"), arguments);
+        assertEquals(8, stops.get());
+    }
+
+    @Test
+    void numericCallbackScopeUsesTheCreatorOfItsExactCapturedCell() throws Exception {
+        Source program = source("""
+                run: (outerMarker) => {
+                    total: 0
+                    for(i, 0, 2) {
+                        total = total + i
+                    }
+                    total
+                }
+                run(41)
+                run(73)
+                """, "debugger-numeric-creator-identity.protos");
+        ProtosActivation activation = new ProtosCoreBootstrap()
+                .bootstrap(Path.of("protos", "lib", "core")).newModuleActivation();
+        AtomicReference<Throwable> callbackFailure = new AtomicReference<>();
+        List<String> visits = new ArrayList<>();
+        AtomicInteger afterLoop = new AtomicInteger();
+        try (ProtosPolyglotExecutionContext polyglot = open()) {
+            try (DebuggerSession session = debugger(polyglot).startSession(event -> {
+                try {
+                    DebugScope scope = event.getTopStackFrame().getScope();
+                    assertNotNull(scope);
+                    DebugValue marker = scope.getDeclaredValue("outerMarker");
+                    assertNotNull(marker);
+                    if (event.getSourceSection().getStartLine() == 4) {
+                        DebugValue binder = scope.getDeclaredValue("i");
+                        assertNotNull(binder);
+                        visits.add(marker.toDisplayString() + ":" + binder.toDisplayString());
+                    } else {
+                        assertEquals(6, event.getSourceSection().getStartLine());
+                        assertNull(scope.getDeclaredValue("i"));
+                        afterLoop.incrementAndGet();
+                    }
+                } catch (Throwable failure) {
+                    callbackFailure.compareAndSet(null, failure);
+                } finally {
+                    event.prepareContinue();
+                }
+            })) {
+                session.install(Breakpoint.newBuilder(program).lineIs(4).build());
+                session.install(Breakpoint.newBuilder(program).lineIs(6).build());
+                assertEquals(ProtosExecutionOutcome.State.COMPLETED,
+                        polyglot.execute(program, activation).state());
+            }
+        }
+        rethrowCallbackFailure(callbackFailure);
+        assertEquals(List.of("41:0", "41:1", "73:0", "73:1"), visits);
+        assertEquals(2, afterLoop.get());
+    }
+
+    @Test
     void genericContextualForKeepsBinderInsideDebuggerCallbackScope()
             throws Exception {
         assertContextualForDebuggerScopes(
@@ -187,7 +314,10 @@ final class ProtosI026EDebuggerIntegrationTest {
 
                             DebugValue outer = scope.getDeclaredValue(
                                     "outerMarker");
-                            assertNotNull(outer);
+                            assertNotNull(outer, () -> "outerMarker missing at line " + line
+                                    + "; visible names=" + java.util.stream.StreamSupport.stream(
+                                            scope.getDeclaredValues().spliterator(), false)
+                                            .map(DebugValue::getName).toList());
                             assertEquals("41", outer.toDisplayString());
 
                             if (line == 5) {

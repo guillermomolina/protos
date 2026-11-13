@@ -42,14 +42,14 @@ import java.util.Objects;
  * and resuming it continues the suspended state, never the invocation from
  * its beginning.
  *
- * <p>I115 (TruffleRuby): the transport owns no invocation. The ReturnHome of
+ * <p>The transport owns no invocation. The ReturnHome of
  * a suspended activation stays in that activation's frame and is captured and
  * closed by its selective root epilogues on completion. On resumption this
  * boundary consumes PLAT070 unwind transfers targeted at the saved frame's
  * exact owned home; captured homes continue unwinding. On abandonment it closes, innermost
  * first, the homes the abandoned frames own.
  *
- * <p>I115 caller provenance: every suspended frame retained here (directly or
+ * <p>Caller provenance: every suspended frame retained here (directly or
  * through a nested {@link ContinuationResult} or transport) had its exact
  * caller sealed into its B5[3] by the dispatcher at its original suspension
  * boundary ({@link ProtosFrameArguments#sealSuspendedCaller}). Resumption
@@ -163,6 +163,13 @@ final class ProtosTailCallContinuation implements TruffleObject {
         this.ownedHome = ownedHome;
     }
 
+    /** The owning bytecode call site attaches provenance only to a real suspension. */
+    static Object completeCall(
+            boolean terminal, Object outcome, BytecodeNode bytecode, int bytecodeIndex) {
+        return terminal && isSuspended(outcome)
+                ? deferDirect(outcome, bytecode, bytecodeIndex) : outcome;
+    }
+
     /**
      * The transport of a terminal entry whose outcome {@link #isSuspended was
      * proved suspended} by the caller; the caller location is materialized
@@ -189,7 +196,7 @@ final class ProtosTailCallContinuation implements TruffleObject {
     }
 
     /**
-     * I115: an owned builtin ReturnHome survives a suspended
+     * An owned builtin ReturnHome survives a suspended
      * native/structured child. The pending transport closes it
      * exactly when that invocation ends or is abandoned.
      */

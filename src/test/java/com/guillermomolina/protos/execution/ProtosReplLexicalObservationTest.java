@@ -246,15 +246,40 @@ final class ProtosReplLexicalObservationTest {
     @Test
     void nullAndNumbersDelegateWithoutOwnSelectors() throws Exception {
         try (var hosted = open()) {
-            hosted.evaluatePersistent("<d228-special>", "nothing: null\nanswer: 42");
+            hosted.evaluatePersistent("<d228-special>", "nothing: null\nanswer: 42\nfraction: 1.5\nflag: true");
 
-            for (String name : List.of("nothing", "answer")) {
+            for (String name : List.of("nothing", "answer", "fraction", "flag")) {
                 var observed = selectorsOf(hosted, name);
                 assertFalse(observed.isEmpty(), name + " is PRESENT and delegates");
                 assertTrue(
                         observed.values().stream().allMatch(p -> p == Provenance.DELEGATED),
                         name + " has no ordinary local table");
             }
+        }
+    }
+
+    @Test
+    void lexicalObservationIsNamesOnlyBoundedOrderedAndInert() throws Exception {
+        try (var hosted = open()) {
+            var activation = hosted.activation();
+            hosted.callEntered(() -> {
+                activation.context().createLocalSlot("zLast", ProtosNullValue.INSTANCE);
+                activation.context().createLocalSlot("aFirst", ProtosNullValue.INSTANCE);
+                return null;
+            });
+            List<String> names = context(hosted).tryObservePersistentLexicalNamesForRuntime(activation);
+            assertTrue(names.containsAll(List.of("aFirst", "zLast")));
+            assertTrue(names.indexOf("aFirst") < names.indexOf("zLast"));
+            assertThrows(UnsupportedOperationException.class, () -> names.add("changed"));
+            hosted.callEntered(() -> {
+                for (int index = 0; index <= ProtosReplSelectorObservation.MAX_EXAMINED_NAMES; index++) {
+                    activation.context().createLocalSlot("wideName" + index, ProtosNullValue.INSTANCE);
+                }
+                return null;
+            });
+            assertTrue(context(hosted).tryObservePersistentLexicalNamesForRuntime(activation).isEmpty(),
+                    "an exceeded budget must discard every partial name");
+            assertTrue(names.contains("aFirst"), "an earlier inert observation stays unchanged");
         }
     }
 
@@ -353,6 +378,7 @@ final class ProtosReplLexicalObservationTest {
             try (var held = scheduler.tryAcquireObservation(
                     hosted.process().rootActorForRuntime()).orElseThrow()) {
                 assertTrue(selectorsOf(hosted, "dog").isEmpty());
+                assertTrue(ctx.tryObservePersistentLexicalNamesForRuntime(hosted.activation()).isEmpty());
             }
 
             assertEquals(Provenance.OWN, selectorsOf(hosted, "dog").get("name"));

@@ -126,7 +126,8 @@ public final class ProtosReplSelectorObservation {
     /* Only ordinary Protos objects and specialized Protos representations; never foreign. */
     private static boolean admissible(Object node) {
         return !(node instanceof ProtosForeignProjectedReceiver)
-                && (node instanceof ProtosObjectValue || node instanceof ProtosRepresentedValue);
+                && (node instanceof ProtosObjectValue || node instanceof ProtosRepresentedValue
+                        || node instanceof Long || node instanceof Double || node instanceof Boolean);
     }
 
     private static List<Candidate> enumerate(Object origin, ProtosPrelude prelude) {

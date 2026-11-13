@@ -28,7 +28,7 @@ import java.util.Optional;
 public final class ProtosActivation {
     private ProtosObjectValue context;
     /*
-     * I115-S1c-L: the frame-backed lexical authority of a genuine Closure
+     * The frame-backed lexical authority of a genuine Closure
      * activation whose frame escaped, installed at most once. It is the
      * authority of the guest Context when that Context exists, and answers
      * lexical membership while the Context is still deferred. Never a copy of
@@ -603,7 +603,7 @@ public final class ProtosActivation {
     }
 
     /**
-     * I115-S1c-L: installs the frame-backed lexical authority of this genuine
+     * Installs the frame-backed lexical authority of this genuine
      * Closure activation without materializing its guest Context. Idempotent
      * for the identical authority; a conflicting authority is rejected. An
      * already existing Context keeps its identity and hands its bindings over
@@ -657,6 +657,25 @@ public final class ProtosActivation {
             return context.hasLocalSlot(name);
         }
         return frameLexicalAuthority != null && frameLexicalAuthority.containsBinding(name);
+    }
+
+    /**
+     * Names-only observation of the current scope; never materializes a Context
+     * or visits captured contexts. An exceeded budget discards the entire result.
+     */
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
+    public List<String> observeCurrentLexicalNamesForRuntime() {
+        ArrayList<String> names = new ArrayList<>();
+        int budget = ProtosReplSelectorObservation.MAX_EXAMINED_NAMES;
+        boolean complete = context != null
+                ? context.appendLocalBindingNamesToBounded(names, budget)
+                : frameLexicalAuthority == null
+                        || frameLexicalAuthority.appendBindingNamesToBounded(names, budget);
+        if (!complete) {
+            return List.of();
+        }
+        names.sort(ProtosReplSelectorObservation::compareScalarValues);
+        return List.copyOf(names);
     }
 
     /**

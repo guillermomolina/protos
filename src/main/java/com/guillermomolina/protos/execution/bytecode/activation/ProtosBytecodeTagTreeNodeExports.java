@@ -12,7 +12,7 @@
  *
  * Software distributed under the License is distributed on an "AS IS" basis,
  * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
- * the specific language governing rights and limitations under the LICENSE.
+ * the specific language governing rights and limitations under the License.
  */
 
 package com.guillermomolina.protos.execution;
@@ -23,6 +23,8 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.bytecode.TagTreeNode;
+import com.oracle.truffle.api.bytecode.TagTree;
+import com.oracle.truffle.api.instrumentation.StandardTags;
 import com.oracle.truffle.api.frame.Frame;
 import com.oracle.truffle.api.frame.MaterializedFrame;
 import com.oracle.truffle.api.interop.NodeLibrary;
@@ -31,29 +33,13 @@ import com.oracle.truffle.api.library.ExportLibrary;
 import com.oracle.truffle.api.library.ExportMessage;
 
 /**
- * PLAT015 NodeLibrary bridge for Bytecode DSL instrumentation locations.
+ * NodeLibrary bridge for Bytecode DSL instrumentation locations.
  *
- * <p>The Bytecode interpreter's own locals are implementation state, not Protos
- * lexical bindings. Tooling therefore projects the exact activation from frame
- * argument zero through the same bounded {@link ProtosDebuggerScope} used by the
- * AST backend.</p>
- *
- * <p>PLAT044 B′: inside an inline literal callback region frame argument zero is
- * the enclosing activation, while the semantic current activation is the
- * callback's own, carried by the region's {@link
- * CanonicalToBytecodeLowerer#INLINE_CALLBACK_CALL_LOCAL}. A location whose
- * bytecode index lies in such a region projects that activation instead,
- * materializing it through the carrier only when a scope is actually
- * requested, so the guest and every later observer share that one instance.
- * For a frame-native callback that first materialization moves the
- * callback's PRESENT block-local bindings to a durable authority on the
- * activation before it is projected; no additional frame is fabricated.</p>
- *
- * <p>I102 (PLAT060-B5): every ordinary Closure frame carries the same
- * argument header, so the frame layout says nothing about debugging. PLAT067-B:
- * every Context uses one proof-optimized lowering; scopes are projected only
- * for executable locations that survived it, and no frame is fabricated for an
- * execution a valid optimization eliminated.</p>
+ * <p>A physical Closure scope reads the exact activation's original frame-backed
+ * lexical authority. MODULE roots retain their module context. Inline callbacks
+ * contribute only temporary tooling snapshots of the locals owned by semantic
+ * RootTag regions active at the suspended bytecode position. No frame, activation
+ * or variable store is fabricated for an eliminated physical call.</p>
  */
 @ExportLibrary(value = NodeLibrary.class, receiverType = TagTreeNode.class)
 final class ProtosBytecodeTagTreeNodeExports {
@@ -73,61 +59,101 @@ final class ProtosBytecodeTagTreeNodeExports {
     static Object getScope(
             TagTreeNode node,
             Frame frame,
-            @SuppressWarnings("unused") boolean nodeEnter)
+            boolean nodeEnter)
             throws UnsupportedMessageException {
         if (!hasScope(node, frame)) {
             throw UnsupportedMessageException.create();
         }
         ProtosActivation activation = ProtosFrameArguments.activation(frame);
-        java.util.Map<String, Object> ownInlineBindings =
-                normalInlineCallbackBindings(node, frame.materialize());
-        if (ownInlineBindings != null) {
-            /*
-             * The physical frame belongs to the enclosing source root.
-             * Its LOCAL/CELL bindings are not necessarily in the activation's
-             * Context. Overlay those live bindings before the callback's own
-             * bindings, preserving lexical shadowing without constructing a
-             * callback activation or retaining the frame.
-             *
-             * This projection is used only when tooling requests a scope.
-             */
-            java.util.Map<String, Object> parentBindings =
-                    toolingBindings(node, frame);
-            if (parentBindings == null || parentBindings.isEmpty()) {
-                return new ProtosDebuggerScope(activation, ownInlineBindings);
+        MaterializedFrame materialized = frame.materialize();
+        int bytecodeIndex = node == null ? -1
+                : nodeEnter ? node.getEnterBytecodeIndex() : node.getReturnBytecodeIndex();
+        if (node != null) {
+            BytecodeNode bytecode = node.getBytecodeNode();
+            if (bytecode.getBytecodeRootNode() instanceof ProtosBytecodeRootNode root) {
+                // MODULE roots have no Closure layout and keep their module authority.
+                root.ensureToolingLexicalFrameView(
+                        materialized, bytecode, bytecodeIndex, activation);
             }
-            java.util.LinkedHashMap<String, Object> visible =
-                    new java.util.LinkedHashMap<>(parentBindings);
-            visible.putAll(ownInlineBindings);
-            return new ProtosDebuggerScope(activation, visible);
         }
-        java.util.Map<String, Object> rootBindings = toolingBindings(node, frame);
-        if (rootBindings != null) {
-            /*
-             * PLAT067-B / I115: a Closure root's LOCAL and CELL bindings are
-             * never part of its Context; the live established bindings
-             * overlay that Context read-only.
-             */
-            return new ProtosDebuggerScope(activation, rootBindings);
-        }
-        return debuggerScope(activation);
+        java.util.Map<String, Object> ownInlineBindings =
+                normalInlineCallbackBindings(node, materialized, bytecodeIndex);
+        return new ProtosDebuggerScope(
+                activation, ownInlineBindings == null ? java.util.Map.of() : ownInlineBindings);
     }
 
-    private static java.util.Map<String, Object> toolingBindings(TagTreeNode node, Frame frame) {
-        if (node == null) {
+    /**
+     * Resolve a live lexical creator only through an identical owned cell whose
+     * canonical binding metadata proves immediate lexical ownership. Stack order
+     * and the dynamic caller are not evidence of a lexical relationship.
+     */
+    @TruffleBoundary
+    static ProtosActivation lexicalCreatorForTooling(ProtosActivation activation) {
+        var closure = activation.invokedClosureOrNullForRuntime();
+        if (closure == null || activation.capturedCellsForRuntime().length == 0) {
             return null;
         }
-        BytecodeNode bytecode = node.getBytecodeNode();
-        return bytecode.getBytecodeRootNode() instanceof ProtosBytecodeRootNode root
-                ? root.toolingBindingsOrNull(
-                        bytecode, node.getEnterBytecodeIndex(), frame.materialize())
-                : null;
+        // Observation must never prepare or rematerialize executable code.
+        var plan = closure.preparedExecutionPlanOrNullForRuntime();
+        if (plan == null) {
+            return null;
+        }
+        var indices = plan.creatorCellIndicesForTooling();
+        if (indices.isEmpty()) {
+            return null;
+        }
+        var captured = activation.capturedCellsForRuntime();
+        return com.oracle.truffle.api.Truffle.getRuntime().iterateFrames(instance -> {
+            if (!(instance.getCallTarget() instanceof com.oracle.truffle.api.RootCallTarget target)) {
+                return null;
+            }
+            Object source = target.getRootNode();
+            Frame original = instance.getFrame(
+                    com.oracle.truffle.api.frame.FrameInstance.FrameAccess.READ_ONLY);
+            boolean resumed = source instanceof com.oracle.truffle.api.bytecode.ContinuationRootNode;
+            if (source instanceof com.oracle.truffle.api.bytecode.ContinuationRootNode continuation) {
+                source = continuation.getSourceRootNode();
+                if (original.getArguments().length == 0
+                        || !(original.getArguments()[0] instanceof Frame saved)) {
+                    return null;
+                }
+                original = saved;
+            }
+            if (!(source instanceof ProtosBytecodeRootNode root) || !root.isSemanticActivationRoot()) {
+                return null;
+            }
+            var layout = root.lexicalFrameLayoutOrNull();
+            if (layout == null) {
+                return null;
+            }
+            BytecodeNode bytecode = root.getBytecodeNode();
+            int bytecodeIndex = bytecode.getBytecodeIndex(original);
+            for (int local = 0; local < layout.size(); local++) {
+                if (!layout.isCell(local)) {
+                    continue;
+                }
+                // The tooling API accepts Frame and returns null for a cleared local.
+                Object ownedCell = bytecode.getLocalValue(bytecodeIndex, original, layout.offset(local));
+                for (int index : indices) {
+                    if (index < captured.length && ownedCell == captured[index]) {
+                        MaterializedFrame materialized = resumed ? original.materialize()
+                                : instance.getFrame(
+                                        com.oracle.truffle.api.frame.FrameInstance.FrameAccess.READ_WRITE)
+                                        .materialize();
+                        ProtosActivation creator = ProtosFrameArguments.activation(materialized);
+                        root.ensureToolingLexicalFrameView(materialized, bytecode,
+                                bytecode.getBytecodeIndex(materialized), creator);
+                        return creator;
+                    }
+                }
+            }
+            return null;
+        });
     }
 
     /*
-     * I111-B: an auxiliary structured/C-prime root of the same generated
-     * interpreter emits no tags, and even a tag location reached there must
-     * never offer a guest scope. Tooling-only.
+     * Auxiliary structured/C-prime roots receive automatic physical tags but
+     * do not represent semantic activations and never offer guest scopes.
      */
     private static boolean inSemanticActivationRoot(TagTreeNode node) {
         return node == null
@@ -145,39 +171,51 @@ final class ProtosBytecodeTagTreeNodeExports {
      */
     @TruffleBoundary
     private static java.util.Map<String, Object> normalInlineCallbackBindings(
-            TagTreeNode node, MaterializedFrame frame) {
+            TagTreeNode node, MaterializedFrame frame, int index) {
         if (node == null) {
             return null;
         }
         BytecodeNode bytecode = node.getBytecodeNode();
-        int index = node.getEnterBytecodeIndex();
         Object[] names = bytecode.getLocalNames(index);
         String prefix = CanonicalToBytecodeLowerer
                 .NORMAL_INLINE_CALLBACK_BINDING_LOCAL_PREFIX;
-        boolean inNormalInlineCallback = false;
-        java.util.LinkedHashMap<String, Object> bindings =
-                new java.util.LinkedHashMap<>();
-        for (int offset = 0; offset < names.length; offset++) {
-            if (!(names[offset] instanceof String name)
-                    || !name.startsWith(prefix)) {
+        java.util.List<TagTree> regions = new java.util.ArrayList<>();
+        collectSemanticRoots(bytecode.getTagTree(), regions);
+        java.util.LinkedHashMap<String, Object> bindings = new java.util.LinkedHashMap<>();
+        boolean active = false;
+        // The first RootTag is the physical root. Later roots are callback regions,
+        // in the same preorder that assigned their BytecodeLocal info during lowering.
+        for (int region = 1; region < regions.size(); region++) {
+            TagTree owner = regions.get(region);
+            if (owner.getEnterBytecodeIndex() == owner.getReturnBytecodeIndex()
+                    || index < owner.getEnterBytecodeIndex() || index > owner.getReturnBytecodeIndex()) {
                 continue;
             }
-            inNormalInlineCallback = true;
-            Object value = ProtosNumericValueSupport.guestValue(
-                    bytecode.getLocalValue(index, frame, offset));
-            if (value != null) {
-                bindings.put(name.substring(prefix.length()), value);
+            active = true;
+            for (int offset = 0; offset < names.length; offset++) {
+                if (names[offset] instanceof String name && name.startsWith(prefix)
+                        && bytecode.getLocalInfo(index, offset) instanceof Integer ownerRegion
+                        && ownerRegion == region) {
+                    Object value = ProtosNumericValueSupport.guestValue(
+                            bytecode.getLocalValue(index, frame, offset));
+                    if (value != null) {
+                        bindings.put(name.substring(prefix.length()), value);
+                    }
+                }
             }
         }
-        return inNormalInlineCallback
-                ? java.util.Collections.unmodifiableMap(bindings)
-                : null;
+        return active ? java.util.Collections.unmodifiableMap(bindings) : null;
     }
 
-    @TruffleBoundary
-    private static ProtosDebuggerScope debuggerScope(
-            ProtosActivation activation) {
-        return new ProtosDebuggerScope(activation);
+    private static void collectSemanticRoots(TagTree tree, java.util.List<TagTree> roots) {
+        if (tree == null) {
+            return;
+        }
+        if (tree.hasTag(StandardTags.RootTag.class)) {
+            roots.add(tree);
+        }
+        for (TagTree child : tree.getTreeChildren()) {
+            collectSemanticRoots(child, roots);
+        }
     }
-
 }

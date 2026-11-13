@@ -167,14 +167,25 @@ public final class ProtosPolyglotProcessContext implements ProtosProcessExecutio
                     || !eligibleForPersistentLexicalObservation(activation)) {
                 return List.of();
             }
-            return context.callEntered(() -> {
-                if (!eligibleForPersistentLexicalObservation(activation)) {
-                    return List.of();
-                }
-                // I115: lexical-name observation is temporarily
-                // unavailable through the new activation representation.
+            Optional<ProtosActorScheduler> scheduler = actorSchedulerForRuntime();
+            if (scheduler.isEmpty()) {
                 return List.of();
-            });
+            }
+            Optional<ProtosActorScheduler.ObservationPermit> admitted =
+                    scheduler.orElseThrow().tryAcquireObservation(process.rootActorForRuntime());
+            if (admitted.isEmpty()) {
+                return List.of();
+            }
+            try (ProtosActorScheduler.ObservationPermit permit = admitted.orElseThrow()) {
+                return context.callEntered(() -> {
+                    if (!eligibleForPersistentLexicalObservation(activation)) {
+                        return List.<String>of();
+                    }
+                    List<String> names = activation.observeCurrentLexicalNamesForRuntime();
+                    return eligibleForPersistentLexicalObservation(activation)
+                            ? names : List.<String>of();
+                });
+            }
         } catch (RuntimeException unavailable) {
             return List.of();
         } finally {

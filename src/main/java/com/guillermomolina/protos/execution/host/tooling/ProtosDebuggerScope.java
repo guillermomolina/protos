@@ -131,13 +131,22 @@ final class ProtosDebuggerScope implements TruffleObject {
         return record == null ? null : record.instance();
     }
 
-    private List<String> visibleNamesSnapshot() {
+    private List<String> lexicalNamesSnapshot() {
         ArrayList<String> names = new ArrayList<>();
         names.addAll(inlineCallbackBindings.keySet());
 
-        appendLocalNames(
-                activation.context(),
-                names);
+        ProtosObjectValue context = activation.materializedContextOrNullForRuntime();
+        if (context != null) {
+            appendLocalNames(context, names);
+        } else if (activation.publishedClosureLexicalAuthorityForRuntime() != null) {
+            activation.publishedClosureLexicalAuthorityForRuntime().appendBindingNamesTo(names);
+        }
+
+        ProtosDebuggerScope lexicalCreatorScope = lexicalCreatorScope();
+        if (lexicalCreatorScope != null) {
+            names.addAll(lexicalCreatorScope.lexicalNamesSnapshot());
+            return List.copyOf(names);
+        }
 
         List<String> capturedNames = capturedCellNames();
         var cells = activation.capturedCellsForRuntime();
@@ -151,22 +160,31 @@ final class ProtosDebuggerScope implements TruffleObject {
                 activation.capturedLexicalContexts()) {
             appendLocalNames(lexical, names);
         }
+        return List.copyOf(names);
+    }
+
+    private List<String> visibleNamesSnapshot() {
+        ArrayList<String> names = new ArrayList<>(lexicalNamesSnapshot());
         ProtosObjectValue sourceContext = sourceModuleContextOrNull();
         if (sourceContext != null) {
-            for (String name : sourceContext.localSlotsSnapshot().keySet()) {
+            ArrayList<String> moduleNames = new ArrayList<>();
+            sourceContext.appendLocalBindingNamesTo(moduleNames);
+            for (String name : moduleNames) {
                 if (!names.contains(name)) {
                     names.add(name);
                 }
             }
         }
         appendReceiverDelegationNames(names);
-        return List.copyOf(new java.util.LinkedHashSet<>(names));
+        return List.copyOf(names);
     }
 
     private static void appendLocalNames(
             ProtosObjectValue object,
             List<String> names) {
-        names.addAll(object.localSlotsSnapshot().keySet());
+        ArrayList<String> localNames = new ArrayList<>();
+        object.appendLocalBindingNamesTo(localNames);
+        names.addAll(localNames);
     }
 
     private void appendReceiverDelegationNames(List<String> names) {
@@ -198,18 +216,30 @@ final class ProtosDebuggerScope implements TruffleObject {
         if (closure == null || activation.capturedCellsForRuntime().length == 0) {
             return List.of();
         }
-        return closure.executionPlanForRuntimeInvocation().capturedCellNamesForTooling();
+        var plan = closure.preparedExecutionPlanOrNullForRuntime();
+        return plan == null ? List.of() : plan.capturedCellNamesForTooling();
     }
 
-    private Optional<Object> rawVisibleValue(String member) {
+    /** Resolve only for this observation; Scope retains no creator or frame registry. */
+    private ProtosDebuggerScope lexicalCreatorScope() {
+        ProtosActivation creator =
+                ProtosBytecodeTagTreeNodeExports.lexicalCreatorForTooling(activation);
+        return creator == null ? null : new ProtosDebuggerScope(creator);
+    }
+
+    private Optional<Object> rawLexicalValue(String member) {
         if (inlineCallbackBindings.containsKey(member)) {
             return Optional.of(inlineCallbackBindings.get(member));
         }
         Optional<Object> local =
-                activation.context()
-                        .readLocalSlot(member);
+                activation.readCurrentLocalSlotForRuntime(member);
         if (local.isPresent()) {
             return local;
+        }
+
+        ProtosDebuggerScope lexicalCreatorScope = lexicalCreatorScope();
+        if (lexicalCreatorScope != null) {
+            return lexicalCreatorScope.rawLexicalValue(member);
         }
 
         List<String> capturedNames = capturedCellNames();
@@ -230,6 +260,15 @@ final class ProtosDebuggerScope implements TruffleObject {
             if (captured.isPresent()) {
                 return captured;
             }
+        }
+
+        return Optional.empty();
+    }
+
+    private Optional<Object> rawVisibleValue(String member) {
+        Optional<Object> lexical = rawLexicalValue(member);
+        if (lexical.isPresent()) {
+            return lexical;
         }
 
         ProtosObjectValue sourceContext = sourceModuleContextOrNull();

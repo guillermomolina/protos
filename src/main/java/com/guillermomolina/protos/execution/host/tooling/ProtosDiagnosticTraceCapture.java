@@ -62,12 +62,10 @@ import java.util.List;
  *       skipped.
  *   <li>A frame without a location (the innermost frame: Protos exceptions carry no location node)
  *       uses the position {@link #recordOrigin} stored on the occurrence.
- *   <li>PLAT044 B′ inline callbacks have no physical frame. When an inline callback carrier is
- *       live at the frame's bytecode index, the root is reparsed with source information and
- *       {@link StandardTags.RootTag} only, and every nested semantic RootTag active at that index
- *       contributes one callback frame (innermost first) before the enclosing physical frame. The
- *       first active RootTag, now emitted explicitly by the lowerer, identifies the physical
- *       semantic root; its frame is projected separately and is never duplicated. No inline
+ *   <li>Inline callbacks have no physical frame. On the error path, the root is reparsed
+ *       with source and tag information. Every nested semantic RootTag active at the failing
+ *       index contributes one callback frame before the physical root, innermost first.
+ *       The automatic physical RootTag and RootBodyTag describe one activation. No inline
  *       activation, scope or binding is materialized.
  *   <li>I112 / PLAT062-T: a caller whose terminal invocation suspended returned its transport,
  *       so after resumption it is no longer a physical frame. When the occurrence crossed such a
@@ -83,14 +81,15 @@ import java.util.List;
  */
 final class ProtosDiagnosticTraceCapture {
     /*
-     * Lazy source sections plus only the RootTag: the smallest reparse that exposes PLAT044
-     * nested semantic roots. It is requested only for a root whose failing position lies in a
-     * live inline callback region.
+     * Error-only reparse exposing semantic roots and their actual invocation sites.
+     * Automatic RootBodyTags describe physical bodies, never additional activations.
      */
     private static final BytecodeConfig INLINE_CALLBACK_DIAGNOSTIC_CONFIG =
             ProtosBytecodeRootNodeGen.newConfigBuilder()
                     .addSource()
                     .addTag(StandardTags.RootTag.class)
+                    .addTag(StandardTags.RootBodyTag.class)
+                    .addTag(StandardTags.CallTag.class)
                     .build();
 
     private ProtosDiagnosticTraceCapture() {}
@@ -275,42 +274,21 @@ final class ProtosDiagnosticTraceCapture {
             return;
         }
 
-        boolean inlineRegionLive =
-                hasLiveInlineCallbackCarrier(location.getBytecodeNode(), location.getBytecodeIndex());
-        if (inlineRegionLive) {
-            semantic.getRootNodes().update(INLINE_CALLBACK_DIAGNOSTIC_CONFIG);
-        } else {
-            semantic.getRootNodes().ensureSourceInformation();
-        }
+        // Root-scoped locals do not describe semantic callback lifetimes. On the
+        // error path the instrumented tag tree supplies the active regions instead.
+        semantic.getRootNodes().update(INLINE_CALLBACK_DIAGNOSTIC_CONFIG);
         BytecodeLocation current = location.update();
         BytecodeNode bytecode = current.getBytecodeNode();
         int bytecodeIndex = current.getBytecodeIndex();
         SourceSection position = current.getSourceLocation();
 
-        if (inlineRegionLive) {
-            List<TagTree> regions = activeNestedRootTags(bytecode.getTagTree(), bytecodeIndex);
-            for (int index = regions.size() - 1; index >= 0 && !collector.full(); index--) {
-                TagTree region = regions.get(index);
-                // PLAT044 inline callbacks are anonymous Closure literals: no label exists.
-                collector.add(frame(null, region.getSourceSection(), position));
-                position = enclosingSection(bytecode, region);
-            }
+        List<TagTree> regions = activeNestedRootTags(bytecode.getTagTree(), bytecodeIndex);
+        for (int index = regions.size() - 1; index >= 0 && !collector.full(); index--) {
+            TagTree region = regions.get(index);
+            collector.add(frame(null, region.getSourceSection(), position));
+            position = enclosingCallSection(bytecode.getTagTree(), region, null);
         }
         collector.add(frame(label, semantic.getSourceSection(), position));
-    }
-
-    /**
-     * Whether {@code bytecodeIndex} lies in a PLAT044 inline callback region. The region's
-     * carrier local is block-scoped to the region, so this is a cheap, reparse-free gate on the
-     * local table; the TagTree remains the authority for the regions themselves.
-     */
-    private static boolean hasLiveInlineCallbackCarrier(BytecodeNode bytecode, int bytecodeIndex) {
-        for (Object name : bytecode.getLocalNames(bytecodeIndex)) {
-            if (CanonicalToBytecodeLowerer.INLINE_CALLBACK_CALL_LOCAL.equals(name)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /**
@@ -333,7 +311,8 @@ final class ProtosDiagnosticTraceCapture {
         while (descended) {
             descended = false;
             for (TagTree child : current.getTreeChildren()) {
-                if (child.getEnterBytecodeIndex() <= bytecodeIndex
+                if (child.getEnterBytecodeIndex() < child.getReturnBytecodeIndex()
+                        && child.getEnterBytecodeIndex() <= bytecodeIndex
                         && bytecodeIndex <= child.getReturnBytecodeIndex()) {
                     if (child.hasTag(StandardTags.RootTag.class)) {
                         if (physicalRootSeen) {
@@ -351,32 +330,24 @@ final class ProtosDiagnosticTraceCapture {
         return regions;
     }
 
-    /**
-     * The position of the enclosing activation while an inline callback region runs: the
-     * smallest source section around the region's entry that strictly contains the region's own
-     * section (the send that invoked the callback), mirroring the call-site position a physical
-     * callback's caller frame reports.
-     */
-    private static SourceSection enclosingSection(BytecodeNode bytecode, TagTree region) {
-        SourceSection inner = region.getSourceSection();
-        SourceSection[] candidates = bytecode.getSourceLocations(region.getEnterBytecodeIndex());
-        if (inner == null || candidates == null) {
-            return null;
+    /** The real tagged invocation enclosing this callback, rather than another statement. */
+    private static SourceSection enclosingCallSection(
+            TagTree tree, TagTree region, SourceSection caller) {
+        if (tree == region) {
+            return caller;
         }
-        SourceSection best = null;
-        for (SourceSection candidate : candidates) {
-            if (candidate == null
-                    || candidate.getSource() != inner.getSource()
-                    || candidate.getCharLength() <= inner.getCharLength()
-                    || candidate.getCharIndex() > inner.getCharIndex()
-                    || candidate.getCharEndIndex() < inner.getCharEndIndex()) {
-                continue;
-            }
-            if (best == null || candidate.getCharLength() < best.getCharLength()) {
-                best = candidate;
+        SourceSection current = tree.hasTag(StandardTags.CallTag.class)
+                ? tree.getSourceSection() : caller;
+        for (TagTree child : tree.getTreeChildren()) {
+            if (child.getEnterBytecodeIndex() <= region.getEnterBytecodeIndex()
+                    && region.getReturnBytecodeIndex() <= child.getReturnBytecodeIndex()) {
+                SourceSection found = enclosingCallSection(child, region, current);
+                if (found != null) {
+                    return found;
+                }
             }
         }
-        return best;
+        return null;
     }
 
     /**

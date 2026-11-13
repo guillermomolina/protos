@@ -219,6 +219,23 @@ final class ProtosBytecodeClosureExecutionPlan {
                 .orElse(java.util.List.of());
     }
 
+    /** Cell positions whose canonical owner is the immediate lexical creator. */
+    java.util.List<Integer> creatorCellIndicesForTooling() {
+        var scope = bindingAnalysis.scopeOf(definition).orElse(null);
+        if (scope == null || scope.lexicalParent() == null) {
+            return java.util.List.of();
+        }
+        java.util.ArrayList<Integer> indices = new java.util.ArrayList<>();
+        int index = 0;
+        for (var binding : scope.freeCells()) {
+            if (binding.owner() == scope.lexicalParent()) {
+                indices.add(index);
+            }
+            index++;
+        }
+        return java.util.List.copyOf(indices);
+    }
+
     ProtosLanguage language() {
         return language;
     }

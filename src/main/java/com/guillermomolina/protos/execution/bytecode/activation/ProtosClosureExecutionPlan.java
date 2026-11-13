@@ -120,6 +120,10 @@ public final class ProtosClosureExecutionPlan {
         return bytecodePlan.capturedCellNamesForTooling();
     }
 
+    java.util.List<Integer> creatorCellIndicesForTooling() {
+        return bytecodePlan.creatorCellIndicesForTooling();
+    }
+
     Object executeBytecodeActivationForTesting(
             com.guillermomolina.protos.runtime.ProtosActivation activation) {
         return bytecodePlan.executeActivation(activation);

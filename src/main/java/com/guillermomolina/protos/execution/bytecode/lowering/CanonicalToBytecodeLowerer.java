@@ -84,13 +84,12 @@ import java.util.Objects;
  * preserved without manufacturing ReturnHome ownership.</p>
  *
  * <p>PLAT042 Candidate B′: every top-level, module and Closure activation root
- * produced here is a real tagged {@link ProtosBytecodeRootNode} (I111-A
- * explicitly emits its RootTag, the guest semantic root identity, when each
- * physical semantic root is created, and I111-B marks it as a semantic
- * activation root, which no auxiliary root of the same interpreter is) and
+ * produced here is a real tagged {@link ProtosBytecodeRootNode}. Automatic
+ * physical root/body tags expose its execution, while the semantic activation
+ * marker distinguishes it from auxiliary roots of the same interpreter, and
  * lexically nested Closure roots share that interpreter's {@code
  * BytecodeRootNodes} group. Structured prepared invocations are not lowered
- * here; they enter the untagged {@link ProtosStructuredDispatchLowerer} root
+ * here; they enter the auxiliary {@link ProtosStructuredDispatchLowerer} root
  * once per invocation.</p>
  */
 final class CanonicalToBytecodeLowerer {
@@ -370,6 +369,11 @@ final class CanonicalToBytecodeLowerer {
     static final String FREE_CELL_LOCAL_PREFIX = "i115FreeCell:";
     static final String NORMAL_INLINE_CALLBACK_BINDING_LOCAL_PREFIX =
             "i095CallbackScalar:";
+    // Preorder identities of semantic inline RootTags within the current physical root.
+    // Stored as BytecodeLocal info and replayed with the tags during instrumentation reparses.
+    private int nextInlineCallbackRegion;
+    private int currentInlineCallbackRegion;
+
     private java.util.Map<String, BytecodeLocal> currentNormalCallbackScalarLocals =
             java.util.Map.of();
     private CanonicalBindingAnalysis currentNormalCallbackScalarAnalysis;
@@ -912,6 +916,8 @@ final class CanonicalToBytecodeLowerer {
                 currentRootBindingCallCandidates;
         java.util.Set<CanonicalClosure> savedMaterializedClosures =
                 currentRootMaterializedClosures;
+        int savedNextInlineCallbackRegion = nextInlineCallbackRegion;
+        int savedInlineCallbackRegion = currentInlineCallbackRegion;
         boolean savedInlineClosureCallBody = currentInlineClosureCallBody;
         boolean savedContinuationPath = currentRootEmittedContinuationPath;
         boolean savedTerminalInvocation = currentRootEmittedTerminalInvocation;
@@ -934,6 +940,8 @@ final class CanonicalToBytecodeLowerer {
                 && !compilationFacts.mayObserveReturnHome(activationDefinition);
         boolean rootMayRequirePrelude = false;
         try {
+            nextInlineCallbackRegion = 0;
+            currentInlineCallbackRegion = 0;
             currentInlineClosureCallBody = false;
             currentRootEmittedContinuationPath = false;
             currentRootEmittedTerminalInvocation = false;
@@ -979,6 +987,8 @@ final class CanonicalToBytecodeLowerer {
             }
             return root;
         } finally {
+            nextInlineCallbackRegion = savedNextInlineCallbackRegion;
+            currentInlineCallbackRegion = savedInlineCallbackRegion;
             currentRootMayRequirePrelude =
                     savedMayRequirePrelude || rootMayRequirePrelude;
             currentRootEmittedContinuationPath = savedContinuationPath;
@@ -1108,9 +1118,9 @@ final class CanonicalToBytecodeLowerer {
         currentRootCellLocals = java.util.Collections.unmodifiableMap(cellLocals);
 
         /*
-         * I111-A: this physical root is a genuine semantic source activation.
-         * I115-H4-B EXPERIMENTAL: its RootTag/RootBodyTag are the Bytecode
-         * DSL's automatic tags, no longer an explicit RootTag.
+         * This physical root is a genuine semantic source activation.
+         * Its physical RootTag/RootBodyTag are emitted automatically by the
+         * Bytecode DSL; inline callbacks add their own semantic RootTags.
          */
         builder.beginBlock();
 
@@ -3105,11 +3115,11 @@ final class CanonicalToBytecodeLowerer {
 
 
     /**
-     * I115: a terminal call or send whose operands are direct terminal
+     * A terminal call or send whose operands are direct terminal
      * values: an arity-selected terminal call through the shared
      * dispatcher. Immediate SEND1 evaluates the receiver once and
-     * transports it separately through CallBinaryMethod. During I115,
-     * terminal continuation transport is deliberately absent.
+     * transports it separately through CallBinaryMethod. A suspended outcome
+     * retains its caller location in the terminal operation's transport.
      */
     private void emitCall(
             ProtosBytecodeRootNodeGen.Builder builder,
@@ -6574,7 +6584,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115: the inline body in one of three forms. {@code STACK} leaves the
+     * The inline body in one of three forms. {@code STACK} leaves the
      * last expression's value on the stack (a condition or a Conditional
      * branch); {@code STORE} stores it once into {@code result};
      * {@code DISCARD} discards it. Earlier expressions are statements.
@@ -6617,6 +6627,8 @@ final class CanonicalToBytecodeLowerer {
          */
         builder.beginSourceSection(closure.span().startOffset(), closure.span().length());
         builder.beginTag(StandardTags.RootTag.class);
+        int enclosingRegion = currentInlineCallbackRegion;
+        currentInlineCallbackRegion = ++nextInlineCallbackRegion;
         builder.beginBlock();
         CanonicalLexicalScope ownScope =
                 compilationFacts.isolatedClosureAnalysis(closure).scopeOf(closure).orElse(null);
@@ -6650,6 +6662,7 @@ final class CanonicalToBytecodeLowerer {
         }
         builder.endBlock();
         builder.endTag(StandardTags.RootTag.class);
+        currentInlineCallbackRegion = enclosingRegion;
         builder.endSourceSection();
     }
 
@@ -6692,11 +6705,10 @@ final class CanonicalToBytecodeLowerer {
         for (String name : names) {
             BytecodeLocal bound = boundParameters.get(name);
             locals.put(name, bound != null ? bound : builder.createLocal(
-                    NORMAL_INLINE_CALLBACK_BINDING_LOCAL_PREFIX + name, null));
+                    NORMAL_INLINE_CALLBACK_BINDING_LOCAL_PREFIX + name, currentInlineCallbackRegion));
         }
         /*
-         * GraalPy DeleteLocal / LocalAccessor.clear: root-scoped physical
-         * locals are reused, but every inline callback invocation starts
+         * Root-scoped physical locals are reused, but every inline callback invocation starts
          * with its own bindings ABSENT. The operation runs inside the selected
          * callback path, including once per iteration of an admitted loop.
          * A value-producing body opens its Block first, so these resets are
@@ -6898,6 +6910,9 @@ final class CanonicalToBytecodeLowerer {
                             java.util.Collections.nCopies(directOperands.size(), false));
             inline.set(staticControl.selectedPosition(), true);
 
+            // Preserve the actual invocation site around the selected semantic callback,
+            // even when selection and physical dispatch have been eliminated.
+            builder.beginTag(StandardTags.CallTag.class);
             builder.beginBlock();
             emitI115Conditional(
                     builder, control,
@@ -6906,6 +6921,7 @@ final class CanonicalToBytecodeLowerer {
                             scratch, childResult, resumeValue),
                     staticControl, valueUsed, result, primitiveCarrierResult);
             builder.endBlock();
+            builder.endTag(StandardTags.CallTag.class);
             return;
         }
 
@@ -9463,7 +9479,7 @@ final class CanonicalToBytecodeLowerer {
 
         String parameter = callback.parameters().get(0).name();
         BytecodeLocal element = builder.createLocal(
-                NORMAL_INLINE_CALLBACK_BINDING_LOCAL_PREFIX + parameter, null);
+                NORMAL_INLINE_CALLBACK_BINDING_LOCAL_PREFIX + parameter, nextInlineCallbackRegion + 1);
         builder.beginWhile();
         builder.beginArrayEachNext(element);
         builder.emitLoadLocal(snapshot);
@@ -9554,9 +9570,9 @@ final class CanonicalToBytecodeLowerer {
         String keyName = callback.parameters().get(0).name();
         String valueName = callback.parameters().get(1).name();
         BytecodeLocal key = builder.createLocal(
-                NORMAL_INLINE_CALLBACK_BINDING_LOCAL_PREFIX + keyName, null);
+                NORMAL_INLINE_CALLBACK_BINDING_LOCAL_PREFIX + keyName, nextInlineCallbackRegion + 1);
         BytecodeLocal value = builder.createLocal(
-                NORMAL_INLINE_CALLBACK_BINDING_LOCAL_PREFIX + valueName, null);
+                NORMAL_INLINE_CALLBACK_BINDING_LOCAL_PREFIX + valueName, nextInlineCallbackRegion + 1);
         builder.beginWhile();
         builder.beginAssociationEachNext(key, value);
         builder.emitLoadLocal(snapshot);

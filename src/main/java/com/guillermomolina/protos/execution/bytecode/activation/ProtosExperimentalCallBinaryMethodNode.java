@@ -79,6 +79,8 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
             Object receiver,
             Object a0,
             @Bind("$node") Node inliningTarget,
+            @Bind("bytecodeOf($node)") BytecodeNode bytecode,
+            @Bind("bytecode.getBytecodeIndex(frame)") int bytecodeIndex,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
             @Cached(value = "callable", weak = true)
                     ProtosClosureValue cachedCallable,
@@ -101,16 +103,22 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
                 null, receiver, receiverHomeOrNull(receiver),
                 null, null, a0);
         if (cachedHomeMode == ProtosFunctionCallDispatchers.ReturnHomeMode.UNOBSERVABLE) {
-            return ProtosFunctionCallDispatchers.invokeUnobservableHome(
+            Object outcome = ProtosFunctionCallDispatchers.invokeUnobservableHome(
                     frame, callNode, cachedCallee, callable, arguments, null);
+            return ProtosTailCallContinuation.completeCall(
+                    terminal, outcome, bytecode, bytecodeIndex);
         }
         if (cachedHomeMode == ProtosFunctionCallDispatchers.ReturnHomeMode.CAPTURED) {
-            return ProtosFunctionCallDispatchers.invokeCapturedHome(
+            Object outcome = ProtosFunctionCallDispatchers.invokeCapturedHome(
                     frame, callNode, cachedCallee, callable, arguments, null);
+            return ProtosTailCallContinuation.completeCall(
+                    terminal, outcome, bytecode, bytecodeIndex);
         }
-        return invoke.execute(
+        Object outcome = invoke.execute(
                 frame, inliningTarget, callNode, cachedCallee,
                 callable, arguments, null);
+        return ProtosTailCallContinuation.completeCall(
+                terminal, outcome, bytecode, bytecodeIndex);
     }
 
     static ProtosFunctionCallDispatchers.ReturnHomeMode classifyReturnHome(
@@ -131,19 +139,23 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
             Object a0,
             Object a1,
             @Bind("$node") Node inliningTarget,
+            @Bind("bytecodeOf($node)") BytecodeNode bytecode,
+            @Bind("bytecode.getBytecodeIndex(frame)") int bytecodeIndex,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
             @Cached(
                     value = "rootCallSelection()",
                     allowUncached = true)
                     ProtosStandardObjectProtocol.CanonicalRootCallSelection rootSelection,
             @Cached ProtosFunctionCallDispatchers.FunctionCachedCallNode call) {
-        return call.execute(
+        Object outcome = call.execute(
                 frame, inliningTarget, terminal, callable,
                 ProtosFrameArguments.dispatchedCall2(
                         null, ProtosFrameArguments.functionCallMarker(),
                         null, null, null, a0, a1),
                 null, root,
                 ProtosFunctionCallDispatchers.currentContext(inliningTarget));
+        return ProtosTailCallContinuation.completeCall(
+                terminal, outcome, bytecode, bytecodeIndex);
     }
 
     @Specialization(
@@ -159,6 +171,8 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
             Object a0,
             Object a1,
             @Bind("$node") Node inliningTarget,
+            @Bind("bytecodeOf($node)") BytecodeNode bytecode,
+            @Bind("bytecode.getBytecodeIndex(frame)") int bytecodeIndex,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
             @Cached ProtosFunctionCallDispatchers.FunctionCachedCallNode call) {
         Object[] arguments = ProtosFrameArguments.dispatchedCall2(
@@ -166,10 +180,12 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
                 null, null, null, a0, a1);
         ProtosFrameArguments.bindMethod(
                 arguments, method.receiver(), method.methodHome());
-        return call.execute(
+        Object outcome = call.execute(
                 frame, inliningTarget, terminal, method.callable(), arguments,
                 null, root,
                 ProtosFunctionCallDispatchers.currentContext(inliningTarget));
+        return ProtosTailCallContinuation.completeCall(
+                terminal, outcome, bytecode, bytecodeIndex);
     }
 
     @Specialization(
@@ -182,14 +198,18 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
             Object callable,
             Object a0,
             Object a1,
+            @Bind("bytecodeOf($node)") BytecodeNode bytecode,
+            @Bind("bytecode.getBytecodeIndex(frame)") int bytecodeIndex,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
             @Cached ProtosFunctionCallDispatchers.CallNode call) {
-        return call.execute(
+        Object outcome = call.execute(
                 frame, terminal, callable,
                 ProtosFrameArguments.dispatchedCall2(
                         null, ProtosFrameArguments.functionCallMarker(),
                         null, null, null, a0, a1),
                 null, root);
+        return ProtosTailCallContinuation.completeCall(
+                terminal, outcome, bytecode, bytecodeIndex);
     }
 
     /*
@@ -208,6 +228,8 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
             Object callable,
             Object receiver,
             Object a0,
+            @Bind("bytecodeOf($node)") BytecodeNode bytecode,
+            @Bind("bytecode.getBytecodeIndex(frame)") int bytecodeIndex,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
             @Cached ProtosFunctionCallDispatchers.CallNode call) {
         Object[] arguments = ProtosFrameArguments.dispatchedCall1(
@@ -219,9 +241,11 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
                     arguments, method.receiver(), method.methodHome());
         }
 
-        return call.execute(
+        Object outcome = call.execute(
                 frame, terminal, callable, arguments,
                 null, root);
+        return ProtosTailCallContinuation.completeCall(
+                terminal, outcome, bytecode, bytecodeIndex);
     }
 
     /*
@@ -287,6 +311,12 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
                         ? isSourceFunction(closure)
                         : callable instanceof ProtosBoundMethod method
                                 && isSourceFunction(method.callable());
+    }
+
+    // Proxy nodes bind through their operation node. The interpreter stores
+    // this call site's index in its frame before entering the proxy.
+    static BytecodeNode bytecodeOf(Node node) {
+        return BytecodeNode.get(node);
     }
 
     static ProtosBytecodeRootNode rootOf(Node node) {
