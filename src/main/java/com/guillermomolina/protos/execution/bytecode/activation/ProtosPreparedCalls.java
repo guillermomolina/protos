@@ -385,8 +385,10 @@ final class ProtosPreparedCalls {
 
             Object receiver = activation.receiver();
             if (receiver instanceof ProtosClosureValue targetClosure) {
+                // The Closure branch is terminal: it executes the Closure's own
+                // body and never looks up `call` again (CALLABLES.md).
                 return PreparedStandardObjectCall.forward(
-                        ProtosCallRequest.call(
+                        ProtosCallRequest.selectedBody(
                                 targetClosure,
                                 supplied,
                                 activation));

@@ -238,6 +238,60 @@ final class ProtosPerf006B2D3BSelectedStandardObjectCallIntrinsicTest {
         System.out.println("PERF006_B2D3B_OVERRIDE_RECEIVER_HOME=PASS");
     }
 
+    /**
+     * A local {@code call} override that delegates to the standard {@code Object.call}
+     * through {@code super}: the standard Closure branch is terminal, so it executes the
+     * receiver Closure's own body and never selects the override again (CALLABLES.md).
+     */
+    @Test
+    void superStandardCallFromLocalOverrideExecutesTheClosureBody()
+            throws Exception {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                ProtosLanguage language = LANGUAGE_REF.get(null);
+                ProtosActivation module = moduleActivation();
+                ProtosObjectValue bodyMarker =
+                        new ProtosObjectValue(ProtosObjectValue.rootObject());
+                module.context().createLocalSlot("bodyMarker", bodyMarker);
+
+                ProtosClosureValue target =
+                        sourceClosure(
+                                language,
+                                module,
+                                "() => { bodyMarker }",
+                                "perf006-b2d3b-super-target.protos");
+                target.createLocalSlot(
+                        "call",
+                        sourceClosure(
+                                language,
+                                module,
+                                "() => { super.call() }",
+                                "perf006-b2d3b-super-override.protos"));
+                module.context().createLocalSlot("target", target);
+
+                assertSame(
+                        bodyMarker,
+                        execute(
+                                language,
+                                module,
+                                "target()",
+                                "perf006-b2d3b-super-invoke.protos"));
+                // Repeated execution keeps the same selection.
+                assertSame(
+                        bodyMarker,
+                        execute(
+                                language,
+                                module,
+                                "target()",
+                                "perf006-b2d3b-super-invoke-again.protos"));
+            } finally {
+                context.leave();
+            }
+        }
+    }
+
     @Test
     void closureLocalNonClosureCallShadowsCanonicalStandardCall()
             throws Exception {

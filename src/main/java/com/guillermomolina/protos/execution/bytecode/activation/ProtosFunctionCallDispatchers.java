@@ -462,6 +462,73 @@ final class ProtosFunctionCallDispatchers {
         return callPublishedUncached(selected, activation);
     }
 
+    /**
+     * Execution of a Closure whose own body is already the selected behavior:
+     * its function CallTarget is invoked directly and {@code call} is never
+     * looked up again.
+     */
+    @GenerateUncached
+    @GenerateInline(false)
+    abstract static class SelectedBodyCallNode extends Node {
+
+        abstract Object execute(
+                VirtualFrame frame,
+                boolean terminal,
+                ProtosClosureValue closure,
+                Object[] arguments,
+                Object callerReference,
+                ProtosBytecodeRootNode root);
+
+        @Specialization(guards = "isSourceFunction(closure)")
+        static Object sourceBody(
+                VirtualFrame frame,
+                boolean terminal,
+                ProtosClosureValue closure,
+                Object[] arguments,
+                Object callerReference,
+                ProtosBytecodeRootNode root,
+                @Bind("$node") Node inliningTarget,
+                @Cached FunctionCachedCallNode cachedCall) {
+            return cachedCall.execute(
+                    frame, inliningTarget, terminal, closure, arguments,
+                    callerReference, root, currentContext(inliningTarget));
+        }
+
+        @Specialization(guards = "isBuiltin(closure)")
+        static Object builtinBody(
+                VirtualFrame frame,
+                boolean terminal,
+                ProtosClosureValue closure,
+                Object[] arguments,
+                Object callerReference,
+                ProtosBytecodeRootNode root,
+                @Bind("$node") Node inliningTarget,
+                @Cached BuiltinFunctionCachedCallNode cachedCall) {
+            return cachedCall.execute(
+                    frame, inliningTarget, terminal, closure, arguments,
+                    frame == null
+                            ? callerReference
+                            : ProtosFrameArguments.activation(frame),
+                    currentContext(inliningTarget));
+        }
+
+        static boolean isSourceFunction(ProtosClosureValue closure) {
+            return CallNode.isSourceFunction(closure);
+        }
+
+        static boolean isBuiltin(ProtosClosureValue closure) {
+            return CallNode.isBuiltin(closure);
+        }
+    }
+
+    /** Host-side execution of an already selected Closure body. */
+    static Object callSelectedBodyUncached(
+            ProtosClosureValue closure, Object[] arguments, ProtosActivation caller) {
+        Object outcome = ProtosFunctionCallDispatchersFactory.SelectedBodyCallNodeGen.getUncached()
+                .execute(null, false, closure, arguments, caller, null);
+        return projectForCaller(outcome, false);
+    }
+
     /** {@code CallDispatchers.FunctionCachedCallNode}. */
     @GenerateInline
     @GenerateCached(false)

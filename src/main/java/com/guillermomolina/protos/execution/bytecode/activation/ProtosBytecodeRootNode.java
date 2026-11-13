@@ -4300,7 +4300,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosCallRequest request,
                 @Bind VirtualFrame frame,
                 @Bind ProtosBytecodeRootNode root,
-                @Cached ProtosFunctionCallDispatchers.CallNode callNode) {
+                @Cached ProtosFunctionCallDispatchers.CallNode callNode,
+                @Cached ProtosFunctionCallDispatchers.SelectedBodyCallNode selectedBody) {
+            if (request.selectedBody()) {
+                return selectedBody.execute(
+                        frame, terminal, (ProtosClosureValue) request.callable(),
+                        request.arguments(), request.caller(), root);
+            }
             return callNode.execute(
                     frame, terminal, request.callable(), request.arguments(),
                     request.caller(), root);

@@ -46,11 +46,34 @@ final class ProtosCallRequest {
     private final Object callable;
     private final Object[] arguments;
     private final ProtosActivation caller;
+    /* The callable is a Closure whose own body is the selected behavior. */
+    private final boolean selectedBody;
 
     private ProtosCallRequest(Object callable, Object[] arguments, ProtosActivation caller) {
+        this(callable, arguments, caller, false);
+    }
+
+    private ProtosCallRequest(
+            Object callable, Object[] arguments, ProtosActivation caller, boolean selectedBody) {
         this.callable = Objects.requireNonNull(callable, "callable");
         this.arguments = Objects.requireNonNull(arguments, "arguments");
         this.caller = Objects.requireNonNull(caller, "caller");
+        this.selectedBody = selectedBody;
+    }
+
+    /**
+     * Execution of {@code closure}'s own body with {@code supplied}, made by
+     * {@code caller}: the terminal Closure branch of the standard
+     * {@code Object.call}. The body is the selected behavior, so
+     * {@code call} is never looked up again.
+     */
+    static ProtosCallRequest selectedBody(
+            ProtosClosureValue closure, List<?> supplied, ProtosActivation caller) {
+        return new ProtosCallRequest(
+                closure,
+                ProtosFrameArguments.functionCallArguments(supplied.toArray()),
+                caller,
+                true);
     }
 
     /** {@code callable(supplied...)} made by {@code caller}. */
@@ -150,8 +173,16 @@ final class ProtosCallRequest {
         return caller;
     }
 
+    boolean selectedBody() {
+        return selectedBody;
+    }
+
     /** Host-side execution through the uncached shared dispatcher. */
     Object callUncached() {
+        if (selectedBody) {
+            return ProtosFunctionCallDispatchers.callSelectedBodyUncached(
+                    (ProtosClosureValue) callable, arguments, caller);
+        }
         return ProtosFunctionCallDispatchers.callUncached(callable, arguments, caller);
     }
 }
