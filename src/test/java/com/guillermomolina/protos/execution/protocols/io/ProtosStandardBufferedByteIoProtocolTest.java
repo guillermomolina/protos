@@ -312,7 +312,8 @@ class ProtosStandardBufferedByteIoProtocolTest {
             com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(java.math.BigInteger.ONE.shiftLeft(64), prelude),
             com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(java.math.BigInteger.ONE.shiftLeft(64).add(java.math.BigInteger.ONE), prelude),
             new ProtosFloatValue(2.0d),
-            Long.valueOf(2L),
+            Double.valueOf(2.0d),
+            Boolean.FALSE,
         };
         for (Object maximum : invalid) {
             ProtosFutureValue future =
@@ -630,9 +631,9 @@ class ProtosStandardBufferedByteIoProtocolTest {
         SequencedReadSource sequenced = sequencedReadSource(activation);
         ProtosFutureValue lower1 = sequenced.pendingLower(true);
         sequenced.resolvedLower('Y');
-        ProtosObjectValue reader = legacyReader(prelude, sequenced.source, activation);
+        ProtosObjectValue reader = readerWithSequencedSource(prelude, sequenced.source, activation);
 
-        ProtosFutureValue cancelled = legacyRead(reader, activation);
+        ProtosFutureValue cancelled = readAndDrain(reader, activation);
         assertEquals(1, sequenced.reads);
         assertTrue(cancelled.cancelRequest());
         assertEquals(ProtosFutureValue.State.CANCELLED, cancelled.state());
@@ -641,10 +642,10 @@ class ProtosStandardBufferedByteIoProtocolTest {
         assertTrue(lower1.resolve(bytes(sequenced.bytesPrototype, 'Z', 'W'), activation));
         assertEquals(ProtosFutureValue.State.CANCELLED, cancelled.state());
 
-        assertEquals(List.of((int) 'Z'), resolvedInts(legacyRead(reader, activation)));
-        assertEquals(List.of((int) 'W'), resolvedInts(legacyRead(reader, activation)));
+        assertEquals(List.of((int) 'Z'), resolvedInts(readAndDrain(reader, activation)));
+        assertEquals(List.of((int) 'W'), resolvedInts(readAndDrain(reader, activation)));
         assertEquals(1, sequenced.reads, "preserved bytes must be read before new source data");
-        assertEquals(List.of((int) 'Y'), resolvedInts(legacyRead(reader, activation)));
+        assertEquals(List.of((int) 'Y'), resolvedInts(readAndDrain(reader, activation)));
         assertEquals(2, sequenced.reads);
         assertEquals(1, sequenced.cancelRequests);
         assertEquals(ProtosFutureValue.State.CANCELLED, cancelled.state());
@@ -657,14 +658,14 @@ class ProtosStandardBufferedByteIoProtocolTest {
         SequencedReadSource sequenced = sequencedReadSource(activation);
         sequenced.pendingLower(false);
         sequenced.resolvedLower('Y');
-        ProtosObjectValue reader = legacyReader(prelude, sequenced.source, activation);
+        ProtosObjectValue reader = readerWithSequencedSource(prelude, sequenced.source, activation);
 
-        ProtosFutureValue cancelled = legacyRead(reader, activation);
+        ProtosFutureValue cancelled = readAndDrain(reader, activation);
         assertTrue(cancelled.cancelRequest());
         assertEquals(ProtosFutureValue.State.CANCELLED, cancelled.state());
         assertEquals(1, sequenced.cancelRequests);
 
-        assertEquals(List.of((int) 'Y'), resolvedInts(legacyRead(reader, activation)));
+        assertEquals(List.of((int) 'Y'), resolvedInts(readAndDrain(reader, activation)));
         assertEquals(2, sequenced.reads, "the next read must request fresh data from the source");
         assertEquals(ProtosFutureValue.State.CANCELLED, cancelled.state());
     }
@@ -676,7 +677,7 @@ class ProtosStandardBufferedByteIoProtocolTest {
         SequencedReadSource sequenced = sequencedReadSource(activation);
         ProtosFutureValue lower1 = sequenced.pendingLower(true);
         sequenced.resolvedLower('Y');
-        ProtosObjectValue reader = legacyReader(prelude, sequenced.source, activation);
+        ProtosObjectValue reader = readerWithSequencedSource(prelude, sequenced.source, activation);
 
         CountDownLatch notificationBlocked = new CountDownLatch(1);
         CountDownLatch releaseNotification = new CountDownLatch(1);
@@ -686,7 +687,7 @@ class ProtosStandardBufferedByteIoProtocolTest {
                 ignored -> {
                     notificationBlocked.countDown();
                     try {
-                        if (!releaseNotification.await(10, TimeUnit.SECONDS)) {
+                        if (!releaseNotification.await(2, TimeUnit.SECONDS)) {
                             throw new AssertionError("test observer was never released");
                         }
                     } catch (InterruptedException interrupted) {
@@ -695,7 +696,7 @@ class ProtosStandardBufferedByteIoProtocolTest {
                     }
                 });
 
-        ProtosFutureValue cancelled = legacyRead(reader, activation);
+        ProtosFutureValue cancelled = readAndDrain(reader, activation);
         AtomicReference<Throwable> resolverFailure = new AtomicReference<>();
         Thread resolver =
                 new Thread(
@@ -710,21 +711,21 @@ class ProtosStandardBufferedByteIoProtocolTest {
                         "bug030-lower-resolver");
         try {
             resolver.start();
-            assertTrue(notificationBlocked.await(10, TimeUnit.SECONDS));
+            assertTrue(notificationBlocked.await(2, TimeUnit.SECONDS));
             assertEquals(ProtosFutureValue.State.RESOLVED, lower1.state());
             assertTrue(cancelled.cancelRequest());
             assertEquals(ProtosFutureValue.State.CANCELLED, cancelled.state());
         } finally {
             releaseNotification.countDown();
-            resolver.join(TimeUnit.SECONDS.toMillis(10));
+            resolver.join(TimeUnit.SECONDS.toMillis(2));
         }
         assertFalse(resolver.isAlive());
         assertNull(resolverFailure.get(), () -> "resolver thread failed: " + resolverFailure.get());
 
         assertEquals(ProtosFutureValue.State.CANCELLED, cancelled.state());
-        assertEquals(List.of((int) 'Z'), resolvedInts(legacyRead(reader, activation)));
+        assertEquals(List.of((int) 'Z'), resolvedInts(readAndDrain(reader, activation)));
         assertEquals(1, sequenced.reads, "no later lower read may overtake the preserved bytes");
-        assertEquals(List.of((int) 'Y'), resolvedInts(legacyRead(reader, activation)));
+        assertEquals(List.of((int) 'Y'), resolvedInts(readAndDrain(reader, activation)));
         assertEquals(2, sequenced.reads);
     }
 
@@ -735,19 +736,21 @@ class ProtosStandardBufferedByteIoProtocolTest {
         SequencedReadSource sequenced = sequencedReadSource(activation);
         ProtosFutureValue lower1 = sequenced.pendingLower(true);
         sequenced.resolvedLower('Y');
-        ProtosObjectValue reader = legacyReader(prelude, sequenced.source, activation);
+        ProtosObjectValue reader = readerWithSequencedSource(prelude, sequenced.source, activation);
 
-        ProtosFutureValue committed = legacyRead(reader, activation);
-        assertTrue(lower1.resolve(bytes(sequenced.bytesPrototype, 'Z', 'W'), activation));
+        ProtosFutureValue committed = readAndDrain(reader, activation);
+        assertTrue(ProtosTestExecutionSupport.callEnteredAndDrain(
+                activation,
+                () -> lower1.resolve(bytes(sequenced.bytesPrototype, 'Z', 'W'), activation)));
         assertEquals(ProtosFutureValue.State.RESOLVED, committed.state());
 
         assertFalse(committed.cancelRequest());
         assertEquals(ProtosFutureValue.State.RESOLVED, committed.state());
         assertEquals(List.of((int) 'Z'), resolvedInts(committed));
 
-        assertEquals(List.of((int) 'W'), resolvedInts(legacyRead(reader, activation)));
+        assertEquals(List.of((int) 'W'), resolvedInts(readAndDrain(reader, activation)));
         assertEquals(1, sequenced.reads);
-        assertEquals(List.of((int) 'Y'), resolvedInts(legacyRead(reader, activation)));
+        assertEquals(List.of((int) 'Y'), resolvedInts(readAndDrain(reader, activation)));
         assertEquals(2, sequenced.reads);
     }
 
@@ -800,7 +803,7 @@ class ProtosStandardBufferedByteIoProtocolTest {
         return sequenced;
     }
 
-    private static ProtosObjectValue legacyReader(
+    private static ProtosObjectValue readerWithSequencedSource(
             ProtosPrelude prelude, ProtosObjectValue source, ProtosActivation activation) {
         return (ProtosObjectValue)
                 call(
@@ -810,11 +813,14 @@ class ProtosStandardBufferedByteIoProtocolTest {
                         activation);
     }
 
-    /** Reads one byte outside any entered Context, so the legacy doRead path is used. */
-    private static ProtosFutureValue legacyRead(
+    /**
+     * Exercise the current operation-owned C-prime path under the retained host
+     * Context. A pending lower Future must be installed before cancellation races it.
+     */
+    private static ProtosFutureValue readAndDrain(
             ProtosObjectValue reader, ProtosActivation activation) {
         return (ProtosFutureValue)
-                ProtosInvocation.invokeMessage(reader, "read", List.of(i(1)), activation);
+                call(reader, "read", List.of(i(1)), activation);
     }
 
     private static List<Integer> resolvedInts(ProtosFutureValue read) {

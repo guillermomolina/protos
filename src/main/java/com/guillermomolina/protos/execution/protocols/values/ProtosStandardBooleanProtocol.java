@@ -29,7 +29,10 @@ import java.util.List;
 public final class ProtosStandardBooleanProtocol {
     enum StructuredCallbackKind {
         AND(1),
-        OR(1);
+        OR(1),
+        IF_TRUE(1),
+        IF_FALSE(1),
+        IF_TRUE_IF_FALSE(2);
 
         private final int arity;
 
@@ -63,12 +66,18 @@ public final class ProtosStandardBooleanProtocol {
      * site whose receiver is canonical true or false selects internally and
      * never sends these selectors.
      */
+    private static final ProtosNativeClosureBody STANDARD_IF_TRUE_BODY =
+            ProtosStandardBooleanProtocol::ifTrue;
+    private static final ProtosNativeClosureBody STANDARD_IF_FALSE_BODY =
+            ProtosStandardBooleanProtocol::ifFalse;
+    private static final ProtosNativeClosureBody STANDARD_IF_TRUE_IF_FALSE_BODY =
+            ProtosStandardBooleanProtocol::ifTrueIfFalse;
     private static final ProtosClosureValue STANDARD_IF_TRUE =
-            standardNative(ProtosStandardBooleanProtocol::ifTrue);
+            standardNative(STANDARD_IF_TRUE_BODY);
     private static final ProtosClosureValue STANDARD_IF_FALSE =
-            standardNative(ProtosStandardBooleanProtocol::ifFalse);
+            standardNative(STANDARD_IF_FALSE_BODY);
     private static final ProtosClosureValue STANDARD_IF_TRUE_IF_FALSE =
-            standardNative(ProtosStandardBooleanProtocol::ifTrueIfFalse);
+            standardNative(STANDARD_IF_TRUE_IF_FALSE_BODY);
 
     private ProtosStandardBooleanProtocol() {}
 
@@ -86,6 +95,13 @@ public final class ProtosStandardBooleanProtocol {
         ProtosNativeClosureBody body = closure.nativeBody().orElse(null);
         if (body == STANDARD_AND_BODY) return StructuredCallbackKind.AND;
         if (body == STANDARD_OR_BODY) return StructuredCallbackKind.OR;
+        // Ordinary selected conditionals may invoke suspendible callbacks too.
+        // Canonical lowered sites still use their internal conditional operations.
+        if (body == STANDARD_IF_TRUE_BODY) return StructuredCallbackKind.IF_TRUE;
+        if (body == STANDARD_IF_FALSE_BODY) return StructuredCallbackKind.IF_FALSE;
+        if (body == STANDARD_IF_TRUE_IF_FALSE_BODY) {
+            return StructuredCallbackKind.IF_TRUE_IF_FALSE;
+        }
         return null;
     }
 

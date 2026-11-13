@@ -31,7 +31,7 @@ import java.util.List;
 
 /**
  * Prepared state of the structured control-flow invocations (match/case,
- * standard Object and import calls, ensure, Error.handle and the and/or callbacks)
+ * standard Object and import calls, ensure, Error.handle and Boolean callbacks)
  * driven by {@link ProtosStructuredDispatchLowerer} roots and inline literal regions.
  */
 final class ProtosStructuredControlCalls {
@@ -272,8 +272,9 @@ final class ProtosStructuredControlCalls {
 
         boolean hasCallback() {
             return switch (kind) {
-                case AND -> receiver == Boolean.TRUE;
-                case OR -> receiver == Boolean.FALSE;
+                case AND, IF_TRUE -> receiver == Boolean.TRUE;
+                case OR, IF_FALSE -> receiver == Boolean.FALSE;
+                case IF_TRUE_IF_FALSE -> true;
             };
         }
 
@@ -282,8 +283,10 @@ final class ProtosStructuredControlCalls {
                 throw new IllegalStateException(
                         "short-circuited Boolean operation has no selected callback");
             }
+            int selected = kind == ProtosStandardBooleanProtocol.StructuredCallbackKind.IF_TRUE_IF_FALSE
+                    && receiver == Boolean.FALSE ? 1 : 0;
             return ProtosCallRequest.call(
-                    supplied.get(0),
+                    supplied.get(selected),
                     List.of(),
                     activation);
         }
@@ -296,13 +299,19 @@ final class ProtosStructuredControlCalls {
             return switch (kind) {
                 case AND -> Boolean.FALSE;
                 case OR -> Boolean.TRUE;
+                case IF_TRUE, IF_FALSE -> ProtosNullValue.INSTANCE;
+                case IF_TRUE_IF_FALSE -> throw new IllegalStateException(
+                        "two-branch conditional always selects a callback");
             };
         }
 
         Object finishCallback(Object result) {
-            return ProtosStandardBooleanProtocol.requireBooleanResult(
-                    result,
-                    activation);
+            // and/or require a Boolean; conditional messages return the exact value,
+            // including an ordinary Future, without adopting or flattening it.
+            return switch (kind) {
+                case AND, OR -> ProtosStandardBooleanProtocol.requireBooleanResult(result, activation);
+                case IF_TRUE, IF_FALSE, IF_TRUE_IF_FALSE -> result;
+            };
         }
     }
 

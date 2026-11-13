@@ -1,4 +1,20 @@
-/* APL-1.0 licensed work; see LICENSE.TXT. */
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
+
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
@@ -6,12 +22,8 @@ import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosIoReleaseExecution;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
-import com.guillermomolina.protos.execution.ProtosPreparedCalls.ModuleInitializationCall;
 import com.oracle.truffle.api.RootCallTarget;
-import com.oracle.truffle.api.bytecode.ContinuationResult;
-import com.oracle.truffle.api.exception.AbstractTruffleException;
 import com.oracle.truffle.api.nodes.ControlFlowException;
-import com.oracle.truffle.api.nodes.IndirectCallNode;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.bytecode.BytecodeConfig;
 import com.oracle.truffle.api.bytecode.BytecodeLocal;
@@ -257,6 +269,21 @@ public final class ProtosIoReleaseCPrimeExecution {
         }
 
         /**
+         * Holds only a later transfer from a mandatory finalizer while the original
+         * transfer is pending in Bytecode TryFinally. Ordinary body transfers unwind
+         * directly; no guest Error is intercepted here. The invocation is accounted
+         * by the same step loop, and the latest transfer is rethrown after all remaining
+         * mandatory finalizers have run, even when one of them suspends.
+         */
+        Object finalizerTransfer(ControlFlowException transfer) {
+            if (!transferEscaped) {
+                throw transfer;
+            }
+            laterTransfer = transfer;
+            return FINALIZER_TRANSFER_ESCAPED;
+        }
+
+        /**
          * PLAT070: every pending mandatory finalizer was invoked during transfer cleanup; the
          * release is terminalized through its ordinary failure with the primary failure. The
          * original transfer then resumes unwinding.
@@ -387,10 +414,19 @@ public final class ProtosIoReleaseCPrimeExecution {
 
                             StepLocals locals = new StepLocals(builder);
 
+                            BytecodeLocal completed =
+                                    builder.createLocal("ioReleaseCompletedOrSignalled", null);
+                            builder.beginStoreLocal(completed);
+                            builder.emitLoadConstant(false);
+                            builder.endStoreLocal();
+                            builder.beginTryFinally(
+                                    () -> emitTransferCleanup(builder, locals, completed));
+                            builder.beginTryCatch();
                             builder.beginBlock();
 
                             emitStepLoop(builder, locals);
 
+                            ProtosIoCPrimeTransferAccounting.markCompleted(builder, completed);
                             builder.beginReturn();
                             builder.beginStructuredFinish();
                             builder.emitLoadArgument(1);
@@ -398,10 +434,56 @@ public final class ProtosIoReleaseCPrimeExecution {
                             builder.endReturn();
 
                             builder.endBlock();
+                            builder.beginBlock();
+                            ProtosIoCPrimeTransferAccounting.markCompleted(builder, completed);
+                            builder.beginRethrowTruffleException();
+                            builder.emitLoadException();
+                            builder.endRethrowTruffleException();
+                            builder.endBlock();
+                            builder.endTryCatch();
+                            builder.endTryFinally();
                             builder.endRoot();
                         });
 
         return new Plan(roots.getNode(0).getCallTarget());
+    }
+
+    /**
+     * A suspension retains the pending transfer and the exact step index in the
+     * Bytecode frame. Only a semantic exit starts cleanup; completed steps are
+     * never replayed. The nested finally terminalizes an abandoned cleanup.
+     */
+    private static void emitTransferCleanup(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            StepLocals locals,
+            BytecodeLocal completed) {
+        builder.beginIfThen();
+        builder.beginIoReleaseBeginTransferCleanup();
+        builder.emitLoadArgument(1);
+        builder.emitLoadLocal(completed);
+        builder.endIoReleaseBeginTransferCleanup();
+        builder.beginBlock();
+        BytecodeLocal cleanupCompleted = builder.createLocal("ioReleaseCleanupCompleted", null);
+        builder.beginStoreLocal(cleanupCompleted);
+        builder.emitLoadConstant(false);
+        builder.endStoreLocal();
+        builder.beginTryFinally(
+                () -> {
+                    builder.beginIoReleaseAbandonTransferCleanup();
+                    builder.emitLoadArgument(1);
+                    builder.emitLoadLocal(cleanupCompleted);
+                    builder.endIoReleaseAbandonTransferCleanup();
+                });
+        builder.beginBlock();
+        emitStepLoop(builder, locals);
+        ProtosIoCPrimeTransferAccounting.markCompleted(builder, cleanupCompleted);
+        builder.beginIoReleaseFinishTransferCleanup();
+        builder.emitLoadArgument(1);
+        builder.endIoReleaseFinishTransferCleanup();
+        builder.endBlock();
+        builder.endTryFinally();
+        builder.endBlock();
+        builder.endIfThen();
     }
 
     /** The frame locals of one release step invocation, shared by both step loops of the root. */
@@ -449,9 +531,10 @@ public final class ProtosIoReleaseCPrimeExecution {
         b.endStoreLocal();
 
         b.beginStoreLocal(l.child);
-        b.beginCallRequest(false);
+        b.beginIoReleaseCallRequest();
+        b.emitLoadArgument(1);
         b.emitLoadLocal(l.prepared);
-        b.endCallRequest();
+        b.endIoReleaseCallRequest();
         b.endStoreLocal();
 
         b.beginWhile();
@@ -468,10 +551,11 @@ public final class ProtosIoReleaseCPrimeExecution {
         b.endStoreLocal();
 
         b.beginStoreLocal(l.child);
-        b.beginResumeDispatchedContinuation();
+        b.beginIoReleaseResumeChild();
+        b.emitLoadArgument(1);
         b.emitLoadLocal(l.child);
         b.emitLoadLocal(l.resume);
-        b.endResumeDispatchedContinuation();
+        b.endIoReleaseResumeChild();
         b.endStoreLocal();
 
         b.endBlock();

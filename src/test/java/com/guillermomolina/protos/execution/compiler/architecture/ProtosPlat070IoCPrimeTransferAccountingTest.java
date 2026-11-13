@@ -347,6 +347,46 @@ final class ProtosPlat070IoCPrimeTransferAccountingTest {
     }
 
     @Test
+    void resumedFinalizerTransferStillRunsTheNextSuspendingFinalizer() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            Harness harness = new Harness(scope.language());
+            ProtosNonLocalReturnException original = new ProtosNonLocalReturnException(
+                    new ProtosReturnHome(), ProtosNullValue.INSTANCE);
+            ProtosTaskCancellationException later = new ProtosTaskCancellationException();
+            ProtosFutureValue callbackWait = harness.pendingFuture();
+            ProtosFutureValue closeWait = harness.pendingFuture();
+            StepProbe flush = harness.probeThrowing(original);
+            StepProbe firstClose = harness.probeSuspendingThenThrowing(callbackWait, later);
+            StepProbe secondClose = harness.probeAnswering(closeWait);
+            ProtosObjectValue target = harness.target(
+                    "flush", flush, "firstClose", firstClose, "secondClose", secondClose);
+            harness.close(List.of(
+                    harness.ordinary(target, "flush", flush),
+                    harness.mandatory(target, "firstClose", firstClose),
+                    harness.mandatory(target, "secondClose", secondClose)));
+
+            assertNull(harness.drain(), "the finalizer callback suspends with the original transfer held");
+            assertEquals(1, firstClose.invocations());
+            assertEquals(0, secondClose.invocations());
+            assertFalse(harness.release().terminal());
+
+            assertTrue(callbackWait.resolve(ProtosNullValue.INSTANCE, harness.module()));
+            assertNull(harness.drain(), "the next finalizer suspends with the later transfer held");
+            firstClose.assertFailedOnce();
+            assertEquals(1, firstClose.invocations(), "the callback prefix must not replay");
+            assertEquals(1, secondClose.invocations());
+            assertFalse(harness.release().terminal());
+
+            assertTrue(closeWait.resolve(ProtosNullValue.INSTANCE, harness.module()));
+            assertSame(later, harness.drain(), "the resumed transfer keeps its exact identity");
+            flush.assertFailedOnce();
+            firstClose.assertFailedOnce();
+            secondClose.assertInvokedAndResolvedOnce();
+            harness.assertReleaseFailed();
+        }
+    }
+
+    @Test
     void everyIoCPrimeRootAccountsEscapingTransfersThroughTryFinally() throws Exception {
         for (String protocol :
                 List.of(
@@ -524,6 +564,22 @@ final class ProtosPlat070IoCPrimeTransferAccountingTest {
                     invocations);
         }
 
+        StepProbe probeSuspendingThenThrowing(
+                ProtosFutureValue lower, ControlFlowException transfer) throws Exception {
+            AtomicInteger invocations = new AtomicInteger();
+            module.context().createLocalSlot("markFinalizer", nativeClosure(
+                    (activation, supplied) -> {
+                        invocations.incrementAndGet();
+                        return ProtosNullValue.INSTANCE;
+                    }));
+            module.context().createLocalSlot("finalizerWait", lower);
+            module.context().createLocalSlot("raiseFinalizerTransfer", nativeClosure(
+                    (activation, supplied) -> { throw transfer; }));
+            return new StepProbe(sourceClosure(
+                    "() => { markFinalizer()\nfinalizerWait.value()\nraiseFinalizerTransfer() }",
+                    null), invocations);
+        }
+
         StepProbe probeSignalling() {
             AtomicInteger invocations = new AtomicInteger();
             return new StepProbe(
@@ -539,7 +595,11 @@ final class ProtosPlat070IoCPrimeTransferAccountingTest {
 
         /** A source Closure whose body returns non-locally to {@code home}. */
         ProtosClosureValue returningClosure(ProtosReturnHome home) throws Exception {
-            String characters = "() => ^1";
+            return sourceClosure("() => ^1", home);
+        }
+
+        private ProtosClosureValue sourceClosure(String characters, ProtosReturnHome home)
+                throws Exception {
             CanonicalClosure definition =
                     (CanonicalClosure) canonicalize(characters).expressions().get(0);
             ProtosClosureExecutionPlan plan =

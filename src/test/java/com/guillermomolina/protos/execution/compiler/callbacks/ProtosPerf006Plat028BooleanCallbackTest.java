@@ -1,7 +1,20 @@
 /*
  * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
- * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. See LICENSE.TXT.
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
  */
+
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -15,6 +28,7 @@ import com.guillermomolina.protos.runtime.ProtosActorModuleState;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
+import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosTask;
 import com.guillermomolina.protos.semantic.Canonicalizer;
@@ -23,6 +37,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
 import com.oracle.truffle.api.source.Source;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.Test;
@@ -81,6 +96,81 @@ final class ProtosPerf006Plat028BooleanCallbackTest {
         System.out.println("PERF006_PLAT028_BOOLEAN_SELECTED_CALLBACK_CPRIME=PASS");
         System.out.println("PERF006_PLAT028_BOOLEAN_UNSELECTED_NONCALLABLE=PASS");
         System.out.println("PERF006_PLAT028_BOOLEAN_CALLBACK_PREFIX_REPLAY=NO");
+    }
+
+    @Test
+    void ordinarySelectedConditionalsSuspendWithoutReplayAndReturnExactObjects() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            ProtosPrelude prelude = core();
+            for (String expression : List.of(
+                    "true.ifTrue(...[body])",
+                    "false.ifFalse(...[body])",
+                    "true.ifTrueIfFalse(...[body, 99])",
+                    "false.ifTrueIfFalse(...[99, body])",
+                    "selected: true.ifTrue\nselected(body)")) {
+                ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+                ProtosActivation module = activation(prelude, domain);
+                ProtosFutureValue lower = new ProtosFutureValue(prelude.futurePrototype(), domain);
+                AtomicInteger prefix = new AtomicInteger();
+                module.context().createLocalSlot("future", lower);
+                module.context().createLocalSlot("probe", ProtosClosureValue.nativeClosure(
+                        (activation, supplied) -> {
+                            prefix.incrementAndGet();
+                            return ProtosNullValue.INSTANCE;
+                        }));
+                module.context().createLocalSlot("body", sourceClosure(
+                        scope.language(), module, "() => { probe()\nfuture.value() }",
+                        "ordinary-conditional-callback.protos"));
+                ProtosTask task = execute(domain, module, lowerRoot(
+                        scope.language(), expression, "ordinary-conditional.protos"));
+
+                assertTrue(domain.dispatchOne(), expression);
+                assertEquals(ProtosTask.State.SUSPENDED, task.state(), expression);
+                assertEquals(1, prefix.get(), expression);
+                ProtosObjectValue exact = new ProtosObjectValue(ProtosObjectValue.rootObject());
+                assertTrue(lower.resolve(exact, module));
+                assertTrue(domain.dispatchOne(), expression);
+                assertEquals(ProtosTask.State.COMPLETED, task.state(), expression);
+                assertSame(exact, task.result().orElseThrow(), expression);
+                assertEquals(1, prefix.get(), "callback prefix must not replay: " + expression);
+            }
+        }
+    }
+
+    @Test
+    void ordinaryConditionalReturnsAPendingFutureWithoutObservingIt() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            ProtosPrelude prelude = core();
+            for (String expression : List.of(
+                    "true.ifTrue(...[() => { returned }])",
+                    "false.ifFalse(...[() => { returned }])",
+                    "true.ifTrueIfFalse(...[() => { returned }, 99])",
+                    "false.ifTrueIfFalse(...[99, () => { returned }])")) {
+                ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+                ProtosActivation module = activation(prelude, domain);
+                ProtosFutureValue returned = new ProtosFutureValue(prelude.futurePrototype(), domain);
+                module.context().createLocalSlot("returned", returned);
+                assertSame(returned, ProtosTestExecutionSupport.evaluate(expression, module), expression);
+                assertEquals(ProtosFutureValue.State.PENDING, returned.state(), expression);
+            }
+        }
+    }
+
+    @Test
+    void ordinaryUnselectedConditionalsDoNotInvokeTheirArgument() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            ProtosPrelude prelude = core();
+            for (String expression : List.of(
+                    "false.ifTrue(...[99])", "true.ifFalse(...[99])")) {
+                ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+                ProtosActivation module = activation(prelude, domain);
+                ProtosTask task = execute(domain, module, lowerRoot(
+                        scope.language(), expression, "ordinary-unselected-conditional.protos"));
+                assertTrue(domain.dispatchOne());
+                assertEquals(ProtosTask.State.COMPLETED, task.state(), expression);
+                assertSame(ProtosNullValue.INSTANCE, task.result().orElseThrow(), expression);
+            }
+        }
     }
 
     @Test

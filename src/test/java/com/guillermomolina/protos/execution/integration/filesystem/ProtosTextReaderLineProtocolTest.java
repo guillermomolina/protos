@@ -240,11 +240,13 @@ final class ProtosTextReaderLineProtocolTest {
         ProtosObjectValue reader =
                 assertInstanceOf(
                         ProtosObjectValue.class,
-                        ProtosInvocation.invokeMessage(
-                                factory,
-                                "call",
-                                List.of(source.source, encoding),
-                                activation));
+                        ProtosTestExecutionSupport.callEnteredAndDrain(
+                                activation,
+                                () -> ProtosInvocation.invokeMessage(
+                                        factory,
+                                        "call",
+                                        List.of(source.source, encoding),
+                                        activation)));
         return new Fixture(prelude, activation, source, reader);
     }
 
@@ -252,19 +254,23 @@ final class ProtosTextReaderLineProtocolTest {
             ProtosObjectValue reader, ProtosActivation activation, Object... arguments) {
         return assertInstanceOf(
                 ProtosFutureValue.class,
-                ProtosInvocation.invokeMessage(
-                        reader,
-                        "readLine",
-                        List.of(arguments),
-                        activation));
+                ProtosTestExecutionSupport.callEnteredAndDrain(
+                        activation,
+                        () -> ProtosInvocation.invokeMessage(
+                                reader,
+                                "readLine",
+                                List.of(arguments),
+                                activation)));
     }
 
     private static ProtosFutureValue readText(
             ProtosObjectValue reader, ProtosActivation activation) {
         return assertInstanceOf(
                 ProtosFutureValue.class,
-                ProtosInvocation.invokeMessage(
-                        reader, "readText", List.of(), activation));
+                ProtosTestExecutionSupport.callEnteredAndDrain(
+                        activation,
+                        () -> ProtosInvocation.invokeMessage(
+                                reader, "readText", List.of(), activation)));
     }
 
     private static String stringResult(ProtosFutureValue future) {
@@ -319,7 +325,10 @@ final class ProtosTextReaderLineProtocolTest {
         }
 
         void resolve(Object value, ProtosActivation activation) {
-            future.resolve(value, activation);
+            // Producer notification makes the operation runnable; the Actor owns
+            // continuation execution and the ordered handoff to queued reads.
+            ProtosTestExecutionSupport.runEnteredAndDrain(
+                    activation, () -> assertTrue(future.resolve(value, activation)));
         }
     }
 

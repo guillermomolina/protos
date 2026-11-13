@@ -4264,6 +4264,75 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
+    /**
+     * Release calls use the shared dispatcher. Only a transfer escaping a mandatory
+     * finalizer during transfer cleanup is held so the next finalizer can run.
+     */
+    @Operation(storeBytecodeIndex = true)
+    public static final class IoReleaseCallRequest {
+        @Specialization
+        public static Object perform(
+                ProtosIoReleaseCPrimeExecution.Sequence sequence,
+                ProtosCallRequest request,
+                @Bind VirtualFrame frame,
+                @Bind ProtosBytecodeRootNode root,
+                @Cached ProtosFunctionCallDispatchers.CallNode callNode,
+                @Cached ProtosFunctionCallDispatchers.SelectedBodyCallNode selectedBody) {
+            try {
+                return CallRequest.perform(false, request, frame, root, callNode, selectedBody);
+            } catch (ControlFlowException transfer) {
+                return sequence.finalizerTransfer(transfer);
+            }
+        }
+    }
+
+    /** The same transfer accounting at a resumed release callback, without replay. */
+    @Operation
+    public static final class IoReleaseResumeChild {
+        @Specialization(
+                guards = "result.getContinuationRootNode() == cachedRoot",
+                limit = "3")
+        public static Object direct(
+                ProtosIoReleaseCPrimeExecution.Sequence sequence,
+                ContinuationResult result,
+                Object resumeValue,
+                @Cached("result.getContinuationRootNode()") ContinuationRootNode cachedRoot,
+                @Cached("create(cachedRoot.getCallTarget())") DirectCallNode node) {
+            try {
+                return ResumeDispatchedContinuation.direct(result, resumeValue, cachedRoot, node);
+            } catch (ControlFlowException transfer) {
+                return sequence.finalizerTransfer(transfer);
+            }
+        }
+
+        @Specialization(replaces = "direct")
+        public static Object indirect(
+                ProtosIoReleaseCPrimeExecution.Sequence sequence,
+                ContinuationResult result,
+                Object resumeValue,
+                @Cached IndirectCallNode node) {
+            try {
+                return ResumeDispatchedContinuation.indirect(result, resumeValue, node);
+            } catch (ControlFlowException transfer) {
+                return sequence.finalizerTransfer(transfer);
+            }
+        }
+
+        @Fallback
+        public static Object leaf(
+                Object state,
+                Object pending,
+                Object resumeValue) {
+            ProtosIoReleaseCPrimeExecution.Sequence sequence =
+                    (ProtosIoReleaseCPrimeExecution.Sequence) state;
+            try {
+                return ProtosTailCallContinuation.resume(pending, resumeValue);
+            } catch (ControlFlowException transfer) {
+                return sequence.finalizerTransfer(transfer);
+            }
+        }
+    }
+
     /** I115: the structured-protocol root is entered only for structured natives. */
     @Operation
     public static final class RejectUnstructuredInvocation {
