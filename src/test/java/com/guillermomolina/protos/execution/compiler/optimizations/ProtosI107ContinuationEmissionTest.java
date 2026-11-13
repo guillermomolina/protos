@@ -34,6 +34,7 @@ import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
 import com.oracle.truffle.api.bytecode.BytecodeConfig;
+import com.oracle.truffle.api.bytecode.BytecodeLocal;
 import com.oracle.truffle.api.bytecode.BytecodeRootNodes;
 import com.oracle.truffle.api.bytecode.Instruction;
 import com.oracle.truffle.api.bytecode.TagTreeNode;
@@ -80,7 +81,7 @@ final class ProtosI107ContinuationEmissionTest {
             normal.run(() -> {
                 ProtosBytecodeRootNode module = compile(NESTED, "nested");
                 ProtosBytecodeRootNode activation = activationRoot(module);
-                List<String> expected = completeSignature(handwrittenLiteralRoot(NESTED, 7L));
+                List<String> expected = completeSignature(handwrittenInlineRegionsRoot(NESTED, 7L, 3));
                 List<String> actual = completeSignature(activation);
                 System.out.println("I107_ORACLE_SIGNATURE=" + expected);
                 System.out.println("I107_NESTED_SIGNATURE=" + actual);
@@ -113,7 +114,7 @@ final class ProtosI107ContinuationEmissionTest {
 
     /**
      * The same shape whose innermost value is a send is not folded. I115: both nested
-     * literal-Boolean controls are inline branches with no callback root, and the innermost {@code 7 + 0} is the GraalPy-shaped {@code NumberAdd} arithmetic operation,
+     * literal-Boolean controls are statically selected inline regions with no callback root, and the innermost {@code 7 + 0} is the GraalPy-shaped {@code NumberAdd} arithmetic operation,
      * which owns its fast path and its ordinary-dispatch fallback, instead of an explicit
      * PrepareSend plus continuation composition. The absence of a root-level Yield is not a
      * non-suspension proof.
@@ -133,30 +134,28 @@ final class ProtosI107ContinuationEmissionTest {
                     }
                 }
                 assertTrue(add >= 0, () -> "NumberAdd missing in " + actual);
-                // Both nested controls: literal true, then literal false, each followed by
-                // its conditional branch, all before the arithmetic.
-                int outer = -1;
-                int inner = -1;
-                for (int index = 0; index < actual.size(); index++) {
-                    String entry = actual.get(index);
-                    if (outer < 0 && entry.startsWith("load.constant ")
-                            && entry.contains("=Boolean(true)")) {
-                        outer = index;
-                    } else if (outer >= 0 && inner < 0 && entry.startsWith("load.constant ")
-                            && entry.contains("=Boolean(false)")) {
-                        inner = index;
+                // Both nested literal controls are statically selected: no Boolean
+                // literal and no conditional branch remains for them, only their inline
+                // regions (RootTag), both entered before the arithmetic.
+                assertFalse(actual.stream().anyMatch(entry -> entry.startsWith("load.constant ")
+                                && (entry.contains("=Boolean(") || entry.contains("=Protos(true)")
+                                        || entry.contains("=Protos(false)"))),
+                        actual::toString);
+                int regions = 0;
+                for (int index = 0; index < add; index++) {
+                    if (actual.get(index).equals("tag.enter tag:TAG_NODE=[RootTag]")) {
+                        regions++;
                     }
                 }
-                assertTrue(outer >= 0 && inner > outer && add > inner, actual::toString);
-                for (int condition : new int[] {outer, inner}) {
-                    int next = condition + 1;
-                    while (next < actual.size() && actual.get(next).startsWith("trace.")) {
-                        next++;
-                    }
-                    assertTrue(next < actual.size()
-                                    && actual.get(next).startsWith("branch.false "),
-                            actual::toString);
-                }
+                // The root's own RootTag plus one region per nested control.
+                assertEquals(3, regions, actual::toString);
+                // The '+' behavior is selected after its operands (D237) and keeps its
+                // guarded ordinary-send fallback with the continuation composition.
+                int selection = actual.indexOf(actual.stream()
+                        .filter(entry -> entry.startsWith("c.IsStandardAddSelection "))
+                        .findFirst().orElse("missing"));
+                assertTrue(selection >= 0 && selection < add, actual::toString);
+                assertHasContinuation(actual);
                 // Both operands of the arithmetic dispatch are staged before it.
                 assertTrue(add >= 2, actual::toString);
                 // I091: the scalar operand is a primitive carrier (Integer or Long).
@@ -190,7 +189,7 @@ final class ProtosI107ContinuationEmissionTest {
                 ProtosBytecodeRootNode module = compile(NESTED, "debug");
                 ProtosBytecodeRootNode activation = activationRoot(module);
                 List<String> actual = completeSignature(activation);
-                assertEquals(completeSignature(handwrittenLiteralRoot(NESTED, 7L)), actual);
+                assertEquals(completeSignature(handwrittenInlineRegionsRoot(NESTED, 7L, 3)), actual);
                 assertNoContinuation(actual);
                 assertEquals(2, groupRoots(module).size());
                 assertTrue(activation.provablyNonSuspendingBody());
@@ -268,8 +267,6 @@ final class ProtosI107ContinuationEmissionTest {
                 // Binding candidate: the guard may miss after replacement/override.
                 "() => { f: () => { 1 }\n f() }",
                 "() => { f: () => { 1 }\n f = () => { 2 }\n f() }",
-                // Literal receiver: inline region with its admission miss.
-                "() => { (() => { 1 })() }",
                 // Terminal method calls are tested separately below.
                 // Spread argument.
                 "(f, items) => { f(...items) }");
@@ -281,29 +278,43 @@ final class ProtosI107ContinuationEmissionTest {
                     assertHasContinuation(instructions);
                 }
 
-                // I115: a terminal method send uses GraalPy-shaped
-                // GetMethod + CallBinaryMethod. Suspension is carried
-                // by the terminal call, not by a caller Yield.
+                // I115: a final ifTrue on a dynamic receiver is internal control, not a
+                // terminal send. A canonical Boolean is decided by CanonicalControlCondition
+                // and its callback is invoked (CallNilaryMethod); any other receiver takes the
+                // guarded ordinary send (GetMethod + CallUnaryMethod). Both invocations keep
+                // the continuation composition.
+                ProtosBytecodeRootNode terminalModule =
+                        compile("(b, g) => { b.ifTrue(g) }", "terminal-method");
                 List<String> terminalMethod =
-                        completeSignature(activationRoot(compile(
-                                "(b, g) => { b.ifTrue(g) }",
-                                "terminal-method")));
+                        completeSignature(activationRoot(terminalModule));
+                for (String operation : List.of(
+                        "c.CanonicalControlCondition",
+                        "c.CallNilaryMethod",
+                        "c.GetMethod",
+                        "c.CallUnaryMethod")) {
+                    assertTrue(
+                            terminalMethod.stream().anyMatch(
+                                    entry -> entry.split(" ", 2)[0].equals(operation)),
+                            () -> operation + " missing in " + terminalMethod);
+                }
+                assertHasContinuation(terminalMethod);
+                ProtosClosureValue terminalClosure = closureOf(normal, terminalModule);
+                assertInteger(5, callClosureWith(normal, terminalClosure, "true, () => { 5 }"));
+                assertSame(ProtosNullValue.INSTANCE,
+                        callClosureWith(normal, terminalClosure, "false, () => { 5 }"));
+                assertInteger(99, callClosureWith(normal, terminalClosure,
+                        "{ ifTrue: (callback) => { 99 } }, () => { 5 }"));
 
-                assertTrue(
-                        terminalMethod.stream().anyMatch(
-                                entry -> entry.split(" ", 2)[0]
-                                        .equals("c.GetMethod")),
-                        () -> "GetMethod missing in " + terminalMethod);
-
-                assertTrue(
-                        terminalMethod.stream().anyMatch(
-                                entry -> entry.startsWith("c.CallBinaryMethod ")
-                                        && entry.contains(
-                                                "terminal:CONSTANT=Boolean(true)")),
-                        () -> "terminal CallBinaryMethod missing in "
-                                + terminalMethod);
-
-                assertNoContinuation(terminalMethod);
+                // I115: a literal Closure receiver is statically selected under the
+                // frozen standard root: an inline region without fallback or continuation.
+                ProtosBytecodeRootNode literalCall =
+                        compile("() => { (() => { 1 })() }", "literal-call");
+                List<String> literalRegion = completeSignature(activationRoot(literalCall));
+                assertNoContinuation(literalRegion);
+                assertTrue(literalRegion.stream().anyMatch(
+                                entry -> entry.equals("tag.enter tag:TAG_NODE=[RootTag]")),
+                        literalRegion::toString);
+                assertInteger(1, callClosure(normal, closureOf(normal, literalCall)));
 
                 ProtosBytecodeRootNode replaced =
                         compile("() => { f: () => { 1 }\n f = () => { 2 }\n f() }", "replace");
@@ -436,7 +447,7 @@ final class ProtosI107ContinuationEmissionTest {
                 List<String> actual = completeSignature(activation);
 
                 // I115-H7: a dispatching Boolean control. The staged receiver
-                // is tested by ExperimentalCanonicalBooleanCondition and a
+                // is tested by CanonicalControlCondition and a
                 // conditional branch selects the inline body (HIT); any other
                 // value takes the ordinary send (MISS). The structural check
                 // alone does not prove the fallback: the HIT and MISS
@@ -446,7 +457,7 @@ final class ProtosI107ContinuationEmissionTest {
                 for (int index = 0; index < actual.size(); index++) {
                     String name = actual.get(index).split(" ", 2)[0];
                     if (condition < 0
-                            && name.equals("c.ExperimentalCanonicalBooleanCondition")) {
+                            && name.equals("c.CanonicalControlCondition")) {
                         condition = index;
                     }
                     if (condition >= 0 && branch < 0 && name.startsWith("branch.false")) {
@@ -455,19 +466,23 @@ final class ProtosI107ContinuationEmissionTest {
                 }
                 assertTrue(condition >= 0, actual::toString);
                 assertTrue(branch > condition, actual::toString);
-                // The local b is canonical true with no intervening mutation, so the
-                // physical guarded fallback is unreachable for this closed program.
-                assertTrue(activation.provablyNonSuspendingBody());
-                assertInteger(1, callClosure(normal, closureOf(normal, module)));
+                // I115: the receiver is a local, not a literal, so the site is not
+                // statically selected; its guarded ordinary-send fallback keeps the
+                // physical continuation composition, and that physical evidence keeps
+                // the root unproven.
+                assertHasContinuation(actual);
+                assertFalse(activation.provablyNonSuspendingBody());
 
+                // Compared before execution: running the root quickens its instructions.
                 module.getRootNodes().ensureComplete();
                 assertEquals(actual, signature(activation));
-                assertTrue(activation.provablyNonSuspendingBody());
+                assertFalse(activation.provablyNonSuspendingBody());
+                assertInteger(1, callClosure(normal, closureOf(normal, module)));
 
                 ProtosBytecodeRootNode equivalent =
                         activationRoot(compile(source, "inline-fallback-reparse"));
                 assertEquals(actual, completeSignature(equivalent));
-                assertTrue(equivalent.provablyNonSuspendingBody());
+                assertFalse(equivalent.provablyNonSuspendingBody());
 
                 // Admitted path versus failed guard: a dynamic canonical
                 // Boolean runs the inline body, while a non-Boolean receiver
@@ -511,11 +526,14 @@ final class ProtosI107ContinuationEmissionTest {
     }
 
     /**
-     * Handwritten Closure root returning one Long literal carrier, with the source section
-     * of {@code characters}' outermost body.
+     * Handwritten Closure root whose single statement holds {@code depth} nested inline regions
+     * (each a statically selected control callback: RootTag plus its statement's
+     * StatementTag + ExpressionTag); the innermost stores one Long literal carrier into a
+     * plain local, which the root then returns. The source section is that of {@code
+     * characters}' outermost body.
      */
-    private static ProtosBytecodeRootNode handwrittenLiteralRoot(
-            String characters, long value) {
+    private static ProtosBytecodeRootNode handwrittenInlineRegionsRoot(
+            String characters, long value, int depth) {
         Source source = Source.newBuilder(ProtosLanguage.ID, characters, "i107-oracle.protos")
                 .build();
         int bodyStart = characters.indexOf('{');
@@ -530,16 +548,26 @@ final class ProtosI107ContinuationEmissionTest {
                             builder.beginSource(source);
                             builder.beginSourceSection(bodyStart, bodyLength);
                             builder.beginRoot();
+                            BytecodeLocal result = builder.createLocal();
                             builder.beginBlock();
                             builder.beginSourceSection(statementStart, statement.length());
                             builder.beginTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
-                            builder.beginBlock();
-                            builder.beginReturn();
+                            for (int level = 0; level < depth; level++) {
+                                builder.beginTag(StandardTags.RootTag.class);
+                                builder.beginTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
+                            }
+                            builder.beginStoreLocal(result);
                             builder.emitLoadConstant(value);
-                            builder.endReturn();
-                            builder.endBlock();
+                            builder.endStoreLocal();
+                            for (int level = 0; level < depth; level++) {
+                                builder.endTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
+                                builder.endTag(StandardTags.RootTag.class);
+                            }
                             builder.endTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
                             builder.endSourceSection();
+                            builder.beginReturn();
+                            builder.emitLoadLocal(result);
+                            builder.endReturn();
                             builder.endBlock();
                             builder.endRoot();
                             builder.endSourceSection();

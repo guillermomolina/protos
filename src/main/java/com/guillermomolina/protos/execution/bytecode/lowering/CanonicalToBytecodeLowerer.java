@@ -262,11 +262,20 @@ final class CanonicalToBytecodeLowerer {
             java.util.Set.of();
 
     /* I115: the inline decisions of this lowerer, as consulted at emission. */
-    private final I115InlineStoragePlan.InlinePolicy i115InlinePolicy =
-            new I115InlineStoragePlan.InlinePolicy() {
+    private final I115InlineStoragePlan.InlinePolicy i115InlinePolicy = inlinePolicyUnder(null);
+
+    /**
+     * The inline decisions under the admission {@code context} of the site
+     * being decided, or under the live emission context when it is
+     * {@code null}.
+     */
+    private I115InlineStoragePlan.InlinePolicy inlinePolicyUnder(ControlSiteContext context) {
+        return new I115InlineStoragePlan.InlinePolicy() {
                 @Override
                 public boolean admitsInline(CanonicalClosure closure) {
-                    return i115AdmitsInlineClosure(closure);
+                    return context == null
+                            ? i115AdmitsInlineClosure(closure)
+                            : i115AdmitsInlineClosure(closure, context);
                 }
 
                 @Override
@@ -287,6 +296,7 @@ final class CanonicalToBytecodeLowerer {
                             && admitsSelectedCallbacks(send.arguments());
                 }
             };
+    }
 
     /*
      * PERF034-C: direct BytecodeLocal storage is admitted only for a
@@ -546,10 +556,18 @@ final class CanonicalToBytecodeLowerer {
         CanonicalCompilationFacts.RootFacts rootFacts =
                 prepareRootFacts(sequence, activationDefinition, analysis);
         CanonicalLexicalScope scope = rootFacts.scope();
+        /*
+         * Inline control regions, however deeply nested, are emitted in this
+         * root's frame, so their static admission is decided under this root's
+         * entry context, exactly as emission decides it.
+         */
+        ControlSiteContext rootContext = ControlSiteContext.rootEntry(analysis, scope);
         CanonicalNonSuspensionAnalysis.SendSelection selection =
                 (send, ownerAnalysis, ownerScope) ->
                         selectedControlSend(
-                                send, ControlSiteContext.rootEntry(ownerAnalysis, ownerScope));
+                                send,
+                                ControlSiteContext.rootEntry(ownerAnalysis, ownerScope),
+                                rootContext);
         CanonicalNonSuspensionAnalysis.Result canonicalBody =
                 compilationFacts.canonicalBodyNonSuspension(
                         sequence, activationDefinition, analysis, scope);
@@ -579,9 +597,32 @@ final class CanonicalToBytecodeLowerer {
      * receiver can take the ordinary send on MISS and stays unselected.
      */
     private CanonicalNonSuspensionAnalysis.SelectedSend selectedControlSend(
-            CanonicalSend send, ControlSiteContext context) {
+            CanonicalSend send, ControlSiteContext context, ControlSiteContext rootContext) {
         if (!(send.receiver() instanceof CanonicalLiteral receiver)) {
             return null;
+        }
+        /*
+         * A conditional control whose literal receiver decides it statically
+         * is emitted without a send ({@link #emitI115Control}): it evaluates
+         * no operand besides literal Closures and runs only the selected
+         * callback inline.
+         */
+        I115StaticControl staticControl = standardObjectPublished
+                ? classifyI115StaticControl(
+                        I115Control.of(send.message(), send.arguments()),
+                        receiver, send.arguments(), rootContext)
+                : null;
+        if (staticControl != null && !staticControl.control().loop()) {
+            java.util.List<CanonicalClosure> selectedBodies =
+                    staticControl.eliminable()
+                            ? java.util.List.of()
+                            : java.util.List.of((CanonicalClosure) send.arguments()
+                                    .get(staticControl.selectedPosition() - 1));
+            return new CanonicalNonSuspensionAnalysis.SelectedSend(
+                    java.util.List.of(),
+                    selectedBodies,
+                    java.util.EnumSet.of(
+                            CanonicalNonSuspensionAnalysis.Precondition.STANDARD_OBJECT_PUBLISHED));
         }
         NormalBooleanControlSite site = normalBooleanControlSite(send, context);
         if (site == null) {
@@ -6269,6 +6310,16 @@ final class CanonicalToBytecodeLowerer {
             I115Control control,
             CanonicalExpression receiver,
             java.util.List<CanonicalExpression> arguments) {
+        return classifyI115StaticControl(
+                control, receiver, arguments, currentControlSiteContext());
+    }
+
+    /** The static classification of a control site under the given admission context. */
+    private I115StaticControl classifyI115StaticControl(
+            I115Control control,
+            CanonicalExpression receiver,
+            java.util.List<CanonicalExpression> arguments,
+            ControlSiteContext context) {
         if (control == null) {
             return null;
         }
@@ -6308,7 +6359,7 @@ final class CanonicalToBytecodeLowerer {
             }
         }
 
-        return i115AdmitsInlineClosure(arguments.get(selected - 1))
+        return i115AdmitsInlineClosure(arguments.get(selected - 1), context)
                 ? new I115StaticControl(control, selected) : null;
     }
 
@@ -6767,9 +6818,13 @@ final class CanonicalToBytecodeLowerer {
      * ReturnHome proof does not authorize a syntactic inline.
      */
     private boolean i115AdmitsInlineClosure(CanonicalExpression callable) {
+        return i115AdmitsInlineClosure(callable, currentControlSiteContext());
+    }
+
+    private boolean i115AdmitsInlineClosure(
+            CanonicalExpression callable, ControlSiteContext context) {
         return callable instanceof CanonicalClosure closure
-                && admitsNormalInlineControlBody(
-                        closure, currentControlSiteContext());
+                && admitsNormalInlineControlBody(closure, context);
     }
 
     /**
@@ -8871,7 +8926,7 @@ final class CanonicalToBytecodeLowerer {
 
         boolean requiresPersistentAuthority =
                 CanonicalCompilationFacts.inlineBodyRequiresPersistentFrameAuthority(
-                        closure, analysis, scope, i115InlinePolicy);
+                        closure, analysis, scope, inlinePolicyUnder(context));
         boolean admitted = (ownScalarBindings
                         || noOwnBindingsAndProvenCaptures
                         || mixedOwnBindingsAndParentCaptures)
@@ -9359,7 +9414,7 @@ final class CanonicalToBytecodeLowerer {
                         context.frameNames(),
                         context.hasFrameLayout())
                 && !CanonicalCompilationFacts.inlineBodyRequiresPersistentFrameAuthority(
-                        closure, analysis, scope, i115InlinePolicy);
+                        closure, analysis, scope, inlinePolicyUnder(context));
     }
 
     /**
