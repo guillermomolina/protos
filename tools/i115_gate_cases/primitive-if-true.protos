@@ -17,7 +17,7 @@
 
 run: () => {
     result: null
-    true.ifTrue() {
+    true.ifTrue() { 
         result = 1
     }
     result

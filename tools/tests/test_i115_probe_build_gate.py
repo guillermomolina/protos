@@ -20,7 +20,14 @@ SPEC.loader.exec_module(GATE)
 class I115ProbeBuildGateTest(unittest.TestCase):
     def stub_preflight(self):
         return (
-            mock.patch.object(GATE, "read_baseline", return_value={"roots": {}}),
+            mock.patch.object(
+                GATE,
+                "read_baseline",
+                return_value={
+                    "baseline_protos_revision": GATE.BASELINE_REVISION,
+                    "roots": {},
+                },
+            ),
             mock.patch.object(GATE, "verify_sources"),
             mock.patch.object(GATE, "check_runtime_version"),
             mock.patch.object(GATE, "git_data", return_value={"head": "synthetic", "clean": False}),

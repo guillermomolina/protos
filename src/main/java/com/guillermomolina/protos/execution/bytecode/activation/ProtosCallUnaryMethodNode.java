@@ -37,6 +37,7 @@ import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.DirectCallNode;
 import com.oracle.truffle.api.nodes.Node;
+import com.oracle.truffle.api.profiles.InlinedConditionProfile;
 
 /**
  * Protos Bytecode DSL: the {@code CallUnaryMethod} operation, a call
@@ -112,19 +113,20 @@ abstract class ProtosCallUnaryMethodNode extends Node {
                     Assumption cachedCallerNeedsStable,
             @Cached("classifyReturnHome(cachedCallable, cachedCallee)")
                     ProtosFunctionCallDispatchers.ReturnHomeMode cachedHomeMode,
-            @Cached ProtosFunctionCallDispatchers.FunctionDirectInvokeNode invoke) {
+            @Cached ProtosFunctionCallDispatchers.FunctionDirectInvokeNode invoke,
+            @Cached InlinedConditionProfile taskPresence) {
         Object[] arguments = ProtosFrameArguments.dispatchedCall1(
                 null, ProtosFrameArguments.functionCallMarker(),
                 null, null, null, a0);
         if (cachedHomeMode == ProtosFunctionCallDispatchers.ReturnHomeMode.UNOBSERVABLE) {
             Object outcome = ProtosFunctionCallDispatchers.invokeUnobservableHome(
-                    frame, callNode, cachedCallee, callable, arguments, null);
+                    frame, inliningTarget, taskPresence, callNode, cachedCallee, callable, arguments, null);
             return ProtosTailCallContinuation.completeCall(
                     terminal, outcome, bytecode, bytecodeIndex);
         }
         if (cachedHomeMode == ProtosFunctionCallDispatchers.ReturnHomeMode.CAPTURED) {
             Object outcome = ProtosFunctionCallDispatchers.invokeCapturedHome(
-                    frame, callNode, cachedCallee, callable, arguments, null);
+                    frame, inliningTarget, taskPresence, callNode, cachedCallee, callable, arguments, null);
             return ProtosTailCallContinuation.completeCall(
                     terminal, outcome, bytecode, bytecodeIndex);
         }

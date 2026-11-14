@@ -347,38 +347,170 @@ def match_roots(case: str, observed: list[str],
 
 def parse_trace(case: str, raw: str, requested_tier: int,
                 expected_ids: tuple[str, ...] | None = None) -> tuple[dict[str, int], dict]:
-    """Read After-TruffleTier node counts from genuine opt done IR fields.
+    """Read compiled roots, retaining explicitly invalidated compilations.
 
-    Compilation failure, duplicate compilation, wrong tier or missing metrics
-    are errors. The scope is exactly the compiled root inventory.
+    A replacement is valid only when the trace proves that the same physical
+    CallTarget was invalidated before recompilation. Ambiguous captures fail.
     """
-    if any(line.startswith("[engine] opt failed") or line.startswith("[engine] opt inval.")
-           for line in raw.splitlines()):
-        raise GateError(f"COMPILATION_FAILED_OR_INVALIDATED: {case}/T{requested_tier}")
-    compiled = []
-    for line in raw.splitlines():
+    lines = raw.splitlines()
+
+    if any(line.startswith("[engine] opt failed") or
+           line.startswith("[engine] opt inval.")
+           for line in lines):
+        raise GateError(
+            f"COMPILATION_FAILED_OR_INVALIDATED: {case}/T{requested_tier}"
+        )
+
+    target_pattern = re.compile(
+        r"^\[engine\] opt done\s+engine=(\d+)\s+id=(\d+)\s+"
+    )
+    invalidation_pattern = re.compile(
+        r"^\[engine\] opt deopt\s+engine=(\d+)\s+id=(\d+)\s+"
+        r"(?P<label>.*?)\s+\|Invalidated\s+true\|"
+    )
+
+    compilations = []
+    all_compilations = []
+    invalidations = []
+
+    for position, line in enumerate(lines):
+        if line.startswith("[engine] opt deopt"):
+            invalidation = invalidation_pattern.match(line)
+            if invalidation is not None:
+                invalidations.append({
+                    "position": position,
+                    "target": (
+                        invalidation.group(1),
+                        invalidation.group(2),
+                    ),
+                    "label": invalidation.group("label").strip(),
+                    "event": line,
+                })
+            continue
+
         if not line.startswith("[engine] opt done"):
             continue
-        m = COMP_RE.match(line)
+
+        match = COMP_RE.match(line)
         tier = TIER_RE.search(line)
         ir = IR_RE.search(line)
-        cid = COMP_ID_RE.search(line)
-        if m is None or tier is None or ir is None or cid is None:
-            raise GateError(f"COMPILATION_TRACE_UNPARSEABLE: {case}: {line[:240]}")
-        if int(tier["tier"]) != requested_tier:
-            # Last-tier captures can naturally observe first-tier compilations;
-            # only the requested tier is comparable to the baseline.
-            continue
-        compiled.append((m["label"].strip(), int(ir["after"]), int(cid["id"])))
-    mapping = match_roots(case, [label for label, _, _ in compiled], expected_ids)
-    values = {mapping[label]: nodes for label, nodes, _ in compiled}
-    if len(values) != len(compiled):
-        raise GateError(f"COMPILATION_DUPLICATED: {case}/T{requested_tier}")
-    provenance = {mapping[label]: {"observed_root": label, "comp_id": compid,
-                                   "ir_after_truffle_tier": nodes}
-                  for label, nodes, compid in compiled}
-    return values, provenance
+        comp_id = COMP_ID_RE.search(line)
 
+        if match is None or tier is None or ir is None or comp_id is None:
+            raise GateError(
+                f"COMPILATION_TRACE_UNPARSEABLE: {case}: {line[:240]}"
+            )
+
+        physical = target_pattern.match(line)
+
+        record = {
+            "position": position,
+            "label": match["label"].strip(),
+            "tier": int(tier["tier"]),
+            "nodes": int(ir["after"]),
+            "comp_id": int(comp_id["id"]),
+            "target": (
+                (physical.group(1), physical.group(2))
+                if physical is not None else None
+            ),
+        }
+
+        all_compilations.append(record)
+
+        if record["tier"] == requested_tier:
+            compilations.append(record)
+
+    grouped = {}
+
+    for record in compilations:
+        grouped.setdefault(record["label"], []).append(record)
+
+    current = []
+    history = {}
+
+    for label, records in grouped.items():
+        replaced = []
+
+        for previous, successor in zip(records, records[1:]):
+            target = previous["target"]
+
+            if target is None or successor["target"] != target:
+                raise GateError(
+                    f"RECOMPILATION_TARGET_AMBIGUOUS: "
+                    f"{case}/T{requested_tier}: {label}"
+                )
+
+            matching = [
+                event for event in invalidations
+                if previous["position"] < event["position"] < successor["position"]
+                and event["target"] == target
+                and event["label"] == label
+            ]
+
+            # A lower-tier compilation may legitimately occur after
+            # invalidation and before recompilation at the requested tier.
+            # Never discard an intervening compilation of the same tier.
+            intervening_same_tier = [
+                item for item in all_compilations
+                if previous["position"] < item["position"] < successor["position"]
+                and item["target"] == target
+                and item["tier"] == requested_tier
+            ]
+
+            if len(matching) != 1 or intervening_same_tier:
+                raise GateError(
+                    f"RECOMPILATION_UNVERIFIED: "
+                    f"{case}/T{requested_tier}: {label}"
+                )
+
+            replaced.append({
+                "comp_id": previous["comp_id"],
+                "ir_after_truffle_tier": previous["nodes"],
+                "invalidation": matching[0]["event"],
+            })
+
+        latest = records[-1]
+
+        if latest["target"] is not None and any(
+            event["position"] > latest["position"]
+            and event["target"] == latest["target"]
+            and event["label"] == label
+            for event in invalidations
+        ):
+            raise GateError(
+                f"LATEST_COMPILATION_INVALIDATED: "
+                f"{case}/T{requested_tier}: {label}"
+            )
+
+        current.append(latest)
+        history[label] = replaced
+
+    mapping = match_roots(
+        case, [item["label"] for item in current], expected_ids
+    )
+
+    values = {
+        mapping[item["label"]]: item["nodes"]
+        for item in current
+    }
+
+    provenance = {}
+
+    for item in current:
+        root = mapping[item["label"]]
+
+        evidence = {
+            "observed_root": item["label"],
+            "comp_id": item["comp_id"],
+            "ir_after_truffle_tier": item["nodes"],
+        }
+
+        if history[item["label"]]:
+            evidence["invalidated_compilations"] = history[item["label"]]
+
+        provenance[root] = evidence
+
+    return values, provenance
 
 def parse_bytecode_sizes(case: str, raw: str,
                          expected_ids: tuple[str, ...] | None = None) -> tuple[dict[str, dict], dict]:

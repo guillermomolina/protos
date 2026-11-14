@@ -8,6 +8,13 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.125-SNAPSHOT
+
+- **I115 — Task-presence profiling on direct Closure calls and verified recompilation in the semantic performance gate.**
+  - Calls: `prepareInvocationTask` profiles whether an inherited Task is present with an `InlinedConditionProfile`, threaded through `invokeUnobservableHome`, `invokeCapturedHome` and the direct/indirect invoke nodes of `ProtosFunctionCallDispatchers`, `ProtosCallUnaryMethodNode` and `ProtosExperimentalCallBinaryMethodNode`. Task inheritance and caller provenance are unchanged.
+  - Gate: `tools/i115_semantic_performance_gate.py` `parse_trace` now accepts a recompilation of a root at the requested tier only when the trace proves the same physical CallTarget was invalidated (`opt deopt … |Invalidated true|`) between the two compilations, with no intervening same-tier compilation. The latest compilation is measured; replaced compilations are kept as `invalidated_compilations` provenance. A recompilation on another CallTarget (`RECOMPILATION_TARGET_AMBIGUOUS`), without verified invalidation (`RECOMPILATION_UNVERIFIED`), or an invalidated latest compilation (`LATEST_COMPILATION_INVALIDATED`) fails the gate.
+  - Tests: `tools/tests/test_i115_local_gate.py` adds coverage for verified, cross-target, unverified, tier-interleaved and invalidated-latest recompilations; the baseline-mapping and probe-build gate tests follow the revision-keyed baseline tier counts.
+
 ## 0.4.124-SNAPSHOT
 
 - **PERF040 — Residual lexical lookup retirement and standard numeric selection caching.**

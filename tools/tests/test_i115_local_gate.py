@@ -64,6 +64,158 @@ class LocalGateTest(unittest.TestCase):
         with self.assertRaises(mod.GateError):
             mod.parse_trace(c, '\n'.join([done(mod.HOST, 1, 239, 1), record, record]), 1)
 
+    def test_verified_recompilation_retains_invalidation_evidence(self):
+        case = "bubble-sort"
+        label = guest_label(case)
+
+        def compiled(comp_id, nodes):
+            return (
+                f"[engine] opt done   engine=2  id=7     {label} "
+                f"|Tier 1|Time 4(1+3)|CompId {comp_id} "
+                f"|IR {nodes}/2000|UTC x"
+            )
+
+        invalidation = (
+            f"[engine] opt deopt  engine=2  id=7     {label} "
+            f"|Invalidated  true|UTC x|Reason uncommon trap"
+        )
+
+        raw = "\n".join((
+            compiled(11, 120),
+            invalidation,
+            compiled(12, 125),
+            done(mod.HOST, 1, 239, 20),
+        ))
+
+        roots, evidence = mod.parse_trace(case, raw, 1)
+        name = "protos-root:70bac6408c0f1e35"
+
+        self.assertEqual(roots[name], 125)
+        self.assertEqual(evidence[name]["comp_id"], 12)
+        self.assertEqual(
+            evidence[name]["invalidated_compilations"][0]["comp_id"], 11
+        )
+        self.assertEqual(
+            evidence[name]["invalidated_compilations"][0]
+            ["ir_after_truffle_tier"], 120
+        )
+
+    def test_recompilation_from_another_calltarget_is_rejected(self):
+        case = "bubble-sort"
+        label = guest_label(case)
+
+        raw = "\n".join((
+            f"[engine] opt done   engine=2  id=7     {label} "
+            "|Tier 1|CompId 11 |IR 120/2000",
+            f"[engine] opt deopt  engine=2  id=7     {label} "
+            "|Invalidated  true|Reason uncommon trap",
+            f"[engine] opt done   engine=2  id=8     {label} "
+            "|Tier 1|CompId 12 |IR 125/2000",
+            done(mod.HOST, 1, 239, 20),
+        ))
+
+        with self.assertRaisesRegex(
+            mod.GateError, "RECOMPILATION_TARGET_AMBIGUOUS"
+        ):
+            mod.parse_trace(case, raw, 1)
+
+    def test_unverified_recompilation_is_rejected(self):
+        case = "bubble-sort"
+        label = guest_label(case)
+
+        raw = "\n".join((
+            f"[engine] opt done   engine=2  id=7     {label} "
+            "|Tier 1|CompId 11 |IR 120/2000",
+            f"[engine] opt done   engine=2  id=7     {label} "
+            "|Tier 1|CompId 12 |IR 125/2000",
+            done(mod.HOST, 1, 239, 20),
+        ))
+
+        with self.assertRaisesRegex(
+            mod.GateError, "RECOMPILATION_UNVERIFIED"
+        ):
+            mod.parse_trace(case, raw, 1)
+
+
+    def test_higher_tier_recompilation_after_lower_tier_is_accepted(self):
+        case = "bubble-sort"
+
+        def host(tier, comp_id, nodes):
+            return (
+                f"[engine] opt done   engine=2  id=7     {mod.HOST} "
+                f"|Tier {tier}|Time 4(1+3)|CompId {comp_id} "
+                f"|IR {nodes}/9000|UTC x"
+            )
+
+        invalidation = (
+            f"[engine] opt deopt  engine=2  id=7     {mod.HOST} "
+            "|Invalidated  true|UTC x|Reason uncommon trap"
+        )
+
+        raw = "\n".join((
+            host(2, 11, 1553),
+            invalidation,
+            host(1, 12, 415),
+            host(2, 13, 7612),
+            done(guest_label(case), 2, 377, 20),
+        ))
+
+        roots, evidence = mod.parse_trace(case, raw, 2)
+
+        self.assertEqual(roots[mod.HOST], 7612)
+        self.assertEqual(evidence[mod.HOST]["comp_id"], 13)
+        self.assertEqual(
+            len(evidence[mod.HOST]["invalidated_compilations"]), 1
+        )
+        self.assertEqual(
+            evidence[mod.HOST]["invalidated_compilations"][0]["comp_id"],
+            11,
+        )
+        self.assertEqual(
+            evidence[mod.HOST]["invalidated_compilations"][0]
+            ["ir_after_truffle_tier"],
+            1553,
+        )
+
+    def test_intervening_lower_tier_without_invalidation_is_rejected(self):
+        case = "bubble-sort"
+
+        def host(tier, comp_id, nodes):
+            return (
+                f"[engine] opt done   engine=2  id=7     {mod.HOST} "
+                f"|Tier {tier}|Time 4(1+3)|CompId {comp_id} "
+                f"|IR {nodes}/9000|UTC x"
+            )
+
+        raw = "\n".join((
+            host(2, 11, 1553),
+            host(1, 12, 415),
+            host(2, 13, 7612),
+            done(guest_label(case), 2, 377, 20),
+        ))
+
+        with self.assertRaisesRegex(
+            mod.GateError, "RECOMPILATION_UNVERIFIED"
+        ):
+            mod.parse_trace(case, raw, 2)
+
+    def test_invalidated_latest_compilation_is_rejected(self):
+        case = "bubble-sort"
+        label = guest_label(case)
+
+        raw = "\n".join((
+            f"[engine] opt done   engine=2  id=7     {label} "
+            "|Tier 1|CompId 11 |IR 120/2000",
+            f"[engine] opt deopt  engine=2  id=7     {label} "
+            "|Invalidated  true|Reason uncommon trap",
+            done(mod.HOST, 1, 239, 20),
+        ))
+
+        with self.assertRaisesRegex(
+            mod.GateError, "LATEST_COMPILATION_INVALIDATED"
+        ):
+            mod.parse_trace(case, raw, 1)
+
     def test_static_instructions_from_instrument(self):
         c = 'bubble-sort'
         label = guest_label(c)

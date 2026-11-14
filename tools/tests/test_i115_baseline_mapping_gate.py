@@ -18,7 +18,7 @@ spec.loader.exec_module(mod)
 def synthetic_baseline() -> dict:
     all_roots = {}
     for case in mod.CASES:
-        host_pair, guest_pairs = mod.BASELINE_TIER_COUNTS[case]
+        host_pair, guest_pairs = mod.BASELINE_TIER_COUNTS[mod.BASELINE_REVISION][case]
         refs = mod.GUEST_IDS_IN_SOURCE_ORDER[case]
         assert len(refs) == len(guest_pairs)
         roots = {
@@ -82,7 +82,12 @@ class HistoricalMappingTest(unittest.TestCase):
 
     def test_graph_signature_stays_frozen(self):
         b = synthetic_baseline()
-        next(v for k, v in b["roots"]["bubble-sort"].items() if k != mod.HOST)["tier2_nodes"] = 377
+        target = next(
+            value
+            for name, value in b["roots"]["bubble-sort"].items()
+            if name != mod.HOST
+        )
+        target["tier2_nodes"] += 1
         with self.assertRaisesRegex(mod.GateError, "BASELINE_GRAPH_SIGNATURE_MISMATCH"):
             self.read(b)
 
