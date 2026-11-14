@@ -66,7 +66,7 @@ abstract class ProtosCallUnaryMethodNode extends Node {
     abstract Object execute(VirtualFrame frame, boolean terminal, Object callable, Object a0);
 
     /*
-     * CallUnaryMethodNode.callPFunction: cache the callable
+     * Cache the callable
      * instance rather than its shared source execution plan. Cache hits
      * use the already-prepared, same-language target without resolving
      * an entered Context. Other source calls use the existing dispatcher.
@@ -87,7 +87,7 @@ abstract class ProtosCallUnaryMethodNode extends Node {
             assumptions = {"cachedCodeStable", "cachedCallerNeedsStable"},
             excludeForUncached = true,
             limit = "4")
-    static Object callPFunction(
+    static Object callCachedClosure(
             VirtualFrame frame,
             boolean terminal,
             ProtosClosureValue callable,
@@ -149,7 +149,7 @@ abstract class ProtosCallUnaryMethodNode extends Node {
                     "isSourceFunction(callable)",
                     "canonicalCallSelected(callable, rootSelection)"
             },
-            replaces = "callPFunction")
+            replaces = "callCachedClosure")
     @Megamorphic
     @InliningCutoff
     static Object callSourceMegamorphic(

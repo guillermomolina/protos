@@ -118,7 +118,7 @@ class ProtosStandardNumericConversionTest {
                 ProtosStandardNumericConversionProtocol.convert(toFloat, negativeZero, prelude));
         assertEquals(Double.doubleToRawLongBits(-0.0d),
                 Double.doubleToRawLongBits(convertedNegativeZero));
-        // GraalPy: an ordinary Double is itself a Float and must retain its binary64 bits.
+        // An ordinary Double is itself a Float and must retain its binary64 bits.
         Double canonicalNegativeZero = assertInstanceOf(Double.class,
                 ProtosStandardNumericConversionProtocol.convert(toFloat, -0.0d, prelude));
         assertEquals(Double.doubleToRawLongBits(-0.0d),

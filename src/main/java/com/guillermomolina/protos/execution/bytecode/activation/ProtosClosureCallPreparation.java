@@ -32,7 +32,7 @@ final class ProtosClosureCallPreparation {
     private ProtosClosureCallPreparation() {}
 
     /**
-     * I115 (GraalPy PFunction.getCallTarget): the effective CallTarget of a
+     * I115: the effective CallTarget of a
      * source Closure in {@code enteredContext}, or null when there is none.
      * A deferred plan is materialized once; a projection is obtained only
      * through the entered Context's executable-plan cache. No activation,

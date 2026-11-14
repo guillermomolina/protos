@@ -53,11 +53,6 @@ import org.junit.jupiter.api.Test;
  * native Bytecode DSL storage (a LOCAL local, or a CELL held in a local and
  * shared with every capturer); a module binding lives in its module context
  * (NAME). No root installs a frame lexical authority any more.
- *
- * <p>KNOWN I115 SEMANTIC DIVERGENCE: a Closure activation's Context holds
- * only NAME bindings. Assertions that the specified semantics make about a
- * Closure's own bindings through its Context are kept as they were and are
- * marked where they depend on that divergence.
  */
 final class ProtosPerf025FrameMaterializationSliceTest {
     private static final LanguageReference<ProtosLanguage> LANGUAGE_REF =
@@ -98,11 +93,11 @@ final class ProtosPerf025FrameMaterializationSliceTest {
 
     /**
      * PLAT067-B: a proven scalar body keeps its bindings in Bytecode locals for every Context. An
-     * activation observed before entry keeps its identity and the result, and no eliminated
-     * binding is fabricated on it.
+     * activation observed before entry keeps its identity and exposes the exact
+     * bindings established during execution.
      */
     @Test
-    void perf034ScalarBodyWithObservedActivationFabricatesNoEliminatedBinding()
+    void perf034ScalarBodyWithObservedActivationPreservesExactBindings()
             throws Exception {
         withFixture(fixture -> {
             ClosureUnderTest plan =
@@ -135,12 +130,15 @@ final class ProtosPerf025FrameMaterializationSliceTest {
                                     invocation)));
 
             assertSame(observedContext, invocation.context());
-            assertTrue(
-                    invocation.context().readLocalSlot("first").isEmpty(),
-                    "an eliminated binding is never fabricated");
-            assertTrue(
-                    invocation.context().readLocalSlot("second").isEmpty(),
-                    "an eliminated binding is never fabricated");
+            assertEquals(
+                    7L,
+                    unwrapNumber(observedContext.readLocalSlot("first").orElseThrow()),
+                    "observed Context must expose the exact first binding");
+            assertEquals(
+                    9L,
+                    unwrapNumber(observedContext.readLocalSlot("second").orElseThrow()),
+                    "observed Context must expose the exact second binding");
+            assertNoRetired(instructionNames(activationNode(plan)));
         });
     }
 
@@ -263,9 +261,8 @@ final class ProtosPerf025FrameMaterializationSliceTest {
 
     /**
      * Explicit {@code context} observation. The final guest assertion reads
-     * a Closure's own LOCAL binding through its observed Context; it is the
-     * specified behavior and depends on the KNOWN I115 SEMANTIC DIVERGENCE
-     * that a Closure Context holds only NAME bindings.
+     * a Closure's own LOCAL binding through its observed Context; this is
+     * required by the specified live lexical Context semantics.
      */
     @Test
     void explicitContextObservationPublishesOneContext() throws Exception {

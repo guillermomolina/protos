@@ -50,7 +50,7 @@ import org.junit.jupiter.api.Test;
  * I115-H1: the local unary Closure calls once admitted by the retired I115-H
  * static invocation now take the ordinary lowering: the Closure is created
  * and bound ({@code MaterializeCurrentClosure}) and, since I115-H11, called
- * through the GraalPy-style {@code CallUnaryMethod}, whose dynamic {@code
+ * through {@code CallUnaryMethod}, whose dynamic {@code
  * Object.call} selection, caches and Assumptions decide the target, with B5+
  * frame arguments.
  *
@@ -520,7 +520,7 @@ final class ProtosI115HStaticClosureCallTest {
         }
     }
 
-    // ---- I115 on-demand Prelude transport (GraalPy caller flags) ----------
+    // ---- I115 on-demand Prelude transport (caller flags) ----------------
 
     /**
      * A recursion that never overflows never requests the caller Prelude

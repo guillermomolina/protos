@@ -34,16 +34,20 @@ final class ProtosNumberFactory {
     private ProtosNumberFactory() {}
 
     static ProtosPrelude prelude(Node node, VirtualFrame frame) {
-        ProtosBytecodeRootNode root =
-                (ProtosBytecodeRootNode) BytecodeNode.get(node).getBytecodeRootNode();
         if (ProtosFrameArguments.inheritsUntransportedCallerPrelude(frame.getArguments())) {
-            root.requestCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE);
+            rootOf(node).requestCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE);
         }
         ProtosPrelude prelude = ProtosFrameArguments.admittedPreludeOrNull(frame.getArguments());
         if (prelude == null) {
             throw new IllegalStateException("numeric construction requires the executing Core");
         }
         return prelude;
+    }
+
+    /* The root lookup is cold; the caller-need request stays outside the boundary. */
+    @TruffleBoundary
+    private static ProtosBytecodeRootNode rootOf(Node node) {
+        return (ProtosBytecodeRootNode) BytecodeNode.get(node).getBytecodeRootNode();
     }
 
     @TruffleBoundary

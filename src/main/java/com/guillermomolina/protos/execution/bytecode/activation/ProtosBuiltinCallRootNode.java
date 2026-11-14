@@ -166,9 +166,28 @@ final class ProtosBuiltinCallRootNode extends RootNode {
         }
         if (body instanceof ProtosSuspensionCapableNativeClosureBody suspensionCapable
                 && suspendible(activation)) {
-            return suspensionCapable.executeForBytecodeContinuation(activation, supplied);
+            return executeForContinuation(suspensionCapable, activation, supplied);
         }
+        return executeNative(body, activation, supplied);
+    }
+
+    /*
+     * A native body is ordinary host code, not a node tree: partial evaluation
+     * stops at its entry. Guest Errors and non-local transfers raised by the
+     * body propagate through the boundary without invalidating the caller.
+     */
+    @TruffleBoundary(transferToInterpreterOnException = false)
+    private static Object executeNative(
+            ProtosNativeClosureBody body, ProtosActivation activation, List<?> supplied) {
         return ProtosNumericValueSupport.guestValue(body.execute(activation, supplied));
+    }
+
+    @TruffleBoundary(transferToInterpreterOnException = false)
+    private static Object executeForContinuation(
+            ProtosSuspensionCapableNativeClosureBody body,
+            ProtosActivation activation,
+            List<?> supplied) {
+        return body.executeForBytecodeContinuation(activation, supplied);
     }
 
     @TruffleBoundary

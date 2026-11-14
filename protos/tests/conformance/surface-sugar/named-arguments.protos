@@ -276,7 +276,10 @@ tests: [
         Assertions.require(trace.inits == 1)
     }),
     Test("duplicate positional binding fails before defaults or body", () => {
-        trace: { defaults: 0, bodies: 0 }
+        trace: {
+            defaults: 0
+            bodies: 0
+        }
         defaultValue: () => {
             trace.defaults = trace.defaults + 1
             2
@@ -290,7 +293,10 @@ tests: [
         Assertions.require(trace.bodies == 0)
     }),
     Test("failure in the first supplied argument stops later evaluation", () => {
-        trace: { later: 0, bodies: 0 }
+        trace: {
+            later: 0
+            bodies: 0
+        }
         failure: Error()
         fail: () => { failure.signal() }
         later: () => {

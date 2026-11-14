@@ -142,8 +142,8 @@ final class ProtosI112TerminalCallBudgetTest {
                 for (String required : List.of(
                         "c.EnterRoot",
                         "c.MaterializeCurrentClosure",
-                        "c.CreateCurrentFrameLocal",
-                        "c.ReadRootFrameLocal",
+                        "c.CreateDiscardedModuleBinding",
+                        "c.ReadGlobal",
                         "c.CallUnaryMethod",
                         "c.EpilogForReturn")) {
                     assertTrue(
@@ -163,13 +163,36 @@ final class ProtosI112TerminalCallBudgetTest {
                 }
                 for (String required : List.of(
                         "c.EnterRoot",
-                        "c.BindUnaryFrameParameter",
+                        "c.CopySuppliedArguments",
                         "load.local",
                         "c.EpilogForReturn")) {
                     assertTrue(
                             names(identity).contains(required),
                             () -> required + " missing in identity\n" + census.fullReport());
                 }
+                // The module creation must consume the captured
+                // Closure directly. No intermediate local or discarded
+                // expression result is permitted on this compact path.
+                for (String redundant : List.of(
+                        "store.local",
+                        "load.local",
+                        "c.CurrentActivation",
+                        "c.CreateCurrentLocalSlot",
+                        "c.DiscardValue")) {
+                    assertEquals(
+                            0L,
+                            names(module).stream()
+                                    .filter(redundant::equals)
+                                    .count(),
+                            () -> redundant + " in module\n"
+                                    + census.fullReport());
+                }
+                assertEquals(
+                        1L,
+                        count(names(module), "c.CreateDiscardedModuleBinding"),
+                        () -> "exactly one checked module creation\n"
+                                + census.fullReport());
+
                 for (List<String> signature : census.signatures()) {
                     for (String entry : signature) {
                         String name = entry.split(" ", 2)[0];
@@ -312,8 +335,8 @@ final class ProtosI112TerminalCallBudgetTest {
 
     /**
      * I115 / PLAT066-C: {@code identity} reads only its own parameter, so
-     * its creation does not capture {@code run}'s context (GraalPy
-     * MakeFunction without freevars). {@code run} then installs no frame
+     * its creation does not capture {@code run}'s context
+     * (no free cell bindings). {@code run} then installs no frame
      * authority and keeps {@code identity} in an ordinary Bytecode DSL local
      * (store.local / load.local) on its compact path.
      */
@@ -397,8 +420,8 @@ final class ProtosI112TerminalCallBudgetTest {
 
     /**
      * I115-R6 (experimental): {@code run} reads the module-owned
-     * {@code factorial} with one {@code ReadGlobal} (GraalPy
-     * {@code ReadGlobal}): no captured owner selection, no conditional
+     * {@code factorial} with one {@code ReadGlobal}:
+     * no captured owner selection, no conditional
      * bytecode and no caller materialization.
      */
     @Test

@@ -136,7 +136,7 @@ public final class Canonicalizer {
     }
 
     /*
-     * I115: GraalPy constant-list lowering.
+     * I115: constant-list lowering.
      * Preserve literal Array provenance.
      */
     private CanonicalExpression lowerArrayConstruction(

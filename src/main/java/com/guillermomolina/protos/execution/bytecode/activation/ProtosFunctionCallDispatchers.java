@@ -372,7 +372,11 @@ final class ProtosFunctionCallDispatchers {
                 // Standard Object.call executes the receiver Closure
                 // directly, retaining its captured receiver/home.
                 return invokeSelectedNamed(
-                        closure, null, null, packet, caller);
+                        closure,
+                        closure.capturedReceiver(),
+                        closure.methodHome().orElse(null),
+                        packet,
+                        caller);
             }
 
             if (!ProtosStandardObjectProtocol

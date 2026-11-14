@@ -648,8 +648,8 @@ final class ProtosI115RFactorialCaptureTest {
     private static final int I115_R5_RUN_DSL_FULL_HISTORICAL = 17;
 
     /**
-     * I115-R6 run() FULL DSL sequence (GraalPy run() has 6). I115-H11: the
-     * unary call is the GraalPy-style CallUnaryMethod.
+     * I115-R6 run() FULL DSL sequence. I115-H11: the
+     * unary call is CallUnaryMethod.
      */
     private static final List<String> I115_R6_RUN_DSL_FULL = List.of(
             "c.EnterRoot",
@@ -787,7 +787,7 @@ final class ProtosI115RFactorialCaptureTest {
 
     /*
      * I115-H11: a unary Closure call site of a caller root is one
-     * GraalPy-style CallUnaryMethod; the retired Call1 operations (ordinary,
+     * CallUnaryMethod; the retired Call1 operations (ordinary,
      * experimental) are absent, and the static recursive call is not used
      * outside its own recursive root.
      */
@@ -1163,8 +1163,22 @@ final class ProtosI115RFactorialCaptureTest {
      */
     private static void assertModuleStructure(List<String> names) {
         assertTrue(names.get(0).startsWith("c.EnterRoot"), "module prologue: " + names);
-        assertEquals(2, names.stream().filter(name -> name.contains("CreateCurrentLocalSlot")).count(),
-                "factorial and run are module NAME bindings: " + names);
+        assertEquals(
+                1L,
+                countStartingWith(names, "c.CreateDiscardedModuleBinding"),
+                "one fused creation of factorial: " + names);
+        assertEquals(
+                1L,
+                countStartingWith(names, "c.CreateCurrentLocalSlot"),
+                "one ordinary creation of run: " + names);
+        assertEquals(
+                2L,
+                countStartingWith(names, "c.MaterializeCurrentClosure"),
+                "both source Closures must be materialized: " + names);
+        assertTrue(
+                indexStartingWith(names, "c.CreateDiscardedModuleBinding")
+                        < indexStartingWith(names, "c.CreateCurrentLocalSlot"),
+                "factorial must be created before run: " + names);
         assertTrue(countStartingWith(names, "c.EpilogForReturn") >= 1,
                 "module return epilogue: " + names);
         assertTrue(names.contains("return"), names.toString());
@@ -1214,8 +1228,33 @@ final class ProtosI115RFactorialCaptureTest {
             }
         }
         assertTrue(branch > condition, "native conditional branch: " + names);
-        int call = indexStartingWith(names, "c.CallUnaryMethod");
-        assertTrue(call > branch, "the recursive call is inside the inline body: " + names);
+        int global = indexStartingWith(names, "c.ReadGlobal");
+        int multiply = indexStartingWith(names, "c.NumberMultiply");
+        assertTrue(global > branch && multiply > global,
+                "recursive function and its product must be inside the inline body: " + names);
+        int subtract = indexStartingWith(names, "c.NumberSubtract");
+        int multiplicationSelection = -1;
+        for (int index = subtract + 1; index < multiply; index++) {
+            if (names.get(index).startsWith("c.IsStandardNumericSelection")) {
+                multiplicationSelection = index;
+                break;
+            }
+        }
+        assertTrue(
+                subtract > global
+                        && multiplicationSelection > subtract
+                        && multiplicationSelection < multiply,
+                "recursive arithmetic order: " + names);
+
+        // The subtraction fallback has one GetMethod/CallUnaryMethod
+        // pair. Exactly one further CallUnaryMethod is the recursion.
+        // The multiplication fallback belongs to the next region.
+        List<String> recursiveRegion =
+                names.subList(global, multiplicationSelection);
+        assertEquals(
+                1 + countStartingWith(recursiveRegion, "c.GetMethod"),
+                countStartingWith(recursiveRegion, "c.CallUnaryMethod"),
+                "exactly one recursive call beyond numeric fallbacks: " + names);
 
         // Native control flow: no second callable invocation. GetMethod only
         // appears as a guarded message fallback of an internal operation.

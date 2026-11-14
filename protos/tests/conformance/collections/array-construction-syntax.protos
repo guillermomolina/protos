@@ -37,6 +37,14 @@ tests: [
         }
         Assertions.require(tool009LegacyCase() == 402)
     }),
+    Test("array construction syntax observes dynamic Array shadow", () => {
+        probe: () => {
+            observed: context
+            observed.Array: (first, second) => first * 100 + second
+            [4, 2]
+        }
+        Assertions.require(probe() == 402)
+    }),
     Test("array construction syntax spread order", () => {
         tool009LegacyCase: () => {
             counter: 0

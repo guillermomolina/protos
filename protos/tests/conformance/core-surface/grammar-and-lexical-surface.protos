@@ -193,6 +193,18 @@ tests: [
         }
         Assertions.require(make() == 12)
     }),
+    Test("captured assignment selects observed Context shadow", () => {
+        x: 1
+        make: () => {
+            observed: context
+            write: (value) => { x = value }
+            observed.x: 2
+            write(3)
+            Assertions.require(observed.x == 3)
+        }
+        make()
+        Assertions.require(x == 1)
+    }),
     Test("present null Closure binding is not an absent binding", () => {
         x: 5
         make: () => {

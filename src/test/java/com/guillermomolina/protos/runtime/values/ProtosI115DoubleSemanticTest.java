@@ -3,7 +3,7 @@ package com.guillermomolina.protos.runtime;
 import static org.junit.jupiter.api.Assertions.*;
 import org.junit.jupiter.api.Test;
 
-/** I115: GraalPy PyFloatCheckNode/GetClassNode representation invariants. */
+/** I115: Float representation and prototype-selection invariants. */
 final class ProtosI115DoubleSemanticTest {
     @Test void directDoubleIsSemanticFloat() {
         Object value = ProtosNumericValueSupport.floating(7.5);

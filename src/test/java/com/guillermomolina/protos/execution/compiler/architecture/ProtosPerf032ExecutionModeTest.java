@@ -679,9 +679,9 @@ final class ProtosPerf032ExecutionModeTest {
                 adapter.closure, callee)) {
             case UNOBSERVABLE ->
                     assertSame(
-                            ProtosReturnHome.unobservableAcceptingPrimitiveResultForRuntime(),
+                            ProtosReturnHome.unobservable(),
                             home,
-                            "prepared direct entry retains its exact primitive-result marker");
+                            "prepared host entry retains its exact unobservable ReturnHome marker");
 
             case CAPTURED ->
                     assertSame(

@@ -34,8 +34,7 @@ import java.util.Optional;
 
 /**
  * I115-S1c-L: the single frame-backed {@link ProtosLexicalBindingAuthority}
- * of one escaped genuine Closure activation (GraalPy {@code
- * PFrameLocalsProxy}, TruffleRuby frame-backed {@code Binding}).
+ * of one escaped genuine Closure activation.
  *
  * <p>It is a live view of the original frame, never a mirror of it. A LOCAL
  * binding is read and written in the original Bytecode DSL local of the
@@ -130,6 +129,7 @@ final class ProtosBytecodeLexicalFrameView implements ProtosLexicalBindingAuthor
         return location.getBytecodeNode();
     }
 
+    @TruffleBoundary
     private Object stored(int index, BytecodeNode bytecode) {
         if (layout.accessor(index).isCleared(bytecode, frame)) {
             return null;

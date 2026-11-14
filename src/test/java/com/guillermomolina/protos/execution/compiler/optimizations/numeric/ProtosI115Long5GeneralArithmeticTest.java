@@ -1,4 +1,4 @@
-/* I115-LONG-5 EXPERIMENTAL: general arithmetic uses GraalPy-shaped operations. */
+/* I115-LONG-5 EXPERIMENTAL: general arithmetic uses specialized operations. */
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;

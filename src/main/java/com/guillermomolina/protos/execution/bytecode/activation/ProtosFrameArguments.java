@@ -486,7 +486,7 @@ final class ProtosFrameArguments {
         return inherited;
     }
 
-    /** Writes the receiver and methodHome of a selected method (PMethod). */
+    /** Writes the receiver and methodHome of a selected method. */
     static void bindMethod(Object[] arguments, Object receiver, ProtosObjectValue methodHome) {
         arguments[RECEIVER_INDEX] = receiver;
         arguments[METHOD_HOME_INDEX] = methodHome;
@@ -509,7 +509,7 @@ final class ProtosFrameArguments {
     }
 
     /**
-     * (TruffleRuby RubyMethodRootNode): the materialized ReturnHome this
+     * The materialized ReturnHome this
      * activation owns, or {@code null} when its home is captured from an
      * outer activation, is the unobservable marker, or the arguments are not
      * a B5 Closure header. Read from the header, so the identity is exactly

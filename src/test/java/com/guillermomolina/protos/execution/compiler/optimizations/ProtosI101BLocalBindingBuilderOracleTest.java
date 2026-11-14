@@ -114,6 +114,39 @@ final class ProtosI101BLocalBindingBuilderOracleTest {
                                         || s.contains("ReadRootFrameLocal")),
                         () -> "minimal builder acquired Protos-specific operations: " + expected);
 
+                assertEquals(
+                        1L,
+                        expected.stream()
+                                .filter(s -> s.startsWith("c.CreateLexicalLocal"))
+                                .count(),
+                        "independent Builder must check exactly one lexical creation");
+                assertEquals(
+                        1L,
+                        actualSignature.stream()
+                                .filter(s -> s.startsWith("c.CreateLexicalLocal"))
+                                .count(),
+                        "production must check exactly one lexical creation");
+                for (List<String> instructions : List.of(expected, actualSignature)) {
+                    assertEquals(
+                            1L,
+                            instructions.stream()
+                                    .filter(s -> s.equals(
+                                            "tag.enter tag:TAG_NODE=[RootTag]"))
+                                    .count(),
+                            "one physical source RootTag");
+                    for (String forbidden : List.of(
+                            "CreateCurrentLocalSlot",
+                            "CurrentActivation",
+                            "ReadRootFrameLocal",
+                            "InstallFrameLexicalAuthority")) {
+                        assertTrue(
+                                instructions.stream()
+                                        .noneMatch(s -> s.contains(forbidden)),
+                                () -> "unnecessary dynamic binding path: "
+                                        + forbidden + " " + instructions);
+                    }
+                }
+
                 System.out.println("I101_B_" + caseName + "_MINIMAL_BUILDER=" + expected);
                 System.out.println("I101_B_" + caseName + "_PROTOS_LOWERER=" + actualSignature);
                 System.out.println("I101_B_" + caseName + "_MINIMAL_INSTRUCTIONS="
@@ -185,24 +218,29 @@ final class ProtosI101BLocalBindingBuilderOracleTest {
                             builder.beginRoot();
 
                             BytecodeLocal x = builder.createLocal("x", null);
-                            builder.beginTag(StandardTags.RootTag.class);
+                            BytecodeLocal sequenceResult =
+                                    builder.createLocal("sequenceResult", null);
                             builder.beginBlock();
 
                             builder.beginSourceSection(creationStart, "x: 1".length());
                             builder.beginTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
                             builder.beginBlock();
                             builder.beginStoreLocal(x);
+                            builder.beginCreateLexicalLocal("x", x);
                             builder.emitLoadConstant(1L);
+                            builder.endCreateLexicalLocal();
                             builder.endStoreLocal();
-                            builder.beginReturn();
+                            builder.beginStoreLocal(sequenceResult);
                             builder.emitLoadLocal(x);
-                            builder.endReturn();
+                            builder.endStoreLocal();
                             builder.endBlock();
                             builder.endTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
                             builder.endSourceSection();
 
+                            builder.beginReturn();
+                            builder.emitLoadLocal(sequenceResult);
+                            builder.endReturn();
                             builder.endBlock();
-                            builder.endTag(StandardTags.RootTag.class);
                             builder.endRoot();
                             builder.endSourceSection();
                             builder.endSource();
@@ -235,14 +273,15 @@ final class ProtosI101BLocalBindingBuilderOracleTest {
                             builder.beginRoot();
 
                             BytecodeLocal x = builder.createLocal("x", null);
-                            builder.beginTag(StandardTags.RootTag.class);
                             builder.beginBlock();
 
                             builder.beginSourceSection(creationStart, "x: 1".length());
                             builder.beginTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
                             builder.beginBlock();
                             builder.beginStoreLocal(x);
+                            builder.beginCreateLexicalLocal("x", x);
                             builder.emitLoadConstant(1L);
+                            builder.endCreateLexicalLocal();
                             builder.endStoreLocal();
                             builder.endBlock();
                             builder.endTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
@@ -259,7 +298,6 @@ final class ProtosI101BLocalBindingBuilderOracleTest {
                             builder.endSourceSection();
 
                             builder.endBlock();
-                            builder.endTag(StandardTags.RootTag.class);
                             builder.endRoot();
                             builder.endSourceSection();
                             builder.endSource();

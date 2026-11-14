@@ -98,8 +98,14 @@ final class ProtosReadCallerFrameNode {
                     @Override
                     public LocatedCaller visitFrame(
                             FrameInstance instance) {
+                        /*
+                         * The fallback runtime's READ_ONLY frame wraps getArguments()
+                         * with a clone. Caller recovery requires identity with the
+                         * original callee B5 array, not a read-only copy.
+                         * This cold @TruffleBoundary walk does not mutate frame locals.
+                         */
                         Frame frame = instance.getFrame(
-                                FrameInstance.FrameAccess.READ_ONLY);
+                                FrameInstance.FrameAccess.READ_WRITE);
                         RootNode root = ((RootCallTarget)
                                 instance.getCallTarget()).getRootNode();
 

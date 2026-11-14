@@ -38,7 +38,7 @@ final class ProtosNumericValueSupportTest {
                 Long.valueOf(42L)));
 
         assertTrue(ProtosNumericValueSupport.isCurrentNumber(42L));
-        // I115: a Java double is the canonical guest Float (GraalPy PyFloatCheckNode).
+        // I115: a Java double is the canonical guest Float.
         assertTrue(ProtosNumericValueSupport.isCurrentNumber(42.0));
         assertFalse(ProtosNumericValueSupport.isCurrentNumber(BigInteger.TEN));
         assertFalse(ProtosNumericValueSupport.isCurrentNumber(

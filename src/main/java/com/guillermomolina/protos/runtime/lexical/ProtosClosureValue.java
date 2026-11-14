@@ -43,7 +43,7 @@ public final class ProtosClosureValue extends ProtosObjectValue {
     private volatile boolean contextLocalExecutionProjectionRequired;
 
     /*
-     * I115 (GraalPy PFunction closure cells): the outer cell bindings this
+     * I115 (Closure cells): the outer cell bindings this
      * Closure references, in the constant order the lowering assigned to its
      * scope. The same cell instances are shared with the owning activation
      * and every other Closure capturing them; values are never copied here.
@@ -59,7 +59,7 @@ public final class ProtosClosureValue extends ProtosObjectValue {
     private Assumption contextProjectionStability;
 
     /*
-     * I115-H4-B EXPERIMENTAL (GraalPy PFunction.getCodeStableAssumption):
+     * I115-H4-B EXPERIMENTAL (code stability assumption):
      * stability of this instance's executable target, independent of
      * contextProjectionStability. Allocated only if a direct-call cache
      * requests it; invalidated when a plan that changes the executable
@@ -619,13 +619,26 @@ public final class ProtosClosureValue extends ProtosObjectValue {
     }
 
     /*
-     * KNOWN I115 SEMANTIC DIVERGENCE: a parallel projection shares the
-     * captured cells by reference instead of isolating them; the I115
-     * cell representation has no isolated-copy form yet.
+     * P projections retain the executable's captured-cell layout but never
+     * share the source Actor's cells. The destination's absent cells cannot
+     * expose source values; checked reads continue lexical lookup in the new
+     * P root, while proven-present reads signal SlotNotFound on absence.
      */
+    private ProtosLexicalCell[] newParallelCapturedCellsForRuntime() {
+        ProtosLexicalCell[] source = capturedCells;
+        if (source.length == 0) {
+            return NO_CAPTURED_CELLS;
+        }
+        ProtosLexicalCell[] projected = new ProtosLexicalCell[source.length];
+        for (int index = 0; index < projected.length; index++) {
+            projected[index] = ProtosLexicalCell.discardedParallelCaptureForRuntime();
+        }
+        return projected;
+    }
+
     public ProtosClosureValue parallelProjection(java.util.List<ProtosObjectValue> roots,Object receiver,ProtosPrelude prelude,ProtosClosureExecutionPlan plan) {
         ProtosClosureValue projection = new ProtosClosureValue(definition,roots,java.util.Objects.requireNonNull(receiver),null,null,java.util.Objects.requireNonNull(prelude),plan,nativeBody,null,definingModuleKey);
-        projection.capturedCells = capturedCells;
+        projection.capturedCells = newParallelCapturedCellsForRuntime();
         return projection;
     }
 
@@ -638,7 +651,7 @@ public final class ProtosClosureValue extends ProtosObjectValue {
                 definition, roots, java.util.Objects.requireNonNull(receiver), null, null,
                 java.util.Objects.requireNonNull(prelude), null, nativeBody,
                 executionPlanRematerializer, definingModuleKey);
-        projection.capturedCells = capturedCells;
+        projection.capturedCells = newParallelCapturedCellsForRuntime();
         return projection;
     }
 

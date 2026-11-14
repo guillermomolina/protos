@@ -34,16 +34,13 @@ import org.junit.jupiter.api.Test;
  * I115-M (EXPERIMENTAL, PLAT066-C / PERF039): the generalized compact
  * lowerer composes literal whileTrue loops, root-local bindings and numeric
  * sends without callback roots or Context-backed lexical authority.
- * I115-H7: {@code +} is NumberAdd, {@code x = x + e} on the same binding is
- * NumberInPlaceAdd and the {@code <} ending a whileTrue condition is Lt; each
- * keeps its generic (ordinary send) route inside the node, so no MISS branch
- * is expanded in the Bytecode DSL. Each case pins the exact count of every
- * H7 site. The remaining pre-H7 numeric sends ({@code -}, {@code *}, value
- * position comparisons) are still the shared guarded numeric site, whose
- * MISS branch physically holds the ordinary send and its continuation
- * machinery; that expanded fallback is counted separately and must appear
- * exactly when such a legacy site exists. DSL FULL counts are recorded, not
- * pinned.
+ * I115 shared numeric lowering: NumberAdd, NumberMultiply,
+ * NumberSubtract and RichCompareLt execute the standard behavior internally.
+ * Every numeric site must retain IsStandardNumericSelection and ordinary
+ * selected-method fallback. Assignment stores the result in its classified
+ * binding; no separate in-place message protocol is introduced.
+ * Retired H7 operations are forbidden. Full DSL counts are reported
+ * independently of semantic and topology acceptance.
  */
 final class ProtosI115MCompactLoweringTest {
 
@@ -76,13 +73,14 @@ final class ProtosI115MCompactLoweringTest {
 
     private record Census(int rootCount, int runCount, int total) {}
 
-    /*
-     * I115-H7: the exact H7 sites of a case (NumberAdd, NumberInPlaceAdd,
-     * Lt) and its pre-H7 TryPrimitiveNumeric sites.
-     */
-    private record Sites(int numberAdd, int numberInPlaceAdd, int lt, int legacyNumeric) {
-        static Sites loop(int numberInPlaceAdd, int lt) {
-            return new Sites(0, numberInPlaceAdd, lt, 0);
+    /** Exact current numeric operations, not historical H7 opcodes. */
+    private record Sites(int add, int multiply, int subtract, int less) {
+        static Sites loop(int add, int less) {
+            return new Sites(add, 0, 0, less);
+        }
+
+        int totalNumericSites() {
+            return add + multiply + subtract + less;
         }
     }
 
@@ -172,7 +170,7 @@ final class ProtosI115MCompactLoweringTest {
                     }
                     outer + inner
                 }
-                """, 5, new Sites(1, 2, 2, 0));
+                """, 5, new Sites(3, 0, 0, 2));
     }
 
     @Test
@@ -184,7 +182,7 @@ final class ProtosI115MCompactLoweringTest {
                     c: a + b
                     c * 2 - 3
                 }
-                """, 17, new Sites(1, 0, 0, 2));
+                """, 17, new Sites(1, 1, 1, 0));
     }
 
     @Test
@@ -271,7 +269,7 @@ final class ProtosI115MCompactLoweringTest {
             ProtosStandaloneHostedSession.PreparedTopLevel prepared =
                     session.prepareTopLevel("run");
             ProtosBytecodeRootNode run = selectedRoot(prepared);
-            census("long-literals", run, new Sites(1, 1, 1, 0));
+            census("long-literals", run, new Sites(2, 0, 0, 1));
             assertLongConstants("long-literals", run, 4);
             assertEquals(2147483651L, prepared.executable().execute().asLong());
             System.out.println("I115_M_CASE[long-literals]_CORRECTNESS=PASS");
@@ -309,16 +307,27 @@ final class ProtosI115MCompactLoweringTest {
             System.out.println("I115_M_CASE[recursive-operations]_DSL=" + names);
             // n * 2 + mix(n - 1) - 1: one product, one sum, two differences.
             for (java.util.Map.Entry<String, Integer> required : java.util.Map.of(
-                    "ExperimentalIntegerAdd", 1,
-                    "ExperimentalIntegerSubtract", 2,
-                    "ExperimentalIntegerMultiply", 1).entrySet()) {
-                assertEquals((long) required.getValue(), names.stream()
-                                .filter(name -> name.contains(required.getKey())).count(),
+                    "c.NumberAdd", 1,
+                    "c.NumberSubtract", 2,
+                    "c.NumberMultiply", 1,
+                    "c.RichCompareGt", 1).entrySet()) {
+                assertEquals((long) required.getValue(),
+                        names.stream()
+                                .filter(op -> op.startsWith(required.getKey()))
+                                .count(),
                         required.getKey() + ": " + names);
             }
-            for (String forbidden : MISS_PATH) {
-                assertTrue(names.stream().noneMatch(name -> name.contains(forbidden)),
-                        "recursive-operations expands " + forbidden + ": " + names);
+            assertEquals(5L, names.stream()
+                            .filter(op -> op.startsWith(
+                                    "c.IsStandardNumericSelection"))
+                            .count(),
+                    "all five numeric selections must be guarded");
+            for (String forbidden : List.of(
+                    "ExperimentalInteger", "TryPrimitiveNumeric",
+                    "PrepareSendOne", "EnterNestedStructuredDispatch")) {
+                assertTrue(names.stream()
+                                .noneMatch(op -> op.contains(forbidden)),
+                        "recursive-operations reintroduces " + forbidden);
             }
             assertLongConstants("recursive-operations", mix, 1);
             // mix(1) = 1, mix(n) = 2n + mix(n - 1) - 1.
@@ -328,18 +337,88 @@ final class ProtosI115MCompactLoweringTest {
         }
     }
 
-    /* Every numeric constant of root is a Long; at least minimum of them. */
+
+    /**
+     * A nonstandard receiver must execute its selected + or < method.
+     * Both sites must retain the standard fast path and ordinary fallback.
+     */
+    @Test
+    void overriddenNumericOperatorsRetainOrdinarySelection()
+            throws Exception {
+        try (ProtosStandaloneHostedSession session = openSession(
+                "numeric-overrides", """
+                plusSource: { add: (other) => { 41 } }
+                customPlus: plusSource.alias("add", "+")
+
+                lessSource: { compare: (other) => { false } }
+                customLess: lessSource.alias("compare", "<")
+
+                plusOverride: () => { customPlus + 1 }
+                lessOverride: () => { customLess < 3 }
+                """)) {
+            ProtosBytecodeRootNode plus =
+                    selectedRoot(session.prepareTopLevel("plusOverride"));
+            ProtosBytecodeRootNode less =
+                    selectedRoot(session.prepareTopLevel("lessOverride"));
+            plus.getRootNodes().ensureSourceInformation();
+            less.getRootNodes().ensureSourceInformation();
+
+            List<String> plusNames = plus.getBytecodeNode()
+                    .getInstructionsAsList().stream()
+                    .map(ProtosInstructionNames::of).toList();
+            List<String> lessNames = less.getBytecodeNode()
+                    .getInstructionsAsList().stream()
+                    .map(ProtosInstructionNames::of).toList();
+
+            for (String required : List.of(
+                    "c.NumberAdd",
+                    "c.IsStandardNumericSelection",
+                    "c.GetMethod",
+                    "c.CallUnaryMethod")) {
+                assertTrue(plusNames.stream()
+                                .anyMatch(op -> op.startsWith(required)),
+                        required + ": " + plusNames);
+            }
+
+            for (String required : List.of(
+                    "c.RichCompareLt",
+                    "c.IsStandardNumericSelection",
+                    "c.GetMethod",
+                    "c.CallUnaryMethod",
+                    "c.RequireCanonicalBooleanResult")) {
+                assertTrue(lessNames.stream()
+                                .anyMatch(op -> op.startsWith(required)),
+                        required + ": " + lessNames);
+            }
+
+            for (int repetition = 0; repetition < 3; repetition++) {
+                assertEquals(41L,
+                        session.prepareTopLevel("plusOverride")
+                                .executable().execute().asLong());
+                assertFalse(session.prepareTopLevel("lessOverride")
+                        .executable().execute().asBoolean());
+            }
+            System.out.println("I115_M_DYNAMIC_NUMERIC_SELECTION=PASS");
+        }
+    }
+
+    /* Every numeric guest literal is a Long; metadata is separate. */
     private static void assertLongConstants(
             String name, ProtosBytecodeRootNode root, int minimum) {
         int longs = 0;
         for (Instruction instruction : root.getBytecodeNode().getInstructionsAsList()) {
+            if (!ProtosInstructionNames.of(instruction)
+                    .startsWith("load.constant")) {
+                continue;
+            }
             for (Instruction.Argument argument : instruction.getArguments()) {
                 if (argument.getKind() != Instruction.Argument.Kind.CONSTANT) {
                     continue;
                 }
                 Object constant = argument.asConstant();
                 assertFalse(constant instanceof Integer,
-                        name + " emits a Java Integer literal: " + instruction);
+                        name + " loads an Integer as a guest literal: "
+                                + instruction);
                 if (constant instanceof Long) {
                     longs++;
                 }
@@ -408,58 +487,88 @@ final class ProtosI115MCompactLoweringTest {
 
         assertEquals(2, roots.size(),
                 "Literal whileTrue callbacks must not add physical roots");
-        int[] missPath = new int[MISS_PATH.size()];
-        int numberAdd = 0;
-        int numberInPlaceAdd = 0;
-        int lt = 0;
-        int authorityPromotions = 0;
+        int[] retiredProtocol = new int[MISS_PATH.size()];
+        int add = 0;
+        int multiply = 0;
+        int subtract = 0;
+        int less = 0;
+        int guards = 0;
+        int selections = 0;
+        int calls = 0;
+        int promotions = 0;
+
         for (Instruction instruction
                 : run.getBytecodeNode().getInstructionsAsList()) {
-            String instructionName = ProtosInstructionNames.of(instruction);
+            String op = ProtosInstructionNames.of(instruction);
             for (String forbidden : FORBIDDEN) {
-                assertFalse(instructionName.contains(forbidden),
-                        name + " run root contains " + instructionName);
+                assertFalse(op.contains(forbidden),
+                        name + " contains " + op);
             }
-            for (int index = 0; index < missPath.length; index++) {
-                if (instructionName.contains(MISS_PATH.get(index))) {
-                    missPath[index]++;
+            assertFalse(op.startsWith("c.NumberInPlaceAdd")
+                            || op.startsWith("c.Lt"),
+                    name + " resurrects H7: " + op);
+
+            for (int i = 0; i < MISS_PATH.size(); i++) {
+                if (op.contains(MISS_PATH.get(i))) {
+                    retiredProtocol[i]++;
                 }
             }
-            if (instructionName.startsWith("c.NumberAdd")) {
-                numberAdd++;
-            } else if (instructionName.startsWith("c.NumberInPlaceAdd")) {
-                numberInPlaceAdd++;
-            } else if (instructionName.startsWith("c.Lt")) {
-                lt++;
-            } else if (instructionName.contains("PromoteFrameLexicalAuthority")) {
-                authorityPromotions++;
+
+            if (op.startsWith("c.NumberAdd")) {
+                add++;
+            } else if (op.startsWith("c.NumberMultiply")) {
+                multiply++;
+            } else if (op.startsWith("c.NumberSubtract")) {
+                subtract++;
+            } else if (op.startsWith("c.RichCompareLt")) {
+                less++;
+            } else if (op.startsWith("c.IsStandardNumericSelection")) {
+                guards++;
+            } else if (op.startsWith("c.GetMethod")) {
+                selections++;
+            } else if (op.startsWith("c.CallUnaryMethod")) {
+                calls++;
+            }
+
+            if (op.contains("PromoteFrameLexicalAuthority")) {
+                promotions++;
             }
         }
-        for (int index = 0; index < missPath.length; index++) {
-            System.out.println(prefix + MISS_PATH.get(index) + "_COUNT=" + missPath[index]);
+
+        System.out.println(prefix + "NUMBER_ADD_COUNT=" + add);
+        System.out.println(prefix + "NUMBER_MULTIPLY_COUNT=" + multiply);
+        System.out.println(prefix + "NUMBER_SUBTRACT_COUNT=" + subtract);
+        System.out.println(prefix + "RICH_COMPARE_LT_COUNT=" + less);
+        System.out.println(prefix + "NUMERIC_SELECTION_GUARDS=" + guards);
+        System.out.println(prefix + "FALLBACK_SELECTIONS=" + selections);
+        System.out.println(prefix + "FALLBACK_CALLS=" + calls);
+
+        assertEquals(sites.add(), add, name + " NumberAdd");
+        assertEquals(sites.multiply(), multiply, name + " NumberMultiply");
+        assertEquals(sites.subtract(), subtract, name + " NumberSubtract");
+        assertEquals(sites.less(), less, name + " RichCompareLt");
+
+        int sitesCount = sites.totalNumericSites();
+        assertEquals(sitesCount, guards,
+                name + " must guard every numeric site");
+        assertTrue(selections >= sitesCount,
+                name + " missing selected-method fallbacks");
+        assertTrue(calls >= sitesCount,
+                name + " missing fallback invocations");
+
+        for (String retired : List.of(
+                "TryPrimitiveNumeric",
+                "PrepareSendOne",
+                "EnterNestedStructuredDispatch",
+                "CompleteClosureCall",
+                "FinishClosureCall")) {
+            assertEquals(0,
+                    retiredProtocol[MISS_PATH.indexOf(retired)],
+                    name + " reintroduces " + retired);
         }
-        System.out.println(prefix + "NUMBER_ADD_COUNT=" + numberAdd);
-        System.out.println(prefix + "NUMBER_IN_PLACE_ADD_COUNT=" + numberInPlaceAdd);
-        System.out.println(prefix + "LT_COUNT=" + lt);
-        // I115-H7: every numeric site of the case is accounted for, exactly.
-        assertEquals(sites.numberAdd(), numberAdd, name + " NumberAdd sites");
-        assertEquals(sites.numberInPlaceAdd(), numberInPlaceAdd,
-                name + " NumberInPlaceAdd sites");
-        assertEquals(sites.lt(), lt, name + " Lt sites");
-        assertEquals(sites.legacyNumeric(), missPath[0], name + " pre-H7 numeric sites");
-        if (sites.legacyNumeric() == 0) {
-            // H7 sites keep their fallback inside the node: no expanded MISS path.
-            for (int index = 0; index < missPath.length; index++) {
-                assertEquals(0, missPath[index],
-                        name + " expands " + MISS_PATH.get(index) + " in the Bytecode DSL");
-            }
-            assertEquals(0, authorityPromotions,
-                    name + " promotes its frame locals without a dispatching site");
-        } else {
-            // A legacy site keeps its expanded ordinary-send MISS branch.
-            assertTrue(missPath[MISS_PATH.indexOf("PrepareSendOne")] > 0,
-                    name + " legacy numeric site lost its ordinary send");
-        }
+        assertEquals(0, promotions,
+                name + " unexpectedly promotes frame authority");
+
         return new Census(roots.size(), runCount, total);
     }
 }

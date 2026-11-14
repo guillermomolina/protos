@@ -194,6 +194,52 @@ test_tool_context_teardown_failures="$(
         || true
 )"
 
+# I115-S97: the fallback runtime must preserve the exact caller when a
+# compact Closure materializes its activation. A READ_ONLY stack walk that
+# compares cloned B5 arguments by identity fails these three cases.
+native_caller_recovery_failures=0
+
+run_native_caller_recovery_case() {
+    local case_name="$1"
+    local expression="$2"
+    local expected="$3"
+    local case_out="${tmp_dir}/caller-${case_name}.out"
+    local case_err="${tmp_dir}/caller-${case_name}.err"
+    local case_expected="${tmp_dir}/caller-${case_name}.expected"
+
+    printf '%s\n' "${expected}" >"${case_expected}"
+
+    PROTOS_HOME="${root}" \
+        timeout -k 3s 20s "${native_bin}" -e "${expression}" \
+        >"${case_out}" 2>"${case_err}"
+    local case_status=$?
+
+    echo "NATIVE_I115_CALLER_${case_name}_STATUS=${case_status}"
+
+    if [[ "${case_status}" -ne 0 ]] || \
+       ! cmp -s "${case_expected}" "${case_out}" || \
+       grep -Eq 'I115: caller frame unavailable|I115_S93_TASK_THROWABLE|Internal error:|Runtime error:' "${case_err}"; then
+        cat "${case_out}" "${case_err}" >&2
+        echo "NATIVE_I115_CALLER_CASE_FAILURE=${case_name}" >&2
+        native_caller_recovery_failures=$((native_caller_recovery_failures + 1))
+    fi
+}
+
+run_native_caller_recovery_case \
+    NESTED_CALL \
+    'f: () => { print("INNER"); 7 }; print(f())' \
+    $'INNER\n7'
+
+run_native_caller_recovery_case \
+    OBJECT_IN_CLOSURE \
+    'f: () => { value: {}; 7 }; print(f())' \
+    '7'
+
+run_native_caller_recovery_case \
+    CLI_MODULE \
+    'M: import("std:cli/command_line"); print(M)' \
+    '<object>'
+
 PROTOS_HOME="${root}" \
     python3 "${root}/scripts/native-test-dap-stacktrace.py" "${native_bin}" \
     >"${dap_log}" 2>&1
@@ -677,8 +723,12 @@ elif [[ "${native_hmac_status}" -ne 0 ]] || \
      [[ "${native_hmac_cases}" -ne 3 ]]; then
     echo "NATIVE_HMAC_SHA256=FAIL" >&2
     false
+elif [[ "${native_caller_recovery_failures}" -ne 0 ]]; then
+    echo "NATIVE_I115_CALLER_RECOVERY=FAIL" >&2
+    false
 else
     echo "NATIVE_REGEX=PASS"
     echo "NATIVE_HMAC_SHA256=PASS"
+    echo "NATIVE_I115_CALLER_RECOVERY=PASS"
     echo "NATIVE_REGRESSION_SUITE=PASS"
 fi

@@ -19,7 +19,7 @@ package com.guillermomolina.protos.runtime;
 
 /**
  * I115 internal runtime storage of one Closure binding captured by reference
- * by a nested Closure (GraalPy {@code PCell}).
+ * by a nested Closure.
  *
  * <p>The owning activation creates exactly one cell per captured binding and
  * shares the same instance with every Closure that captures it, so the cell
@@ -37,7 +37,7 @@ package com.guillermomolina.protos.runtime;
  *
  * <p>Presence proofs are exactly as narrow as the physical binding: a
  * presence-aware read tests this cell's own state on every execution (one
- * null check, GraalPy's checked cell load), so removal of this binding never
+ * null check), so removal of this binding never
  * invalidates any other binding, activation or compiled specialization, and
  * a later recreation needs no re-validation. A change of value alone never
  * affects presence.
@@ -53,6 +53,28 @@ package com.guillermomolina.protos.runtime;
 public final class ProtosLexicalCell {
     private Object value;
     private ProtosActivation owner;
+    private final boolean discardedParallelCapture;
+
+    public ProtosLexicalCell() {
+        this(false);
+    }
+
+    private ProtosLexicalCell(boolean discardedParallelCapture) {
+        this.discardedParallelCapture = discardedParallelCapture;
+    }
+
+    /**
+     * A P projection preserves the physical layout of captured cells
+     * without importing their bindings or their source Actor authority.
+     * A direct store must not establish an absent projected binding.
+     */
+    public static ProtosLexicalCell discardedParallelCaptureForRuntime() {
+        return new ProtosLexicalCell(true);
+    }
+
+    public boolean isDiscardedParallelCaptureForRuntime() {
+        return discardedParallelCapture;
+    }
 
     public Object valueOrNullForRuntime() {
         return value;

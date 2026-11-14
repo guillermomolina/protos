@@ -47,7 +47,7 @@ final class ProtosLanguageContext {
     private final ConcurrentMap<ProtosClosureExecutionPlan, ProtosClosureExecutionPlan>
             sharedBytecodeExecutionPlans = new ConcurrentHashMap<>();
     /*
-     * I115 (GraalPy builtin call targets): one stable ProtosBuiltinCallRootNode
+     * I115 (builtin call targets): one stable ProtosBuiltinCallRootNode
      * CallTarget per native body, keyed by body identity, never shared between
      * Contexts. Native bodies do not override equals, so the key is identity.
      */

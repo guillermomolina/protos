@@ -463,21 +463,14 @@ final class ProtosI115PublishedLexicalContextTest {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
-                ProtosStandardObjectProtocol.install();
-
-                ProtosObjectValue contextPrototype = newObject();
-                ProtosObjectValue bindings = new ProtosObjectValue(contextPrototype);
-                ProtosObjectValue errorPrototype = newObject();
-                bindings.createLocalSlot("Context", contextPrototype);
-                bindings.createLocalSlot("Error", errorPrototype);
-                bindings.createLocalSlot("SlotNotFound", new ProtosObjectValue(errorPrototype));
-                bindings.createLocalSlot("Array", newObject());
-                bindings.freeze();
+                ProtosPrelude prelude =
+                        new ProtosCoreBootstrap().bootstrap(
+                                java.nio.file.Path.of("protos", "lib", "core"));
 
                 test.run(
                         new Fixture(
                                 LANGUAGE_REF.get(null),
-                                new ProtosPrelude(bindings, contextPrototype).newModuleActivation()));
+                                prelude.newModuleActivation()));
             } finally {
                 context.leave();
             }

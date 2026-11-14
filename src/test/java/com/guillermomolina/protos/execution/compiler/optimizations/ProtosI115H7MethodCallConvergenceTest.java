@@ -50,7 +50,7 @@ import org.graalvm.polyglot.Value;
 import org.junit.jupiter.api.Test;
 
 /**
- * I115-H7 EXPERIMENTAL: GraalPy-shaped physical convergence of the
+ * I115-H7 EXPERIMENTAL: physical convergence of the
  * {@code method-call} workload (Bytecode While, ReadGlobal, GetMethod,
  * CallUnaryMethod, NumberAdd, RichCompareLt and the grouped parameter
  * binding CopySuppliedArguments into LOCAL locals, or LoadSuppliedArgument
@@ -189,7 +189,7 @@ final class ProtosI115H7MethodCallConvergenceTest {
             "c.Lt",
             "NumberInPlaceAdd");
 
-    // ---- A. Result and the GraalPy-shaped census -------------------------------------
+    // ---- A. Result and the census ---------------------------------------------------
 
     @Test
     void methodCallResult() throws Exception {
@@ -631,7 +631,7 @@ final class ProtosI115H7MethodCallConvergenceTest {
         assertEquals(16777217.0, ProtosNumberAddFastPathsBase.doDL(1.0, 16777216L));
         assertEquals(0.1 + 0.2, ProtosNumberAddFastPathsBase.doDD(0.1, 0.2));
         // I115: RichCompareLt's double lane yields the primitive boolean that a
-        // conditional branch consumes directly (as GraalPy's float compare);
+        // conditional branch consumes directly;
         // mixed operands and guest results are checked by execution.
         assertTrue(ProtosRichCompareLtNode.doDD(16777216.0, 16777217.0));
         assertFalse(ProtosRichCompareLtNode.doDD(16777217.0, 16777216.0));
@@ -1612,7 +1612,7 @@ final class ProtosI115H7MethodCallConvergenceTest {
     }
 
     /**
-     * CopySuppliedArguments (grouped binding, GraalPy CopyArguments) is one
+     * CopySuppliedArguments (grouped binding) is one
      * specialization copying the supplied positions from the frame arguments
      * straight into the consecutive LOCAL parameter locals, with no
      * fallback; a captured (CELL) parameter keeps LoadSuppliedArgument stored

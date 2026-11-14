@@ -22,7 +22,7 @@ import com.oracle.truffle.api.object.DynamicObject;
 import java.util.Objects;
 
 /**
- * I115 (GraalPy ReadGlobal/WriteGlobal over the module dict storage): the
+ * I115 (ReadGlobal/WriteGlobal over the module binding storage): the
  * stable physical location of one NAME binding in a module execution
  * context, resolved once when a ReadGlobal or WriteGlobal site specializes.
  *

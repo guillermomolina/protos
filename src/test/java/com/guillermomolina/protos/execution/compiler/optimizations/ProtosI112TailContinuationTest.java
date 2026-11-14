@@ -968,7 +968,18 @@ final class ProtosI112TailContinuationTest {
                         .map(entry -> entry.split(" ", 2)[0]).toList();
                 assertFalse(names.contains("c.InstallFrameLexicalAuthority"), names::toString);
                 // Module bindings are created in the module's own Context.
-                assertTrue(names.contains("c.CreateCurrentLocalSlot"), names::toString);
+                assertEquals(
+                        2L,
+                        names.stream()
+                                .filter("c.CreateDiscardedModuleBinding"::equals)
+                                .count(),
+                        () -> "two checked module creations: " + names);
+                assertEquals(
+                        0L,
+                        names.stream()
+                                .filter("c.CreateCurrentLocalSlot"::equals)
+                                .count(),
+                        () -> "no separate creation operands: " + names);
 
                 ProtosActivation module = harness.moduleActivation();
                 Object[] observed = new Object[2];
@@ -1044,10 +1055,31 @@ final class ProtosI112TailContinuationTest {
                     // The module keeps its persistent authority: its bindings
                     // are created in its own Context (the retired
                     // InstallFrameLexicalAuthority body operation is gone).
-                    assertTrue(
-                            signature(root).stream().anyMatch(
-                                    entry -> entry.startsWith("c.CreateCurrentLocalSlot")),
-                            program);
+                    List<String> operations = signature(root).stream()
+                            .map(entry -> entry.split(" ", 2)[0])
+                            .toList();
+                    long ordinary = operations.stream()
+                            .filter("c.CreateCurrentLocalSlot"::equals)
+                            .count();
+                    long fused = operations.stream()
+                            .filter("c.CreateDiscardedModuleBinding"::equals)
+                            .count();
+
+                    long expectedCreations =
+                            program.contains("result:") ? 2L : 1L;
+                    assertEquals(expectedCreations, ordinary + fused,
+                            () -> "all module creations retained: "
+                                    + program + " " + operations);
+
+                    if (program.startsWith("identity:")) {
+                        assertEquals(1L, fused,
+                                () -> "discarded identity definition: "
+                                        + program + " " + operations);
+                    } else {
+                        assertEquals(1L, ordinary,
+                                () -> "result-producing local creation: "
+                                        + program + " " + operations);
+                    }
                     assertInteger(1, root.getCallTarget().call(harness.moduleActivation()));
                 }
             });

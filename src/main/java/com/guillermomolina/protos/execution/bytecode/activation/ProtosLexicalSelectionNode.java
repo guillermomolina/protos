@@ -42,8 +42,7 @@ import java.util.Optional;
  * is not already proven by its physical binding identity (a {@code Dynamic}
  * name, a {@code Candidate} or removable binding found ABSENT, a site behind
  * a Context that may hold a nearer dynamic binding, an inline
- * object-construction body). Modeled on GraalPy {@code
- * ReadGlobalOrBuiltinNode} and TruffleRuby's cached frame/Binding access.
+ * object-construction body).
  *
  * <p>The semantic traversal (EXECUTION_AND_CONTROL.md §§6-7) is:
  * <ol>
@@ -66,7 +65,7 @@ import java.util.Optional;
  * the caller selects it before the right-hand side evaluates and assigns
  * through it without selecting again.
  *
- * <p>Selection is specialized like GraalPy {@code ReadGlobalOrBuiltinNode}:
+ * <p>Selection is specialized:
  * {@link #readCachedOwner} and {@link #selectWriteCachedOwner} cache the
  * captured lexical chain's identity and the exact owning scope node found when
  * they specialized (with its module {@link ProtosModuleBindingLocation} when

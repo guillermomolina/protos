@@ -716,7 +716,7 @@ final class ProtosI115BDeferredCallerTest {
                 }
 
                 // A direct RootCallTarget invocation bypasses the call-site
-                // dispatcher. Like GraalPy, the root epilogue returns the raw
+                // dispatcher. The root epilogue returns the raw
                 // outcome even when its header does not admit a carrier.
                 Object[] ordinary =
                         ProtosFrameArguments.compactDirectClosureCallOne(
@@ -753,7 +753,7 @@ final class ProtosI115BDeferredCallerTest {
         });
     }
 
-    // ---- I115. Admitted B5 accessors (GraalPy PArguments / ReadFrameNode) ------------
+    // ---- I115. Admitted B5 accessors ----------------------------------------------
 
     /**
      * Both source-entry classifications retain their exact caller, Prelude
@@ -787,7 +787,7 @@ final class ProtosI115BDeferredCallerTest {
         });
     }
 
-    // ---- I115. Per-root caller needs (GraalPy CallerFlagsAssumptionSet) -------------
+    // ---- I115. Per-root caller needs -------------------------------------------------
 
     @Test
     void callerNeedsAreMonotonicPerRootAndConverge() throws Exception {
@@ -899,7 +899,7 @@ final class ProtosI115BDeferredCallerTest {
             assertTrue(late(module).hasLocalCallSlotForRuntime());
             // The selected override body is a different callee whose Prelude
             // use may notify this caller once (the callee-demand profile used by
-            // TruffleRuby's notifyCallerToSendFrame); it must never demand the
+            // caller-frame notification); it must never demand the
             // exact caller activation merely because the override exists.
             assertTrue(beforeOverride.isValid()
                             || root.callerNeedsStability() != beforeOverride,

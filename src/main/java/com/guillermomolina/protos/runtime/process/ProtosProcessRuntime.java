@@ -275,7 +275,27 @@ public final class ProtosProcessRuntime {
         synchronized (this) {
             while (lifecycle != LifecycleState.TERMINATED) {
                 try {
-                    wait();
+                    if ("1".equals(System.getenv("I115_NATIVE_TERM_DIAG"))) {
+                        System.err.println(
+                                "I115_TERM_PROCESS lifecycle=" + lifecycle
+                                        + " liveActors=" + liveActors.size());
+                        for (ProtosActor actor : liveActors) {
+                            ProtosActorExecutionDomain domain = actor.executionDomain();
+                            System.err.println(
+                                    "I115_TERM_ACTOR root=" + actor.isRootActorForRuntime()
+                                            + " state=" + actor.lifecycleState()
+                                            + " liveTasks=" + domain.liveTaskCount()
+                                            + " runnable=" + domain.runnableCount()
+                                            + " cleanup=" + domain.hasTerminationCleanupForRuntime());
+                            System.err.println(
+                                    "I115_TERM_TASKS "
+                                            + domain.taskTerminationDiagnosticForRuntime());
+
+                        }
+                        wait(1000L);
+                    } else {
+                        wait();
+                    }
                 } catch (InterruptedException interruption) {
                     interrupted = true;
                 }

@@ -20,8 +20,7 @@ package com.guillermomolina.protos.execution;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 
 /**
- * I115-H4-B EXPERIMENTAL internal trace probe (GraalPy trace/profile hooks
- * counterpart), enabled only by the JVM system property {@code
+ * I115-H4-B EXPERIMENTAL internal trace probe, enabled only by the JVM system property {@code
  * protos.i115.trace}, read once at class initialization. It is not a Protos
  * option and not a general tracing facility. Values are reported by Java
  * class name only; no guest value is converted to text.

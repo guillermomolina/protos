@@ -165,7 +165,7 @@ public final class ProtosArrayValue extends ProtosObjectValue {
     }
 
     /*
-     * I115: GraalPy LongSequenceStorage construction.
+     * I115: specialized long-storage construction.
      * Each Array gets its own primitive backing.
      */
     public ProtosArrayValue(Object parent, long[] elements) {

@@ -41,8 +41,8 @@ public final class ProtosValueLookup {
 
     /**
      * A structural selection of an ordinary property along a delegation
-     * chain, following GraalPy {@code ReadAttributeFromObjectNode.readDirect}
-     * with Protos prototype delegation in place of an MRO.
+     * chain, examining each object's own properties along the Protos
+     * prototype delegation chain.
      *
      * <p>It records the ordinary objects examined from the lookup origin up to
      * and including the real slot owner ({@link #home()}), the {@code Shape}
@@ -113,7 +113,7 @@ public final class ProtosValueLookup {
     }
 
     /**
-     * GraalPy {@code PythonUtils.getPropertyGetterWithFinalAssumption}: the
+     * The
      * getter of {@code name} in {@code shape}, or {@code null} when absent.
      * Obtaining the location's final assumption lets compiled reads of a
      * constant receiver fold while the location is never rewritten; the value
@@ -291,7 +291,7 @@ public final class ProtosValueLookup {
                     ProtosRepresentedValue.requirePrelude(prelude, "SmallInteger")
                             .smallIntegerPrototype());
         }
-        // GraalPy GetClassNode.getDouble -> PFloat; regular Float lookup
+        // A Double receiver is a Float; regular Float lookup
         // delegates through the observing Prelude's Float prototype.
         if (receiver instanceof Double) {
             return Optional.of(Objects.requireNonNull(prelude,

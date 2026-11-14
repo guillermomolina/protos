@@ -841,7 +841,7 @@ final class CanonicalToBytecodeLowerer {
                                 }
                             });
 
-            // Truffle SimpleLanguage's immediate cached-tier admission.
+            // Immediate cached-tier admission.
             // Specialize source-root locals from the first invocation.
             for (ProtosBytecodeRootNode root : roots.getNodes()) {
                 if (root.isSemanticActivationRoot()) {
@@ -2858,6 +2858,31 @@ final class CanonicalToBytecodeLowerer {
             if (isI115EliminableControl(expression)) {
                 continue;
             }
+
+            // A discarded module binding whose RHS is a Closure has
+            // one source-visible effect: create the named binding.
+            // The fused node preserves normal ':' admission and error
+            // semantics without staging the created Closure or
+            // materializing the activation as a bytecode operand.
+            if (expression instanceof CanonicalCreate create
+                    && create.target().isEmpty()
+                    && create.value() instanceof CanonicalClosure closure
+                    && currentRootTopScope != null
+                    && currentRootTopScope.kind()
+                            == CanonicalLexicalScope.Kind.ROOT
+                    && currentActivationLocal == null
+                    && !currentInlineClosureCallBody
+                    && currentNormalCallbackScalarLocals.isEmpty()) {
+                beginStatement(builder, create);
+                ProtosClosureExecutionPlanCell plan =
+                        bytecodeClosurePlan(builder, closure);
+                builder.beginCreateDiscardedModuleBinding(create.name());
+                emitClosureCapture(builder, closure, plan);
+                builder.endCreateDiscardedModuleBinding();
+                endStatement(builder);
+                continue;
+            }
+
             boolean directDiscard =
                     isDirectTerminalValue(expression)
                             && !requiresComposedInvocation(expression)
@@ -3156,6 +3181,33 @@ final class CanonicalToBytecodeLowerer {
             emitTerminalCallOperand(builder, call.receiver());
             emitTerminalCallOneArgument(builder, call.arguments().get(0));
             builder.endCallUnaryMethod();
+            builder.endTag(StandardTags.CallTag.class);
+            builder.endSourceSection();
+            return;
+        }
+
+        // The terminal Call0 consumes its receiver directly.
+        // The terminal operation owns suspension transport.
+        if (expression instanceof CanonicalCall call
+                && call.arguments().isEmpty()) {
+            builder.beginCallNilaryMethod(true);
+            emitTerminalCallOperand(builder, call.receiver());
+            builder.endCallNilaryMethod();
+            builder.endTag(StandardTags.CallTag.class);
+            builder.endSourceSection();
+            return;
+        }
+
+        // Fixed-arity terminal Call2: receiver, first argument and second
+        // argument are direct operands evaluated once in source order.
+        // The terminal operation owns dynamic selection and suspension.
+        if (expression instanceof CanonicalCall call
+                && call.arguments().size() == 2) {
+            builder.beginCallBinaryMethod(true, false);
+            emitTerminalCallOperand(builder, call.receiver());
+            emitTerminalCallOneArgument(builder, call.arguments().get(0));
+            emitTerminalCallOneArgument(builder, call.arguments().get(1));
+            builder.endCallBinaryMethod();
             builder.endTag(StandardTags.CallTag.class);
             builder.endSourceSection();
             return;
@@ -3757,8 +3809,7 @@ final class CanonicalToBytecodeLowerer {
             case CanonicalNotIdentity identity ->
                     requiresContinuationScratch(identity.left())
                             || requiresContinuationScratch(identity.right());
-            case CanonicalCall call ->
-                    i115ConstantLongArray(call) == null;
+            case CanonicalCall ignored -> true;
             case CanonicalSuperSend ignored -> true;
             case CanonicalDerivedInequality ignored -> true;
             // a non-standard receiver dispatches atPut, which may suspend.
@@ -3951,14 +4002,6 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
-        if (expression instanceof CanonicalCall array
-                && i115ConstantLongArray(array) != null) {
-            builder.beginStoreLocal(target);
-            emitI115ConstantLongArray(builder, array);
-            builder.endStoreLocal();
-            return;
-        }
-
         if (isI115EliminableControl(expression)) {
             builder.beginStoreLocal(target);
             builder.emitLoadConstant(ProtosNullValue.INSTANCE);
@@ -4169,14 +4212,6 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
-        if (expression instanceof CanonicalCall array
-                && i115ConstantLongArray(array) != null) {
-            builder.beginStoreLocal(target);
-            emitI115ConstantLongArray(builder, array);
-            builder.endStoreLocal();
-            return;
-        }
-
         if (i115DirectUnaryCall(expression)
                 || (expression instanceof CanonicalSend send
                         && isDirectNumericOperand(send))) {
@@ -6431,12 +6466,6 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal childResult,
             BytecodeLocal resumeValue,
             boolean primitiveCarrierResult) {
-        if (expression instanceof CanonicalCall array
-                && i115ConstantLongArray(array) != null) {
-            emitI115ConstantLongArray(builder, array);
-            return;
-        }
-
         if (isI115EliminableControl(expression)) {
             builder.emitLoadConstant(ProtosNullValue.INSTANCE);
             return;
@@ -8059,9 +8088,9 @@ final class CanonicalToBytecodeLowerer {
      * PLAT066-C: the second constant operand carries the capture
      * classification of this exact Closure under the root's analysis; a
      * Closure that does not capture its creator is created from the
-     * creator's own environment (MakeFunction without freevars).
+     * creator's own environment, without free cell bindings.
      *
-     * (MakeFunction closure tuple): a Closure whose scope
+     * A Closure whose scope
      * carries free cells is wrapped by CaptureClosureCells, which installs
      * the creator's cell references, in the Closure scope's constant order,
      * before the Closure escapes. Returns those cells for endClosureCapture.
@@ -8141,12 +8170,6 @@ final class CanonicalToBytecodeLowerer {
     private void emitExpression(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalExpression expression) {
-        if (expression instanceof CanonicalCall array
-                && i115ConstantLongArray(array) != null) {
-            emitI115ConstantLongArray(builder, array);
-            return;
-        }
-
         if (expression instanceof CanonicalLiteral literal) {
             emitLiteral(builder, literal);
             return;
@@ -9721,52 +9744,6 @@ final class CanonicalToBytecodeLowerer {
         }
         Object descriptor = numberLiteralDescriptor(literal);
         return descriptor instanceof Long || descriptor instanceof Double ? descriptor : null;
-    }
-
-    /*
-     * RootNodeCompiler constant collection selection.
-     * Only literal Arrays containing signed-64 Integer constants
-     * qualify for the direct primitive operation.
-     */
-    private long[] i115ConstantLongArray(CanonicalCall call) {
-        if (!call.arrayLiteral()) {
-            return null;
-        }
-
-        long[] values = new long[call.arguments().size()];
-
-        for (int index = 0; index < values.length; index++) {
-            CanonicalExpression expression =
-                    call.arguments().get(index);
-
-            if (!(expression instanceof CanonicalLiteral literal)
-                    || literal.kind() != CanonicalLiteral.Kind.NUMBER) {
-                return null;
-            }
-
-            Object number = numberLiteralDescriptor(literal);
-
-            if (!(number instanceof Long integer)) {
-                return null;
-            }
-
-            values[index] = integer.longValue();
-        }
-
-        return values;
-    }
-
-    private void emitI115ConstantLongArray(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            CanonicalCall call) {
-        long[] values = i115ConstantLongArray(call);
-
-        if (values == null) {
-            throw new AssertionError(
-                    "Not an admitted constant Long Array");
-        }
-
-        builder.emitMakeConstantLongArray(values);
     }
 
     private Object numberLiteralDescriptor(CanonicalLiteral literal) {

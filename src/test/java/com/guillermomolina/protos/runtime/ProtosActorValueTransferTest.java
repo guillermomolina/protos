@@ -1021,7 +1021,7 @@ final class ProtosActorValueTransferTest {
         assertNonTransferable(
                 source,
                 () -> ProtosActorValueTransfer.snapshotValue(BigInteger.ONE.shiftLeft(64), source));
-        // GraalPy-style direct primitives are semantic Number values, not
+        // Direct primitives are semantic Number values, not
         // rejected host carriers. Integer and Float transfer without boxing.
         Object copiedInteger =
                 ProtosActorValueTransfer.snapshotValue(Long.valueOf(7L), source);

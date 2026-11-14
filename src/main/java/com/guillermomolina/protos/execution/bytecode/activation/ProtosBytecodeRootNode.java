@@ -762,7 +762,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /*
-     * (TruffleRuby FrameOnStackMarker): closes the materialized ReturnHome
+     * Closes the materialized ReturnHome
      * this activation owns when it terminates. A pending result (Bytecode DSL
      * suspension or terminal transport) is not a termination; captured homes
      * and the unobservable marker are never owned; closing is idempotent.
@@ -867,13 +867,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * lexical context is materialized by this operation.
      */
     @Operation(storeBytecodeIndex = false)
-    @ConstantOperand(type = LocalRangeAccessor.class)
+    @ConstantOperand(type = LocalRangeAccessor.class, name = "locals")
     public static final class CopySuppliedArguments {
         @Specialization
         @ExplodeLoop
         public static void perform(
-                VirtualFrame frame,
                 LocalRangeAccessor locals,
+                @Bind VirtualFrame frame,
                 @Bind BytecodeNode bytecodeNode) {
             for (int index = 0; index < locals.getLength(); index++) {
                 locals.setObject(
@@ -971,7 +971,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     public static final class StoreCell {
         @Specialization
-        public static void perform(ProtosLexicalCell cell, Object value) {
+        public static void perform(
+                ProtosLexicalCell cell,
+                Object value,
+                @Bind VirtualFrame frame) {
+            if (cell.isDiscardedParallelCaptureForRuntime()) {
+                throw uninitializedCellError(frame.getArguments());
+            }
             cell.setForRuntime(value);
         }
     }
@@ -1533,7 +1539,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      *
      * executes its built-in subscript/length specializations only
      * for receivers whose selected behavior is the built-in one, and calls
-     * the selected __getitem__/__setitem__/__len__ otherwise. Protos is
+     * the selected at/atPut/size otherwise. Protos is
      * prototype-based, so a Java receiver type alone never proves that: an
      * Array or Bytes receiver may own, or inherit, an overriding at/atPut/
      * size. This operation answers whether the behavior actually selected
@@ -2406,6 +2412,34 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
     // ---- Slot creation/assignment, members, identity, intrinsics -------------------
 
+    /**
+     * StoreGlobal-style fused operation for a discarded, module-owned
+     * lexical creation. Its single value operand is evaluated before
+     * creation, just as in CreateCurrentLocalSlot.
+     *
+     * No activation is published on the fast emission path merely to
+     * pass it as a separate bytecode operand. Runtime creation uses
+     * exactly the existing authority, presence and mutability checks.
+     */
+    @Operation
+    @ConstantOperand(type = String.class, name = "name")
+    public static final class CreateDiscardedModuleBinding {
+        @Specialization
+        public static void perform(
+                String name,
+                Object value,
+                @Bind VirtualFrame frame,
+                @Bind ProtosBytecodeRootNode root) {
+            Object[] arguments = frame.getArguments();
+            if (!ProtosFrameArguments.hasPublishedActivation(arguments)) {
+                root.requestCallerNeed(NEEDS_EXACT_ACTIVATION);
+            }
+            ProtosActivation activation =
+                    ProtosFrameArguments.activation(frame);
+            CreateCurrentLocalSlot.perform(activation, name, value);
+        }
+    }
+
     @Operation
     public static final class CreateCurrentLocalSlot {
         @Specialization
@@ -2578,9 +2612,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
-     * attribute read ({@code GetAttribute.doInstanceValueInt} /
-     * {@code doInstanceValue}, adapted to signed-64 {@code long}; SimpleLanguage
-     * {@code SLReadPropertyNode.readSLObject}).
+     * Attribute read, with a signed-64 {@code long} specialization.
      *
      * The cached specializations read the receiver's own property through a
      * {@link PropertyGetter} of the cached {@code Shape}, shared by every exact
@@ -2929,8 +2961,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * <p>PLAT066-C: {@code capturesCreatorContext} is the lowering's
      * classification of this exact Closure ({@code
      * CanonicalCompilationFacts#capturesCreatorContext}). When it is false
-     * the operation is {@code MakeFunction} with empty {@code
-     * freevars}: the Closure receives its creator's own captured environment
+     * the Closure has no free cell bindings: it receives its creator's own captured environment
      * and the creator's activation is neither materialized nor published,
      * and no compact capture owner is created. That classification is a
      * recorded divergence from the unconditional capture of {@code

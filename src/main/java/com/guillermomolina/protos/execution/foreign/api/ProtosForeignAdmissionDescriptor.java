@@ -85,7 +85,7 @@ record ProtosForeignAdmissionDescriptor(
         return new ProtosForeignAdmissionDescriptor(Kind.BOOLEAN, value, null, Set.of());
     }
 
-    /** A true foreign absence/null; never an ambiguous null-like value such as JS undefined. */
+    /** A true foreign absence/null; never an ambiguous null-like value such as an "undefined" marker. */
     static ProtosForeignAdmissionDescriptor absent() {
         return new ProtosForeignAdmissionDescriptor(Kind.NULL, null, null, Set.of());
     }

@@ -432,7 +432,7 @@ final class ProtosI115UnaryPICConvergenceTest {
                     assertEquals(1, unaryNames.size(), unaryNames.toString());
 
                     String expected = i <= 4
-                            ? "c.CallUnaryMethod$CallPFunction"
+                            ? "c.CallUnaryMethod$CallCachedClosure"
                             : "c.CallUnaryMethod";
 
                     assertEquals(

@@ -435,10 +435,117 @@ public final class ProtosTask {
             resumeContinuation = publishedSuspensionContinuation;
             publishedSuspensionContinuation = null;
         }
-        if (resumeContinuation != null) {
-            resumeContinuation.resume(this);
-        } else {
-            continuation.resume(this);
+        try {
+            if (resumeContinuation != null) {
+                resumeContinuation.resume(this);
+            } else {
+                continuation.resume(this);
+            }
+        } catch (RuntimeException | Error unexpected) {
+            /*
+             * An internal Java failure is not a guest Error or a cooperative
+             * cancellation. Release this Task's runtime ownership while
+             * preserving the original Throwable for its host caller.
+             */
+            try {
+                abortUnexpectedRuntimeFailure(unexpected);
+            } catch (RuntimeException | Error cleanupFailure) {
+                if (cleanupFailure != unexpected) {
+                    unexpected.addSuppressed(cleanupFailure);
+                }
+            }
+            throw unexpected;
+        }
+    }
+
+    /**
+     * Fail-closed terminalization for an unexpected host/runtime exception.
+     * This is not a Protos guest failure and never fabricates a guest Error.
+     * Structured children must drain before the terminal lifecycle runs.
+     */
+    private void abortUnexpectedRuntimeFailure(Throwable unexpected) {
+        Set<ProtosTask> childrenToCancel = Set.of();
+        WaitDependency waitingToDetach = null;
+        WaitDependency captureToDetach = null;
+        boolean terminalNow = false;
+        boolean alreadyTerminal;
+
+        synchronized (this) {
+            alreadyTerminal = isTerminal();
+            if (!alreadyTerminal) {
+                waitingToDetach = waitDependency;
+                captureToDetach = capturePendingDependency;
+                capturePendingDependency = null;
+                captureWakeRecorded = false;
+                publishedSuspensionContinuation = null;
+                resumedDependency = null;
+
+                failure = unexpected;
+                childrenToCancel = childrenSnapshot();
+                terminalNow = childrenToCancel.isEmpty();
+
+                if (terminalNow) {
+                    state = State.FAILED;
+                    waitDependency = null;
+                    if (cancellationRequestRecorded) {
+                        cancellationPhase = CancellationPhase.TERMINAL;
+                    }
+                } else {
+                    state = State.SUSPENDED;
+                    waitDependency = CHILD_DRAIN;
+                }
+            }
+        }
+
+        /*
+         * A host/runtime failure remains distinct from a guest Error.
+         * The owning Actor already provides the fatal-failure authority,
+         * including Process supervision and termination cleanup.
+         */
+        try {
+            owner.currentActorForRuntime()
+                    .ifPresent(actor -> actor.failForRuntime(unexpected));
+        } catch (RuntimeException | Error reportingFailure) {
+            if (reportingFailure != unexpected) {
+                unexpected.addSuppressed(reportingFailure);
+            }
+        }
+
+        if (alreadyTerminal) {
+            return;
+        }
+
+        if (waitingToDetach != null && waitingToDetach != CHILD_DRAIN) {
+            try {
+                waitingToDetach.waitingTaskCancelled(this);
+            } catch (RuntimeException | Error cleanupFailure) {
+                if (cleanupFailure != unexpected) {
+                    unexpected.addSuppressed(cleanupFailure);
+                }
+            }
+        }
+        if (captureToDetach != null && captureToDetach != waitingToDetach) {
+            try {
+                captureToDetach.waitingTaskCancelled(this);
+            } catch (RuntimeException | Error cleanupFailure) {
+                if (cleanupFailure != unexpected) {
+                    unexpected.addSuppressed(cleanupFailure);
+                }
+            }
+        }
+
+        for (ProtosTask child : childrenToCancel) {
+            try {
+                child.requestCancellation();
+            } catch (RuntimeException | Error cleanupFailure) {
+                if (cleanupFailure != unexpected) {
+                    unexpected.addSuppressed(cleanupFailure);
+                }
+            }
+        }
+
+        if (terminalNow) {
+            publishTerminal(State.FAILED, unexpected);
         }
     }
 
@@ -647,6 +754,16 @@ public final class ProtosTask {
                 return false;
             }
             if (cancellationRequestRecorded) {
+                return false;
+            }
+            /*
+             * A committed failure already owns the terminal outcome.
+             * Its structured children have received cancellation and
+             * must finish draining before the parent can be dispatched.
+             */
+            if (state == State.SUSPENDED
+                    && waitDependency == CHILD_DRAIN
+                    && failure != null) {
                 return false;
             }
             cancellationRequestRecorded = true;
@@ -939,7 +1056,18 @@ public final class ProtosTask {
         if (!(associatedFuture instanceof ProtosFutureValue future)) return;
         switch (terminal) {
             case COMPLETED -> future.resolve(outcome, future.producerActivation());
-            case FAILED -> future.fail((ProtosObjectValue) outcome);
+            case FAILED -> {
+                if (outcome instanceof ProtosObjectValue guestError) {
+                    future.fail(guestError);
+                } else if (outcome instanceof Throwable) {
+                    // An internal host failure must not become a fabricated
+                    // guest Error. Terminate the pending Future fail-closed.
+                    future.cancelTerminal();
+                } else {
+                    throw new IllegalStateException(
+                            "failed Task has neither guest Error nor internal Throwable");
+                }
+            }
             case CANCELLED -> future.cancelTerminal();
             default -> { }
         }

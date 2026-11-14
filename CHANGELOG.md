@@ -8,6 +8,19 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.123-SNAPSHOT
+
+- **I115 — Task failure containment, P capture isolation, package reorganization and source cleanup.**
+  - Tasks: an unexpected Java `RuntimeException`/`Error` raised while a Task resumes no longer strands it. The Task is terminalized fail-closed: it is detached from its wait/capture dependencies, structured children are cancelled and drained before the parent publishes `FAILED`, the owning Actor is failed through its existing fatal-failure authority, and the original Throwable is rethrown to the host caller with any cleanup failures attached as suppressed exceptions. A pending Future of such a Task is cancelled instead of receiving a fabricated guest Error.
+  - Parallel (P) projections no longer share the source Actor's captured lexical cells. A projection keeps the captured-cell layout but every cell is a fresh discarded placeholder: proven-present reads signal `SlotNotFound`, checked reads continue lexical lookup in the new P root, and a direct store to a discarded cell signals the uninitialized-cell error. This closes the previously recorded I115 divergence in `ProtosClosureValue`.
+  - Lowering: a lexical lookup or assignment whose access is `SELECTED` (a Context may hold a nearer dynamic binding) is no longer treated as a transported free cell, so captured assignment and Array construction observe a dynamic Context shadow. Root-level Closure definitions are created by the new `CreateDiscardedModuleBinding` operation. Terminal nilary and two-argument calls use `CallNilaryMethod` and `CallBinaryMethod`. The constant long-array lowering shortcut was removed; Array literals take the ordinary path.
+  - Truffle boundaries: native builtin bodies and suspension-capable native bodies execute behind `@TruffleBoundary(transferToInterpreterOnException = false)`; the root lookup of `ProtosNumberFactory` is a cold boundary.
+  - Package reorganization (no behavior change): global access nodes and trace hooks moved to `execution.bytecode.activation.globals`, Closure execution plans and call requests to `execution.bytecode.activation.plans`, and Task/C-prime/I/O execution helpers to `execution.bytecode.activation.tasks`. Boolean and numeric optimization tests moved to `optimizations.booleans` and `optimizations.numeric`; represented-value tests to `runtime.values`.
+  - Source cleanup: comments and Javadoc in main and test sources no longer reference other Truffle languages (GraalPy, TruffleRuby, SimpleLanguage, GraalJS) or Python-specific terms; they describe the Protos mechanism directly. The `ProtosCallUnaryMethodNode` specialization `callPFunction` is renamed `callCachedClosure`, and generated-name references in tests and baselines follow it.
+  - Diagnostics: temporary Native termination diagnostic printed by `ProtosProcessRuntime` when `I115_NATIVE_TERM_DIAG=1` (Process, Actor and Task lifecycle snapshot, re-polled every second); default behavior unchanged.
+  - Native image: `scripts/native-generate-init-args.sh` initializes the generated function-call dispatcher nodes, `ProtosLexicalSelectionNode` and the new layout/mode types at build time; `scripts/native-test.sh` adds caller-recovery smoke cases (nested call, object in Closure, CLI module import).
+  - Tests: added `ProtosI115UnexpectedTaskEscapeTest` and P captured-cell isolation coverage in `ProtosParallelExecutionTest`; added conformance cases for dynamic Array and captured-assignment Context shadows; updated lowering, census and PE baselines (`tools/java_*_pe_*baseline.json`) to the new emitted operations.
+
 ## 0.4.122-SNAPSHOT
 
 - **I115-V141 — historical replay.**

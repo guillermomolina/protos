@@ -217,7 +217,6 @@ final class ProtosI101BLiteralOneTest {
                                     bodyStart, bodyLength);
 
                             builder.beginRoot();
-                            builder.beginTag(StandardTags.RootTag.class);
                             builder.beginBlock();
                             builder.beginSourceSection(statementStart, statement.length());
                             builder.beginTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
@@ -230,7 +229,6 @@ final class ProtosI101BLiteralOneTest {
                             builder.endSourceSection();
 
                             builder.endBlock();
-                            builder.endTag(StandardTags.RootTag.class);
                             builder.endRoot();
 
                             builder.endSourceSection();

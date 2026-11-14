@@ -44,7 +44,7 @@ import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.strings.TruffleString;
 
 /**
- * I115 (GraalPy {@code GetMethod}), proxied as the {@code GetMethod}
+ * I115: proxied as the {@code GetMethod}
  * operation: the selection half of every ordinary send. The receiver was
  * evaluated once by the caller bytecode; the selector is a constant operand.
  * Ordinary selection returns a {@link ProtosBoundMethod} carrying the
@@ -177,7 +177,7 @@ abstract class ProtosExperimentalGetMethodNode extends Node {
     }
 
     /**
-     * The super-send selection (GraalPy {@code super().method}): the lookup
+     * The super-send selection: the lookup
      * starts at the parent of the caller's methodHome and the selected method
      * is bound to the caller's receiver.
      */

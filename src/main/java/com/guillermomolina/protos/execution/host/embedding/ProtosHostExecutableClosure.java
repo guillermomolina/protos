@@ -211,8 +211,8 @@ final class ProtosHostExecutableClosure implements TruffleObject {
         }
 
         /*
-         * I115: a source-backed host entry goes through the shared dispatcher
-         * (GraalPy CallNode). The callee root owns its ReturnHome; a pending
+         * I115: a source-backed host entry goes through the shared dispatcher.
+         * The callee root owns its ReturnHome; a pending
          * outcome is driven by the host-entry suspension driver.
          */
         @Specialization(guards = {
@@ -262,7 +262,7 @@ final class ProtosHostExecutableClosure implements TruffleObject {
         }
 
         /*
-         * GraalPy-style cold fallback: retain the nonzero-argument
+         * Cold fallback: retain the nonzero-argument
          * implementation without expanding it into the ordinary
          * zero-argument host call.
          */

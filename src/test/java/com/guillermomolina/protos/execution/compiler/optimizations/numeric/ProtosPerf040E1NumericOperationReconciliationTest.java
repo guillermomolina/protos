@@ -664,7 +664,7 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
     }
 
     /**
-     * GraalPy-style doLL -> doLLOvf for '+', '-' and '*', executed on real
+     * Overflow-checked long arithmetic (doLL -> doLLOvf) for '+', '-' and '*', executed on real
      * operation sites: long results before and after the first overflow,
      * exact promotion on overflow, and the signed-64 edges that fit. Only
      * results are asserted: after the rewrite the generalization, not doLL,

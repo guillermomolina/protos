@@ -129,7 +129,7 @@ public final class ProtosStandardObjectProtocol {
 
     /**
      * I114/I115 structural selection of canonical {@code Object.call} on the
-     * root Object, following GraalPy: the root's observed {@code Shape}
+     * root Object: the root's observed {@code Shape}
      * protects the structure the property was selected in (removal,
      * recreation and any other structural change are {@code Shape}
      * transitions), and the root selector's independently invalidated Assumption protects

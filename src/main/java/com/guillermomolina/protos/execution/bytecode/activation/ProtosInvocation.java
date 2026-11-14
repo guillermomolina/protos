@@ -37,7 +37,7 @@ public final class ProtosInvocation {
         Objects.requireNonNull(receiver, "receiver");
         Objects.requireNonNull(supplied, "supplied");
         Objects.requireNonNull(caller, "caller");
-        // I115: the shared dispatcher (GraalPy CallNode) selects the behavior.
+        // I115: the shared dispatcher selects the behavior.
         return ProtosClosureInvoker.invokeCallable(receiver, supplied, caller);
     }
 

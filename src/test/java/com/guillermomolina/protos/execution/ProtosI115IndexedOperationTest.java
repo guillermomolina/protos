@@ -27,7 +27,7 @@ import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.Test;
 
 /**
- * I115: bracket reads, indexed assignment and size over the GraalPy-shaped
+ * I115: bracket reads, indexed assignment and size over the
  * Bytecode DSL operations. Standard Array/Bytes receivers whose selected
  * behavior is the standard one use BinarySubscript/SetItem/GetLen; every
  * other receiver uses GetMethod and Call*Method with composed continuations.

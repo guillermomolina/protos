@@ -30,7 +30,7 @@ import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.Test;
 
 /**
- * I115: binary {@code +} over the GraalPy-shaped Bytecode DSL operations.
+ * I115: binary {@code +} over the Bytecode DSL operations.
  * A numeric receiver, or a String receiver whose selected {@code +} is the
  * standard String concatenation, executes the native NumberAdd behind
  * IsStandardNumericSelection; every other receiver uses GetMethod and

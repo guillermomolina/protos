@@ -743,11 +743,10 @@ final class CanonicalCompilationFacts {
 
     /**
      * I115 / PLAT066-C: whether creating {@code definition} must capture the
-     * creating execution context, the counterpart of a non-empty GraalPy
-     * {@code freevars}. A Closure that does not ({@code false}) is created
-     * from its creator's own captured environment, without materializing or
-     * publishing the creator's activation, exactly as GraalPy's {@code
-     * MakeFunction} passes no cell array when {@code freevars} is empty.
+     * creating execution context, i.e. whether it has free cell bindings. A
+     * Closure that does not ({@code false}) is created from its creator's
+     * own captured environment, without materializing or publishing the
+     * creator's activation, and receives no cell array.
      *
      * <p>The classification is the strict form of {@link
      * #requiresPersistentFrameAuthority}: every parameter, default and body
@@ -895,7 +894,9 @@ final class CanonicalCompilationFacts {
             return (ownBindingsOnly || scope.declaresName(lookup.name()))
                     && !resolvedInScope(analysis.resolutionOf(lookup), scope)
                     && !(ownBindingsOnly
-                            && transportedFreeCell(analysis.resolutionOf(lookup), scope));
+                            && transportedFreeCell(analysis.resolutionOf(lookup), scope)
+                            && analysis.accessOf(lookup)
+                                    != CanonicalBindingAnalysis.LexicalAccess.SELECTED);
         }
         if (expression instanceof CanonicalAssign assign) {
             if (assign.target().isPresent()) {
@@ -905,7 +906,9 @@ final class CanonicalCompilationFacts {
             return ((ownBindingsOnly || scope.declaresName(assign.name()))
                             && !resolvedInScope(analysis.resolutionOf(assign), scope)
                             && !(ownBindingsOnly
-                                    && transportedFreeCell(analysis.resolutionOf(assign), scope)))
+                                    && transportedFreeCell(analysis.resolutionOf(assign), scope)
+                                    && analysis.accessOf(assign)
+                                            != CanonicalBindingAnalysis.LexicalAccess.SELECTED))
                     || demandsPersistentFrame(assign.value(), analysis, scope, ownBindingsOnly, promotable, inline);
         }
         if (expression instanceof CanonicalCreate create) {

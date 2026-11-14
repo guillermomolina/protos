@@ -108,7 +108,7 @@ final class ProtosI091IdentityRepresentationTest {
         assertTrue(ProtosIdentity.identical(first, second));
         assertEquals(ProtosIdentity.identityHash(first), ProtosIdentity.identityHash(second));
         assertFalse(ProtosNumericValueSupport.isCurrentInteger(Integer.valueOf(1)));
-        // I115: a Java double is the canonical guest Float (GraalPy PyFloatCheckNode).
+        // I115: a Java double is the canonical guest Float.
         assertTrue(ProtosNumericValueSupport.isCurrentNumber(Double.valueOf(1.5)));
         assertFalse(ProtosNumericValueSupport.isCurrentNumber(BigInteger.ONE.shiftLeft(64)));
     }

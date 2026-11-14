@@ -402,7 +402,7 @@ final class ProtosPerf042IdentityBuilderOracleTest {
         });
     }
     /**
-     * I115 / PLAT066-C: the nested run program follows GraalPy's physical
+     * I115 / PLAT066-C: the nested run program follows the physical
      * sequence for a non-cell local. run keeps identity in an ordinary local,
      * creates it without capturing run's context, installs no frame
      * authority, and its compact invocation never publishes an activation.

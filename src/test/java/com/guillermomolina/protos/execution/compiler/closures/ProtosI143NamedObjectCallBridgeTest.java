@@ -46,6 +46,23 @@ class ProtosI143NamedObjectCallBridgeTest {
     }
 
     @Test
+    void extractedStandardConstructKeepsReceiverWithNamedArguments()
+            throws Exception {
+        assertSame(
+                Boolean.TRUE,
+                evaluate("""
+                Thing: {
+                    init: (value) => {
+                        this.saved: value
+                    }
+                }
+                extracted: Thing.construct
+                made: extracted(value: 5)
+                (made.parent() === Thing) && (made.saved == 5)
+                """));
+    }
+
+    @Test
     void namedInitEvaluatesArgumentExactlyOnce() throws Exception {
         assertSame(
                 Boolean.TRUE,

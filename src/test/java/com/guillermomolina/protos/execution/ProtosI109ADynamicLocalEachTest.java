@@ -752,6 +752,14 @@ final class ProtosI109ADynamicLocalEachTest {
                 () -> diagnostic
                         + ": epílogo incompleto " + epilogue);
 
+        if ("c.EpilogForReturn".equals(epilogue.get(position))) {
+            assertEquals(
+                    List.of("c.EpilogForReturn", "return"),
+                    epilogue.subList(position, epilogue.size()),
+                    diagnostic + ": epílogo de retorno inesperado");
+            return;
+        }
+
         assertEquals(
                 "load.null",
                 epilogue.get(position++),

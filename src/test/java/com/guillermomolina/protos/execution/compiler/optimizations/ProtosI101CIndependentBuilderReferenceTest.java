@@ -102,7 +102,7 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                         "call-n",
                         "() => { null(7, 9) }",
                         true,
-                        "CallVarargsMethod"));
+                        "CallBinaryMethod"));
 
         try (Harness normal =
                 new Harness(false)) {
@@ -238,7 +238,7 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                                     StandardTags.CallTag.class);
 
                             if (multi) {
-                                builder.beginCallVarargsMethod(true);
+                                builder.beginCallBinaryMethod(true, false);
                             } else {
                                 builder.beginCallNilaryMethod(true);
                             }
@@ -247,13 +247,11 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                                     ProtosNullValue.INSTANCE);
 
                             if (multi) {
-                                builder.beginCollectClosureCallArguments();
                                 builder.emitLoadConstant(
                                         ProtosNumericValueSupport.integer(7));
                                 builder.emitLoadConstant(
                                         ProtosNumericValueSupport.integer(9));
-                                builder.endCollectClosureCallArguments();
-                                builder.endCallVarargsMethod();
+                                builder.endCallBinaryMethod();
                             } else {
                                 builder.endCallNilaryMethod();
                             }
@@ -328,7 +326,7 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                 // operation owns selection, fallback and the transport
                 // of a suspended invocation; no physical composition
                 // remains in this root.
-                // I115: the GraalPy-shaped CallUnaryMethod replaces the
+                // I115: the CallUnaryMethod replaces the
                 // retired InvokeClosureOneTail terminal operation.
                 assertTrue(
                         indexOfOperation(
@@ -353,11 +351,13 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                 assertNoOperation(actual, "PrepareClosureCallOne");
                 assertNoOperation(actual, "IsDirectSendMiss");
 
-                // I115: the parameter is bound by the one parameter lowering
-                // into its native local and read back natively.
-                int bind = indexOfOperation(actual, "LoadSuppliedArgument");
+                // The parameter is bound by one grouped native-local copy.
+                int bind = indexOfOperation(actual, "CopySuppliedArguments");
                 assertTrue(bind >= 0, actual::toString);
-                assertTrue(actual.get(bind + 1).startsWith("store.local"), actual::toString);
+                assertTrue(
+                        actual.stream().anyMatch(entry ->
+                                entry.startsWith("load.local local_offset:LOCAL_OFFSET=0")),
+                        actual::toString);
                 assertTrue(indexOfOperation(actual, "CallUnaryMethod") > bind, actual::toString);
                 for (String retired : List.of(
                         "BindClosureFrameParameter",
@@ -441,11 +441,10 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                                             "identity", null);
                             builder.beginBlock();
 
-                            // I115: the one parameter lowering stores the
-                            // supplied position directly into the LOCAL.
-                            builder.beginStoreLocal(identity);
-                            builder.emitLoadSuppliedArgument(0);
-                            builder.endStoreLocal();
+                            // I115: grouped parameter copy directly initializes the
+                            // native local without a separate load/store sequence.
+                            builder.emitCopySuppliedArguments(
+                                    new BytecodeLocal[] {identity});
 
                             // I112 / PLAT062-T: the final call is the
                             // root's terminal invocation. Receiver and
@@ -495,6 +494,53 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                         });
 
         return nodes.getNode(0);
+    }
+
+
+    /**
+     * A direct terminal Call2 keeps its fixed-arity physical dispatch
+     * and passes both arguments to a real guest Closure in source order.
+     */
+    @Test
+    void terminalBinaryCallPreservesArgumentOrderAndDirectDispatch()
+            throws Exception {
+        try (Harness normal = new Harness(false)) {
+            normal.run(() -> {
+                ProtosBytecodeRootNode module = compile(
+                        "(callback) => { callback(7, 9) }",
+                        "terminal-call2-semantics");
+
+                List<ProtosBytecodeRootNode> roots = groupRoots(module);
+                assertEquals(2, roots.size(),
+                        "module and Closure are the only source roots");
+
+                List<String> instructions =
+                        completeSignature(roots.get(1));
+
+                assertTrue(
+                        indexOfOperation(instructions, "CallBinaryMethod") >= 0,
+                        instructions::toString);
+                assertNoOperation(instructions, "CallVarargsMethod");
+                assertNoOperation(instructions, "CollectClosureCallArguments");
+                assertTrue(
+                        instructions.stream().noneMatch(
+                                entry -> entry.startsWith("store.local")),
+                        instructions::toString);
+
+                ProtosClosureValue caller = assertInstanceOf(
+                        ProtosClosureValue.class,
+                        module.getCallTarget().call(
+                                normal.moduleActivation()));
+
+                assertInteger(
+                        79L,
+                        callClosure(
+                                normal,
+                                caller,
+                                "(a, b) => { a * 10 + b }"));
+            });
+        }
+        System.out.println("I115_TERMINAL_CALL2_SEMANTICS=PASS");
     }
 
     // ---- Shared Builder restatement of the physical prepared-invocation protocol. ----

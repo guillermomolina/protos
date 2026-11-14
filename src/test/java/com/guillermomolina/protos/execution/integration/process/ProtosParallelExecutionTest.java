@@ -250,6 +250,38 @@ class ProtosParallelExecutionTest{
   }
  }
 
+ @Test void projectedCapturedCellsCannotReadOrMutateCallerState()
+   throws Exception{
+  var p=core();
+  try(var h=ProtosHostedExecutionTestFixture.open(p)){
+   evalHosted(h, """
+       i115Make: () => {
+           secret: 41
+           readPrivate: () => secret
+           changePrivate: () => {
+               secret = 99
+               secret
+           }
+           {
+               readPrivate: readPrivate
+               changePrivate: changePrivate
+           }
+       }
+       i115Captured: i115Make()
+       """);
+
+   assertErrorCategory(p,"SlotNotFound",
+       failedP(h,"i115Captured.readPrivate.parallel()"));
+   assertErrorCategory(p,"SlotNotFound",
+       failedP(h,"i115Captured.changePrivate.parallel()"));
+   assertEquals("41",integerText(
+       evalHosted(h,"i115Captured.readPrivate()")));
+
+   dispatchHosted(h,h.activation().executionDomain());
+   assertEquals(0,h.activation().executionDomain().liveTaskCount());
+  }
+ }
+
  @Test void parallelFailuresAndNonTransferableResults()throws Exception{
   var p=core();
   try(var h=ProtosHostedExecutionTestFixture.open(p)){

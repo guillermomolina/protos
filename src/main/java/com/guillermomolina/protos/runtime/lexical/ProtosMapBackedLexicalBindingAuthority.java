@@ -19,6 +19,7 @@ package com.guillermomolina.protos.runtime;
 
 import com.oracle.truffle.api.object.DynamicObject;
 import com.oracle.truffle.api.object.Shape;
+import java.lang.invoke.MethodHandles;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -33,9 +34,8 @@ import java.util.Optional;
  * <p>Two storage forms share the same operations:
  * <ul>
  *   <li>the object authority, whose storage is the owning
- *       {@link ProtosObjectValue} itself (the ordinary slot representation,
- *       following SimpleLanguage {@code SLObject} and GraalPy
- *       {@code PythonAbstractObject}); and</li>
+ *       {@link ProtosObjectValue} itself (the ordinary slot representation
+ *       as a Truffle {@code DynamicObject}); and</li>
  *   <li>the independent durable authority, whose storage is a private
  *       {@link Store}, used only by owners whose bindings are not ordinary
  *       object properties (for example an execution context before or
@@ -47,7 +47,10 @@ import java.util.Optional;
  */
 final class ProtosMapBackedLexicalBindingAuthority
         implements ProtosLexicalBindingAuthority {
-    private static final Shape STORE_INITIAL_SHAPE = Shape.newBuilder().build();
+    private static final Shape STORE_INITIAL_SHAPE =
+            Shape.newBuilder()
+                    .layout(Store.class, MethodHandles.lookup())
+                    .build();
 
     /** Independent storage of a durable authority not backed by an object. */
     static final class Store extends DynamicObject {

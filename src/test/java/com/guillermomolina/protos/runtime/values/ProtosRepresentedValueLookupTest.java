@@ -91,7 +91,7 @@ class ProtosRepresentedValueLookupTest {
         assertSame(floatCall, floatSelected.value());
         assertSame(prelude.floatPrototype(), floatSelected.home());
 
-        // GraalPy GetClassNode.getDouble: direct Double and the object form
+        // A direct Double and the object form
         // select the same Float prototype and the same inherited method.
         Object direct = Double.valueOf(2.5d);
         assertSame(prelude.floatPrototype(),

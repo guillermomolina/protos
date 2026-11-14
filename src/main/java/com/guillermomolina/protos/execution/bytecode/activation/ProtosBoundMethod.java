@@ -22,7 +22,7 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import java.util.Objects;
 
 /**
- * I115 (GraalPy {@code PMethod} / the result of {@code GetMethod}): a selected
+ * I115 (the result of {@code GetMethod}): a selected
  * method together with the receiver it was selected on and the home object
  * that owns the selected slot. Backend-private; never a guest value.
  *

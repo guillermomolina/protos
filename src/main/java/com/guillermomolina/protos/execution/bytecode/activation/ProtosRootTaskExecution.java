@@ -72,7 +72,7 @@ public final class ProtosRootTaskExecution {
 
     private static ProtosExecutionOutcome runRootTask(
             ProtosActivation activation, ProtosTask.Continuation continuation) {
-        // GraalPy-style number construction is bound once to this language Context.
+        // Number construction is bound once to this language Context.
         // No arithmetic node needs to recover a Protos caller/Prelude chain.
         ProtosLanguageContext languageContext =
                 ProtosLanguageContext.currentIfEnteredForRuntime();

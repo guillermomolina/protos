@@ -60,10 +60,42 @@ main() {
     done
 
     inline_support_generated=(
-        'com.guillermomolina.protos.execution.ProtosBytecodeRootNodeGen$EnterClosureCall_Node'
-        'com.guillermomolina.protos.execution.ProtosBytecodeRootNodeGen$PrepareSendArguments_Node'
-        'com.guillermomolina.protos.execution.ProtosBytecodeRootNodeGen$ResumeContinuation_Node'
+        'com.guillermomolina.protos.execution.ProtosBytecodeRootNodeGen$MaterializeCurrentClosure_Node'
+        'com.guillermomolina.protos.execution.ProtosBytecodeRootNodeGen$IsStandardNumericSelection_Node'
+        'com.guillermomolina.protos.execution.ProtosFunctionCallDispatchersFactory$FunctionCachedCallNodeGen$Inlined'
+        'com.guillermomolina.protos.execution.ProtosFunctionCallDispatchersFactory$BuiltinFunctionCachedCallNodeGen$Inlined'
+        'com.guillermomolina.protos.execution.ProtosFunctionCallDispatchersFactory$BuiltinMethodCachedCallNodeGen$Inlined'
+        'com.guillermomolina.protos.execution.ProtosFunctionCallDispatchersFactory$FunctionDirectInvokeNodeGen$Inlined'
+        'com.guillermomolina.protos.execution.ProtosFunctionCallDispatchersFactory$FunctionIndirectInvokeNodeGen$Inlined'
+        'com.guillermomolina.protos.execution.ProtosLexicalSelectionNodeGen'
+        'com.guillermomolina.protos.execution.ProtosLexicalSelectionNodeGen$Uncached'
     )
+
+    # I115-S82: generated dispatcher nodes with hosted Truffle field descriptors.
+    # Initialize the generated metadata at image build time, not during guest calls.
+    dispatcher_generated_dir="${classes_dir}/com/guillermomolina/protos/execution"
+    dispatcher_call_node="${dispatcher_generated_dir}/ProtosFunctionCallDispatchersFactory$CallNodeGen.class"
+
+    if [[ ! -f "${dispatcher_call_node}" ]]; then
+        echo "missing generated dispatcher CallNodeGen: ${dispatcher_call_node}" >&2
+        return 1
+    fi
+
+    mapfile -t dispatcher_generated < <(
+        find "${dispatcher_generated_dir}" \
+            -maxdepth 1 \
+            -type f \
+            \( -name 'ProtosFunctionCallDispatchersFactory$*NodeGen.class' \
+               -o -name 'ProtosFunctionCallDispatchersFactory$*NodeGen$Uncached.class' \
+               -o -name 'ProtosFunctionCallDispatchersFactory$*NodeGen$Inlined.class' \) \
+            -printf '%f\n' \
+            | sort
+    )
+
+    for file in "${dispatcher_generated[@]}"; do
+        class="com.guillermomolina.protos.execution.${file%.class}"
+        inline_support_generated+=("${class}")
+    done
 
     for class in "${inline_support_generated[@]}"; do
         path="${classes_dir}/${class//./\/}.class"
@@ -154,6 +186,8 @@ main() {
     safe_hosted_constants=(
         'com.guillermomolina.protos.execution.ProtosTextReaderCPrimeExecution$Advance'
         'com.guillermomolina.protos.runtime.ProtosCoreErrors$StandardError'
+        'com.guillermomolina.protos.execution.ProtosBytecodeRootNode$LexicalFrameLayout'
+        'com.guillermomolina.protos.execution.ProtosFunctionCallDispatchers$ReturnHomeMode'
     )
 
     for class in "${safe_hosted_constants[@]}"; do

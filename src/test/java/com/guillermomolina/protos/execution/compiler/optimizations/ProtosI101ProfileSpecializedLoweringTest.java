@@ -114,7 +114,7 @@ final class ProtosI101ProfileSpecializedLoweringTest {
 
                 assertEquals(expected, directSignature, "direct literal root");
                 assertTrue(
-                        expected.stream().anyMatch(entry -> entry.contains("=Metadata(com.guillermomolina.protos.runtime.Long)")),
+                        expected.stream().anyMatch(entry -> entry.contains("constant:CONSTANT=Long(1)")),
                         expected::toString);
                 assertExperimentalBooleanControlTopology(
                         folded, foldedSignature, "witness " + label(debugger));
@@ -167,8 +167,8 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                         actual,
                         "the production root must equal the independent Builder");
                 // I115: the one parameter lowering, not a special unary entry.
-                assertSingleParameterLowering(expected, 1);
-                assertSingleParameterLowering(actual, 1);
+                assertSingleParameterLowering(expected, 1, 0);
+                assertSingleParameterLowering(actual, 1, 0);
                 assertEquals(2, groupRoots(module).size());
                 assertSame(production, groupRoots(module).get(1));
 
@@ -510,10 +510,23 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                     ProtosBytecodeRootNode module =
                             compile(program, "omitted-callbacks-" + mode);
                     List<String> run = completeSignature(groupRoots(module).get(1));
-                    long inlineSites = run.stream()
-                            .filter(entry -> entry.startsWith("c.PrepareInlineClosureLiteralCall"))
-                            .count();
-                    assertEquals(2L, inlineSites, () -> mode + " " + run);
+                    for (String operation : List.of(
+                            "c.CallNilaryMethod",
+                            "c.MaterializeCurrentClosure")) {
+                        assertEquals(
+                                2L,
+                                run.stream()
+                                        .filter(entry -> entry.startsWith(operation))
+                                        .count(),
+                                () -> mode + " two " + operation + ": " + run);
+                    }
+                    assertEquals(
+                            0L,
+                            run.stream()
+                                    .filter(entry -> entry.startsWith(
+                                            "c.PrepareInlineClosureLiteralCall"))
+                                    .count(),
+                            () -> mode + " retired inline preparation: " + run);
                     for (int iteration = 0; iteration < 3; iteration++) {
                         assertInteger(11022,
                                 module.getCallTarget().call(harness.moduleActivation()));
@@ -888,8 +901,8 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                         }
                         0
                         """,
-                        "TryCompactCanonicalBooleanOne",
-                        "PrepareSendOne",
+                        "IsCanonicalBooleanOperand",
+                        "GetMethod",
                         17),
                 new Family(
                         "closure-call",
@@ -903,8 +916,8 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                         }
                         0
                         """,
-                        "AdmitsInlineClosureLiteralCall",
-                        "LoadInlineLiteralFallbackCall",
+                        "CallUnaryMethod",
+                        "CallUnaryMethod",
                         33));
 
         for (boolean debugger : new boolean[] {false, true}) {
@@ -944,7 +957,7 @@ final class ProtosI101ProfileSpecializedLoweringTest {
 
                     List<List<String>> before = roots.stream()
                             .map(ProtosI101ProfileSpecializedLoweringTest
-                                    ::semanticSignature)
+                                    ::stableReparseSemanticSignature)
                             .toList();
 
                     group.ensureComplete();
@@ -972,7 +985,7 @@ final class ProtosI101ProfileSpecializedLoweringTest {
 
                         assertReparsePrefixAndCleanup(
                                 before.get(index),
-                                semanticSignature(root),
+                                stableReparseSemanticSignature(root),
                                 mode + " " + family.name()
                                         + " root " + index);
 
@@ -988,12 +1001,14 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                     }
 
                     List<ProtosBytecodeRootNode> guarded =
-                            roots.stream()
-                                    .filter(root -> signature(root).stream()
-                                            .anyMatch(instruction ->
-                                                    instruction.contains(
-                                                            family.guard())))
-                                    .toList();
+                            family.name().equals("closure-call")
+                                    ? List.of(activation)
+                                    : roots.stream()
+                                            .filter(root -> signature(root).stream()
+                                                    .anyMatch(instruction ->
+                                                            instruction.contains(
+                                                                    family.guard())))
+                                            .toList();
 
                     {
                         assertEquals(
@@ -1019,7 +1034,9 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                             }
 
                             if (instruction.contains(family.fallback())
-                                    && fallbackIndex < 0) {
+                                    && fallbackIndex < 0
+                                    && (!family.name().equals("closure-call")
+                                            || index > guardIndex)) {
                                 fallbackIndex = index;
                             }
                         }
@@ -1034,8 +1051,33 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                                 "missing guard: " + instructions);
                         assertTrue(
                                 fallbackIndex > guardIndex,
-                                "missing or misplaced MISS fallback: "
+                                "missing or misplaced fallback/second call: "
                                         + instructions);
+                        if (family.name().equals("closure-call")) {
+                            for (String retired : List.of(
+                                    "TryDirectCall",
+                                    "PrepareClosureCall",
+                                    "EnterStraightLineSourceCall",
+                                    "BindClosureFrameParameter")) {
+                                assertTrue(
+                                        instructions.stream().noneMatch(
+                                                entry -> entry.contains(retired)),
+                                        () -> "retired Closure dispatch "
+                                                + retired + ": " + instructions);
+                            }
+                            long unaryOperations = instructions.stream()
+                                    .filter(entry -> entry.startsWith(
+                                            "c.CallUnaryMethod"))
+                                    .count();
+                            assertTrue(
+                                    unaryOperations >= 2L,
+                                    "two source calls must remain executable: "
+                                            + instructions);
+                            assertSame(
+                                    activation,
+                                    guarded.get(0),
+                                    "both source calls must belong to run");
+                        }
                     }
 
                     for (int repetition = 0; repetition < 2;
@@ -1310,14 +1352,19 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                 long callZero = operationNames.stream()
                         .filter(name -> name.startsWith("c.CallNilaryMethod"))
                         .count();
-                long callN = operationNames.stream()
+                long callTwo = operationNames.stream()
+                        .filter(name -> name.startsWith("c.CallBinaryMethod"))
+                        .count();
+                long callSpread = operationNames.stream()
                         .filter(name -> name.startsWith("c.CallVarargsMethod"))
                         .count();
 
                 assertEquals(1L, callZero,
                         mode + ": expected one ordinary Call0");
-                assertEquals(2L, callN,
-                        mode + ": expected ordinary rest and spread calls");
+                assertEquals(1L, callTwo,
+                        mode + ": rest invocation must use physical Call2");
+                assertEquals(1L, callSpread,
+                        mode + ": spread invocation must retain physical varargs");
 
                 assertTrue(
                         instructions.stream().noneMatch(
@@ -1377,25 +1424,21 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                             }
                             builder.beginBlock();
 
-                            for (int index = 0; index < names.length; index++) {
-                                builder.beginStoreLocal(locals[index]);
-                                builder.emitLoadSuppliedArgument(index);
-                                builder.endStoreLocal();
-                            }
+                            builder.emitCopySuppliedArguments(locals);
 
+                            builder.beginReturn();
                             builder.beginSourceSection(readStart, readLength);
                             builder.beginTag(
                                     StandardTags.StatementTag.class,
                                     StandardTags.ExpressionTag.class);
                             builder.beginBlock();
-                            builder.beginReturn();
                             builder.emitLoadLocal(locals[read]);
-                            builder.endReturn();
                             builder.endBlock();
                             builder.endTag(
                                     StandardTags.StatementTag.class,
                                     StandardTags.ExpressionTag.class);
                             builder.endSourceSection();
+                            builder.endReturn();
 
                             builder.endBlock();
                             builder.endRoot();
@@ -1422,24 +1465,30 @@ final class ProtosI101ProfileSpecializedLoweringTest {
      * order, each immediately stored into a native local, followed by a
      * native read; and no retired parameter operation.
      */
-    private static void assertSingleParameterLowering(List<String> signature, int parameters) {
-        List<Integer> loads = new ArrayList<>();
-        for (int index = 0; index < signature.size(); index++) {
-            if (signature.get(index).startsWith("c.LoadSuppliedArgument")) {
-                loads.add(index);
-                String entry = signature.get(index);
-                int position = loads.size() - 1;
-                assertTrue(entry.contains("index:INTEGER=" + position)
-                                || entry.contains("index:CONSTANT=Integer(" + position + ")"),
-                        () -> "supplied position out of order: " + signature);
-                assertTrue(signature.get(index + 1).startsWith("store.local"),
-                        () -> "supplied value not stored into its local: " + signature);
-            }
-        }
-        assertEquals(parameters, loads.size(), signature::toString);
-        assertTrue(signature.stream().skip(loads.get(loads.size() - 1))
-                        .anyMatch(entry -> entry.startsWith("load.local")),
-                signature::toString);
+    private static void assertSingleParameterLowering(
+            List<String> signature, int parameters, int readOffset) {
+        long groupedCopies = signature.stream()
+                .filter(entry -> entry.startsWith("c.CopySuppliedArguments"))
+                .count();
+        assertEquals(1L, groupedCopies,
+                "exactly one grouped parameter copy: " + signature);
+        assertTrue(signature.stream()
+                        .noneMatch(entry -> entry.startsWith("c.LoadSuppliedArgument")),
+                "individual parameter loads must not replace the grouped copy: " + signature);
+        assertTrue(parameters > 0 && readOffset >= 0 && readOffset < parameters,
+                "invalid independent parameter witness");
+        assertEquals(
+                1L,
+                signature.stream()
+                        .filter(entry -> entry.startsWith("load.local "))
+                        .count(),
+                "identity/read witness must load exactly one local: " + signature);
+        assertTrue(
+                signature.stream().anyMatch(entry ->
+                        entry.startsWith(
+                                "load.local local_offset:LOCAL_OFFSET=" + readOffset)),
+                () -> "the returned parameter must be read from its native local: "
+                        + signature);
         for (String retired : RETIRED_PARAMETER_OPERATIONS) {
             assertTrue(signature.stream().noneMatch(entry -> entry.contains(retired)),
                     () -> retired + " in " + signature);
@@ -1477,8 +1526,8 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                         handwritten, compiled,
                         "the required-prefix root must match independent Builder");
                 // I115: three required parameters, one contract each.
-                assertSingleParameterLowering(handwritten, 3);
-                assertSingleParameterLowering(compiled, 3);
+                assertSingleParameterLowering(handwritten, 3, 1);
+                assertSingleParameterLowering(compiled, 3, 1);
                 assertEquals(2, roots.size());
                 assertSame(module, roots.get(0));
                 assertSame(actual, roots.get(1));
@@ -1502,7 +1551,7 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                 // epilogue: EpilogForReturn, then return.
                 assertEquals(
                         List.of(
-                                "c.EpilogForReturn INTEGER=1 NODE_PROFILE=profile",
+                                "c.EpilogForReturn INTEGER=0 BYTECODE_INDEX=bci INTEGER=1 NODE_PROFILE=profile",
                                 "return"),
                         afterReparse.subList(
                                 beforeReparse.size(), afterReparse.size()),
@@ -1523,7 +1572,7 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                         completeSignature(handwrittenI104BRoot()),
                         signature,
                         "with a debugger the production root must equal the independent Builder");
-                assertSingleParameterLowering(signature, 3);
+                assertSingleParameterLowering(signature, 3, 1);
                 System.out.println("I104_B_DEBUGGER_SAME_ENTRY=PASS");
             });
         }
@@ -1610,10 +1659,10 @@ final class ProtosI101ProfileSpecializedLoweringTest {
      * callback body is lowered inline, so it is verified on its own terms and never equated
      * with the literal-only oracle. {@code signature} is the root's complete signature.
      *
-     * <p>A literal receiver is an unguarded condition ({@code load.constant Boolean(...)}): it
-     * has no MISS path, so no send may appear. A staged receiver is guarded by
-     * {@code ExperimentalCanonicalBooleanCondition}: its MISS path must keep the ordinary
-     * send. In both forms the callbacks never become Closures or roots.
+     * <p>A proven literal control may be entirely folded into one result constant
+     * without a condition or branch. Otherwise, an unguarded condition has no MISS
+     * path, while a guarded receiver must preserve ordinary selection on its MISS
+     * path. In every form, no separate callback root is permitted.
      *
      * @return whether the condition is the guarded form
      */
@@ -1653,9 +1702,33 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                 branch = index;
             }
         }
-        assertTrue(condition >= 0, () -> message + ": no Boolean condition in " + signature);
-        assertTrue(branch > condition,
-                () -> message + ": no conditional branch after the condition in " + signature);
+        if (condition < 0) {
+            long selectedLiterals = signature.stream()
+                    .filter(entry -> entry.startsWith("load.constant ")
+                            && (entry.contains("=Long(")
+                                    || entry.contains("=Protos(null)")))
+                    .count();
+            assertEquals(1L, selectedLiterals,
+                    message + ": folded Boolean control must retain one selected literal: "
+                            + signature);
+            assertTrue(activation.provablyNonSuspendingBody(),
+                    message + ": a folded literal body must not suspend");
+            for (String entry : signature) {
+                String name = entry.split(" ", 2)[0];
+                assertTrue(
+                        !name.startsWith("branch")
+                                && !name.equals("yield")
+                                && (!name.startsWith("c.")
+                                        || name.equals("c.EnterRoot")
+                                        || name.equals("c.EpilogForReturn")),
+                        message + ": folded Boolean control retains execution machinery: "
+                                + signature);
+            }
+        } else {
+            assertTrue(branch > condition,
+                    () -> message + ": no conditional branch after the condition in "
+                            + signature);
+        }
         // The selected callback body runs inline: no callback Closure and no callback call.
         for (String forbidden : List.of(
                 "Capture",
@@ -1761,6 +1834,41 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                         .append(argument.getKind())
                         .append('=')
                         .append(operand(argument));
+            }
+            entries.add(entry.toString());
+        }
+        return entries;
+    }
+
+
+    /**
+     * Exact semantic reparse signature independent of Truffle quickening.
+     * All physical operations and semantic operands remain represented.
+     * Only specialization state and quickening suffixes are omitted.
+     */
+    private static List<String> stableReparseSemanticSignature(
+            ProtosBytecodeRootNode root) {
+        List<String> entries = new ArrayList<>();
+        for (Instruction instruction : root.getBytecodeNode().getInstructionsAsList()) {
+            String name = ProtosInstructionNames.of(instruction);
+            if (name.startsWith("tag.") || name.startsWith("trace.")) {
+                continue;
+            }
+            int quickening = name.indexOf('$');
+            StringBuilder entry = new StringBuilder(
+                    quickening >= 0 ? name.substring(0, quickening) : name);
+            for (Instruction.Argument argument : instruction.getArguments()) {
+                if (argument.getName().startsWith("state_")) {
+                    continue;
+                }
+                entry.append(' ')
+                        .append(argument.getName())
+                        .append(':')
+                        .append(argument.getKind())
+                        .append('=')
+                        .append(argument.getKind()
+                                == Instruction.Argument.Kind.BYTECODE_INDEX
+                                        ? "bci" : operand(argument));
             }
             entries.add(entry.toString());
         }

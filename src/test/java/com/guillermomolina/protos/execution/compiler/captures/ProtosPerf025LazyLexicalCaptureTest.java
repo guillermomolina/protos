@@ -648,8 +648,8 @@ final class ProtosPerf025LazyLexicalCaptureTest {
 
     /**
      * I115 / PLAT066-C: a Closure that reads only its own parameter is
-     * created from its creator's own captured environment (GraalPy
-     * MakeFunction without freevars). This records the divergence from the
+     * created from its creator's own captured environment
+     * (without free cell bindings). This records the divergence from the
      * unconditional capture of CALLABLES.md; it is not an equivalence proof.
      */
     @Test

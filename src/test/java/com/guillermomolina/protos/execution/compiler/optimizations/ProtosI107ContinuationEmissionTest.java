@@ -113,7 +113,7 @@ final class ProtosI107ContinuationEmissionTest {
 
     /**
      * The same shape whose innermost value is a send is not folded. I115: both nested
-     * literal-Boolean controls are statically selected inline regions with no callback root, and the innermost {@code 7 + 0} is the GraalPy-shaped {@code NumberAdd} arithmetic operation,
+     * literal-Boolean controls are statically selected inline regions with no callback root, and the innermost {@code 7 + 0} is the {@code NumberAdd} arithmetic operation,
      * which owns its fast path and its ordinary-dispatch fallback, instead of an explicit
      * PrepareSend plus continuation composition. The absence of a root-level Yield is not a
      * non-suspension proof.

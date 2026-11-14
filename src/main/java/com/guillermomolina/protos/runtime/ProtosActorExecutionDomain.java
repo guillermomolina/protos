@@ -628,6 +628,24 @@ public final class ProtosActorExecutionDomain {
         return liveTasks.size();
     }
 
+    /** Temporary I115 Native termination diagnostic; no scheduler mutation. */
+    public synchronized String taskTerminationDiagnosticForRuntime() {
+        StringBuilder result = new StringBuilder();
+        int index = 0;
+        for (ProtosTask task : liveTasks) {
+            index++;
+            if (index > 1) {
+                result.append("; ");
+            }
+            result.append("task#").append(index)
+                    .append(" state=").append(task.state())
+                    .append(" cancellation=").append(task.cancellationPhase())
+                    .append(" waiting=").append(task.waitDependency().isPresent())
+                    .append(" parent=").append(task.parentForRuntime() != null);
+        }
+        return result.toString();
+    }
+
     public synchronized Optional<ProtosTask> nextRunnableForTesting() {
         Object next = runnable.peekFirst();
         return next instanceof ProtosTask task ? Optional.of(task) : Optional.empty();

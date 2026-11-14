@@ -52,7 +52,7 @@ import org.junit.jupiter.api.Test;
  * production lowerer currently has this proof or may unconditionally remove
  * dynamically selected guest sends.
  *
- * <p>Unlike GraalJS's variable-plus-constant specialized node, this oracle
+ * <p>Unlike a variable-plus-constant specialized node, this oracle
  * deliberately requires constant propagation across these exact immutable
  * literal initializer shapes. Protos's dynamic '+' dispatch remains a
  * semantic gate for any production implementation of this optimization.

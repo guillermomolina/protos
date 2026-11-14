@@ -641,7 +641,7 @@ final class ProtosComplexArithmeticTest {
                 integer(numerator), integer(denominator), prelude);
     }
 
-    /* I115: a Java double is the canonical guest Float (GraalPy PyFloatCheckNode). */
+    /* I115: a Java double is the canonical guest Float. */
     private static Object flt(double value) {
         return Double.valueOf(value);
     }

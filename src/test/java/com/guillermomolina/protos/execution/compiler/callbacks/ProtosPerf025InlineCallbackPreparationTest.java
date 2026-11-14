@@ -406,9 +406,11 @@ final class ProtosPerf025InlineCallbackPreparationTest {
                 assertOrdered(
                         names,
                         "c.IsStandardArrayEachSelection",
-                        "c.GetMethod",
                         "c.GetArrayEachSnapshot",
                         "c.ArrayEachNext",
+                        "c.ResetInlineCallbackLocal",
+                        "c.MaterializeCurrentClosure",
+                        "c.GetMethod",
                         "c.CallUnaryMethod");
 
                 // A selection change during the native loop neither repeats

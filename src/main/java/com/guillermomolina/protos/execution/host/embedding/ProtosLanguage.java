@@ -106,7 +106,7 @@ public final class ProtosLanguage extends TruffleLanguage<ProtosLanguageContext>
     private final ProtosSourceCompiler sourceCompiler = new ProtosSourceCompiler();
 
     /*
-     * GraalPy PythonLanguage.isSingleContext: Truffle invalidates compiled
+     * Single-context assumption: Truffle invalidates compiled
      * single-context paths when another Context is initialized for this
      * language instance. Multi-context calls retain Context-local projection.
      */

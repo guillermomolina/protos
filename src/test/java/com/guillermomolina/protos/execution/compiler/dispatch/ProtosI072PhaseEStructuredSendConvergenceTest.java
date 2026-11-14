@@ -287,10 +287,13 @@ final class ProtosI072PhaseEStructuredSendConvergenceTest {
         try (LanguageScope scope = languageScope()) {
             ProtosPrelude prelude = core();
             ProtosActivation module = activation(prelude, new ProtosActorExecutionDomain());
-            String[] selectors = {"and", "or"};
+            String[] selectors = {"and", "or", "ifTrue", "ifFalse", "ifTrueIfFalse"};
             ProtosStandardBooleanProtocol.StructuredCallbackKind[] kinds = {
                 ProtosStandardBooleanProtocol.StructuredCallbackKind.AND,
-                ProtosStandardBooleanProtocol.StructuredCallbackKind.OR
+                ProtosStandardBooleanProtocol.StructuredCallbackKind.OR,
+                ProtosStandardBooleanProtocol.StructuredCallbackKind.IF_TRUE,
+                ProtosStandardBooleanProtocol.StructuredCallbackKind.IF_FALSE,
+                ProtosStandardBooleanProtocol.StructuredCallbackKind.IF_TRUE_IF_FALSE
             };
             for (Boolean receiver :
                     new Boolean[] {Boolean.TRUE, Boolean.FALSE}) {
@@ -310,13 +313,6 @@ final class ProtosI072PhaseEStructuredSendConvergenceTest {
                             kinds[i],
                             ProtosStandardBooleanProtocol.structuredCallbackKindForImplementation(
                                     send.callable()));
-                }
-                for (String retired : List.of("ifTrue", "ifFalse", "ifTrueIfFalse")) {
-                    var selected = ProtosValueLookup.lookup(receiver, retired, prelude);
-                    assertTrue(selected.isEmpty()
-                            || ProtosStandardBooleanProtocol.structuredCallbackKindForImplementation(
-                                    assertInstanceOf(ProtosClosureValue.class,
-                                            selected.orElseThrow().value())) == null);
                 }
                 // Not a Boolean callback: no structured Boolean classification.
                 assertNull(ProtosStandardBooleanProtocol.structuredCallbackKindForImplementation(

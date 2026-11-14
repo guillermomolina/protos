@@ -28,13 +28,13 @@ import com.oracle.truffle.api.library.ExportMessage;
 import com.oracle.truffle.api.object.DynamicObject;
 import com.oracle.truffle.api.object.Shape;
 
+import java.lang.invoke.MethodHandles;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
 /**
- * An ordinary Protos object. It is a Truffle {@link DynamicObject} (following
- * SimpleLanguage {@code SLObject} and GraalPy {@code PythonAbstractObject}):
+ * An ordinary Protos object. It is a Truffle {@link DynamicObject}:
  * once established, its ordinary local slots are the object's own
  * properties, described by its {@link Shape}. The delegation {@code parent}
  * is a separate semantic field, not part of the {@code Shape}.
@@ -127,7 +127,10 @@ public class ProtosObjectValue extends DynamicObject implements TruffleObject {
      * Declared before {@link #ROOT} so the root object can use it.
      */
     private static final Shape INITIAL_SHAPE =
-            Shape.newBuilder().propertyAssumptions(true).build();
+            Shape.newBuilder()
+                    .layout(ProtosObjectValue.class, MethodHandles.lookup())
+                    .propertyAssumptions(true)
+                    .build();
 
     private static final ProtosObjectValue ROOT = new ProtosObjectValue();
 
