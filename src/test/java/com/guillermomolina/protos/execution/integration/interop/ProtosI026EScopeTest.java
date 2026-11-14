@@ -24,7 +24,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosLexicalFallback;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.oracle.truffle.api.interop.InteropLibrary;
@@ -130,9 +129,6 @@ final class ProtosI026EScopeTest {
 
         assertSame(
                 currentShadow,
-                ProtosLexicalFallback.readByName(activation, "shadow").orElseThrow());
-        assertSame(
-                currentShadow,
                 interop.readMember(scope, "shadow"));
         assertEquals(
                 "parent",
@@ -163,7 +159,7 @@ final class ProtosI026EScopeTest {
         Object scope = new ProtosDebuggerScope(activation);
 
         assertSame(
-                ProtosLexicalFallback.readByName(activation, "inherited").orElseThrow(),
+                inherited,
                 interop.readMember(scope, "inherited"));
 
         assertFalse(interop.hasScopeParent(scope));
@@ -174,10 +170,11 @@ final class ProtosI026EScopeTest {
 
     @Test
     void scopeIsReadOnly() throws Exception {
+        ProtosStringValue original = new ProtosStringValue("value");
         ProtosObjectValue context =
                 objectWith(
                         "name",
-                        new ProtosStringValue("value"));
+                        original);
 
         ProtosActivation activation =
                 new ProtosActivation(
@@ -200,7 +197,7 @@ final class ProtosI026EScopeTest {
                                 new ProtosStringValue("replacement")));
 
         assertSame(
-                ProtosLexicalFallback.readByName(activation, "name").orElseThrow(),
+                original,
                 interop.readMember(scope, "name"));
     }
 

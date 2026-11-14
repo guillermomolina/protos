@@ -22,6 +22,7 @@ import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+import com.oracle.truffle.api.dsl.NonIdempotent;
 import com.oracle.truffle.api.nodes.ExplodeLoop;
 import com.oracle.truffle.api.object.PropertyGetter;
 import com.oracle.truffle.api.object.Property;
@@ -88,6 +89,7 @@ public final class ProtosValueLookup {
          * with equal Shapes but different objects never share a selection,
          * so {@link #home()} is always the real owner.
          */
+        @NonIdempotent
         @ExplodeLoop
         public boolean isValid() {
             for (int index = 0; index < chain.length; index++) {
@@ -101,6 +103,22 @@ public final class ProtosValueLookup {
         /** The current value of the selected property. Requires {@link #isValid()}. */
         public Object read() {
             return getter.get(home());
+        }
+
+        /**
+         * Whether every examined object of the captured chain is FROZEN. Such
+         * objects can neither change their slots nor their parents, so while
+         * {@link #isValid()} holds the selected value never changes. Inspects
+         * only the chain observed when the selection was made.
+         */
+        @ExplodeLoop
+        public boolean allOwnersFrozen() {
+            for (int index = 0; index < chain.length; index++) {
+                if (!chain[index].isFrozen()) {
+                    return false;
+                }
+            }
+            return true;
         }
     }
 

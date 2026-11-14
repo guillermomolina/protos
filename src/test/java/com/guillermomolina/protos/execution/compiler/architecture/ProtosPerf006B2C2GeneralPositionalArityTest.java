@@ -23,7 +23,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosLexicalFallback;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -95,10 +94,10 @@ final class ProtosPerf006B2C2GeneralPositionalArityTest {
                                 closureSource);
                 directPlan.bind(invocation);
 
-                assertSame(first, ProtosLexicalFallback.readByName(invocation, "a").orElseThrow());
-                assertSame(second, ProtosLexicalFallback.readByName(invocation, "b").orElseThrow());
-                assertSame(third, ProtosLexicalFallback.readByName(invocation, "c").orElseThrow());
-                assertSame(fourth, ProtosLexicalFallback.readByName(invocation, "d").orElseThrow());
+                assertSame(first, ProtosLexicalSelectionNodeGen.getUncached().execute(invocation, "a", false));
+                assertSame(second, ProtosLexicalSelectionNodeGen.getUncached().execute(invocation, "b", false));
+                assertSame(third, ProtosLexicalSelectionNodeGen.getUncached().execute(invocation, "c", false));
+                assertSame(fourth, ProtosLexicalSelectionNodeGen.getUncached().execute(invocation, "d", false));
 
                 module.context().createLocalSlot("first", first);
                 module.context().createLocalSlot("second", second);

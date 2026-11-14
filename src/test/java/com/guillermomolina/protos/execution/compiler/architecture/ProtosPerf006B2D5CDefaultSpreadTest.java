@@ -25,7 +25,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosLexicalFallback;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
@@ -105,8 +104,7 @@ final class ProtosPerf006B2D5CDefaultSpreadTest {
                 assertSame(marker, execution.result());
                 assertSame(
                         marker,
-                        ProtosLexicalFallback.readByName(execution.invocation(), "value")
-                                .orElseThrow());
+                        ProtosLexicalSelectionNodeGen.getUncached().execute(execution.invocation(), "value", false));
                 assertEquals(
                         List.of(a, b, c, d, e),
                         seen.get());
@@ -364,8 +362,7 @@ final class ProtosPerf006B2D5CDefaultSpreadTest {
                 assertEquals(0, laterCount.get());
                 assertEquals(0, methodCount.get());
                 assertTrue(
-                        ProtosLexicalFallback.readByName(suspended.invocation(), "value")
-                                .isEmpty());
+                        suspended.invocation().readCurrentLocalSlotForRuntime("value").isEmpty());
 
                 Object completed =
                         continuation.continueWith(
@@ -380,8 +377,7 @@ final class ProtosPerf006B2D5CDefaultSpreadTest {
                         seen.get());
                 assertSame(
                         marker,
-                        ProtosLexicalFallback.readByName(suspended.invocation(), "value")
-                                .orElseThrow());
+                        ProtosLexicalSelectionNodeGen.getUncached().execute(suspended.invocation(), "value", false));
             } finally {
                 context.leave();
             }
@@ -511,8 +507,7 @@ final class ProtosPerf006B2D5CDefaultSpreadTest {
                 assertSame(supplied, execution.result());
                 assertSame(
                         supplied,
-                        ProtosLexicalFallback.readByName(execution.invocation(), "value")
-                                .orElseThrow());
+                        ProtosLexicalSelectionNodeGen.getUncached().execute(execution.invocation(), "value", false));
                 assertEquals(0, producerCount.get());
                 assertEquals(0, targetCount.get());
             } finally {

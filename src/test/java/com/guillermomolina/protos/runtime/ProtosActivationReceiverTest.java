@@ -48,6 +48,9 @@ class ProtosActivationReceiverTest {
 
         assertThrows(
                 UnsupportedOperationException.class,
-                () -> ProtosLexicalFallback.readByName(activation, "missing"));
+                () -> ProtosValueLookup.readMember(
+                        activation.receiver(),
+                        "missing",
+                        activation.prelude().orElse(null)));
     }
 }

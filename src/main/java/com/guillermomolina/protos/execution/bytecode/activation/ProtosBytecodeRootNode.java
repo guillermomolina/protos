@@ -1669,8 +1669,31 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("prelude") ProtosPrelude cachedPrelude,
                 @Cached("prototype") ProtosObjectValue cachedPrototype,
                 @Cached("selectNumeric(cachedPrototype, selector)")
-                        ProtosValueLookup.StructuralSelection selection) {
+                        ProtosValueLookup.StructuralSelection selection,
+                @Cached(value = "allOwnersFrozen(selection)", neverDefault = false) boolean frozen,
+                @Cached(value = "frozenStandard(frozen, selector, receiver, selection, cachedPrelude)",
+                        neverDefault = false) boolean frozenStandard) {
+            if (frozen) {
+                // A FROZEN chain cannot change the selected behavior while the
+                // shapes stay valid, so its classification is cached.
+                return frozenStandard;
+            }
             return standard(selector, receiver, selection.read(), selection.home(), cachedPrelude);
+        }
+
+        /* Specialization time only: whether the whole selected chain is FROZEN. */
+        static boolean allOwnersFrozen(ProtosValueLookup.StructuralSelection selection) {
+            return selection != null && selection.allOwnersFrozen();
+        }
+
+        /*
+         * Specialization time only: the standard classification of a FROZEN
+         * selection; never computed for a chain that may still change.
+         */
+        static boolean frozenStandard(boolean frozen, String selector, Object receiver,
+                ProtosValueLookup.StructuralSelection selection, ProtosPrelude prelude) {
+            return frozen && selection.isValid()
+                    && standard(selector, receiver, selection.read(), selection.home(), prelude);
         }
 
         @Specialization(replaces = "cached")
@@ -1680,6 +1703,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return selectStandard(selector, receiver, prelude);
         }
 
+        @NonIdempotent
         static ProtosPrelude prelude(VirtualFrame frame) {
             return ProtosFrameArguments.admittedPreludeOrNull(frame.getArguments());
         }

@@ -15,23 +15,27 @@
  * the specific language governing rights and limitations under the License.
  */
 
-package com.guillermomolina.protos.runtime.contexts;
+package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.execution.ProtosFrameLocalBindings.ResolvedLexicalWriteTarget;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
-import com.guillermomolina.protos.runtime.ProtosLexicalFallback;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
+import com.guillermomolina.protos.runtime.ProtosTestPrelude;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-class ProtosActivationTest {
+class ProtosLexicalSelectionNodeTest {
     @Test
     void lookupPrefersCurrentContextThenCapturedLexicalContextsThenReceiver() {
         ProtosObjectValue root = ProtosObjectValue.rootObject();
@@ -54,10 +58,10 @@ class ProtosActivationTest {
         ProtosActivation activation =
                 new ProtosActivation(current, List.of(inner, outer), receiver);
 
-        assertSame(currentValue, ProtosLexicalFallback.readByName(activation, "name").orElseThrow());
+        assertSame(currentValue, read(activation, "name"));
 
         current.assignLocalSlot("name", ProtosNullValue.INSTANCE);
-        assertSame(ProtosNullValue.INSTANCE, ProtosLexicalFallback.readByName(activation, "name").orElseThrow());
+        assertSame(ProtosNullValue.INSTANCE, read(activation, "name"));
     }
 
     @Test
@@ -79,7 +83,7 @@ class ProtosActivationTest {
         ProtosActivation activation =
                 new ProtosActivation(current, List.of(inner, outer), receiver);
 
-        assertSame(innerValue, ProtosLexicalFallback.readByName(activation, "state").orElseThrow());
+        assertSame(innerValue, read(activation, "state"));
     }
 
     @Test
@@ -95,7 +99,7 @@ class ProtosActivationTest {
         ProtosActivation activation =
                 new ProtosActivation(current, List.of(), receiver);
 
-        assertSame(inherited, ProtosLexicalFallback.readByName(activation, "name").orElseThrow());
+        assertSame(inherited, read(activation, "name"));
     }
 
     @Test
@@ -115,13 +119,13 @@ class ProtosActivationTest {
         ProtosClosureValue bound =
                 assertInstanceOf(
                         ProtosClosureValue.class,
-                        ProtosLexicalFallback.readByName(activation, "method").orElseThrow());
+                        read(activation, "method"));
         assertNotSame(method, bound);
         assertSame(receiver, bound.capturedReceiver());
         assertSame(prototype, bound.methodHome().orElseThrow());
 
         current.createLocalSlot("method", method);
-        assertSame(method, ProtosLexicalFallback.readByName(activation, "method").orElseThrow());
+        assertSame(method, read(activation, "method"));
     }
 
     @Test
@@ -184,7 +188,7 @@ class ProtosActivationTest {
     }
 
     @Test
-    void writableLookupNeverTraversesReceiverDelegationParents() {
+    void writeSelectionAssignsOnlyTheSelectedDestination() {
         ProtosObjectValue root = ProtosObjectValue.rootObject();
         ProtosObjectValue prototype = new ProtosObjectValue(root);
         ProtosObjectValue receiver = new ProtosObjectValue(prototype);
@@ -197,12 +201,77 @@ class ProtosActivationTest {
         current.createLocalSlot("local", Boolean.TRUE);
 
         ProtosActivation activation =
-                new ProtosActivation(current, List.of(lexical), receiver);
+                ProtosTestPrelude.activation(current, List.of(lexical), receiver);
 
-        assertSame(current, ProtosLexicalFallback.writableContextByName(activation, "local").orElseThrow());
-        assertSame(lexical, ProtosLexicalFallback.writableContextByName(activation, "captured").orElseThrow());
-        assertSame(receiver, ProtosLexicalFallback.writableContextByName(activation, "receiverLocal").orElseThrow());
-        assertTrue(ProtosLexicalFallback.writableContextByName(activation, "inherited").isEmpty());
-        assertTrue(ProtosLexicalFallback.writableContextByName(activation, "missing").isEmpty());
+        assign(activation, "local", Boolean.FALSE);
+        assertSame(Boolean.FALSE, current.readLocalSlot("local").orElseThrow());
+        assertFalse(lexical.hasLocalSlot("local"));
+        assertFalse(receiver.hasLocalSlot("local"));
+
+        assign(activation, "captured", Boolean.FALSE);
+        assertSame(Boolean.FALSE, lexical.readLocalSlot("captured").orElseThrow());
+        assertFalse(current.hasLocalSlot("captured"));
+        assertFalse(receiver.hasLocalSlot("captured"));
+
+        assign(activation, "receiverLocal", Boolean.FALSE);
+        assertSame(Boolean.FALSE, receiver.readLocalSlot("receiverLocal").orElseThrow());
+        assertFalse(current.hasLocalSlot("receiverLocal"));
+        assertFalse(lexical.hasLocalSlot("receiverLocal"));
+        assertFalse(prototype.hasLocalSlot("receiverLocal"));
+    }
+
+    @Test
+    void writeSelectionNeverTraversesReceiverDelegationParents() {
+        ProtosObjectValue root = ProtosObjectValue.rootObject();
+        ProtosObjectValue prototype = new ProtosObjectValue(root);
+        ProtosObjectValue receiver = new ProtosObjectValue(prototype);
+        ProtosObjectValue lexical = new ProtosObjectValue(root);
+        ProtosObjectValue current = new ProtosObjectValue(root);
+
+        prototype.createLocalSlot("inherited", Boolean.TRUE);
+
+        ProtosActivation activation =
+                ProtosTestPrelude.activation(current, List.of(lexical), receiver);
+
+        for (String name : List.of("inherited", "missing")) {
+            ProtosSignalException signal =
+                    assertThrows(ProtosSignalException.class, () -> selectWrite(activation, name));
+            assertSame(
+                    ProtosTestPrelude.slotNotFoundPrototype(),
+                    signal.error().parent().orElseThrow());
+        }
+        assertSame(Boolean.TRUE, prototype.readLocalSlot("inherited").orElseThrow());
+        assertFalse(receiver.hasLocalSlot("inherited"));
+        assertFalse(current.hasLocalSlot("inherited"));
+        assertFalse(lexical.hasLocalSlot("inherited"));
+    }
+
+    @Test
+    void missingReadSignalsSlotNotFound() {
+        ProtosObjectValue root = ProtosObjectValue.rootObject();
+        ProtosActivation activation =
+                ProtosTestPrelude.activation(
+                        new ProtosObjectValue(root), List.of(), new ProtosObjectValue(root));
+
+        ProtosSignalException signal =
+                assertThrows(ProtosSignalException.class, () -> read(activation, "missing"));
+        assertSame(
+                ProtosTestPrelude.slotNotFoundPrototype(),
+                signal.error().parent().orElseThrow());
+    }
+
+    private static Object read(ProtosActivation activation, String name) {
+        return ProtosLexicalSelectionNodeGen.getUncached().execute(activation, name, false);
+    }
+
+    private static ResolvedLexicalWriteTarget selectWrite(ProtosActivation activation, String name) {
+        return assertInstanceOf(
+                ResolvedLexicalWriteTarget.class,
+                ProtosLexicalSelectionNodeGen.getUncached().execute(activation, name, true));
+    }
+
+    private static void assign(ProtosActivation activation, String name, Object value) {
+        ProtosFrameLocalBindings.assignResolvedLexicalTarget(
+                activation, selectWrite(activation, name), name, value);
     }
 }

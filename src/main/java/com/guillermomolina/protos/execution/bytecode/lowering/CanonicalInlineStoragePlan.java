@@ -47,7 +47,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * I115: the physical storage plan of one CLOSURE root after inlining.
+ * The physical storage plan of one CLOSURE root after inlining.
  *
  * <p>The lexical classification of {@link CanonicalBindingAnalyzer} is kept
  * unchanged: a captured binding is still {@code Storage.CELL} in the
@@ -63,7 +63,7 @@ import java.util.Set;
  * and is derived deterministically from the canonical tree, so it is the
  * same on every Bytecode DSL reparse.
  */
-final class I115InlineStoragePlan {
+final class CanonicalInlineStoragePlan {
 
     /** The lowerer's inline decisions, consulted exactly as at emission. */
     interface InlinePolicy {
@@ -78,7 +78,7 @@ final class I115InlineStoragePlan {
     private final InlinePolicy policy;
     private final Set<CanonicalBindingIdentity> blocked = new LinkedHashSet<>();
 
-    private I115InlineStoragePlan(CanonicalBindingAnalysis analysis, InlinePolicy policy) {
+    private CanonicalInlineStoragePlan(CanonicalBindingAnalysis analysis, InlinePolicy policy) {
         this.analysis = analysis;
         this.policy = policy;
     }
@@ -99,7 +99,7 @@ final class I115InlineStoragePlan {
                 || rootScope.cellNamesInDeclarationOrder().isEmpty()) {
             return Set.of();
         }
-        I115InlineStoragePlan plan = new I115InlineStoragePlan(analysis, policy);
+        CanonicalInlineStoragePlan plan = new CanonicalInlineStoragePlan(analysis, policy);
         if (definition != null) {
             for (CanonicalParameter parameter : definition.parameters()) {
                 parameter.defaultValue().ifPresent(value -> plan.walk(value, true));

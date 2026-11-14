@@ -680,7 +680,7 @@ final class CanonicalCompilationFacts {
             CanonicalClosure definition,
             CanonicalBindingAnalysis analysis,
             CanonicalLexicalScope scope,
-            I115InlineStoragePlan.InlinePolicy inline) {
+            CanonicalInlineStoragePlan.InlinePolicy inline) {
         if (definition == null || analysis == null || scope == null) {
             return true;
         }
@@ -870,7 +870,7 @@ final class CanonicalCompilationFacts {
             CanonicalLexicalScope scope,
             boolean ownBindingsOnly,
             boolean promotable,
-            I115InlineStoragePlan.InlinePolicy inline) {
+            CanonicalInlineStoragePlan.InlinePolicy inline) {
         if (expression instanceof CanonicalLiteral) {
             return false;
         }
@@ -1002,7 +1002,7 @@ final class CanonicalCompilationFacts {
             CanonicalLexicalScope scope,
             boolean ownBindingsOnly,
             boolean promotable,
-            I115InlineStoragePlan.InlinePolicy inline) {
+            CanonicalInlineStoragePlan.InlinePolicy inline) {
         for (CanonicalExpression expression : expressions) {
             if (demandsPersistentFrame(expression, analysis, scope, ownBindingsOnly, promotable, inline)) {
                 return true;
@@ -1024,7 +1024,7 @@ final class CanonicalCompilationFacts {
             CanonicalLexicalScope scope,
             boolean ownBindingsOnly,
             boolean promotable,
-            I115InlineStoragePlan.InlinePolicy inline) {
+            CanonicalInlineStoragePlan.InlinePolicy inline) {
         if (inline != null
                 && operand instanceof CanonicalClosure closure
                 && inline.inlineCallbackPosition(send, position)

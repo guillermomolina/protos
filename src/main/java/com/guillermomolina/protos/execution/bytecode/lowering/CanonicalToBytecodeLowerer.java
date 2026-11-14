@@ -260,15 +260,15 @@ final class CanonicalToBytecodeLowerer {
             java.util.Set.of();
 
     /* the inline decisions of this lowerer, as consulted at emission. */
-    private final I115InlineStoragePlan.InlinePolicy inlineStoragePolicy = inlinePolicyUnder(null);
+    private final CanonicalInlineStoragePlan.InlinePolicy inlineStoragePolicy = inlinePolicyUnder(null);
 
     /**
      * The inline decisions under the admission {@code context} of the site
      * being decided, or under the live emission context when it is
      * {@code null}.
      */
-    private I115InlineStoragePlan.InlinePolicy inlinePolicyUnder(ControlSiteContext context) {
-        return new I115InlineStoragePlan.InlinePolicy() {
+    private CanonicalInlineStoragePlan.InlinePolicy inlinePolicyUnder(ControlSiteContext context) {
+        return new CanonicalInlineStoragePlan.InlinePolicy() {
                 @Override
                 public boolean admitsInline(CanonicalClosure closure) {
                     return context == null
@@ -1101,7 +1101,7 @@ final class CanonicalToBytecodeLowerer {
              * local and gets no cell.
              */
             currentRootFrameLocals = java.util.Collections.unmodifiableMap(frameLocals);
-            currentRootPromotedCells = I115InlineStoragePlan.promotedCells(
+            currentRootPromotedCells = CanonicalInlineStoragePlan.promotedCells(
                     sequence, activationDefinition, scopeForThisRoot,
                     currentRootAnalysis, inlineStoragePolicy);
             for (String name : scopeForThisRoot.declaredNames()) {

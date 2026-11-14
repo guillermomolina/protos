@@ -78,7 +78,7 @@ class ProtosPreludeTest {
 
         assertSame(
                 contextPrototype,
-                ProtosLexicalFallback.readByName(activation, "Context").orElseThrow());
+                bindings.readLocalSlot("Context").orElseThrow());
         assertSame(
                 bindings,
                 activation.capturedLexicalContexts().get(0));

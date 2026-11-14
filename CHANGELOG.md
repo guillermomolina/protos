@@ -8,6 +8,15 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.124-SNAPSHOT
+
+- **PERF040 — Residual lexical lookup retirement and standard numeric selection caching.**
+  - Lexical lookup: removed `ProtosLexicalFallback`, the second String-keyed implementation of bare-name read and write-target selection. `ProtosLexicalSelectionNode` (Bytecode DSL) is the only runtime implementation; the debugger scope dropped its unused import. No behavior change.
+  - Lowering: `I115InlineStoragePlan` renamed `CanonicalInlineStoragePlan` (nominal only; capture analysis, materialization and `BytecodeLocal`/`CELL` selection unchanged).
+  - Numeric selection: `ProtosValueLookup.StructuralSelection` gains `allOwnersFrozen()`, and its `isValid()` Shape guard is `@NonIdempotent`. The `cached` specialization of `IsStandardNumericSelection` caches the standard classification only when every object of the selected chain is FROZEN; a chain that is not fully FROZEN still reads and classifies the selected behavior on every execution. Prelude and prototype identity and Shape validity still guard the cache, and the Prelude read is `@NonIdempotent`. `NumberAdd`, operand evaluation order and the generic route are unchanged.
+  - Tests: `ProtosExecutionContextTest` moved and rewritten as `ProtosLexicalSelectionNodeTest`, exercising the generated selection node for reads, write targets assigned through `assignResolvedLexicalTarget`, and `SlotNotFound` Errors. The tests that used the removed helper now use the selection node or direct binding reads. `ProtosPerf040E1NumericOperationReconciliationTest` adds coverage for repeated standard `+`, mutable-prototype value and structural changes, Prelude isolation, overflow continuity, alternating numeric domains, and propagation of nonstandard selections and Errors.
+  - Performance: the effect on the `primitive-integer-add` benchmark is not yet established by published benchmark results.
+
 ## 0.4.123-SNAPSHOT
 
 - **I115 — Task failure containment, P capture isolation, package reorganization and source cleanup.**

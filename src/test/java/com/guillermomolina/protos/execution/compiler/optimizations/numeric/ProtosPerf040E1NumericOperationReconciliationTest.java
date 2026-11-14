@@ -31,6 +31,9 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosSignalException;
+import com.guillermomolina.protos.runtime.ProtosStringValue;
+import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.bytecode.Instruction;
 import com.oracle.truffle.api.dsl.Specialization;
@@ -488,42 +491,294 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
             context.enter();
             try {
                 ProtosPrelude canonical = new ProtosCoreBootstrap().bootstrap(CORE);
-                ProtosObjectValue integer = new ProtosObjectValue(canonical.numberPrototype());
-                for (Map.Entry<String, Object> slot :
-                        canonical.integerPrototype().localSlotsSnapshot().entrySet()) {
-                    integer.createLocalSlot(
-                            slot.getKey(),
-                            slot.getKey().equals("+")
-                                    ? answering(ALTERNATIVE_PLUS_RESULT)
-                                    : slot.getValue());
-                }
-                ProtosObjectValue smallInteger = new ProtosObjectValue(integer);
-                ProtosObjectValue bigInteger = new ProtosObjectValue(integer);
-                integer.freeze();
-                smallInteger.freeze();
-                bigInteger.freeze();
-
-                ProtosObjectValue bindings = new ProtosObjectValue(canonical.contextPrototype());
-                Map<String, ProtosObjectValue> replaced = Map.of(
-                        "Integer", integer,
-                        "SmallInteger", smallInteger,
-                        "BigInteger", bigInteger);
-                for (Map.Entry<String, Object> binding :
-                        canonical.bindings().localSlotsSnapshot().entrySet()) {
-                    bindings.createLocalSlot(
-                            binding.getKey(),
-                            replaced.containsKey(binding.getKey())
-                                    ? replaced.get(binding.getKey())
-                                    : binding.getValue());
-                }
-                bindings.freeze();
-                ProtosPrelude alternative = new ProtosPrelude(bindings, canonical.contextPrototype());
-                assertNotSame(canonical.integerPrototype(), alternative.integerPrototype());
-                test.run(alternative.newModuleActivation());
+                AlternativeIntegers alternative = alternativeIntegers(
+                        canonical, answering(ALTERNATIVE_PLUS_RESULT), true);
+                assertNotSame(canonical.integerPrototype(), alternative.prelude().integerPrototype());
+                test.run(alternative.prelude().newModuleActivation());
             } finally {
                 context.leave();
             }
         }
+    }
+
+    /* A noncanonical Prelude and its replaced Integer prototypes. */
+    private record AlternativeIntegers(
+            ProtosPrelude prelude,
+            ProtosObjectValue integer,
+            ProtosObjectValue smallInteger,
+            ProtosObjectValue bigInteger) {}
+
+    /**
+     * Every canonical binding of {@code canonical}, except an Integer
+     * prototype (with fresh SmallInteger and BigInteger below it) whose
+     * {@code +} is {@code plus}; its other selectors are the standard ones.
+     * With {@code freeze} the three prototypes are FROZEN like the canonical
+     * ones; otherwise they stay mutable.
+     */
+    private static AlternativeIntegers alternativeIntegers(
+            ProtosPrelude canonical, Object plus, boolean freeze) {
+        ProtosObjectValue integer = new ProtosObjectValue(canonical.numberPrototype());
+        for (Map.Entry<String, Object> slot :
+                canonical.integerPrototype().localSlotsSnapshot().entrySet()) {
+            integer.createLocalSlot(
+                    slot.getKey(),
+                    slot.getKey().equals("+") ? plus : slot.getValue());
+        }
+        ProtosObjectValue smallInteger = new ProtosObjectValue(integer);
+        ProtosObjectValue bigInteger = new ProtosObjectValue(integer);
+        if (freeze) {
+            integer.freeze();
+            smallInteger.freeze();
+            bigInteger.freeze();
+        }
+
+        ProtosObjectValue bindings = new ProtosObjectValue(canonical.contextPrototype());
+        Map<String, ProtosObjectValue> replaced = Map.of(
+                "Integer", integer,
+                "SmallInteger", smallInteger,
+                "BigInteger", bigInteger);
+        for (Map.Entry<String, Object> binding :
+                canonical.bindings().localSlotsSnapshot().entrySet()) {
+            bindings.createLocalSlot(
+                    binding.getKey(),
+                    replaced.containsKey(binding.getKey())
+                            ? replaced.get(binding.getKey())
+                            : binding.getValue());
+        }
+        bindings.freeze();
+        return new AlternativeIntegers(
+                new ProtosPrelude(bindings, canonical.contextPrototype()),
+                integer,
+                smallInteger,
+                bigInteger);
+    }
+
+    /* Runs {@code test} with a canonical Prelude in an entered Context. */
+    private interface PreludeTest {
+        void run(ProtosPrelude canonical) throws Exception;
+    }
+
+    private static void withCanonicalPrelude(PreludeTest test) throws Exception {
+        try (Context context = context(false)) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                test.run(new ProtosCoreBootstrap().bootstrap(CORE));
+            } finally {
+                context.leave();
+            }
+        }
+    }
+
+    /**
+     * Repeated standard {@code +} over two signed-64 Integers at one site
+     * stays exact well past warm-up. The canonical selection of {@code +}
+     * for a SmallInteger receiver examines only FROZEN prototypes, which is
+     * what lets the site keep its classification without reading the
+     * selected method again.
+     */
+    @Test
+    void repeatedStandardLongPlusStaysExactAfterWarmup() throws Exception {
+        withCore(module -> {
+            ProtosPrelude prelude = module.preludeOrNullForRuntime();
+            ProtosObjectValue prototype = (ProtosObjectValue)
+                    ProtosValueLookup.delegationParent(1L, prelude).orElseThrow();
+            ProtosValueLookup.StructuralSelection selection =
+                    ProtosValueLookup.selectStructural(prototype, "+");
+            assertTrue(selection != null && selection.isValid());
+            assertTrue(selection.allOwnersFrozen(), "canonical + selection is FROZEN");
+
+            ProtosClosureValue add = closure("(x, y) => x + y", module);
+            for (long i = 0; i < 2000; i++) {
+                assertEquals(2 * i + 1, normalized(call(add, module, i, i + 1)));
+            }
+            assertEquals(Long.MAX_VALUE, normalized(call(add, module, Long.MAX_VALUE - 7, 7L)));
+            assertEquals(-3L, normalized(call(add, module, -1L, -2L)));
+        });
+        System.out.println("PERF040_E1_REPEATED_STANDARD_PLUS=PASS");
+    }
+
+    /**
+     * A mutable Integer prototype keeps every selection observed: assigning
+     * a new value to {@code +} keeps the structure valid, yet each call at
+     * the same site runs the currently selected behavior, including a return
+     * to the standard method and away from it again.
+     */
+    @Test
+    void mutablePrototypeSelectionValueChangesAreObserved() throws Exception {
+        withCanonicalPrelude(canonical -> {
+            Object standardPlus =
+                    canonical.integerPrototype().readLocalSlot("+").orElseThrow();
+            AlternativeIntegers alternative =
+                    alternativeIntegers(canonical, answering(41L), false);
+            ProtosActivation module = alternative.prelude().newModuleActivation();
+            ProtosClosureValue add = closure("(x, y) => x + y", module);
+
+            assertFalse(ProtosValueLookup.selectStructural(alternative.smallInteger(), "+")
+                    .allOwnersFrozen());
+            assertEquals(41L, normalized(call(add, module, 1L, 2L)));
+            assertEquals(41L, normalized(call(add, module, 1L, 2L)));
+
+            alternative.integer().assignLocalSlot("+", answering(42L));
+            assertEquals(42L, normalized(call(add, module, 1L, 2L)),
+                    "the reassigned behavior is selected");
+
+            alternative.integer().assignLocalSlot("+", standardPlus);
+            for (long i = 0; i < 200; i++) {
+                assertEquals(i + 2, normalized(call(add, module, i, 2L)));
+            }
+
+            alternative.integer().assignLocalSlot("+", answering(43L));
+            assertEquals(43L, normalized(call(add, module, 1L, 2L)),
+                    "leaving the standard behavior is observed");
+        });
+        System.out.println("PERF040_E1_MUTABLE_SELECTION_VALUE=PASS");
+    }
+
+    /**
+     * A structural change of a mutable prototype replaces the selection: a
+     * nearer {@code +} created on SmallInteger shadows the Integer method at
+     * the same site, and removing it restores the former selection.
+     */
+    @Test
+    void structuralChangeOfMutablePrototypeReplacesTheSelection() throws Exception {
+        withCanonicalPrelude(canonical -> {
+            Object standardPlus =
+                    canonical.integerPrototype().readLocalSlot("+").orElseThrow();
+            AlternativeIntegers alternative =
+                    alternativeIntegers(canonical, standardPlus, false);
+            ProtosActivation module = alternative.prelude().newModuleActivation();
+            ProtosClosureValue add = closure("(x, y) => x + y", module);
+
+            for (long i = 0; i < 200; i++) {
+                assertEquals(i + 3, normalized(call(add, module, i, 3L)));
+            }
+
+            alternative.smallInteger().createLocalSlot("+", answering(7L));
+            assertEquals(7L, normalized(call(add, module, 1L, 2L)),
+                    "the nearer selection is observed");
+
+            alternative.smallInteger().removeLocalSlot("+");
+            assertEquals(3L, normalized(call(add, module, 1L, 2L)),
+                    "the former selection is restored");
+            assertTrue(ProtosNumericValueSupport.isLargeInteger(
+                    call(add, module, Long.MAX_VALUE, 1L)));
+        });
+        System.out.println("PERF040_E1_STRUCTURAL_REPLACEMENT=PASS");
+    }
+
+    /**
+     * Two Preludes in one Context, each with its own {@code +}, interleaved
+     * on sites with the same source: neither cached selection leaks into
+     * the other Prelude.
+     */
+    @Test
+    void distinctPreludesNeverShareASelection() throws Exception {
+        withCanonicalPrelude(canonical -> {
+            ProtosActivation standardModule = canonical.newModuleActivation();
+            AlternativeIntegers alternative = alternativeIntegers(
+                    canonical, answering(ALTERNATIVE_PLUS_RESULT), true);
+            ProtosActivation alternativeModule = alternative.prelude().newModuleActivation();
+            ProtosClosureValue standardAdd = closure("(x, y) => x + y", standardModule);
+            ProtosClosureValue alternativeAdd = closure("(x, y) => x + y", alternativeModule);
+
+            for (long i = 0; i < 100; i++) {
+                assertEquals(i + 1, normalized(call(standardAdd, standardModule, i, 1L)));
+                assertEquals(ALTERNATIVE_PLUS_RESULT,
+                        normalized(call(alternativeAdd, alternativeModule, i, 1L)));
+            }
+            assertTrue(ProtosNumericValueSupport.isLargeInteger(
+                    call(standardAdd, standardModule, Long.MAX_VALUE, 1L)));
+            assertEquals(ALTERNATIVE_PLUS_RESULT,
+                    normalized(call(alternativeAdd, alternativeModule, Long.MAX_VALUE, 1L)));
+            assertEquals(5L, normalized(call(standardAdd, standardModule, 2L, 3L)));
+        });
+        System.out.println("PERF040_E1_PRELUDE_ISOLATION=PASS");
+    }
+
+    /**
+     * {@code Long.MAX_VALUE + 1} promotes exactly and the same site keeps
+     * adding exactly afterwards, in both the signed-64 and the large domain.
+     */
+    @Test
+    void overflowPromotesExactlyAndTheSiteContinues() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue add = closure("(x, y) => x + y", module);
+            ProtosClosureValue subtract = closure("(x, y) => x - y", module);
+
+            assertEquals(3L, normalized(call(add, module, 1L, 2L)));
+            Object big = call(add, module, Long.MAX_VALUE, 1L);
+            assertTrue(ProtosNumericValueSupport.isLargeInteger(big));
+            assertEquals(Long.MAX_VALUE, normalized(call(subtract, module, big, 1L)),
+                    "the promotion is exact");
+            assertEquals(Long.MIN_VALUE,
+                    normalized(call(subtract, module, call(subtract, module, 0L, big), 0L)));
+            Object bigger = call(add, module, big, 1L);
+            assertTrue(ProtosNumericValueSupport.isLargeInteger(bigger));
+            assertEquals(1L, normalized(call(subtract, module, bigger, big)));
+            for (long i = 0; i < 500; i++) {
+                assertEquals(i + 5, normalized(call(add, module, i, 5L)));
+            }
+        });
+        System.out.println("PERF040_E1_OVERFLOW_CONTINUITY=PASS");
+    }
+
+    /**
+     * Alternating Integer, Float and large Integer operands at one site
+     * never retires the signed-64 result: every Integer sum is still a
+     * signed-64 Integer with its exact value.
+     */
+    @Test
+    void alternatingDomainsKeepLongPlusReachable() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue add = closure("(x, y) => x + y", module);
+            Object big = call(add, module, Long.MAX_VALUE, 1L);
+            for (long i = 0; i < 200; i++) {
+                Object small = normalized(call(add, module, i, 1L));
+                assertInstanceOf(Long.class, small);
+                assertEquals(i + 1, small);
+                assertEquals(i + 0.5d, call(add, module, i, 0.5d));
+                assertEquals(1.5d, call(add, module, 1.0d, 0.5d));
+                assertTrue(ProtosNumericValueSupport.isLargeInteger(call(add, module, big, i)));
+                Object back = normalized(call(add, module, 2L, i));
+                assertInstanceOf(Long.class, back);
+                assertEquals(i + 2, back);
+            }
+        });
+        System.out.println("PERF040_E1_ALTERNATING_DOMAINS=PASS");
+    }
+
+    /**
+     * A nonstandard {@code +} propagates its own Error unchanged through
+     * the numeric site, between standard calls in the canonical Prelude,
+     * and an Integer plus a non-numeric operand still signals.
+     */
+    @Test
+    void nonstandardSelectionAndErrorsPropagateUnchanged() throws Exception {
+        withCanonicalPrelude(canonical -> {
+            ProtosObjectValue failure = new ProtosObjectValue(ProtosObjectValue.rootObject());
+            AlternativeIntegers alternative = alternativeIntegers(
+                    canonical,
+                    ProtosClosureValue.nativeClosure((activation, supplied) -> {
+                        throw new ProtosSignalException(failure);
+                    }),
+                    true);
+            ProtosActivation alternativeModule = alternative.prelude().newModuleActivation();
+            ProtosClosureValue alternativeAdd = closure("(x, y) => x + y", alternativeModule);
+            for (int round = 0; round < 3; round++) {
+                ProtosSignalException signal = assertThrows(ProtosSignalException.class,
+                        () -> call(alternativeAdd, alternativeModule, 1L, 2L));
+                assertSame(failure, signal.error());
+            }
+
+            ProtosActivation module = canonical.newModuleActivation();
+            ProtosClosureValue add = closure("(x, y) => x + y", module);
+            assertEquals(3L, normalized(call(add, module, 1L, 2L)));
+            assertThrows(ProtosSignalException.class,
+                    () -> call(add, module, 1L, new ProtosStringValue("x")));
+            assertEquals(3L, normalized(call(add, module, 1L, 2L)));
+        });
+        System.out.println("PERF040_E1_NONSTANDARD_ERRORS=PASS");
     }
 
     /**
