@@ -57,7 +57,6 @@ public final class ProtosRegexUnicodeFacility {
     public static final ProtosModuleKey MODULE_KEY = ProtosModuleKey.module("std:regex/regex");
     public static final String BOOTSTRAP_SLOT = "_regexUnicodeFacility";
 
-    private static final VersionInfo REQUIRED_UNICODE = VersionInfo.getInstance(17, 0, 0, 0);
     private static final int MAX_SCALAR = 0x10FFFF;
     private static final int FIRST_SURROGATE = 0xD800;
     private static final int LAST_SURROGATE = 0xDFFF;
@@ -202,7 +201,10 @@ public final class ProtosRegexUnicodeFacility {
 
     private static void requireUnicode17() {
         VersionInfo actual = UCharacter.getUnicodeVersion();
-        if (actual.compareTo(REQUIRED_UNICODE) != 0) {
+        if (actual.getMajor() != 17
+                || actual.getMinor() != 0
+                || actual.getMilli() != 0
+                || actual.getMicro() != 0) {
             throw new IllegalStateException(
                     "Regex Unicode data requires Unicode 17.0.0 data; ICU reports " + actual);
         }

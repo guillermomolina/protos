@@ -111,7 +111,8 @@ public final class ProtosTextWriterCPrimeExecution {
         private final ProtosIoOperation operation;
         private final Object target;
         private final String selector;
-        private final List<?> arguments;
+        /* The prepared positional arguments of the lower target call. */
+        private final Object[] arguments;
         private final Completion completion;
 
         CallState(
@@ -124,7 +125,7 @@ public final class ProtosTextWriterCPrimeExecution {
             this.completion = Objects.requireNonNull(completion, "completion");
             this.target = Objects.requireNonNull(target, "target");
             this.selector = Objects.requireNonNull(selector, "selector");
-            this.arguments = List.copyOf(Objects.requireNonNull(arguments, "arguments"));
+            this.arguments = List.copyOf(Objects.requireNonNull(arguments, "arguments")).toArray();
         }
 
         Object target() {
@@ -135,7 +136,7 @@ public final class ProtosTextWriterCPrimeExecution {
             return selector;
         }
 
-        List<?> arguments() {
+        Object[] arguments() {
             return arguments;
         }
 
@@ -233,9 +234,9 @@ public final class ProtosTextWriterCPrimeExecution {
                             builder.endStoreLocal();
 
                             builder.beginWhile();
-                            builder.beginIsResultKind(ProtosResultKind.CONTINUATION);
+                            builder.beginIsContinuation();
                             builder.emitLoadLocal(child);
-                            builder.endIsResultKind();
+                            builder.endIsContinuation();
                             builder.beginBlock();
                             builder.beginStoreLocal(resume);
                             builder.beginYield();
@@ -291,9 +292,9 @@ public final class ProtosTextWriterCPrimeExecution {
                              * be redirected by Future instance mutation/override.
                              */
                             builder.beginWhile();
-                            builder.beginIsResultKind(ProtosResultKind.CONTINUATION);
+                            builder.beginIsContinuation();
                             builder.emitLoadLocal(lowerOutcome);
-                            builder.endIsResultKind();
+                            builder.endIsContinuation();
                             builder.beginBlock();
                             builder.beginStoreLocal(yielded);
                             builder.emitLoadLocal(lowerOutcome);

@@ -199,7 +199,7 @@ final class ProtosForeignProjectedOperations {
     /** The non-Task path; inside a Task the structured dispatcher drives the same cursor. */
     private static Object each(ProtosActivation activation, List<?> supplied) {
         ProtosForeignEachCall each =
-                new ProtosForeignEachCall(activation.receiver(), supplied, activation);
+                new ProtosForeignEachCall(activation.receiver(), supplied.toArray(), activation);
         while (each.hasNext()) {
             ProtosInvocation.invoke(each.callback(), List.of(each.current()), activation);
             each.advance();

@@ -84,7 +84,7 @@ class ProtosAPlusExecutionProjectionTest {
                         () ->
                                 // I115: the call is made by the shared dispatcher.
                                 ProtosCallRequest.call(
-                                                init, List.of(), prelude.newModuleActivation())
+                                                init, new Object[0], prelude.newModuleActivation())
                                         .callUncached());
         assertSame(UnsupportedOperationException.class, failure.getClass());
         assertEquals(
@@ -120,7 +120,7 @@ class ProtosAPlusExecutionProjectionTest {
                                 // I115: GetMethod selection, then the shared dispatcher.
                                 ProtosCallRequest prepared =
                                         ProtosCallRequest.send(
-                                                receiver, "match", caller, List.of(argument));
+                                                receiver, "match", caller, new Object[] {argument});
                                 ProtosBoundMethod method =
                                         assertInstanceOf(
                                                 ProtosBoundMethod.class, prepared.callable());

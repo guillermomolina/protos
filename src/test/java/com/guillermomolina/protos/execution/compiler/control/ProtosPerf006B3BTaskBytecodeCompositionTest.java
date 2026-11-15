@@ -73,7 +73,7 @@ final class ProtosPerf006B3BTaskBytecodeCompositionTest {
                                     // I115: the shared dispatcher's call; the
                                     // callee activation is read from its B5 header.
                                     ProtosCallRequest prepared =
-                                            ProtosCallRequest.call(child, List.of(), module);
+                                            ProtosCallRequest.call(child, new Object[0], module);
                                     assertTrue(ProtosFunctionCallDispatchers.CallNode
                                             .isSourceFunction(child));
                                     prepared.callUncached();
@@ -176,7 +176,7 @@ final class ProtosPerf006B3BTaskBytecodeCompositionTest {
                                     // I115: a builtin call through the shared dispatcher.
                                     assertTrue(nativeClosure.nativeBody().isPresent());
                                     Object value =
-                                            ProtosCallRequest.call(nativeClosure, List.of(), module)
+                                            ProtosCallRequest.call(nativeClosure, new Object[0], module)
                                                     .callUncached();
                                     current.complete(value);
                                 });
@@ -213,7 +213,7 @@ final class ProtosPerf006B3BTaskBytecodeCompositionTest {
                 assertTrue(nativeClosure.nativeBody().isPresent());
                 assertSame(
                         ProtosNullValue.INSTANCE,
-                        ProtosCallRequest.call(nativeClosure, List.of(), module).callUncached());
+                        ProtosCallRequest.call(nativeClosure, new Object[0], module).callUncached());
                 assertEquals(1, nativeExecutions.get());
             } finally {
                 context.leave();

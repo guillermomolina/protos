@@ -429,6 +429,21 @@ final class ProtosFrameArguments {
         return dispatchedCallN(null, DIRECT_CLOSURE_CALL, null, null, null, supplied);
     }
 
+    /** {@link #functionCallArguments(Object[])} of no positional argument. */
+    static Object[] functionCallArguments0() {
+        return dispatchedCall0(null, DIRECT_CLOSURE_CALL, null, null, null);
+    }
+
+    /** {@link #functionCallArguments(Object[])} of exactly one positional argument. */
+    static Object[] functionCallArguments1(Object a0) {
+        return dispatchedCall1(null, DIRECT_CLOSURE_CALL, null, null, null, a0);
+    }
+
+    /** {@link #functionCallArguments(Object[])} of exactly two positional arguments. */
+    static Object[] functionCallArguments2(Object a0, Object a1) {
+        return dispatchedCall2(null, DIRECT_CLOSURE_CALL, null, null, null, a0, a1);
+    }
+
     /** A B5 method-call array with the dispatcher-owned slots still empty. */
     static Object[] methodCallArguments(
             Object receiver, ProtosObjectValue methodHome, Object[] supplied) {

@@ -62,32 +62,46 @@ final class ProtosCallRequest {
     }
 
     /**
+     * The B5 array of an unbound call of {@code supplied}, through the
+     * specialized zero-, one- and two-position builders, so a callback
+     * argument array allocated by the caller is never escaped or copied twice.
+     */
+    private static Object[] functionArguments(Object[] supplied) {
+        switch (supplied.length) {
+            case 0:
+                return ProtosFrameArguments.functionCallArguments0();
+            case 1:
+                return ProtosFrameArguments.functionCallArguments1(supplied[0]);
+            case 2:
+                return ProtosFrameArguments.functionCallArguments2(supplied[0], supplied[1]);
+            default:
+                return ProtosFrameArguments.functionCallArguments(supplied);
+        }
+    }
+
+    /**
      * Execution of {@code closure}'s own body with {@code supplied}, made by
      * {@code caller}: the terminal Closure branch of the standard
      * {@code Object.call}. The body is the selected behavior, so
      * {@code call} is never looked up again.
      */
     static ProtosCallRequest selectedBody(
-            ProtosClosureValue closure, List<?> supplied, ProtosActivation caller) {
-        return new ProtosCallRequest(
-                closure,
-                ProtosFrameArguments.functionCallArguments(supplied.toArray()),
-                caller,
-                true);
+            ProtosClosureValue closure, Object[] supplied, ProtosActivation caller) {
+        return new ProtosCallRequest(closure, functionArguments(supplied), caller, true);
     }
 
-    /** {@code callable(supplied...)} made by {@code caller}. */
-    static ProtosCallRequest call(Object callable, List<?> supplied, ProtosActivation caller) {
-        return new ProtosCallRequest(
-                callable,
-                ProtosFrameArguments.functionCallArguments(supplied.toArray()),
-                caller);
+    /**
+     * {@code callable(supplied...)} made by {@code caller}. {@code supplied}
+     * holds the prepared positional arguments; it is read, never retained.
+     */
+    static ProtosCallRequest call(Object callable, Object[] supplied, ProtosActivation caller) {
+        return new ProtosCallRequest(callable, functionArguments(supplied), caller);
     }
 
     /** {@code receiver.selector(supplied...)} made by {@code caller}, selected now. */
     @TruffleBoundary
     static ProtosCallRequest send(
-            Object receiver, String selector, ProtosActivation caller, List<?> supplied) {
+            Object receiver, String selector, ProtosActivation caller, Object[] supplied) {
         Object selected =
                 ProtosExperimentalGetMethodNode.select(receiver, selector, null, caller);
         return call(selected, supplied, caller);
@@ -97,7 +111,7 @@ final class ProtosCallRequest {
     static ProtosCallRequest method(
             ProtosSlotLookupResult selected,
             Object receiver,
-            List<?> supplied,
+            Object[] supplied,
             ProtosActivation caller) {
         if (!(selected.value() instanceof ProtosClosureValue closure)) {
             throw new ProtosSignalException(ProtosCoreErrors.newError(caller));
@@ -115,11 +129,11 @@ final class ProtosCallRequest {
      */
     @TruffleBoundary
     static ProtosCallRequest taskEntry(
-            Object callable, ProtosTask task, List<?> supplied, ProtosActivation creator) {
+            Object callable, ProtosTask task, Object[] supplied, ProtosActivation creator) {
         if (callable instanceof ProtosClosureValue) {
             return new ProtosCallRequest(
                     callable,
-                    ProtosFrameArguments.taskFunctionCallArguments(task, supplied.toArray()),
+                    ProtosFrameArguments.taskFunctionCallArguments(task, supplied),
                     creator);
         }
         ProtosBoundMethod method;
@@ -146,7 +160,7 @@ final class ProtosCallRequest {
         return new ProtosCallRequest(
                 method.callable(),
                 ProtosFrameArguments.methodCallArguments(
-                        method.receiver(), method.methodHome(), supplied.toArray()),
+                        method.receiver(), method.methodHome(), supplied),
                 taskCaller);
     }
 

@@ -22,12 +22,12 @@ import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosDynamicControlState;
+import com.guillermomolina.protos.runtime.ProtosIndexedSnapshot;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.oracle.truffle.api.exception.AbstractTruffleException;
-import java.util.List;
 
 /**
  * Prepared state of the structured control-flow invocations (match/case,
@@ -39,15 +39,16 @@ final class ProtosStructuredControlCalls {
 
     static final class PreparedCaseOfCall {
         private final Object subject;
-        private final List<java.util.Map.Entry<Object, Object>> cases;
+        /* Insertion-ordered (matcher, action) pairs of the case Map. */
+        private final ProtosIndexedSnapshot cases;
         private final ProtosActivation activation;
         private int index;
         private Object selectedAction;
-        private List<Object> selectedArguments;
+        private Object[] selectedArguments;
 
         PreparedCaseOfCall(
                 Object subject,
-                List<?> supplied,
+                Object[] supplied,
                 ProtosActivation activation) {
             this.subject = java.util.Objects.requireNonNull(subject, "subject");
             this.activation =
@@ -55,20 +56,18 @@ final class ProtosStructuredControlCalls {
                             activation,
                             "activation");
 
-            if (supplied.size() != 1
-                    || !(supplied.get(0) instanceof ProtosMapValue caseMap)) {
+            if (supplied.length != 1
+                    || !(supplied[0] instanceof ProtosMapValue caseMap)) {
                 throw ProtosCoreErrors.signal(
                         activation,
                         ProtosCoreErrors.newError(activation));
             }
 
-            this.cases =
-                    List.copyOf(
-                            caseMap.associationSnapshot());
+            this.cases = caseMap.associationIndexedSnapshot();
         }
 
         boolean needsMatcher() {
-            return selectedAction == null && index < cases.size();
+            return selectedAction == null && index < cases.length();
         }
 
         ProtosCallRequest prepareMatcher() {
@@ -78,10 +77,10 @@ final class ProtosStructuredControlCalls {
             }
 
             return ProtosCallRequest.send(
-                    cases.get(index).getKey(),
+                    cases.keyAt(index),
                     "match",
                     activation,
-                    List.of(subject));
+                    new Object[] {subject});
         }
 
         void acceptMatcher(Object outcome) {
@@ -96,22 +95,26 @@ final class ProtosStructuredControlCalls {
             }
 
             if (outcome == Boolean.TRUE) {
-                selectedAction = cases.get(index).getValue();
-                selectedArguments = List.of();
+                selectedAction = cases.valueAt(index);
+                selectedArguments = new Object[0];
                 return;
             }
 
             if (outcome instanceof ProtosArrayValue captures) {
-                List<Object> snapshot = captures.indexedSnapshot();
+                ProtosIndexedSnapshot snapshot = captures.indexedGenerationSnapshot();
 
-                if (snapshot.isEmpty()) {
+                if (snapshot.length() == 0) {
                     throw ProtosCoreErrors.signal(
                             activation,
                             ProtosCoreErrors.newError(activation));
                 }
 
-                selectedAction = cases.get(index).getValue();
-                selectedArguments = List.copyOf(snapshot);
+                selectedAction = cases.valueAt(index);
+                Object[] arguments = new Object[snapshot.length()];
+                for (int position = 0; position < arguments.length; position++) {
+                    arguments[position] = snapshot.at(position);
+                }
+                selectedArguments = arguments;
                 return;
             }
 
@@ -223,7 +226,7 @@ final class ProtosStructuredControlCalls {
                 leave();
                 return ProtosCallRequest.call(
                         handler,
-                        List.of(transfer.error()),
+                        new Object[] {transfer.error()},
                         activation);
             }
             leave();
@@ -243,18 +246,18 @@ final class ProtosStructuredControlCalls {
     static final class PreparedBooleanCall {
         private final ProtosStandardBooleanProtocol.StructuredCallbackKind kind;
         private final Object receiver;
-        private final List<?> supplied;
+        private final Object[] supplied;
         private final ProtosActivation activation;
 
         PreparedBooleanCall(
                 ProtosStandardBooleanProtocol.StructuredCallbackKind kind,
                 Object receiver,
-                List<?> supplied,
+                Object[] supplied,
                 ProtosActivation activation) {
             this.kind = java.util.Objects.requireNonNull(kind, "kind");
             this.receiver = java.util.Objects.requireNonNull(receiver, "receiver");
-            // TEST009-AL: supplied is NativeCall's already-immutable List.copyOf result (the sole
-            // construction site); re-copying it only re-enters List.copyOf's erased fallback in PE.
+            // TEST009-AL: supplied is the structured invocation's own prepared argument array
+            // (the sole construction site); it is read here, never copied or written.
             this.supplied = java.util.Objects.requireNonNull(supplied, "supplied");
             this.activation = java.util.Objects.requireNonNull(activation, "activation");
             if (receiver != Boolean.TRUE
@@ -263,7 +266,7 @@ final class ProtosStructuredControlCalls {
                         activation,
                         ProtosCoreErrors.newError(activation));
             }
-            if (this.supplied.size() != kind.arity()) {
+            if (this.supplied.length != kind.arity()) {
                 throw ProtosCoreErrors.signal(
                         activation,
                         ProtosCoreErrors.newError(activation));
@@ -286,8 +289,8 @@ final class ProtosStructuredControlCalls {
             int selected = kind == ProtosStandardBooleanProtocol.StructuredCallbackKind.IF_TRUE_IF_FALSE
                     && receiver == Boolean.FALSE ? 1 : 0;
             return ProtosCallRequest.call(
-                    supplied.get(selected),
-                    List.of(),
+                    supplied[selected],
+                    new Object[0],
                     activation);
         }
 
@@ -338,13 +341,13 @@ final class ProtosStructuredControlCalls {
                 boolean postTest,
                 Boolean exitValue,
                 Object receiver,
-                List<?> supplied,
+                Object[] supplied,
                 ProtosActivation activation) {
             this.activation = java.util.Objects.requireNonNull(activation, "activation");
             this.exitValue = java.util.Objects.requireNonNull(exitValue, "exitValue");
             if (!(receiver instanceof ProtosClosureValue receiverClosure)
-                    || supplied.size() != 1
-                    || !(supplied.get(0) instanceof ProtosClosureValue argument)) {
+                    || supplied.length != 1
+                    || !(supplied[0] instanceof ProtosClosureValue argument)) {
                 throw ProtosCoreErrors.signal(activation, ProtosCoreErrors.newError(activation));
             }
             this.condition = postTest ? argument : receiverClosure;
@@ -360,7 +363,7 @@ final class ProtosStructuredControlCalls {
             if (done) {
                 throw new IllegalStateException("loop child requested after termination");
             }
-            return ProtosCallRequest.call(conditionNext ? condition : body, List.of(), activation);
+            return ProtosCallRequest.call(conditionNext ? condition : body, new Object[0], activation);
         }
 
         void acceptCurrent(Object outcome) {

@@ -78,8 +78,16 @@ final class ProtosBytecodeTagTreeNodeExports {
         }
         java.util.Map<String, Object> ownInlineBindings =
                 normalInlineCallbackBindings(node, materialized, bytecodeIndex);
-        return new ProtosDebuggerScope(
-                activation, ownInlineBindings == null ? java.util.Map.of() : ownInlineBindings);
+        return createScopeForTooling(activation, ownInlineBindings);
+    }
+
+    @TruffleBoundary
+    private static ProtosDebuggerScope createScopeForTooling(
+            ProtosActivation activation,
+            java.util.Map<String, Object> ownInlineBindings) {
+        return ownInlineBindings == null
+                ? new ProtosDebuggerScope(activation)
+                : new ProtosDebuggerScope(activation, ownInlineBindings);
     }
 
     /**

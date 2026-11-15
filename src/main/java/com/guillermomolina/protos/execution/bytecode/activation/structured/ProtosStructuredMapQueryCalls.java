@@ -20,6 +20,7 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
+import com.guillermomolina.protos.runtime.ProtosIndexedSnapshot;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.numeric.ProtosNumericHashKey;
 import java.util.ArrayList;
@@ -54,7 +55,7 @@ final class ProtosStructuredMapQueryCalls {
 
         PreparedMapMatchCall(
                 Object receiver,
-                List<?> supplied,
+                Object[] supplied,
                 ProtosActivation activation) {
             this.activation =
                     java.util.Objects.requireNonNull(
@@ -62,13 +63,13 @@ final class ProtosStructuredMapQueryCalls {
                             "activation");
 
             if (!(receiver instanceof ProtosMapValue matcher)
-                    || supplied.size() != 1) {
+                    || supplied.length != 1) {
                 throw ProtosCoreErrors.signal(
                         activation,
                         ProtosCoreErrors.newError(activation));
             }
 
-            Object subjectValue = supplied.get(0);
+            Object subjectValue = supplied[0];
             if (!(subjectValue instanceof ProtosMapValue subjectMap)) {
                 subject = null;
                 matcherSnapshot = List.of();
@@ -121,7 +122,7 @@ final class ProtosStructuredMapQueryCalls {
                     matcherSnapshot.get(requirementIndex).key(),
                     "hash",
                     activation,
-                    List.of());
+                    new Object[0]);
         }
 
         void acceptHash(Object result) {
@@ -170,7 +171,7 @@ final class ProtosStructuredMapQueryCalls {
                     matcherSnapshot.get(requirementIndex).key(),
                     "==",
                     activation,
-                    List.of(subjectSnapshot.get(candidateIndex).key()));
+                    new Object[] {subjectSnapshot.get(candidateIndex).key()});
         }
 
         void acceptEquality(Object result) {
@@ -240,7 +241,7 @@ final class ProtosStructuredMapQueryCalls {
                     childMatchers.get(childIndex),
                     "match",
                     activation,
-                    List.of(selectedValues.get(childIndex)));
+                    new Object[] {selectedValues.get(childIndex)});
         }
 
         void acceptChildOutcome(Object outcome) {
@@ -260,19 +261,19 @@ final class ProtosStructuredMapQueryCalls {
             }
 
             if (outcome instanceof ProtosArrayValue childCaptures) {
-                List<Object> observedCaptures =
-                        childCaptures.indexedSnapshot();
+                ProtosIndexedSnapshot observedCaptures =
+                        childCaptures.indexedGenerationSnapshot();
 
-                if (observedCaptures.isEmpty()) {
+                if (observedCaptures.length() == 0) {
                     throw ProtosCoreErrors.signal(
                             activation,
                             ProtosCoreErrors.newError(activation));
                 }
 
                 for (int captureIndex = 0;
-                        captureIndex < observedCaptures.size();
+                        captureIndex < observedCaptures.length();
                         captureIndex++) {
-                    captures.add(observedCaptures.get(captureIndex));
+                    captures.add(observedCaptures.at(captureIndex));
                 }
                 childIndex++;
                 return;
@@ -329,7 +330,7 @@ final class ProtosStructuredMapQueryCalls {
         private final Object fallback;
         private final ProtosActivation activation;
         private ProtosNumericHashKey queryHash;
-        private List<ProtosMapValue.Entry> candidates;
+        private ProtosMapValue.Candidates candidates;
         private int index;
         private ProtosMapValue.Entry match;
         private boolean hashAccepted;
@@ -339,7 +340,7 @@ final class ProtosStructuredMapQueryCalls {
         PreparedMapReadLookupCall(
                 ProtosStandardMapProtocol.StructuredReadLookupKind kind,
                 Object receiver,
-                List<?> supplied,
+                Object[] supplied,
                 ProtosActivation activation) {
             this.kind = java.util.Objects.requireNonNull(kind, "kind");
             this.activation = java.util.Objects.requireNonNull(activation, "activation");
@@ -348,16 +349,16 @@ final class ProtosStructuredMapQueryCalls {
                             ? 2
                             : 1;
             if (!(receiver instanceof ProtosMapValue value)
-                    || supplied.size() != expectedArity) {
+                    || supplied.length != expectedArity) {
                 throw ProtosCoreErrors.signal(
                         activation,
                         ProtosCoreErrors.newError(activation));
             }
             this.map = value;
-            this.key = supplied.get(0);
+            this.key = supplied[0];
             this.fallback =
                     kind == ProtosStandardMapProtocol.StructuredReadLookupKind.AT_IF_ABSENT
-                            ? supplied.get(1)
+                            ? supplied[1]
                             : null;
         }
 
@@ -388,7 +389,7 @@ final class ProtosStructuredMapQueryCalls {
                     key,
                     "hash",
                     activation,
-                    List.of());
+                    new Object[0]);
         }
 
         void acceptHash(Object result) {
@@ -425,7 +426,7 @@ final class ProtosStructuredMapQueryCalls {
                     key,
                     "==",
                     activation,
-                    List.of(candidates.get(index).key()));
+                    new Object[] {candidates.get(index).key()});
         }
 
         void acceptEquality(Object result) {
@@ -462,7 +463,7 @@ final class ProtosStructuredMapQueryCalls {
             fallbackPrepared = true;
             return ProtosCallRequest.call(
                     fallback,
-                    List.of(),
+                    new Object[0],
                     activation);
         }
 

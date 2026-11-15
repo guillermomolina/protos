@@ -84,7 +84,7 @@ public final class ProtosInvocation {
             return invokeForeignCallbackOutsideTask(receiver, supplied, caller);
         }
         return ProtosBytecodeTaskExecution.invokeNestedSynchronous(
-                task, ProtosCallRequest.call(receiver, supplied, caller), caller);
+                task, ProtosCallRequest.call(receiver, supplied.toArray(), caller), caller);
     }
 
 
@@ -127,7 +127,7 @@ public final class ProtosInvocation {
 
         ProtosCallRequest request;
         try {
-            request = ProtosCallRequest.taskEntry(receiver, task, supplied, caller);
+            request = ProtosCallRequest.taskEntry(receiver, task, supplied.toArray(), caller);
         } catch (ProtosSignalException signalled) {
             task.fail(signalled.error(), ProtosDiagnosticTraceCapture.capture(signalled));
             return;
@@ -227,7 +227,7 @@ public final class ProtosInvocation {
                     ProtosCallRequest.taskEntry(
                             new ProtosBoundMethod(closure, receiver, selected.home()),
                             task,
-                            supplied,
+                            supplied.toArray(),
                             caller);
         } catch (ProtosSignalException signalled) {
             task.fail(signalled.error(), ProtosDiagnosticTraceCapture.capture(signalled));

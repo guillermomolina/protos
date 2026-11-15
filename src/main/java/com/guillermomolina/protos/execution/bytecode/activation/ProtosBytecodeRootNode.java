@@ -95,6 +95,7 @@ import com.oracle.truffle.api.exception.AbstractTruffleException;
 import com.oracle.truffle.api.frame.FrameDescriptor;
 import com.oracle.truffle.api.frame.MaterializedFrame;
 import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.api.profiles.ConditionProfile;
 import com.oracle.truffle.api.nodes.ControlFlowException;
 import com.oracle.truffle.api.nodes.DirectCallNode;
 import com.oracle.truffle.api.nodes.ExplodeLoop;
@@ -411,6 +412,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
     /* The layout of a genuine Closure root, or null for any other root. */
     private transient LexicalFrameLayout lexicalFrameLayout;
+
+    @CompilationFinal private transient boolean lexicalFrameEverEscaped;
+    private final ConditionProfile publishedClosureFrameProfile =
+            ConditionProfile.create();
 
     /*
      * TEST009-V: the exact root span, recorded by the lowerer only while the diagnostic stable
@@ -1126,6 +1131,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         if (layout == null || activation.publishedClosureLexicalAuthorityForRuntime() != null) {
             return;
         }
+        if (!lexicalFrameEverEscaped) {
+            CompilerDirectives.transferToInterpreterAndInvalidate();
+            lexicalFrameEverEscaped = true;
+        }
         installLexicalFrameView(frame.materialize(), bytecode, bytecodeIndex, activation, layout);
     }
 
@@ -1138,15 +1147,26 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             VirtualFrame frame,
             BytecodeNode bytecode,
             int bytecodeIndex) {
-        if (lexicalFrameLayout == null
-                || !ProtosFrameArguments.hasPublishedActivation(frame.getArguments())) {
+        if (lexicalFrameLayout == null) {
             return;
         }
-        ensureLexicalFrameView(
-                frame,
-                bytecode,
-                bytecodeIndex,
-                ProtosFrameArguments.publishedActivation(frame.getArguments()));
+        if (publishedClosureFrameProfile.profile(
+                ProtosFrameArguments.hasPublishedActivation(frame.getArguments()))) {
+            retainEscapedClosureFrame(
+                    frame,
+                    bytecode,
+                    bytecodeIndex,
+                    ProtosFrameArguments.publishedActivation(frame.getArguments()));
+        }
+    }
+
+    @InliningCutoff
+    private void retainEscapedClosureFrame(
+            VirtualFrame frame,
+            BytecodeNode bytecode,
+            int bytecodeIndex,
+            ProtosActivation activation) {
+        ensureLexicalFrameView(frame, bytecode, bytecodeIndex, activation);
     }
 
     @TruffleBoundary
@@ -2083,24 +2103,25 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * guest value.
      */
     public static final class ArrayEachSnapshot {
-        private final List<Object> elements;
+        /* One published indexed generation: known length, indexed reads, no copy. */
+        private final com.guillermomolina.protos.runtime.ProtosIndexedSnapshot elements;
         private int next;
 
-        ArrayEachSnapshot(List<Object> elements) {
+        ArrayEachSnapshot(com.guillermomolina.protos.runtime.ProtosIndexedSnapshot elements) {
             this.elements = elements;
         }
 
         @NonIdempotent
         boolean nextIsLong() {
-            return next < elements.size() && elements.get(next) instanceof Long;
+            return next < elements.length() && elements.at(next) instanceof Long;
         }
 
         boolean hasNext() {
-            return next < elements.size();
+            return next < elements.length();
         }
 
         Object advance() {
-            return elements.get(next++);
+            return elements.at(next++);
         }
     }
 
@@ -2120,12 +2141,14 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         @Specialization
         @TruffleBoundary
         public static ArrayEachSnapshot bytes(com.guillermomolina.protos.runtime.ProtosBytesValue receiver) {
-            return new ArrayEachSnapshot(receiver.indexedSnapshot());
+            List<Object> octets = receiver.indexedSnapshot();
+            return new ArrayEachSnapshot(
+                    com.guillermomolina.protos.runtime.ProtosIndexedSnapshot.elements(
+                            octets.toArray(), octets.size()));
         }
 
-        @TruffleBoundary
         static ArrayEachSnapshot snapshot(ProtosArrayValue receiver) {
-            return new ArrayEachSnapshot(receiver.indexedSnapshot());
+            return new ArrayEachSnapshot(receiver.indexedGenerationSnapshot());
         }
     }
 
@@ -3349,7 +3372,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                                     value,
                                     activation);
 
-            return ProtosCallRequest.method(selected, value, List.of(), activation);
+            return ProtosCallRequest.method(selected, value, new Object[0], activation);
         }
     }
 
@@ -3478,47 +3501,39 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
 
     /**
-     * I113: classifies one result value as the builder-fixed
-     * {@link ProtosResultKind} (a miss sentinel, a carrier type or a C-prime
-     * gate); see that type for each predicate.
+     * I115: the BufferedWriter C-prime step gate. The gate produces a Boolean
+     * carrier; any other value is an internal protocol violation.
      */
-    @Operation(storeBytecodeIndex = false)
-    @ConstantOperand(type = ProtosResultKind.class, name = "kind")
-    public static final class IsResultKind {
-        /*
-         * PERF038-F: an ordinary call site observes a small, stable set of
-         * result classes, none of them a continuation. Profiling the exact
-         * result class replaces the four suspension type tests of every
-         * ordinary result with one class comparison; the answer is decided
-         * once per class from the same type tests, so continuation results
-         * keep their resumption path unchanged. A site seeing more classes
-         * than the limit (and the uncached interpreter) takes the generic
-         * form.
-         */
-        @Specialization(
-                guards = {
-                    "kind == CONTINUATION_KIND",
-                    "value != null",
-                    "value.getClass() == cachedClass"
-                },
-                limit = "3")
-        public static boolean continuationClassProfiled(
-                ProtosResultKind kind,
-                Object value,
-                @Cached("value.getClass()") Class<?> cachedClass,
-                @Cached("isContinuationClass(cachedClass)") boolean continuation) {
-            return continuation;
+    @Operation
+    public static final class IsBufferedByteWriterStepRequired {
+        @Specialization
+        public static boolean doBoolean(boolean required) {
+            return required;
         }
 
-        @Specialization(replaces = "continuationClassProfiled")
-        public static boolean perform(ProtosResultKind kind, Object value) {
-            return kind.matches(value);
+        @Fallback
+        public static boolean doInvalid(Object value) {
+            throw new IllegalStateException(
+                    "BufferedWriter C-prime step gate produced a non-Boolean value");
+        }
+    }
+
+    /**
+     * I115: whether the TextReader C-prime advance needs lower input. The
+     * advance produces an {@link ProtosTextReaderCPrimeExecution.Advance}
+     * carrier; any other value is an internal protocol violation.
+     */
+    @Operation
+    public static final class IsTextReaderNeedInput {
+        @Specialization
+        public static boolean doAdvance(ProtosTextReaderCPrimeExecution.Advance state) {
+            return state.needsInput();
         }
 
-        static final ProtosResultKind CONTINUATION_KIND = ProtosResultKind.CONTINUATION;
-
-        static boolean isContinuationClass(Class<?> type) {
-            return IsContinuation.isContinuationClass(type);
+        @Fallback
+        public static boolean doInvalid(Object value) {
+            throw new IllegalStateException(
+                    "TextReader C-prime advance produced an invalid carrier");
         }
     }
 
@@ -3722,7 +3737,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosStructuredPhase phase,
                 ProtosForeignEachCall prepared) {
             return ProtosCallRequest.call(
-                    prepared.callback(), List.of(prepared.current()), prepared.activation());
+                    prepared.callback(), new Object[] {prepared.current()}, prepared.activation());
         }
 
         @Specialization
@@ -4277,11 +4292,35 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
-     * I113: the continuation classification shared by
-     * {@code IsResultKind[CONTINUATION]}.
-     * Plain Java helpers; no longer a registered operation.
+     * I115: whether one result value is a continuation or suspension the
+     * caller must compose.
      */
+    @Operation(storeBytecodeIndex = false)
     public static final class IsContinuation {
+        /*
+         * PERF038-F: an ordinary call site observes a small, stable set of
+         * result classes, none of them a continuation. Profiling the exact
+         * result class replaces the four suspension type tests of every
+         * ordinary result with one class comparison; the answer is decided
+         * once per class from the same type tests, so continuation results
+         * keep their resumption path unchanged. A site seeing more classes
+         * than the limit (and the uncached interpreter) takes the generic
+         * form.
+         */
+        @Specialization(
+                guards = {
+                    "value != null",
+                    "value.getClass() == cachedClass"
+                },
+                limit = "3")
+        public static boolean continuationClassProfiled(
+                Object value,
+                @Cached("value.getClass()") Class<?> cachedClass,
+                @Cached("isContinuationClass(cachedClass)") boolean continuation) {
+            return continuation;
+        }
+
+        @Specialization(replaces = "continuationClassProfiled")
         public static boolean perform(Object value) {
             /*
              * A native suspension is the leaf request. Yielding it from this
@@ -4680,7 +4719,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         state.target(),
                         "flush",
                         activation,
-                        List.of());
+                        new Object[0]);
             }
             return ProtosCallRequest.send(
                     state.target(),

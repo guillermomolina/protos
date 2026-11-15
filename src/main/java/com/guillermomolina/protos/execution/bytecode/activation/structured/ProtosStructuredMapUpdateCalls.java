@@ -21,7 +21,6 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.numeric.ProtosNumericHashKey;
-import java.util.List;
 
 /**
  * Prepared state of the structured Map construction, at:put: and remove
@@ -36,7 +35,7 @@ final class ProtosStructuredMapUpdateCalls {
         private final Object value;
         private final ProtosActivation activation;
         private ProtosNumericHashKey queryHash;
-        private List<ProtosMapValue.Entry> candidates;
+        private ProtosMapValue.Candidates candidates;
         private int index;
         private ProtosMapValue.Entry match;
         private boolean hashAccepted;
@@ -92,7 +91,7 @@ final class ProtosStructuredMapUpdateCalls {
                     key,
                     "hash",
                     activation,
-                    List.of());
+                    new Object[0]);
         }
 
         void acceptHash(Object result) {
@@ -133,7 +132,7 @@ final class ProtosStructuredMapUpdateCalls {
                     key,
                     "==",
                     activation,
-                    List.of(candidates.get(index).key()));
+                    new Object[] {candidates.get(index).key()});
         }
 
         void acceptEquality(Object result) {
@@ -195,7 +194,7 @@ final class ProtosStructuredMapUpdateCalls {
         private final Object newValue;
         private final ProtosActivation activation;
         private ProtosNumericHashKey queryHash;
-        private List<ProtosMapValue.Entry> candidates;
+        private ProtosMapValue.Candidates candidates;
         private int index;
         private ProtosMapValue.Entry match;
         private boolean hashAccepted;
@@ -203,19 +202,19 @@ final class ProtosStructuredMapUpdateCalls {
 
         PreparedMapAtPutCall(
                 Object receiver,
-                List<?> supplied,
+                Object[] supplied,
                 ProtosActivation activation) {
             this.activation = java.util.Objects.requireNonNull(activation, "activation");
             if (!(receiver instanceof ProtosMapValue mapValue)
-                    || supplied.size() != 2) {
+                    || supplied.length != 2) {
                 throw ProtosCoreErrors.signal(
                         activation,
                         ProtosCoreErrors.newError(activation));
             }
             this.map = mapValue;
             ProtosStandardMapProtocol.requireMutationEntryForStructured(map, activation);
-            this.key = supplied.get(0);
-            this.newValue = supplied.get(1);
+            this.key = supplied[0];
+            this.newValue = supplied[1];
         }
 
         void enterComparison() {
@@ -241,7 +240,7 @@ final class ProtosStructuredMapUpdateCalls {
                 throw new IllegalStateException(
                         "Map.atPut hash callback prepared after hash acceptance");
             }
-            return ProtosCallRequest.send(key, "hash", activation, List.of());
+            return ProtosCallRequest.send(key, "hash", activation, new Object[0]);
         }
 
         void acceptHash(Object result) {
@@ -278,7 +277,7 @@ final class ProtosStructuredMapUpdateCalls {
                     key,
                     "==",
                     activation,
-                    List.of(candidates.get(index).key()));
+                    new Object[] {candidates.get(index).key()});
         }
 
         void acceptEquality(Object result) {
@@ -342,7 +341,7 @@ final class ProtosStructuredMapUpdateCalls {
         private final Object key;
         private final ProtosActivation activation;
         private ProtosNumericHashKey queryHash;
-        private List<ProtosMapValue.Entry> candidates;
+        private ProtosMapValue.Candidates candidates;
         private int index;
         private ProtosMapValue.Entry match;
         private boolean hashAccepted;
@@ -350,11 +349,11 @@ final class ProtosStructuredMapUpdateCalls {
 
         PreparedMapRemoveCall(
                 Object receiver,
-                List<?> supplied,
+                Object[] supplied,
                 ProtosActivation activation) {
             this.activation = java.util.Objects.requireNonNull(activation, "activation");
             if (!(receiver instanceof ProtosMapValue mapValue)
-                    || supplied.size() != 1) {
+                    || supplied.length != 1) {
                 throw ProtosCoreErrors.signal(
                         activation,
                         ProtosCoreErrors.newError(activation));
@@ -366,7 +365,7 @@ final class ProtosStructuredMapUpdateCalls {
                         activation,
                         ProtosCoreErrors.newError(activation));
             }
-            this.key = supplied.get(0);
+            this.key = supplied[0];
         }
 
         void enterComparison() {
@@ -392,7 +391,7 @@ final class ProtosStructuredMapUpdateCalls {
                 throw new IllegalStateException(
                         "Map.remove hash callback prepared after hash acceptance");
             }
-            return ProtosCallRequest.send(key, "hash", activation, List.of());
+            return ProtosCallRequest.send(key, "hash", activation, new Object[0]);
         }
 
         void acceptHash(Object result) {
@@ -429,7 +428,7 @@ final class ProtosStructuredMapUpdateCalls {
                     key,
                     "==",
                     activation,
-                    List.of(candidates.get(index).key()));
+                    new Object[] {candidates.get(index).key()});
         }
 
         void acceptEquality(Object result) {

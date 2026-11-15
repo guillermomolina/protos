@@ -112,7 +112,7 @@ final class ProtosHostEntrySuspension {
 
             outcome =
                     Objects.requireNonNull(
-                            ProtosCallRequest.call(closure, List.of(supplied), caller).callUncached(),
+                            ProtosCallRequest.call(closure, supplied, caller).callUncached(),
                             "host entry returned null");
 
         return drive(embedding, outcome);

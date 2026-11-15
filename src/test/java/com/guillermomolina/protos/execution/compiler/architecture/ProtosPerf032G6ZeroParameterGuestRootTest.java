@@ -373,7 +373,7 @@ final class ProtosPerf032G6ZeroParameterGuestRootTest {
                                 current -> {
                                     ProtosCallRequest prepared =
                                             ProtosCallRequest.taskEntry(
-                                                    closure, current, supplied, module);
+                                                    closure, current, supplied.toArray(), module);
                                     preparedRef.set(prepared);
                                     ProtosBytecodeTaskExecution.executeRequest(
                                             current, prepared);

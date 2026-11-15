@@ -428,7 +428,7 @@ public final class ProtosStandardObjectProtocol {
                         instance,
                         "init",
                         activation,
-                        supplied);
+                        supplied.toArray());
 
         Object outcome = initializer.callUncached();
 

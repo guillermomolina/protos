@@ -25,7 +25,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
@@ -109,41 +108,92 @@ final class ProtosNativeGeneratedStructurePolicyTest {
         String prefix = "--initialize-at-build-time=";
         assertTrue(lines.get(0).startsWith(prefix));
 
-        Set<String> initialized =
-                new HashSet<>(
-                        List.of(
-                                lines.get(0)
-                                        .substring(prefix.length())
-                                        .split(",")));
+        List<String> initialized =
+                List.of(
+                        lines.get(0)
+                                .substring(prefix.length())
+                                .split(","));
 
-        String semantic = PACKAGE + SEMANTIC_ROOT;
+        // Package-prefix initialization of exactly the two implementation packages.
+        assertEquals(
+                List.of(
+                        "com.guillermomolina.protos.execution",
+                        "com.guillermomolina.protos.runtime"),
+                initialized,
+                "generator output:\n" + generatorLog);
 
-        Set<String> required =
-                Set.of(
-                        semantic,
-                        semantic + "$1",
-                        semantic + "$Bytecode",
-                        semantic + "$AbstractBytecodeNode",
-                        semantic + "$UncachedBytecodeNode",
-                        semantic + "$UncachedBytecodeNodeTailCall",
-                        semantic + "$TagNode",
-                        semantic + "$VirtualState");
-
-        assertTrue(
-                initialized.containsAll(required),
-                "missing Native generated-structure coverage: "
-                        + difference(required, initialized)
-                        + "\ngenerator output:\n"
-                        + generatorLog);
-
+        // No enumerated generated classes, %%D methods or per-class entries.
+        assertFalse(
+                lines.get(0).contains("$"),
+                "the policy must not enumerate generated classes");
+        assertFalse(lines.get(0).contains("%%"));
         assertFalse(
                 initialized.stream()
                         .anyMatch(name -> name.startsWith(PACKAGE + FORMER_RUNTIME_ROOT)),
                 "native initialization must not name the former interpreter");
+        for (String excluded : List.of(
+                "com.guillermomolina.protos.cli",
+                "com.guillermomolina.protos.lsp",
+                "org.eclipse.lsp4j")) {
+            assertFalse(
+                    initialized.stream().anyMatch(name -> name.startsWith(excluded)),
+                    excluded + " must not be initialized at build time");
+        }
 
+        assertTrue(lines.contains("-H:MaxRuntimeCompileMethods=20000"));
+
+        /*
+         * Implementation metadata is initialized at build time by package;
+         * the run-time exceptions are exactly the class whose static
+         * initializer links native symbols through Java FFM and the class
+         * whose static initializer computes Unicode case tables through ICU4J.
+         */
+        assertEquals(
+                "--initialize-at-run-time="
+                        + "com.guillermomolina.protos.execution.ProtosLinuxConfinedFilesystemNative$Bridge,"
+                        + "com.guillermomolina.protos.execution.ProtosRegexUnicodeFacility$CaseOrbits",
+                lines.get(1));
+        assertEquals(1L,
+                lines.stream().filter(line -> line.startsWith("--initialize-at-run-time=")).count(),
+                "no further run-time initialization lists");
+
+        // No ICU4J package or class is initialized at image build time.
         assertFalse(
-                initialized.contains(
-                        semantic + "$UninitializedBytecodeNode"));
+                lines.stream().anyMatch(line -> line.contains("com.ibm.icu")
+                        && !line.startsWith("--initialize-at-run-time=")),
+                "ICU4J must not be initialized at build time");
+        assertFalse(lines.get(1).contains("com.ibm.icu"));
+
+        // No fallback runtime selection in the generated arguments.
+        assertFalse(lines.stream().anyMatch(line -> line.contains("Fallback")));
+
+        // LSP preservation and native access are unchanged.
+        assertEquals(
+                List.of(
+                        "-H:+UnlockExperimentalVMOptions",
+                        "-H:Preserve=package=org.eclipse.lsp4j.*",
+                        "-H:-UnlockExperimentalVMOptions",
+                        "--enable-native-access=org.graalvm.truffle"),
+                lines.subList(3, lines.size()));
+    }
+
+    @Test
+    void optimizedNativeProfilesKeepTheTruffleRuntime() throws Exception {
+        Path repository =
+                Path.of(System.getProperty("user.dir"))
+                        .toAbsolutePath()
+                        .normalize();
+        String pom = Files.readString(repository.resolve("pom.xml"), StandardCharsets.UTF_8);
+
+        assertFalse(pom.contains("UseFallbackRuntime"),
+                "native profiles must not select the fallback Truffle runtime");
+        assertFalse(pom.contains("EnableFallbackCompilation"));
+        assertFalse(pom.contains("WarnInterpreterOnly"));
+        assertTrue(pom.contains("<buildArg>-march=compatibility</buildArg>"));
+        assertTrue(pom.contains(
+                "<buildArg>@${project.build.directory}/native-image-init.args</buildArg>"));
+        assertTrue(pom.contains("<buildArg>--enable-native-access=ALL-UNNAMED</buildArg>"));
+        assertTrue(pom.contains("<artifactId>truffle-runtime</artifactId>"));
     }
 
     private static Set<String> sensitiveDirectRoles(
@@ -178,13 +228,5 @@ final class ProtosNativeGeneratedStructurePolicyTest {
         }
 
         return roles;
-    }
-
-    private static Set<String> difference(
-            Set<String> required,
-            Set<String> actual) {
-        TreeSet<String> missing = new TreeSet<>(required);
-        missing.removeAll(actual);
-        return missing;
     }
 }

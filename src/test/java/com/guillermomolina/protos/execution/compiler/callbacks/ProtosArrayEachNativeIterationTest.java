@@ -209,6 +209,50 @@ final class ProtosArrayEachNativeIterationTest {
         });
     }
 
+    /*
+     * A hot standard each keeps its native iteration across repeated
+     * executions; a later effective redefinition on the receiver is selected
+     * by the very next execution instead of the cached admission.
+     */
+    @Test
+    void hotStandardEachStaysNativeUntilItsSelectionChanges() throws Exception {
+        inContext(() -> {
+            Module module = new Module(null);
+            module.run(
+                    """
+                    values: Array(1, 2)
+                    run: () => {
+                        marker: 0
+                        values.each((element) => {
+                            hook(element)
+                        })
+                    }
+                    loop: () => {
+                        n: 0
+                        (() => n < 20).whileTrue() {
+                            run()
+                            n = n + 1
+                        }
+                        0
+                    }
+                    loop()
+                    values.each: (callback) => {
+                        callback(99)
+                        42
+                    }
+                    run()
+                    """);
+            assertEquals(41, module.visits.size());
+            for (int index = 0; index < 40; index++) {
+                assertEquals(index % 2 == 0 ? 1L : 2L, module.visits.get(index),
+                        "callbacks keep their element order");
+            }
+            assertEquals(99L, module.visits.get(40),
+                    "the redefined each on the Array is selected after the hot standard one");
+            assertNativeLoop(module);
+        });
+    }
+
     @Test
     void nonAdmissibleCallbackKeepsItsActivationAndContext() throws Exception {
         inContext(() -> {
@@ -244,6 +288,79 @@ final class ProtosArrayEachNativeIterationTest {
     }
 
     /** The physical root of {@code run} iterates natively, without per-element dispatch. */
+    /**
+     * The native each snapshot is the published indexed generation: known
+     * length, ascending indexed reads of the exact elements (primitive
+     * storage included) and independent of writes after it was taken.
+     */
+    @Test
+    void eachSnapshotIsAnIndexedGenerationIndependentOfLaterWrites() {
+        ProtosObjectValue parent = ProtosObjectValue.rootObject();
+        Object first = new ProtosObjectValue(parent);
+        Object second = new ProtosObjectValue(parent);
+        com.guillermomolina.protos.runtime.ProtosArrayValue objects =
+                new com.guillermomolina.protos.runtime.ProtosArrayValue(parent, List.of(first, second));
+        com.guillermomolina.protos.runtime.ProtosArrayValue longs =
+                new com.guillermomolina.protos.runtime.ProtosArrayValue(parent, new long[] {3L, 4L});
+
+        ProtosBytecodeRootNode.ArrayEachSnapshot objectSnapshot =
+                ProtosBytecodeRootNode.GetArrayEachSnapshot.snapshot(objects);
+        ProtosBytecodeRootNode.ArrayEachSnapshot longSnapshot =
+                ProtosBytecodeRootNode.GetArrayEachSnapshot.snapshot(longs);
+        objects.indexedPut(0, new ProtosObjectValue(parent));
+        longs.indexedLongPut(1, 40L);
+        assertTrue(longs.hasLongStorageForRuntime(), "long storage is never boxed by snapshots");
+
+        assertFalse(objectSnapshot.nextIsLong());
+        assertTrue(objectSnapshot.advance() == first);
+        assertTrue(objectSnapshot.advance() == second);
+        assertFalse(objectSnapshot.hasNext());
+
+        assertTrue(longSnapshot.nextIsLong());
+        assertEquals(3L, longSnapshot.advance());
+        assertEquals(4L, longSnapshot.advance());
+        assertFalse(longSnapshot.hasNext());
+        assertEquals(40L, longs.indexedLongAt(1));
+    }
+
+    /**
+     * Each prepared callback carries exactly its snapshot position as the
+     * single B5 positional argument; preparation reads the generation by
+     * index and never re-snapshots.
+     */
+    @Test
+    void preparedArrayEachBuildsOneB5CallPerSnapshotPosition() throws Exception {
+        inContext(() -> {
+            ProtosActivation activation =
+                    new ProtosCoreBootstrap().bootstrap(CORE).newModuleActivation();
+            ProtosObjectValue parent = ProtosObjectValue.rootObject();
+            Object first = new ProtosObjectValue(parent);
+            Object second = new ProtosObjectValue(parent);
+            com.guillermomolina.protos.runtime.ProtosArrayValue array =
+                    new com.guillermomolina.protos.runtime.ProtosArrayValue(parent, List.of(first, second));
+            ProtosClosureValue block = ProtosClosureValue.nativeClosure((a, x) -> x.get(0));
+
+            ProtosStructuredEachCalls.PreparedArrayEachCall each =
+                    new ProtosStructuredEachCalls.PreparedArrayEachCall(
+                            array, new Object[] {block}, activation);
+            array.indexedPut(1, new ProtosObjectValue(parent));
+
+            List<Object> visited = new ArrayList<>();
+            while (each.hasNext()) {
+                ProtosCallRequest request = each.prepareCurrent();
+                Object[] arguments = request.arguments();
+                assertEquals(ProtosFrameArguments.HEADER_LENGTH + 1, arguments.length);
+                assertTrue(request.callable() == block);
+                assertTrue(request.caller() == activation);
+                visited.add(arguments[ProtosFrameArguments.HEADER_LENGTH]);
+                each.advance();
+            }
+            assertEquals(2, visited.size());
+            assertTrue(visited.get(0) == first && visited.get(1) == second);
+            assertTrue(each.finish() == array);
+        });
+    }
+
     private static List<String> assertNativeLoop(Module module) {
         List<String> names = instructionNames(module.physicalRun());
         int next = indexAfter(names, "c.ArrayEachNext", -1);

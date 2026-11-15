@@ -5,7 +5,7 @@
 
     <groupId>com.guillermomolina</groupId>
     <artifactId>protos</artifactId>
-    <version>0.4.133-SNAPSHOT</version>
+    <version>0.4.134-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <name>Protos</name>
@@ -373,15 +373,11 @@
                             -->
                             <classesDirectory>${project.build.outputDirectory}</classesDirectory>
                             <!--
-                                PLAT045 (#772): Native guest execution uses the
-                                supported interpreter-only fallback Truffle
-                                runtime while oracle/graal#14579 prevents
-                                Bytecode DSL Tier-2 runtime compilation in
-                                Native Image. Scoped to this profile only; the
-                                JVM path keeps the optimizing runtime.
+                                Native guest execution keeps the optimizing
+                                Truffle runtime; implementation packages are
+                                initialized at build time by native-image-init.args.
                             -->
                             <buildArgs>
-                                <buildArg>-Dtruffle.UseFallbackRuntime=true</buildArg>
                                 <buildArg>-march=compatibility</buildArg>
                                 <buildArg>@${project.build.directory}/native-image-init.args</buildArg>
                                 <!--
@@ -464,16 +460,9 @@
                         </executions>
                         <configuration>
                             <buildArgs>
-                                <buildArg>-Dtruffle.UseFallbackRuntime=true</buildArg>
                                 <buildArg>-march=compatibility</buildArg>
                                 <buildArg>@${project.build.directory}/native-image-init.args</buildArg>
                             </buildArgs>
-                            <!-- Diagnostic output only, for the Native JUnit executable: PLAT045
-                                 deliberately selects the fallback runtime, so the interpreter-only
-                                 notice is expected. It neither enables nor disables compilation. -->
-                            <runtimeArgs>
-                                <runtimeArg>-Dpolyglot.engine.WarnInterpreterOnly=false</runtimeArg>
-                            </runtimeArgs>
                         </configuration>
                     </plugin>
                 </plugins>

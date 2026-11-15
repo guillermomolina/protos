@@ -31,6 +31,7 @@ import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import com.guillermomolina.protos.runtime.callables.ProtosNativeClosureBody;
 import com.guillermomolina.protos.runtime.lookup.ProtosSlotLookupResult;
 import com.oracle.truffle.api.Assumption;
+import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
@@ -41,6 +42,7 @@ import com.oracle.truffle.api.dsl.Cached.Exclusive;
 import com.oracle.truffle.api.dsl.GenerateCached;
 import com.oracle.truffle.api.dsl.GenerateInline;
 import com.oracle.truffle.api.dsl.GenerateUncached;
+import com.oracle.truffle.api.dsl.Idempotent;
 import com.oracle.truffle.api.dsl.NonIdempotent;
 import com.oracle.truffle.api.dsl.ReportPolymorphism.Megamorphic;
 import com.oracle.truffle.api.dsl.Specialization;
@@ -576,7 +578,8 @@ final class ProtosFunctionCallDispatchers {
                 ProtosLanguageContext enteredContext,
                 @Cached(value = "closure", weak = true)
                         ProtosClosureValue cachedClosure,
-                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached(value = "enteredContext", weak = true)
+                        ProtosLanguageContext cachedContext,
                 @Cached("cachedClosure.codeStableAssumptionForRuntime()")
                         Assumption cachedCodeStable,
                 @Cached("cachedClosure.contextProjectionStabilityForRuntime()")
@@ -592,23 +595,9 @@ final class ProtosFunctionCallDispatchers {
                         ReturnHomeMode cachedHomeMode,
                 @Exclusive @Cached FunctionDirectInvokeNode invoke,
                 @Exclusive @Cached InlinedConditionProfile taskPresence) {
-            /*
-             * the mode is a per-entry constant of this identity PIC,
-             * so partial evaluation keeps exactly one of the three routes.
-             */
-            if (cachedHomeMode == ReturnHomeMode.UNOBSERVABLE) {
-                return invokeUnobservableHome(
-                        frame, inliningTarget, taskPresence,
-                        callNode, cachedCallee, closure, arguments, callerReference);
-            }
-            if (cachedHomeMode == ReturnHomeMode.CAPTURED) {
-                return invokeCapturedHome(
-                        frame, inliningTarget, taskPresence,
-                        callNode, cachedCallee, closure, arguments, callerReference);
-            }
-            return invoke.execute(
-                    frame, inliningTarget, callNode, cachedCallee,
-                    closure, arguments, callerReference);
+            return invokeCachedClosure(
+                    frame, inliningTarget, cachedHomeMode, taskPresence, invoke,
+                    callNode, cachedCallee, closure, arguments, callerReference);
         }
 
         static ReturnHomeMode classifyReturnHome(
@@ -652,7 +641,8 @@ final class ProtosFunctionCallDispatchers {
                 ProtosLanguageContext enteredContext,
                 @Bind("closure.preparedExecutionPlanOrNullForRuntime()")
                         ProtosClosureExecutionPlan currentPlan,
-                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached(value = "enteredContext", weak = true)
+                        ProtosLanguageContext cachedContext,
                 @Cached("currentPlan.bytecodeActivationTargetForComposition()")
                         RootCallTarget cachedTarget,
                 @Cached("createDirectCallNodeOrNull(cachedTarget)") DirectCallNode callNode,
@@ -962,6 +952,70 @@ final class ProtosFunctionCallDispatchers {
             return ReturnHomeMode.UNOBSERVABLE;
         }
         return ReturnHomeMode.OWNED_PHYSICAL;
+    }
+
+    /**
+     * Shared entry of every identity-keyed direct-call cache. The mode is a
+     * per-entry constant of the cache, so partial evaluation keeps exactly
+     * one of the three routes.
+     */
+    static Object invokeCachedClosure(
+            VirtualFrame frame,
+            Node inliningTarget,
+            ReturnHomeMode homeMode,
+            InlinedConditionProfile taskPresence,
+            FunctionDirectInvokeNode invoke,
+            DirectCallNode callNode,
+            ProtosBytecodeRootNode callee,
+            ProtosClosureValue closure,
+            Object[] arguments,
+            Object explicitCaller) {
+        if (homeMode == ReturnHomeMode.UNOBSERVABLE) {
+            return invokeUnobservableHome(
+                    frame, inliningTarget, taskPresence,
+                    callNode, callee, closure, arguments, explicitCaller);
+        }
+        if (homeMode == ReturnHomeMode.CAPTURED) {
+            return invokeCapturedHome(
+                    frame, inliningTarget, taskPresence,
+                    callNode, callee, closure, arguments, explicitCaller);
+        }
+        return invoke.execute(
+                frame, inliningTarget, callNode, callee,
+                closure, arguments, explicitCaller);
+    }
+
+    /**
+     * Admission guard of the single-context direct-call caches. It reads the
+     * language's single-context state once, when a cache entry is created.
+     */
+    @Idempotent
+    static boolean isSingleContext() {
+        CompilerAsserts.neverPartOfCompilation();
+        return ProtosLanguageContext.current()
+                .languageForRuntime()
+                .isSingleContextForRuntime();
+    }
+
+    /**
+     * Only a prepared plan belonging to the caller root's language can enter
+     * a single-context direct cache. A deferred, foreign or projection-required
+     * plan takes the context-aware dispatcher.
+     */
+    static RootCallTarget singleContextTargetOrNull(
+            ProtosClosureValue callable,
+            ProtosBytecodeRootNode callerRoot) {
+        ProtosClosureExecutionPlan plan =
+                callable.preparedExecutionPlanOrNullForRuntime();
+
+        if (plan == null
+                || callable.requiresContextLocalExecutionProjectionForRuntime()
+                || plan.language().orElse(null)
+                        != callerRoot.getLanguage(ProtosLanguage.class)) {
+            return null;
+        }
+
+        return plan.bytecodeActivationTargetForComposition();
     }
 
     /**

@@ -113,7 +113,83 @@ class ProtosI072PhaseDPreparedCallSeparationTest {
         assertEquals(
                 null,
                 ProtosPreparedCalls.StructuredNativeInvocation.forBodyOrNull(
-                        builtin, List.of(), moduleActivation()));
+                        builtin, new Object[0], moduleActivation()));
+    }
+
+    /** A structured invocation retains the prepared positional array without copying it. */
+    @Test
+    void structuredInvocationRetainsPreparedArgumentsWithoutCopy() throws Exception {
+        ProtosActivation activation = moduleActivation();
+        com.guillermomolina.protos.execution.ProtosStandardObjectProtocol.install();
+        ProtosClosureValue standardCall =
+                assertInstanceOf(
+                        ProtosClosureValue.class,
+                        ProtosObjectValue.rootObject().readLocalSlot("call").orElseThrow());
+        assertTrue(
+                com.guillermomolina.protos.execution.ProtosStandardObjectProtocol
+                        .isStandardCallImplementation(standardCall));
+        Object first = new Object();
+        Object second = new Object();
+        Object[] prepared = {first, second};
+
+        ProtosPreparedCalls.StructuredNativeInvocation invocation =
+                ProtosPreparedCalls.StructuredNativeInvocation.forBodyOrNull(
+                        standardCall, prepared, activation);
+
+        assertTrue(invocation != null && invocation.isStructuredObjectCall());
+        Field field =
+                ProtosPreparedCalls.StructuredNativeInvocation.class.getDeclaredField("supplied");
+        field.setAccessible(true);
+        assertEquals(Object[].class, field.getType(), "structured preparation transports Object[]");
+        Object[] retained = (Object[]) field.get(invocation);
+        assertTrue(retained == prepared, "the prepared argument array must not be copied again");
+        assertTrue(retained[0] == first && retained[1] == second);
+        assertTrue(invocation.activation() == activation);
+    }
+
+    /**
+     * Internal calls receive prepared positional {@code Object[]} arguments
+     * and build the B5 header in its fixed order, keeping argument identity.
+     */
+    @Test
+    void callRequestBuildsB5HeaderFromPreparedPositionalArrays() {
+        ProtosActivation activation = moduleActivation();
+        ProtosClosureValue callee = ProtosClosureValue.nativeClosure((a, x) -> x.size());
+        Object first = new Object();
+        Object second = new Object();
+        Object third = new Object();
+        for (Object[] supplied : List.of(
+                new Object[0],
+                new Object[] {first},
+                new Object[] {first, second},
+                new Object[] {first, second, third})) {
+            ProtosCallRequest request = ProtosCallRequest.call(callee, supplied, activation);
+            Object[] arguments = request.arguments();
+            assertEquals(ProtosFrameArguments.HEADER_LENGTH + supplied.length, arguments.length);
+            assertTrue(ProtosFrameArguments.isFunctionCall(arguments));
+            assertEquals(null, arguments[0], "dispatcher-owned Closure/Activation slot");
+            assertEquals(null, arguments[2], "no methodHome/Task for an unbound call");
+            assertEquals(null, arguments[3], "dispatcher-owned caller slot");
+            assertEquals(null, arguments[4], "dispatcher-owned ReturnHome slot");
+            for (int index = 0; index < supplied.length; index++) {
+                assertTrue(arguments[ProtosFrameArguments.HEADER_LENGTH + index] == supplied[index]);
+            }
+            assertTrue(arguments != supplied, "the B5 array is never the caller's array");
+            assertTrue(request.caller() == activation);
+            assertFalse(request.selectedBody());
+        }
+    }
+
+    /** Request preparation exposes no Java collection parameter. */
+    @Test
+    void callRequestFactoriesTakePreparedArraysNotCollections() {
+        for (java.lang.reflect.Method method : ProtosCallRequest.class.getDeclaredMethods()) {
+            for (Class<?> parameter : method.getParameterTypes()) {
+                assertFalse(
+                        java.util.Collection.class.isAssignableFrom(parameter),
+                        method.getName() + " must receive prepared Object[] arguments");
+            }
+        }
     }
 
     private static List<java.lang.reflect.Method> specializations(Class<?> operation) {

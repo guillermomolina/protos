@@ -286,10 +286,10 @@ final class ProtosPerf025IdentityMapSnapshotGenerationTest {
 
         assertTrue(
                 identitySource.contains(
-                        "Collections.unmodifiableList(entries)"));
+                        "Arrays.asList(entries).subList(0, size)"));
         assertTrue(
                 identitySource.contains(
-                        "new AssociationSnapshotView(entries)"));
+                        "new AssociationSnapshotView("));
 
         assertFalse(
                 identitySource.contains(
@@ -329,7 +329,7 @@ final class ProtosPerf025IdentityMapSnapshotGenerationTest {
 
         assertTrue(
                 identityMapEachSource.contains(
-                        "this.snapshot = value.associationSnapshot();"));
+                        "this.snapshot = value.associationIndexedSnapshot();"));
     }
 
     private static Object generation(

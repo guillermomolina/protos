@@ -1268,7 +1268,7 @@ final class ProtosStructuredDispatchLowerer {
     /**
      * I115: one call a structured protocol makes through the shared
      * dispatcher ({@code CallRequest}), composing its pending result through
-     * this root's continuation: {@code IsResultKind(CONTINUATION) -> Yield ->
+     * this root's continuation: {@code IsContinuation -> Yield ->
      * ResumeDispatchedContinuation}. The callee frames, never this root,
      * own their ReturnHomes.
      */
@@ -1329,9 +1329,9 @@ final class ProtosStructuredDispatchLowerer {
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
         builder.beginWhile();
-        builder.beginIsResultKind(ProtosResultKind.CONTINUATION);
+        builder.beginIsContinuation();
         builder.emitLoadLocal(childResult);
-        builder.endIsResultKind();
+        builder.endIsContinuation();
         builder.beginBlock();
         builder.beginStoreLocal(resumeValue);
         builder.beginYield();

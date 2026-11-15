@@ -88,7 +88,8 @@ abstract class ProtosExperimentalWriteGlobalNode extends Node {
             TruffleString name,
             int lexicalDepth,
             @Bind("ownModuleContextOrNull(frame.getArguments())") ProtosObjectValue context,
-            @Cached("context") ProtosObjectValue cachedContext,
+            @Cached(value = "context", weak = true)
+                    ProtosObjectValue cachedContext,
             @Cached("ownLocationOrNull(cachedContext, name)")
                     ProtosModuleBindingLocation location,
             @Exclusive @Cached DynamicObject.GetNode getNode) {
@@ -112,7 +113,8 @@ abstract class ProtosExperimentalWriteGlobalNode extends Node {
             TruffleString name,
             int lexicalDepth,
             @Bind("compactClosureOrNull(frame.getArguments())") ProtosClosureValue closure,
-            @Cached("closure") ProtosClosureValue cachedClosure,
+            @Cached(value = "closure", weak = true)
+                    ProtosClosureValue cachedClosure,
             @Cached("locationOrNull(cachedClosure, name, lexicalDepth)")
                     ProtosModuleBindingLocation location,
             @Exclusive @Cached DynamicObject.GetNode getNode) {

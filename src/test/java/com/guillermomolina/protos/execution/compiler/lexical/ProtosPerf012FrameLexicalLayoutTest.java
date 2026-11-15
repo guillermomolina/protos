@@ -264,7 +264,7 @@ final class ProtosPerf012FrameLexicalLayoutTest {
     private static Object call(
             ProtosClosureValue closure, ProtosActivation caller, Object... supplied) {
         return ProtosNumericValueSupport.guestValue(
-                ProtosCallRequest.call(closure, List.of(supplied), caller).callUncached());
+                ProtosCallRequest.call(closure, supplied, caller).callUncached());
     }
 
     private interface ModuleTest {

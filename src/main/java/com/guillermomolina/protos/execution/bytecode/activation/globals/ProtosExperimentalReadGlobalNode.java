@@ -108,7 +108,8 @@ abstract class ProtosExperimentalReadGlobalNode extends Node {
             int lexicalDepth,
             boolean candidate,
             @Bind("ownModuleContextOrNull(frame.getArguments())") ProtosObjectValue context,
-            @Cached("context") ProtosObjectValue cachedContext,
+            @Cached(value = "context", weak = true)
+                    ProtosObjectValue cachedContext,
             @Cached("ownLocationOrNull(cachedContext, name)")
                     ProtosModuleBindingLocation location,
             @Exclusive @Cached DynamicObject.GetNode getNode) {
@@ -134,7 +135,8 @@ abstract class ProtosExperimentalReadGlobalNode extends Node {
             int lexicalDepth,
             boolean candidate,
             @Bind("compactClosureOrNull(frame.getArguments())") ProtosClosureValue closure,
-            @Cached("closure") ProtosClosureValue cachedClosure,
+            @Cached(value = "closure", weak = true)
+                    ProtosClosureValue cachedClosure,
             @Cached("locationOrNull(cachedClosure, name, lexicalDepth)")
                     ProtosModuleBindingLocation location,
             @Exclusive @Cached DynamicObject.GetNode getNode) {

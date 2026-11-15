@@ -59,7 +59,7 @@ public final class ProtosClosureInvoker {
         Objects.requireNonNull(creator, "creator");
         Objects.requireNonNull(task, "task");
         ProtosBytecodeTaskExecution.executeRequest(
-                task, ProtosCallRequest.taskEntry(closure, task, supplied, creator));
+                task, ProtosCallRequest.taskEntry(closure, task, supplied.toArray(), creator));
     }
 
     public static Object invoke(

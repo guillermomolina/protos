@@ -273,7 +273,7 @@ final class ProtosPerf027AGuardedIntegerDeferredActivationTest {
         var generic = ProtosValueLookup.lookup(receiver, selector, prelude).orElseThrow();
         ProtosCallRequest request =
                 ProtosCallRequest.send(
-                        receiver, selector, prelude.newModuleActivation(), List.of(argument));
+                        receiver, selector, prelude.newModuleActivation(), new Object[] {argument});
         assertSame(generic.value(), ((ProtosBoundMethod) request.callable()).callable());
         assertSame(generic.home(), ((ProtosBoundMethod) request.callable()).methodHome());
         return request;

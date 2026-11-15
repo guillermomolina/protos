@@ -20,6 +20,7 @@ package com.guillermomolina.protos.runtime;
 import com.guillermomolina.protos.runtime.numeric.ProtosNumericHashKey;
 import java.util.AbstractList;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -116,16 +117,24 @@ public final class ProtosIdentityMapValue extends ProtosObjectValue {
      * old generations stay alive only through ordinary snapshot references.
      */
     private static final class IdentityMapGeneration {
-        private final List<Entry> entries = new ArrayList<>();
+        private static final Entry[] NO_ENTRIES = new Entry[0];
+
+        /* Insertion-ordered entries [0, size); read by index, never via List. */
+        private Entry[] entries = NO_ENTRIES;
+        private int size;
         private final Map<ProtosNumericHashKey, Bucket> entriesByIdentityHash =
                 new HashMap<>();
 
         private List<Entry> keyedSnapshotView;
         private List<Map.Entry<Object, Object>> associationSnapshotView;
+        private ProtosIndexedSnapshot associationIndexedView;
         private boolean published;
 
         private void append(Entry entry) {
-            entries.add(entry);
+            if (size == entries.length) {
+                entries = Arrays.copyOf(entries, Math.max(4, size * 2));
+            }
+            entries[size++] = entry;
             entriesByIdentityHash
                     .computeIfAbsent(
                             entry.recordedIdentityHash(),
@@ -145,7 +154,8 @@ public final class ProtosIdentityMapValue extends ProtosObjectValue {
             published = true;
             if (keyedSnapshotView == null) {
                 keyedSnapshotView =
-                        Collections.unmodifiableList(entries);
+                        Collections.unmodifiableList(
+                                Arrays.asList(entries).subList(0, size));
             }
             return keyedSnapshotView;
         }
@@ -154,16 +164,34 @@ public final class ProtosIdentityMapValue extends ProtosObjectValue {
             published = true;
             if (associationSnapshotView == null) {
                 associationSnapshotView =
-                        new AssociationSnapshotView(entries);
+                        new AssociationSnapshotView(
+                                Arrays.asList(entries).subList(0, size));
             }
             return associationSnapshotView;
+        }
+
+        private ProtosIndexedSnapshot publishAssociationIndexedSnapshot() {
+            published = true;
+            ProtosIndexedSnapshot view = associationIndexedView;
+            if (view == null) {
+                Object[] keysAndValues = new Object[size * 2];
+                for (int index = 0; index < size; index++) {
+                    Entry entry = entries[index];
+                    keysAndValues[index * 2] = entry.key();
+                    keysAndValues[index * 2 + 1] = entry.value();
+                }
+                view = ProtosIndexedSnapshot.associations(keysAndValues, size);
+                associationIndexedView = view;
+            }
+            return view;
         }
 
         private IdentityMapGeneration detachedCopy() {
             IdentityMapGeneration copy =
                     new IdentityMapGeneration();
 
-            for (Entry entry : entries) {
+            for (int position = 0; position < size; position++) {
+                Entry entry = entries[position];
                 copy.append(
                         new Entry(
                                 entry.key(),
@@ -181,7 +209,8 @@ public final class ProtosIdentityMapValue extends ProtosObjectValue {
                     new IdentityMapGeneration();
             boolean found = false;
 
-            for (Entry entry : entries) {
+            for (int position = 0; position < size; position++) {
+                Entry entry = entries[position];
                 Object copiedValue = entry.value();
 
                 if (entry == target) {
@@ -210,7 +239,8 @@ public final class ProtosIdentityMapValue extends ProtosObjectValue {
                     new IdentityMapGeneration();
             boolean found = false;
 
-            for (Entry entry : entries) {
+            for (int position = 0; position < size; position++) {
+                Entry entry = entries[position];
                 if (entry == target) {
                     found = true;
                     continue;
@@ -232,7 +262,13 @@ public final class ProtosIdentityMapValue extends ProtosObjectValue {
         }
 
         private Object remove(Entry entry) {
-            int insertionIndex = entries.indexOf(entry);
+            int insertionIndex = -1;
+            for (int index = 0; index < size; index++) {
+                if (entries[index] == entry) {
+                    insertionIndex = index;
+                    break;
+                }
+            }
             Bucket bucket =
                     entriesByIdentityHash.get(
                             entry.recordedIdentityHash());
@@ -244,7 +280,11 @@ public final class ProtosIdentityMapValue extends ProtosObjectValue {
                         "foreign IdentityMap entry");
             }
 
-            entries.remove(insertionIndex);
+            int tail = size - insertionIndex - 1;
+            if (tail > 0) {
+                System.arraycopy(entries, insertionIndex + 1, entries, insertionIndex, tail);
+            }
+            entries[--size] = null;
             bucket.entries.remove(entry);
 
             if (bucket.entries.isEmpty()) {
@@ -264,7 +304,7 @@ public final class ProtosIdentityMapValue extends ProtosObjectValue {
     }
 
     public int keyedSize() {
-        return generation.entries.size();
+        return generation.size;
     }
 
     public List<Entry> keyedSnapshot() {
@@ -278,6 +318,15 @@ public final class ProtosIdentityMapValue extends ProtosObjectValue {
 
     public List<Map.Entry<Object, Object>> associationSnapshot() {
         return generation.publishAssociationSnapshot();
+    }
+
+    /**
+     * The insertion-ordered associations of the current generation as one
+     * indexed snapshot. Publishing it freezes the generation exactly like the
+     * List snapshots, so it is independent of later mutation.
+     */
+    public ProtosIndexedSnapshot associationIndexedSnapshot() {
+        return generation.publishAssociationIndexedSnapshot();
     }
 
     public void append(

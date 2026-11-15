@@ -51,7 +51,8 @@ public final class ProtosIoReleaseCPrimeExecution {
     public static final class Step {
         private final Object target;
         private final String selector;
-        private final List<?> arguments;
+        /* The prepared positional arguments of this guest step. */
+        private final Object[] arguments;
         private final boolean runAfterFailure;
         private final Runnable resolvedAction;
         private final Consumer<ProtosObjectValue> failedAction;
@@ -65,7 +66,7 @@ public final class ProtosIoReleaseCPrimeExecution {
                 Consumer<ProtosObjectValue> failedAction) {
             this.target = Objects.requireNonNull(target, "target");
             this.selector = Objects.requireNonNull(selector, "selector");
-            this.arguments = List.copyOf(Objects.requireNonNull(arguments, "arguments"));
+            this.arguments = List.copyOf(Objects.requireNonNull(arguments, "arguments")).toArray();
             this.runAfterFailure = runAfterFailure;
             this.resolvedAction = Objects.requireNonNull(resolvedAction, "resolvedAction");
             this.failedAction = Objects.requireNonNull(failedAction, "failedAction");
@@ -209,7 +210,7 @@ public final class ProtosIoReleaseCPrimeExecution {
             return currentStep().selector;
         }
 
-        List<?> arguments() {
+        Object[] arguments() {
             return currentStep().arguments;
         }
 
@@ -538,9 +539,9 @@ public final class ProtosIoReleaseCPrimeExecution {
         b.endStoreLocal();
 
         b.beginWhile();
-        b.beginIsResultKind(ProtosResultKind.CONTINUATION);
+        b.beginIsContinuation();
         b.emitLoadLocal(l.child);
-        b.endIsResultKind();
+        b.endIsContinuation();
 
         b.beginBlock();
 
@@ -594,9 +595,9 @@ public final class ProtosIoReleaseCPrimeExecution {
         b.endStoreLocal();
 
         b.beginWhile();
-        b.beginIsResultKind(ProtosResultKind.CONTINUATION);
+        b.beginIsContinuation();
         b.emitLoadLocal(l.lowerOutcome);
-        b.endIsResultKind();
+        b.endIsContinuation();
         b.beginBlock();
         b.beginStoreLocal(l.yielded);
         b.emitLoadLocal(l.lowerOutcome);

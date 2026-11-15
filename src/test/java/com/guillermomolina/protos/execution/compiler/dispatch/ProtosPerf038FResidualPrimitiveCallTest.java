@@ -359,6 +359,20 @@ final class ProtosPerf038FResidualPrimitiveCallTest {
                     ProtosBytecodeRootNode.IsContinuation.isContinuationClass(
                             ordinary.getClass()));
         }
+        // I115: null and ordinary Boolean results are not continuations.
+        assertFalse(ProtosBytecodeRootNode.IsContinuation.perform(null));
+        assertFalse(ProtosBytecodeRootNode.IsContinuation.perform(Boolean.TRUE));
+        assertFalse(ProtosBytecodeRootNode.IsContinuation.perform(Boolean.FALSE));
+        for (Object ordinary : List.of(Boolean.TRUE, "text", Long.valueOf(7L))) {
+            assertFalse(ProtosBytecodeRootNode.IsContinuation.isContinuationClass(
+                    ordinary.getClass()));
+            assertEquals(ProtosBytecodeRootNode.IsContinuation.perform(ordinary),
+                    ProtosBytecodeRootNode.IsContinuation.isContinuationClass(
+                            ordinary.getClass()));
+        }
+        // I115: the suspension carrier types keep their classification.
+        assertTrue(ProtosBytecodeRootNode.IsContinuation.isContinuationClass(
+                ProtosTailCallContinuation.class));
         System.out.println("PERF038F_CONTINUATION_CLASS=PASS");
     }
 

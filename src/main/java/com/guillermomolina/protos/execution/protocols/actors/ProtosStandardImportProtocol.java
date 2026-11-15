@@ -260,11 +260,11 @@ final class ProtosStandardImportProtocol {
     static ProtosModuleRuntime.PreparedModuleInitialization claimImportAttempt(
             ProtosNativeClosureBody selected,
             ProtosActivation activation,
-            java.util.List<?> supplied) {
+            Object[] supplied) {
         if (!(selected instanceof ImportExecuteBody executeBody)
                 || activation.receiver() != executeBody.bridge
-                || supplied.size() != 1
-                || !(supplied.get(0) instanceof PendingInitializationToken token)
+                || supplied.length != 1
+                || !(supplied[0] instanceof PendingInitializationToken token)
                 || token.runtime != executeBody.runtime
                 || token.actorState != activation.actorModuleState()
                 || token.domain != activation.executionDomain()

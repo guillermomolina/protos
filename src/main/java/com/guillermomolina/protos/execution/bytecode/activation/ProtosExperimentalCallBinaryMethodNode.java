@@ -33,6 +33,7 @@ import com.oracle.truffle.api.dsl.GenerateInline;
 import com.oracle.truffle.api.dsl.GenerateUncached;
 import com.oracle.truffle.api.dsl.Idempotent;
 import com.oracle.truffle.api.dsl.NonIdempotent;
+import com.oracle.truffle.api.dsl.ReportPolymorphism.Megamorphic;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.DirectCallNode;
@@ -105,18 +106,9 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
         Object[] arguments = ProtosFrameArguments.dispatchedCall1(
                 null, receiver, receiverHomeOrNull(receiver),
                 null, null, a0);
-        Object outcome;
-        if (cachedHomeMode == ProtosFunctionCallDispatchers.ReturnHomeMode.UNOBSERVABLE) {
-            outcome = ProtosFunctionCallDispatchers.invokeUnobservableHome(
-                    frame, inliningTarget, taskPresence, callNode, cachedCallee, callable, arguments, null);
-        } else if (cachedHomeMode == ProtosFunctionCallDispatchers.ReturnHomeMode.CAPTURED) {
-            outcome = ProtosFunctionCallDispatchers.invokeCapturedHome(
-                    frame, inliningTarget, taskPresence, callNode, cachedCallee, callable, arguments, null);
-        } else {
-            outcome = invoke.execute(
-                    frame, inliningTarget, callNode, cachedCallee,
-                    callable, arguments, null);
-        }
+        Object outcome = ProtosFunctionCallDispatchers.invokeCachedClosure(
+                frame, inliningTarget, cachedHomeMode, taskPresence, invoke,
+                callNode, cachedCallee, callable, arguments, null);
         // The cached effective root's compilation-final proof: a proven body
         // never yields a suspended outcome, so no terminal classification.
         if (cachedCallee.provablyNonSuspendingBody()) {
@@ -131,11 +123,78 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
         return ProtosFunctionCallDispatchers.classifyReturnHome(closure, callee);
     }
 
-    @Specialization(limit = "3", guards = {
+    /*
+     * Ordinary CALL2 of a source function: identity-keyed direct-call
+     * cache. The canonical `call` selection is checked before the cached
+     * target is used.
+     */
+    @ForceQuickening
+    @Specialization(
+            guards = {
+                    "!methodSend",
+                    "isSourceFunction(callable)",
+                    "isSingleContext()",
+                    "canonicalCallSelected(callable, rootSelection)",
+                    "callable == cachedCallable",
+                    "cachedTarget != null"
+            },
+            assumptions = {"cachedCodeStable", "cachedCallerNeedsStable"},
+            excludeForUncached = true,
+            limit = "3")
+    static Object callCachedClosure(
+            VirtualFrame frame,
+            boolean terminal,
+            boolean methodSend,
+            ProtosClosureValue callable,
+            Object a0,
+            Object a1,
+            @Bind Node inliningTarget,
+            @Bind("bytecodeOf($node)") BytecodeNode bytecode,
+            @Bind("bytecode.getBytecodeIndex(frame)") int bytecodeIndex,
+            @Bind("rootOf($node)") ProtosBytecodeRootNode root,
+            @Cached(value = "callable", weak = true)
+                    ProtosClosureValue cachedCallable,
+            @Exclusive @Cached(value = "rootCallSelection()", allowUncached = true)
+                    ProtosStandardObjectProtocol.CanonicalRootCallSelection rootSelection,
+            @Cached("cachedCallable.codeStableAssumptionForRuntime()")
+                    Assumption cachedCodeStable,
+            @Cached("singleContextTargetOrNull(cachedCallable, root)")
+                    RootCallTarget cachedTarget,
+            @Cached("createDirectCallNodeOrNull(cachedTarget)")
+                    DirectCallNode callNode,
+            @Cached(value = "calleeRootOrNull(cachedTarget)", adopt = false)
+                    ProtosBytecodeRootNode cachedCallee,
+            @Cached("cachedCallee.callerNeedsStability()")
+                    Assumption cachedCallerNeedsStable,
+            @Cached("classifyReturnHome(cachedCallable, cachedCallee)")
+                    ProtosFunctionCallDispatchers.ReturnHomeMode cachedHomeMode,
+            @Exclusive @Cached ProtosFunctionCallDispatchers.FunctionDirectInvokeNode invoke,
+            @Exclusive @Cached InlinedConditionProfile taskPresence) {
+        Object[] arguments = ProtosFrameArguments.dispatchedCall2(
+                null, ProtosFrameArguments.functionCallMarker(),
+                null, null, null, a0, a1);
+        Object outcome = ProtosFunctionCallDispatchers.invokeCachedClosure(
+                frame, inliningTarget, cachedHomeMode, taskPresence, invoke,
+                callNode, cachedCallee, callable, arguments, null);
+        // The cached effective root's compilation-final proof: a proven body
+        // never yields a suspended outcome, so no terminal classification.
+        if (cachedCallee.provablyNonSuspendingBody()) {
+            return outcome;
+        }
+        return ProtosTailCallContinuation.completeCall(
+                terminal, outcome, bytecode, bytecodeIndex);
+    }
+
+    @Specialization(
+            limit = "3",
+            guards = {
                     "!methodSend",
                     "isSourceFunction(callable)",
                     "canonicalCallSelected(callable, rootSelection)"
-            })
+            },
+            replaces = "callCachedClosure")
+    @Megamorphic
+    @InliningCutoff
     static Object callFunction(
             VirtualFrame frame,
             boolean terminal,
@@ -259,25 +318,25 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
      */
     @Idempotent
     static boolean isSingleContext() {
-        return ProtosCallUnaryMethodNode.isSingleContext();
+        return ProtosFunctionCallDispatchers.isSingleContext();
     }
 
     static RootCallTarget singleContextTargetOrNull(
             ProtosClosureValue callable,
             ProtosBytecodeRootNode root) {
-        return ProtosCallUnaryMethodNode.singleContextTargetOrNull(
+        return ProtosFunctionCallDispatchers.singleContextTargetOrNull(
                 callable, root);
     }
 
     static DirectCallNode createDirectCallNodeOrNull(
             RootCallTarget target) {
-        return ProtosCallUnaryMethodNode.createDirectCallNodeOrNull(
+        return ProtosFunctionCallDispatchers.createDirectCallNodeOrNull(
                 target);
     }
 
     static ProtosBytecodeRootNode calleeRootOrNull(
             RootCallTarget target) {
-        return ProtosCallUnaryMethodNode.calleeRootOrNull(target);
+        return ProtosFunctionCallDispatchers.calleeRootOrNull(target);
     }
 
     static ProtosObjectValue receiverHomeOrNull(Object receiver) {

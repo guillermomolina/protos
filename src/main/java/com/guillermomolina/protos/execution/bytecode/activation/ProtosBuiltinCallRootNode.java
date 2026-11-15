@@ -150,11 +150,9 @@ final class ProtosBuiltinCallRootNode extends RootNode {
     }
 
     private Object executeBody(ProtosClosureValue closure, ProtosActivation activation) {
-        List<?> supplied = activation.suppliedArgumentsForRuntime();
         ProtosPreparedCalls.StructuredNativeInvocation structured =
                 ProtosPreparedCalls.StructuredNativeInvocation.forBodyOrNull(
                         closure,
-                        supplied,
                         activation);
         if (structured != null) {
 
@@ -164,6 +162,7 @@ final class ProtosBuiltinCallRootNode extends RootNode {
                         structured);
 
         }
+        List<?> supplied = activation.suppliedArgumentsForRuntime();
         if (body instanceof ProtosSuspensionCapableNativeClosureBody suspensionCapable
                 && suspendible(activation)) {
             return executeForContinuation(suspensionCapable, activation, supplied);

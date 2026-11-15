@@ -584,7 +584,7 @@ final class ProtosPerf025LazyLexicalCaptureTest {
         // I115: a direct function call through the shared dispatcher; its B5
         // array is the callee frame's arguments.
         ProtosCallRequest request =
-                ProtosCallRequest.call(closure, java.util.List.of(supplied), caller);
+                ProtosCallRequest.call(closure, supplied, caller);
         Object result = ProtosNumericValueSupport.guestValue(request.callUncached());
         /*
          * PERF025-H1: a callee whose body never needs its rich activation

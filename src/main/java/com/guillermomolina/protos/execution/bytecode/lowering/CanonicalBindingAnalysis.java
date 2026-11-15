@@ -199,9 +199,8 @@ final class CanonicalBindingAnalysis {
             return true;
         }
 
-        if (!parentHasFrameLayout) {
-            return false;
-        }
+        // Module bindings live in their Context, not the parent's frame.
+        // Each remaining access must still prove its lexical owner and depth.
 
         for (CanonicalLookup lookup : lookupResolutions.keySet()) {
             CanonicalBindingResolution resolution =
@@ -223,7 +222,7 @@ final class CanonicalBindingAnalysis {
                 return false;
             }
 
-            if (admittedInlineGlobalRead(captured, parentScope)) {
+            if (admittedInlineGlobalAccess(captured, parentScope)) {
                 // The callback is removed physically: the enclosing root's
                 // global read uses the same lexical owner at depth minus one.
                 continue;
@@ -249,9 +248,9 @@ final class CanonicalBindingAnalysis {
                 return false;
             }
 
-            if (captured.identity().owner() != parentScope
-                    || !parentFrameNames.contains(
-                            captured.identity().name())) {
+            if (!admittedInlineGlobalAccess(captured, parentScope)
+                    && !directParentCapture(
+                            resolution, parentScope, parentFrameNames)) {
                 return false;
             }
         }
@@ -304,7 +303,7 @@ final class CanonicalBindingAnalysis {
                 continue;
             }
             if (!(parent instanceof CanonicalBindingResolution.CapturedResolved captured)
-                    || (!admittedInlineGlobalRead(captured, parentScope)
+                    || (!admittedInlineGlobalAccess(captured, parentScope)
                             && !directParentCapture(
                                     parent, parentScope, parentFrameNames))) {
                 return false;
@@ -317,9 +316,12 @@ final class CanonicalBindingAnalysis {
                     && resolved.identity().owner() == ownScope) {
                 continue;
             }
-            if (!directParentCapture(
-                    enclosing.resolutionOf(entry.getKey()).orElse(null),
-                    parentScope, parentFrameNames)) {
+            CanonicalBindingResolution parent =
+                    enclosing.resolutionOf(entry.getKey()).orElse(null);
+            if (!(parent instanceof CanonicalBindingResolution.CapturedResolved captured)
+                    || (!admittedInlineGlobalAccess(captured, parentScope)
+                            && !directParentCapture(
+                                    parent, parentScope, parentFrameNames))) {
                 return false;
             }
         }
@@ -401,7 +403,7 @@ final class CanonicalBindingAnalysis {
                 continue;
             }
             if (!(parent instanceof CanonicalBindingResolution.CapturedResolved captured)
-                    || (!admittedInlineGlobalRead(captured, parentScope)
+                    || (!admittedInlineGlobalAccess(captured, parentScope)
                             && !directParentCapture(
                                     parent, parentScope, parentFrameNames))) {
                 return false;
@@ -427,17 +429,16 @@ final class CanonicalBindingAnalysis {
     }
 
     /**
-     * I115: a read in an inlined callback may refer to an enclosing module
-     * declaration. The lexical owner and complete depth are proven against
-     * the current parent's scope chain; no name-only global assumption is
-     * allowed. Writes still use the separate direct-parent proof.
+     * An inline callback may access a module binding only when the
+     * lexical owner and complete depth are statically proven.
+     * Reads and writes retain their existing global operations.
      */
-    static boolean admittedInlineGlobalRead(
+    static boolean admittedInlineGlobalAccess(
             CanonicalBindingResolution.CapturedResolved captured,
             CanonicalLexicalScope parentScope) {
         if (parentScope == null
                 || captured.identity().owner().kind() != CanonicalLexicalScope.Kind.ROOT
-                || captured.lexicalDepth() < 2) {
+                || captured.lexicalDepth() < 1) {
             return false;
         }
         int depth = 1;
@@ -536,7 +537,9 @@ final class CanonicalBindingAnalysis {
         return resolution
                         instanceof CanonicalBindingResolution.CapturedResolved captured
                 && captured.identity().owner() == parentScope
-                && parentFrameNames.contains(captured.identity().name());
+                && (parentScope.kind() == CanonicalLexicalScope.Kind.ROOT
+                        ? captured.lexicalDepth() == 1
+                        : parentFrameNames.contains(captured.identity().name()));
     }
 
     int lexicalCreateSiteCount() {

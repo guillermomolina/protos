@@ -468,7 +468,9 @@ public final class ProtosStandardMapProtocol {
   return find(m,k,hash(m,k,a),a);
  }
  private static ProtosMapValue.Entry find(ProtosMapValue m,Object k,ProtosNumericHashKey h,ProtosActivation a){
-  for(var e:m.candidatesForRecordedHash(h)){
+  ProtosMapValue.Candidates candidates=m.candidatesForRecordedHash(h);
+  for(int index=0;index<candidates.size();index++){
+   ProtosMapValue.Entry e=candidates.get(index);
    if(matchesStoredKey(m,k,h,e.key(),e.recordedHash(),a))return e;
   }
   return null;

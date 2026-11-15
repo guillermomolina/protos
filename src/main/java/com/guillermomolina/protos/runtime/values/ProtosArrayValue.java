@@ -26,7 +26,6 @@ import com.oracle.truffle.api.library.ExportLibrary;
 import com.oracle.truffle.api.library.ExportMessage;
 
 import java.util.AbstractList;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
@@ -41,15 +40,17 @@ public final class ProtosArrayValue extends ProtosObjectValue {
      * exactly as long as their shallow snapshots do.
      */
     private static final class IndexedGeneration {
-        private ArrayList<Object> elements;
+        /* Exactly one of the two backings is non-null; both have the Array's size. */
+        private Object[] elements;
         private long[] longElements;
         private List<Object> snapshotView;
+        private ProtosIndexedSnapshot indexedView;
         private boolean published;
 
-        private IndexedGeneration(ArrayList<Object> values) {
+        private IndexedGeneration(Object[] values) {
             Objects.requireNonNull(values, "values");
 
-            boolean allLong = !values.isEmpty();
+            boolean allLong = values.length != 0;
             for (Object value : values) {
                 if (!(value instanceof Long)) {
                     allLong = false;
@@ -58,10 +59,9 @@ public final class ProtosArrayValue extends ProtosObjectValue {
             }
 
             if (allLong) {
-                longElements = new long[values.size()];
-                for (int index = 0; index < values.size(); index++) {
-                    longElements[index] =
-                            ((Long) values.get(index)).longValue();
+                longElements = new long[values.length];
+                for (int index = 0; index < values.length; index++) {
+                    longElements[index] = ((Long) values[index]).longValue();
                 }
             } else {
                 elements = values;
@@ -75,13 +75,13 @@ public final class ProtosArrayValue extends ProtosObjectValue {
         private int size() {
             return longElements != null
                     ? longElements.length
-                    : elements.size();
+                    : elements.length;
         }
 
         private Object get(int index) {
             return longElements != null
                     ? Long.valueOf(longElements[index])
-                    : elements.get(index);
+                    : elements[index];
         }
 
         private long getLong(int index) {
@@ -95,57 +95,67 @@ public final class ProtosArrayValue extends ProtosObjectValue {
                     return;
                 }
 
-                ArrayList<Object> widened =
-                        new ArrayList<>(longElements.length);
-                for (long element : longElements) {
-                    widened.add(Long.valueOf(element));
+                Object[] widened = new Object[longElements.length];
+                for (int position = 0; position < longElements.length; position++) {
+                    widened[position] = Long.valueOf(longElements[position]);
                 }
 
                 elements = widened;
                 longElements = null;
             }
 
-            elements.set(index, value);
+            elements[index] = value;
         }
 
         private void putLong(int index, long value) {
             if (longElements != null) {
                 longElements[index] = value;
             } else {
-                elements.set(index, Long.valueOf(value));
+                elements[index] = Long.valueOf(value);
             }
         }
 
+        @TruffleBoundary
         private List<Object> publishSnapshot() {
             published = true;
 
             if (snapshotView == null) {
-                if (longElements == null) {
-                    snapshotView = Collections.unmodifiableList(elements);
-                } else {
-                    IndexedGeneration captured = this;
-                    snapshotView = Collections.unmodifiableList(
-                            new AbstractList<Object>() {
-                                @Override
-                                public Object get(int index) {
-                                    return captured.get(index);
-                                }
+                IndexedGeneration captured = this;
+                snapshotView = Collections.unmodifiableList(
+                        new AbstractList<Object>() {
+                            @Override
+                            public Object get(int index) {
+                                Objects.checkIndex(index, captured.size());
+                                return captured.get(index);
+                            }
 
-                                @Override
-                                public int size() {
-                                    return captured.size();
-                                }
-                            });
-                }
+                            @Override
+                            public int size() {
+                                return captured.size();
+                            }
+                        });
             }
 
             return snapshotView;
         }
 
+        private ProtosIndexedSnapshot publishIndexedSnapshot() {
+            published = true;
+
+            ProtosIndexedSnapshot view = indexedView;
+            if (view == null) {
+                view = longElements != null
+                        ? ProtosIndexedSnapshot.longElements(longElements)
+                        : ProtosIndexedSnapshot.elements(elements, elements.length);
+                indexedView = view;
+            }
+            return view;
+        }
+
         private IndexedGeneration detachedCopy() {
             return longElements != null
                     ? new IndexedGeneration(longElements.clone())
-                    : new IndexedGeneration(new ArrayList<>(elements));
+                    : new IndexedGeneration(elements.clone());
         }
     }
 
@@ -156,10 +166,10 @@ public final class ProtosArrayValue extends ProtosObjectValue {
         Objects.requireNonNull(elements, "elements");
 
         int size = elements.size();
-        ArrayList<Object> ownedElements = new ArrayList<>(size);
+        Object[] ownedElements = new Object[size];
         for (int index = 0; index < size; index++) {
             Object element = elements.get(index);
-            ownedElements.add(Objects.requireNonNull(element, "element"));
+            ownedElements[index] = Objects.requireNonNull(element, "element");
         }
         this.indexedGeneration = new IndexedGeneration(ownedElements);
     }
@@ -214,6 +224,15 @@ public final class ProtosArrayValue extends ProtosObjectValue {
 
     public List<Object> indexedSnapshot() {
         return indexedGeneration.publishSnapshot();
+    }
+
+    /**
+     * The current generation published as one indexed snapshot: the
+     * generation's own backing, read by index, never written again, so it is
+     * independent of later writes (which detach a fresh generation first).
+     */
+    public ProtosIndexedSnapshot indexedGenerationSnapshot() {
+        return indexedGeneration.publishIndexedSnapshot();
     }
 
     private IndexedGeneration writableIndexedGeneration() {

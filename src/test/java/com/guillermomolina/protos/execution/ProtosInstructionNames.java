@@ -26,20 +26,13 @@ import java.util.Map;
  * <p>I113 merged operations that differ only in a builder-fixed phase into
  * one operation with a discriminating constant operand. Instruction-order and
  * absence oracles still need to identify that phase exactly, so for those
- * operations this answers the name of the phase the constant selects (for
- * example {@code c.IsContinuation} for
- * {@code c.IsResultKind} with {@link ProtosResultKind#CONTINUATION}).
+ * operations this answers the name of the phase the constant selects.
  * Every other instruction keeps {@link Instruction#getName()}.
  */
 public final class ProtosInstructionNames {
     private ProtosInstructionNames() {}
 
     private static final Map<String, Map<Object, String>> PHASES = Map.ofEntries(
-            Map.entry("IsResultKind", Map.of(
-                    ProtosResultKind.CAPTURED_OWNER_FRAME_SELECTED, "IsCapturedOwnerFrameSelected",
-                    ProtosResultKind.BUFFERED_WRITER_STEP_REQUIRED, "IsBufferedByteWriterStepRequired",
-                    ProtosResultKind.TEXT_READER_NEED_INPUT, "IsTextReaderNeedInput",
-                    ProtosResultKind.CONTINUATION, "IsContinuation")),
             Map.entry("Identity", Map.of(false, "Identity", true, "NotIdentity")),
             Map.entry("MutateLocalSlot", Map.of(
                     ProtosSlotMutation.ASSIGN_RESOLVED,

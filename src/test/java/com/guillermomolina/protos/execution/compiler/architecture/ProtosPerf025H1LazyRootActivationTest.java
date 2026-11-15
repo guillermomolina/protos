@@ -285,7 +285,7 @@ final class ProtosPerf025H1LazyRootActivationTest {
                                                 ProtosCallRequest.taskEntry(
                                                         identity,
                                                         current,
-                                                        List.of(integer(9)),
+                                                        new Object[] {integer(9)},
                                                         module);
                                         preparedRef.set(prepared);
                                         ProtosBytecodeTaskExecution.executeRequest(

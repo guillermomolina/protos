@@ -37,6 +37,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import org.graalvm.polyglot.Context;
+import org.graalvm.polyglot.Engine;
 import org.graalvm.polyglot.PolyglotException;
 import org.graalvm.polyglot.Source;
 import org.graalvm.polyglot.Value;
@@ -189,6 +190,85 @@ final class ProtosStandardPolyglotEmbeddingTest {
             assertNotSame(embedded(left), embedded(right));
             assertEquals(1, left.getBindings(ProtosLanguage.ID).getMember("v").asInt());
             assertEquals(2, right.getBindings(ProtosLanguage.ID).getMember("v").asInt());
+        }
+    }
+
+    private static final String SHARED_ENGINE_SOURCE =
+            """
+            base: %d
+            f0: () => { base }
+            f1: (a) => { a + base }
+            f3: (a, b, c) => { a * 100 + b * 10 + c + base }
+            capture: () => { () => { base } }
+            captured: capture()
+            hot: () => {
+                n: 0
+                total: 0
+                (() => n < 20).whileTrue() {
+                    total = total + f0() + f1(n) + f3(1, 2, 3)
+                    n = n + 1
+                }
+                total
+            }
+            rebase: (value) => {
+                base = value
+                base
+            }
+            0
+            """;
+
+    private static long expectedHot(long base) {
+        long total = 0;
+        for (long n = 0; n < 20; n++) {
+            total += base + (n + base) + (123 + base);
+        }
+        return total;
+    }
+
+    /*
+     * Two simultaneous Contexts of one Engine: the language runs in
+     * multiple-context mode, so identity caches must never cross Contexts.
+     * Executable plans, captured Closures and module bindings stay local to
+     * their own Context, and the shared root Object stays one frozen object.
+     */
+    @Test
+    void sharedEngineContextsKeepTheirOwnPlansClosuresAndBindings() {
+        try (Engine engine = Engine.create(ProtosLanguage.ID);
+                Context left = builder().engine(engine).build();
+                Context right = builder().engine(engine).build()) {
+            left.eval(ProtosLanguage.ID, SHARED_ENGINE_SOURCE.formatted(1));
+            right.eval(ProtosLanguage.ID, SHARED_ENGINE_SOURCE.formatted(1000));
+            Value leftHot = left.getBindings(ProtosLanguage.ID).getMember("hot");
+            Value rightHot = right.getBindings(ProtosLanguage.ID).getMember("hot");
+            Value leftCaptured = left.getBindings(ProtosLanguage.ID).getMember("captured");
+            Value rightCaptured = right.getBindings(ProtosLanguage.ID).getMember("captured");
+            assertTrue(leftCaptured.canExecute(), "left captured Closure binding is executable");
+            assertTrue(rightCaptured.canExecute(), "right captured Closure binding is executable");
+
+            for (int round = 0; round < 64; round++) {
+                assertEquals(expectedHot(1), leftHot.execute().asLong());
+                assertEquals(expectedHot(1000), rightHot.execute().asLong());
+                assertEquals(1, leftCaptured.execute().asLong());
+                assertEquals(1000, rightCaptured.execute().asLong());
+            }
+
+            left.getBindings(ProtosLanguage.ID).getMember("rebase").execute(7);
+            for (int round = 0; round < 16; round++) {
+                assertEquals(expectedHot(7), leftHot.execute().asLong());
+                assertEquals(expectedHot(1000), rightHot.execute().asLong(),
+                        "a rebinding in one Context is not observed by the other");
+                assertEquals(7, leftCaptured.execute().asLong());
+                assertEquals(1000, rightCaptured.execute().asLong());
+            }
+
+            assertNotSame(languageContext(left), languageContext(right));
+            assertNotSame(embedded(left), embedded(right));
+            assertNotSame(selected(left), selected(right));
+
+            ProtosObjectValue root = ProtosObjectValue.rootObject();
+            assertTrue(root.isRootObject());
+            assertTrue(root.isFrozen(), "the standard root Object stays frozen");
+            assertSame(root, ProtosObjectValue.rootObject());
         }
     }
 

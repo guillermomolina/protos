@@ -2156,7 +2156,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                                                 ProtosCallRequest.taskEntry(
                                                         identity,
                                                         current,
-                                                        List.of(integer(8)),
+                                                        new Object[] {integer(8)},
                                                         module);
                                         preparedRef.set(prepared);
                                         ProtosBytecodeTaskExecution.executeRequest(

@@ -146,7 +146,7 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
                         // I115: the Task-owned entry is made by the shared dispatcher,
                         // which writes the B5 header; it is inspected after the call.
                         ProtosCallRequest prepared =
-                                ProtosCallRequest.taskEntry(literal, current, List.of(), module);
+                                ProtosCallRequest.taskEntry(literal, current, new Object[0], module);
                         argumentsRef.set(prepared.arguments());
                         currentRef.set(current);
                         assertSame(current, prepared.arguments()[2]);
@@ -183,7 +183,7 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
                     module.executionDomain().createTask(null, current -> {
                         // I115: Task-owned entry through the shared dispatcher.
                         ProtosCallRequest prepared =
-                                ProtosCallRequest.taskEntry(returning, current, List.of(), module);
+                                ProtosCallRequest.taskEntry(returning, current, new Object[0], module);
                         Object[] arguments = prepared.arguments();
                         argumentsRef.set(arguments);
                         assertSame(current, arguments[2]);
@@ -306,7 +306,7 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
                     plain.definition(), module.lexicalContextsForClosureCapture(),
                     module.receiver(), module.methodHome().orElse(null), home,
                     module.prelude().orElseThrow(), plain.executionPlan().orElseThrow());
-            ProtosCallRequest request = ProtosCallRequest.call(captured, List.of(integer(23)), module);
+            ProtosCallRequest request = ProtosCallRequest.call(captured, new Object[] {integer(23)}, module);
             assertEquals("23", integerValue(request.callUncached()));
             Object[] arguments = request.arguments();
             assertEquals(ProtosFrameArguments.HEADER_LENGTH + 1, arguments.length);
@@ -333,7 +333,7 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
                         "() => { dependency.value()\n ^17 }", "g7-pending-home.protos", module);
                 AtomicReference<ProtosCallRequest> saved = new AtomicReference<>();
                 ProtosTask task = domain.createTask(null, current -> {
-                    ProtosCallRequest request = ProtosCallRequest.taskEntry(closure, current, List.of(), module);
+                    ProtosCallRequest request = ProtosCallRequest.taskEntry(closure, current, new Object[0], module);
                     saved.set(request);
                     assertFalse(ProtosFrameArguments.hasPublishedActivation(request.arguments()));
                     ProtosBytecodeTaskExecution.executeRequest(current, request);

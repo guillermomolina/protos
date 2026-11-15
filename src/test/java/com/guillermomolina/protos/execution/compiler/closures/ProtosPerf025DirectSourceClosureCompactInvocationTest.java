@@ -258,7 +258,7 @@ final class ProtosPerf025DirectSourceClosureCompactInvocationTest {
                                                     ProtosCallRequest.taskEntry(
                                                             add,
                                                             current,
-                                                            List.of(integer(4), integer(5)),
+                                                            new Object[] {integer(4), integer(5)},
                                                             module);
                                             preparedRef.set(prepared);
                                             assertSame(

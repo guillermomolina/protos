@@ -476,7 +476,7 @@ final class ProtosPerf037CCapturedLexicalReadTest {
             ProtosActivation caller) {
         // I115: a direct function call through the shared dispatcher.
         return ProtosNumericValueSupport.guestValue(
-                ProtosCallRequest.call(closure, java.util.List.of(), caller).callUncached());
+                ProtosCallRequest.call(closure, new Object[0], caller).callUncached());
     }
 
     private static ProtosActivation invocationOf(

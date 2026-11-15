@@ -88,8 +88,6 @@ public final class ProtosPasswordArgon2Facility {
      * @return an independently owned 32-octet tag
      */
 
-    private static final Normalizer2 NFC = Normalizer2.getNFCInstance();
-
     /**
      * Validate an actual standard Protos String and encode its NFC
      * representation using strict UTF-8.
@@ -109,7 +107,8 @@ public final class ProtosPasswordArgon2Facility {
             throw new IllegalArgumentException("Password exceeds limit");
         }
 
-        String normalized = NFC.normalize(original);
+        String normalized =
+                Normalizer2.getNFCInstance().normalize(original);
 
         try {
             ByteBuffer encoded = StandardCharsets.UTF_8

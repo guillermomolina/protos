@@ -18,19 +18,26 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
+import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.bytecode.ConstantOperand;
+import com.oracle.truffle.api.bytecode.ForceQuickening;
 import com.oracle.truffle.api.bytecode.OperationProxy;
 import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.Cached.Exclusive;
 import com.oracle.truffle.api.dsl.GenerateInline;
 import com.oracle.truffle.api.dsl.GenerateUncached;
+import com.oracle.truffle.api.dsl.Idempotent;
 import com.oracle.truffle.api.dsl.NonIdempotent;
+import com.oracle.truffle.api.dsl.ReportPolymorphism.Megamorphic;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.api.nodes.DirectCallNode;
 import com.oracle.truffle.api.nodes.Node;
+import com.oracle.truffle.api.profiles.InlinedConditionProfile;
 
 /**
  * Protos Bytecode DSL: the {@code CallNilaryMethod} operation, a call
@@ -39,8 +46,8 @@ import com.oracle.truffle.api.nodes.Node;
  * (its receiver is not counted among the arguments) or any other object.
  *
  * <p>The B5 frame-argument array is built once here and becomes the callee
- * frame's arguments. A source function goes straight to the shared
- * function PIC; a bound source method writes its receiver and methodHome
+ * frame's arguments. A source function uses an identity-keyed direct-call
+ * cache before the shared function PIC; a bound source method writes its receiver and methodHome
  * and uses the same PIC; every other callable takes {@link
  * ProtosFunctionCallDispatchers.CallNode}. No call is prepared.
  */
@@ -58,10 +65,77 @@ abstract class ProtosCallNilaryMethodNode extends Node {
 
     abstract Object execute(VirtualFrame frame, boolean terminal, Object callable);
 
-    @Specialization(limit = "3", guards = {
-            "isSourceFunction(callable)",
-            "canonicalCallSelected(callable, rootSelection)"
-        })
+    /*
+     * Identity-keyed direct-call cache for source functions. The canonical
+     * `call` selection is checked before the cached target is used; code
+     * changes invalidate the entry through its code-stability assumption.
+     */
+    @ForceQuickening
+    @Specialization(
+            guards = {
+                    "isSourceFunction(callable)",
+                    "isSingleContext()",
+                    "canonicalCallSelected(callable, rootSelection)",
+                    "callable == cachedCallable",
+                    "cachedTarget != null"
+            },
+            assumptions = {"cachedCodeStable", "cachedCallerNeedsStable"},
+            excludeForUncached = true,
+            limit = "4")
+    static Object callCachedClosure(
+            VirtualFrame frame,
+            boolean terminal,
+            ProtosClosureValue callable,
+            @Bind Node inliningTarget,
+            @Bind("bytecodeOf($node)") BytecodeNode bytecode,
+            @Bind("bytecode.getBytecodeIndex(frame)") int bytecodeIndex,
+            @Bind("rootOf($node)") ProtosBytecodeRootNode root,
+            @Cached(value = "callable", weak = true)
+                    ProtosClosureValue cachedCallable,
+            @Exclusive @Cached(value = "rootCallSelection()", allowUncached = true)
+                    ProtosStandardObjectProtocol.CanonicalRootCallSelection rootSelection,
+            @Cached("cachedCallable.codeStableAssumptionForRuntime()")
+                    Assumption cachedCodeStable,
+            @Cached("singleContextTargetOrNull(cachedCallable, root)")
+                    RootCallTarget cachedTarget,
+            @Cached("createDirectCallNodeOrNull(cachedTarget)")
+                    DirectCallNode callNode,
+            @Cached(value = "calleeRootOrNull(cachedTarget)", adopt = false)
+                    ProtosBytecodeRootNode cachedCallee,
+            @Cached("cachedCallee.callerNeedsStability()")
+                    Assumption cachedCallerNeedsStable,
+            @Cached("classifyReturnHome(cachedCallable, cachedCallee)")
+                    ProtosFunctionCallDispatchers.ReturnHomeMode cachedHomeMode,
+            @Exclusive @Cached ProtosFunctionCallDispatchers.FunctionDirectInvokeNode invoke,
+            @Exclusive @Cached InlinedConditionProfile taskPresence) {
+        Object[] arguments = ProtosFrameArguments.dispatchedCall0(
+                null, ProtosFrameArguments.functionCallMarker(),
+                null, null, null);
+        Object outcome = ProtosFunctionCallDispatchers.invokeCachedClosure(
+                frame, inliningTarget, cachedHomeMode, taskPresence, invoke,
+                callNode, cachedCallee, callable, arguments, null);
+        // The cached effective root's compilation-final proof: a proven body
+        // never yields a suspended outcome, so no terminal classification.
+        if (cachedCallee.provablyNonSuspendingBody()) {
+            return outcome;
+        }
+        return ProtosTailCallContinuation.completeCall(
+                terminal, outcome, bytecode, bytecodeIndex);
+    }
+
+    /*
+     * Megamorphic transition: the context-aware function dispatcher, which
+     * keeps its own target cache and indirect fallback.
+     */
+    @Specialization(
+            limit = "3",
+            guards = {
+                    "isSourceFunction(callable)",
+                    "canonicalCallSelected(callable, rootSelection)"
+            },
+            replaces = "callCachedClosure")
+    @Megamorphic
+    @InliningCutoff
     static Object callFunction(
             VirtualFrame frame,
             boolean terminal,
@@ -154,6 +228,32 @@ abstract class ProtosCallNilaryMethodNode extends Node {
                         ? isSourceFunction(closure)
                         : callable instanceof ProtosBoundMethod method
                                 && isSourceFunction(method.callable());
+    }
+
+    // Admission-time guard, independent of the generated cache node.
+    @Idempotent
+    static boolean isSingleContext() {
+        return ProtosFunctionCallDispatchers.isSingleContext();
+    }
+
+    static RootCallTarget singleContextTargetOrNull(
+            ProtosClosureValue callable,
+            ProtosBytecodeRootNode callerRoot) {
+        return ProtosFunctionCallDispatchers.singleContextTargetOrNull(
+                callable, callerRoot);
+    }
+
+    static DirectCallNode createDirectCallNodeOrNull(RootCallTarget target) {
+        return ProtosFunctionCallDispatchers.createDirectCallNodeOrNull(target);
+    }
+
+    static ProtosBytecodeRootNode calleeRootOrNull(RootCallTarget target) {
+        return ProtosFunctionCallDispatchers.calleeRootOrNull(target);
+    }
+
+    static ProtosFunctionCallDispatchers.ReturnHomeMode classifyReturnHome(
+            ProtosClosureValue closure, ProtosBytecodeRootNode callee) {
+        return ProtosFunctionCallDispatchers.classifyReturnHome(closure, callee);
     }
 
     // Proxy nodes bind through their operation node. The interpreter stores

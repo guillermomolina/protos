@@ -1,6 +1,18 @@
 /*
  * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
- * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. See LICENSE.TXT.
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
  */
 package com.guillermomolina.protos.execution;
 
@@ -23,6 +35,8 @@ final class ProtosPerf006C1OptimizingRuntimeClosureTest {
             "com.oracle.truffle.runtime.hotspot.HotSpotTruffleRuntime";
     private static final String FALLBACK_BUILD_ARG =
             "<buildArg>-Dtruffle.UseFallbackRuntime=true</buildArg>";
+    private static final String CONFIGURABLE_FALLBACK_BUILD_ARG =
+            "<buildArg>-Dtruffle.UseFallbackRuntime=${protos.native.fallbackRuntime}</buildArg>";
     /** The Native Image profiles: the distributed executable and the I130-C2 JUnit test image. */
     private static final String NATIVE_PROFILE = "native";
     private static final String NATIVE_TLS_TESTS_PROFILE = "native-tls-tests";
@@ -63,6 +77,7 @@ final class ProtosPerf006C1OptimizingRuntimeClosureTest {
         assertFalse(launcher.contains("-jar \"$JAR\""));
 
         String nativeProfile = profile(pom, NATIVE_PROFILE);
+        assertEquals(1, occurrences(pom, "<protos.native.fallbackRuntime>true</protos.native.fallbackRuntime>"));
         String nativeTlsTestsProfile = profile(pom, NATIVE_TLS_TESTS_PROFILE);
         // I130-C3: the interpreter-only notice is silenced only as a runtime argument of the
         // Native JUnit executable; never for the JVM, Surefire or the distributed executable.
@@ -85,8 +100,8 @@ final class ProtosPerf006C1OptimizingRuntimeClosureTest {
         assertFalse(pom.replace(nativeTlsTestsProfile, "").contains("WarnInterpreterOnly"));
         assertEquals(
                 1,
-                occurrences(nativeProfile, FALLBACK_BUILD_ARG),
-                "native profile must select the fallback runtime exactly once");
+                occurrences(nativeProfile, CONFIGURABLE_FALLBACK_BUILD_ARG),
+                "native profile must select the configured runtime exactly once");
         assertEquals(
                 1,
                 occurrences(nativeTlsTestsProfile, FALLBACK_BUILD_ARG),

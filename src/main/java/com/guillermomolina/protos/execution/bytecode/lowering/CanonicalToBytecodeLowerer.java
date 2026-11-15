@@ -6084,7 +6084,7 @@ final class CanonicalToBytecodeLowerer {
      *       CALL uses its previously evaluated callee.
      *   <li>{@code Call*Method} by arity (0..4, otherwise or with spread
      *       {@code CallVarargsMethod}) enters the shared dispatcher.
-     *   <li>A pending result is composed: {@code IsResultKind(CONTINUATION)
+     *   <li>A pending result is composed: {@code IsContinuation
      *       -> Yield -> ResumeDispatchedContinuation}.
      * </ol>
      * Dynamic dispatch keeps its {@link StandardTags.CallTag}; statically
@@ -7910,9 +7910,9 @@ final class CanonicalToBytecodeLowerer {
 
         builder.beginWhile();
 
-        builder.beginIsResultKind(ProtosResultKind.CONTINUATION);
+        builder.beginIsContinuation();
         builder.emitLoadLocal(childResult);
-        builder.endIsResultKind();
+        builder.endIsContinuation();
 
         builder.beginBlock();
 

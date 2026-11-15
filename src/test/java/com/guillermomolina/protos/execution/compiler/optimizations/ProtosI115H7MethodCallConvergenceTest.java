@@ -879,20 +879,25 @@ final class ProtosI115H7MethodCallConvergenceTest {
 
                 readVisits: () => { visits }
                 """)) {
-            /*
-             * I115: the condition and body are Closure callbacks here (the
-             * receiver is not a statically admitted comparison), invoked by
-             * two CallNilaryMethod sites; the condition result passes the
-             * unified canonical Boolean validation, which signals the
-             * standard Error for a non-Boolean result before any body runs.
-             */
             List<String> names = unquickened(names(root(session, "probeNotBoolean")));
-            assertEquals(2, count(names, "c.CallNilaryMethod"), names.toString());
-            assertTrue(count(names, "c.CanonicalControlCondition") >= 1,
-                    names.toString());
+            assertEquals(0, count(names, "c.CallNilaryMethod"),
+                    "literal loop callbacks must execute inline: " + names);
+
+            int comparison = names.indexOf("c.RichCompareLt");
+            int validation = names.indexOf("c.RequireCanonicalBooleanResult");
             int condition = names.indexOf("c.CanonicalControlCondition");
-            assertTrue(names.indexOf("c.CallNilaryMethod") < condition,
-                    "the condition callback runs before its validation: " + names);
+
+            assertTrue(comparison >= 0
+                            && validation > comparison
+                            && condition > validation,
+                    "comparison, Boolean validation and branch: " + names);
+
+            assertTrue(names.contains("c.GetMethod")
+                            && names.contains("c.CallUnaryMethod"),
+                    "custom comparison must retain ordinary selection: " + names);
+            assertTrue(names.indexOf("c.CallBinaryMethod") > condition,
+                    "body invocation must follow condition validation: " + names);
+
             assertReplacedAbsent("probeNotBoolean", names);
 
             assertNumber(session, "probeFalse", 0L);
@@ -1017,6 +1022,290 @@ final class ProtosI115H7MethodCallConvergenceTest {
                 assertFalse(failure.isInternalError(), failure.toString());
                 System.out.println("I115_H7_NON_CLOSURE_SELECTION_OUTCOME=guest-error");
             }
+        }
+    }
+
+    private static final String CALL_FAMILY = """
+            f0: () => { 1 }
+            f1: (a) => { a }
+            f2: (a, b) => { a * 10 + b }
+            f3: (a, b, c) => { a * 100 + b * 10 + c }
+            f4: (a, b, c, d) => { a * 1000 + b * 100 + c * 10 + d }
+            f5: (a, b, c, d, e) => { a * 10000 + b * 1000 + c * 100 + d * 10 + e }
+
+            calls: () => {
+                n: 0
+                total: 0
+                (() => n < 10).whileTrue() {
+                    total = total + f0() + f1(1) + f2(1, 2) + f3(1, 2, 3) + f4(1, 2, 3, 4) + f5(1, 2, 3, 4, 5)
+                    n = n + 1
+                }
+                total
+            }
+
+            t3: (a, b, c) => { f3(a, b, c) }
+
+            terminal: () => {
+                n: 0
+                total: 0
+                (() => n < 10).whileTrue() {
+                    total = total + t3(3, 2, 1)
+                    n = n + 1
+                }
+                total
+            }
+
+            reorder: () => {
+                f3 = (a, b, c) => { c * 100 + b * 10 + a }
+                f0 = () => { 2 }
+                f4 = (a, b, c, d) => { d * 1000 + c * 100 + b * 10 + a }
+                0
+            }
+
+            r1: {
+                f: (a, b, c) => { a + b + c + 1 }
+                next: (u) => { r2 }
+            }
+            r2: {
+                f: (a, b, c) => { a + b + c + 2 }
+                next: (u) => { r3 }
+            }
+            r3: {
+                f: (a, b, c) => { a + b + c + 3 }
+                next: (u) => { r4 }
+            }
+            r4: {
+                f: (a, b, c) => { a + b + c + 4 }
+                next: (u) => { r5 }
+            }
+            r5: {
+                f: (a, b, c) => { a + b + c + 5 }
+                next: (u) => { r1 }
+            }
+
+            megamorphic: () => {
+                n: 0
+                total: 0
+                current: r1
+                (() => n < 10).whileTrue() {
+                    total = total + current.f(n, n, n)
+                    current = current.next(0)
+                    n = n + 1
+                }
+                total
+            }
+
+            overridden: () => {
+                g: (a, b, c) => { 0 }
+                g.call: (a, b, c) => { a + b + c }
+                n: 0
+                total: 0
+                (() => n < 10).whileTrue() {
+                    total = total + g(1, 2, 3)
+                    n = n + 1
+                }
+                total
+            }
+            """;
+
+    /*
+     * Every fixed arity and the varargs form: distinct positional weights
+     * detect any B5 argument misplacement; the direct target is reused by
+     * repeated executions of one stable lowering.
+     */
+    @Test
+    void everyCallArityKeepsItsArgumentsAndReusesItsTarget() throws Exception {
+        try (ProtosStandaloneHostedSession session = open("call-family", CALL_FAMILY)) {
+            ProtosBytecodeRootNode root = root(session, "calls");
+            List<String> before = unquickened(names(root));
+            for (String operation : List.of(
+                    "c.CallNilaryMethod",
+                    "c.CallUnaryMethod",
+                    "c.CallTernaryMethod",
+                    "c.CallQuaternaryMethod")) {
+                assertTrue(before.contains(operation), operation + ": " + before);
+            }
+            for (int call = 0; call < WARM; call++) {
+                assertNumber(session, "calls", 137160L);
+            }
+            assertSame(root, root(session, "calls"));
+            assertEquals(before, unquickened(names(root)),
+                    "the direct call path adds no selection or dispatch instruction");
+        }
+    }
+
+    /* A terminal call through the direct cache completes with its value. */
+    @Test
+    void terminalCallsContinueThroughTheDirectCache() throws Exception {
+        try (ProtosStandaloneHostedSession session = open("call-terminal", CALL_FAMILY)) {
+            for (int call = 0; call < WARM; call++) {
+                assertNumber(session, "terminal", 3210L);
+            }
+        }
+    }
+
+    /* Rebinding a hot function replaces the cached target in every arity. */
+    @Test
+    void reboundFunctionsInvalidateEveryArityCache() throws Exception {
+        try (ProtosStandaloneHostedSession session = open("call-rebound", CALL_FAMILY)) {
+            for (int call = 0; call < WARM; call++) {
+                assertNumber(session, "calls", 137160L);
+            }
+            assertNumber(session, "reorder", 0L);
+            // f0: 2, f3: 321, f4: 4321 per iteration.
+            for (int call = 0; call < WARM; call++) {
+                assertNumber(session, "calls", 10L * (2 + 1 + 12 + 321 + 4321 + 12345));
+            }
+        }
+    }
+
+    /* More distinct Closures than the PIC limit: the general path stays exact. */
+    @Test
+    void megamorphicCallSiteRemainsExact() throws Exception {
+        try (ProtosStandaloneHostedSession session = open("call-megamorphic", CALL_FAMILY)) {
+            for (int call = 0; call < WARM; call++) {
+                assertNumber(session, "megamorphic", 165L);
+            }
+        }
+    }
+
+    /* A local `call` slot is selected by ordinary invocation, never the cached body. */
+    @Test
+    void overriddenCallSelectionBypassesTheDirectCache() throws Exception {
+        try (ProtosStandaloneHostedSession session = open("call-overridden", CALL_FAMILY)) {
+            for (int call = 0; call < WARM; call++) {
+                assertNumber(session, "overridden", 60L);
+            }
+        }
+    }
+
+    private static final String GLOBALS = """
+            counter: 10
+
+            readCounter: () => { counter }
+
+            hotRead: () => {
+                n: 0
+                total: 0
+                (() => n < 10).whileTrue() {
+                    total = total + counter
+                    n = n + 1
+                }
+                total
+            }
+
+            bump: () => {
+                counter = counter + 1
+                counter
+            }
+
+            setHundred: () => {
+                counter = 100
+                counter + 5
+            }
+
+            rhsRebinds: () => {
+                counter = setHundred()
+                counter
+            }
+
+            capture: () => { () => { counter } }
+            captured: capture()
+            """;
+
+    /*
+     * A declared module binding removed during initialization, through the
+     * removal and write forms of the resolved lexical write tests.
+     */
+    private static final String ABSENT_GLOBALS = """
+            module: context
+            touched: 0
+            touch: () => {
+                touched = touched + 1
+                touched
+            }
+            doomed: 1
+            context.removeSlot("doomed")
+
+            writeDoomed: () => {
+                doomed = touch()
+                doomed
+            }
+            readDoomed: () => { doomed }
+            readTouched: () => { touched }
+            hasDoomed: () => { module.hasSlot("doomed") }
+            recreate: () => {
+                module.doomed: 5
+                0
+            }
+            """;
+
+
+    /* Cached and uncached module reads observe every legal assignment. */
+    @Test
+    void globalReadsObserveAssignmentsAndCapturedClosures() throws Exception {
+        try (ProtosStandaloneHostedSession session = open("globals-read", GLOBALS)) {
+            for (int call = 0; call < WARM; call++) {
+                assertNumber(session, "hotRead", 100L);
+            }
+            assertNumber(session, "bump", 11L);
+            for (int call = 0; call < WARM; call++) {
+                assertNumber(session, "hotRead", 110L);
+                assertNumber(session, "readCounter", 11L);
+            }
+            Value captured = session.prepareTopLevel("captured").executable();
+            assertTrue(captured.canExecute(), "the published captured Closure is executable");
+            for (int call = 0; call < WARM; call++) {
+                assertEquals(11L, captured.execute().asLong());
+            }
+            assertNumber(session, "bump", 12L);
+            assertEquals(12L, captured.execute().asLong(),
+                    "the captured read follows the module binding");
+        }
+    }
+
+    /* The write target is selected before the right-hand side runs. */
+    @Test
+    void globalWriteSelectsItsTargetBeforeTheRightHandSide() throws Exception {
+        try (ProtosStandaloneHostedSession session = open("globals-write", GLOBALS)) {
+            for (int call = 0; call < WARM; call++) {
+                assertNumber(session, "rhsRebinds", 105L);
+            }
+        }
+    }
+
+    /*
+     * An absent binding is never created: the write fails before its
+     * right-hand side runs, identically on every execution; a recreated
+     * binding is then read and written through the same sites.
+     */
+    @Test
+    void absentGlobalsFailWithoutCreatingBindings() throws Exception {
+        try (ProtosStandaloneHostedSession session = open("globals-absent", ABSENT_GLOBALS)) {
+            String firstWrite = null;
+            String firstRead = null;
+            for (int call = 0; call < WARM; call++) {
+                PolyglotException write = assertThrows(PolyglotException.class,
+                        () -> session.prepareTopLevel("writeDoomed").executable().execute());
+                assertTrue(write.isGuestException(), write.toString());
+                PolyglotException read = assertThrows(PolyglotException.class,
+                        () -> session.prepareTopLevel("readDoomed").executable().execute());
+                assertTrue(read.isGuestException(), read.toString());
+                if (firstWrite == null) {
+                    firstWrite = write.getMessage();
+                    firstRead = read.getMessage();
+                }
+                assertEquals(firstWrite, write.getMessage(), "write error is stable");
+                assertEquals(firstRead, read.getMessage(), "read error is stable");
+            }
+            assertNumber(session, "readTouched", 0L);
+            assertFalse(session.prepareTopLevel("hasDoomed").executable().execute().asBoolean(),
+                    "a failed write creates no binding");
+
+            assertNumber(session, "recreate", 0L);
+            assertNumber(session, "readDoomed", 5L);
+            assertNumber(session, "writeDoomed", 1L);
+            assertNumber(session, "readDoomed", 1L);
         }
     }
 

@@ -98,6 +98,100 @@ final class ProtosI115PCompactBooleanWhileTest {
             List<String> names) {}
 
     @Test
+    void moduleOwnedLoopCallbacksAreInlineBeforeFirstExecution() throws Exception {
+        withCore(module -> {
+            Source source = Source.newBuilder(
+                            ProtosLanguage.ID,
+                            """
+                            n: 0
+                            (() => { n < 3 }).whileTrue(() => { n = n + 1 })
+                            n
+                            """,
+                            "module-loop-inline.protos")
+                    .mimeType(ProtosLanguage.MIME_TYPE)
+                    .build();
+
+            RootCallTarget target = assertInstanceOf(
+                    RootCallTarget.class,
+                    ProtosLanguageContext.current().parsePublic(source));
+            ProtosBytecodeRootNode moduleRoot = assertInstanceOf(
+                    ProtosBytecodeRootNode.class, target.getRootNode());
+
+            assertEquals(1, moduleRoot.getRootNodes().getNodes().size(),
+                    "literal control callbacks must not create physical roots");
+
+            List<String> names = moduleRoot.getBytecodeNode()
+                    .getInstructionsAsList().stream()
+                    .map(ProtosInstructionNames::of)
+                    .toList();
+
+            for (String operation : List.of(
+                    "c.ReadGlobal",
+                    "c.SelectWriteGlobal",
+                    "c.RichCompareLt",
+                    "branch.backward")) {
+                assertTrue(names.contains(operation),
+                        operation + ": " + names);
+            }
+            assertFalse(names.stream()
+                    .anyMatch(name -> name.contains("MaterializeCurrentClosure")),
+                    names.toString());
+
+            assertEquals("3", integerValue(target.call(module)));
+        });
+    }
+
+    @Test
+    void moduleCaptureInsideClosureAlsoInlinesBeforeExecution() throws Exception {
+        withCore(module -> {
+            Source source = Source.newBuilder(
+                            ProtosLanguage.ID,
+                            """
+                            n: 0
+                            run: () => {
+                                (() => { n < 3 }).whileTrue(() => { n = n + 1 })
+                                n
+                            }
+                            run()
+                            """,
+                            "nested-module-loop-inline.protos")
+                    .mimeType(ProtosLanguage.MIME_TYPE)
+                    .build();
+
+            RootCallTarget target = assertInstanceOf(
+                    RootCallTarget.class,
+                    ProtosLanguageContext.current().parsePublic(source));
+            ProtosBytecodeRootNode moduleRoot = assertInstanceOf(
+                    ProtosBytecodeRootNode.class, target.getRootNode());
+
+            List<ProtosBytecodeRootNode> roots = moduleRoot.getRootNodes()
+                    .getNodes().stream()
+                    .map(ProtosBytecodeRootNode.class::cast)
+                    .toList();
+
+            assertEquals(2, roots.size(),
+                    "only module and run may have physical roots");
+
+            ProtosBytecodeRootNode run = roots.stream()
+                    .filter(root -> root != moduleRoot)
+                    .findFirst()
+                    .orElseThrow();
+
+            List<String> names = run.getBytecodeNode()
+                    .getInstructionsAsList().stream()
+                    .map(ProtosInstructionNames::of)
+                    .toList();
+
+            assertTrue(names.contains("c.ReadGlobal"), names.toString());
+            assertTrue(names.contains("c.SelectWriteGlobal"), names.toString());
+            assertTrue(names.contains("c.RichCompareLt"), names.toString());
+            assertTrue(names.contains("branch.backward"), names.toString());
+
+            assertEquals("3", integerValue(target.call(module)));
+        });
+    }
+
+    @Test
     void primitiveWhileZeroExactSource() throws Exception {
         Census census = runEliminatedLoop(
                 "primitive-while-zero",

@@ -19,7 +19,6 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.oracle.truffle.api.Assumption;
-import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
@@ -120,18 +119,9 @@ abstract class ProtosCallUnaryMethodNode extends Node {
         Object[] arguments = ProtosFrameArguments.dispatchedCall1(
                 null, ProtosFrameArguments.functionCallMarker(),
                 null, null, null, a0);
-        Object outcome;
-        if (cachedHomeMode == ProtosFunctionCallDispatchers.ReturnHomeMode.UNOBSERVABLE) {
-            outcome = ProtosFunctionCallDispatchers.invokeUnobservableHome(
-                    frame, inliningTarget, taskPresence, callNode, cachedCallee, callable, arguments, null);
-        } else if (cachedHomeMode == ProtosFunctionCallDispatchers.ReturnHomeMode.CAPTURED) {
-            outcome = ProtosFunctionCallDispatchers.invokeCapturedHome(
-                    frame, inliningTarget, taskPresence, callNode, cachedCallee, callable, arguments, null);
-        } else {
-            outcome = invoke.execute(
-                    frame, inliningTarget, callNode, cachedCallee,
-                    callable, arguments, null);
-        }
+        Object outcome = ProtosFunctionCallDispatchers.invokeCachedClosure(
+                frame, inliningTarget, cachedHomeMode, taskPresence, invoke,
+                callNode, cachedCallee, callable, arguments, null);
         // The cached effective root's compilation-final proof: a proven body
         // never yields a suspended outcome, so no terminal classification.
         if (cachedCallee.provablyNonSuspendingBody()) {
@@ -320,37 +310,17 @@ abstract class ProtosCallUnaryMethodNode extends Node {
                                 && isSourceFunction(method.callable());
     }
 
-    /*
-     * AbstractCallMethodNode.isSingleContext:
-     * admission-time guard, independent of the generated cache node.
-     */
+    // Admission-time guard, independent of the generated cache node.
     @Idempotent
     static boolean isSingleContext() {
-        CompilerAsserts.neverPartOfCompilation();
-        return ProtosLanguageContext.current()
-                .languageForRuntime()
-                .isSingleContextForRuntime();
+        return ProtosFunctionCallDispatchers.isSingleContext();
     }
 
-    /*
-     * Only a prepared plan belonging to this physical root's language
-     * can enter the single-context direct specialization. A deferred,
-     * foreign or projection-required plan takes the context-aware PIC.
-     */
     static RootCallTarget singleContextTargetOrNull(
             ProtosClosureValue callable,
             ProtosBytecodeRootNode callerRoot) {
-        ProtosClosureExecutionPlan plan =
-                callable.preparedExecutionPlanOrNullForRuntime();
-
-        if (plan == null
-                || callable.requiresContextLocalExecutionProjectionForRuntime()
-                || plan.language().orElse(null)
-                        != callerRoot.getLanguage(ProtosLanguage.class)) {
-            return null;
-        }
-
-        return plan.bytecodeActivationTargetForComposition();
+        return ProtosFunctionCallDispatchers.singleContextTargetOrNull(
+                callable, callerRoot);
     }
 
     static DirectCallNode createDirectCallNodeOrNull(RootCallTarget target) {

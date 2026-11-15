@@ -87,7 +87,8 @@ public final class ProtosBufferedByteReaderCPrimeExecution {
         private final ProtosIoOperation operation;
         private final ProtosBufferedByteIo reader;
         private final Object target;
-        private final List<?> arguments;
+        /* The prepared positional arguments of the lower target call. */
+        private final Object[] arguments;
 
         CallState(
                 ProtosIoOperation operation,
@@ -97,14 +98,14 @@ public final class ProtosBufferedByteReaderCPrimeExecution {
             this.operation = Objects.requireNonNull(operation, "operation");
             this.reader = Objects.requireNonNull(reader, "reader");
             this.target = Objects.requireNonNull(target, "target");
-            this.arguments = List.copyOf(Objects.requireNonNull(arguments, "arguments"));
+            this.arguments = List.copyOf(Objects.requireNonNull(arguments, "arguments")).toArray();
         }
 
         Object target() {
             return target;
         }
 
-        List<?> arguments() {
+        Object[] arguments() {
             return arguments;
         }
 
@@ -200,9 +201,9 @@ public final class ProtosBufferedByteReaderCPrimeExecution {
                             builder.endStoreLocal();
 
                             builder.beginWhile();
-                            builder.beginIsResultKind(ProtosResultKind.CONTINUATION);
+                            builder.beginIsContinuation();
                             builder.emitLoadLocal(child);
-                            builder.endIsResultKind();
+                            builder.endIsContinuation();
                             builder.beginBlock();
                             builder.beginStoreLocal(resume);
                             builder.beginYield();
@@ -253,9 +254,9 @@ public final class ProtosBufferedByteReaderCPrimeExecution {
                             builder.endStoreLocal();
 
                             builder.beginWhile();
-                            builder.beginIsResultKind(ProtosResultKind.CONTINUATION);
+                            builder.beginIsContinuation();
                             builder.emitLoadLocal(lowerOutcome);
-                            builder.endIsResultKind();
+                            builder.endIsContinuation();
                             builder.beginBlock();
                             builder.beginStoreLocal(yielded);
                             builder.emitLoadLocal(lowerOutcome);

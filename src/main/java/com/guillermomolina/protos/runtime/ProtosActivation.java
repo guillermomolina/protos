@@ -65,14 +65,41 @@ public final class ProtosActivation {
 
     private static final class DeferredSuppliedArguments {
         private final List<?> values;
+        /*
+         * The same supplied values as one array range: the adopted compact
+         * frame-argument array (whose primitive carriers are observed as guest
+         * values) or the array of the owned copy. Internal readers index it
+         * directly instead of dispatching through the List view.
+         */
+        private final Object[] storage;
+        private final int offset;
+        private final boolean frameBacked;
         private ProtosArrayValue guestArray;
 
         private DeferredSuppliedArguments(List<?> values) {
             Objects.requireNonNull(values, "values");
-            this.values =
-                    values instanceof FrameBackedSuppliedArguments
-                            ? values
-                            : List.copyOf(values);
+            if (values instanceof FrameBackedSuppliedArguments frame) {
+                this.values = frame;
+                this.storage = frame.frameArguments;
+                this.offset = frame.offset;
+                this.frameBacked = true;
+            } else {
+                List<?> owned = List.copyOf(values);
+                this.values = owned;
+                this.storage = owned.toArray();
+                this.offset = 0;
+                this.frameBacked = false;
+            }
+        }
+
+        private int size() {
+            return storage.length - offset;
+        }
+
+        private Object get(int index) {
+            Objects.checkIndex(index, size());
+            Object value = storage[offset + index];
+            return frameBacked ? ProtosNumericValueSupport.guestValue(value) : value;
         }
 
         private List<?> values() {
@@ -950,12 +977,41 @@ public final class ProtosActivation {
     }
 
     /**
+     * Supplied argument {@code index} of this invocation activation, read by
+     * index from its argument storage without a collection view.
+     */
+    public Object suppliedArgumentForRuntime(int index) {
+        if (deferredSuppliedArguments != null) {
+            return deferredSuppliedArguments.get(index);
+        }
+        if (arguments != null) {
+            return arguments.indexedAt(index);
+        }
+        throw new IllegalStateException(
+                "parameter binding requires an invocation activation");
+    }
+
+    /**
+     * The supplied arguments of this invocation activation as one fresh
+     * positional {@code Object[]}, owned by the caller: the prepared
+     * positional arguments of an internal call.
+     */
+    public Object[] suppliedArgumentArrayForRuntime() {
+        int count = suppliedArgumentCountForRuntime();
+        Object[] supplied = new Object[count];
+        for (int index = 0; index < count; index++) {
+            supplied[index] = suppliedArgumentForRuntime(index);
+        }
+        return supplied;
+    }
+
+    /**
      * PERF032-G6: the number of supplied arguments of this invocation
      * activation, read without snapshotting them.
      */
     public int suppliedArgumentCountForRuntime() {
         if (deferredSuppliedArguments != null) {
-            return deferredSuppliedArguments.values().size();
+            return deferredSuppliedArguments.size();
         }
         if (arguments != null) {
             return arguments.indexedSize();

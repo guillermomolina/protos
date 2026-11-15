@@ -8,6 +8,7 @@ import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.io.ProtosTextReader;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.bytecode.BytecodeConfig;
 import com.oracle.truffle.api.bytecode.BytecodeLocal;
@@ -129,8 +130,13 @@ public final class ProtosTextReaderCPrimeExecution {
             return source;
         }
 
-        List<?> arguments() {
-            return reader.sourceReadArgumentsForCPrimeRuntime();
+        /*
+         * The text reader's source-read request is host reader state: it is
+         * read and prepared as positional arguments at this I/O boundary.
+         */
+        @TruffleBoundary
+        Object[] arguments() {
+            return reader.sourceReadArgumentsForCPrimeRuntime().toArray();
         }
 
         SourceInvocation invocationSucceeded(Object result) {
@@ -225,9 +231,9 @@ public final class ProtosTextReaderCPrimeExecution {
                             builder.endStoreLocal();
 
                             builder.beginWhile();
-                            builder.beginIsResultKind(ProtosResultKind.TEXT_READER_NEED_INPUT);
+                            builder.beginIsTextReaderNeedInput();
                             builder.emitLoadLocal(advance);
-                            builder.endIsResultKind();
+                            builder.endIsTextReaderNeedInput();
 
                             builder.beginBlock();
 
@@ -254,9 +260,9 @@ public final class ProtosTextReaderCPrimeExecution {
                             builder.endStoreLocal();
 
                             builder.beginWhile();
-                            builder.beginIsResultKind(ProtosResultKind.CONTINUATION);
+                            builder.beginIsContinuation();
                             builder.emitLoadLocal(child);
-                            builder.endIsResultKind();
+                            builder.endIsContinuation();
                             builder.beginBlock();
                             builder.beginStoreLocal(resume);
                             builder.beginYield();
@@ -308,9 +314,9 @@ public final class ProtosTextReaderCPrimeExecution {
                             builder.endStoreLocal();
 
                             builder.beginWhile();
-                            builder.beginIsResultKind(ProtosResultKind.CONTINUATION);
+                            builder.beginIsContinuation();
                             builder.emitLoadLocal(lowerOutcome);
-                            builder.endIsResultKind();
+                            builder.endIsContinuation();
                             builder.beginBlock();
                             builder.beginStoreLocal(yielded);
                             builder.emitLoadLocal(lowerOutcome);

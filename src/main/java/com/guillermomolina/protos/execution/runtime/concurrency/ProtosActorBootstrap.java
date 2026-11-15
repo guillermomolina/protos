@@ -594,10 +594,11 @@ public final class ProtosActorBootstrap {
                                     bootstrapContext,
                                     actor.executionDomain());
             // Transferred arguments are materialized exactly once, in the destination.
-            List<?> arguments =
+            Object[] arguments =
                     List.copyOf(
                             ProtosActorValueTransfer.materializeArguments(
-                                    transferredArguments, invocation));
+                                    transferredArguments, invocation))
+                            .toArray();
             // D242: MODULE exports are ordinary methods selected on the public object; invoking
             // the extracted Closure would discard the MODULE receiver and method home.
             return canonicalModuleKey.isModule()

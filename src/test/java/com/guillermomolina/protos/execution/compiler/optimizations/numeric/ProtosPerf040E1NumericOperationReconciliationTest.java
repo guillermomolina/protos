@@ -1453,7 +1453,7 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
             ProtosClosureValue closure, ProtosActivation caller, Object... supplied) {
         // I115: a direct function call through the shared dispatcher.
         return ProtosNumericValueSupport.guestValue(
-                ProtosCallRequest.call(closure, java.util.List.of(supplied), caller).callUncached());
+                ProtosCallRequest.call(closure, supplied, caller).callUncached());
     }
 
     private static ProtosBytecodeRootNode rootOf(ProtosClosureValue closure) {

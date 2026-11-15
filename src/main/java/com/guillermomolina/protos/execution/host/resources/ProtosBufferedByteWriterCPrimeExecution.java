@@ -96,7 +96,8 @@ public final class ProtosBufferedByteWriterCPrimeExecution {
         private final Object target;
         private final boolean writeFirst;
         private final int pendingLength;
-        private final List<?> firstArguments;
+        /* The prepared positional arguments of the first lower target call. */
+        private final Object[] firstArguments;
         private boolean firstOutcomeApplied;
 
         CallState(
@@ -112,7 +113,7 @@ public final class ProtosBufferedByteWriterCPrimeExecution {
             this.writeFirst = writeFirst;
             this.pendingLength = pendingLength;
             this.firstArguments =
-                    List.copyOf(Objects.requireNonNull(firstArguments, "firstArguments"));
+                    List.copyOf(Objects.requireNonNull(firstArguments, "firstArguments")).toArray();
         }
 
         Object target() {
@@ -123,7 +124,7 @@ public final class ProtosBufferedByteWriterCPrimeExecution {
             return writeFirst ? "write" : "flush";
         }
 
-        List<?> firstArguments() {
+        Object[] firstArguments() {
             return firstArguments;
         }
 
@@ -270,9 +271,9 @@ public final class ProtosBufferedByteWriterCPrimeExecution {
                             builder.endStoreLocal();
 
                             builder.beginWhile();
-                            builder.beginIsResultKind(ProtosResultKind.BUFFERED_WRITER_STEP_REQUIRED);
+                            builder.beginIsBufferedByteWriterStepRequired();
                             builder.emitLoadLocal(runFirst);
-                            builder.endIsResultKind();
+                            builder.endIsBufferedByteWriterStepRequired();
                             builder.beginBlock();
 
                             builder.beginStoreLocal(runFirst);
@@ -297,9 +298,9 @@ public final class ProtosBufferedByteWriterCPrimeExecution {
                             builder.endStoreLocal();
 
                             builder.beginWhile();
-                            builder.beginIsResultKind(ProtosResultKind.CONTINUATION);
+                            builder.beginIsContinuation();
                             builder.emitLoadLocal(child);
-                            builder.endIsResultKind();
+                            builder.endIsContinuation();
                             builder.beginBlock();
                             builder.beginStoreLocal(resume);
                             builder.beginYield();
@@ -350,9 +351,9 @@ public final class ProtosBufferedByteWriterCPrimeExecution {
                             builder.endStoreLocal();
 
                             builder.beginWhile();
-                            builder.beginIsResultKind(ProtosResultKind.CONTINUATION);
+                            builder.beginIsContinuation();
                             builder.emitLoadLocal(lowerOutcome);
-                            builder.endIsResultKind();
+                            builder.endIsContinuation();
                             builder.beginBlock();
                             builder.beginStoreLocal(yielded);
                             builder.emitLoadLocal(lowerOutcome);
@@ -380,9 +381,9 @@ public final class ProtosBufferedByteWriterCPrimeExecution {
                             builder.endStoreLocal();
 
                             builder.beginWhile();
-                            builder.beginIsResultKind(ProtosResultKind.BUFFERED_WRITER_STEP_REQUIRED);
+                            builder.beginIsBufferedByteWriterStepRequired();
                             builder.emitLoadLocal(runFlush);
-                            builder.endIsResultKind();
+                            builder.endIsBufferedByteWriterStepRequired();
                             builder.beginBlock();
 
                             builder.beginStoreLocal(runFlush);
@@ -407,9 +408,9 @@ public final class ProtosBufferedByteWriterCPrimeExecution {
                             builder.endStoreLocal();
 
                             builder.beginWhile();
-                            builder.beginIsResultKind(ProtosResultKind.CONTINUATION);
+                            builder.beginIsContinuation();
                             builder.emitLoadLocal(child);
-                            builder.endIsResultKind();
+                            builder.endIsContinuation();
                             builder.beginBlock();
                             builder.beginStoreLocal(resume);
                             builder.beginYield();
@@ -460,9 +461,9 @@ public final class ProtosBufferedByteWriterCPrimeExecution {
                             builder.endStoreLocal();
 
                             builder.beginWhile();
-                            builder.beginIsResultKind(ProtosResultKind.CONTINUATION);
+                            builder.beginIsContinuation();
                             builder.emitLoadLocal(lowerOutcome);
-                            builder.endIsResultKind();
+                            builder.endIsContinuation();
                             builder.beginBlock();
                             builder.beginStoreLocal(yielded);
                             builder.emitLoadLocal(lowerOutcome);

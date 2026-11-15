@@ -23,7 +23,6 @@ import com.ibm.icu.util.VersionInfo;
 import java.util.Locale;
 
 final class ProtosUnicodeGraphemeSegmentation {
-    private static final VersionInfo REQUIRED_UNICODE = VersionInfo.getInstance(17, 0, 0, 0);
 
     private ProtosUnicodeGraphemeSegmentation() {}
 
@@ -63,7 +62,10 @@ final class ProtosUnicodeGraphemeSegmentation {
 
     private static void requireUnicode17() {
         VersionInfo actual = UCharacter.getUnicodeVersion();
-        if (actual.compareTo(REQUIRED_UNICODE) != 0) {
+        if (actual.getMajor() != 17
+                || actual.getMinor() != 0
+                || actual.getMilli() != 0
+                || actual.getMicro() != 0) {
             throw new IllegalStateException(
                     "Unicode grapheme segmentation requires Unicode 17.0.0 data; ICU reports "
                             + actual);

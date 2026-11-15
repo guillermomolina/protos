@@ -185,8 +185,10 @@ final class ProtosPerf025ArraySnapshotGenerationTest {
 
         String source = Files.readString(ARRAY_SOURCE);
 
-        assertTrue(source.contains("Collections.unmodifiableList(elements)"));
-        assertTrue(source.contains("new ArrayList<>(elements)"));
+        // A published generation is shared by both snapshot forms; only a later write
+        // detaches a fresh indexed backing.
+        assertTrue(source.contains("ProtosIndexedSnapshot.elements(elements, elements.length)"));
+        assertTrue(source.contains("new IndexedGeneration(elements.clone())"));
         assertFalse(
                 source.contains("return List.copyOf(elements);"),
                 "indexedSnapshot must not return to an eager O(n) element-reference copy");

@@ -21,7 +21,6 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.lookup.ProtosSlotLookupResult;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
-import java.util.List;
 
 /**
  * Loop state of one projected D188 {@code foreign.each(block)}: a Protos-side pull over a
@@ -53,7 +52,7 @@ final class ProtosForeignEachCall {
     /** The admitted element of the current position, or null until pulled. */
     private Object current;
 
-    ProtosForeignEachCall(Object receiver, List<?> supplied, ProtosActivation activation) {
+    ProtosForeignEachCall(Object receiver, Object[] supplied, ProtosActivation activation) {
         this.activation = activation;
         this.prelude =
                 activation.prelude()
@@ -63,10 +62,10 @@ final class ProtosForeignEachCall {
                                                 "foreign each requires an owning Core prelude"));
         this.receiver = receiver;
         this.handle = ProtosForeignHandle.of(receiver);
-        if (handle == null || !handle.projectsEach() || supplied.size() != 1) {
+        if (handle == null || !handle.projectsEach() || supplied.length != 1) {
             throw ProtosForeignOperation.ordinaryError(prelude);
         }
-        this.block = supplied.get(0);
+        this.block = supplied[0];
         requireInvokable(block, prelude);
     }
 

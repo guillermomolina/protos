@@ -396,6 +396,41 @@ final class ProtosI107ContinuationEmissionTest {
                                         .equals("c.InvokeClosureOne")),
                         () -> "legacy InvokeClosureOne in " + instructions);
 
+                /*
+                 * I115: the physical identity of the continuation predicate is
+                 * read from the raw generated instructions, not from the
+                 * ProtosInstructionNames phase mapping.
+                 */
+                List<Instruction> raw =
+                        activationRoot(module).getBytecodeNode().getInstructionsAsList();
+                List<String> rawNames = raw.stream()
+                        .map(instruction -> instruction.getName().split("\\$", 2)[0])
+                        .toList();
+                int isContinuation = rawNames.indexOf("c.IsContinuation");
+                assertTrue(isContinuation >= 0,
+                        () -> "physical IsContinuation missing in " + rawNames);
+                assertFalse(rawNames.contains("c.IsResultKind"),
+                        () -> "generic IsResultKind in " + rawNames);
+                for (Instruction instruction : raw) {
+                    if (instruction.getName().split("\\$", 2)[0].equals("c.IsContinuation")) {
+                        for (Instruction.Argument argument : instruction.getArguments()) {
+                            assertFalse(
+                                    argument.getKind() == Instruction.Argument.Kind.CONSTANT,
+                                    () -> "IsContinuation carries a constant operand: "
+                                            + argument);
+                        }
+                    }
+                }
+                int yield = rawNames.subList(isContinuation, rawNames.size())
+                        .indexOf("yield");
+                assertTrue(yield > 0,
+                        () -> "Yield does not follow IsContinuation in " + rawNames);
+                int resume = rawNames.subList(isContinuation + yield, rawNames.size())
+                        .indexOf("c.ResumeDispatchedContinuation");
+                assertTrue(resume > 0,
+                        () -> "ResumeDispatchedContinuation does not follow Yield in "
+                                + rawNames);
+
                 assertInteger(
                         9,
                         callClosureWith(

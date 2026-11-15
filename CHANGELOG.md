@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.134-SNAPSHOT
+
+- **I115.** Refactor Truffle invocation and structured execution, use indexed collection snapshots, and enable the optimizing Truffle runtime in Native Image packaging. Update lowering and embedding regression coverage.
+
 ## 0.4.133-SNAPSHOT
 
 - **I115 — Explicit Truffle DSL contracts.** Operations declare bytecode-index storage, stable guards declare idempotence, and inlining-target binds and cache-sharing declarations follow DSL conventions. The generated-bytecode baseline includes shared-plan unary dispatch. Default Java test parallelism is reduced from eight jobs to six.

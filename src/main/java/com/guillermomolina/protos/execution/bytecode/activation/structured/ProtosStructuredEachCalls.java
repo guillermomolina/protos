@@ -23,8 +23,10 @@ import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.ProtosIdentityMapValue;
+import com.guillermomolina.protos.runtime.ProtosIndexedSnapshot;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
 import java.util.ArrayList;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import java.util.List;
 
 /**
@@ -83,33 +85,34 @@ final class ProtosStructuredEachCalls {
 
     static final class PreparedArrayEachCall implements PreparedIndexedEachCall {
         private final ProtosArrayValue array;
-        private final List<Object> snapshot;
+        /* The published Array generation: known length, indexed reads, no copy. */
+        private final ProtosIndexedSnapshot snapshot;
         private final Object block;
         private final ProtosActivation activation;
         private int index;
 
         PreparedArrayEachCall(
                 Object receiver,
-                List<?> supplied,
+                Object[] supplied,
                 ProtosActivation activation) {
             this.activation = java.util.Objects.requireNonNull(activation, "activation");
             if (!(receiver instanceof ProtosArrayValue value)
-                    || supplied.size() != 1) {
+                    || supplied.length != 1) {
                 throw ProtosCoreErrors.signal(
                         activation,
                         ProtosCoreErrors.newError(activation));
             }
             this.array = value;
-            this.block = supplied.get(0);
+            this.block = supplied[0];
             ProtosStandardArrayProtocol.requireInvokableForStructured(
                     block,
                     activation);
-            this.snapshot = value.indexedSnapshot();
+            this.snapshot = value.indexedGenerationSnapshot();
         }
 
         @Override
         public boolean hasNext() {
-            return index < snapshot.size();
+            return index < snapshot.length();
         }
 
         @Override
@@ -120,7 +123,7 @@ final class ProtosStructuredEachCalls {
             }
             return ProtosCallRequest.call(
                     block,
-                    List.of(snapshot.get(index)),
+                    new Object[] {snapshot.at(index)},
                     activation);
         }
 
@@ -151,15 +154,15 @@ final class ProtosStructuredEachCalls {
 
     static final class PreparedArrayMatchCall {
         private final ProtosActivation activation;
-        private final List<Object> matcherSnapshot;
-        private final List<Object> subjectSnapshot;
+        private final ProtosIndexedSnapshot matcherSnapshot;
+        private final ProtosIndexedSnapshot subjectSnapshot;
         private final List<Object> captures = new ArrayList<>();
         private int index;
         private boolean mismatch;
 
         PreparedArrayMatchCall(
                 Object receiver,
-                List<?> supplied,
+                Object[] supplied,
                 ProtosActivation activation) {
             this.activation =
                     java.util.Objects.requireNonNull(
@@ -167,30 +170,30 @@ final class ProtosStructuredEachCalls {
                             "activation");
 
             if (!(receiver instanceof ProtosArrayValue matcher)
-                    || supplied.size() != 1) {
+                    || supplied.length != 1) {
                 throw ProtosCoreErrors.signal(
                         activation,
                         ProtosCoreErrors.newError(activation));
             }
 
-            Object subjectValue = supplied.get(0);
+            Object subjectValue = supplied[0];
             if (!(subjectValue instanceof ProtosArrayValue subject)) {
-                matcherSnapshot = List.of();
-                subjectSnapshot = List.of();
+                matcherSnapshot = ProtosIndexedSnapshot.elements(new Object[0], 0);
+                subjectSnapshot = ProtosIndexedSnapshot.elements(new Object[0], 0);
                 mismatch = true;
                 return;
             }
 
-            matcherSnapshot = matcher.indexedSnapshot();
-            subjectSnapshot = subject.indexedSnapshot();
+            matcherSnapshot = matcher.indexedGenerationSnapshot();
+            subjectSnapshot = subject.indexedGenerationSnapshot();
 
-            if (matcherSnapshot.size() != subjectSnapshot.size()) {
+            if (matcherSnapshot.length() != subjectSnapshot.length()) {
                 mismatch = true;
             }
         }
 
         boolean hasNext() {
-            return !mismatch && index < matcherSnapshot.size();
+            return !mismatch && index < matcherSnapshot.length();
         }
 
         ProtosCallRequest prepareCurrent() {
@@ -200,10 +203,10 @@ final class ProtosStructuredEachCalls {
             }
 
             return ProtosCallRequest.send(
-                    matcherSnapshot.get(index),
+                    matcherSnapshot.at(index),
                     "match",
                     activation,
-                    List.of(subjectSnapshot.get(index)));
+                    new Object[] {subjectSnapshot.at(index)});
         }
 
         void acceptCurrent(Object outcome) {
@@ -223,19 +226,19 @@ final class ProtosStructuredEachCalls {
             }
 
             if (outcome instanceof ProtosArrayValue childCaptures) {
-                List<Object> observedCaptures =
-                        childCaptures.indexedSnapshot();
+                ProtosIndexedSnapshot observedCaptures =
+                        childCaptures.indexedGenerationSnapshot();
 
-                if (observedCaptures.isEmpty()) {
+                if (observedCaptures.length() == 0) {
                     throw ProtosCoreErrors.signal(
                             activation,
                             ProtosCoreErrors.newError(activation));
                 }
 
                 for (int captureIndex = 0;
-                        captureIndex < observedCaptures.size();
+                        captureIndex < observedCaptures.length();
                         captureIndex++) {
-                    captures.add(observedCaptures.get(captureIndex));
+                    captures.add(observedCaptures.at(captureIndex));
                 }
                 index++;
                 return;
@@ -279,17 +282,17 @@ final class ProtosStructuredEachCalls {
 
         PreparedBytesEachCall(
                 Object receiver,
-                List<?> supplied,
+                Object[] supplied,
                 ProtosActivation activation) {
             this.activation = java.util.Objects.requireNonNull(activation, "activation");
             if (!(receiver instanceof ProtosBytesValue value)
-                    || supplied.size() != 1) {
+                    || supplied.length != 1) {
                 throw ProtosCoreErrors.signal(
                         activation,
                         ProtosCoreErrors.newError(activation));
             }
             this.bytes = value;
-            this.block = supplied.get(0);
+            this.block = supplied[0];
             ProtosStandardBytesProtocol.requireInvokableForStructured(
                     block,
                     activation);
@@ -309,7 +312,7 @@ final class ProtosStructuredEachCalls {
             }
             return ProtosCallRequest.call(
                     block,
-                    List.of(snapshot.get(index)),
+                    new Object[] {snapshot.get(index)},
                     activation);
         }
 
@@ -347,24 +350,25 @@ final class ProtosStructuredEachCalls {
      */
     static final class PreparedEnvironmentEachCall implements PreparedLocalEachCall {
         private final ProtosEnvironmentValue environment;
-        private final List<ProtosEnvironmentValue.PortableEntry> snapshot;
+        /* Interleaved (name, value) pairs of the converted portable snapshot. */
+        private final ProtosIndexedSnapshot snapshot;
         private final Object block;
         private final ProtosActivation activation;
         private int index;
 
         PreparedEnvironmentEachCall(
                 Object receiver,
-                List<?> supplied,
+                Object[] supplied,
                 ProtosActivation activation) {
             this.activation = java.util.Objects.requireNonNull(activation, "activation");
             if (!(receiver instanceof ProtosEnvironmentValue value)
-                    || supplied.size() != 1) {
+                    || supplied.length != 1) {
                 throw ProtosCoreErrors.signal(
                         activation,
                         ProtosCoreErrors.newError(activation));
             }
             this.environment = value;
-            this.block = supplied.get(0);
+            this.block = supplied[0];
             ProtosStandardEnvironmentProtocol.requireInvokableForStructured(
                     block,
                     activation);
@@ -373,16 +377,34 @@ final class ProtosStructuredEachCalls {
              * portable-representation cutover. This call validates/converts
              * the complete environment before callback #1 can be prepared.
              */
-            this.snapshot =
-                    List.copyOf(
-                            ProtosStandardEnvironmentProtocol.portableEntriesForStructured(
-                                    value,
-                                    activation));
+            this.snapshot = portableSnapshot(value, activation);
+        }
+
+        /*
+         * The process environment is host data: reading, converting and
+         * ordering it is the existing Environment host operation, after which
+         * the loop reads only the indexed pairs.
+         */
+        @TruffleBoundary
+        private static ProtosIndexedSnapshot portableSnapshot(
+                ProtosEnvironmentValue value, ProtosActivation activation) {
+            List<ProtosEnvironmentValue.PortableEntry> entries =
+                    ProtosStandardEnvironmentProtocol.portableEntriesForStructured(
+                            value,
+                            activation);
+            int count = entries.size();
+            Object[] namesAndValues = new Object[count * 2];
+            for (int index = 0; index < count; index++) {
+                ProtosEnvironmentValue.PortableEntry entry = entries.get(index);
+                namesAndValues[index * 2] = entry.name();
+                namesAndValues[index * 2 + 1] = entry.value();
+            }
+            return ProtosIndexedSnapshot.associations(namesAndValues, count);
         }
 
         @Override
         public boolean hasNext() {
-            return index < snapshot.size();
+            return index < snapshot.length();
         }
 
         @Override
@@ -391,10 +413,9 @@ final class ProtosStructuredEachCalls {
                 throw new IllegalStateException(
                         "Environment.each callback requested after snapshot exhaustion");
             }
-            ProtosEnvironmentValue.PortableEntry entry = snapshot.get(index);
             return ProtosCallRequest.call(
                     block,
-                    List.of(entry.name(), entry.value()),
+                    new Object[] {snapshot.keyAt(index), snapshot.valueAt(index)},
                     activation);
         }
 
@@ -431,7 +452,7 @@ final class ProtosStructuredEachCalls {
 
         PreparedIdentityMapAtIfAbsentCall(
                 Object receiver,
-                List<?> supplied,
+                Object[] supplied,
                 ProtosActivation activation) {
             this.activation =
                     java.util.Objects.requireNonNull(
@@ -439,14 +460,14 @@ final class ProtosStructuredEachCalls {
                             "activation");
 
             if (!(receiver instanceof ProtosIdentityMapValue map)
-                    || supplied.size() != 2) {
+                    || supplied.length != 2) {
                 throw ProtosCoreErrors.signal(
                         activation,
                         ProtosCoreErrors.newError(activation));
             }
 
-            Object key = supplied.get(0);
-            this.fallback = supplied.get(1);
+            Object key = supplied[0];
+            this.fallback = supplied[1];
 
             this.match =
                     ProtosStandardIdentityMapProtocol.findForStructured(
@@ -468,7 +489,7 @@ final class ProtosStructuredEachCalls {
 
             return ProtosCallRequest.call(
                     fallback,
-                    List.of(),
+                    new Object[0],
                     activation);
         }
 
@@ -496,33 +517,33 @@ final class ProtosStructuredEachCalls {
 
     static final class PreparedIdentityMapEachCall implements PreparedAssociationEachCall {
         private final ProtosIdentityMapValue identityMap;
-        private final List<java.util.Map.Entry<Object, Object>> snapshot;
+        private final ProtosIndexedSnapshot snapshot;
         private final Object block;
         private final ProtosActivation activation;
         private int index;
 
         PreparedIdentityMapEachCall(
                 Object receiver,
-                List<?> supplied,
+                Object[] supplied,
                 ProtosActivation activation) {
             this.activation = java.util.Objects.requireNonNull(activation, "activation");
             if (!(receiver instanceof ProtosIdentityMapValue value)
-                    || supplied.size() != 1) {
+                    || supplied.length != 1) {
                 throw ProtosCoreErrors.signal(
                         activation,
                         ProtosCoreErrors.newError(activation));
             }
             this.identityMap = value;
-            this.block = supplied.get(0);
+            this.block = supplied[0];
             ProtosStandardIdentityMapProtocol.requireInvokableForStructured(
                     block,
                     activation);
-            this.snapshot = value.associationSnapshot();
+            this.snapshot = value.associationIndexedSnapshot();
         }
 
         @Override
         public boolean hasNext() {
-            return index < snapshot.size();
+            return index < snapshot.length();
         }
 
         @Override
@@ -531,10 +552,9 @@ final class ProtosStructuredEachCalls {
                 throw new IllegalStateException(
                         "IdentityMap.each callback requested after snapshot exhaustion");
             }
-            java.util.Map.Entry<Object, Object> entry = snapshot.get(index);
             return ProtosCallRequest.call(
                     block,
-                    List.of(entry.getKey(), entry.getValue()),
+                    new Object[] {snapshot.keyAt(index), snapshot.valueAt(index)},
                     activation);
         }
 
@@ -564,33 +584,33 @@ final class ProtosStructuredEachCalls {
 
     static final class PreparedMapEachCall implements PreparedAssociationEachCall {
         private final ProtosMapValue map;
-        private final List<java.util.Map.Entry<Object, Object>> snapshot;
+        private final ProtosIndexedSnapshot snapshot;
         private final Object block;
         private final ProtosActivation activation;
         private int index;
 
         PreparedMapEachCall(
                 Object receiver,
-                List<?> supplied,
+                Object[] supplied,
                 ProtosActivation activation) {
             this.activation = java.util.Objects.requireNonNull(activation, "activation");
             if (!(receiver instanceof ProtosMapValue value)
-                    || supplied.size() != 1) {
+                    || supplied.length != 1) {
                 throw ProtosCoreErrors.signal(
                         activation,
                         ProtosCoreErrors.newError(activation));
             }
             this.map = value;
-            this.block = supplied.get(0);
+            this.block = supplied[0];
             ProtosStandardMapProtocol.requireInvokableForStructured(
                     block,
                     activation);
-            this.snapshot = List.copyOf(value.associationSnapshot());
+            this.snapshot = value.associationIndexedSnapshot();
         }
 
         @Override
         public boolean hasNext() {
-            return index < snapshot.size();
+            return index < snapshot.length();
         }
 
         @Override
@@ -599,10 +619,9 @@ final class ProtosStructuredEachCalls {
                 throw new IllegalStateException(
                         "Map.each callback requested after snapshot exhaustion");
             }
-            java.util.Map.Entry<Object, Object> entry = snapshot.get(index);
             return ProtosCallRequest.call(
                     block,
-                    List.of(entry.getKey(), entry.getValue()),
+                    new Object[] {snapshot.keyAt(index), snapshot.valueAt(index)},
                     activation);
         }
 

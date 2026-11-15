@@ -201,17 +201,18 @@ final class ProtosPreparedCalls {
      */
     static final class StructuredNativeInvocation {
         private final ProtosNativeClosureBody nativeBody;
-        private final List<?> supplied;
+        /* The prepared positional arguments, owned by this invocation; read, never written. */
+        private final Object[] supplied;
         private final ProtosActivation activation;
         private final StructuredCallCapabilities structured;
 
         private StructuredNativeInvocation(
                 ProtosNativeClosureBody nativeBody,
-                List<?> supplied,
+                Object[] supplied,
                 ProtosActivation activation,
                 StructuredCallCapabilities structured) {
             this.nativeBody = java.util.Objects.requireNonNull(nativeBody, "nativeBody");
-            this.supplied = List.copyOf(supplied);
+            this.supplied = java.util.Objects.requireNonNull(supplied, "supplied");
             this.activation = java.util.Objects.requireNonNull(activation, "activation");
             this.structured = structured;
         }
@@ -219,35 +220,59 @@ final class ProtosPreparedCalls {
         /**
          * The structured state of a native body, or {@code null} when the
          * body is an ordinary builtin. Classification is by the identity of
-         * the standard implementation, exactly as before I115.
+         * the standard implementation, exactly as before I115. The supplied
+         * arguments are taken from {@code activation} as one prepared
+         * positional array only once the body is known to be structured, so
+         * an ordinary builtin never materializes them.
          */
         static StructuredNativeInvocation forBodyOrNull(
                 ProtosClosureValue closure,
-                List<?> supplied,
                 ProtosActivation activation) {
             ProtosNativeClosureBody nativeBody = closure.nativeBody().orElseThrow();
-            StructuredNativeInvocation invocation =
-                    new StructuredNativeInvocation(
-                            nativeBody,
-                            supplied,
-                            activation,
-                            StructuredCallCapabilities.of(
-                                    ProtosStandardObjectProtocol.isStandardEnsureImplementation(closure),
-                                    ProtosStandardErrorProtocol.isStandardHandleImplementation(closure),
-                                    ProtosStandardBooleanProtocol.structuredCallbackKindForImplementation(closure),
-                                    ProtosStandardObjectProtocol.standardLoopForImplementation(closure),
-                                    ProtosStandardArrayProtocol.isStandardEachImplementation(closure),
-                                    ProtosStandardBytesProtocol.isStandardEachImplementation(closure),
-                                    ProtosStandardEnvironmentProtocol.isStandardEachImplementation(closure),
-                                    ProtosStandardIdentityMapProtocol.isStandardEachImplementation(closure),
-                                    ProtosStandardMapProtocol.isStandardEachImplementation(closure),
-                                    ProtosStandardMapProtocol.structuredReadLookupKindForImplementation(closure),
-                                    ProtosStandardMapProtocol.isStandardAtPutImplementation(closure),
-                                    ProtosStandardMapProtocol.isStandardRemoveImplementation(closure),
-                                    ProtosStandardErrorProtocol.isStandardSignalImplementation(closure),
-                                    ProtosStandardObjectProtocol.isStandardCallImplementation(closure),
-                                    ProtosStandardImportProtocol.structuredImportRuntimeForImplementation(closure)));
-            return invocation.requiresStructuredDispatch() ? invocation : null;
+            StructuredCallCapabilities structured = capabilitiesOf(closure);
+            if (!requiresStructuredDispatch(nativeBody, structured)) {
+                return null;
+            }
+            return new StructuredNativeInvocation(
+                    nativeBody,
+                    activation.suppliedArgumentArrayForRuntime(),
+                    activation,
+                    structured);
+        }
+
+        /**
+         * {@link #forBodyOrNull(ProtosClosureValue, ProtosActivation)} for
+         * already prepared positional arguments, retained without copying.
+         */
+        static StructuredNativeInvocation forBodyOrNull(
+                ProtosClosureValue closure,
+                Object[] supplied,
+                ProtosActivation activation) {
+            ProtosNativeClosureBody nativeBody = closure.nativeBody().orElseThrow();
+            StructuredCallCapabilities structured = capabilitiesOf(closure);
+            if (!requiresStructuredDispatch(nativeBody, structured)) {
+                return null;
+            }
+            return new StructuredNativeInvocation(nativeBody, supplied, activation, structured);
+        }
+
+        private static StructuredCallCapabilities capabilitiesOf(ProtosClosureValue closure) {
+            return StructuredCallCapabilities.of(
+                    ProtosStandardObjectProtocol.isStandardEnsureImplementation(closure),
+                    ProtosStandardErrorProtocol.isStandardHandleImplementation(closure),
+                    ProtosStandardBooleanProtocol.structuredCallbackKindForImplementation(closure),
+                    ProtosStandardObjectProtocol.standardLoopForImplementation(closure),
+                    ProtosStandardArrayProtocol.isStandardEachImplementation(closure),
+                    ProtosStandardBytesProtocol.isStandardEachImplementation(closure),
+                    ProtosStandardEnvironmentProtocol.isStandardEachImplementation(closure),
+                    ProtosStandardIdentityMapProtocol.isStandardEachImplementation(closure),
+                    ProtosStandardMapProtocol.isStandardEachImplementation(closure),
+                    ProtosStandardMapProtocol.structuredReadLookupKindForImplementation(closure),
+                    ProtosStandardMapProtocol.isStandardAtPutImplementation(closure),
+                    ProtosStandardMapProtocol.isStandardRemoveImplementation(closure),
+                    ProtosStandardErrorProtocol.isStandardSignalImplementation(closure),
+                    ProtosStandardObjectProtocol.isStandardCallImplementation(closure),
+                    ProtosStandardImportProtocol.structuredImportRuntimeForImplementation(closure));
         }
 
         ProtosActivation activation() { return activation; }
@@ -331,6 +356,11 @@ final class ProtosPreparedCalls {
         }
 
         boolean requiresStructuredDispatch() {
+            return requiresStructuredDispatch(nativeBody, structured);
+        }
+
+        private static boolean requiresStructuredDispatch(
+                ProtosNativeClosureBody nativeBody, StructuredCallCapabilities structured) {
             if (structured != null
                     && (structured.objectCall
                             || structured.importRuntime != null
@@ -348,11 +378,11 @@ final class ProtosPreparedCalls {
                             || structured.mapRemove)) {
                 return true;
             }
-            return isStructuredCaseOf()
-                    || isStructuredMapMatch()
-                    || isStructuredArrayMatch()
-                    || isStructuredIdentityMapAtIfAbsent()
-                    || isStructuredForeignEach();
+            return ProtosStandardObjectProtocol.isStandardCaseOfImplementation(nativeBody)
+                    || ProtosStandardMapProtocol.isStandardMatchImplementation(nativeBody)
+                    || ProtosStandardArrayProtocol.isStandardMatchImplementation(nativeBody)
+                    || ProtosStandardIdentityMapProtocol.isStandardAtIfAbsentImplementation(nativeBody)
+                    || ProtosForeignProjectedOperations.isEachImplementation(nativeBody);
         }
 
         PreparedMapMatchCall prepareStructuredMapMatch() {
@@ -427,15 +457,15 @@ final class ProtosPreparedCalls {
             }
             Object receiver = activation.receiver();
             if (!(receiver instanceof ProtosClosureValue body)
-                    || supplied.size() != 1
-                    || !(supplied.get(0) instanceof ProtosClosureValue cleanup)) {
+                    || supplied.length != 1
+                    || !(supplied[0] instanceof ProtosClosureValue cleanup)) {
                 throw ProtosCoreErrors.signal(
                         activation,
                         ProtosCoreErrors.newError(activation));
             }
             return new PreparedEnsureCall(
-                    ProtosCallRequest.call(body, List.of(), activation),
-                    ProtosCallRequest.call(cleanup, List.of(), activation));
+                    ProtosCallRequest.call(body, new Object[0], activation),
+                    ProtosCallRequest.call(cleanup, new Object[0], activation));
         }
 
         PreparedErrorHandlerCall prepareStructuredErrorHandler() {
@@ -446,9 +476,9 @@ final class ProtosPreparedCalls {
             Object receiver = activation.receiver();
             if (!(receiver instanceof ProtosObjectValue matchPrototype)
                     || !ProtosCoreErrors.isError(activation, matchPrototype)
-                    || supplied.size() != 2
-                    || !(supplied.get(0) instanceof ProtosClosureValue body)
-                    || !(supplied.get(1) instanceof ProtosClosureValue handler)) {
+                    || supplied.length != 2
+                    || !(supplied[0] instanceof ProtosClosureValue body)
+                    || !(supplied[1] instanceof ProtosClosureValue handler)) {
                 throw ProtosCoreErrors.signal(
                         activation,
                         ProtosCoreErrors.newError(activation));
@@ -463,7 +493,7 @@ final class ProtosPreparedCalls {
                         frame,
                         handler,
                         activation,
-                        ProtosCallRequest.call(body, List.of(), activation));
+                        ProtosCallRequest.call(body, new Object[0], activation));
             } catch (RuntimeException | Error preparationFailure) {
                 state.leaveFrame(frame);
                 throw preparationFailure;
@@ -732,7 +762,7 @@ final class ProtosPreparedCalls {
         }
 
         List<ProtosNamedArgumentAssociation.NamedValue> namedSnapshot() {
-            return namedValues == null ? List.of() : List.copyOf(namedValues);
+            return namedValues == null ? java.util.Collections.emptyList() : List.copyOf(namedValues);
         }
 
         NamedArgumentPacket namedPacket() {
