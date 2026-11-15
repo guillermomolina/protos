@@ -341,4 +341,65 @@ final class ProtosPerf025IdentityMapSnapshotGenerationTest {
         field.setAccessible(true);
         return field.get(map);
     }
+
+    @Test
+    void openIndexSurvivesGrowthCollisionsAndRemoval() {
+        ProtosObjectValue parent = ProtosObjectValue.rootObject();
+        ProtosIdentityMapValue map = new ProtosIdentityMapValue(parent);
+        int count = 200;
+        Object[] keys = new Object[count];
+        Object[] values = new Object[count];
+        for (int index = 0; index < count; index++) {
+            keys[index] = new ProtosObjectValue(parent);
+            values[index] = new ProtosObjectValue(parent);
+            // Every fourth key shares one recorded hash bucket.
+            long hash = index % 4 == 0 ? 7L : 1000L + index;
+            map.append(keys[index], ProtosNumericHashKey.ofLong(hash), values[index]);
+        }
+
+        assertEquals(count, map.keyedSize());
+        List<ProtosIdentityMapValue.Entry> collided =
+                map.candidatesForRecordedIdentityHash(ProtosNumericHashKey.ofLong(7L));
+        assertEquals(count / 4, collided.size());
+        for (int index = 0; index < collided.size(); index++) {
+            assertSame(keys[index * 4], collided.get(index).key());
+        }
+
+        // Exact physical removal of a whole singleton bucket and one collided entry.
+        ProtosIdentityMapValue.Entry singleton =
+                map.candidatesForRecordedIdentityHash(ProtosNumericHashKey.ofLong(1001L)).get(0);
+        assertSame(values[1], map.remove(singleton));
+        assertTrue(map.candidatesForRecordedIdentityHash(ProtosNumericHashKey.ofLong(1001L)).isEmpty());
+        ProtosIdentityMapValue.Entry middle = collided.get(1);
+        assertSame(values[4], map.remove(middle));
+
+        List<ProtosIdentityMapValue.Entry> remaining =
+                map.candidatesForRecordedIdentityHash(ProtosNumericHashKey.ofLong(7L));
+        assertEquals(count / 4 - 1, remaining.size());
+        assertSame(keys[0], remaining.get(0).key());
+        assertSame(keys[8], remaining.get(1).key());
+        assertThrows(IllegalStateException.class, () -> map.remove(middle));
+
+        // Reinsertion lands at the end of insertion order, in its bucket's tail.
+        map.append(keys[1], ProtosNumericHashKey.ofLong(1001L), values[1]);
+        List<ProtosIdentityMapValue.Entry> snapshot = map.keyedSnapshot();
+        assertEquals(count - 1, snapshot.size());
+        assertSame(keys[0], snapshot.get(0).key());
+        assertSame(keys[2], snapshot.get(1).key());
+        assertSame(keys[1], snapshot.get(snapshot.size() - 1).key());
+
+        // A published generation is retained while later mutation detaches.
+        map.remove(map.candidatesForRecordedIdentityHash(ProtosNumericHashKey.ofLong(1002L)).get(0));
+        assertEquals(count - 1, snapshot.size());
+        assertSame(keys[2], snapshot.get(1).key());
+        assertEquals(count - 2, map.keyedSize());
+    }
+
+    @Test
+    void identityIndexUsesNoJavaHashMap() throws Exception {
+        String source = Files.readString(IDENTITY_MAP_SOURCE);
+        assertFalse(source.contains("HashMap"));
+        assertFalse(source.contains("computeIfAbsent"));
+        assertTrue(source.contains("(5L * index) + perturb + 1L"));
+    }
 }

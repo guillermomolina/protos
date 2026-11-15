@@ -18,6 +18,7 @@ package com.guillermomolina.protos.runtime.numeric;
 
 import com.guillermomolina.protos.runtime.ProtosIdentity;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import java.math.BigInteger;
 import java.util.Objects;
 
@@ -70,13 +71,25 @@ public final class ProtosNumericHashKey {
             return large == null && key.large == null
                     && small == key.small;
         }
-        return large.equals(key.large);
+        return largeEquals(large, key.large);
     }
 
     @Override
     public int hashCode() {
         return large == null
                 ? Long.hashCode(small)
-                : large.hashCode();
+                : largeHashCode(large);
+    }
+
+    /** Exact equality of two large Integers; BigInteger work stays off the compiled path. */
+    @TruffleBoundary
+    private static boolean largeEquals(BigInteger left, BigInteger right) {
+        return left.equals(right);
+    }
+
+    /** Exact Java hash of a large Integer; BigInteger work stays off the compiled path. */
+    @TruffleBoundary
+    private static int largeHashCode(BigInteger value) {
+        return value.hashCode();
     }
 }

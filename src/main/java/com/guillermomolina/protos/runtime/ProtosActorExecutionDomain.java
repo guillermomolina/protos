@@ -307,6 +307,7 @@ public final class ProtosActorExecutionDomain {
     }
 
     /** PLAT029 readiness publication for one already-registered Actor-local I/O operation. */
+    @TruffleBoundary
     void enqueueActorIoOperationForRuntime(ProtosIoOperation operation) {
         Objects.requireNonNull(operation, "operation");
         Runnable wakeup = null;
@@ -324,6 +325,7 @@ public final class ProtosActorExecutionDomain {
     }
 
     /** PLAT030 readiness publication for one registered lifecycle-release C-prime owner. */
+    @TruffleBoundary
     public void enqueueActorIoReleaseForRuntime(ProtosIoReleaseExecution release) {
         Objects.requireNonNull(release, "release");
         Runnable wakeup = null;

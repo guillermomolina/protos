@@ -129,4 +129,62 @@ final class ProtosNumericHashKeyTest {
         mutable.createLocalSlot("changed", ProtosNullValue.INSTANCE);
         assertEquals(identityKey, ProtosNumericHashKey.fromIdentity(mutable));
     }
+
+    private static ProtosNumericHashKey largeKey(BigInteger value) {
+        return ProtosNumericHashKey.fromSemanticInteger(
+                ProtosNumericValueSupport.integerWithPrototype(
+                        value, ProtosObjectValue.rootObject()));
+    }
+
+    @Test
+    void smallKeysUseTheExactLongHash() {
+        for (long value : new long[] {0L, 1L, -1L, 1L << 40, Long.MAX_VALUE, Long.MIN_VALUE}) {
+            assertEquals(Long.hashCode(value), ProtosNumericHashKey.ofLong(value).hashCode());
+        }
+    }
+
+    @Test
+    void largeKeysUseTheExactBigIntegerHash() {
+        BigInteger value = BigInteger.ONE.shiftLeft(130).subtract(BigInteger.TEN);
+        assertEquals(value.hashCode(), largeKey(value).hashCode());
+    }
+
+    @Test
+    void distinctLargeValuesWithEqualJavaHashesStayUnequal() {
+        // Magnitudes [1, 0, 0] and [1, 1, -31] share the BigInteger hash 961.
+        BigInteger first = BigInteger.ONE.shiftLeft(64);
+        BigInteger second = BigInteger.ONE.shiftLeft(64)
+                .add(BigInteger.ONE.shiftLeft(32))
+                .add(BigInteger.valueOf(0xFFFFFFE1L));
+        assertEquals(first.hashCode(), second.hashCode());
+        assertNotEquals(first, second);
+
+        ProtosNumericHashKey left = largeKey(first);
+        ProtosNumericHashKey right = largeKey(second);
+
+        assertEquals(left.hashCode(), right.hashCode());
+        assertNotEquals(left, right);
+        assertEquals(left, largeKey(BigInteger.ONE.shiftLeft(64)));
+    }
+
+    @Test
+    void smallAndLargeKeysWithEqualHashesStayUnequal() {
+        BigInteger large = BigInteger.ONE.shiftLeft(64);
+        ProtosNumericHashKey largeHashKey = largeKey(large);
+        ProtosNumericHashKey small = ProtosNumericHashKey.ofLong(large.hashCode());
+
+        assertEquals(small.hashCode(), largeHashKey.hashCode());
+        assertNotEquals(small, largeHashKey);
+        assertNotEquals(largeHashKey, small);
+    }
+
+    @Test
+    void bigIntegerOperationsAreIsolatedBehindBoundaries() throws Exception {
+        String source = java.nio.file.Files.readString(java.nio.file.Path.of(
+                "src/main/java/com/guillermomolina/protos/runtime/numeric/ProtosNumericHashKey.java"));
+        assertFalse(source.contains("large.equals(key.large)"));
+        assertFalse(source.contains(": large.hashCode()"));
+        assertTrue(source.contains("@TruffleBoundary\n    private static boolean largeEquals("));
+        assertTrue(source.contains("@TruffleBoundary\n    private static int largeHashCode("));
+    }
 }

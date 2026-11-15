@@ -18,6 +18,7 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.source.Source;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -64,6 +65,7 @@ public record ProtosModuleSource(
         return new ProtosModuleSource(key, characters, Optional.of(exact));
     }
 
+    @TruffleBoundary
     String sourceName() {
         return physicalPath
                 .map(path -> path.getFileName().toString())
@@ -75,6 +77,7 @@ public record ProtosModuleSource(
      * semantic/compiler harnesses. Hosted physical execution must use PLAT020 Context
      * materialization instead.
      */
+    @TruffleBoundary
     Source literalSource() {
         Source.LiteralBuilder builder =
                 Source.newBuilder(ProtosLanguage.ID, characters, sourceName())

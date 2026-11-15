@@ -40,13 +40,13 @@ import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosDynamicControlState;
+import com.guillermomolina.protos.runtime.ProtosIndexedSnapshot;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.callables.ProtosNativeClosureBody;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.nodes.ControlFlowException;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -743,26 +743,65 @@ final class ProtosPreparedCalls {
     }
 
     static final class PreparedArgumentVector {
-        private final ArrayList<Object> values = new ArrayList<>();
+        private static final int INITIAL_CAPACITY = 8;
+
+        // Logical length is independent of physical capacity.
+        private Object[] values = new Object[INITIAL_CAPACITY];
+        private int valueCount;
 
         // I143: positional calls allocate no named-argument metadata.
-        private ArrayList<ProtosNamedArgumentAssociation.NamedValue> namedValues;
+        private ProtosNamedArgumentAssociation.NamedValue[] namedValues;
+        private int namedCount;
+
+        /**
+         * Returns a capacity of at least {@code required}, growing
+         * geometrically from {@code current} with checked arithmetic.
+         */
+        private static int grownCapacity(int current, int required) {
+            if (required < 0) {
+                throw new OutOfMemoryError("argument vector capacity overflow");
+            }
+            int grown = current + (current >> 1) + 1;
+            if (grown < 0) {
+                grown = Integer.MAX_VALUE - 8;
+            }
+            if (grown < required) {
+                grown = required;
+            }
+            return grown;
+        }
+
+        private void ensurePositionalCapacity(int additional) {
+            int required = Math.addExact(valueCount, additional);
+            if (required > values.length) {
+                values = java.util.Arrays.copyOf(
+                        values, grownCapacity(values.length, required));
+            }
+        }
 
         void appendNamed(String name, Object value) {
+            // Validates name and value before any storage mutation.
             ProtosNamedArgumentAssociation.NamedValue item =
                     new ProtosNamedArgumentAssociation.NamedValue(name, value);
             if (namedValues == null) {
-                namedValues = new ArrayList<>();
+                namedValues = new ProtosNamedArgumentAssociation.NamedValue[4];
+            } else if (namedCount == namedValues.length) {
+                namedValues = java.util.Arrays.copyOf(
+                        namedValues,
+                        grownCapacity(namedValues.length, Math.addExact(namedCount, 1)));
             }
-            namedValues.add(item);
+            namedValues[namedCount++] = item;
         }
 
         boolean hasNamedArguments() {
-            return namedValues != null && !namedValues.isEmpty();
+            return namedCount != 0;
         }
 
         List<ProtosNamedArgumentAssociation.NamedValue> namedSnapshot() {
-            return namedValues == null ? java.util.Collections.emptyList() : List.copyOf(namedValues);
+            if (namedCount == 0) {
+                return java.util.Collections.emptyList();
+            }
+            return List.of(java.util.Arrays.copyOf(namedValues, namedCount));
         }
 
         NamedArgumentPacket namedPacket() {
@@ -771,8 +810,15 @@ final class ProtosPreparedCalls {
                     namedSnapshot());
         }
 
+        /**
+         * Returns a fresh copy of exactly the used positional prefix.
+         */
+        Object[] positionalArray() {
+            return java.util.Arrays.copyOf(values, valueCount);
+        }
+
         List<Object> positionalSnapshot() {
-            return List.copyOf(values);
+            return List.of(positionalArray());
         }
 
         private void requirePositionalOnly() {
@@ -783,10 +829,9 @@ final class ProtosPreparedCalls {
         }
 
         void append(Object value) {
-            values.add(
-                    java.util.Objects.requireNonNull(
-                            value,
-                            "supplied argument"));
+            java.util.Objects.requireNonNull(value, "supplied argument");
+            ensurePositionalCapacity(1);
+            values[valueCount++] = value;
         }
 
         void appendSpread(Object value, ProtosActivation caller) {
@@ -804,17 +849,19 @@ final class ProtosPreparedCalls {
                 return false;
             }
 
-            // Snapshot at this argument's own evaluation position.
-            List<Object> spread = array.indexedSnapshot();
-            for (int index = 0; index < spread.size(); index++) {
-                values.add(spread.get(index));
+            // Published generation at this argument's own evaluation position.
+            ProtosIndexedSnapshot spread = array.indexedGenerationSnapshot();
+            int length = spread.length();
+            ensurePositionalCapacity(length);
+            for (int index = 0; index < length; index++) {
+                values[valueCount++] = spread.at(index);
             }
             return true;
         }
 
         Object soleValueOrNull() {
             requirePositionalOnly();
-            return values.size() == 1 ? values.get(0) : null;
+            return valueCount == 1 ? values[0] : null;
         }
 
         List<Object> snapshot() {

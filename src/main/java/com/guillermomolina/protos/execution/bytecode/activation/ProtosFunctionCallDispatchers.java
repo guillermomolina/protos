@@ -302,6 +302,21 @@ final class ProtosFunctionCallDispatchers {
     @TruffleBoundary
     static Object callNamed(
             Object callable,
+            ProtosPreparedCalls.PreparedArgumentVector vector,
+            ProtosActivation caller) {
+        java.util.Objects.requireNonNull(vector, "prepared arguments");
+        // The immutable packet is materialized once, inside this boundary.
+        ProtosPreparedCalls.NamedArgumentPacket packet = vector.namedPacket();
+        return callNamedPacket(callable, packet, caller);
+    }
+
+    /**
+     * Shared selection and association for an already materialized
+     * named packet; also re-entered for standard call/construct/init
+     * forwarding.
+     */
+    private static Object callNamedPacket(
+            Object callable,
             ProtosPreparedCalls.NamedArgumentPacket packet,
             ProtosActivation caller) {
         java.util.Objects.requireNonNull(packet, "named packet");
@@ -395,7 +410,7 @@ final class ProtosFunctionCallDispatchers {
                     ProtosExperimentalGetMethodNode.select(
                             receiver, "construct", null, caller);
 
-            return callNamed(construct, packet, caller);
+            return callNamedPacket(construct, packet, caller);
         }
 
         if (ProtosStandardObjectProtocol
@@ -417,7 +432,7 @@ final class ProtosFunctionCallDispatchers {
                             instance, "init", null, caller);
 
             Object initialized =
-                    callNamed(initializer, packet, caller);
+                    callNamedPacket(initializer, packet, caller);
 
             // A suspended init must finish before construct returns.
             // Its normal return value is ignored; the instance wins.

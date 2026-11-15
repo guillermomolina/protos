@@ -762,7 +762,9 @@ final class ProtosI108BCallNDispatchTest {
 
         long binary = instructions.stream()
                 .filter(name -> name.equals("c.CallBinaryMethod")
-                        || name.equals("CallBinaryMethod"))
+                        || name.equals("CallBinaryMethod")
+                        || name.startsWith("c.CallBinaryMethod$")
+                        || name.startsWith("CallBinaryMethod$"))
                 .count();
 
         assertEquals(

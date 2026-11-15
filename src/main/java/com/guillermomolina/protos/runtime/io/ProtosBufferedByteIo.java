@@ -20,6 +20,7 @@ import com.guillermomolina.protos.execution.ProtosBufferedByteReaderCPrimeExecut
 import com.guillermomolina.protos.execution.ProtosBufferedByteWriterCPrimeExecution;
 import com.guillermomolina.protos.execution.ProtosInvocation;
 import com.guillermomolina.protos.execution.ProtosIoReleaseCPrimeExecution;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import java.util.*;
 
 /** Ordered bounded state machine for the standard {@code std:io} byte buffering wrappers. */
@@ -558,6 +559,7 @@ public final class ProtosBufferedByteIo {
      * The passive observer exists only to clean up a late lower completion after the
      * outer read was already cancelled/closed; it never executes guest code.
      */
+    @TruffleBoundary
     public boolean observeReadLowerForCPrimeRuntime(
             ProtosIoOperation operation,
             ProtosFutureValue lower) {
@@ -608,6 +610,7 @@ public final class ProtosBufferedByteIo {
     }
 
     /** Applies one already-terminal lower Future on the Actor-domain C-prime segment. */
+    @TruffleBoundary
     public void consumeReadLowerForCPrimeRuntime(
             ProtosIoOperation operation,
             ProtosFutureValue lower) {

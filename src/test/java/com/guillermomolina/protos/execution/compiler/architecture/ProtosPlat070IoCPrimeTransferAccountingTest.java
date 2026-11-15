@@ -408,6 +408,54 @@ final class ProtosPlat070IoCPrimeTransferAccountingTest {
         System.out.println("PLAT070_IO_CPRIME_TRANSFER_ACCOUNTING=TRY_FINALLY_BASED");
     }
 
+    @Test
+    void hostIoAndSchedulerEntriesAreBoundariesWhileGuestControlStaysCompilable()
+            throws Exception {
+        String main = "src/main/java/com/guillermomolina/protos/";
+        assertBoundary(main + "runtime/io/ProtosBufferedByteIo.java",
+                "public boolean observeReadLowerForCPrimeRuntime(",
+                "public void consumeReadLowerForCPrimeRuntime(");
+        assertBoundary(main + "runtime/io/ProtosIoOperation.java",
+                "public void onDeferredCPrimeTerminalIdleForRuntime(",
+                "public boolean requestDeferredCPrimeRunForRuntime(");
+        assertBoundary(main + "runtime/ProtosActorExecutionDomain.java",
+                "void enqueueActorIoOperationForRuntime(",
+                "public void enqueueActorIoReleaseForRuntime(");
+        assertBoundary(main + "runtime/io/ProtosTextReader.java",
+                "public boolean observeLowerForCPrimeRuntime(",
+                "public boolean consumeLowerForCPrimeRuntime(",
+                "public boolean invalidLowerForCPrimeRuntime(",
+                "public boolean invocationFailedForCPrimeRuntime(");
+        assertBoundary(main + "execution/modules/ProtosModuleSource.java",
+                "String sourceName(",
+                "Source literalSource(");
+
+        String futureProtocol = Files.readString(
+                Path.of(main + "execution/protocols/actors/ProtosStandardFutureProtocol.java"),
+                StandardCharsets.UTF_8);
+        assertNoBoundary(futureProtocol,
+                "static Object awaitFutureForIoOperationContinuationForRuntime(");
+        assertNoBoundary(read("ProtosBufferedByteReaderCPrimeExecution"),
+                "Object awaitTargetFuture(");
+    }
+
+    private static void assertNoBoundary(String source, String declaration) {
+        int at = source.indexOf(declaration);
+        assertTrue(at > 0, declaration);
+        assertFalse(source.substring(0, at).stripTrailing().endsWith("@TruffleBoundary"),
+                declaration);
+    }
+
+    private static void assertBoundary(String file, String... declarations) throws Exception {
+        String source = Files.readString(Path.of(file), StandardCharsets.UTF_8);
+        for (String declaration : declarations) {
+            int at = source.indexOf(declaration);
+            assertTrue(at > 0, file + ": " + declaration);
+            String before = source.substring(0, at).stripTrailing();
+            assertTrue(before.endsWith("@TruffleBoundary"), file + ": " + declaration);
+        }
+    }
+
     private static String read(String protocol) throws Exception {
         return Files.readString(
                 Path.of(

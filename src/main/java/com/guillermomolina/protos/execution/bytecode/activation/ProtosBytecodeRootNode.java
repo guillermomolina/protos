@@ -3474,7 +3474,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Bind VirtualFrame frame) {
             return ProtosFunctionCallDispatchers.callNamed(
                     callable,
-                    supplied.namedPacket(),
+                    supplied,
                     ProtosFrameArguments.activation(frame));
         }
     }
@@ -3495,7 +3495,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     public static final class SnapshotClosureCallArguments {
         @Specialization
         public static Object[] perform(PreparedArgumentVector vector) {
-            return vector.snapshot().toArray();
+            return vector.positionalArray();
         }
     }
 

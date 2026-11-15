@@ -659,6 +659,7 @@ public final class ProtosTextReader {
      * retained. A second observer records only terminal evidence needed for the historical
      * late-read-ahead rule; it never schedules or executes guest code.
      */
+    @TruffleBoundary
     public boolean observeLowerForCPrimeRuntime(
             ProtosIoOperation operation,
             ProtosFutureValue lower) {
@@ -708,6 +709,7 @@ public final class ProtosTextReader {
     }
 
     /** Consumes one terminal lower Future on the Actor-domain C-prime segment. */
+    @TruffleBoundary
     public boolean consumeLowerForCPrimeRuntime(
             ProtosIoOperation operation,
             ProtosFutureValue lower) {
@@ -811,11 +813,13 @@ public final class ProtosTextReader {
     }
 
     /** Invalid source.read result is the historical permanent TextReader IOError lane. */
+    @TruffleBoundary
     public boolean invalidLowerForCPrimeRuntime(ProtosIoOperation operation) {
         return recordCPrimeSourceFailure(operation, null);
     }
 
     /** Preserve an exact guest Error from source.read; non-Error control is mapped to IOError. */
+    @TruffleBoundary
     public boolean invocationFailedForCPrimeRuntime(
             ProtosIoOperation operation,
             ProtosObjectValue exactError) {

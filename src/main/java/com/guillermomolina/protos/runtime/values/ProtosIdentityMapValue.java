@@ -19,10 +19,8 @@ package com.guillermomolina.protos.runtime;
 
 import com.guillermomolina.protos.runtime.numeric.ProtosNumericHashKey;
 import java.util.AbstractList;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -77,10 +75,73 @@ public final class ProtosIdentityMapValue extends ProtosObjectValue {
         }
     }
 
+    private static final int EMPTY_INDEX = 0;
+    private static final int DUMMY_INDEX = -1;
+    private static final int INITIAL_INDEX_SIZE = 8;
+    private static final int PERTURB_SHIFT = 5;
+
+    /**
+     * Entries sharing one exact recorded identity hash, in insertion order.
+     * Owned by exactly one generation.
+     */
     private static final class Bucket {
-        private final List<Entry> entries = new ArrayList<>();
-        private final List<Entry> view =
-                Collections.unmodifiableList(entries);
+        private static final Entry[] NO_BUCKET_ENTRIES = new Entry[0];
+
+        private final ProtosNumericHashKey hash;
+        private final int hashCode;
+        private Entry[] entries = NO_BUCKET_ENTRIES;
+        private int count;
+        /* Position in the owning generation's bucket array, or -1 once removed. */
+        private int bucketIndex = -1;
+        private final List<Entry> view = new BucketView(this);
+
+        private Bucket(ProtosNumericHashKey hash, int hashCode) {
+            this.hash = hash;
+            this.hashCode = hashCode;
+        }
+
+        private void add(Entry entry) {
+            if (count == entries.length) {
+                entries = Arrays.copyOf(entries, Math.max(2, count * 2));
+            }
+            entries[count++] = entry;
+        }
+
+        private boolean removeIdentical(Entry entry) {
+            for (int index = 0; index < count; index++) {
+                if (entries[index] == entry) {
+                    int tail = count - index - 1;
+                    if (tail > 0) {
+                        System.arraycopy(entries, index + 1, entries, index, tail);
+                    }
+                    entries[--count] = null;
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+
+    /** Read-only live projection of one bucket. */
+    private static final class BucketView
+            extends AbstractList<Entry>
+            implements RandomAccess {
+        private final Bucket bucket;
+
+        private BucketView(Bucket bucket) {
+            this.bucket = bucket;
+        }
+
+        @Override
+        public Entry get(int index) {
+            Objects.checkIndex(index, bucket.count);
+            return bucket.entries[index];
+        }
+
+        @Override
+        public int size() {
+            return bucket.count;
+        }
     }
 
     /**
@@ -122,8 +183,11 @@ public final class ProtosIdentityMapValue extends ProtosObjectValue {
         /* Insertion-ordered entries [0, size); read by index, never via List. */
         private Entry[] entries = NO_ENTRIES;
         private int size;
-        private final Map<ProtosNumericHashKey, Bucket> entriesByIdentityHash =
-                new HashMap<>();
+
+        /* Open-addressed index of 1-based bucket positions; null until first insertion. */
+        private int[] indices;
+        private Bucket[] buckets;
+        private int bucketsUsed;
 
         private List<Entry> keyedSnapshotView;
         private List<Map.Entry<Object, Object>> associationSnapshotView;
@@ -135,19 +199,121 @@ public final class ProtosIdentityMapValue extends ProtosObjectValue {
                 entries = Arrays.copyOf(entries, Math.max(4, size * 2));
             }
             entries[size++] = entry;
-            entriesByIdentityHash
-                    .computeIfAbsent(
-                            entry.recordedIdentityHash(),
-                            ignored -> new Bucket())
-                    .entries
-                    .add(entry);
+            Bucket bucket = lookupBucket(entry.recordedIdentityHash());
+            if (bucket == null) {
+                bucket = insertBucket(entry.recordedIdentityHash());
+            }
+            bucket.add(entry);
         }
 
         private List<Entry> candidates(ProtosNumericHashKey hash) {
             Bucket bucket =
-                    entriesByIdentityHash.get(
+                    lookupBucket(
                             Objects.requireNonNull(hash, "hash"));
             return bucket == null ? List.of() : bucket.view;
+        }
+
+        private static int nextIndex(int index, long perturb, int mask) {
+            return (int) (((5L * index) + perturb + 1L) & mask);
+        }
+
+        private Bucket lookupBucket(ProtosNumericHashKey hash) {
+            int[] table = indices;
+            if (table == null) {
+                return null;
+            }
+            int hashCode = hash.hashCode();
+            int mask = table.length - 1;
+            int index = hashCode & mask;
+            long perturb = hashCode & 0xffffffffL;
+            while (true) {
+                int compact = table[index];
+                if (compact == EMPTY_INDEX) {
+                    return null;
+                }
+                if (compact != DUMMY_INDEX) {
+                    Bucket bucket = buckets[compact - 1];
+                    if (bucket.hashCode == hashCode && bucket.hash.equals(hash)) {
+                        return bucket;
+                    }
+                }
+                perturb >>>= PERTURB_SHIFT;
+                index = nextIndex(index, perturb, mask);
+            }
+        }
+
+        private Bucket insertBucket(ProtosNumericHashKey hash) {
+            if (indices == null) {
+                indices = new int[INITIAL_INDEX_SIZE];
+                buckets = new Bucket[INITIAL_INDEX_SIZE];
+            } else if ((bucketsUsed + 1) * 3 >= indices.length * 2
+                    || bucketsUsed == buckets.length) {
+                rehash();
+            }
+            Bucket bucket = new Bucket(hash, hash.hashCode());
+            bucket.bucketIndex = bucketsUsed;
+            buckets[bucketsUsed++] = bucket;
+            placeIndex(indices, bucket);
+            return bucket;
+        }
+
+        private static void placeIndex(int[] table, Bucket bucket) {
+            int mask = table.length - 1;
+            int index = bucket.hashCode & mask;
+            long perturb = bucket.hashCode & 0xffffffffL;
+            while (table[index] != EMPTY_INDEX) {
+                perturb >>>= PERTURB_SHIFT;
+                index = nextIndex(index, perturb, mask);
+            }
+            table[index] = bucket.bucketIndex + 1;
+        }
+
+        private void removeBucket(Bucket bucket) {
+            int[] table = indices;
+            int mask = table.length - 1;
+            int index = bucket.hashCode & mask;
+            long perturb = bucket.hashCode & 0xffffffffL;
+            int expected = bucket.bucketIndex + 1;
+            while (table[index] != expected) {
+                if (table[index] == EMPTY_INDEX) {
+                    throw new IllegalStateException(
+                            "IdentityMap hash index lost its bucket");
+                }
+                perturb >>>= PERTURB_SHIFT;
+                index = nextIndex(index, perturb, mask);
+            }
+            table[index] = DUMMY_INDEX;
+            buckets[bucket.bucketIndex] = null;
+            bucket.bucketIndex = -1;
+        }
+
+        private void rehash() {
+            int live = 0;
+            for (int index = 0; index < bucketsUsed; index++) {
+                if (buckets[index] != null) {
+                    live++;
+                }
+            }
+            int tableSize = INITIAL_INDEX_SIZE;
+            while ((live + 1) * 3 >= tableSize) {
+                tableSize <<= 1;
+            }
+            Bucket[] compacted = new Bucket[tableSize];
+            int written = 0;
+            for (int index = 0; index < bucketsUsed; index++) {
+                Bucket bucket = buckets[index];
+                if (bucket != null) {
+                    bucket.bucketIndex = written;
+                    compacted[written++] = bucket;
+                }
+            }
+            int[] table = new int[tableSize];
+            for (int index = 0; index < written; index++) {
+                placeIndex(table, compacted[index]);
+            }
+            indices = table;
+            buckets = compacted;
+            bucketsUsed = written;
         }
 
         private List<Entry> publishKeyedSnapshot() {
@@ -269,13 +435,11 @@ public final class ProtosIdentityMapValue extends ProtosObjectValue {
                     break;
                 }
             }
-            Bucket bucket =
-                    entriesByIdentityHash.get(
-                            entry.recordedIdentityHash());
+            Bucket bucket = lookupBucket(entry.recordedIdentityHash());
 
             if (insertionIndex < 0
                     || bucket == null
-                    || !bucket.entries.contains(entry)) {
+                    || !bucket.removeIdentical(entry)) {
                 throw new IllegalStateException(
                         "foreign IdentityMap entry");
             }
@@ -285,11 +449,9 @@ public final class ProtosIdentityMapValue extends ProtosObjectValue {
                 System.arraycopy(entries, insertionIndex + 1, entries, insertionIndex, tail);
             }
             entries[--size] = null;
-            bucket.entries.remove(entry);
 
-            if (bucket.entries.isEmpty()) {
-                entriesByIdentityHash.remove(
-                        entry.recordedIdentityHash());
+            if (bucket.count == 0) {
+                removeBucket(bucket);
             }
 
             return entry.value();

@@ -168,6 +168,7 @@ public final class ProtosIoOperation {
      * delivered immediately. The handler runs at most once, outside every internal lock; it is a
      * host-only retirement signal and must not run guest code.
      */
+    @TruffleBoundary
     public void onDeferredCPrimeTerminalIdleForRuntime(Runnable handler) {
         Objects.requireNonNull(handler, "handler");
         Runnable deliver;
@@ -195,6 +196,7 @@ public final class ProtosIoOperation {
      * caller thread. Multiple requests while queued coalesce; one request while running becomes
      * exactly one later Actor-domain segment.
      */
+    @TruffleBoundary
     public boolean requestDeferredCPrimeRunForRuntime() {
         boolean enqueue = false;
         boolean accepted;

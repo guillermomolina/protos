@@ -1111,6 +1111,7 @@ public final class ProtosNumericValueSupport {
      * (D197-C); no other sealed value is copied here. A Complex is deliberately absent: it
      * crosses isolation only through the staged descriptor of {@link ProtosComplexNumericSupport}. This method is not called on ordinary arithmetic, lookup, or numeric dispatch paths.
      */
+    @TruffleBoundary
     public static Object copyCurrentNumberOrNull(Object value, ProtosPrelude destination) {
         if (value instanceof Long integer) {
             return integer;
