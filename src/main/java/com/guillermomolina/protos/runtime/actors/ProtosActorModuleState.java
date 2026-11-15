@@ -5,6 +5,7 @@
 package com.guillermomolina.protos.runtime;
 
 import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -60,6 +61,7 @@ public final class ProtosActorModuleState {
         }
     }
 
+    @TruffleBoundary
     public void removeIfSame(ProtosModuleKey key, ModuleRecord record) {
         moduleCache.remove(Objects.requireNonNull(key, "key"), Objects.requireNonNull(record, "record"));
     }

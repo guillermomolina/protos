@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.runtime;
 
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import java.util.ArrayDeque;
 import java.util.IdentityHashMap;
 import java.util.Objects;
@@ -112,6 +113,7 @@ public final class ProtosActorScheduler {
         this(ProtosActorScheduler::startFallbackPlatformWorker, DEFAULT_PARALLELISM);
     }
 
+    @TruffleBoundary
     private static void startFallbackPlatformWorker(Runnable command) {
         Thread carrier = new Thread(command, "protos-actor-fallback");
         carrier.setDaemon(true);

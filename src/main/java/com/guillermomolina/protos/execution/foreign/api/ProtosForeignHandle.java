@@ -59,9 +59,9 @@ final class ProtosForeignHandle implements ProtosRawForeignValue.Handle {
             return handle;
         }
         if (receiver instanceof ProtosForeignModuleFacadeValue facade) {
-            return facade.attachmentForRuntime()
-                    .map(ProtosForeignModuleFacadeValue.Attachment::handle)
-                    .orElse(null);
+            Optional<ProtosForeignModuleFacadeValue.Attachment> attachment =
+                    facade.attachmentForRuntime();
+            return attachment.isPresent() ? attachment.get().handle() : null;
         }
         return null;
     }

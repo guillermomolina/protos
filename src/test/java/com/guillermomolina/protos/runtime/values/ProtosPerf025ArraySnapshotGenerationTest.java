@@ -18,7 +18,9 @@
 package com.guillermomolina.protos.runtime.values;
 
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
+import com.guillermomolina.protos.runtime.ProtosIndexedSnapshot;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -192,6 +194,33 @@ final class ProtosPerf025ArraySnapshotGenerationTest {
         assertFalse(
                 source.contains("return List.copyOf(elements);"),
                 "indexedSnapshot must not return to an eager O(n) element-reference copy");
+    }
+
+    @Test
+    void elementsSnapshotBoundsUsePrimitiveRangeChecks() {
+        Object first = new Object();
+        Object second = new Object();
+        Object[] values = {first, second};
+
+        ProtosIndexedSnapshot empty = ProtosIndexedSnapshot.elements(values, 0);
+        assertEquals(0, empty.length());
+
+        ProtosIndexedSnapshot prefix = ProtosIndexedSnapshot.elements(values, 1);
+        assertEquals(1, prefix.length());
+        assertSame(first, prefix.at(0));
+
+        ProtosIndexedSnapshot full = ProtosIndexedSnapshot.elements(values, values.length);
+        assertEquals(2, full.length());
+        assertSame(first, full.at(0));
+        assertSame(second, full.at(1));
+        assertNotSame(prefix, full);
+
+        assertThrows(
+                IndexOutOfBoundsException.class,
+                () -> ProtosIndexedSnapshot.elements(values, -1));
+        assertThrows(
+                IndexOutOfBoundsException.class,
+                () -> ProtosIndexedSnapshot.elements(values, values.length + 1));
     }
 
     private static Object indexedGeneration(ProtosArrayValue array)

@@ -52,7 +52,9 @@ public final class ProtosIndexedSnapshot {
     /** An element snapshot adopting {@code values[0, length)}, never written again. */
     public static ProtosIndexedSnapshot elements(Object[] values, int length) {
         Objects.requireNonNull(values, "values");
-        Objects.checkFromToIndex(0, length, values.length);
+        if (length < 0 || length > values.length) {
+            throw new IndexOutOfBoundsException("snapshot range out of bounds");
+        }
         return length == 0
                 ? EMPTY_ELEMENTS
                 : new ProtosIndexedSnapshot(values, null, length, false);

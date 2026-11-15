@@ -18,6 +18,7 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.io.ProtosEntropyBackend;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import java.security.SecureRandom;
 import java.util.List;
 import java.util.Objects;
@@ -115,6 +116,7 @@ final class ProtosHostEntropyBackend implements ProtosEntropyBackend {
     }
 
     @Override
+    @TruffleBoundary
     public void close() {
         ThreadPoolExecutor current;
 

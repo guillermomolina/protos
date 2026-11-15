@@ -16,6 +16,8 @@
  */
 package com.guillermomolina.protos.runtime;
 
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+
 /**
  * I156 marker of host threads whose I/O completions must be published inside the owning Actor.
  *
@@ -36,6 +38,7 @@ public final class ProtosHostCompletionThread {
     }
 
     /** Whether the calling thread is a marked host completion thread. */
+    @TruffleBoundary
     public static boolean isCurrent() {
         return MARKED.get();
     }

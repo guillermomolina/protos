@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.136-SNAPSHOT
+
+- **I115.** Isolate password custody, foreign handles, entropy, Actor scheduling and completion-thread operations behind Truffle boundaries. Keep indexed snapshot generation checks aligned.
+
 ## 0.4.135-SNAPSHOT
 
 - **I115.** Refine prepared-call argument handling, identity-map snapshots and numeric hash keys, and isolate additional host I/O operations from compilation. Add named-argument, snapshot and transfer-accounting regressions.

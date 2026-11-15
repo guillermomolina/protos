@@ -23,6 +23,7 @@ import com.guillermomolina.protos.runtime.process.ProtosProcessExecutionHost.Pas
 import com.guillermomolina.protos.runtime.process.ProtosProcessExecutionHost.PasswordKdfRejection;
 import com.guillermomolina.protos.runtime.process.ProtosProcessExecutionHost.PasswordKdfResult;
 import com.guillermomolina.protos.runtime.process.ProtosProcessExecutionHost.PasswordKdfTicket;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
@@ -329,6 +330,7 @@ final class ProtosPasswordKdfCustody implements AutoCloseable {
     }
 
     @Override
+    @TruffleBoundary
     public void close() {
         retireForRuntime();
 
