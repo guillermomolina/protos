@@ -679,6 +679,7 @@ public final class ProtosActorExecutionDomain {
         }
     }
 
+    @TruffleBoundary
     public void terminalActorIoReleaseForRuntime(ProtosIoReleaseExecution release) {
         ProtosActor actor;
         synchronized (this) { actorIoReleases.remove(release); notifyAll(); actor=ownerActor; }
@@ -694,6 +695,7 @@ public final class ProtosActorExecutionDomain {
         }
     }
 
+    @TruffleBoundary
     void terminalActorIoLifecycleCleanupForRuntime(ProtosIoLifecycle lifecycle) {
         ProtosActor actor;
         synchronized (this) { actorIoLifecycleCleanup.remove(lifecycle); notifyAll(); actor=ownerActor; }

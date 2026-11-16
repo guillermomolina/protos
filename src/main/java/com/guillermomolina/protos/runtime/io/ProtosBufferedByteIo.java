@@ -463,8 +463,18 @@ public final class ProtosBufferedByteIo {
         }
     }
 
+    @TruffleBoundary
+    private static List<Object> noArguments() {
+        return List.of();
+    }
+
+    @TruffleBoundary
+    private static List<Object> singletonArguments(Object value) {
+        return List.of(value);
+    }
+
     private List<?> readArguments(Req req) {
-        return List.of(
+        return singletonArguments(
                 ProtosNumericValueSupport.integer(
                                 Math.max(req.maximum, READ_AHEAD)));
     }
@@ -959,7 +969,7 @@ public final class ProtosBufferedByteIo {
                 invokeFuture(
                         target,
                         "write",
-                        List.of(bytes(pending)),
+                        singletonArguments(bytes(pending)),
                         req.a);
         if (lower == null) {
             if (closePath) {
@@ -1041,7 +1051,7 @@ public final class ProtosBufferedByteIo {
                 invokeFuture(
                         target,
                         "flush",
-                        List.of(),
+                        noArguments(),
                         req.a);
         if (lower == null) {
             if (closePath) {
@@ -1177,7 +1187,7 @@ public final class ProtosBufferedByteIo {
                     ProtosIoReleaseCPrimeExecution.Step.ordinary(
                             target,
                             "write",
-                            List.of(payload),
+                            singletonArguments(payload),
                             () -> releaseBufferedPrefix(pending.length),
                             this::recordReleaseOutputFailure));
             if (target.lookupSlot("flush").isPresent()) {
@@ -1185,7 +1195,7 @@ public final class ProtosBufferedByteIo {
                         ProtosIoReleaseCPrimeExecution.Step.ordinary(
                                 target,
                                 "flush",
-                                List.of(),
+                                noArguments(),
                                 () -> {},
                                 this::recordReleaseOutputFailure));
             }
@@ -1196,7 +1206,7 @@ public final class ProtosBufferedByteIo {
                     ProtosIoReleaseCPrimeExecution.Step.mandatoryFinalizer(
                             target,
                             "close",
-                            List.of(),
+                            noArguments(),
                             () -> {},
                             ignored -> {}));
         }
@@ -1295,7 +1305,7 @@ public final class ProtosBufferedByteIo {
         }
 
         ProtosFutureValue targetClose =
-                invokeFuture(target, "close", List.of(), activation);
+                invokeFuture(target, "close", noArguments(), activation);
         if (targetClose == null) {
             finishRelease(primary != null ? primary : ioError(activation));
             return;

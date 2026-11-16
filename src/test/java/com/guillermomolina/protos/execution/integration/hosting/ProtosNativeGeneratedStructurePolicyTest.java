@@ -378,6 +378,22 @@ final class ProtosNativeGeneratedStructurePolicyTest {
     }
 
     @Test
+    void actorIoCleanupCompletionAndBufferedArgumentFactoriesAreHostBoundaries() throws Exception {
+        String domain = mainSource("runtime/ProtosActorExecutionDomain.java");
+        assertTrue(boundaryPrecedes(domain,
+                "void terminalActorIoLifecycleCleanupForRuntime(ProtosIoLifecycle lifecycle)"));
+        assertTrue(boundaryPrecedes(domain,
+                "public void terminalActorIoReleaseForRuntime(ProtosIoReleaseExecution release)"));
+
+        String buffered = mainSource("runtime/io/ProtosBufferedByteIo.java");
+        assertTrue(boundaryPrecedes(buffered, "private static List<Object> noArguments()"));
+        assertTrue(boundaryPrecedes(buffered,
+                "private static List<Object> singletonArguments(Object value)"));
+        assertFalse(boundaryPrecedes(buffered, "private void pump("));
+        assertFalse(boundaryPrecedes(buffered, "private void doFlush("));
+    }
+
+    @Test
     void noHistoricalInterpreterOrAlternateEngineIsReintroduced() throws Exception {
         for (String retired : List.of(
                 "execution/bytecode/activation/structured/ProtosStructuredCallKind.java",
