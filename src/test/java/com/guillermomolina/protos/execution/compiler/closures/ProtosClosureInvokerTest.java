@@ -20,6 +20,7 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
@@ -27,10 +28,15 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
+import com.oracle.truffle.api.CompilerDirectives;
+import java.nio.file.Path;
 import java.util.List;
+import java.util.function.Supplier;
 import org.junit.jupiter.api.Test;
 
 class ProtosClosureInvokerTest {
+    private static final Path CORE = Path.of("protos", "lib", "core");
+
     @Test
     void invokesSelectedClosureThroughBindingAndBody() {
         ProtosClosureValue closure = closure("(x) => x");
@@ -83,6 +89,99 @@ class ProtosClosureInvokerTest {
         ProtosClosureInvoker.invoke(nested, List.of());
 
         assertTrue(capturedHome.isActive());
+    }
+
+    @Test
+    void hostContextEntryIsTruffleBoundary() throws NoSuchMethodException {
+        assertTrue(
+                ProtosClosureInvoker.class
+                        .getDeclaredMethod("callWithEnteredContext", Supplier.class)
+                        .isAnnotationPresent(CompilerDirectives.TruffleBoundary.class));
+    }
+
+    @Test
+    void synchronousClosureWithArgumentsUsesTemporaryHost() {
+        ProtosClosureValue closure = closure("(x, y) => y");
+        Object first = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        Object second = new ProtosObjectValue(ProtosObjectValue.rootObject());
+
+        Object result = ProtosClosureInvoker.invoke(closure, List.of(first, second));
+
+        assertSame(second, result);
+    }
+
+    @Test
+    void synchronousCallableWithArgumentsInsideEnteredContext() {
+        ProtosTestExecutionSupport.runEntered(
+                () -> {
+                    ProtosActivation caller = coreModuleActivation();
+                    ProtosClosureValue closure = closure("(x, y) => y", caller);
+                    Object first = new ProtosObjectValue(ProtosObjectValue.rootObject());
+                    Object second = new ProtosObjectValue(ProtosObjectValue.rootObject());
+
+                    Object viaCallable =
+                            ProtosClosureInvoker.invokeCallable(
+                                    closure, List.of(first, second), caller);
+                    Object viaInvoke =
+                            ProtosClosureInvoker.invoke(
+                                    closure, List.of(first, second), caller);
+
+                    assertSame(second, viaCallable);
+                    assertSame(second, viaInvoke);
+                });
+    }
+
+    @Test
+    void synchronousCallableExecutionErrorPropagates() {
+        ProtosTestExecutionSupport.runEntered(
+                () -> {
+                    ProtosActivation caller = coreModuleActivation();
+                    ProtosClosureValue closure =
+                            closure("() => protosClosureInvokerTestUnboundName", caller);
+
+                    assertThrows(
+                            RuntimeException.class,
+                            () -> ProtosClosureInvoker.invokeCallable(
+                                    closure, List.of(), caller));
+                });
+    }
+
+    @Test
+    void synchronousCallableDoesNotCompleteCapturedReturnHome() {
+        ProtosTestExecutionSupport.runEntered(
+                () -> {
+                    ProtosActivation caller = coreModuleActivation();
+                    ProtosClosureValue outer = closure("() => null", caller);
+                    ProtosReturnHome capturedHome = new ProtosReturnHome();
+                    ProtosClosureValue nested =
+                            new ProtosClosureValue(
+                                    outer.definition(),
+                                    outer.capturedLexicalContexts(),
+                                    outer.capturedReceiver(),
+                                    outer.methodHome().orElse(null),
+                                    capturedHome,
+                                    outer.prelude().orElseThrow(),
+                                    outer.executionPlan().orElseThrow());
+
+                    ProtosClosureInvoker.invokeCallable(nested, List.of(), caller);
+
+                    assertTrue(capturedHome.isActive());
+                });
+    }
+
+    private static ProtosActivation coreModuleActivation() {
+        try {
+            return new ProtosCoreBootstrap().bootstrap(CORE).newModuleActivation();
+        } catch (java.io.IOException failure) {
+            throw new java.io.UncheckedIOException(failure);
+        }
+    }
+
+    private static ProtosClosureValue closure(String source, ProtosActivation activation) {
+        return assertInstanceOf(
+                ProtosClosureValue.class,
+                ProtosTestExecutionSupport.evaluate(
+                        "closure-invoker-test.protos", source, activation));
     }
 
     private static ProtosClosureValue closure(String source) {

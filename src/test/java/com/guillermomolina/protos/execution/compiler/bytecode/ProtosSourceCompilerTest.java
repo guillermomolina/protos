@@ -21,13 +21,18 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.parser.ParseError;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.source.Source;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Path;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -78,6 +83,44 @@ class ProtosSourceCompilerTest {
                                                     source,
                                                     context.languageForTesting());
                                 }));
+    }
+
+    @Test
+    void sourceCompilationUsesGraalPyStyleTruffleBoundary() throws NoSuchMethodException {
+        assertTrue(
+                ProtosSourceCompiler.class
+                        .getDeclaredMethod("compileBytecode", Source.class, ProtosLanguage.class)
+                        .isAnnotationPresent(CompilerDirectives.TruffleBoundary.class));
+    }
+
+    @Test
+    void boundedSourceCompilationPreservesClosureInvocation() {
+        Object result =
+                ProtosTestExecutionSupport.callEntered(
+                        () -> {
+                            ProtosPrelude prelude;
+                            try {
+                                prelude =
+                                        new ProtosCoreBootstrap()
+                                                .bootstrap(Path.of("protos", "lib", "core"));
+                            } catch (IOException exception) {
+                                throw new UncheckedIOException(exception);
+                            }
+                            Source source =
+                                    Source.newBuilder(
+                                                    ProtosLanguage.ID,
+                                                    "f: (value) => value\nf(4)",
+                                                    "source-compiler-closure.protos")
+                                            .mimeType(ProtosLanguage.MIME_TYPE)
+                                            .build();
+                            return new ProtosSourceCompiler()
+                                    .compileBytecode(
+                                            source,
+                                            ProtosLanguageContext.current().languageForTesting())
+                                    .call(prelude.newModuleActivation());
+                        });
+
+        assertEquals(4L, assertInstanceOf(Long.class, result));
     }
 
     private static Object compileAndCall(String characters) {

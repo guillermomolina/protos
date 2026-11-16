@@ -21,6 +21,7 @@ import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.parser.ast.SurfaceSequence;
 import com.guillermomolina.protos.semantic.Canonicalizer;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.source.Source;
 import java.util.Objects;
@@ -37,6 +38,7 @@ public final class ProtosSourceCompiler {
      * (PLAT067-B). The result does not depend on whether the host enables a debugger: source,
      * tag and instrumentation information is materialized on demand by Truffle.
      */
+    @TruffleBoundary
     RootCallTarget compileBytecode(Source source, ProtosLanguage language) {
         Objects.requireNonNull(source, "source");
         Objects.requireNonNull(language, "language");

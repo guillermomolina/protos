@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.142-SNAPSHOT
+
+- **I115.** Add Truffle boundaries for Closure host-context entry and source compilation, extend host-entry regressions, and update the generated-bytecode baseline.
+
 ## 0.4.141-SNAPSHOT
 
 - **I115.** Add native-analysis and native-analysis-graph Maven profiles for strict runtime-compilation inventory and diagnostic call-tree analysis without producing an executable.

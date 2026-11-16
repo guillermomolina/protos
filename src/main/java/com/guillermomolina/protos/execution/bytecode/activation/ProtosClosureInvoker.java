@@ -26,6 +26,7 @@ import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosTask;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import java.util.List;
 import java.util.Objects;
 
@@ -171,7 +172,10 @@ public final class ProtosClosureInvoker {
      * The dispatcher is always entered under a Truffle Context; ordinary
      * guest-to-guest calls already have one and incur no additional host.
      * This is the same bounded host entry used for a published source call.
+     * The Truffle boundary keeps this host-side entry (and its Supplier
+     * actions) out of the partial-evaluation graphs of guest roots.
      */
+    @TruffleBoundary
     private static Object callWithEnteredContext(java.util.function.Supplier<Object> action) {
         if (ProtosLanguageContext.currentIfEnteredForRuntime() != null) {
             return action.get();
