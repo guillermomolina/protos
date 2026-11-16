@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.141-SNAPSHOT
+
+- **I115.** Add native-analysis and native-analysis-graph Maven profiles for strict runtime-compilation inventory and diagnostic call-tree analysis without producing an executable.
+
 ## 0.4.140-SNAPSHOT
 
 - **I115.** Add the Native Image runtime-compilation gate with separate detector, GraalVM analysis, inventory and policy results, Makefile integration and gate regression coverage.

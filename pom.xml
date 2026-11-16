@@ -5,7 +5,7 @@
 
     <groupId>com.guillermomolina</groupId>
     <artifactId>protos</artifactId>
-    <version>0.4.140-SNAPSHOT</version>
+    <version>0.4.141-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <name>Protos</name>
@@ -389,6 +389,73 @@
                                     compilation step is involved.
                                 -->
                                 <buildArg>--enable-native-access=ALL-UNNAMED</buildArg>
+                            </buildArgs>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <!--
+            Global Native Image runtime-compilation analysis. Activate only
+            together with the native profile (-Pnative,native-analysis): it
+            reuses that profile's execution, classpath, reachability metadata,
+            class initialization and optimizing runtime, appends the analysis
+            options to its buildArgs, stops after the points-to analysis and
+            writes into a separate output directory; no executable is produced.
+            -TruffleCheckBlockListMethods keeps GraalVM from aborting on the
+            blocklist check; with +PrintRuntimeCompileMethods GraalVM still
+            enumerates every blocklist violation. neverPartOfCompilation stays
+            checked (strict inventory) and tools/native_runtime_compilation_gate.py
+            fails on any violation of either category.
+        -->
+        <profile>
+            <id>native-analysis</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.graalvm.buildtools</groupId>
+                        <artifactId>native-maven-plugin</artifactId>
+                        <configuration>
+                            <imageName>protos-native-analysis</imageName>
+                            <outputDirectory>${project.build.directory}/native-analysis/image</outputDirectory>
+                            <buildArgs combine.children="append">
+                                <buildArg>-H:+ReturnAfterAnalysis</buildArg>
+                                <buildArg>-H:-TruffleCheckBlockListMethods</buildArg>
+                                <buildArg>-H:+PrintRuntimeCompileMethods</buildArg>
+                                <buildArg>-H:+PrintRuntimeCompilationCallTree</buildArg>
+                                <buildArg>-H:+TruffleCheckNeverPartOfCompilation</buildArg>
+                            </buildArgs>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <!--
+            Diagnostic graph phase of the runtime-compilation analysis.
+            Activate only together with both previous profiles
+            (-Pnative,native-analysis,native-analysis-graph). It appends
+            -TruffleCheckNeverPartOfCompilation after native-analysis's
+            +TruffleCheckNeverPartOfCompilation (the later option wins) so the
+            analysis completes and prints the full call tree. Used only when
+            the strict phase was stopped by neverPartOfCompilation violations;
+            violation results always come from the strict phase.
+        -->
+        <profile>
+            <id>native-analysis-graph</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.graalvm.buildtools</groupId>
+                        <artifactId>native-maven-plugin</artifactId>
+                        <configuration>
+                            <imageName>protos-native-analysis-graph</imageName>
+                            <outputDirectory>${project.build.directory}/native-analysis/graph-image</outputDirectory>
+                            <buildArgs combine.children="append">
+                                <buildArg>-H:-TruffleCheckNeverPartOfCompilation</buildArg>
+                                <!-- Assertions only for jdk.graal.compiler.debug.Assertions:
+                                     MethodTypeFlow.sealFlowsGraph() keeps the seal stack
+                                     trace when Assertions.assertionsEnabled() is true. -->
+                                <buildArg>-J-ea:jdk.graal.compiler.debug.Assertions</buildArg>
                             </buildArgs>
                         </configuration>
                     </plugin>
