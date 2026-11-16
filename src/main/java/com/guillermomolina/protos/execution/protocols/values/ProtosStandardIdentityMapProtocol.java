@@ -96,8 +96,10 @@ public final class ProtosStandardIdentityMapProtocol {
   arity(a, x, 1);
   Object block = x.get(0);
   requireInvokableForStructured(block, a);
-  for (var entry : m.associationSnapshot()) {
-   ProtosInvocation.invoke(block, List.of(entry.getKey(), entry.getValue()), a);
+  ProtosIndexedSnapshot snapshot = m.associationIndexedSnapshot();
+  int length = snapshot.length();
+  for (int index = 0; index < length; index++) {
+   ProtosInvocation.invoke(block, List.of(snapshot.keyAt(index), snapshot.valueAt(index)), a);
   }
   return m;
  }
@@ -111,10 +113,7 @@ public final class ProtosStandardIdentityMapProtocol {
   return find(m,k,ProtosNumericHashKey.fromIdentity(k));
  }
  private static ProtosIdentityMapValue.Entry find(ProtosIdentityMapValue m,Object k,ProtosNumericHashKey h){
-  for(var e:m.candidatesForRecordedIdentityHash(h)){
-   if(ProtosIdentity.identical(k,e.key()))return e;
-  }
-  return null;
+  return m.findIdentical(k,h);
  }
  private static ProtosIdentityMapValue map(ProtosActivation a){if(!(a.receiver() instanceof ProtosIdentityMapValue m))throw err(a);return m;} private static void arity(ProtosActivation a,List<?> x,int n){if(x.size()!=n)throw err(a);}
  static void requireInvokableForStructured(Object c, ProtosActivation a) {

@@ -85,7 +85,6 @@ final class ProtosI115NCompactBooleanTest {
             "PromoteFrameLexicalAuthority",
             "MaterializeCurrentClosure",
             "PrepareSendOne",
-            "PrepareStructuredCall",
             "EnterNestedStructuredDispatch",
             "ResumeContinuation",
             "CompleteClosureCall",
@@ -593,6 +592,7 @@ final class ProtosI115NCompactBooleanTest {
                 "Only guarded controls register callback roots");
         boolean compact = false;
         int[] missPath = new int[MISS_PATH.size()];
+        int structuredPreparations = 0;
         for (Instruction instruction
                 : run.getBytecodeNode().getInstructionsAsList()) {
             String instructionName = ProtosInstructionNames.of(instruction);
@@ -606,11 +606,16 @@ final class ProtosI115NCompactBooleanTest {
                     missPath[index]++;
                 }
             }
+            if (isStructuredPreparation(instructionName)) {
+                structuredPreparations++;
+            }
         }
         for (int index = 0; index < missPath.length; index++) {
             System.out.println(
                     "I115_N_" + MISS_PATH.get(index) + "_COUNT=" + missPath[index]);
         }
+        System.out.println("I115_N_STRUCTURED_PREPARATION_COUNT="
+                + structuredPreparations);
         assertTrue(compact, name + " run root must select the standard Boolean behavior natively");
         // A discarded Boolean control stores its result in no local.
         boolean consumedLocal = false;
@@ -619,5 +624,12 @@ final class ProtosI115NCompactBooleanTest {
         }
         System.out.println("I115_N_RESULT_LOCAL=" + consumedLocal);
         return new Census(roots.size(), runCount, total, consumedLocal);
+    }
+
+    /* Concrete structured preparations; admitted protocols, not misses. */
+    private static boolean isStructuredPreparation(String instructionName) {
+        String operation = instructionName.startsWith("c.")
+                ? instructionName.substring(2) : instructionName;
+        return operation.startsWith("PrepareStructured");
     }
 }

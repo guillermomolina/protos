@@ -358,4 +358,133 @@ final class ProtosPasswordKdfExecutorTest {
         assertFalse(interrupted.get());
         assertEquals(0, publications.get());
     }
+
+    /**
+     * Cancellation after admission but before a worker takes the job:
+     * repeated cancellation is idempotent, the queued job never reaches
+     * the provider and never publishes.
+     */
+    @Test
+    @Timeout(30)
+    void queuedCancellationBeforeExecutionIsIdempotentAndSilent()
+            throws Exception {
+
+        CountDownLatch entered = new CountDownLatch(2);
+        CountDownLatch release = new CountDownLatch(1);
+        AtomicInteger providerEntries = new AtomicInteger();
+        AtomicInteger published = new AtomicInteger();
+
+        ProtosPasswordKdfExecutor executor =
+                new ProtosPasswordKdfExecutor(() -> {
+                    providerEntries.incrementAndGet();
+                    entered.countDown();
+                    try {
+                        release.await();
+                    } catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                    }
+                });
+
+        List<ProtosPasswordKdfExecutor.Ticket> running = new ArrayList<>();
+
+        try {
+            running.add(submit(executor, published));
+            running.add(submit(executor, published));
+            assertTrue(entered.await(10, TimeUnit.SECONDS));
+
+            ProtosPasswordKdfExecutor.Ticket queued =
+                    submit(executor, published);
+            assertNotNull(queued);
+
+            queued.cancel();
+            queued.cancel();
+
+            for (ProtosPasswordKdfExecutor.Ticket ticket : running) {
+                ticket.cancel();
+                ticket.cancel();
+            }
+        } finally {
+            release.countDown();
+            executor.close();
+        }
+
+        assertTrue(
+                executor.awaitTerminationForTesting(
+                        15, TimeUnit.SECONDS));
+
+        assertEquals(2, providerEntries.get());
+        assertEquals(0, published.get());
+    }
+
+    /**
+     * Completion racing cancellation: once the terminal host result has
+     * been delivered, later cancellation is a no-op and the completion is
+     * never repeated.
+     */
+    @Test
+    @Timeout(30)
+    void cancellationAfterCompletionKeepsExactlyOnePublication()
+            throws Exception {
+
+        CountDownLatch delivered = new CountDownLatch(1);
+        AtomicInteger publications = new AtomicInteger();
+
+        ProtosPasswordKdfExecutor executor =
+                new ProtosPasswordKdfExecutor(() -> {
+                    throw new IllegalStateException("injected provider failure");
+                });
+
+        try {
+            ProtosPasswordKdfExecutor.Ticket ticket =
+                    executor.submit(
+                            PASSWORD,
+                            SALT,
+                            null,
+                            result -> {
+                                try {
+                                    publications.incrementAndGet();
+                                } finally {
+                                    if (result != null) {
+                                        result.close();
+                                    }
+                                    delivered.countDown();
+                                }
+                            });
+
+            assertNotNull(ticket);
+            assertTrue(delivered.await(15, TimeUnit.SECONDS));
+
+            ticket.cancel();
+            ticket.cancel();
+        } finally {
+            executor.close();
+        }
+
+        assertTrue(
+                executor.awaitTerminationForTesting(
+                        15, TimeUnit.SECONDS));
+
+        assertEquals(1, publications.get());
+    }
+
+    /** Admission after Process retirement is refused before any queueing. */
+    @Test
+    @Timeout(30)
+    void submissionAfterRetirementIsRefused() throws Exception {
+        AtomicInteger providerEntries = new AtomicInteger();
+        AtomicInteger published = new AtomicInteger();
+
+        ProtosPasswordKdfExecutor executor =
+                new ProtosPasswordKdfExecutor(providerEntries::incrementAndGet);
+
+        executor.close();
+
+        assertTrue(executor.isClosedForRuntime());
+        assertNull(submit(executor, published));
+        assertTrue(
+                executor.awaitTerminationForTesting(
+                        15, TimeUnit.SECONDS));
+        assertEquals(0, providerEntries.get());
+        assertEquals(0, published.get());
+    }
 }

@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import java.security.MessageDigest;
 import java.util.Arrays;
 import java.util.Objects;
@@ -192,6 +193,7 @@ final class ProtosPasswordKdfExecutor implements AutoCloseable {
      * @return a cancellation ticket, or null when admission is closed
      *         or capacity is exhausted
      */
+    @TruffleBoundary
     Ticket submit(
             byte[] normalizedPassword,
             byte[] salt,
@@ -290,6 +292,7 @@ final class ProtosPasswordKdfExecutor implements AutoCloseable {
         }
 
         @Override
+        @TruffleBoundary
         public void cancel() {
             boolean remove;
 
@@ -319,6 +322,7 @@ final class ProtosPasswordKdfExecutor implements AutoCloseable {
         }
 
         @Override
+        @TruffleBoundary
         public void run() {
             synchronized (this) {
                 if (finished || cancelled || closed.get()) {

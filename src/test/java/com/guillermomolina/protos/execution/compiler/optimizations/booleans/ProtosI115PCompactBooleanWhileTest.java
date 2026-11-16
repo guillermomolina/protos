@@ -83,7 +83,6 @@ final class ProtosI115PCompactBooleanWhileTest {
             "TryPrimitiveNumeric",
             "PromoteFrameLexicalAuthority",
             "PrepareSendOne",
-            "PrepareStructuredCall",
             "EnterNestedStructuredDispatch",
             "ResumeContinuation",
             "CompleteClosureCall",
@@ -782,6 +781,10 @@ final class ProtosI115PCompactBooleanWhileTest {
             System.out.println(prefix + operation + "_COUNT="
                     + names.stream().filter(n -> n.contains(operation)).count());
         }
+        System.out.println(prefix + "STRUCTURED_PREPARATION_COUNT="
+                + names.stream()
+                        .filter(ProtosI115PCompactBooleanWhileTest::isStructuredPreparation)
+                        .count());
 
         if (admitted) {
             assertEquals(
@@ -930,5 +933,12 @@ final class ProtosI115PCompactBooleanWhileTest {
         }
         // The unified While: a native conditional branch and a backward edge.
         assertStructuredWhileInstructions(run.getBytecodeNode().getInstructionsAsList());
+    }
+
+    /* Concrete structured preparations; admitted protocols, not misses. */
+    private static boolean isStructuredPreparation(String instructionName) {
+        String operation = instructionName.startsWith("c.")
+                ? instructionName.substring(2) : instructionName;
+        return operation.startsWith("PrepareStructured");
     }
 }

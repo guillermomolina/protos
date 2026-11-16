@@ -22,6 +22,7 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -393,6 +394,63 @@ final class ProtosPerf025IdentityMapSnapshotGenerationTest {
         assertEquals(count - 1, snapshot.size());
         assertSame(keys[2], snapshot.get(1).key());
         assertEquals(count - 2, map.keyedSize());
+    }
+
+    @Test
+    void indexedLookupFollowsDetachedGenerationsAndKeepsSnapshots() {
+        ProtosObjectValue parent = ProtosObjectValue.rootObject();
+        ProtosIdentityMapValue map = new ProtosIdentityMapValue(parent);
+        ProtosNumericHashKey shared = ProtosNumericHashKey.ofLong(7L);
+        Object first = new ProtosObjectValue(parent);
+        Object second = new ProtosObjectValue(parent);
+        Object third = new ProtosObjectValue(parent);
+        map.append(first, shared, "first");
+        map.append(second, shared, "second");
+        map.append(third, ProtosNumericHashKey.ofLong(8L), "third");
+
+        assertSame(first, map.findIdentical(first, shared).key());
+        assertSame(second, map.findIdentical(second, shared).key());
+        assertNull(map.findIdentical(third, shared));
+        assertNull(map.findIdentical(new ProtosObjectValue(parent), shared));
+
+        List<ProtosIdentityMapValue.Entry> snapshot = map.keyedSnapshot();
+        ProtosIdentityMapValue.Entry published = map.findIdentical(second, shared);
+        assertSame(snapshot.get(1), published);
+
+        // Removal after publication detaches; lookup sees only the live generation.
+        map.remove(map.findIdentical(first, shared));
+        assertNull(map.findIdentical(first, shared));
+        assertSame(second, map.findIdentical(second, shared).key());
+        assertNotSame(published, map.findIdentical(second, shared));
+
+        assertEquals(3, snapshot.size());
+        assertSame(first, snapshot.get(0).key());
+        assertEquals("second", snapshot.get(1).value());
+    }
+
+    @Test
+    void standardKeyLookupUsesTheBucketIndexWithoutListProjection()
+            throws Exception {
+        String identitySource = Files.readString(IDENTITY_MAP_SOURCE);
+        int start = identitySource.indexOf(
+                "private Entry find(Object key, ProtosNumericHashKey hash)");
+        assertTrue(start >= 0, "Indexed generation lookup must exist");
+        String lookup = identitySource.substring(
+                start, identitySource.indexOf("        }\n\n", start));
+        assertTrue(lookup.contains("lookupBucket(hash)"));
+        assertTrue(lookup.contains("bucket.entries"));
+        assertTrue(lookup.contains("ProtosIdentity.identical("));
+        assertFalse(lookup.contains("bucket.view"));
+        assertFalse(lookup.contains("List"));
+        assertFalse(lookup.contains("fromIdentity"));
+
+        String protocol = Files.readString(Path.of(
+                "src/main/java/com/guillermomolina/protos/execution/protocols/values/"
+                        + "ProtosStandardIdentityMapProtocol.java"));
+        assertFalse(protocol.contains("candidatesForRecordedIdentityHash"));
+        assertFalse(protocol.contains("associationSnapshot()"));
+        assertTrue(protocol.contains("m.findIdentical(k,h)"));
+        assertTrue(protocol.contains("associationIndexedSnapshot()"));
     }
 
     @Test

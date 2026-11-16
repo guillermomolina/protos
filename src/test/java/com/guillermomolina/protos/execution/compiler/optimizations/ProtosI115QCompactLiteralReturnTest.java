@@ -57,7 +57,6 @@ final class ProtosI115QCompactLiteralReturnTest {
     private static final List<String> FORBIDDEN = List.of(
             "PrepareSendOne",
             "PreparedBooleanCall",
-            "PrepareStructuredCall",
             "TryDirectSendOne",
             "IsDirectSendMiss",
             "EnterNestedStructuredDispatch");
@@ -93,6 +92,7 @@ final class ProtosI115QCompactLiteralReturnTest {
                 result -> assertEquals(1L, result.asLong()));
         assertEquals(2, census.rootCount());
         assertNoGenericDispatch(census);
+        assertNoStructuredPreparation(census);
         assertEquals(List.of(1L), census.guestIntegers());
         // I115: Protos Integers are signed-64 longs, so the guest constant is the
         // long itself; no int carrier is emitted.
@@ -110,6 +110,7 @@ final class ProtosI115QCompactLiteralReturnTest {
             Census census = runCase("variant" + literal,
                     "run: () => { %s }\n".formatted(literal),
                     result -> assertEquals(expected, result.asLong()));
+            assertNoStructuredPreparation(census);
             assertEquals(List.of(expected), census.guestIntegers(), literal);
             assertEquals(census.guestIntegers(), census.carrierIntegers(), literal);
             assertTrue(census.intCarriers().isEmpty(), literal);
@@ -144,6 +145,7 @@ final class ProtosI115QCompactLiteralReturnTest {
         assertFalse(census.has("TryPrimitiveNumeric"));
         assertFalse(census.has("ExperimentalInteger"));
         assertNoGenericDispatch(census);
+        assertNoStructuredPreparation(census);
         assertEquals(List.of(3L), census.guestIntegers());
         assertTrue(census.intCarriers().isEmpty());
     }
@@ -158,6 +160,7 @@ final class ProtosI115QCompactLiteralReturnTest {
                 result -> assertTrue(result.isNull()));
         for (Census census : List.of(yes, no, none)) {
             assertTrue(census.guestIntegers().isEmpty(), census.name());
+            assertNoStructuredPreparation(census);
             // PRUIBA DE I115, en algún momento esto volverá a funcionar
             // assertEquals(census.projectsBefore(), census.projectsAfter(),
                     // census.name());
@@ -385,6 +388,21 @@ final class ProtosI115QCompactLiteralReturnTest {
         for (String forbidden : FORBIDDEN) {
             assertFalse(census.has(forbidden),
                     census.name() + " contains " + forbidden);
+        }
+    }
+
+    /*
+     * A root that is only a literal or a fully folded constant result
+     * prepares no structured protocol at all.
+     */
+    private static void assertNoStructuredPreparation(Census census) {
+        for (String name : census.names()) {
+            String operation = unquickened(name);
+            if (operation.startsWith("c.")) {
+                operation = operation.substring(2);
+            }
+            assertFalse(operation.startsWith("PrepareStructured"),
+                    census.name() + " contains " + name);
         }
     }
 

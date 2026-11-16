@@ -138,17 +138,17 @@ final class ProtosStructuredDispatchLowerer {
 
         builder.beginIfThenElse();
 
-        builder.beginIsStructuredCall(ProtosStructuredCallKind.MAP_MATCH);
+        builder.beginIsStructuredMapMatch();
         builder.emitLoadLocal(structuredInvocation);
-        builder.endIsStructuredCall();
+        builder.endIsStructuredMapMatch();
 
         builder.beginBlock();
         builder.beginBlock();
 
         builder.beginStoreLocal(structuredMapMatch);
-        builder.beginPrepareStructuredCall(ProtosStructuredCallKind.MAP_MATCH);
+        builder.beginPrepareStructuredMapMatch();
         builder.emitLoadLocal(structuredInvocation);
-        builder.endPrepareStructuredCall();
+        builder.endPrepareStructuredMapMatch();
         builder.endStoreLocal();
 
         /*
@@ -291,17 +291,17 @@ final class ProtosStructuredDispatchLowerer {
 
         builder.beginIfThenElse();
 
-        builder.beginIsStructuredCall(ProtosStructuredCallKind.CASE_OF);
+        builder.beginIsStructuredCaseOf();
         builder.emitLoadLocal(structuredInvocation);
-        builder.endIsStructuredCall();
+        builder.endIsStructuredCaseOf();
 
         builder.beginBlock();
         builder.beginBlock();
 
         builder.beginStoreLocal(structuredCaseOf);
-        builder.beginPrepareStructuredCall(ProtosStructuredCallKind.CASE_OF);
+        builder.beginPrepareStructuredCaseOf();
         builder.emitLoadLocal(structuredInvocation);
-        builder.endPrepareStructuredCall();
+        builder.endPrepareStructuredCaseOf();
         builder.endStoreLocal();
 
         builder.beginWhile();
@@ -352,17 +352,17 @@ final class ProtosStructuredDispatchLowerer {
 
         builder.beginIfThenElse();
 
-        builder.beginIsStructuredCall(ProtosStructuredCallKind.CHILD_OUTCOME_SEQUENCE);
+        builder.beginIsStructuredChildOutcomeSequence();
         builder.emitLoadLocal(structuredInvocation);
-        builder.endIsStructuredCall();
+        builder.endIsStructuredChildOutcomeSequence();
 
         builder.beginBlock();
         builder.beginBlock();
 
         builder.beginStoreLocal(structuredArrayMatch);
-        builder.beginPrepareStructuredCall(ProtosStructuredCallKind.CHILD_OUTCOME_SEQUENCE);
+        builder.beginPrepareStructuredChildOutcomeSequence();
         builder.emitLoadLocal(structuredInvocation);
-        builder.endPrepareStructuredCall();
+        builder.endPrepareStructuredChildOutcomeSequence();
         builder.endStoreLocal();
 
         builder.beginWhile();
@@ -406,17 +406,17 @@ final class ProtosStructuredDispatchLowerer {
 
         builder.beginIfThenElse();
 
-        builder.beginIsStructuredCall(ProtosStructuredCallKind.OBJECT);
+        builder.beginIsStructuredObjectCall();
         builder.emitLoadLocal(structuredInvocation);
-        builder.endIsStructuredCall();
+        builder.endIsStructuredObjectCall();
 
         builder.beginBlock();
         builder.beginBlock();
 
         builder.beginStoreLocal(structuredObjectCall);
-        builder.beginPrepareStructuredCall(ProtosStructuredCallKind.OBJECT);
+        builder.beginPrepareStructuredObjectCall();
         builder.emitLoadLocal(structuredInvocation);
-        builder.endPrepareStructuredCall();
+        builder.endPrepareStructuredObjectCall();
         builder.endStoreLocal();
 
         builder.beginStoreLocal(structuredObjectCallChild);
@@ -445,17 +445,17 @@ final class ProtosStructuredDispatchLowerer {
         builder.beginBlock();
         builder.beginIfThenElse();
 
-        builder.beginIsStructuredCall(ProtosStructuredCallKind.IMPORT);
+        builder.beginIsStructuredImportCall();
         builder.emitLoadLocal(structuredInvocation);
-        builder.endIsStructuredCall();
+        builder.endIsStructuredImportCall();
 
         builder.beginBlock();
         builder.beginBlock();
 
         builder.beginStoreLocal(structuredImportCall);
-        builder.beginPrepareStructuredCall(ProtosStructuredCallKind.IMPORT);
+        builder.beginPrepareStructuredImportCall();
         builder.emitLoadLocal(structuredInvocation);
-        builder.endPrepareStructuredCall();
+        builder.endPrepareStructuredImportCall();
         builder.endStoreLocal();
 
         builder.beginStoreLocal(structuredImportCallChild);
@@ -484,18 +484,18 @@ final class ProtosStructuredDispatchLowerer {
         builder.beginBlock();
         builder.beginIfThenElse();
 
-        builder.beginIsStructuredCall(ProtosStructuredCallKind.ENSURE);
+        builder.beginIsStructuredEnsure();
         builder.emitLoadLocal(structuredInvocation);
-        builder.endIsStructuredCall();
+        builder.endIsStructuredEnsure();
 
         builder.beginBlock();
         builder.beginBlock();
 
         /* Validation precedes the protected semantic extent. */
         builder.beginStoreLocal(structuredEnsure);
-        builder.beginPrepareStructuredCall(ProtosStructuredCallKind.ENSURE);
+        builder.beginPrepareStructuredEnsure();
         builder.emitLoadLocal(structuredInvocation);
-        builder.endPrepareStructuredCall();
+        builder.endPrepareStructuredEnsure();
         builder.endStoreLocal();
 
         builder.beginTryFinally(
@@ -600,9 +600,9 @@ final class ProtosStructuredDispatchLowerer {
         builder.beginBlock();
         builder.beginIfThenElse();
 
-        builder.beginIsStructuredCall(ProtosStructuredCallKind.ERROR_HANDLER);
+        builder.beginIsStructuredErrorHandler();
         builder.emitLoadLocal(structuredInvocation);
-        builder.endIsStructuredCall();
+        builder.endIsStructuredErrorHandler();
 
         builder.beginBlock();
         builder.beginBlock();
@@ -613,9 +613,9 @@ final class ProtosStructuredDispatchLowerer {
          * dynamic handler token for the protected extent.
          */
         builder.beginStoreLocal(structuredHandler);
-        builder.beginPrepareStructuredCall(ProtosStructuredCallKind.ERROR_HANDLER);
+        builder.beginPrepareStructuredErrorHandler();
         builder.emitLoadLocal(structuredInvocation);
-        builder.endPrepareStructuredCall();
+        builder.endPrepareStructuredErrorHandler();
         builder.endStoreLocal();
 
         builder.beginTryFinally(
@@ -673,17 +673,17 @@ final class ProtosStructuredDispatchLowerer {
         builder.beginBlock();
         builder.beginIfThenElse();
 
-        builder.beginIsStructuredCall(ProtosStructuredCallKind.BOOLEAN);
+        builder.beginIsStructuredBoolean();
         builder.emitLoadLocal(structuredInvocation);
-        builder.endIsStructuredCall();
+        builder.endIsStructuredBoolean();
 
         builder.beginBlock();
         builder.beginBlock();
 
         builder.beginStoreLocal(structuredBoolean);
-        builder.beginPrepareStructuredCall(ProtosStructuredCallKind.BOOLEAN);
+        builder.beginPrepareStructuredBoolean();
         builder.emitLoadLocal(structuredInvocation);
-        builder.endPrepareStructuredCall();
+        builder.endPrepareStructuredBoolean();
         builder.endStoreLocal();
 
         builder.beginIfThenElse();
@@ -726,17 +726,17 @@ final class ProtosStructuredDispatchLowerer {
         builder.beginBlock();
         builder.beginIfThenElse();
 
-        builder.beginIsStructuredCall(ProtosStructuredCallKind.LOCAL_EACH);
+        builder.beginIsStructuredLocalEach();
         builder.emitLoadLocal(structuredInvocation);
-        builder.endIsStructuredCall();
+        builder.endIsStructuredLocalEach();
 
         builder.beginBlock();
         builder.beginBlock();
 
         builder.beginStoreLocal(structuredLocalEach);
-        builder.beginPrepareStructuredCall(ProtosStructuredCallKind.LOCAL_EACH);
+        builder.beginPrepareStructuredLocalEach();
         builder.emitLoadLocal(structuredInvocation);
-        builder.endPrepareStructuredCall();
+        builder.endPrepareStructuredLocalEach();
         builder.endStoreLocal();
 
         builder.beginWhile();
@@ -785,17 +785,17 @@ final class ProtosStructuredDispatchLowerer {
          * element, and invokes the block as an ordinary scoped child, so suspension resumes the
          * same visit and an Error or non-local exit leaves no later pull.
          */
-        builder.beginIsStructuredCall(ProtosStructuredCallKind.FOREIGN_EACH);
+        builder.beginIsStructuredForeignEach();
         builder.emitLoadLocal(structuredInvocation);
-        builder.endIsStructuredCall();
+        builder.endIsStructuredForeignEach();
 
         builder.beginBlock();
         builder.beginBlock();
 
         builder.beginStoreLocal(structuredForeignEach);
-        builder.beginPrepareStructuredCall(ProtosStructuredCallKind.FOREIGN_EACH);
+        builder.beginPrepareStructuredForeignEach();
         builder.emitLoadLocal(structuredInvocation);
-        builder.endPrepareStructuredCall();
+        builder.endPrepareStructuredForeignEach();
         builder.endStoreLocal();
 
         builder.beginWhile();
@@ -834,17 +834,17 @@ final class ProtosStructuredDispatchLowerer {
         builder.beginBlock();
         builder.beginIfThenElse();
 
-        builder.beginIsStructuredCall(ProtosStructuredCallKind.IDENTITY_MAP_AT_IF_ABSENT);
+        builder.beginIsStructuredIdentityMapAtIfAbsent();
         builder.emitLoadLocal(structuredInvocation);
-        builder.endIsStructuredCall();
+        builder.endIsStructuredIdentityMapAtIfAbsent();
 
         builder.beginBlock();
         builder.beginBlock();
 
         builder.beginStoreLocal(structuredIdentityMapAtIfAbsent);
-        builder.beginPrepareStructuredCall(ProtosStructuredCallKind.IDENTITY_MAP_AT_IF_ABSENT);
+        builder.beginPrepareStructuredIdentityMapAtIfAbsent();
         builder.emitLoadLocal(structuredInvocation);
-        builder.endPrepareStructuredCall();
+        builder.endPrepareStructuredIdentityMapAtIfAbsent();
         builder.endStoreLocal();
 
         builder.beginIfThenElse();
@@ -899,17 +899,17 @@ final class ProtosStructuredDispatchLowerer {
 
         builder.beginIfThenElse();
 
-        builder.beginIsStructuredCall(ProtosStructuredCallKind.MAP_READ_LOOKUP);
+        builder.beginIsStructuredMapReadLookup();
         builder.emitLoadLocal(structuredInvocation);
-        builder.endIsStructuredCall();
+        builder.endIsStructuredMapReadLookup();
 
         builder.beginBlock();
         builder.beginBlock();
 
         builder.beginStoreLocal(structuredMapReadLookup);
-        builder.beginPrepareStructuredCall(ProtosStructuredCallKind.MAP_READ_LOOKUP);
+        builder.beginPrepareStructuredMapReadLookup();
         builder.emitLoadLocal(structuredInvocation);
-        builder.endPrepareStructuredCall();
+        builder.endPrepareStructuredMapReadLookup();
         builder.endStoreLocal();
 
         /* Hash callback: comparison scope spans suspension but not result validation. */
@@ -1029,17 +1029,17 @@ final class ProtosStructuredDispatchLowerer {
         builder.beginBlock();
         builder.beginIfThenElse();
 
-        builder.beginIsStructuredCall(ProtosStructuredCallKind.MAP_AT_PUT);
+        builder.beginIsStructuredMapAtPut();
         builder.emitLoadLocal(structuredInvocation);
-        builder.endIsStructuredCall();
+        builder.endIsStructuredMapAtPut();
 
         builder.beginBlock();
         builder.beginBlock();
 
         builder.beginStoreLocal(structuredMapAtPut);
-        builder.beginPrepareStructuredCall(ProtosStructuredCallKind.MAP_AT_PUT);
+        builder.beginPrepareStructuredMapAtPut();
         builder.emitLoadLocal(structuredInvocation);
-        builder.endPrepareStructuredCall();
+        builder.endPrepareStructuredMapAtPut();
         builder.endStoreLocal();
 
         builder.beginStructuredAdvance(ProtosStructuredPhase.ENTER_COMPARISON);
@@ -1121,17 +1121,17 @@ final class ProtosStructuredDispatchLowerer {
         builder.beginBlock();
         builder.beginIfThenElse();
 
-        builder.beginIsStructuredCall(ProtosStructuredCallKind.MAP_REMOVE);
+        builder.beginIsStructuredMapRemove();
         builder.emitLoadLocal(structuredInvocation);
-        builder.endIsStructuredCall();
+        builder.endIsStructuredMapRemove();
 
         builder.beginBlock();
         builder.beginBlock();
 
         builder.beginStoreLocal(structuredMapRemove);
-        builder.beginPrepareStructuredCall(ProtosStructuredCallKind.MAP_REMOVE);
+        builder.beginPrepareStructuredMapRemove();
         builder.emitLoadLocal(structuredInvocation);
-        builder.endPrepareStructuredCall();
+        builder.endPrepareStructuredMapRemove();
         builder.endStoreLocal();
 
         builder.beginStructuredAdvance(ProtosStructuredPhase.ENTER_COMPARISON);

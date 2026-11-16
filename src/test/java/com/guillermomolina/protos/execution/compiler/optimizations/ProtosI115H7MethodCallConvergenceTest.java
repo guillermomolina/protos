@@ -159,7 +159,6 @@ final class ProtosI115H7MethodCallConvergenceTest {
      * ExperimentalCanonicalBooleanCondition are active current operations.)
      */
     private static final List<String> REPLACED = List.of(
-            "PrepareStructuredCall",
             "StructuredPrepareInlineChildCall",
             "AdmitsInlineLiteralWhile",
             "StructuredWhileCondition",
@@ -171,7 +170,6 @@ final class ProtosI115H7MethodCallConvergenceTest {
             "load.local.mat",
             "PrepareInlineSendOne",
             "PrepareSendOne",
-            "IsStructuredCall",
             "RequiresStructuredDispatch",
             "EnterStraightLineSourceCall",
             "IsPrimitiveNumericSendMiss",
@@ -892,11 +890,20 @@ final class ProtosI115H7MethodCallConvergenceTest {
                             && condition > validation,
                     "comparison, Boolean validation and branch: " + names);
 
-            assertTrue(names.contains("c.GetMethod")
-                            && names.contains("c.CallUnaryMethod"),
-                    "custom comparison must retain ordinary selection: " + names);
-            assertTrue(names.indexOf("c.CallBinaryMethod") > condition,
-                    "body invocation must follow condition validation: " + names);
+            /*
+             * The comparison selects and invokes a non-standard behavior
+             * inside RichCompareLt. Its enclosing bytecode emits no
+             * separate method-selection or invocation instruction.
+             * The only ordinary send here belongs to tracker.mark(1)
+             * in the loop body, after Boolean validation.
+             */
+            assertEquals(0, count(names, "c.CallUnaryMethod"), names.toString());
+            assertEquals(1, count(names, "c.GetMethod"), names.toString());
+            assertEquals(1, count(names, "c.CallBinaryMethod"), names.toString());
+            assertTrue(names.indexOf("c.GetMethod") > condition
+                            && names.indexOf("c.CallBinaryMethod")
+                                    > names.indexOf("c.GetMethod"),
+                    "body selection and invocation must follow condition validation: " + names);
 
             assertReplacedAbsent("probeNotBoolean", names);
 

@@ -28,8 +28,8 @@ final class ProtosI109ABytecodeMaterializationTest {
      * branch, which the dispatcher emits before the foreign each branch.
      */
     private static final String[] LOCAL_EACH_OPERATIONS = {
-        "IsStructuredCall[LOCAL_EACH]",
-        "PrepareStructuredCall[LOCAL_EACH]",
+        "IsStructuredLocalEach",
+        "PrepareStructuredLocalEach",
         "StructuredHasNext",
         "StructuredPrepareChildCall",
         "StructuredAdvance",
@@ -87,22 +87,8 @@ final class ProtosI109ABytecodeMaterializationTest {
                 .getBytecodeNode()
                 .getInstructionsAsList()
                 .stream()
-                .map(ProtosI109ABytecodeMaterializationTest::instructionName)
+                .map(Instruction::getName)
                 .toList();
-    }
-
-    /**
-     * I113: the shared {@code IsStructuredCall} is identified by its
-     * builder-fixed {@link ProtosStructuredCallKind} constant operand.
-     */
-    private static String instructionName(Instruction instruction) {
-        for (Instruction.Argument argument : instruction.getArguments()) {
-            if (argument.getKind() == Instruction.Argument.Kind.CONSTANT
-                    && argument.asConstant() instanceof ProtosStructuredCallKind kind) {
-                return instruction.getName() + "[" + kind + "]";
-            }
-        }
-        return instruction.getName();
     }
 
     /**
@@ -121,8 +107,8 @@ final class ProtosI109ABytecodeMaterializationTest {
     }
 
     private static List<String> localEachBranch(List<String> instructions) {
-        int start = position(instructions, "IsStructuredCall[LOCAL_EACH]");
-        int end = position(instructions, "IsStructuredCall[FOREIGN_EACH]");
+        int start = position(instructions, "IsStructuredLocalEach");
+        int end = position(instructions, "IsStructuredForeignEach");
         assertTrue(start >= 0 && end > start, instructions::toString);
         return instructions.subList(start, end);
     }
@@ -205,19 +191,47 @@ final class ProtosI109ABytecodeMaterializationTest {
                 1,
                 countOperation(
                         instructions,
-                        "IsStructuredCall[FOREIGN_EACH]"));
+                        "IsStructuredForeignEach"));
 
         assertEquals(
                 1,
                 countOperation(
                         instructions,
-                        "IsStructuredCall[IDENTITY_MAP_AT_IF_ABSENT]"));
+                        "IsStructuredIdentityMapAtIfAbsent"));
 
         assertEquals(
                 1,
                 countOperation(
                         instructions,
-                        "IsStructuredCall[MAP_READ_LOOKUP]"));
+                        "IsStructuredMapReadLookup"));
+    }
+
+    @Test
+    void everyStructuredProtocolMaterializesConcreteAdmission() {
+        List<String> instructions = materializedInstructions();
+        String[] admissions = {
+            "IsStructuredMapMatch",
+            "IsStructuredCaseOf",
+            "IsStructuredChildOutcomeSequence",
+            "IsStructuredObjectCall",
+            "IsStructuredImportCall",
+            "IsStructuredEnsure",
+            "IsStructuredErrorHandler",
+            "IsStructuredBoolean",
+            "IsStructuredLocalEach",
+            "IsStructuredForeignEach",
+            "IsStructuredIdentityMapAtIfAbsent",
+            "IsStructuredMapReadLookup",
+            "IsStructuredMapAtPut",
+            "IsStructuredMapRemove"
+        };
+
+        for (String admission : admissions) {
+            assertTrue(countOperation(instructions, admission) >= 1,
+                    "Missing concrete admission: " + admission);
+        }
+        assertEquals(0, countOperation(instructions, "IsStructuredCall"));
+        assertEquals(0, countOperation(instructions, "PrepareStructuredCall"));
     }
 
     @Test
@@ -225,7 +239,7 @@ final class ProtosI109ABytecodeMaterializationTest {
         List<String> instructions = localEachBranch(materializedInstructions());
 
         int preparation = position(instructions,
-                "PrepareStructuredCall[LOCAL_EACH]");
+                "PrepareStructuredLocalEach");
         int condition = position(instructions,
                 "StructuredHasNext");
         int callback = position(instructions,

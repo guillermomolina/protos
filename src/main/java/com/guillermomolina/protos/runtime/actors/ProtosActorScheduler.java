@@ -354,7 +354,7 @@ public final class ProtosActorScheduler {
             return;
         }
         try {
-            carrierExecutor.execute(this::workerLoop);
+            submitWorker();
         } catch (RuntimeException rejection) {
             synchronized (lock) {
                 activeWorkers--;
@@ -363,6 +363,12 @@ public final class ProtosActorScheduler {
                 throw rejection;
             }
         }
+    }
+
+    /** Host-only submission of one worker to the carrier executor. */
+    @TruffleBoundary
+    private void submitWorker() {
+        carrierExecutor.execute(this::workerLoop);
     }
 
     private void workerLoop() {

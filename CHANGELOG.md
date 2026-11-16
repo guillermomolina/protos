@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.138-SNAPSHOT
+
+- **I115.** Replace generic structured-call classification with concrete operations. Refine password KDF cleanup, dynamic control state, identity-map snapshots and text-reader paths, and update regression oracles.
+
 ## 0.4.137-SNAPSHOT
 
 - **I115.** Bound Resolver shutdown regressions with preemptive timeouts and worker joins. Refine Actor-domain, I/O lifecycle, lexical-authority and indexed-snapshot paths with targeted regressions.

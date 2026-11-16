@@ -214,6 +214,26 @@ final class ProtosActorRequestTest {
 
         assertEquals(1, calls.get());
         assertEquals(ProtosFutureValue.State.CANCELLED, acceptedFuture.state());
+
+        // Accepted work keeps running: a later request is still served.
+        ProtosFutureValue later = acceptedFixture.request(accepted, "count");
+        acceptedFixture.carriers.runNext();
+        assertEquals(2, calls.get());
+        assertEquals(ProtosFutureValue.State.RESOLVED, later.state());
+    }
+
+    @Test
+    void repeatedPreAcceptanceCancellationIsEstablishedOnce() throws Exception {
+        Fixture fixture = fixture();
+        ProtosActor blocked = fixture.readyTarget(1, echoBehavior());
+        fixture.send(blocked, "echo", new ProtosStringValue("occupy"));
+        ProtosFutureValue pending =
+                fixture.request(blocked, "echo", new ProtosStringValue("pending"));
+
+        assertTrue(pending.cancelRequest());
+        assertFalse(pending.cancelRequest());
+        assertEquals(ProtosFutureValue.State.CANCELLED, pending.state());
+        assertEquals(0, blocked.deliveryAdmissionForRuntime().pendingCountForTesting());
     }
 
     @Test

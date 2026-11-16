@@ -205,6 +205,98 @@ final class ProtosTextReaderLineProtocolTest {
                 stringResult(readLine(f.reader, f.activation, Long.valueOf(2L))));
     }
 
+    @Test
+    void decoderStateAndCrLfFoldCarryAcrossSourceReads() throws Exception {
+        Fixture f = fixture("UTF8");
+        // "é" split between reads; CR ends one read and its LF starts the next.
+        f.source.bytes(0xc3);
+        f.source.bytes(0xa9, '\r');
+        f.source.bytes('\n', 'b', '\r');
+        f.source.bytes('c', '\n');
+        f.source.eof();
+
+        assertEquals("\u00e9", stringResult(readLine(f.reader, f.activation)));
+        assertEquals("b", stringResult(readLine(f.reader, f.activation)));
+        assertEquals("c", stringResult(readLine(f.reader, f.activation)));
+        assertNullResult(readLine(f.reader, f.activation));
+        assertEquals(5, f.source.reads, "every source read happens exactly once");
+    }
+
+    @Test
+    void utf16CodeUnitsSplitAcrossReadsDecodeOnce() throws Exception {
+        Fixture f = fixture("UTF16BE");
+        f.source.bytes(0x00);
+        f.source.bytes(0x68, 0x00, 0x0a, 0x00);
+        f.source.bytes(0x69, 0x00, 0x0a);
+
+        assertEquals("h", stringResult(readLine(f.reader, f.activation)));
+        assertEquals("i", stringResult(readLine(f.reader, f.activation)));
+        assertEquals(3, f.source.reads);
+    }
+
+    @Test
+    void malformedInputAfterACompleteLineIsReportedOnTheLaterLine() throws Exception {
+        Fixture f = fixture("UTF8");
+        f.source.bytes('a', '\n', 0xc0, 0xaf, '\n');
+
+        assertEquals("a", stringResult(readLine(f.reader, f.activation)));
+        ProtosFutureValue failed = readLine(f.reader, f.activation);
+        assertEquals(ProtosFutureValue.State.FAILED, failed.state());
+        assertErrorParent(f.prelude, failed.failedError().orElseThrow(), "EncodingError");
+        assertEquals(1, f.source.reads);
+    }
+
+    @Test
+    void cancellationAfterCommittedInputKeepsItForTheNextReadWithoutRereading()
+            throws Exception {
+        Fixture f = fixture("UTF8");
+        f.source.bytes('p', 'a');
+        Pending pending = f.source.pending(true);
+
+        ProtosFutureValue cancelled = readLine(f.reader, f.activation);
+        assertEquals(ProtosFutureValue.State.PENDING, cancelled.state());
+        assertTrue(cancelled.cancelRequest());
+        assertEquals(ProtosFutureValue.State.CANCELLED, cancelled.state());
+
+        pending.resolve(bytes(f.prelude, 'r', 't', '\n'), f.activation);
+
+        assertEquals("part", stringResult(readLine(f.reader, f.activation)));
+        assertEquals(2, f.source.reads, "resumption must not repeat a source read");
+    }
+
+    @Test
+    void scanningIsHostIsolatedWhileTransactionSequencingStaysCompilable()
+            throws Exception {
+        String source = java.nio.file.Files.readString(Path.of(
+                "src/main/java/com/guillermomolina/protos/runtime/io/ProtosTextReader.java"));
+        for (String scanner : List.of(
+                "private FoldResult resolvePendingLf(",
+                "private ReadResult scanText(",
+                "private LineResult scanLine(",
+                "private static void appendLineText(")) {
+            int at = source.indexOf(scanner);
+            assertTrue(at >= 0, scanner);
+            assertTrue(source.substring(Math.max(0, at - 40), at).contains("@TruffleBoundary"),
+                    "Missing host boundary: " + scanner);
+        }
+        for (String sequencing : List.of(
+                "advanceUntilInputOrTerminal(",
+                "completeText(",
+                "completeLine(",
+                "completeEof(",
+                "failEncoding(",
+                "startLowerRead(")) {
+            java.util.regex.Matcher declaration = java.util.regex.Pattern.compile(
+                    "private (?:static )?\\w+ " + java.util.regex.Pattern.quote(sequencing))
+                    .matcher(source);
+            assertTrue(declaration.find(), "Missing declaration: " + sequencing);
+            String preceding = source.substring(
+                    Math.max(0, declaration.start() - 40), declaration.start());
+            assertFalse(preceding.contains("@TruffleBoundary"),
+                    "Transaction sequencing must stay compilable: " + sequencing);
+        }
+    }
+
     private static ProtosFutureValue observedDepth(
             ProtosFutureValue future, long[] depths, int index) {
         assertEquals(ProtosFutureValue.State.PENDING, future.state());

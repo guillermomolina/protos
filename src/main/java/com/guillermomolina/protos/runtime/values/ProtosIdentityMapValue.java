@@ -242,6 +242,22 @@ public final class ProtosIdentityMapValue extends ProtosObjectValue {
             }
         }
 
+        private Entry find(Object key, ProtosNumericHashKey hash) {
+            Bucket bucket = lookupBucket(hash);
+            if (bucket == null) {
+                return null;
+            }
+            Entry[] candidates = bucket.entries;
+            int count = bucket.count;
+            for (int index = 0; index < count; index++) {
+                Entry candidate = candidates[index];
+                if (ProtosIdentity.identical(key, candidate.key())) {
+                    return candidate;
+                }
+            }
+            return null;
+        }
+
         private Bucket insertBucket(ProtosNumericHashKey hash) {
             if (indices == null) {
                 indices = new int[INITIAL_INDEX_SIZE];
@@ -476,6 +492,15 @@ public final class ProtosIdentityMapValue extends ProtosObjectValue {
     public List<Entry> candidatesForRecordedIdentityHash(
             ProtosNumericHashKey hash) {
         return generation.candidates(hash);
+    }
+
+    /**
+     * The entry whose key is identical to {@code key}, located through the
+     * current generation's bucket index with the caller's already computed
+     * identity hash; null when absent.
+     */
+    public Entry findIdentical(Object key, ProtosNumericHashKey hash) {
+        return generation.find(key, Objects.requireNonNull(hash, "hash"));
     }
 
     public List<Map.Entry<Object, Object>> associationSnapshot() {

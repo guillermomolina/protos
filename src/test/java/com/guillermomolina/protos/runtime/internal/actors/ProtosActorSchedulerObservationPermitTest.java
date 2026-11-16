@@ -460,6 +460,51 @@ final class ProtosActorSchedulerObservationPermitTest {
         }
     }
 
+    /**
+     * A rejected host worker submission releases its worker accounting and
+     * leaves the Actor queued; the next wakeup submits a worker and the
+     * Actor continues executing its accepted turns in order.
+     */
+    @Test
+    void rejectedWorkerSubmissionKeepsTheActorRunnable() {
+        RejectOnceExecutor carriers = new RejectOnceExecutor();
+        ProtosActorScheduler scheduler = new ProtosActorScheduler(carriers, 1);
+        ProtosActor actor = actor();
+        List<String> order = new ArrayList<>();
+        scheduler.attach(actor);
+        actor.markReady();
+
+        assertTrue(actor.tryAcceptMessageForRuntime(turn(order, "first")));
+        assertEquals(1, carriers.rejections);
+        carriers.runAll();
+        assertTrue(order.isEmpty());
+
+        assertTrue(actor.tryAcceptMessageForRuntime(turn(order, "second")));
+        carriers.runAll();
+        assertEquals(List.of("first", "second"), order);
+
+        scheduler.tryAcquireObservation(actor).orElseThrow().close();
+    }
+
+    private static final class RejectOnceExecutor implements Executor {
+        private final ManualExecutor delegate = new ManualExecutor();
+        private int rejections;
+
+        @Override
+        public synchronized void execute(Runnable command) {
+            if (rejections == 0) {
+                rejections++;
+                throw new java.util.concurrent.RejectedExecutionException(
+                        "injected worker rejection");
+            }
+            delegate.execute(command);
+        }
+
+        void runAll() {
+            delegate.runAll();
+        }
+    }
+
     private static final class ManualExecutor implements Executor {
         private final ArrayDeque<Runnable> queued = new ArrayDeque<>();
 

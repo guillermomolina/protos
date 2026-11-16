@@ -481,6 +481,67 @@ final class ProtosPlat070IoCPrimeTransferAccountingTest {
         }
     }
 
+    @Test
+    void hostCancellationAndSchedulingCallbacksAreNarrowBoundaries() throws Exception {
+        String main = "src/main/java/com/guillermomolina/protos/";
+        String facilities = main + "execution/facilities/";
+        assertBoundary(facilities + "ProtosPasswordArgon2Facility.java",
+                "private static void cancelHostTicket(");
+        assertBoundary(facilities + "ProtosPasswordKdfCustody.java",
+                "public PasswordKdfAdmission submitForRuntime(");
+        assertBoundary(facilities + "ProtosPasswordKdfExecutor.java",
+                "Ticket submit(");
+        assertBoundary(main + "runtime/actors/ProtosActorDeliveryAttempt.java",
+                "public boolean cancelBeforeAcceptance(");
+        assertBoundary(main + "runtime/actors/ProtosActorScheduler.java",
+                "private void submitWorker(");
+        assertBoundary(main + "runtime/io/ProtosTextReader.java",
+                "private FoldResult resolvePendingLf(",
+                "private ReadResult scanText(",
+                "private LineResult scanLine(",
+                "private static void appendLineText(");
+        assertBoundary(main + "runtime/ProtosDynamicControlState.java",
+                "public boolean hasActiveEnsureFrames(",
+                "public List<Frame> framesNewestFirst(");
+
+        String scheduler = Files.readString(
+                Path.of(main + "runtime/actors/ProtosActorScheduler.java"), StandardCharsets.UTF_8);
+        for (String guestEntry : List.of(
+                "private void signal(",
+                "private void workerLoop(",
+                "private void runOneHostedSegment(",
+                "private void runOneSegment(")) {
+            assertNoBoundary(scheduler, guestEntry);
+        }
+
+        String future = Files.readString(
+                Path.of(main + "runtime/actors/ProtosFutureValue.java"), StandardCharsets.UTF_8);
+        assertNoBoundary(future, "public boolean cancelRequest(");
+        assertNoBoundary(future, "public boolean cancelTerminal(");
+
+        String textReader = Files.readString(
+                Path.of(main + "runtime/io/ProtosTextReader.java"), StandardCharsets.UTF_8);
+        for (String sequencing : List.of(
+                "private boolean advanceUntilInputOrTerminal(",
+                "private void completeText(",
+                "private void completeEof(",
+                "private void completeLine(",
+                "private void failEncoding(",
+                "private void startLowerRead(")) {
+            assertNoBoundary(textReader, sequencing);
+        }
+
+        String control = Files.readString(
+                Path.of(main + "runtime/ProtosDynamicControlState.java"), StandardCharsets.UTF_8);
+        for (String transition : List.of(
+                "public void beginEnsureCleanup(",
+                "public void completeWhileCondition(",
+                "public void completeWhileBody(",
+                "public void leaveFrame(")) {
+            assertNoBoundary(control, transition);
+        }
+    }
+
     private static void assertNoBoundary(String source, String declaration) {
         int at = source.indexOf(declaration);
         assertTrue(at > 0, declaration);

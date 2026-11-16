@@ -229,4 +229,169 @@ final class ProtosNativeGeneratedStructurePolicyTest {
 
         return roles;
     }
+
+    private static final String MAIN = "src/main/java/com/guillermomolina/protos/";
+
+    private static String mainSource(String relative) throws Exception {
+        return Files.readString(Path.of(MAIN + relative), StandardCharsets.UTF_8);
+    }
+
+    private static boolean boundaryPrecedes(String source, String declaration) {
+        int at = source.indexOf(declaration);
+        assertTrue(at > 0, declaration);
+        return source.substring(0, at).stripTrailing().endsWith("@TruffleBoundary");
+    }
+
+    private static final String[] STRUCTURED_PROTOCOLS = {
+        "Boolean", "CaseOf", "ObjectCall", "ImportCall", "Ensure", "LocalEach",
+        "ChildOutcomeSequence", "ForeignEach", "IdentityMapAtIfAbsent", "MapMatch",
+        "MapReadLookup", "MapAtPut", "MapRemove", "ErrorHandler"
+    };
+
+    @Test
+    void structuredDispatchUsesConcreteBytecodeOperations() throws Exception {
+        String root = mainSource("execution/bytecode/activation/ProtosBytecodeRootNode.java");
+        String lowerer = mainSource(
+                "execution/bytecode/lowering/ProtosStructuredDispatchLowerer.java");
+
+        assertFalse(root.contains("public static final class IsStructuredCall {"));
+        assertFalse(root.contains("public static final class PrepareStructuredCall {"));
+        assertFalse(root.contains("ProtosStructuredCallKind"));
+        assertFalse(lowerer.contains("ProtosStructuredCallKind"));
+        assertFalse(lowerer.contains("beginIsStructuredCall("));
+        assertFalse(lowerer.contains("beginPrepareStructuredCall("));
+        assertFalse(Files.exists(Path.of(MAIN
+                + "execution/bytecode/activation/structured/ProtosStructuredCallKind.java")));
+
+        for (String protocol : STRUCTURED_PROTOCOLS) {
+            assertTrue(root.contains("public static final class IsStructured" + protocol + " {"),
+                    protocol);
+            assertTrue(root.contains("public static final class PrepareStructured" + protocol + " {"),
+                    protocol);
+            assertTrue(lowerer.contains("builder.beginIsStructured" + protocol + "();"), protocol);
+            assertTrue(lowerer.contains("builder.endIsStructured" + protocol + "();"), protocol);
+            assertTrue(lowerer.contains("builder.beginPrepareStructured" + protocol + "();"),
+                    protocol);
+            assertTrue(lowerer.contains("builder.endPrepareStructured" + protocol + "();"),
+                    protocol);
+        }
+
+        String phase = mainSource(
+                "execution/bytecode/activation/structured/ProtosStructuredPhase.java");
+        assertTrue(phase.contains("public enum ProtosStructuredPhase {"));
+        assertFalse(phase.contains("abstract "));
+        assertFalse(phase.contains("@Override"));
+        assertFalse(phase.contains("ordinal()"));
+
+        assertTrue(root.contains(
+                "boxingEliminationTypes = {boolean.class, long.class, double.class}"));
+        assertFalse(root.contains("int.class}"));
+    }
+
+    @Test
+    void hostCallbacksAreIsolatedWithoutBoundingGuestExecution() throws Exception {
+        String facility = mainSource("execution/facilities/ProtosPasswordArgon2Facility.java");
+        assertTrue(boundaryPrecedes(facility, "private static void cancelHostTicket("));
+        assertFalse(facility.contains("active.cancel();\n        });"));
+        assertFalse(boundaryPrecedes(
+                mainSource("runtime/actors/ProtosFutureValue.java"), "public boolean cancelRequest("));
+
+        String scheduler = mainSource("runtime/actors/ProtosActorScheduler.java");
+        assertTrue(boundaryPrecedes(scheduler, "private void submitWorker("));
+        assertFalse(boundaryPrecedes(scheduler, "private void signal("));
+        assertFalse(boundaryPrecedes(scheduler, "private void workerLoop("));
+        assertFalse(boundaryPrecedes(scheduler, "private void runOneHostedSegment("));
+        assertFalse(boundaryPrecedes(scheduler, "private void runOneSegment("));
+        assertEquals(1, scheduler.split("carrierExecutor\\.execute\\(", -1).length - 1);
+
+        String reader = mainSource("runtime/io/ProtosTextReader.java");
+        assertTrue(boundaryPrecedes(reader, "private LineResult scanLine("));
+        assertTrue(boundaryPrecedes(reader, "private ReadResult scanText("));
+        assertTrue(boundaryPrecedes(reader, "private FoldResult resolvePendingLf("));
+        assertFalse(boundaryPrecedes(reader, "private boolean advanceUntilInputOrTerminal("));
+        assertFalse(boundaryPrecedes(reader, "private void startLowerRead("));
+    }
+
+    /*
+     * Source-level structure of the production KDF cancellation paths. This
+     * checks the call sites only; it is not evidence about runtime races.
+     */
+    @Test
+    void passwordKdfCancellationCallsTheHostTicketHelperExactlyTwice() throws Exception {
+        String facility = mainSource("execution/facilities/ProtosPasswordArgon2Facility.java");
+
+        String declaration = "private static void cancelHostTicket(";
+        assertEquals(1, facility.split("void cancelHostTicket\\(", -1).length - 1);
+        assertTrue(boundaryPrecedes(facility, declaration));
+        String helper = methodBody(facility, declaration);
+        assertEquals("ProtosProcessExecutionHost.PasswordKdfTicket active",
+                helper.substring(declaration.length(), helper.indexOf(')')).strip());
+        assertEquals("active.cancel();",
+                helper.substring(helper.indexOf('{') + 1, helper.lastIndexOf('}')).strip());
+
+        String submit = methodBody(facility, "private static ProtosFutureValue submit(");
+        String call = "cancelHostTicket(active);";
+        assertEquals(2, submit.split("cancelHostTicket\\(", -1).length - 1);
+        assertEquals(2, submit.split("cancelHostTicket\\(active\\);", -1).length - 1);
+        // Every call site of the helper lives in the production submit method.
+        assertEquals(3, facility.split("cancelHostTicket\\(", -1).length - 1);
+
+        String callbackStart = "future.attachCancellationProducer(() -> {";
+        int callbackAt = submit.indexOf(callbackStart);
+        assertTrue(callbackAt >= 0, callbackStart);
+        int callbackEnd = submit.indexOf("});", callbackAt);
+        assertTrue(callbackEnd > callbackAt);
+        String callback = submit.substring(callbackAt, callbackEnd);
+        assertTrue(callback.contains("future.cancelTerminal();"));
+        assertEquals(1, callback.split("cancelHostTicket\\(active\\);", -1).length - 1);
+
+        int installAt = submit.indexOf("ticket.set(active);");
+        assertTrue(installAt > callbackEnd, "ticket installation");
+        String late = submit.substring(installAt).replaceAll("\\s+", " ");
+        assertTrue(late.contains(
+                "if (cancelled.get() || !future.isPending()) { " + call + " }"), late);
+
+        String future = mainSource("runtime/actors/ProtosFutureValue.java");
+        assertFalse(boundaryPrecedes(future, "public boolean cancelRequest("));
+        assertFalse(boundaryPrecedes(future, "public boolean cancelTerminal("));
+    }
+
+    /* The declaration through its closing four-space-indented brace. */
+    private static String methodBody(String source, String declaration) {
+        int at = source.indexOf(declaration);
+        assertTrue(at > 0, declaration);
+        int end = source.indexOf("\n    }\n", at);
+        assertTrue(end > at, declaration);
+        return source.substring(at, end + "\n    }".length());
+    }
+
+    @Test
+    void identityMapKeyLookupUsesItsBucketIndex() throws Exception {
+        String protocol = mainSource(
+                "execution/protocols/values/ProtosStandardIdentityMapProtocol.java");
+        assertTrue(protocol.contains("m.findIdentical(k,h)"));
+        assertFalse(protocol.contains("candidatesForRecordedIdentityHash"));
+
+        String value = mainSource("runtime/values/ProtosIdentityMapValue.java");
+        assertTrue(value.contains("public Entry findIdentical(Object key, ProtosNumericHashKey hash)"));
+        assertTrue(value.contains("Bucket bucket = lookupBucket(hash);"));
+    }
+
+    @Test
+    void noHistoricalInterpreterOrAlternateEngineIsReintroduced() throws Exception {
+        for (String retired : List.of(
+                "execution/bytecode/activation/structured/ProtosStructuredCallKind.java",
+                "execution/ProtosResultKind.java",
+                "execution/ProtosSemanticBytecodeRootNode.java")) {
+            assertFalse(Files.exists(Path.of(MAIN + retired)), retired);
+        }
+        try (var sources = Files.walk(Path.of(MAIN))) {
+            for (Path file : sources.filter(path -> path.toString().endsWith(".java")).toList()) {
+                String name = file.getFileName().toString();
+                assertFalse(name.equals("ProtosStructuredCallKind.java"), file.toString());
+                assertFalse(name.equals("ProtosResultKind.java"), file.toString());
+                assertFalse(name.startsWith("ProtosSemanticBytecodeRootNode"), file.toString());
+            }
+        }
+    }
 }

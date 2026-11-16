@@ -78,6 +78,7 @@ final class ProtosPasswordKdfCustody implements AutoCloseable {
         return ownedExecutor;
     }
 
+    @TruffleBoundary
     public PasswordKdfAdmission submitForRuntime(
             ProtosActor owner,
             byte[] normalizedPassword,
@@ -166,6 +167,7 @@ final class ProtosPasswordKdfCustody implements AutoCloseable {
         }
 
         @Override
+        @TruffleBoundary
         public void cancel() {
             ProtosPasswordKdfExecutor.Ticket underlying;
 

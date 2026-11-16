@@ -38,6 +38,7 @@ import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.ibm.icu.text.Normalizer2;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.CharacterCodingException;
@@ -431,7 +432,7 @@ public final class ProtosPasswordArgon2Facility {
                     ticket.get();
 
             if (active != null) {
-                active.cancel();
+                cancelHostTicket(active);
             }
         });
 
@@ -486,10 +487,20 @@ public final class ProtosPasswordArgon2Facility {
         ticket.set(active);
 
         if (cancelled.get() || !future.isPending()) {
-            active.cancel();
+            cancelHostTicket(active);
         }
 
         return future;
+    }
+
+    /**
+     * Host-only withdrawal of an already selected KDF ticket. Performs no
+     * guest operation, allocation, message send or Future publication.
+     */
+    @TruffleBoundary
+    private static void cancelHostTicket(
+            ProtosProcessExecutionHost.PasswordKdfTicket active) {
+        active.cancel();
     }
 
     /**

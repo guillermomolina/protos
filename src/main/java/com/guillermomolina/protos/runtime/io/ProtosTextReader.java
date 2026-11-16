@@ -433,6 +433,7 @@ public final class ProtosTextReader {
         return false;
     }
 
+    @TruffleBoundary
     private FoldResult resolvePendingLf(byte[] bytes, boolean eof)
             throws ProtosEncodingValue.ConversionFailure {
         ProtosEncodingValue.DecodePreview preview = decoder.preview(bytes, eof);
@@ -454,6 +455,7 @@ public final class ProtosTextReader {
         };
     }
 
+    @TruffleBoundary
     private ReadResult scanText(ProtosEncodingValue.DecodePreview preview) {
         int consumed = 0;
         ProtosEncodingValue.StreamingDecoder next = decoder;
@@ -482,6 +484,7 @@ public final class ProtosTextReader {
         };
     }
 
+    @TruffleBoundary
     private LineResult scanLine(ProtosEncodingValue.DecodePreview preview, long maxBytes) {
         int consumed = 0;
         long lineBytes = 0L;

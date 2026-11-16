@@ -3567,19 +3567,284 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
-    /**
-     * I113: whether a structured native invocation is the protocol named by the
-     * builder-fixed {@code kind}. The predicates are owned by
-     * {@link ProtosStructuredCallKind}; {@code kind} is a constant operand,
-     * so partial evaluation folds the selection at every site.
+    /*
+     * Structured-protocol admission and preparation. Each protocol owns one
+     * concrete admission operation and one concrete preparation operation;
+     * the builder emits the operation of the protocol it lowers, so every
+     * site delegates directly to that protocol's capability.
      */
+
+    /** Whether {@code prepared} is the structured Boolean protocol. */
     @Operation
-    @ConstantOperand(type = ProtosStructuredCallKind.class, name = "kind")
-    public static final class IsStructuredCall {
+    public static final class IsStructuredBoolean {
         @Specialization
-        public static boolean perform(
-                ProtosStructuredCallKind kind, StructuredNativeInvocation prepared) {
-            return kind.admits(prepared);
+        public static boolean perform(StructuredNativeInvocation prepared) {
+            return prepared.isStructuredBoolean();
+        }
+    }
+
+    /** Prepares the structured Boolean state; precondition {@code IsStructuredBoolean}. */
+    @Operation
+    public static final class PrepareStructuredBoolean {
+        @Specialization
+        public static Object perform(StructuredNativeInvocation prepared) {
+            return prepared.prepareStructuredBoolean();
+        }
+    }
+
+    /** Whether {@code prepared} is the structured CaseOf protocol. */
+    @Operation
+    public static final class IsStructuredCaseOf {
+        @Specialization
+        public static boolean perform(StructuredNativeInvocation prepared) {
+            return prepared.isStructuredCaseOf();
+        }
+    }
+
+    /** Prepares the structured CaseOf state; precondition {@code IsStructuredCaseOf}. */
+    @Operation
+    public static final class PrepareStructuredCaseOf {
+        @Specialization
+        public static Object perform(StructuredNativeInvocation prepared) {
+            return prepared.prepareStructuredCaseOf();
+        }
+    }
+
+    /** Whether {@code prepared} is the structured ObjectCall protocol. */
+    @Operation
+    public static final class IsStructuredObjectCall {
+        @Specialization
+        public static boolean perform(StructuredNativeInvocation prepared) {
+            return prepared.isStructuredObjectCall();
+        }
+    }
+
+    /** Prepares the structured ObjectCall state; precondition {@code IsStructuredObjectCall}. */
+    @Operation
+    public static final class PrepareStructuredObjectCall {
+        @Specialization
+        public static Object perform(StructuredNativeInvocation prepared) {
+            return prepared.prepareStructuredObjectCall();
+        }
+    }
+
+    /** Whether {@code prepared} is the structured ImportCall protocol. */
+    @Operation
+    public static final class IsStructuredImportCall {
+        @Specialization
+        public static boolean perform(StructuredNativeInvocation prepared) {
+            return prepared.isStructuredImportCall();
+        }
+    }
+
+    /** Prepares the structured ImportCall state; precondition {@code IsStructuredImportCall}. */
+    @Operation
+    public static final class PrepareStructuredImportCall {
+        @Specialization
+        public static Object perform(StructuredNativeInvocation prepared) {
+            return prepared.prepareStructuredImportCall();
+        }
+    }
+
+    /** Whether {@code prepared} is the structured Ensure protocol. */
+    @Operation
+    public static final class IsStructuredEnsure {
+        @Specialization
+        public static boolean perform(StructuredNativeInvocation prepared) {
+            return prepared.isStructuredEnsure();
+        }
+    }
+
+    /** Prepares the structured Ensure state; precondition {@code IsStructuredEnsure}. */
+    @Operation
+    public static final class PrepareStructuredEnsure {
+        @Specialization
+        public static Object perform(StructuredNativeInvocation prepared) {
+            return prepared.prepareStructuredEnsure();
+        }
+    }
+
+    /** Whether {@code prepared} is the structured ForeignEach protocol. */
+    @Operation
+    public static final class IsStructuredForeignEach {
+        @Specialization
+        public static boolean perform(StructuredNativeInvocation prepared) {
+            return prepared.isStructuredForeignEach();
+        }
+    }
+
+    /** Prepares the structured ForeignEach state; precondition {@code IsStructuredForeignEach}. */
+    @Operation
+    public static final class PrepareStructuredForeignEach {
+        @Specialization
+        public static Object perform(StructuredNativeInvocation prepared) {
+            return prepared.prepareStructuredForeignEach();
+        }
+    }
+
+    /** Whether {@code prepared} is the structured IdentityMapAtIfAbsent protocol. */
+    @Operation
+    public static final class IsStructuredIdentityMapAtIfAbsent {
+        @Specialization
+        public static boolean perform(StructuredNativeInvocation prepared) {
+            return prepared.isStructuredIdentityMapAtIfAbsent();
+        }
+    }
+
+    /** Prepares the structured IdentityMapAtIfAbsent state; precondition {@code IsStructuredIdentityMapAtIfAbsent}. */
+    @Operation
+    public static final class PrepareStructuredIdentityMapAtIfAbsent {
+        @Specialization
+        public static Object perform(StructuredNativeInvocation prepared) {
+            return prepared.prepareStructuredIdentityMapAtIfAbsent();
+        }
+    }
+
+    /** Whether {@code prepared} is the structured MapMatch protocol. */
+    @Operation
+    public static final class IsStructuredMapMatch {
+        @Specialization
+        public static boolean perform(StructuredNativeInvocation prepared) {
+            return prepared.isStructuredMapMatch();
+        }
+    }
+
+    /** Prepares the structured MapMatch state; precondition {@code IsStructuredMapMatch}. */
+    @Operation
+    public static final class PrepareStructuredMapMatch {
+        @Specialization
+        public static Object perform(StructuredNativeInvocation prepared) {
+            return prepared.prepareStructuredMapMatch();
+        }
+    }
+
+    /** Whether {@code prepared} is the structured MapReadLookup protocol. */
+    @Operation
+    public static final class IsStructuredMapReadLookup {
+        @Specialization
+        public static boolean perform(StructuredNativeInvocation prepared) {
+            return prepared.isStructuredMapReadLookup();
+        }
+    }
+
+    /** Prepares the structured MapReadLookup state; precondition {@code IsStructuredMapReadLookup}. */
+    @Operation
+    public static final class PrepareStructuredMapReadLookup {
+        @Specialization
+        public static Object perform(StructuredNativeInvocation prepared) {
+            return prepared.prepareStructuredMapReadLookup();
+        }
+    }
+
+    /** Whether {@code prepared} is the structured MapAtPut protocol. */
+    @Operation
+    public static final class IsStructuredMapAtPut {
+        @Specialization
+        public static boolean perform(StructuredNativeInvocation prepared) {
+            return prepared.isStructuredMapAtPut();
+        }
+    }
+
+    /** Prepares the structured MapAtPut state; precondition {@code IsStructuredMapAtPut}. */
+    @Operation
+    public static final class PrepareStructuredMapAtPut {
+        @Specialization
+        public static Object perform(StructuredNativeInvocation prepared) {
+            return prepared.prepareStructuredMapAtPut();
+        }
+    }
+
+    /** Whether {@code prepared} is the structured MapRemove protocol. */
+    @Operation
+    public static final class IsStructuredMapRemove {
+        @Specialization
+        public static boolean perform(StructuredNativeInvocation prepared) {
+            return prepared.isStructuredMapRemove();
+        }
+    }
+
+    /** Prepares the structured MapRemove state; precondition {@code IsStructuredMapRemove}. */
+    @Operation
+    public static final class PrepareStructuredMapRemove {
+        @Specialization
+        public static Object perform(StructuredNativeInvocation prepared) {
+            return prepared.prepareStructuredMapRemove();
+        }
+    }
+
+    /** Whether {@code prepared} is the structured ErrorHandler protocol. */
+    @Operation
+    public static final class IsStructuredErrorHandler {
+        @Specialization
+        public static boolean perform(StructuredNativeInvocation prepared) {
+            return prepared.isStructuredErrorHandler();
+        }
+    }
+
+    /** Prepares the structured ErrorHandler state; precondition {@code IsStructuredErrorHandler}. */
+    @Operation
+    public static final class PrepareStructuredErrorHandler {
+        @Specialization
+        public static Object perform(StructuredNativeInvocation prepared) {
+            return prepared.prepareStructuredErrorHandler();
+        }
+    }
+
+    /** Whether {@code prepared} is one of the five local each families sharing one loop. */
+    @Operation
+    public static final class IsStructuredLocalEach {
+        @Specialization
+        public static boolean perform(StructuredNativeInvocation prepared) {
+            return prepared.isStructuredArrayEach()
+                    || prepared.isStructuredBytesEach()
+                    || prepared.isStructuredEnvironmentEach()
+                    || prepared.isStructuredIdentityMapEach()
+                    || prepared.isStructuredMapEach();
+        }
+    }
+
+    /** Prepares the admitted local each family; precondition {@code IsStructuredLocalEach}. */
+    @Operation
+    public static final class PrepareStructuredLocalEach {
+        @Specialization
+        public static Object perform(StructuredNativeInvocation prepared) {
+            if (prepared.isStructuredArrayEach()) {
+                return prepared.prepareStructuredArrayEach();
+            }
+            if (prepared.isStructuredBytesEach()) {
+                return prepared.prepareStructuredBytesEach();
+            }
+            if (prepared.isStructuredEnvironmentEach()) {
+                return prepared.prepareStructuredEnvironmentEach();
+            }
+            if (prepared.isStructuredIdentityMapEach()) {
+                return prepared.prepareStructuredIdentityMapEach();
+            }
+            if (prepared.isStructuredMapEach()) {
+                return prepared.prepareStructuredMapEach();
+            }
+            throw new IllegalStateException(
+                    "Not a structured local each call");
+        }
+    }
+
+    /** Whether {@code prepared} is Array.match or a standard Closure loop, both driven as a child-outcome sequence. */
+    @Operation
+    public static final class IsStructuredChildOutcomeSequence {
+        @Specialization
+        public static boolean perform(StructuredNativeInvocation prepared) {
+            return prepared.isStructuredArrayMatch() || prepared.isStructuredLoop();
+        }
+    }
+
+    /** Prepares the admitted loop or Array.match; precondition {@code IsStructuredChildOutcomeSequence}. */
+    @Operation
+    public static final class PrepareStructuredChildOutcomeSequence {
+        @Specialization
+        public static Object perform(StructuredNativeInvocation prepared) {
+            return prepared.isStructuredLoop()
+                    ? prepared.prepareStructuredLoop()
+                    : prepared.prepareStructuredArrayMatch();
         }
     }
 
@@ -3592,21 +3857,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * protocol's method. No phase spans a guest call: each lowered guest
      * child invocation still sits between two of these instructions.
      */
-
-    /**
-     * Prepares the structured state of the protocol named by the
-     * builder-fixed {@code kind}; see {@link ProtosStructuredCallKind#prepare}.
-     */
-    @Operation
-    @ConstantOperand(type = ProtosStructuredCallKind.class, name = "kind")
-    public static final class PrepareStructuredCall {
-        @Specialization
-        public static Object perform(
-                ProtosStructuredCallKind kind, StructuredNativeInvocation prepared) {
-            return kind.prepare(prepared);
-        }
-    }
-
 
     /**
      * A structured protocol state query, by the builder-fixed phase:

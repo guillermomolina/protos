@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.runtime;
 
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import java.util.Objects;
 
 /**
@@ -76,6 +77,7 @@ public final class ProtosActorDeliveryAttempt {
      *
      * @return true only for the call that establishes cancellation before concrete-Actor acceptance
      */
+    @TruffleBoundary
     public boolean cancelBeforeAcceptance() {
         return owner.cancel(this);
     }

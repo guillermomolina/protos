@@ -22,20 +22,19 @@ final class ProtosI109ASharedLocalEachLoweringTest {
     };
 
     private static final String LOCAL_EACH_ADMISSION =
-            "builder.beginIsStructuredCall(ProtosStructuredCallKind.LOCAL_EACH);";
+            "builder.beginIsStructuredLocalEach();";
 
     private static final String FOREIGN_EACH_ADMISSION =
-            "builder.beginIsStructuredCall(ProtosStructuredCallKind.FOREIGN_EACH);";
+            "builder.beginIsStructuredForeignEach();";
 
     private static final String IDENTITY_MAP_AT_IF_ABSENT_ADMISSION =
-            "builder.beginIsStructuredCall("
-                    + "ProtosStructuredCallKind.IDENTITY_MAP_AT_IF_ABSENT);";
+            "builder.beginIsStructuredIdentityMapAtIfAbsent();";
 
     private static final String MAP_READ_LOOKUP_ADMISSION =
-            "builder.beginIsStructuredCall(ProtosStructuredCallKind.MAP_READ_LOOKUP);";
+            "builder.beginIsStructuredMapReadLookup();";
 
     private static final String LOCAL_EACH_PREPARATION =
-            "builder.beginPrepareStructuredCall(ProtosStructuredCallKind.LOCAL_EACH);";
+            "builder.beginPrepareStructuredLocalEach();";
 
     /** I113: the shared structured phases the local each loop emits once. */
     private static final String[] OPERATIONS = {
@@ -69,13 +68,6 @@ final class ProtosI109ASharedLocalEachLoweringTest {
                 "src/main/java/com/guillermomolina/protos/"
                 + "execution/bytecode/lowering/"
                 + "ProtosStructuredDispatchLowerer.java");
-    }
-
-    private static String structuredCallKinds() throws IOException {
-        return read(
-                "src/main/java/com/guillermomolina/protos/"
-                + "execution/bytecode/activation/structured/"
-                + "ProtosStructuredCallKind.java");
     }
 
     private static String activation() throws IOException {
@@ -154,9 +146,9 @@ final class ProtosI109ASharedLocalEachLoweringTest {
         assertEquals(1, occurrences(region, LOCAL_EACH_ADMISSION));
         assertEquals(1, occurrences(region, LOCAL_EACH_PREPARATION));
         assertEquals(1, occurrences(
-                region, "builder.endPrepareStructuredCall();"));
+                region, "builder.endPrepareStructuredLocalEach();"));
         assertEquals(1, occurrences(
-                region, "builder.endIsStructuredCall();"));
+                region, "builder.endIsStructuredLocalEach();"));
 
         assertEquals(1, occurrences(
                 region, "builder.beginWhile();"));
@@ -215,25 +207,20 @@ final class ProtosI109ASharedLocalEachLoweringTest {
     @Test
     void admissionUsesCapabilitiesNotSelectorText()
             throws IOException {
-        String kinds = structuredCallKinds();
-        int localEach = kinds.indexOf("    LOCAL_EACH {");
-        assertTrue(localEach >= 0, "Missing LOCAL_EACH admission");
-        String localEachPredicate =
-                kinds.substring(localEach, kinds.indexOf("    },", localEach));
+        String admission = operationClass(activation(), "IsStructuredLocalEach");
 
         for (String family : FAMILIES) {
-            assertTrue(localEachPredicate.contains(
+            assertEquals(1, occurrences(admission,
                     "prepared.isStructured" + family + "Each()"),
                     "Missing capability: " + family);
         }
+        assertEquals(FAMILIES.length,
+                occurrences(admission, "prepared.isStructured"),
+                "Admission must check exactly the five capabilities");
 
-        assertFalse(localEachPredicate.contains("\"each\""));
-
-        String admission = operationClass(activation(), "IsStructuredCall");
-
-        assertTrue(admission.contains("kind.admits(prepared)"));
         assertTrue(admission.contains(
                 "StructuredNativeInvocation prepared"));
+        assertFalse(admission.contains("\"each\""));
 
         assertFalse(admission.contains(
                 "OrdinarySourceCall prepared"));
@@ -248,21 +235,39 @@ final class ProtosI109ASharedLocalEachLoweringTest {
     @Test
     void preparationDelegatesToTheFiveExistingAuthorities()
             throws IOException {
-        String kinds = structuredCallKinds();
-        int localEach = kinds.indexOf("    LOCAL_EACH {");
-        assertTrue(localEach >= 0, "Missing LOCAL_EACH preparation");
         String preparation =
-                kinds.substring(localEach, kinds.indexOf("    },", localEach));
+                operationClass(activation(), "PrepareStructuredLocalEach");
 
+        int previous = -1;
         for (String family : FAMILIES) {
-            assertEquals(1, occurrences(
-                    preparation,
-                    "return prepared.prepareStructured" + family
-                    + "Each();"),
+            String delegate = "return prepared.prepareStructured" + family
+                    + "Each();";
+            assertEquals(1, occurrences(preparation, delegate),
                     "Incorrect number of delegates: " + family);
+            int guard = preparation.indexOf(
+                    "if (prepared.isStructured" + family + "Each())");
+            assertTrue(guard > previous,
+                    "Missing or reordered preparation precedence: " + family);
+            assertTrue(preparation.indexOf(delegate) > guard, family);
+            previous = guard;
         }
 
         assertFalse(preparation.contains("\"each\""));
+    }
+
+    @Test
+    void genericStructuredCallOperationsAreRetired()
+            throws IOException {
+        String activation = activation();
+        String source = lowering();
+
+        assertFalse(activation.contains(
+                "public static final class IsStructuredCall {"));
+        assertFalse(activation.contains(
+                "public static final class PrepareStructuredCall {"));
+        assertFalse(source.contains("builder.beginIsStructuredCall("));
+        assertFalse(source.contains("builder.beginPrepareStructuredCall("));
+        assertFalse(source.contains("ProtosStructuredCallKind"));
     }
 
     @Test
@@ -289,5 +294,12 @@ final class ProtosI109ASharedLocalEachLoweringTest {
         assertTrue(
                 source.indexOf(FOREIGN_EACH_ADMISSION)
                 < source.indexOf(IDENTITY_MAP_AT_IF_ABSENT_ADMISSION));
+
+        assertTrue(operationClass(activation(), "IsStructuredForeignEach")
+                .contains("prepared.isStructuredForeignEach()"));
+        assertTrue(operationClass(activation(), "IsStructuredIdentityMapAtIfAbsent")
+                .contains("prepared.isStructuredIdentityMapAtIfAbsent()"));
+        assertTrue(operationClass(activation(), "IsStructuredMapReadLookup")
+                .contains("prepared.isStructuredMapReadLookup()"));
     }
 }

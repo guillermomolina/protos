@@ -65,13 +65,39 @@ class ProtosI072PhaseDPreparedCallSeparationTest {
     @Test
     void structuredDispatchOperationsSpecializeOnConcreteRepresentations() {
         for (Class<?> operation : List.of(
-                ProtosBytecodeRootNode.IsStructuredCall.class,
-                ProtosBytecodeRootNode.PrepareStructuredCall.class)) {
+                ProtosBytecodeRootNode.IsStructuredBoolean.class,
+                ProtosBytecodeRootNode.PrepareStructuredBoolean.class,
+                ProtosBytecodeRootNode.IsStructuredCaseOf.class,
+                ProtosBytecodeRootNode.PrepareStructuredCaseOf.class,
+                ProtosBytecodeRootNode.IsStructuredObjectCall.class,
+                ProtosBytecodeRootNode.PrepareStructuredObjectCall.class,
+                ProtosBytecodeRootNode.IsStructuredImportCall.class,
+                ProtosBytecodeRootNode.PrepareStructuredImportCall.class,
+                ProtosBytecodeRootNode.IsStructuredEnsure.class,
+                ProtosBytecodeRootNode.PrepareStructuredEnsure.class,
+                ProtosBytecodeRootNode.IsStructuredLocalEach.class,
+                ProtosBytecodeRootNode.PrepareStructuredLocalEach.class,
+                ProtosBytecodeRootNode.IsStructuredChildOutcomeSequence.class,
+                ProtosBytecodeRootNode.PrepareStructuredChildOutcomeSequence.class,
+                ProtosBytecodeRootNode.IsStructuredForeignEach.class,
+                ProtosBytecodeRootNode.PrepareStructuredForeignEach.class,
+                ProtosBytecodeRootNode.IsStructuredIdentityMapAtIfAbsent.class,
+                ProtosBytecodeRootNode.PrepareStructuredIdentityMapAtIfAbsent.class,
+                ProtosBytecodeRootNode.IsStructuredMapMatch.class,
+                ProtosBytecodeRootNode.PrepareStructuredMapMatch.class,
+                ProtosBytecodeRootNode.IsStructuredMapReadLookup.class,
+                ProtosBytecodeRootNode.PrepareStructuredMapReadLookup.class,
+                ProtosBytecodeRootNode.IsStructuredMapAtPut.class,
+                ProtosBytecodeRootNode.PrepareStructuredMapAtPut.class,
+                ProtosBytecodeRootNode.IsStructuredMapRemove.class,
+                ProtosBytecodeRootNode.PrepareStructuredMapRemove.class,
+                ProtosBytecodeRootNode.IsStructuredErrorHandler.class,
+                ProtosBytecodeRootNode.PrepareStructuredErrorHandler.class)) {
             List<java.lang.reflect.Method> specializations = specializations(operation);
             assertEquals(1, specializations.size(), operation.getName());
             assertEquals(
                     ProtosPreparedCalls.StructuredNativeInvocation.class,
-                    specializations.get(0).getParameterTypes()[1],
+                    specializations.get(0).getParameterTypes()[0],
                     operation.getName());
         }
     }

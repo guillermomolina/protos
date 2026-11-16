@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.runtime;
 
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
@@ -288,6 +289,7 @@ public final class ProtosDynamicControlState {
         frame.completeWhileInvocation(WhilePhase.BODY, WhilePhase.CONDITION);
     }
 
+    @TruffleBoundary
     public boolean hasActiveEnsureFrames() {
         for (Frame frame : framesNewestFirst) {
             if (frame.active() && frame.kind() == FrameKind.ENSURE) {
@@ -333,6 +335,7 @@ public final class ProtosDynamicControlState {
         return Optional.ofNullable(framesByInvocation.get(invocationIdentity));
     }
 
+    @TruffleBoundary
     public List<Frame> framesNewestFirst() {
         return List.copyOf(new ArrayList<>(framesNewestFirst));
     }

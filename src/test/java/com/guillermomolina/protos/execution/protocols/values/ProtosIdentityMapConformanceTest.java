@@ -5,11 +5,17 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorValueTransfer;
+import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosCoreErrors;
+import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosIdentity;
 import com.guillermomolina.protos.runtime.ProtosIdentityMapValue;
@@ -19,6 +25,7 @@ import com.guillermomolina.protos.runtime.ProtosStringValue;
 
 import java.io.IOException;
 import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.List;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
@@ -155,6 +162,103 @@ class ProtosIdentityMapConformanceTest {
         assertEquals(
                 "nan",
                 at(copied, new ProtosFloatValue(Double.longBitsToDouble(0x7ff8000000000077L)), a));
+    }
+
+    @Test
+    void indexedLookupResolvesCollidingKeysThroughTheExistingBucket() throws IOException {
+        ProtosPrelude prelude = core();
+        ProtosActivation a = prelude.newModuleActivation();
+        ProtosIdentityMapValue map = new ProtosIdentityMapValue(prelude.identityMapPrototype());
+        BigInteger first = BigInteger.ONE.shiftLeft(64).add(BigInteger.valueOf(31));
+        BigInteger second = BigInteger.ONE.shiftLeft(64).add(BigInteger.ONE.shiftLeft(32));
+        Object firstKey = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(first, prelude);
+        Object secondKey = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(second, prelude);
+        ProtosNumericHashKey hash = ProtosNumericHashKey.fromIdentity(firstKey);
+        assertEquals(hash, ProtosNumericHashKey.fromIdentity(secondKey));
+
+        put(map, firstKey, "first", a);
+        put(map, secondKey, "second", a);
+
+        Object probe = com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(second, prelude);
+        ProtosIdentityMapValue.Entry found = map.findIdentical(probe, hash);
+        assertSame(secondKey, found.key());
+        assertSame(found, map.findIdentical(secondKey, hash));
+        assertSame(firstKey, map.findIdentical(firstKey, hash).key());
+        assertNull(map.findIdentical(Long.valueOf(992), ProtosNumericHashKey.fromIdentity(Long.valueOf(992))));
+
+        // Replacement keeps the original representative key.
+        put(map, probe, "replaced", a);
+        assertSame(secondKey, map.findIdentical(secondKey, hash).key());
+        assertEquals("replaced", at(map, secondKey, a));
+
+        // Removing one collider leaves the other reachable.
+        ProtosInvocation.invokeMessage(map, "remove", List.of(firstKey), a);
+        assertNull(map.findIdentical(firstKey, hash));
+        assertEquals("replaced", at(map, secondKey, a));
+        assertEquals(1, map.keyedSize());
+    }
+
+    @Test
+    void standardEachIteratesOneInsertionOrderedSnapshot() throws IOException {
+        ProtosPrelude prelude = core();
+        ProtosActivation a = prelude.newModuleActivation();
+        ProtosIdentityMapValue map = new ProtosIdentityMapValue(prelude.identityMapPrototype());
+        put(map, Long.valueOf(3), "three", a);
+        put(map, Long.valueOf(1), "one", a);
+        put(map, Long.valueOf(2), "two", a);
+
+        List<String> visited = new ArrayList<>();
+        ProtosClosureValue callback = ProtosClosureValue.nativeClosure((activation, arguments) -> {
+            visited.add(arguments.get(0) + "="
+                    + ((ProtosStringValue) arguments.get(1)).value());
+            // Mutation during iteration does not affect the snapshot.
+            put(map, Long.valueOf(100 + visited.size()), "late", activation);
+            return arguments.get(1);
+        });
+
+        assertSame(map, ProtosInvocation.invokeMessage(map, "each", List.of(callback), a));
+        assertEquals(List.of("3=three", "1=one", "2=two"), visited);
+        assertEquals(6, map.keyedSize());
+    }
+
+    @Test
+    void standardEachPropagatesCallbackErrors() throws IOException {
+        ProtosPrelude prelude = core();
+        ProtosActivation a = prelude.newModuleActivation();
+        ProtosIdentityMapValue map = new ProtosIdentityMapValue(prelude.identityMapPrototype());
+        put(map, Long.valueOf(1), "one", a);
+        put(map, Long.valueOf(2), "two", a);
+
+        List<Object> visited = new ArrayList<>();
+        ProtosClosureValue failing = ProtosClosureValue.nativeClosure((activation, arguments) -> {
+            visited.add(arguments.get(0));
+            throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
+        });
+
+        assertThrows(ProtosSignalException.class,
+                () -> ProtosInvocation.invokeMessage(map, "each", List.of(failing), a));
+        assertEquals(List.of(Long.valueOf(1)), visited);
+    }
+
+    @Test
+    void overriddenEachIsSelectedInsteadOfTheStandardBehavior() throws IOException {
+        ProtosPrelude prelude = core();
+        ProtosActivation a = prelude.newModuleActivation();
+        ProtosObjectValue custom = new ProtosObjectValue(prelude.identityMapPrototype());
+        custom.createLocalSlot("each", ProtosClosureValue.nativeClosure(
+                (activation, arguments) -> new ProtosStringValue("overridden")));
+        ProtosIdentityMapValue map = new ProtosIdentityMapValue(custom);
+        put(map, Long.valueOf(1), "one", a);
+
+        List<Object> visited = new ArrayList<>();
+        ProtosClosureValue callback = ProtosClosureValue.nativeClosure((activation, arguments) -> {
+            visited.add(arguments.get(0));
+            return arguments.get(1);
+        });
+
+        Object result = ProtosInvocation.invokeMessage(map, "each", List.of(callback), a);
+        assertEquals("overridden", assertInstanceOf(ProtosStringValue.class, result).value());
+        assertTrue(visited.isEmpty());
     }
 
     private static void put(

@@ -209,4 +209,66 @@ class ProtosDynamicControlStateTest {
         state.leaveFrame(frame);
     }
 
+    @Test
+    void nestedEnsureCensusFollowsCleanupTransitionsAndLifoExit() {
+        ProtosDynamicControlState state = new ProtosDynamicControlState();
+        Object outerInvocation = new Object();
+        Object innerInvocation = new Object();
+
+        assertFalse(state.hasActiveEnsureFrames());
+
+        ProtosDynamicControlState.Frame handler =
+                state.enterFrame(new Object(), ProtosDynamicControlState.FrameKind.HANDLER);
+        assertFalse(state.hasActiveEnsureFrames());
+
+        ProtosDynamicControlState.Frame outer =
+                state.enterFrame(outerInvocation, ProtosDynamicControlState.FrameKind.ENSURE);
+        ProtosDynamicControlState.Frame inner =
+                state.enterFrame(innerInvocation, ProtosDynamicControlState.FrameKind.ENSURE);
+        assertTrue(state.hasActiveEnsureFrames());
+        assertEquals(List.of(inner, outer, handler), state.framesNewestFirst());
+
+        // Cancellation cleanup of the inner ensure keeps the census active.
+        Object cancellation = new Object();
+        state.beginEnsureCleanup(
+                inner, ProtosDynamicControlState.EnsureExitKind.CANCELLATION, cancellation);
+        assertTrue(state.hasActiveEnsureFrames());
+        assertTrue(state.hasActiveCancellationEnsureCleanupForRuntime());
+        assertThrows(
+                IllegalStateException.class,
+                () -> state.beginEnsureCleanup(
+                        inner, ProtosDynamicControlState.EnsureExitKind.CANCELLATION, cancellation));
+
+        // Replay reuses the exact frame identity in its cleanup phase.
+        assertSame(inner,
+                state.enterFrame(innerInvocation, ProtosDynamicControlState.FrameKind.ENSURE));
+        assertSame(cancellation, inner.ensureOutcome().orElseThrow());
+
+        // LIFO: the outer ensure cannot leave before the inner one.
+        assertThrows(IllegalStateException.class, () -> state.leaveFrame(outer));
+        state.leaveFrame(inner);
+        assertFalse(state.hasActiveCancellationEnsureCleanupForRuntime());
+        assertTrue(state.hasActiveEnsureFrames());
+
+        state.deactivate(outer);
+        assertFalse(state.hasActiveEnsureFrames());
+        state.leaveFrame(outer);
+        state.leaveFrame(handler);
+        assertTrue(state.framesNewestFirst().isEmpty());
+        assertFalse(state.hasActiveEnsureFrames());
+    }
+
+    @Test
+    void framesSnapshotIsIndependentOfLaterFrameChanges() {
+        ProtosDynamicControlState state = new ProtosDynamicControlState();
+        ProtosDynamicControlState.Frame frame =
+                state.enterFrame(new Object(), ProtosDynamicControlState.FrameKind.ENSURE);
+
+        List<ProtosDynamicControlState.Frame> snapshot = state.framesNewestFirst();
+        state.leaveFrame(frame);
+
+        assertEquals(List.of(frame), snapshot);
+        assertTrue(state.framesNewestFirst().isEmpty());
+        assertThrows(UnsupportedOperationException.class, () -> snapshot.add(frame));
+    }
 }
