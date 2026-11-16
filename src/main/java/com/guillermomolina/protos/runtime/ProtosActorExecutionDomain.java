@@ -700,10 +700,12 @@ public final class ProtosActorExecutionDomain {
         if (actor != null) actor.tryCompleteTerminationForRuntime();
     }
 
+    @TruffleBoundary
     void registerActorIoOperation(ProtosIoOperation operation) {
         synchronized (this) { actorIoOperations.add(Objects.requireNonNull(operation, "operation")); }
     }
 
+    @TruffleBoundary
     void terminalActorIoOperation(ProtosIoOperation operation) {
         synchronized (this) { actorIoOperations.remove(operation); }
     }

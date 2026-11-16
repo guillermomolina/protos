@@ -19,9 +19,11 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActorValueTransfer;
@@ -37,7 +39,9 @@ import com.guillermomolina.protos.runtime.io.ProtosHostIpEndpoint;
 import com.guillermomolina.protos.runtime.io.ProtosResolverBackend;
 import com.guillermomolina.protos.runtime.io.ProtosResolverBackend.AddressDescriptor;
 import com.oracle.truffle.api.source.Source;
+import java.net.InetAddress;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -427,6 +431,93 @@ final class ProtosResolverAuthorityTest {
         ProtosFreshProcessExecutor.Request carrying =
                 request(prelude, source("1"), null, new ProtosResolverCapabilityValue(prelude, new FakeBackend()));
         assertThrows(IllegalArgumentException.class, () -> ProtosFreshProcessExecutor.execute(carrying));
+    }
+
+    @Test
+    void directRetirementWithdrawsAuthorityOnceAndBlocksFutureGrants() throws Exception {
+        ProtosPrelude prelude = prelude();
+        FakeBackend backend = new FakeBackend();
+        ProtosResolverCapabilityValue resolver = new ProtosResolverCapabilityValue(prelude, backend);
+        assertFalse(resolver.retiredForRuntime());
+
+        resolver.retireForRuntime();
+        resolver.retireForRuntime();
+        assertTrue(resolver.retiredForRuntime());
+        assertEquals(1, backend.closes);
+        assertTrue(resolver.ownerForRuntime().isEmpty());
+
+        assertThrows(IllegalArgumentException.class, () -> bootstrap(prelude, null, resolver));
+        assertEquals(1, backend.closes);
+        assertEquals(List.of(), backend.names);
+    }
+
+    @Test
+    void retirementClosesTheHostBackendWithoutWaitingAndDiscardsLateResults() throws Exception {
+        ProtosPrelude prelude = prelude();
+        java.util.concurrent.CountDownLatch entered = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicReference<Thread> worker =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        ProtosHostResolverBackend backend =
+                new ProtosHostResolverBackend(
+                        name -> {
+                            worker.set(Thread.currentThread());
+                            entered.countDown();
+                            // Models a host lookup that ignores interruption.
+                            boolean interrupted = false;
+                            while (true) {
+                                try {
+                                    if (release.await(5, java.util.concurrent.TimeUnit.SECONDS)) {
+                                        break;
+                                    }
+                                } catch (InterruptedException ignored) {
+                                    interrupted = true;
+                                }
+                            }
+                            if (interrupted) {
+                                Thread.currentThread().interrupt();
+                            }
+                            return new InetAddress[] {
+                                InetAddress.getByAddress(new byte[] {127, 0, 0, 1})
+                            };
+                        });
+        try {
+            ProtosResolverCapabilityValue resolver =
+                    new ProtosResolverCapabilityValue(prelude, backend);
+            List<Object> delivered = java.util.Collections.synchronizedList(new ArrayList<>());
+            ProtosResolverBackend.Completion recording =
+                    new ProtosResolverBackend.Completion() {
+                        @Override
+                        public void succeeded(List<AddressDescriptor> addresses) {
+                            delivered.add(addresses);
+                        }
+
+                        @Override
+                        public void failed(ProtosResolverBackend.FailureKind kind) {
+                            delivered.add(kind);
+                        }
+                    };
+            ProtosResolverBackend.Cancellation cancellation =
+                    resolver.backendForRuntime().lookup("blocked.", recording);
+            assertTrue(entered.await(5, java.util.concurrent.TimeUnit.SECONDS));
+
+            cancellation.cancel();
+            assertTimeoutPreemptively(Duration.ofSeconds(3), resolver::retireForRuntime);
+            assertTrue(resolver.retiredForRuntime());
+            resolver.retireForRuntime();
+
+            resolver.backendForRuntime().lookup("after-retirement.", recording);
+            assertEquals(List.of(ProtosResolverBackend.FailureKind.UNAVAILABLE), delivered);
+
+            release.countDown();
+            Thread lookupThread = worker.get();
+            assertNotNull(lookupThread);
+            lookupThread.join(Duration.ofSeconds(5).toMillis());
+            assertFalse(lookupThread.isAlive(), "the released lookup worker must terminate");
+            assertEquals(List.of(ProtosResolverBackend.FailureKind.UNAVAILABLE), delivered);
+        } finally {
+            release.countDown();
+        }
     }
 
     // ------------------------------------------------------------ helpers

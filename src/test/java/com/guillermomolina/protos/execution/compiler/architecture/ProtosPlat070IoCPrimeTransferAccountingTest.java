@@ -439,6 +439,48 @@ final class ProtosPlat070IoCPrimeTransferAccountingTest {
                 "Object awaitTargetFuture(");
     }
 
+    @Test
+    void terminalHostHandlersAreBoundariesWhileTerminalStateAndGuestSegmentsStayCompilable()
+            throws Exception {
+        String main = "src/main/java/com/guillermomolina/protos/";
+        String operationFile = main + "runtime/io/ProtosIoOperation.java";
+        assertBoundary(operationFile,
+                "private static void runTerminalIdleHandler(",
+                "private static void notifyTerminalizedExecution(",
+                "private static void runCancellationHandler(");
+        assertBoundary(main + "runtime/ProtosActorExecutionDomain.java",
+                "void registerActorIoOperation(",
+                "void terminalActorIoOperation(");
+        assertBoundary(main + "runtime/io/ProtosIoLifecycle.java",
+                "private boolean retireOperationRegistration(");
+
+        String operation = Files.readString(Path.of(operationFile), StandardCharsets.UTF_8);
+        assertNoBoundary(operation, "private void finishTerminal(");
+        assertFalse(operation.contains("terminalIdle.run()"));
+        assertFalse(operation.contains("deliver.run()"));
+        String lifecycle = Files.readString(
+                Path.of(main + "runtime/io/ProtosIoLifecycle.java"), StandardCharsets.UTF_8);
+        assertNoBoundary(lifecycle, "private void startRelease(");
+        String tasks = main + "execution/bytecode/activation/tasks/";
+        assertNoBoundary(Files.readString(
+                        Path.of(tasks + "ProtosBytecodeIoOperationExecution.java"),
+                        StandardCharsets.UTF_8),
+                "public void runSegment(ProtosIoOperation scheduledOperation)");
+        assertNoBoundary(Files.readString(
+                        Path.of(tasks + "ProtosBytecodeIoReleaseExecution.java"),
+                        StandardCharsets.UTF_8),
+                "public void runSegment(ProtosIoReleaseExecution scheduledRelease)");
+        for (String protocol :
+                List.of(
+                        "ProtosBufferedByteReaderCPrimeExecution",
+                        "ProtosBufferedByteWriterCPrimeExecution",
+                        "ProtosTextReaderCPrimeExecution",
+                        "ProtosTextWriterCPrimeExecution")) {
+            assertTrue(read(protocol).contains("ProtosIoCPrimeTransferAccounting.begin(builder)"),
+                    protocol);
+        }
+    }
+
     private static void assertNoBoundary(String source, String declaration) {
         int at = source.indexOf(declaration);
         assertTrue(at > 0, declaration);

@@ -18,6 +18,7 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.io.ProtosResolverBackend;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
@@ -119,6 +120,7 @@ final class ProtosHostResolverBackend implements ProtosResolverBackend {
     }
 
     @Override
+    @TruffleBoundary
     public void close() {
         ThreadPoolExecutor current;
         synchronized (this) {

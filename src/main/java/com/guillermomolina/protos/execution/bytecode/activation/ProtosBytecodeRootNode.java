@@ -342,9 +342,38 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * parameterized {@code List<String>} operand forces an erased unchecked
      * cast in the generated interpreter.
      */
-    public record ComposeReservedNames(java.util.List<String> names) {
-        public ComposeReservedNames {
-            names = java.util.List.copyOf(names);
+    public static final class ComposeReservedNames {
+        private final java.util.List<String> names;
+        private final String[] indexedNames;
+
+        public ComposeReservedNames(java.util.List<String> names) {
+            this.names = java.util.List.copyOf(names);
+            this.indexedNames = this.names.toArray(new String[0]);
+        }
+
+        public java.util.List<String> names() {
+            return names;
+        }
+
+        /** Internal read-only view for composition; consumers never write it. */
+        String[] indexedNamesForComposition() {
+            return indexedNames;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof ComposeReservedNames that
+                    && names.equals(that.names);
+        }
+
+        @Override
+        public int hashCode() {
+            return names.hashCode();
+        }
+
+        @Override
+        public String toString() {
+            return "ComposeReservedNames[names=" + names + "]";
         }
     }
 
@@ -3338,7 +3367,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
             ProtosObjectValue target = activation.context();
             try {
-                target.composeLocalSlotsFrom(source, reservedNames.names());
+                target.composeLocalSlotsFrom(
+                        source, reservedNames.indexedNamesForComposition());
             } catch (IllegalStateException failure) {
                 throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
             }

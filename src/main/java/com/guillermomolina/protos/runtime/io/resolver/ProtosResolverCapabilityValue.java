@@ -17,6 +17,7 @@
 package com.guillermomolina.protos.runtime;
 
 import com.guillermomolina.protos.runtime.io.ProtosResolverBackend;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.interop.InteropLibrary;
 import com.oracle.truffle.api.library.ExportLibrary;
 import com.oracle.truffle.api.library.ExportMessage;
@@ -91,6 +92,7 @@ public final class ProtosResolverCapabilityValue implements ProtosRepresentedVal
      * for (its late completion is discarded by the lookup flow). Closes no Network, connection,
      * HTTP, TLS or other Resolver resource. Idempotent.
      */
+    @TruffleBoundary
     public void retireForRuntime() {
         synchronized (this) {
             if (retired) {

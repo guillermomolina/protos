@@ -181,7 +181,9 @@ public final class ProtosIoOperation {
             deferredCPrimeTerminalIdleHandler = handler;
             deliver = claimDeferredCPrimeTerminalIdleLocked();
         }
-        if (deliver != null) deliver.run();
+        if (deliver != null) {
+            runTerminalIdleHandler(deliver);
+        }
     }
 
     private Runnable claimDeferredCPrimeTerminalIdleLocked() {
@@ -289,7 +291,7 @@ public final class ProtosIoOperation {
                 origin.executionDomain().enqueueActorIoOperationForRuntime(this);
             }
             if (terminalIdle != null) {
-                terminalIdle.run();
+                runTerminalIdleHandler(terminalIdle);
             }
         }
     }
@@ -445,7 +447,7 @@ public final class ProtosIoOperation {
             if (cancellationHandler != null) throw new IllegalStateException("cancellation handler already installed");
             cancellationHandler=handler; call=cancellationRequested;
         }
-        if (call) handler.run();
+        if (call) runCancellationHandler(handler);
     }
 
     /** Producer-visible cancellation request. Pre-commit cancellation wins; post-commit cancellation cannot rewrite outcome. */
@@ -478,6 +480,18 @@ public final class ProtosIoOperation {
     @TruffleBoundary
     private static void runCancellationHandler(Runnable handler) {
         handler.run();
+    }
+
+    @TruffleBoundary
+    private static void runTerminalIdleHandler(Runnable handler) {
+        handler.run();
+    }
+
+    @TruffleBoundary
+    private static void notifyTerminalizedExecution(
+            DeferredCPrimeExecutionForRuntime execution,
+            ProtosIoOperation operation) {
+        execution.operationTerminalized(operation);
     }
 
     public boolean resolve(Object value) {
@@ -620,7 +634,7 @@ public final class ProtosIoOperation {
             }
         }
         if (terminalizedExecution != null) {
-            terminalizedExecution.operationTerminalized(this);
+            notifyTerminalizedExecution(terminalizedExecution, this);
         }
         Runnable terminalIdle;
         synchronized (deferredCPrimeLock) {
@@ -629,7 +643,7 @@ public final class ProtosIoOperation {
         // A failing retirement callback must never leave a terminal operation registered.
         try {
             if (terminalIdle != null) {
-                terminalIdle.run();
+                runTerminalIdleHandler(terminalIdle);
             }
         } finally {
             try {

@@ -109,4 +109,41 @@ final class ProtosI091NumericStructuralAdmissionTest {
         assertFalse(ProtosNumericValueSupport.isCurrentNumber(
                 activation.context()));
     }
+
+    @Test
+    void reservedNamesCarrierFiltersAndConflictsWriteNothing() throws Exception {
+        ProtosPrelude prelude =
+                new ProtosCoreBootstrap().bootstrap(
+                        Path.of("protos", "lib", "core"));
+        ProtosActivation activation = prelude.newModuleActivation();
+
+        var reserved = new ProtosBytecodeRootNode.ComposeReservedNames(
+                List.of("hidden", "other"));
+        assertEquals(List.of("hidden", "other"), reserved.names());
+        assertEquals(
+                new ProtosBytecodeRootNode.ComposeReservedNames(List.of("hidden", "other")),
+                reserved);
+        assertEquals(List.of("hidden", "other").hashCode(), reserved.hashCode());
+
+        ProtosObjectValue source = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        Object kept = new Object();
+        source.createLocalSlot("hidden", new Object());
+        source.createLocalSlot("i091Kept", kept);
+        assertSame(
+                activation.context(),
+                ProtosBytecodeRootNode.ComposeLocalSlots.perform(
+                        activation, source, reserved));
+        assertSame(kept, activation.context().readLocalSlot("i091Kept").orElseThrow());
+        assertFalse(activation.context().hasLocalSlot("hidden"));
+
+        ProtosObjectValue conflicting = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        conflicting.createLocalSlot("i091Fresh", new Object());
+        conflicting.createLocalSlot("i091Kept", new Object());
+        assertThrows(
+                ProtosSignalException.class,
+                () -> ProtosBytecodeRootNode.ComposeLocalSlots.perform(
+                        activation, conflicting, reserved));
+        assertFalse(activation.context().hasLocalSlot("i091Fresh"));
+        assertSame(kept, activation.context().readLocalSlot("i091Kept").orElseThrow());
+    }
 }

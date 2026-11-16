@@ -346,4 +346,105 @@ class ProtosObjectValueTest {
                 () -> frozen.composeLocalSlotsFrom(source, java.util.Set.of()));
         assertFalse(frozen.hasLocalSlot("x"));
     }
+
+    @Test
+    void indexedCompositionOfEmptySourceWritesNothing() {
+        ProtosObjectValue root = ProtosObjectValue.rootObject();
+        ProtosObjectValue target = new ProtosObjectValue(root);
+        target.composeLocalSlotsFrom(new ProtosObjectValue(root), new String[0]);
+        assertTrue(target.localSlotsSnapshot().isEmpty());
+    }
+
+    @Test
+    void indexedCompositionOfOneBindingPreservesIdentity() {
+        ProtosObjectValue root = ProtosObjectValue.rootObject();
+        ProtosObjectValue source = new ProtosObjectValue(root);
+        Object value = new Object();
+        source.createLocalSlot("only", value);
+        ProtosObjectValue target = new ProtosObjectValue(root);
+        target.composeLocalSlotsFrom(source, new String[0]);
+        assertSame(value, target.readLocalSlot("only").orElseThrow());
+    }
+
+    @Test
+    void indexedCompositionOfManyBindingsPreservesOrderIdentityAndReservations() {
+        ProtosObjectValue root = ProtosObjectValue.rootObject();
+        ProtosObjectValue source = new ProtosObjectValue(root);
+        java.util.List<String> expected = new java.util.ArrayList<>();
+        Object[] values = new Object[64];
+        for (int index = 0; index < values.length; index++) {
+            values[index] = new Object();
+            source.createLocalSlot("s" + index, values[index]);
+            if (index != 0 && index != 31 && index != 63) {
+                expected.add("s" + index);
+            }
+        }
+        ProtosObjectValue target = new ProtosObjectValue(root);
+        target.composeLocalSlotsFrom(source, new String[] {"s0", "s31", "s63", "absent"});
+
+        assertEquals(expected, List.copyOf(target.localSlotsSnapshot().keySet()));
+        for (int index = 0; index < values.length; index++) {
+            if (index == 0 || index == 31 || index == 63) {
+                assertFalse(target.hasLocalSlot("s" + index));
+            } else {
+                assertSame(values[index], target.readLocalSlot("s" + index).orElseThrow());
+            }
+        }
+    }
+
+    @Test
+    void indexedCompositionConflictOnFirstOrLastNameWritesNothing() {
+        ProtosObjectValue root = ProtosObjectValue.rootObject();
+        ProtosObjectValue source = new ProtosObjectValue(root);
+        source.createLocalSlot("first", new Object());
+        source.createLocalSlot("middle", new Object());
+        source.createLocalSlot("last", new Object());
+
+        for (String conflicting : new String[] {"first", "last"}) {
+            ProtosObjectValue target = new ProtosObjectValue(root);
+            Object existing = new Object();
+            target.createLocalSlot(conflicting, existing);
+            assertThrows(
+                    IllegalStateException.class,
+                    () -> target.composeLocalSlotsFrom(source, new String[0]));
+            assertEquals(List.of(conflicting), List.copyOf(target.localSlotsSnapshot().keySet()));
+            assertSame(existing, target.readLocalSlot(conflicting).orElseThrow());
+        }
+    }
+
+    @Test
+    void indexedCompositionRejectsClosedAndFrozenTargets() {
+        ProtosObjectValue root = ProtosObjectValue.rootObject();
+        ProtosObjectValue source = new ProtosObjectValue(root);
+        source.createLocalSlot("x", new Object());
+        ProtosObjectValue closed = new ProtosObjectValue(root);
+        closed.close();
+        assertThrows(
+                IllegalStateException.class,
+                () -> closed.composeLocalSlotsFrom(source, new String[0]));
+        assertFalse(closed.hasLocalSlot("x"));
+        ProtosObjectValue frozen = new ProtosObjectValue(root);
+        frozen.freeze();
+        assertThrows(
+                IllegalStateException.class,
+                () -> frozen.composeLocalSlotsFrom(source, new String[0]));
+        assertFalse(frozen.hasLocalSlot("x"));
+    }
+
+    @Test
+    void collectionOverloadsStillRejectNullReservedNames() {
+        ProtosObjectValue root = ProtosObjectValue.rootObject();
+        ProtosObjectValue target = new ProtosObjectValue(root);
+        ProtosObjectValue source = new ProtosObjectValue(root);
+        java.util.List<String> withNull = new java.util.ArrayList<>();
+        withNull.add(null);
+        assertThrows(
+                NullPointerException.class,
+                () -> target.composeLocalSlotsFrom(source, withNull));
+        java.util.Set<String> nullSet = new java.util.HashSet<>();
+        nullSet.add(null);
+        assertThrows(
+                NullPointerException.class,
+                () -> target.composeLocalSlotsFrom(source, nullSet));
+    }
 }

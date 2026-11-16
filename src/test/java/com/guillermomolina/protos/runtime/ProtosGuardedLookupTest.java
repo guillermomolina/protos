@@ -271,6 +271,30 @@ final class ProtosGuardedLookupTest {
     }
 
     @Test
+    void indexedCompositionInvalidatesOnlyContributedSelectorsAndFailureKeepsSelection() {
+        var parent = object();
+        var receiver = new ProtosObjectValue(parent);
+        var source = object();
+        parent.createLocalSlot("pick", new Object());
+        Object contributed = new Object();
+        source.createLocalSlot("pick", contributed);
+        var before = selected(receiver);
+
+        receiver.composeLocalSlotsFrom(source, new String[] {"pick"});
+        assertTrue(before.isValid());
+
+        receiver.composeLocalSlotsFrom(source, new String[0]);
+        assertFalse(before.isValid());
+        var after = selected(receiver);
+        assertSame(receiver, after.home());
+        assertSame(contributed, after.read());
+
+        assertThrows(IllegalStateException.class,
+                () -> receiver.composeLocalSlotsFrom(source, new String[0]));
+        assertTrue(after.isValid());
+    }
+
+    @Test
     void failedCompositionAndFrozenMutationPreserveSelection() {
         var receiver = object();
         var source = object();

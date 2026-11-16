@@ -473,12 +473,22 @@ public class ProtosObjectValue extends DynamicObject implements TruffleObject {
             java.util.Set<String> reservedNames) {
         Objects.requireNonNull(source, "source");
         Objects.requireNonNull(reservedNames, "reservedNames");
-        composeLocalSlotsFrom(source, java.util.List.copyOf(reservedNames));
+        composeLocalSlotsFrom(
+                source, java.util.List.copyOf(reservedNames).toArray(new String[0]));
     }
 
     public void composeLocalSlotsFrom(
             ProtosObjectValue source,
             java.util.List<String> reservedNames) {
+        Objects.requireNonNull(source, "source");
+        Objects.requireNonNull(reservedNames, "reservedNames");
+        composeLocalSlotsFrom(
+                source, java.util.List.copyOf(reservedNames).toArray(new String[0]));
+    }
+
+    public void composeLocalSlotsFrom(
+            ProtosObjectValue source,
+            String[] reservedNames) {
         Objects.requireNonNull(source, "source");
         Objects.requireNonNull(reservedNames, "reservedNames");
 
@@ -489,41 +499,45 @@ public class ProtosObjectValue extends DynamicObject implements TruffleObject {
             throw new IllegalStateException("object is closed");
         }
 
-        java.util.ArrayList<String> sourceNames = new java.util.ArrayList<>();
-        java.util.ArrayList<Object> sourceValues = new java.util.ArrayList<>();
-        authorityAppendTo(source.lexicalBindingAuthority, sourceNames, sourceValues);
+        ProtosIndexedSnapshot snapshot =
+                ProtosLexicalBindingAuthorityCalls.captureBindingsForComposition(
+                        source.lexicalBindingAuthority);
+        int sourceLength = snapshot.length();
+        if (sourceLength > Integer.MAX_VALUE / 2) {
+            throw new IllegalStateException("too many bindings for composition");
+        }
+        Object[] contributions = new Object[2 * sourceLength];
+        int contributionCount = 0;
 
-        java.util.ArrayList<String> contributionNames = new java.util.ArrayList<>();
-        java.util.ArrayList<Object> contributionValues = new java.util.ArrayList<>();
-
-        for (int index = 0; index < sourceNames.size(); index++) {
-            String name = sourceNames.get(index);
+        for (int index = 0; index < sourceLength; index++) {
+            String name = (String) snapshot.keyAt(index);
             if (!containsName(reservedNames, name)) {
-                contributionNames.add(name);
-                contributionValues.add(sourceValues.get(index));
+                contributions[2 * contributionCount] = name;
+                contributions[2 * contributionCount + 1] = snapshot.valueAt(index);
+                contributionCount++;
             }
         }
 
-        for (int index = 0; index < contributionNames.size(); index++) {
-            String name = contributionNames.get(index);
+        for (int index = 0; index < contributionCount; index++) {
+            String name = (String) contributions[2 * index];
             if (authorityContains(lexicalBindingAuthority, name)) {
                 throw new IllegalStateException("composition conflict: " + name);
             }
         }
 
-        for (int index = 0; index < contributionNames.size(); index++) {
+        for (int index = 0; index < contributionCount; index++) {
             ProtosLexicalBindingAuthorityCalls.put(
                     writableLexicalBindingAuthority(),
-                    contributionNames.get(index),
-                    contributionValues.get(index));
+                    (String) contributions[2 * index],
+                    contributions[2 * index + 1]);
         }
     }
 
     private static boolean containsName(
-            java.util.List<String> names,
+            String[] names,
             String candidate) {
-        for (int index = 0; index < names.size(); index++) {
-            if (names.get(index).equals(candidate)) {
+        for (int index = 0; index < names.length; index++) {
+            if (names[index].equals(candidate)) {
                 return true;
             }
         }

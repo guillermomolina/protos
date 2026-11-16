@@ -76,6 +76,35 @@ final class ProtosLexicalBindingAuthorityCalls {
         authority.appendBindingsTo(names, values);
     }
 
+    /**
+     * Captures a point-in-time indexed copy of every current binding of
+     * {@code authority}, in its observable order, for one composition. The
+     * returned snapshot is not a second store: it is never written after
+     * publication and lives only for the duration of the caller's operation.
+     */
+    @TruffleBoundary
+    static ProtosIndexedSnapshot captureBindingsForComposition(
+            ProtosLexicalBindingAuthority authority) {
+        ArrayList<String> names = new ArrayList<>();
+        ArrayList<Object> values = new ArrayList<>();
+        authority.appendBindingsTo(names, values);
+        int length = names.size();
+        if (values.size() != length) {
+            throw new IllegalStateException(
+                    "lexical binding names and values differ in length");
+        }
+        if (length > Integer.MAX_VALUE / 2) {
+            throw new IllegalStateException(
+                    "too many lexical bindings for composition");
+        }
+        Object[] keysAndValues = new Object[2 * length];
+        for (int index = 0; index < length; index++) {
+            keysAndValues[2 * index] = names.get(index);
+            keysAndValues[2 * index + 1] = values.get(index);
+        }
+        return ProtosIndexedSnapshot.associations(keysAndValues, length);
+    }
+
     @TruffleBoundary
     static void put(ProtosLexicalBindingAuthority authority, String name, Object value) {
         authority.putBinding(name, value);

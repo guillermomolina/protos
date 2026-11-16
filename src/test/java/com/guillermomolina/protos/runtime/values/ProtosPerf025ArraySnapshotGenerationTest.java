@@ -230,4 +230,80 @@ final class ProtosPerf025ArraySnapshotGenerationTest {
         field.setAccessible(true);
         return field.get(array);
     }
+
+    @Test
+    void indexedSnapshotRejectsNegativeAndLengthIndexes() {
+        ProtosIndexedSnapshot elements =
+                ProtosIndexedSnapshot.elements(new Object[] {"a", "b"}, 2);
+        assertThrows(IndexOutOfBoundsException.class, () -> elements.at(-1));
+        assertThrows(IndexOutOfBoundsException.class, () -> elements.at(2));
+        ProtosIndexedSnapshot associations =
+                ProtosIndexedSnapshot.associations(new Object[] {"k", "v"}, 1);
+        assertThrows(IndexOutOfBoundsException.class, () -> associations.keyAt(-1));
+        assertThrows(IndexOutOfBoundsException.class, () -> associations.keyAt(1));
+        assertThrows(IndexOutOfBoundsException.class, () -> associations.valueAt(-1));
+        assertThrows(IndexOutOfBoundsException.class, () -> associations.valueAt(1));
+    }
+
+    @Test
+    void emptyIndexedSnapshotsHaveNoPositions() {
+        ProtosIndexedSnapshot elements = ProtosIndexedSnapshot.elements(new Object[0], 0);
+        assertEquals(0, elements.length());
+        assertThrows(IndexOutOfBoundsException.class, () -> elements.at(0));
+        ProtosIndexedSnapshot associations =
+                ProtosIndexedSnapshot.associations(new Object[0], 0);
+        assertEquals(0, associations.length());
+        assertThrows(IndexOutOfBoundsException.class, () -> associations.keyAt(0));
+    }
+
+    @Test
+    void associationSnapshotReadsInterleavedKeysAndValues() {
+        Object firstValue = new Object();
+        Object secondValue = new Object();
+        ProtosIndexedSnapshot snapshot =
+                ProtosIndexedSnapshot.associations(
+                        new Object[] {"a", firstValue, "b", secondValue}, 2);
+        assertEquals(2, snapshot.length());
+        assertEquals("a", snapshot.keyAt(0));
+        assertSame(firstValue, snapshot.valueAt(0));
+        assertEquals("b", snapshot.keyAt(1));
+        assertSame(secondValue, snapshot.valueAt(1));
+        assertThrows(IllegalStateException.class, () -> snapshot.at(0));
+    }
+
+    @Test
+    void associationSnapshotRejectsInvalidLengths() {
+        Object[] storage = new Object[] {"a", 1L, "b"};
+        assertThrows(
+                IndexOutOfBoundsException.class,
+                () -> ProtosIndexedSnapshot.associations(storage, -1));
+        assertThrows(
+                IndexOutOfBoundsException.class,
+                () -> ProtosIndexedSnapshot.associations(storage, 2));
+    }
+
+    @Test
+    void publishedIndexedSnapshotsAreIndependentOfLaterArrayMutation() {
+        Object first = new Object();
+        Object replacement = new Object();
+        ProtosArrayValue array =
+                new ProtosArrayValue(ProtosObjectValue.rootObject(), List.of(first));
+        List<Object> published = array.indexedSnapshot();
+        array.indexedPut(0, replacement);
+        assertSame(first, published.get(0));
+        assertSame(replacement, array.indexedSnapshot().get(0));
+    }
+
+    @Test
+    void longElementSnapshotPreservesPrimitiveStorage() throws Exception {
+        long[] storage = new long[] {7L, -3L};
+        ProtosIndexedSnapshot snapshot = ProtosIndexedSnapshot.longElements(storage);
+        assertEquals(2, snapshot.length());
+        assertEquals(Long.valueOf(7L), snapshot.at(0));
+        assertEquals(Long.valueOf(-3L), snapshot.at(1));
+        assertThrows(IllegalStateException.class, () -> snapshot.keyAt(0));
+        Field longs = ProtosIndexedSnapshot.class.getDeclaredField("longs");
+        longs.setAccessible(true);
+        assertSame(storage, longs.get(snapshot));
+    }
 }

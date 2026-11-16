@@ -74,7 +74,10 @@ public final class ProtosIndexedSnapshot {
      */
     public static ProtosIndexedSnapshot associations(Object[] keysAndValues, int length) {
         Objects.requireNonNull(keysAndValues, "keysAndValues");
-        Objects.checkFromToIndex(0, length, keysAndValues.length / 2);
+        if (length < 0 || length > keysAndValues.length / 2) {
+            throw new IndexOutOfBoundsException(
+                    "snapshot range out of bounds");
+        }
         return length == 0
                 ? EMPTY_ASSOCIATIONS
                 : new ProtosIndexedSnapshot(keysAndValues, null, length, true);
@@ -90,7 +93,10 @@ public final class ProtosIndexedSnapshot {
         if (associations) {
             throw new IllegalStateException("association snapshot has no single elements");
         }
-        Objects.checkIndex(index, length);
+        if (index < 0 || index >= length) {
+            throw new IndexOutOfBoundsException(
+                    "snapshot index out of bounds");
+        }
         long[] primitive = longs;
         return primitive != null ? Long.valueOf(primitive[index]) : objects[index];
     }
@@ -98,14 +104,20 @@ public final class ProtosIndexedSnapshot {
     /** The key of association {@code index}. */
     public Object keyAt(int index) {
         requireAssociations();
-        Objects.checkIndex(index, length);
+        if (index < 0 || index >= length) {
+            throw new IndexOutOfBoundsException(
+                    "snapshot index out of bounds");
+        }
         return objects[index * 2];
     }
 
     /** The value of association {@code index}. */
     public Object valueAt(int index) {
         requireAssociations();
-        Objects.checkIndex(index, length);
+        if (index < 0 || index >= length) {
+            throw new IndexOutOfBoundsException(
+                    "snapshot index out of bounds");
+        }
         return objects[index * 2 + 1];
     }
 

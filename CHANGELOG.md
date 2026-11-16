@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.137-SNAPSHOT
+
+- **I115.** Bound Resolver shutdown regressions with preemptive timeouts and worker joins. Refine Actor-domain, I/O lifecycle, lexical-authority and indexed-snapshot paths with targeted regressions.
+
 ## 0.4.136-SNAPSHOT
 
 - **I115.** Isolate password custody, foreign handles, entropy, Actor scheduling and completion-thread operations behind Truffle boundaries. Keep indexed snapshot generation checks aligned.

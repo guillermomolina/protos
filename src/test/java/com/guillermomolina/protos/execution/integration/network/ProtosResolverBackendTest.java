@@ -19,7 +19,9 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.io.ProtosResolverBackend;
@@ -27,11 +29,13 @@ import com.guillermomolina.protos.runtime.io.ProtosResolverBackend.AddressDescri
 import com.guillermomolina.protos.runtime.io.ProtosResolverBackend.FailureKind;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
 /** D223-A1 bounded host name-service adapter, exercised with a controlled name service only. */
@@ -157,6 +161,80 @@ final class ProtosResolverBackendTest {
         release.countDown();
         assertFalse(outcome.done.await(200, TimeUnit.MILLISECONDS));
         backend.close();
+    }
+
+    @Test
+    void closeIsIdempotentDoesNotWaitForABlockedLookupAndDiscardsItsLateResult()
+            throws Exception {
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        AtomicReference<Thread> worker = new AtomicReference<>();
+        ProtosHostResolverBackend backend =
+                new ProtosHostResolverBackend(
+                        name -> {
+                            worker.set(Thread.currentThread());
+                            entered.countDown();
+                            // Models a host lookup that ignores interruption.
+                            boolean interrupted = false;
+                            while (true) {
+                                try {
+                                    if (release.await(5, TimeUnit.SECONDS)) {
+                                        break;
+                                    }
+                                } catch (InterruptedException ignored) {
+                                    interrupted = true;
+                                }
+                            }
+                            if (interrupted) {
+                                Thread.currentThread().interrupt();
+                            }
+                            return new InetAddress[] {
+                                InetAddress.getByAddress(new byte[] {127, 0, 0, 1})
+                            };
+                        });
+        try {
+            Outcome running = new Outcome();
+            ProtosResolverBackend.Cancellation cancellation = backend.lookup("blocked.", running);
+            assertTrue(entered.await(5, TimeUnit.SECONDS));
+
+            // The owner settles the operation first, then withdraws the host authority.
+            cancellation.cancel();
+            assertTimeoutPreemptively(Duration.ofSeconds(3), backend::close);
+            backend.close();
+            backend.close();
+
+            Outcome rejected = new Outcome();
+            backend.lookup("after-close.", rejected);
+            assertEquals(FailureKind.UNAVAILABLE, rejected.failure);
+            assertEquals(0, rejected.done.getCount());
+
+            release.countDown();
+            Thread lookupThread = worker.get();
+            assertNotNull(lookupThread);
+            lookupThread.join(Duration.ofSeconds(5).toMillis());
+            assertFalse(lookupThread.isAlive(), "the released lookup worker must terminate");
+            assertEquals(1, running.done.getCount());
+            assertEquals(null, running.addresses);
+            assertEquals(null, running.failure);
+        } finally {
+            release.countDown();
+            backend.close();
+        }
+    }
+
+    @Test
+    void closeBeforeAnyLookupNeverStartsTheExecutor() {
+        ProtosHostResolverBackend backend =
+                new ProtosHostResolverBackend(
+                        name -> {
+                            throw new AssertionError("name service must not be reached");
+                        });
+        backend.close();
+        backend.close();
+        Outcome rejected = new Outcome();
+        backend.lookup("example.com.", rejected);
+        assertEquals(FailureKind.UNAVAILABLE, rejected.failure);
+        assertFalse(backend.executorInitializedForTesting());
     }
 
     private static FailureKind failureOf(ProtosHostResolverBackend.NameService service)

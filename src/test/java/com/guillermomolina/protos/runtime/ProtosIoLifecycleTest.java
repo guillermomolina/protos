@@ -224,4 +224,32 @@ class ProtosIoLifecycleTest {
 
     private record Fixture(ProtosPrelude prelude, ProtosActorExecutionDomain domain, ProtosActivation activation, ProtosObjectValue receiver,
             ProtosIoLifecycle lifecycle, AtomicInteger releaseStarts, AtomicReference<ProtosIoLifecycle.ReleaseCompletion> completion) {}
+
+    @Test
+    void retiringLastCommittedOperationStartsReleaseExactlyOnce() throws Exception {
+        var x=fixture();
+        var first=x.lifecycle.beginOperation(x.activation); assertTrue(first.commit());
+        var second=x.lifecycle.beginOperation(x.activation); assertTrue(second.commit());
+        var close=x.lifecycle.close(x.activation);
+        assertTrue(first.resolve(ProtosNullValue.INSTANCE));
+        assertEquals(0,x.releaseStarts.get());
+        assertEquals(ProtosFutureValue.State.PENDING,close.state());
+        assertEquals(1,x.domain.actorIoOperationCountForTesting());
+
+        assertTrue(second.resolve(ProtosNullValue.INSTANCE));
+        assertEquals(1,x.releaseStarts.get());
+        assertEquals(0,x.domain.actorIoOperationCountForTesting());
+        assertEquals(ProtosFutureValue.State.PENDING,close.state());
+
+        var concurrentClose=x.lifecycle.close(x.activation);
+        assertNotSame(close,concurrentClose);
+        assertEquals(1,x.releaseStarts.get());
+        assertFalse(second.resolve(ProtosNullValue.INSTANCE));
+        assertEquals(1,x.releaseStarts.get());
+
+        x.completion.get().succeeded();
+        assertEquals(ProtosFutureValue.State.RESOLVED,close.state());
+        assertEquals(ProtosFutureValue.State.RESOLVED,concurrentClose.state());
+        assertSame(x.receiver,close.resolvedValue().orElseThrow());
+    }
 }

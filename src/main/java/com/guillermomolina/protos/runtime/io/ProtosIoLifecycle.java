@@ -255,13 +255,18 @@ public final class ProtosIoLifecycle {
     }
 
     void operationTerminal(ProtosIoOperation operation) {
-        boolean start;
-        synchronized(this) {
-            operations.remove(operation);
-            start=readyToReleaseLocked();
-        }
+        boolean start=retireOperationRegistration(operation);
         // A retirement may run in any Actor or on a host thread: never an owner-synchronous start.
         if (start) startRelease(false);
+    }
+
+    @TruffleBoundary
+    private boolean retireOperationRegistration(
+            ProtosIoOperation operation) {
+        synchronized (this) {
+            operations.remove(operation);
+            return readyToReleaseLocked();
+        }
     }
 
     /** Called only by the owner-domain close. */

@@ -326,6 +326,57 @@ final class ProtosPlat029FutureValueNonTaskCPrimeTest {
     }
 
     @Test
+    void terminalIdleFromFinishTerminalRunsOnceOutsideInternalLocks() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            Fixture f = fixture();
+            ProtosIoOperation op = f.lifecycle.beginOperation(f.module);
+            Object deferredLock = field(op, "deferredCPrimeLock");
+            Object lifecycleLock = field(op, "lifecycle");
+            AtomicInteger idle = new AtomicInteger();
+            op.onDeferredCPrimeTerminalIdleForRuntime(() -> {
+                assertFalse(Thread.holdsLock(deferredLock));
+                assertFalse(Thread.holdsLock(lifecycleLock));
+                assertFalse(Thread.holdsLock(op));
+                idle.incrementAndGet();
+            });
+            assertTrue(op.commit());
+            assertTrue(op.resolve(ProtosNullValue.INSTANCE));
+            assertEquals(1, idle.get());
+            assertFalse(op.resolve(ProtosNullValue.INSTANCE));
+            assertFalse(op.requestCancellation());
+            assertEquals(1, idle.get());
+            assertEquals(ProtosFutureValue.State.RESOLVED, op.future().state());
+        }
+        System.out.println("I115_TERMINAL_IDLE_FINISH_TERMINAL_OUTSIDE_LOCKS=PASS");
+    }
+
+    @Test
+    void cancellationHandlerInstalledAfterCommittedRequestRunsImmediatelyOnce() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            Fixture f = fixture();
+            ProtosIoOperation op = f.lifecycle.beginOperation(f.module);
+            assertTrue(op.commit());
+            assertTrue(op.requestCancellation());
+            AtomicInteger cancellations = new AtomicInteger();
+            op.onCancellation(cancellations::incrementAndGet);
+            assertEquals(1, cancellations.get());
+            assertEquals(ProtosFutureValue.State.PENDING, op.future().state(),
+                    "post-commit cancellation cannot rewrite the outcome");
+            assertFalse(op.requestCancellation());
+            assertEquals(1, cancellations.get());
+            assertTrue(op.resolve(ProtosNullValue.INSTANCE));
+            assertEquals(ProtosFutureValue.State.RESOLVED, op.future().state());
+        }
+        System.out.println("I115_IMMEDIATE_CANCELLATION_HANDLER_ONCE=PASS");
+    }
+
+    private static Object field(Object owner, String name) throws Exception {
+        java.lang.reflect.Field field = owner.getClass().getDeclaredField(name);
+        field.setAccessible(true);
+        return field.get(owner);
+    }
+
+    @Test
     void terminalIdleWaitsForConcurrentRunningSegmentToExit() throws Exception {
         try (LanguageScope scope = languageScope()) {
             Fixture f = fixture();
