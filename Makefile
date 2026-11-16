@@ -58,6 +58,12 @@ GENERATED_BYTECODE_BCI_PE_BASELINE := tools/java_generated_bytecode_bci_pe_basel
 GENERATED_BYTECODE_BCI_PE_REPORT := target/generated-bytecode-bci-pe-guard-report.json
 GENERATED_BYTECODE_BCI_PE_CANDIDATE := target/generated-bytecode-bci-pe-candidate-baseline.json
 GENERATED_BYTECODE_BCI_COMPILATION_REPORT := target/generated-bytecode-bci-compilation-report.json
+# Global Native Image runtime-compilation analysis (check-native-runtime-compilation):
+# reachability-only Native Image analysis with the Truffle compilation blocklist.
+NATIVE_RUNTIME_COMPILATION_LOG := target/native-analysis/analysis.log
+NATIVE_RUNTIME_COMPILATION_REPORT := target/native-analysis/report.json
+# Applies to each analysis phase.
+NATIVE_RUNTIME_COMPILATION_TIMEOUT ?= 1800
 # TEST009-F: strict Truffle compilation gate over the real Test Tool corpus
 # (SYNC and BACKGROUND modes) and its manual textual diagnostic surface.
 TRUFFLE_COMPILATION_DIR := target/truffle-compilation
@@ -77,7 +83,7 @@ TRUFFLE_ROOT_EXPANSION ?= method
 TRUFFLE_ROOT_DUMP_LEVEL ?= 1
 
 .PHONY: semantic-performance-gate i115-performance-baseline i115-performance-probe test-semantic-performance-gate
-.PHONY: help toolchain compile build test test-java java-test-phase test-java-parallel test-java-serial test-java-confirm test-java-stress test-local-range-pe-guard check-local-range-index-pe check-local-range-operands-pe check-local-accessor-pe check-bytecode-api-pe check-generated-bytecode-bci-pe check-truffle-compilation diagnose-truffle-compilation truffle-root-catalog diagnose-truffle-root test-protos test-protos-suite test-protos-foreign check verify clean artifacts artifacts-verify artifacts-publish-d064 dist dist-validate build-native test-native clean-native
+.PHONY: help toolchain compile build test test-java java-test-phase test-java-parallel test-java-serial test-java-confirm test-java-stress test-local-range-pe-guard check-local-range-index-pe check-local-range-operands-pe check-local-accessor-pe check-bytecode-api-pe check-generated-bytecode-bci-pe check-native-runtime-compilation check-truffle-compilation diagnose-truffle-compilation truffle-root-catalog diagnose-truffle-root test-protos test-protos-suite test-protos-foreign check verify clean artifacts artifacts-verify artifacts-publish-d064 dist dist-validate build-native test-native clean-native
 
 # I115: self-contained Protos local JVM gate. No external benchmarks checkout.
 semantic-performance-gate:
@@ -115,6 +121,14 @@ help:
 		'  make check-generated-bytecode-bci-pe  Generated cached-dispatch BCI PE guard:' \
 		'                      package, static generated-Java topology check and' \
 		'                      real-compilation check of the exception-handler path' \
+		'  make check-native-runtime-compilation  Global Native Image analysis of the' \
+		'                      native profile up to reachability (no executable): strict' \
+		'                      blocklist/neverPartOfCompilation inventory, plus a second' \
+		'                      diagnostic analysis when needed for the full call tree;' \
+		'                      reports detector, GraalVM analysis and global inventory' \
+		'                      completeness separately; fails on any violation and' \
+		'                      whenever GraalVM aborts before its official call tree' \
+		'                      (no complete global inventory is then claimed)' \
 		'  make check-truffle-compilation  Strict Truffle compilation gate: package, then run' \
 		'                      the Test Tool corpus on the JVM with CompileImmediately,' \
 		'                      ExitVM and performance warnings as errors, in SYNC and' \
@@ -134,8 +148,9 @@ help:
 		'                      (test-protos-suite + test-protos-foreign, one build)' \
 		'  make test-protos-suite    Run the native Protos test suite (no build)' \
 		'  make test-protos-foreign  Run the external foreign-provider tests (no build)' \
-		'  make check          Run bounded compilerability / PE bailout checks only:' \
-		'                      toolchain, static PE guards and generated-dispatch BCI;' \
+		'  make check          Run compilerability / PE bailout checks: toolchain,' \
+		'                      static PE guards, generated-dispatch BCI and the global' \
+		'                      Native Image analysis up to reachability (long-running);' \
 		'                      never runs make test or check-truffle-compilation' \
 		'  make verify         Run a clean Maven verify lifecycle' \
 		'  make clean          Remove Maven build output' \
@@ -151,7 +166,7 @@ help:
 		'           TRUFFLE_COMPILATION_TEST_ARGS=... TRUFFLE_COMPILATION_TIMEOUT=...' \
 		'           TRUFFLE_COMPILATION_SHARD_WORKERS=... TRUFFLE_COMPILATION_DIAGNOSE_TEST_ARGS=...' \
 		'           TRUFFLE_ROOT_TEST_ARGS=... TRUFFLE_ROOT_SELECTOR=... TRUFFLE_ROOT_EXPANSION=...' \
-		'           TRUFFLE_ROOT_DUMP_LEVEL=...'
+		'           TRUFFLE_ROOT_DUMP_LEVEL=... NATIVE_RUNTIME_COMPILATION_TIMEOUT=...'
 
 toolchain:
 	$(PYTHON) tools/verify_toolchain.py --mode check --scope development
@@ -290,6 +305,23 @@ check-generated-bytecode-bci-pe:
 	$(PYTHON) tools/java_generated_bytecode_bci_compilation_check.py \
 		--report $(GENERATED_BYTECODE_BCI_COMPILATION_REPORT)
 
+# Strict Native Image analysis inventory of the native profile (stops after
+# reachability; no executable); when neverPartOfCompilation violations stop it
+# before the call tree, a second sequential diagnostic analysis completes the
+# graph. Fails on any blocklist or neverPartOfCompilation violation and on any
+# incomplete GraalVM analysis or global inventory (an aborted GraalVM run is
+# classified and recorded under target/native-analysis/, never treated as a
+# complete inventory). Ordered after check-generated-bytecode-bci-pe: both run
+# Maven over target/classes.
+check-native-runtime-compilation: check-generated-bytecode-bci-pe
+	$(PYTHON) tools/tests/test_native_runtime_compilation_gate.py
+	$(PYTHON) tools/native_runtime_compilation_gate.py check \
+		--timeout $(NATIVE_RUNTIME_COMPILATION_TIMEOUT) \
+		--log $(NATIVE_RUNTIME_COMPILATION_LOG) \
+		--report $(NATIVE_RUNTIME_COMPILATION_REPORT) \
+		--strict-command '$(MVN) $(MVN_FLAGS) -Pnative,native-analysis -DskipTests package' \
+		--graph-command '$(MVN) $(MVN_FLAGS) -Pnative,native-analysis,native-analysis-graph -DskipTests package'
+
 # TEST009-F: packages once, then runs both strict modes; fail-closed.
 check-truffle-compilation:
 	$(MVN) $(MVN_FLAGS) package -DskipTests
@@ -360,11 +392,12 @@ test-protos-foreign:
 	$(PYTHON) dist/test_external_foreign_providers.py
 
 # TEST009: compilerability validation is independent from functional tests.
-# `make check` aggregates only the bounded routine guards (static PE guards and
-# the generated-dispatch BCI guard). TEST009-AM: the strict full-corpus Truffle
-# compilation gate is an explicit audit target (`make check-truffle-compilation`)
+# `make check` aggregates the static PE guards, the generated-dispatch BCI guard
+# and the global Native Image runtime-compilation analysis (up to reachability).
+# TEST009-AM: the strict full-corpus Truffle compilation gate is an explicit
+# audit target (`make check-truffle-compilation`)
 # and is never a prerequisite of `make check`; neither is `make test`.
-check: toolchain check-local-range-index-pe check-local-range-operands-pe check-local-accessor-pe check-bytecode-api-pe check-generated-bytecode-bci-pe check-directory-file-limit
+check: toolchain check-local-range-index-pe check-local-range-operands-pe check-local-accessor-pe check-bytecode-api-pe check-generated-bytecode-bci-pe check-native-runtime-compilation check-directory-file-limit
 
 verify:
 	$(MVN) $(MVN_FLAGS) clean verify

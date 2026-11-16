@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.140-SNAPSHOT
+
+- **I115.** Add the Native Image runtime-compilation gate with separate detector, GraalVM analysis, inventory and policy results, Makefile integration and gate regression coverage.
+
 ## 0.4.139-SNAPSHOT
 
 - **I115.** Add Truffle boundaries for Actor I/O cleanup completion and buffered byte-I/O argument lists, with corresponding generated-structure policy checks.
