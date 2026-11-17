@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.152-SNAPSHOT
+
+- **I115.** Align inline-callback stack-depth, Native fallback-runtime and buffered-argument boundary test oracles with current lowering and packaging, and update Makefile runtime selection.
+
 ## 0.4.151-SNAPSHOT
 
 - **I115.** Use typed StableAssociation array snapshots for Map.match to remove polymorphic collection dispatch from Native Image compilation paths. Update map matching and physical-index regressions.

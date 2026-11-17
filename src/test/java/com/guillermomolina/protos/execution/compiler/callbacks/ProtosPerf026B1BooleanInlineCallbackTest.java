@@ -125,7 +125,7 @@ final class ProtosPerf026B1BooleanInlineCallbackTest {
     }
 
     @Test
-    void ownedReturnHomeLiteralRetainsItsPhysicalRoot() throws Exception {
+    void moduleLiteralWithoutReturnInlinesIntoModuleRoot() throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
@@ -141,12 +141,15 @@ final class ProtosPerf026B1BooleanInlineCallbackTest {
                                 """);
 
                 assertInteger(1, root.getCallTarget().call(probe.module()));
-                assertProbeCalledFrom(probe.stack, root, "probe");
+                // Without a return the callback cannot observe a ReturnHome,
+                // and its module-binding read is statically proven, so it
+                // runs inline in the module root.
+                assertProbeCalledFromModule(probe.stack, root, "probe");
             } finally {
                 context.leave();
             }
         }
-        System.out.println("PERF026_B1_OWNED_RETURN_HOME_FALLBACK=YES");
+        System.out.println("PERF026_B1_MODULE_LITERAL_INLINE=YES");
     }
 
     @Test
@@ -419,6 +422,19 @@ final class ProtosPerf026B1BooleanInlineCallbackTest {
         assertNotSame(moduleRoot, caller, scenario);
         assertSame(moduleRoot, stack.get(2), scenario);
         return caller;
+    }
+
+    /** The native probe frame sits directly on the module root. */
+    private static void assertProbeCalledFromModule(
+            List<RootNode> stack,
+            ProtosBytecodeRootNode moduleRoot,
+            String scenario) {
+        assertEquals(2, stack.size(), () -> scenario + " stack=" + stack);
+        assertEquals(
+                "ProtosBuiltinCallRootNode",
+                stack.get(0).getClass().getSimpleName(),
+                scenario);
+        assertSame(moduleRoot, stack.get(1), scenario);
     }
 
     /** As {@link #assertProbeCalledFrom}, for a test without its module root. */

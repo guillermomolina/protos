@@ -203,7 +203,9 @@ final class ProtosPerf025C1cSemanticSourceTopologyTest {
 
                     root.getCallTarget().call(module);
 
-                    assertEquals(3, stack.size(), () -> characters + " stack=" + stack);
+                    // The literal callback contains no return and its module
+                    // read is statically proven: it runs inline in the source root.
+                    assertEquals(2, stack.size(), () -> characters + " stack=" + stack);
                     assertInstanceOf(
                             ProtosBuiltinCallRootNode.class,
                             stack.get(0),
@@ -215,13 +217,7 @@ final class ProtosPerf025C1cSemanticSourceTopologyTest {
                                         frameRoot).isSemanticActivationRoot(),
                                 () -> characters + " stack=" + stack);
                     }
-                    assertSame(root, stack.get(2));
-
-                    ProtosBytecodeRootNode callback =
-                            (ProtosBytecodeRootNode) stack.get(1);
-                    callback.getRootNodes().ensureComplete();
-                    assertEquals(1, rootTags(callback.getBytecodeNode()));
-                    assertEquals(1, rootBodyTags(callback.getBytecodeNode()));
+                    assertSame(root, stack.get(1));
                 }
             } finally {
                 context.leave();
@@ -254,12 +250,11 @@ final class ProtosPerf025C1cSemanticSourceTopologyTest {
 
                 root.getCallTarget().call(module);
 
-                assertEquals(3, stack.size(), () -> "stack=" + stack);
+                // The condition literal contains no return and its module read
+                // is statically proven: it runs inline in the source root.
+                assertEquals(2, stack.size(), () -> "stack=" + stack);
                 assertInstanceOf(ProtosBuiltinCallRootNode.class, stack.get(0));
-                ProtosBytecodeRootNode condition =
-                        assertInstanceOf(ProtosBytecodeRootNode.class, stack.get(1));
-                assertTrue(condition.isSemanticActivationRoot());
-                assertSame(root, stack.get(2));
+                assertSame(root, stack.get(1));
                 assertTrue(root.isSemanticActivationRoot());
 
                 // No auxiliary structured dispatcher may appear on the
@@ -270,11 +265,11 @@ final class ProtosPerf025C1cSemanticSourceTopologyTest {
                 assertTrue(stack.stream().noneMatch(frame -> frame == auxiliary),
                         () -> "unexpected structured dispatcher: " + stack);
                 assertEquals(
-                        2L,
+                        1L,
                         stack.stream()
                                 .filter(frame -> frame instanceof ProtosBytecodeRootNode)
                                 .count(),
-                        () -> "exactly two semantic source roots: " + stack);
+                        () -> "exactly one semantic source root: " + stack);
             } finally {
                 context.leave();
             }

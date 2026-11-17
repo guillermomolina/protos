@@ -380,7 +380,7 @@ final class ProtosPerf026C1WhileInlineCallbackTest {
     }
 
     @Test
-    void ownedReturnHomeLiteralsRetainStructuredWhile() throws Exception {
+    void moduleLiteralsWithoutReturnInlineIntoModuleRoot() throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
@@ -397,18 +397,16 @@ final class ProtosPerf026C1WhileInlineCallbackTest {
                                 """);
 
                 assertInteger(1, root.getCallTarget().call(probe.module()));
-                // The module-level body owns its return home and keeps its own
-                // root; the loop runs in the module root and invokes it directly.
-                assertEquals(List.of(2), probe.depths(), () -> "stacks=" + probe.stacks);
-                List<RootNode> stack = probe.stacks.get(0);
-                assertNotSame(root,
-                        assertInstanceOf(ProtosBytecodeRootNode.class, stack.get(0)));
-                assertSame(root, stack.get(1));
+                // Neither literal contains a return, so neither can observe a
+                // ReturnHome; their module-binding accesses are statically
+                // proven, so the loop and both bodies run in the module root.
+                assertEquals(List.of(1), probe.depths(), () -> "stacks=" + probe.stacks);
+                assertSame(root, probe.stacks.get(0).get(0));
             } finally {
                 context.leave();
             }
         }
-        System.out.println("PERF026_C1_OWNED_RETURN_HOME_FALLBACK=YES");
+        System.out.println("PERF026_C1_MODULE_LITERAL_INLINE=YES");
     }
 
     @Test

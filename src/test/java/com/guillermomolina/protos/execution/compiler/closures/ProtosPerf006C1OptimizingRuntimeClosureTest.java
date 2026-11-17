@@ -27,21 +27,15 @@ import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
 /**
- * PERF006-C1 optimizing-runtime closure, PLAT033 packaging-boundary evidence, and the PLAT045
- * boundary: only the Native Image profiles select the fallback runtime.
+ * PERF006-C1 optimizing-runtime closure and PLAT033 packaging-boundary evidence: no profile,
+ * including the Native Image profiles, selects the fallback runtime.
  */
 final class ProtosPerf006C1OptimizingRuntimeClosureTest {
     private static final String EXPECTED_RUNTIME =
             "com.oracle.truffle.runtime.hotspot.HotSpotTruffleRuntime";
-    private static final String FALLBACK_BUILD_ARG =
-            "<buildArg>-Dtruffle.UseFallbackRuntime=true</buildArg>";
-    private static final String CONFIGURABLE_FALLBACK_BUILD_ARG =
-            "<buildArg>-Dtruffle.UseFallbackRuntime=${protos.native.fallbackRuntime}</buildArg>";
     /** The Native Image profiles: the distributed executable and the I130-C2 JUnit test image. */
     private static final String NATIVE_PROFILE = "native";
     private static final String NATIVE_TLS_TESTS_PROFILE = "native-tls-tests";
-    private static final String WARNING_RUNTIME_ARG =
-            "<runtimeArg>-Dpolyglot.engine.WarnInterpreterOnly=false</runtimeArg>";
 
     @Test
     void surefireUsesExactOptimizingRuntimeWithoutSuppression() {
@@ -76,54 +70,25 @@ final class ProtosPerf006C1OptimizingRuntimeClosureTest {
         assertTrue(launcher.contains("-cp \"$JAR:$RUNTIME_DIR/*\""));
         assertFalse(launcher.contains("-jar \"$JAR\""));
 
+        // The Native Image profiles no longer select the fallback runtime: no
+        // profile, property or launcher pins it or silences its notice.
         String nativeProfile = profile(pom, NATIVE_PROFILE);
-        assertEquals(1, occurrences(pom, "<protos.native.fallbackRuntime>true</protos.native.fallbackRuntime>"));
-        String nativeTlsTestsProfile = profile(pom, NATIVE_TLS_TESTS_PROFILE);
-        // I130-C3: the interpreter-only notice is silenced only as a runtime argument of the
-        // Native JUnit executable; never for the JVM, Surefire or the distributed executable.
-        assertEquals(
-                1,
-                occurrences(nativeTlsTestsProfile, WARNING_RUNTIME_ARG),
-                "native-tls-tests must silence the fallback notice exactly once");
-        assertEquals(1, occurrences(nativeTlsTestsProfile, "WarnInterpreterOnly"));
-        int runtimeArgs = nativeTlsTestsProfile.indexOf("<runtimeArgs>");
-        int warningArg = nativeTlsTestsProfile.indexOf(WARNING_RUNTIME_ARG);
-        assertTrue(
-                runtimeArgs >= 0
-                        && warningArg > runtimeArgs
-                        && warningArg < nativeTlsTestsProfile.indexOf("</runtimeArgs>"),
-                "the fallback notice suppression must be a Native JUnit runtime argument");
-        assertTrue(
-                warningArg > nativeTlsTestsProfile.indexOf("<artifactId>native-maven-plugin</artifactId>"),
-                "the fallback notice suppression belongs to the native-maven-plugin");
-        assertFalse(nativeProfile.contains("WarnInterpreterOnly"));
-        assertFalse(pom.replace(nativeTlsTestsProfile, "").contains("WarnInterpreterOnly"));
-        assertEquals(
-                1,
-                occurrences(nativeProfile, CONFIGURABLE_FALLBACK_BUILD_ARG),
-                "native profile must select the configured runtime exactly once");
-        assertEquals(
-                1,
-                occurrences(nativeTlsTestsProfile, FALLBACK_BUILD_ARG),
-                "native-tls-tests profile must select the fallback runtime exactly once");
+        assertFalse(pom.contains("UseFallbackRuntime"));
+        assertFalse(pom.contains("protos.native.fallbackRuntime"));
+        assertFalse(pom.contains("WarnInterpreterOnly"));
         assertTrue(
                 nativeProfile.contains(
                         "<classesDirectory>${project.build.outputDirectory}</classesDirectory>"));
         assertFalse(nativeProfile.contains("<protos.shade.skip>true</protos.shade.skip>"));
-        assertFalse(
-                pom.replace(nativeProfile, "")
-                        .replace(nativeTlsTestsProfile, "")
-                        .contains("UseFallbackRuntime"));
         assertFalse(launcher.contains("WarnInterpreterOnly=false"));
         assertFalse(launcher.contains("UseFallbackRuntime=true"));
 
         System.out.println("PERF006_C1_SHADED_OPTIMIZER=NO");
         System.out.println("PERF006_C1_CHECKOUT_RUNTIME_PLANE=PASS");
-        System.out.println("PLAT045_NATIVE_PROFILE_FALLBACK_RUNTIME=YES");
+        System.out.println("PLAT045_NATIVE_PROFILE_FALLBACK_RUNTIME=NO");
         System.out.println("PLAT045_JVM_FALLBACK_RUNTIME=NO");
         System.out.println("BUG014_NATIVE_PROFILE_SHADE_SKIP=NO");
         System.out.println("BUG014_NATIVE_PROFILE_APPLICATION_INPUT=CLASSES_DIRECTORY");
-        System.out.println("I130_C3_NATIVE_TLS_TESTS_FALLBACK_NOTICE=SILENCED_RUNTIME_ARG_ONLY");
     }
 
     /**

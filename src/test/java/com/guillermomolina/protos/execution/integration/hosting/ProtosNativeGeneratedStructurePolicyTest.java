@@ -386,9 +386,11 @@ final class ProtosNativeGeneratedStructurePolicyTest {
                 "public void terminalActorIoReleaseForRuntime(ProtosIoReleaseExecution release)"));
 
         String buffered = mainSource("runtime/io/ProtosBufferedByteIo.java");
-        assertTrue(boundaryPrecedes(buffered, "private static List<Object> noArguments()"));
-        assertTrue(boundaryPrecedes(buffered,
-                "private static List<Object> singletonArguments(Object value)"));
+        // The argument factories allocate exact-size arrays, which partial
+        // evaluation handles directly; they need no host boundary.
+        assertFalse(boundaryPrecedes(buffered, "private static Object[] noArguments()"));
+        assertFalse(boundaryPrecedes(buffered,
+                "private static Object[] singletonArguments(Object value)"));
         assertFalse(boundaryPrecedes(buffered, "private void pump("));
         assertFalse(boundaryPrecedes(buffered, "private void doFlush("));
     }
