@@ -135,6 +135,17 @@ final class ProtosPerf006C1OptimizingRuntimeClosureTest {
                         .contains("<phase>process-test-classes</phase>"),
                 "the cleanup must run before Surefire");
 
+        // The shared test Polyglot context owner is initialized at image run time, only in the
+        // JUnit image; the production init-args policy is not changed for it.
+        String runTimeTestContext =
+                "<buildArg>--initialize-at-run-time="
+                        + "com.guillermomolina.protos.execution.ProtosTestExecutionSupport"
+                        + "</buildArg>";
+        assertEquals(1, occurrences(nativeTlsTestsProfile, runTimeTestContext));
+        assertFalse(
+                Files.readString(Path.of("scripts/native-generate-init-args.sh"))
+                        .contains("ProtosTestExecutionSupport"));
+
         // The selection stays profile-local: the ordinary JVM suite is never restricted.
         String outside = pom.replace(nativeTlsTestsProfile, "");
         assertFalse(outside.contains("ProtosTlsClientIntegrationTest"));
@@ -145,24 +156,29 @@ final class ProtosPerf006C1OptimizingRuntimeClosureTest {
         System.out.println("I130_C3_NATIVE_TLS_TESTS_STALE_IDS=CLEANED");
     }
 
-    /** PLAT045 (#772): Native admission is interpreter-only and must never claim guest JIT. */
+    /** Native admission requires guest Tier-2 JIT for both root families (supersedes PLAT045). */
     @Test
-    void nativeAdmissionValidatesInterpreterOnlyFallback() throws Exception {
+    void nativeAdmissionRequiresGuestTier2Jit() throws Exception {
         String script = Files.readString(Path.of("scripts/native-test.sh"));
 
-        assertTrue(script.contains("NATIVE_GUEST_JIT=UNSUPPORTED_UPSTREAM_ORACLE_GRAAL_14579"));
-        assertTrue(script.contains("NATIVE_INTERPRETER_ONLY=FAIL_FALLBACK_RUNTIME_NOT_SELECTED"));
-        assertTrue(script.contains("NATIVE_INTERPRETER_ONLY=FAIL_UNEXPECTED_GUEST_COMPILATION"));
-        assertTrue(script.contains("NATIVE_INTERPRETER_ONLY=FAIL_OPT_FAILED"));
-        assertTrue(script.contains("NATIVE_INTERPRETER_ONLY=FAIL_FRAME_WITHOUT_BOXING"));
-        assertTrue(script.contains("NATIVE_INTERPRETER_ONLY=FAIL_COMPILATION"));
+        assertTrue(script.contains("-Dpolyglot.engine.TraceCompilation=true"));
+        assertTrue(script.contains("-Dpolyglot.engine.CompileImmediately=true"));
+        assertTrue(script.contains("-Dpolyglot.engine.BackgroundCompilation=false"));
+        assertTrue(script.contains("-Dpolyglot.engine.CompilationFailureAction=Print"));
+        assertTrue(script.contains("NATIVE_GUEST_JIT=PASS"));
+        assertTrue(script.contains("NATIVE_GUEST_JIT=FAIL_FALLBACK_RUNTIME_SELECTED"));
+        assertTrue(script.contains("NATIVE_GUEST_JIT=FAIL_OPT_FAILED"));
+        assertTrue(script.contains("NATIVE_GUEST_JIT=FAIL_FRAME_WITHOUT_BOXING"));
+        assertTrue(script.contains("NATIVE_GUEST_JIT=FAIL_COMPILATION"));
+        assertTrue(script.contains("NATIVE_GUEST_JIT=FAIL_NO_BYTECODE_ROOT_TIER2"));
+        assertTrue(script.contains("NATIVE_GUEST_JIT=FAIL_NO_BUILTIN_CALL_ROOT_TIER2"));
         assertTrue(script.contains("NATIVE_TEST_TOOL_SMOKE=PASS"));
         assertTrue(script.contains("NATIVE_DAP_STACKTRACE_REGRESSION=PASS"));
+        assertFalse(script.contains("NATIVE_INTERPRETER_ONLY"));
+        assertFalse(script.contains("UNSUPPORTED_UPSTREAM_ORACLE_GRAAL_14579"));
         assertFalse(script.contains("WarnInterpreterOnly"));
-        assertFalse(script.contains("NATIVE_FORCED_GUEST_JIT=PASS"));
-        assertFalse(script.contains("BYTECODE_ROOT_TIER2=PASS"));
 
-        System.out.println("PLAT045_NATIVE_GUEST_JIT_CLAIM=UNAVAILABLE_NOT_PASS");
+        System.out.println("NATIVE_GUEST_JIT_ADMISSION=TIER2_REQUIRED");
     }
 
     private static String profile(String pom, String id) {

@@ -5,7 +5,7 @@
 
     <groupId>com.guillermomolina</groupId>
     <artifactId>protos</artifactId>
-    <version>0.4.154-SNAPSHOT</version>
+    <version>0.4.155-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <name>Protos</name>
@@ -535,6 +535,11 @@
                             <buildArgs>
                                 <buildArg>-march=compatibility</buildArg>
                                 <buildArg>@${project.build.directory}/native-image-init.args</buildArg>
+                                <!-- Test-only owner of the shared entered Polyglot context. Its
+                                     static initializer opens an Engine/Context, which must never
+                                     run in the image builder (it would retain the builder's
+                                     thread through Engine.ENGINES). Production policy unchanged. -->
+                                <buildArg>--initialize-at-run-time=com.guillermomolina.protos.execution.ProtosTestExecutionSupport</buildArg>
                             </buildArgs>
                         </configuration>
                     </plugin>

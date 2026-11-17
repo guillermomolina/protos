@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.155-SNAPSHOT
+
+- **I115.** Require Native guest Tier-2 JIT in `native-test.sh`: both the Bytecode DSL root and the builtin-call root must reach a successful Tier-2 compilation with no opt, compilation, FrameWithoutBoxing or fallback-runtime failures (supersedes the PLAT045 interpreter-only probe). Initialize the test-only shared Polyglot context owner `ProtosTestExecutionSupport` at image run time in the `native-tls-tests` profile so the JUnit image no longer retains a builder-created Engine, Context or thread. Update the Native profile static regression.
+
 ## 0.4.154-SNAPSHOT
 
 - **I115.** Replace collection-copy snapshots in Future terminal transitions, I/O lifecycle close cutover and publication, and Actor termination cancellation with typed array snapshots taken under the existing monitors, removing JDK collection factories from Native Image compilation paths. Extend Future observer, I/O close cutover and follower, multi-waiter resumption and multi-task Actor termination regressions.
