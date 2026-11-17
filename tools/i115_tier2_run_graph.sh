@@ -27,6 +27,7 @@ exec env JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} \
 -Dpolyglot.engine.AllowExperimentalOptions=true \
 -Dpolyglot.engine.BackgroundCompilation=false \
 -Dpolyglot.engine.TraceCompilation=true \
+-Dpolyglot.engine.TraceInlining=true \
 -Dpolyglot.engine.MultiTier=true \
 -Dpolyglot.engine.DynamicCompilationThresholds=false \
 -Dpolyglot.engine.FirstTierMinInvokeThreshold=1 \

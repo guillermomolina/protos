@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.128-SNAPSHOT
+
+- **I115 — Unified guarded invocation sites.** Direct and indirect Closure dispatch now share one guarded call site per path while preserving owned and captured return-home control transfers. Added dispatch admission and unary-cache regressions; the opt-in Tier 2 graph diagnostic reports remaining invocations and enables inlining traces.
+
 ## 0.4.127-SNAPSHOT
 
 - **I115 — Fused numeric operations with internal selection and overloaded dispatch.**

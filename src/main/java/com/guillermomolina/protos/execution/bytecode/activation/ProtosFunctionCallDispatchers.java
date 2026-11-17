@@ -1113,14 +1113,14 @@ final class ProtosFunctionCallDispatchers {
             ProtosFrameArguments.bindOwnedReturnHome(closure, home, task);
 
             Object outcome;
-            if (!home.isMaterialized() || closure.capturedReturnHomeOrNullForRuntime() != null) {
+            try {
                 outcome = callNode.call(arguments);
-            } else {
-                try {
-                    outcome = callNode.call(arguments);
-                } catch (ControlFlowException transfer) {
+            } catch (ControlFlowException transfer) {
+                if (home.isMaterialized()
+                        && closure.capturedReturnHomeOrNullForRuntime() == null) {
                     return completeOwnedTransfer(home, transfer);
                 }
+                throw transfer;
             }
             return sealIfSuspended(frame, arguments, explicitCaller, outcome);
         }
@@ -1166,14 +1166,14 @@ final class ProtosFunctionCallDispatchers {
             ProtosFrameArguments.bindOwnedReturnHome(closure, home, task);
 
             Object outcome;
-            if (!home.isMaterialized() || closure.capturedReturnHomeOrNullForRuntime() != null) {
+            try {
                 outcome = callNode.call(target, arguments);
-            } else {
-                try {
-                    outcome = callNode.call(target, arguments);
-                } catch (ControlFlowException transfer) {
+            } catch (ControlFlowException transfer) {
+                if (home.isMaterialized()
+                        && closure.capturedReturnHomeOrNullForRuntime() == null) {
                     return completeOwnedTransfer(home, transfer);
                 }
+                throw transfer;
             }
             return sealIfSuspended(frame, arguments, explicitCaller, outcome);
         }

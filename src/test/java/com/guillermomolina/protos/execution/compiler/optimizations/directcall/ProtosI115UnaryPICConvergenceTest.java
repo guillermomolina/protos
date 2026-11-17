@@ -197,6 +197,80 @@ final class ProtosI115UnaryPICConvergenceTest {
         });
     }
 
+    /**
+     * The primitive-closure-call program: every run() creates a fresh local
+     * identity Closure and calls it once. Far past every identity cache limit
+     * the single CallUnaryMethod keeps returning 1, the fresh Closures share
+     * one body target, and each invocation reads its own lexical captures.
+     */
+    @Test
+    void primitiveClosureCallReusesTheBodyTargetAcrossFreshClosures() throws Exception {
+        withCore(module -> {
+            evaluate(FOCAL, "primitive-closure-call-define.protos", module);
+            evaluate("""
+                    makeIdentity: () => {
+                        identity: (value) => { value }
+                        identity
+                    }
+                    makeOffset: (seed) => {
+                        identity: (value) => { value + seed }
+                        identity
+                    }
+                    callOne: (f, value) => { f(value) }
+                    """, "primitive-closure-call-companions.protos", module);
+            ProtosBytecodeRootNode root = runRoot(module);
+            for (int i = 0; i < 4 * PAST_CACHE_LIMITS; i++) {
+                assertInteger(1, evaluate("run()\n", "primitive-closure-call.protos", module));
+            }
+            assertSharedUnaryCallRoot(runRoot(module), 1);
+            assertSame(root, runRoot(module), "one stable run root");
+
+            ProtosClosureValue first = closure("makeIdentity()\n", module);
+            ProtosClosureValue second = closure("makeIdentity()\n", module);
+            assertNotSame(first, second, "every evaluation creates a distinct Closure");
+            assertSame(first.definition(), second.definition());
+            assertSame(
+                    first.preparedExecutionPlanOrNullForRuntime()
+                            .bytecodeActivationTargetForComposition(),
+                    second.preparedExecutionPlanOrNullForRuntime()
+                            .bytecodeActivationTargetForComposition(),
+                    "the identity body target is reused");
+
+            for (int i = 0; i < 4 * PAST_CACHE_LIMITS; i++) {
+                assertInteger(1 + i, evaluate("callOne(makeOffset(" + i + "), 1)\n",
+                        "primitive-closure-call-captures.protos", module));
+            }
+        });
+    }
+
+    /**
+     * Two Closures of one definition capturing different values alternate at
+     * one call site after the identity cache is saturated: each result
+     * depends on the Closure received by that invocation, never on the first
+     * Closure the PIC observed.
+     */
+    @Test
+    void sharedTargetPicAlternatesCapturesAfterSaturation() throws Exception {
+        withCore(module -> {
+            evaluate("""
+                    makeA: (offset) => { (value) => { value + offset } }
+                    callOne: (f, value) => { f(value) }
+                    low: makeA(2)
+                    high: makeA(9)
+                    """, "shared-target-alternation-define.protos", module);
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                assertInteger(7 + i, evaluate("callOne(makeA(" + i + "), 7)\n",
+                        "shared-target-alternation-saturate.protos", module));
+            }
+            for (int i = 0; i < 2 * PAST_CACHE_LIMITS; i++) {
+                assertInteger(9, evaluate("callOne(low, 7)\n",
+                        "shared-target-alternation-low.protos", module));
+                assertInteger(16, evaluate("callOne(high, 7)\n",
+                        "shared-target-alternation-high.protos", module));
+            }
+        });
+    }
+
     /*
      * Source Closures take the direct function entry only while ordinary
      * `call` lookup would select the canonical Object.call; a nearer local

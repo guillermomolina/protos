@@ -387,6 +387,143 @@ final class ProtosI115ARuntimeAdmissionTest {
         }
     }
 
+    /**
+     * The single guarded invocation site: an ordinary Closure with an
+     * unobservable home returns normally through the identity, shared-target
+     * (direct) and megamorphic (indirect) tiers without publishing an
+     * Activation or materializing a home.
+     */
+    @Test
+    void unobservableHomeCompletesNormallyAcrossAllPicTiers() throws Exception {
+        withCore(module -> {
+            var task = module.executionDomain().createTask(null, current -> {});
+            ProtosClosureValue parent = closure("() => 42", module);
+            ProtosClosureValue template = closure("() => 42", module);
+            var dispatch = new HeaderDispatchRoot(
+                    ProtosLanguageContext.current().languageForRuntime(), module)
+                    .getCallTarget();
+            for (int tier = 0; tier < 3; tier++) {
+                for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                    ProtosClosureValue selected = switch (tier) {
+                        case 0 -> template;
+                        case 1 -> withCapturedHome(template, null, module);
+                        default -> closure("() => " + (42 + i), module);
+                    };
+                    long expected = tier == 2 ? 42 + i : 42;
+                    Object[] header =
+                            ProtosFrameArguments.taskFunctionCallArguments(task, new Object[0]);
+                    Object[] caller = ProtosFrameArguments.compactDirectClosureCall(
+                            parent, module, null, new Object[] {selected, header});
+                    caller[3] = null;
+                    assertInteger(expected, dispatch.call(caller));
+                    assertSame(selected, header[0], "no Activation is published");
+                    assertSame(task, header[2]);
+                    assertSame(parent, caller[0], "the caller is not published");
+                    assertSame(ProtosReturnHome.unobservable(), header[4]);
+                    assertFalse(((ProtosReturnHome) header[4]).isMaterialized());
+                }
+            }
+        });
+    }
+
+    /**
+     * A non-local return raised by an inner Closure is consumed by its owning
+     * invocation in the single guarded call site, on every PIC tier: the
+     * transferred value wins over the trailing expression, the owned home is
+     * closed and every invocation owns an independent home.
+     */
+    @Test
+    void ownedHomeConsumesItsNonLocalReturnAcrossAllPicTiers() throws Exception {
+        withCore(module -> {
+            var task = module.executionDomain().createTask(null, current -> {});
+            evaluate("invokeInner: (f) => { f() }\n", "owned-home-helper.protos", module);
+            ProtosClosureValue parent = closure("() => 42", module);
+            ProtosClosureValue template =
+                    closure("() => { invokeInner(() => { ^7 })\n99 }", module);
+            var dispatch = new HeaderDispatchRoot(
+                    ProtosLanguageContext.current().languageForRuntime(), module)
+                    .getCallTarget();
+            ProtosReturnHome previous = null;
+            for (int tier = 0; tier < 3; tier++) {
+                for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                    ProtosClosureValue selected = switch (tier) {
+                        case 0 -> template;
+                        case 1 -> withCapturedHome(template, null, module);
+                        default -> closure(
+                                "() => { invokeInner(() => { ^" + (100 + i) + " })\n99 }", module);
+                    };
+                    long expected = tier == 2 ? 100 + i : 7;
+                    Object[] header =
+                            ProtosFrameArguments.taskFunctionCallArguments(task, new Object[0]);
+                    Object[] caller = ProtosFrameArguments.compactDirectClosureCall(
+                            parent, module, null, new Object[] {selected, header});
+                    caller[3] = null;
+                    assertInteger(expected, dispatch.call(caller));
+                    assertSame(task, header[2], "the Task is inherited unchanged");
+                    assertSame(parent, caller[0], "the caller is not published");
+                    ProtosReturnHome home = assertInstanceOf(ProtosReturnHome.class, header[4]);
+                    assertTrue(home.isMaterialized());
+                    assertNotSame(previous, home, "each owning invocation has its own home");
+                    assertFalse(home.isActive(), "the owner closed its home");
+                    assertNull(home.ownerTaskForRuntime());
+                    previous = home;
+                }
+            }
+        });
+    }
+
+    /**
+     * A Closure carrying another invocation's home never consumes the
+     * transfer aimed at that owner: the exact non-local return propagates out
+     * of the intermediate call, on every PIC tier, and the outer home stays
+     * active and bound to its Task.
+     */
+    @Test
+    void capturedHomePropagatesTheTransferAcrossAllPicTiers() throws Exception {
+        withCore(module -> {
+            var task = module.executionDomain().createTask(null, current -> {});
+            ProtosClosureValue parent = closure("() => 42", module);
+            ProtosClosureValue template = closure("() => { ^7 }", module);
+            ProtosReturnHome outer = new ProtosReturnHome();
+            outer.bindOwnerTaskForRuntime(task);
+            ProtosClosureValue same = withCapturedHome(template, outer, module);
+            var dispatch = new HeaderDispatchRoot(
+                    ProtosLanguageContext.current().languageForRuntime(), module)
+                    .getCallTarget();
+            try {
+                for (int tier = 0; tier < 3; tier++) {
+                    for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                        ProtosClosureValue selected = switch (tier) {
+                            case 0 -> same;
+                            case 1 -> withCapturedHome(template, outer, module);
+                            default -> withCapturedHome(
+                                    closure("() => { ^" + (100 + i) + " }", module), outer, module);
+                        };
+                        long expected = tier == 2 ? 100 + i : 7;
+                        Object[] header =
+                                ProtosFrameArguments.taskFunctionCallArguments(task, new Object[0]);
+                        Object[] caller = ProtosFrameArguments.compactDirectClosureCall(
+                                parent, module, null, new Object[] {selected, header});
+                        caller[3] = null;
+                        var transfer = assertThrows(
+                                com.guillermomolina.protos.runtime.control.ProtosNonLocalReturnException.class,
+                                () -> dispatch.call(caller));
+                        assertSame(outer, transfer.target(), "the transfer keeps its owner");
+                        assertInteger(expected, transfer.value());
+                        assertSame(outer, header[4]);
+                        assertSame(task, header[2]);
+                        assertTrue(outer.isActive(), "the intermediate call never closes the owner");
+                        assertSame(task, outer.ownerTaskForRuntime());
+                    }
+                }
+            } finally {
+                outer.closeOwned();
+            }
+            assertFalse(outer.isActive(), "the owner closes its home after the scenario");
+            assertNull(outer.ownerTaskForRuntime());
+        });
+    }
+
     private static ProtosBytecodeRootNode effectiveRoot(ProtosClosureValue closure) {
         return assertInstanceOf(ProtosBytecodeRootNode.class,
                 ProtosClosureCallPreparation.functionCallTarget(
