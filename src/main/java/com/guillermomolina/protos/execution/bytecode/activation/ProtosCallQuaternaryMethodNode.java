@@ -146,7 +146,7 @@ abstract class ProtosCallQuaternaryMethodNode extends Node {
             @Bind("bytecodeOf($node)") BytecodeNode bytecode,
             @Bind("bytecode.getBytecodeIndex(frame)") int bytecodeIndex,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
-            @Cached(
+            @Exclusive @Cached(
                     value = "rootCallSelection()",
                     allowUncached = true)
                     ProtosStandardObjectProtocol.CanonicalRootCallSelection rootSelection,

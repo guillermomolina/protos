@@ -144,7 +144,7 @@ abstract class ProtosCallNilaryMethodNode extends Node {
             @Bind("bytecodeOf($node)") BytecodeNode bytecode,
             @Bind("bytecode.getBytecodeIndex(frame)") int bytecodeIndex,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
-            @Cached(value = "rootCallSelection()", allowUncached = true)
+            @Exclusive @Cached(value = "rootCallSelection()", allowUncached = true)
                     ProtosStandardObjectProtocol.CanonicalRootCallSelection rootSelection,
             @Exclusive @Cached ProtosFunctionCallDispatchers.FunctionCachedCallNode call) {
         Object outcome = call.execute(

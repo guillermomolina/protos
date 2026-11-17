@@ -101,8 +101,8 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
                     Assumption cachedCallerNeedsStable,
             @Cached("classifyReturnHome(cachedCallable, cachedCallee)")
                     ProtosFunctionCallDispatchers.ReturnHomeMode cachedHomeMode,
-            @Cached ProtosFunctionCallDispatchers.FunctionDirectInvokeNode invoke,
-            @Cached InlinedConditionProfile taskPresence) {
+            @Exclusive @Cached ProtosFunctionCallDispatchers.FunctionDirectInvokeNode invoke,
+            @Exclusive @Cached InlinedConditionProfile taskPresence) {
         Object[] arguments = ProtosFrameArguments.dispatchedCall1(
                 null, receiver, receiverHomeOrNull(receiver),
                 null, null, a0);
@@ -206,7 +206,7 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
             @Bind("bytecodeOf($node)") BytecodeNode bytecode,
             @Bind("bytecode.getBytecodeIndex(frame)") int bytecodeIndex,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
-            @Cached(
+            @Exclusive @Cached(
                     value = "rootCallSelection()",
                     allowUncached = true)
                     ProtosStandardObjectProtocol.CanonicalRootCallSelection rootSelection,
