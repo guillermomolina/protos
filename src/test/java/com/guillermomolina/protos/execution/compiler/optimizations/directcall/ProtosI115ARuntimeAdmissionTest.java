@@ -35,6 +35,7 @@ import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
 import com.oracle.truffle.api.Assumption;
+import com.oracle.truffle.api.object.Shape;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.source.Source;
@@ -1401,6 +1402,118 @@ final class ProtosI115ARuntimeAdmissionTest {
             assertSame(root.getShape(), d.rootShape());
             assertTrue(d.callSelectionStable().isValid());
             assertNull(functionSelection(sourceShaped));
+
+            // Mutations of an unrelated root slot change the Shape but never
+            // the call behavior, so the issued certificate stays valid.
+            Shape beforeUnrelated = root.getShape();
+            root.createLocalSlot("unrelatedRootSlot", ProtosNullValue.INSTANCE);
+            assertNotSame(beforeUnrelated, root.getShape());
+            assertNotSame(root.getShape(), d.rootShape());
+            assertTrue(d.isValid(), "creating an unrelated slot must keep the call proof");
+            assertTrue(d.callSelectionStable().isValid());
+            assertSame(d.callSelectionStable(), certificate().callSelectionStable());
+
+            root.assignLocalSlot("unrelatedRootSlot", standardCall);
+            assertTrue(d.isValid(), "assigning an unrelated slot must keep the call proof");
+            assertSame(d.callSelectionStable(), certificate().callSelectionStable());
+
+            root.removeLocalSlot("unrelatedRootSlot");
+            assertFalse(root.hasLocalSlot("unrelatedRootSlot"));
+            assertTrue(d.isValid(), "removing an unrelated slot must keep the call proof");
+            assertSame(d.callSelectionStable(), certificate().callSelectionStable());
+
+            // Reassigning call to the standard value invalidates the proof.
+            Assumption beforeSameValue = d.callSelectionStable();
+            root.assignLocalSlot("call", standardCall);
+            assertFalse(d.isValid());
+            assertFalse(beforeSameValue.isValid());
+            var e = certificate();
+            assertNotNull(e);
+            assertNotSame(beforeSameValue, e.callSelectionStable());
+
+            // Another behavior abandons the canonical selection entirely.
+            root.assignLocalSlot("call", sourceShaped);
+            assertFalse(e.isValid());
+            assertNull(certificate());
+            assertFalse(ProtosStandardObjectProtocol.isCanonicalRootCallSelectionForRuntime());
+
+            root.assignLocalSlot("call", standardCall);
+            var f = certificate();
+            assertNotNull(f);
+            assertTrue(f.isValid());
+
+            // Removing call invalidates the previous proof.
+            root.removeLocalSlot("call");
+            assertFalse(f.isValid());
+            assertNull(certificate());
+
+            // Restoring the standard behavior admits a fresh certificate.
+            root.createLocalSlot("call", standardCall);
+            var g = certificate();
+            assertNotNull(g);
+            assertTrue(g.isValid());
+            assertNotSame(f, g);
+            assertNotSame(f.callSelectionStable(), g.callSelectionStable());
+            assertSame(root.getShape(), g.rootShape());
+            assertFalse(f.isValid());
+
+            setAttributeRootCallSelection(root, standardCall, sourceShaped);
+        }
+
+        /**
+         * The bytecode attribute assignment keeps root {@code call} writes
+         * away from the direct property write and on the generic path, which
+         * goes through the lexical binding authority. A null frame is used
+         * only for successful assignments, which never consult it.
+         */
+        private static void setAttributeRootCallSelection(
+                ProtosObjectValue root, Object standardCall, ProtosClosureValue otherBehavior) {
+            ProtosObjectValue ordinary = new ProtosObjectValue(root);
+            assertTrue(ProtosBytecodeRootNode.SetAttribute.isRootCallAssignment("call", root));
+            assertFalse(ProtosBytecodeRootNode.SetAttribute.isRootCallAssignment("call", ordinary));
+            assertFalse(ProtosBytecodeRootNode.SetAttribute.isRootCallAssignment("unrelatedRootSlot", root));
+
+            var issued = certificate();
+            assertNotNull(issued);
+            assertTrue(issued.isValid());
+
+            // Ordinary slots keep the normal property contract and never
+            // touch the call proof, including a local call on another object.
+            ordinary.createLocalSlot("value", ProtosNullValue.INSTANCE);
+            ProtosBytecodeRootNode.SetAttribute.generic("value", standardCall, ordinary, null);
+            assertSame(standardCall, ordinary.readLocalSlot("value").orElseThrow());
+            ordinary.createLocalSlot("call", ProtosNullValue.INSTANCE);
+            ProtosBytecodeRootNode.SetAttribute.generic("call", standardCall, ordinary, null);
+            assertSame(standardCall, ordinary.readLocalSlot("call").orElseThrow());
+            root.createLocalSlot("unrelatedRootSlot", ProtosNullValue.INSTANCE);
+            ProtosBytecodeRootNode.SetAttribute.generic("unrelatedRootSlot", standardCall, root, null);
+            assertSame(standardCall, root.readLocalSlot("unrelatedRootSlot").orElseThrow());
+            root.removeLocalSlot("unrelatedRootSlot");
+            assertTrue(issued.isValid(), "unrelated assignments must keep the call proof");
+            assertSame(issued.callSelectionStable(), certificate().callSelectionStable());
+
+            // A different behavior invalidates the proof and abandons it.
+            ProtosBytecodeRootNode.SetAttribute.generic("call", otherBehavior, root, null);
+            assertFalse(issued.isValid());
+            assertFalse(issued.callSelectionStable().isValid());
+            assertNull(certificate());
+            assertFalse(ProtosStandardObjectProtocol.isCanonicalRootCallSelectionForRuntime());
+
+            // Restoring the standard behavior admits a fresh certificate.
+            ProtosBytecodeRootNode.SetAttribute.generic("call", standardCall, root, null);
+            var restored = certificate();
+            assertNotNull(restored);
+            assertTrue(restored.isValid());
+            assertNotSame(issued, restored);
+
+            // Reassigning the identical standard behavior still invalidates.
+            ProtosBytecodeRootNode.SetAttribute.generic("call", standardCall, root, null);
+            assertFalse(restored.isValid());
+            assertFalse(restored.callSelectionStable().isValid());
+            var again = certificate();
+            assertNotNull(again);
+            assertTrue(again.isValid());
+            assertNotSame(restored.callSelectionStable(), again.callSelectionStable());
         }
 
         private static ProtosStandardObjectProtocol.CanonicalRootCallSelection certificate() {

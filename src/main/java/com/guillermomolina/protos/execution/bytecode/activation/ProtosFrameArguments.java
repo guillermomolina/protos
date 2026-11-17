@@ -1032,6 +1032,25 @@ final class ProtosFrameArguments {
     }
 
     /**
+     * The compact creator Closure of an admitted Bytecode DSL root, or
+     * {@code null} once its activation has been published.
+     *
+     * <p>Precondition: {@code arguments} are the B5 frame arguments of a
+     * Closure root whose header the root has already admitted (see {@link
+     * #isUnmaterializedCompactCall}); argument 0 is then either the invoked
+     * Closure or its published activation. Only argument 0 is read: the
+     * header is not revalidated, no caller is looked up, nothing is
+     * materialized, the array is not written, no caller need is registered,
+     * and the Task and ReturnHome are untouched. Arrays without that
+     * precondition must use the general accessors instead.
+     */
+    static ProtosClosureValue admittedCompactCreatorOrNull(Object[] arguments) {
+        return arguments[CLOSURE_INDEX] instanceof ProtosClosureValue closure
+                ? closure
+                : null;
+    }
+
+    /**
      * PERF025-H1: true while {@code arguments} are still in compact
      * source-call form, i.e. no rich activation has been materialized and
      * published for this invocation yet. The invocation's execution context

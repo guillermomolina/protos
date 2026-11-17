@@ -159,6 +159,13 @@ final class ProtosMapBackedLexicalBindingAuthority
         }
     }
 
+    /**
+     * Creates or assigns one binding in this authority's single storage.
+     * For the root Object's {@code call} slot, both creation and assignment
+     * (including an assignment of the identical value) invalidate the root
+     * {@code call} selection Assumption under the root's monitor before the
+     * slot changes; other names never touch that Assumption.
+     */
     @Override
     public void putBinding(String name, Object value) {
         Objects.requireNonNull(value, "value");
@@ -172,6 +179,13 @@ final class ProtosMapBackedLexicalBindingAuthority
         DynamicObject.PutNode.getUncached().execute(storage, key(name), value);
     }
 
+    /**
+     * Removes one binding from this authority's single storage. An effective
+     * removal of the root Object's {@code call} slot invalidates the root
+     * {@code call} selection Assumption under the root's monitor before the
+     * slot disappears; removing an absent {@code call}, or any other name,
+     * leaves that Assumption untouched.
+     */
     @Override
     public Object removeBinding(String name) {
         String key = key(name);

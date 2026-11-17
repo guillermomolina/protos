@@ -129,18 +129,25 @@ public final class ProtosStandardObjectProtocol {
 
     /**
      * I114/I115 structural selection of canonical {@code Object.call} on the
-     * root Object: the root's observed {@code Shape}
-     * protects the structure the property was selected in (removal,
-     * recreation and any other structural change are {@code Shape}
-     * transitions), and the root selector's independently invalidated Assumption protects
-     * its value against rewrites, including writes that retain the same Shape. A consumer must check both; when either fails it
-     * takes the generic path. No value is held here.
+     * root Object.
+     *
+     * <p>The root {@code Shape} observed when the certificate was issued is
+     * still recorded here, and issuance itself checks that Shape and that the
+     * {@code call} property holds exactly {@link #STANDARD_CALL}. Compiled
+     * validity, however, depends only on the root selector's independently
+     * invalidated Assumption: a mutation of any other root slot (creation,
+     * assignment or removal) changes the Shape but not the {@code call}
+     * behavior, so it does not by itself invalidate the certificate. Every
+     * mutation of the {@code call} slot itself, including creation,
+     * removal and an assignment of the identical value, invalidates that
+     * Assumption before the slot changes, so any previous certificate is
+     * abandoned. A consumer that sees an invalid certificate takes the
+     * generic path. No value is held here.
      */
     public record CanonicalRootCallSelection(Shape rootShape, Assumption callSelectionStable) {
-        /** Whether the root still has the observed Shape and the call location was not rewritten. */
+        /** Whether the root {@code call} slot was not mutated since issuance. */
         public boolean isValid() {
-            return rootShape.check(ProtosObjectValue.rootObject())
-                    && callSelectionStable.isValid();
+            return callSelectionStable.isValid();
         }
     }
 

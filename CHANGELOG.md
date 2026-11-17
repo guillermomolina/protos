@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.131-SNAPSHOT
+
+- **I115 — Specialized Closure creation and host entry.** Closure creation specializes admitted frame shapes, and zero-argument host entries cache adapter identity while retaining shared dispatch, RootActor admission and suspension handling. Root `call` mutation continues to invalidate canonical selection assumptions. Added host-entry, dispatch and Closure-creation regressions.
+
 ## 0.4.130-SNAPSHOT
 
 - **I115 — Shared-plan unary call caching.** After the Closure-identity cache saturates, unary source calls cache shared prepared execution plans while reading captures and return homes from the current Closure. Deferred and Context-local plans retain general dispatch. Added shared-target, captured-home and cache-convergence regressions.

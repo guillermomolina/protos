@@ -29,6 +29,7 @@ import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
+import com.oracle.truffle.api.dsl.Cached.Shared;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.interop.ArityException;
 import com.oracle.truffle.api.interop.InteropLibrary;
@@ -211,19 +212,56 @@ final class ProtosHostExecutableClosure implements TruffleObject {
         }
 
         /*
+         * Identity PIC over the host adapter. The adapter's closure, caller,
+         * target and embedding are final, so a cached adapter lets the
+         * compiler specialize them. Only the adapter identity is cached:
+         * RootActor admission, the host-entry extent, the Task, results and
+         * continuations are established at every execution, and the call
+         * still enters the shared dispatcher, which keeps authority over the
+         * selected target, its assumptions and the `call` selection.
+         */
+        @Specialization(
+                guards = {
+                    "receiver.target != null",
+                    "arguments.length == 0",
+                    "receiver == cachedReceiver"
+                },
+                limit = "3")
+        static Object sourceZeroCached(
+                ProtosHostExecutableClosure receiver,
+                Object[] arguments,
+                @Bind("$node") Node inliningTarget,
+                @Cached(value = "receiver", weak = true)
+                        ProtosHostExecutableClosure cachedReceiver,
+                @Cached @Shared("sourceZeroCall")
+                        ProtosFunctionCallDispatchers.FunctionCachedCallNode callNode) {
+            return executeSourceZero(cachedReceiver, inliningTarget, callNode);
+        }
+
+        /*
          * I115: a source-backed host entry goes through the shared dispatcher.
          * The callee root owns its ReturnHome; a pending
          * outcome is driven by the host-entry suspension driver.
          */
-        @Specialization(guards = {
-                "receiver.target != null",
-                "arguments.length == 0"
-        })
+        @Specialization(
+                guards = {
+                    "receiver.target != null",
+                    "arguments.length == 0"
+                },
+                replaces = "sourceZeroCached")
         static Object sourceZero(
                 ProtosHostExecutableClosure receiver,
                 Object[] arguments,
                 @Bind("$node") Node inliningTarget,
-                @Cached ProtosFunctionCallDispatchers.FunctionCachedCallNode callNode) {
+                @Cached @Shared("sourceZeroCall")
+                        ProtosFunctionCallDispatchers.FunctionCachedCallNode callNode) {
+            return executeSourceZero(receiver, inliningTarget, callNode);
+        }
+
+        private static Object executeSourceZero(
+                ProtosHostExecutableClosure receiver,
+                Node inliningTarget,
+                ProtosFunctionCallDispatchers.FunctionCachedCallNode callNode) {
             ProtosEmbeddedProcess embedding = receiver.embedding;
             Thread token = embedding == null ? null : embedding.enterRootActor();
             HostEntryExtent previous =
@@ -244,10 +282,7 @@ final class ProtosHostExecutableClosure implements TruffleObject {
                         receiver.caller,
                         null,
                         ProtosFunctionCallDispatchers.currentContext(inliningTarget));
-                if (ProtosTailCallContinuation.isPending(outcome)) {
-                    outcome = drivePending(embedding, outcome);
-                }
-                return hostResult(receiver, outcome);
+                return hostResult(receiver, drivePending(embedding, outcome));
             } catch (ProtosSignalException failure) {
                 if (embedding != null) {
                     embedding.outermostEntryFailed(token, failure);
@@ -294,10 +329,7 @@ final class ProtosHostExecutableClosure implements TruffleObject {
                                     receiver.caller,
                                     null);
 
-                if (ProtosTailCallContinuation.isPending(outcome)) {
-                    outcome = drivePending(embedding, outcome);
-                }
-                return hostResult(receiver, outcome);
+                return hostResult(receiver, drivePending(embedding, outcome));
             } catch (ProtosSignalException failure) {
                 if (embedding != null) {
                     embedding.outermostEntryFailed(token, failure);
@@ -311,8 +343,17 @@ final class ProtosHostExecutableClosure implements TruffleObject {
             }
         }
 
+        /*
+         * Host classification of a dispatched outcome, kept inside the
+         * boundary that already owns host-entry waiting: a non-pending
+         * outcome is returned unchanged, a pending one is abandoned for a
+         * session adapter or waited on and resumed for an embedding entry.
+         */
         @TruffleBoundary
         private static Object drivePending(ProtosEmbeddedProcess embedding, Object outcome) {
+            if (!ProtosTailCallContinuation.isPending(outcome)) {
+                return outcome;
+            }
             if (embedding == null) {
                 ProtosTailCallContinuation.abandon(outcome);
                 throw new IllegalStateException(
@@ -327,7 +368,9 @@ final class ProtosHostExecutableClosure implements TruffleObject {
          * guest allocation removed from EpilogForReturn. A Java Integer is
          * never an I115 carrier: it keeps the ordinary normalization to a
          * guest Integer (there is no 32-bit guest integer).
+         * The final host projection runs outside guest compilation.
          */
+        @TruffleBoundary
         private static Object hostResult(
                 ProtosHostExecutableClosure receiver, Object result) {
             if (result instanceof Integer small) {

@@ -2045,6 +2045,129 @@ final class ProtosI115BDeferredCallerTest {
         });
     }
 
+    /**
+     * A suspension seal without a guest caller frame (a host entry) uses only the explicit
+     * caller: an exact Activation is sealed as is, an unpublished compact caller header is
+     * materialized once into its own exact Activation, repeated seals never replace it, and the
+     * Closure, Task and ReturnHome slots keep their identities.
+     */
+    @Test
+    void frameLessSuspensionSealKeepsExplicitCallerTaskAndHome() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue callee = closure("(x) => x", module);
+            ProtosClosureValue callerClosure = closure("(x) => x", module);
+
+            Object[] exact = ProtosDispatchTestSupport.direct(callee, null, SUPPLIED).targetArguments();
+            Object[] before = exact.clone();
+            ProtosFrameArguments.sealSuspendedCaller(exact, null, module);
+            assertSame(module, exact[3], "the explicit exact caller is sealed unchanged");
+            for (int index = 0; index < exact.length; index++) {
+                if (index != 3) {
+                    assertSame(before[index], exact[index], "slot " + index + " is unchanged");
+                }
+            }
+
+            Object[] callerHeader = ProtosDispatchTestSupport
+                    .direct(callerClosure, module, SUPPLIED).targetArguments();
+            assertInstanceOf(ProtosClosureValue.class, callerHeader[0], "caller not yet published");
+            Object[] hosted = ProtosDispatchTestSupport.direct(callee, null, SUPPLIED).targetArguments();
+            Object[] hostedBefore = hosted.clone();
+            ProtosFrameArguments.sealSuspendedCaller(hosted, null, callerHeader);
+            ProtosActivation sealed = assertInstanceOf(ProtosActivation.class, hosted[3]);
+            assertSame(callerHeader[0], sealed, "the caller is materialized in its own header");
+            assertSame(sealed, ProtosFrameArguments.compactCaller(hosted));
+            ProtosFrameArguments.sealSuspendedCaller(hosted, null, callerHeader);
+            ProtosFrameArguments.sealSuspendedCaller(hosted, null, module);
+            assertSame(sealed, hosted[3], "a sealed exact caller is never replaced");
+            for (int index = 0; index < hosted.length; index++) {
+                if (index != 3) {
+                    assertSame(hostedBefore[index], hosted[index], "slot " + index + " is unchanged");
+                }
+            }
+
+            ProtosTask task = module.executionDomain().createTask(null, current -> {});
+            Object[] owned = ProtosFrameArguments.taskFunctionCallArguments(task, new Object[] {SUPPLIED});
+            ProtosReturnHome home = ProtosReturnHome.unobservable();
+            ProtosFrameArguments.completeDispatchedHeader(owned, callee, null, home);
+            ProtosFrameArguments.sealSuspendedCaller(owned, null, module);
+            assertSame(task, owned[2], "the explicit Task is preserved");
+            assertSame(module, owned[3]);
+            assertSame(home, owned[4], "the ReturnHome identity is preserved");
+            assertSame(task, ProtosFrameArguments.compactTask(owned));
+        });
+    }
+
+    /**
+     * Frame-less Task entries (explicit caller, no guest frame) that really suspend resume with
+     * their exact results: an unpublished caller, a callee that materializes its own activation,
+     * an owner that consumes a ^ into its own physical home after resumption, and a ^ that does
+     * not belong to the intermediate callee and propagates through it to its owner.
+     */
+    @Test
+    void frameLessTaskEntriesResumeWithExactCallerHomeAndTask() throws Exception {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
+                ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+                ProtosActivation module =
+                        prelude.newModuleActivation(
+                                new ProtosActorModuleState(), null, prelude.newExecutionContext(), domain);
+                evaluate("""
+                        plain: (future) => { future.value() }
+                        materializing: (future) => {
+                            r: future.value()
+                            context.hasSlot("r")
+                            r
+                        }
+                        owner: (future) => {
+                            escape: (x) => { ^x }
+                            r: future.value()
+                            escape(r)
+                            0
+                        }
+                        callZero: (f) => { f() }
+                        outer: (future) => {
+                            inner: () => {
+                                r: future.value()
+                                ^r
+                            }
+                            callZero(inner)
+                            0
+                        }
+                        """, "i115b-frameless-define.protos", module);
+                enterCachedTier("callZero", module);
+                for (String name : List.of("plain", "materializing", "owner", "outer")) {
+                    ProtosClosureValue entry = closure(name + "\n", module);
+                    for (int round = 0; round < 3; round++) {
+                        ProtosFutureValue wait =
+                                new ProtosFutureValue(prelude.futurePrototype(), domain);
+                        ProtosObjectValue resolved =
+                                new ProtosObjectValue(ProtosObjectValue.rootObject());
+                        ProtosTask task = domain.createTask(null, current ->
+                                ProtosBytecodeTaskExecution.executeRequest(
+                                        current,
+                                        ProtosCallRequest.taskEntry(
+                                                entry, current, List.of(wait), module)));
+                        assertTrue(domain.dispatchOne());
+                        assertEquals(ProtosTask.State.SUSPENDED, task.state(),
+                                name + ": really suspended");
+                        assertTrue(wait.resolve(resolved, module));
+                        assertTrue(domain.dispatchOne());
+                        assertEquals(ProtosTask.State.COMPLETED, task.state(),
+                                () -> name + ": failure=" + task.failure());
+                        assertSame(resolved, task.result().orElseThrow(),
+                                name + ": exact resumed result");
+                    }
+                }
+                assertTrue(module.task().isEmpty(), "the explicit caller never adopted a Task");
+            } finally {
+                context.leave();
+            }
+        }
+    }
+
     /** A normal, non-suspending dispatched call leaves B5[3] unpublished. */
     @Test
     void nonSuspendingDispatchedCallDoesNotPublishItsCaller() throws Exception {

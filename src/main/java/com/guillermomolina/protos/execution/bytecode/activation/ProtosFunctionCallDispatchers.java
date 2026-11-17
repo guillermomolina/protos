@@ -1103,16 +1103,42 @@ final class ProtosFunctionCallDispatchers {
      * before the pending outcome is returned. Ordinary results and
      * exceptional transfers are returned or propagated unchanged, without
      * reading or publishing the caller.
+     *
+     * <p>Without a guest frame (a host entry) the classification and the
+     * seal run behind {@link #sealHostSuspension}.
      */
     private static Object sealIfSuspended(
             VirtualFrame frame,
             Object[] arguments,
             Object explicitCaller,
             Object outcome) {
+        if (frame == null) {
+            return sealHostSuspension(arguments, explicitCaller, outcome);
+        }
         if (ProtosTailCallContinuation.isSuspended(outcome)) {
             ProtosFrameArguments.sealSuspendedCaller(
                     arguments,
-                    frame == null ? null : frame.getArguments(),
+                    frame.getArguments(),
+                    explicitCaller);
+        }
+        return outcome;
+    }
+
+    /**
+     * Host-entry form of {@link #sealIfSuspended}: there is no guest caller
+     * frame, so only the explicit caller can be sealed into the callee's B5
+     * header. The original outcome is returned unchanged; no continuation is
+     * consumed or re-entered and no Task, ReturnHome or Activation is created.
+     */
+    @TruffleBoundary
+    private static Object sealHostSuspension(
+            Object[] arguments,
+            Object explicitCaller,
+            Object outcome) {
+        if (ProtosTailCallContinuation.isSuspended(outcome)) {
+            ProtosFrameArguments.sealSuspendedCaller(
+                    arguments,
+                    null,
                     explicitCaller);
         }
         return outcome;

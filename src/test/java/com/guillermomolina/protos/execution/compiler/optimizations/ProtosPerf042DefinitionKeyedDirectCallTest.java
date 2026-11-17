@@ -32,6 +32,7 @@ import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
+import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.RootCallTarget;
@@ -927,6 +928,115 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
                 assertNewCallSite(function, 1, module);
             }
         });
+    }
+
+    /**
+     * One creator root repeatedly creates fresh non-capturing Closures. The
+     * creator-identity cache of the creating operation never shares a
+     * Closure, never mixes the Prelude or module key of distinct creators,
+     * and leaves Prelude-free and published creators on the general path.
+     */
+    @Test
+    void sharedCreatorCreatesFreshClosuresWithItsOwnPreludeAndModuleKey() throws Exception {
+        withCore(module -> {
+            evaluate("""
+                    run: () => { (value) => { value } }
+                    """, "perf042-creator-define.protos", module);
+            ProtosClosureValue run = assertInstanceOf(
+                    ProtosClosureValue.class,
+                    module.context().readLocalSlot("run").orElseThrow());
+            ProtosClosureExecutionPlan plan = run.executionPlan().orElseThrow();
+            RootCallTarget target = plan.bytecodeActivationTargetForComposition();
+            enterCachedTier("run", module);
+
+            ProtosPrelude own = module.prelude().orElseThrow();
+            ProtosPrelude other = new ProtosCoreBootstrap().bootstrap(CORE)
+                    .newModuleActivation().prelude().orElseThrow();
+            assertNotSame(own, other);
+            ProtosModuleKey firstKey = ProtosModuleKey.module("perf042-creator-first");
+            ProtosModuleKey secondKey = ProtosModuleKey.module("perf042-creator-second");
+            ProtosModuleKey preludeFreeKey = ProtosModuleKey.module("perf042-creator-free");
+            ProtosClosureValue first = creator(run, own, firstKey);
+            ProtosClosureValue second = creator(run, other, secondKey);
+            ProtosClosureValue preludeFree = creator(run, null, preludeFreeKey);
+
+            ProtosClosureValue previous = null;
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                ProtosClosureValue fromFirst = create(target, first, module);
+                assertSame(own, fromFirst.preludeOrNullForRuntime());
+                assertSame(firstKey, fromFirst.definingModuleKeyOrNullForRuntime());
+                assertNotSame(previous, fromFirst, "every creation is a fresh Closure");
+                previous = fromFirst;
+
+                ProtosClosureValue fromSecond = create(target, second, module);
+                assertSame(other, fromSecond.preludeOrNullForRuntime());
+                assertSame(secondKey, fromSecond.definingModuleKeyOrNullForRuntime());
+                assertNotSame(fromFirst, fromSecond);
+                assertSame(fromFirst.definition(), fromSecond.definition());
+                assertSame(
+                        fromFirst.executionPlan().orElseThrow(),
+                        fromSecond.executionPlan().orElseThrow());
+                assertSame(
+                        effectiveTarget(fromFirst, ProtosLanguageContext.current()),
+                        effectiveTarget(fromSecond, ProtosLanguageContext.current()));
+
+                // No own Prelude: the general path recovers the transported one.
+                ProtosClosureValue fromFree = create(target, preludeFree, module);
+                assertSame(own, fromFree.preludeOrNullForRuntime());
+                assertSame(preludeFreeKey, fromFree.definingModuleKeyOrNullForRuntime());
+
+                // A published creator answers from its published activation.
+                Object[] header = ProtosFrameArguments.compactDirectClosureCallZeroNoHome(
+                        second, module);
+                ProtosActivation published = ProtosFrameArguments.activation(header);
+                ProtosClosureValue fromPublished = assertInstanceOf(
+                        ProtosClosureValue.class, target.call(header));
+                assertSame(published, header[0]);
+                assertSame(published.preludeOrNullForRuntime(),
+                        fromPublished.preludeOrNullForRuntime());
+                assertSame(published.currentModuleKey().orElse(null),
+                        fromPublished.definingModuleKeyOrNullForRuntime());
+                assertNotSame(fromSecond, fromPublished);
+
+                for (ProtosClosureValue fresh :
+                        List.of(fromFirst, fromSecond, fromFree, fromPublished)) {
+                    assertSame(fromFirst.definition(), fresh.definition());
+                    assertSame(plan.bytecodeActivationTargetForComposition(), target);
+                    assertEquivalentHomeProof(true, fresh);
+                    assertSame(fresh, dispatchedAsFunction(fresh));
+                }
+            }
+        });
+    }
+
+    /** A copy of {@code template} with its own Prelude and module key. */
+    private static ProtosClosureValue creator(
+            ProtosClosureValue template, ProtosPrelude prelude, ProtosModuleKey moduleKey) {
+        return new ProtosClosureValue(
+                template.definition(),
+                template.capturedLexicalEnvironmentForRuntime(),
+                template.capturedReceiver(),
+                null,
+                null,
+                prelude,
+                template.executionPlan().orElseThrow(),
+                moduleKey);
+    }
+
+    /**
+     * Enters the creator's root with a compact header and checks that the
+     * creation itself never published the creator's activation.
+     */
+    private static ProtosClosureValue create(
+            RootCallTarget target,
+            ProtosClosureValue creator,
+            ProtosActivation caller) {
+        Object[] header = ProtosFrameArguments.compactDirectClosureCallZeroNoHome(creator, caller);
+        ProtosClosureValue created =
+                assertInstanceOf(ProtosClosureValue.class, target.call(header));
+        assertSame(creator, header[0], "closure creation must not publish its creator");
+        assertNotSame(creator, created);
+        return created;
     }
 
     private static void assertEquivalentHomeProof(boolean expected, ProtosClosureValue closure) {

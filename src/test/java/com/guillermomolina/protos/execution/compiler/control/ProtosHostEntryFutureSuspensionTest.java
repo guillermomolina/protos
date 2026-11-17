@@ -553,6 +553,139 @@ final class ProtosHostEntryFutureSuspensionTest {
         }
     }
 
+    /**
+     * The same retained executable crosses its cached host entry repeatedly: a synchronous entry
+     * returns its exact guest result object, a later outermost entry suspends and resumes without
+     * replaying the call, and the host-entry extent is restored after each exit.
+     */
+    @Test
+    void retainedExecutableAlternatesSynchronousAndSuspendedEntries() throws Exception {
+        try (Context context = newContext()) {
+            Fixture f =
+                    new Fixture(
+                            context,
+                            SUSPENDING_RUN
+                                    + """
+                                    shared: { marker: 1 }
+                                    sharedResult: () => { shared }
+                                    isShared: (candidate) => { candidate === shared }
+                                    """);
+            Value run = f.member("run");
+            Value sharedResult = f.member("sharedResult");
+            Value isShared = f.member("isShared");
+            for (int index = 0; index < 5; index++) {
+                Value result = sharedResult.execute();
+                assertTrue(
+                        isShared.execute(result).asBoolean(),
+                        "the exact guest result object crosses the cached entry");
+                assertCompactState(f);
+            }
+
+            Entry entry = new Entry(run);
+            entry.awaitSuspended(() -> f.gate.observerCountForTesting() == 1);
+            assertEquals(
+                    ProtosActorExecutionDomain.HostEntryExtent.NONE,
+                    f.domain().hostEntryExtentForRuntime(),
+                    "a waiting entry does not leave its extent installed");
+            f.resolve(41);
+            assertEquals(42L, entry.await());
+            assertEquals(1, f.slot("before"), "the resumed call was not repeated");
+            assertEquals(1, f.slot("after"));
+            assertCompactState(f);
+        }
+    }
+
+    /** A suspended entry resumed with an Error propagates it and restores the extent. */
+    @Test
+    void suspendedEntryResumedWithAnErrorPropagatesIt() throws Exception {
+        try (Context context = newContext()) {
+            Fixture f = new Fixture(context, SUSPENDING_RUN);
+            Entry entry = new Entry(f.member("run"));
+            entry.awaitSuspended(() -> f.gate.observerCountForTesting() == 1);
+            assertTrue(f.gate.fail(f.failureError()));
+            Object outcome = entry.await();
+            assertTrue(
+                    outcome instanceof org.graalvm.polyglot.PolyglotException,
+                    "the resumed Error reaches the host: " + outcome);
+            assertEquals(1, f.slot("before"), "the call was not repeated");
+            assertEquals(0, f.slot("after"), "nothing after the failed observation ran");
+            assertEquals(0, f.gate.observerCountForTesting());
+            assertEquals(
+                    ProtosActorExecutionDomain.HostEntryExtent.NONE,
+                    f.domain().hostEntryExtentForRuntime());
+            assertEquals(0, f.domain().liveTaskCount());
+        }
+    }
+
+    /** Cancellation while the outermost entry waits resumes the entry with the cancellation. */
+    @Test
+    void cancellationWhileWaitingResumesTheHandledEntry() throws Exception {
+        try (Context context = newContext()) {
+            Fixture f =
+                    new Fixture(
+                            context,
+                            """
+                            run: () => {
+                                before = before + 1
+                                Error.handle(() => { gateBox.current.value() }, (caught) => { 9 })
+                            }
+                            """);
+            Entry entry = new Entry(f.member("run"));
+            entry.awaitSuspended(() -> f.gate.observerCountForTesting() == 1);
+            assertTrue(f.gate.cancelTerminal());
+            assertEquals(9L, entry.await());
+            assertEquals(1, f.slot("before"), "the call was not repeated");
+            assertEquals(0, f.gate.observerCountForTesting());
+            assertCompactState(f);
+        }
+    }
+
+    /** Termination while the outermost entry waits abandons it; it never resumes. */
+    @Test
+    void terminationWhileWaitingAbandonsTheEntry() throws Exception {
+        try (Context context = newContext()) {
+            Fixture f = new Fixture(context, SUSPENDING_RUN);
+            Entry entry = new Entry(f.member("run"));
+            entry.awaitSuspended(() -> f.gate.observerCountForTesting() == 1);
+            f.process.processForTesting().requestTerminationForRuntime();
+            Object outcome = entry.await();
+            assertTrue(outcome instanceof Throwable, "a terminated entry never resumes: " + outcome);
+            assertEquals(0, f.slot("after"), "nothing after the observation ran");
+            assertFalse(f.process.isLive());
+            assertEquals(0, f.gate.observerCountForTesting());
+        }
+    }
+
+    /**
+     * A re-entrant (nested, same-thread) host entry is a synchronous foreign callback: a pending
+     * observation is rejected with an Error instead of suspending, the Process survives, the held
+     * RootActor admission is untouched, and the outer extent is restored exactly.
+     */
+    @Test
+    void reentrantCallbackCannotSuspend() {
+        try (Context context = newContext()) {
+            Fixture f = new Fixture(context, SUSPENDING_RUN);
+            Value run = f.member("run");
+            Thread token = f.process.enterRootActor();
+            try {
+                assertThrows(org.graalvm.polyglot.PolyglotException.class, () -> run.execute());
+                assertEquals(0, f.gate.observerCountForTesting(), "no wait was installed");
+                assertEquals(0, f.slot("after"));
+                assertTrue(f.process.isLive(), "a callback Error does not fail the RootActor");
+                assertFalse(f.process.permitsUnadmittedNonSuspendingHostEntry());
+                assertEquals(
+                        ProtosActorExecutionDomain.HostEntryExtent.NONE,
+                        f.domain().hostEntryExtentForRuntime());
+            } finally {
+                f.process.exitRootActor(token);
+            }
+            assertTrue(f.process.permitsUnadmittedNonSuspendingHostEntry());
+            f.resolve(41);
+            assertEquals(42, run.execute().asInt(), "the outermost entry is admitted again");
+            assertCompactState(f);
+        }
+    }
+
     @Test
     void alreadyCancelledFutureSignalsCancelledWithoutSuspension() {
         try (Context context = newContext()) {

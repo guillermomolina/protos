@@ -57,6 +57,7 @@ import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
 import com.guillermomolina.protos.runtime.lookup.ProtosSlotLookupResult;
+import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalIntrinsic;
@@ -2508,6 +2509,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         @Specialization(
                 guards = {
                     "isOrdinaryObject(receiver)",
+                    "!isRootCallAssignment(name, receiver)",
                     "cachedShape.check(receiver)",
                     "propertyPresent",
                     "isWritableShape(cachedShape)"
@@ -2555,6 +2557,15 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         static boolean isWritableShape(Shape shape) {
             return !ProtosObjectValue.isFrozenShape(shape);
+        }
+
+        /**
+         * Whether the assignment targets the root {@code call} slot, whose
+         * mutation must go through the lexical binding authority so the
+         * canonical call selection is invalidated.
+         */
+        public static boolean isRootCallAssignment(String name, ProtosObjectValue receiver) {
+            return receiver.isRootObject() && "call".equals(name);
         }
     }
 
@@ -2976,6 +2987,49 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @ConstantOperand(type = boolean.class, name = "mayObserveReturnHome")
     public static final class MaterializeCurrentClosure {
         /*
+         * Identity PIC over the creating Closure. While the creator is still
+         * the compact argument 0 of this root and carries its own Prelude,
+         * that Prelude and its defining module key are final fields of that
+         * exact creator, so they are cached with the frozen plan cell. The
+         * creator's own Prelude is the complete creation-time answer, so no
+         * caller recovery is ever needed on this path. A fresh Closure is
+         * still created at every execution; no Closure, capture, Task,
+         * ReturnHome, caller or activation is cached. A published creator, a
+         * different creator or one without its own Prelude takes the general
+         * specializations below.
+         */
+        @Specialization(
+                guards = {
+                    "!capturesCreatorContext",
+                    "!requiresInheritedLexicalEnvironment",
+                    "!mayObserveReturnHome",
+                    "isSingleContext()",
+                    "executionPlanCell == cachedCell",
+                    "creator != null",
+                    "creator == cachedCreator",
+                    "cachedPrelude != null"
+                },
+                limit = "3")
+        public static ProtosClosureValue nonCapturingCreatorCached(
+                boolean compactCapture,
+                boolean capturesCreatorContext,
+                boolean requiresInheritedLexicalEnvironment,
+                boolean mayObserveReturnHome,
+                CanonicalClosure definition,
+                ProtosClosureExecutionPlanCell executionPlanCell,
+                @Bind VirtualFrame frame,
+                @Bind("admittedCompactCreatorOrNull(frame)") ProtosClosureValue creator,
+                @Cached(value = "creator", weak = true) ProtosClosureValue cachedCreator,
+                @Cached("executionPlanCell") ProtosClosureExecutionPlanCell cachedCell,
+                @Cached("cachedCell.plan()") ProtosClosureExecutionPlan cachedPlan,
+                @Cached("cachedCreator.preludeOrNullForRuntime()") ProtosPrelude cachedPrelude,
+                @Cached("cachedCreator.definingModuleKeyOrNullForRuntime()")
+                        ProtosModuleKey cachedModuleKey) {
+            return ProtosClosureValue.experimentalNonCapturing(
+                    definition, cachedPlan, cachedModuleKey, cachedPrelude);
+        }
+
+        /*
          * each source-literal plan cell is frozen before guest execution.
          * Cache the plan by cell identity so a fresh non-capturing Closure does
          * not reload the cell at each invocation. This cache stores only the
@@ -2989,6 +3043,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     "!mayObserveReturnHome",
                     "executionPlanCell == cachedCell"
                 },
+                replaces = "nonCapturingCreatorCached",
                 limit = "3")
         public static ProtosClosureValue nonCapturingCached(
                 boolean compactCapture,
@@ -3156,6 +3211,15 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     ProtosFrameArguments.activation(frame),
                     definition,
                     executionPlanCell);
+        }
+
+        @NonIdempotent
+        static ProtosClosureValue admittedCompactCreatorOrNull(VirtualFrame frame) {
+            return ProtosFrameArguments.admittedCompactCreatorOrNull(frame.getArguments());
+        }
+
+        static boolean isSingleContext() {
+            return ProtosCallUnaryMethodNode.isSingleContext();
         }
 
         @NonIdempotent

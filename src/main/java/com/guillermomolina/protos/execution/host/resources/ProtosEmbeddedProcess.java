@@ -400,6 +400,7 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
      * enclosing guest handler boundary). A concurrent entry from another thread is rejected, never
      * queued; a terminated Process admits nothing.
      */
+    @TruffleBoundary
     Thread enterRootActor() {
         Thread current = Thread.currentThread();
         if (entryOwner.get() == current) {
@@ -420,6 +421,7 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
     }
 
     /** Leaves an entry admitted by {@link #enterRootActor}; {@code token} is its result. */
+    @TruffleBoundary
     void exitRootActor(Thread token) {
         if (--entryDepth == 0) {
             entryOwner.set(null);
@@ -464,6 +466,7 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
      * ({@code FUTURES_AND_TASKS.md}, Synchronous foreign callbacks and the current Task). Returns
      * the extent {@link #endHostEntryExtent} restores.
      */
+    @TruffleBoundary
     HostEntryExtent beginHostEntryExtent(Thread token) {
         return rootActor
                 .executionDomain()
@@ -471,6 +474,7 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
                         token != null ? HostEntryExtent.SUSPENDIBLE : HostEntryExtent.SYNCHRONOUS);
     }
 
+    @TruffleBoundary
     void endHostEntryExtent(HostEntryExtent previous) {
         rootActor.executionDomain().swapHostEntryExtentForRuntime(previous);
     }
