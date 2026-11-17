@@ -219,6 +219,51 @@ class ProtosStandardBytesProtocolTest {
         }
     }
 
+    @Test
+    void runtimeSnapshotIsAnIndependentArrayOfTheStoredOctetReferences()
+            throws IOException {
+        Fixture fixture = fixture();
+        ProtosBytesValue bytes = fixture.create();
+        Long zero = integer(0);
+        Long middle = integer(128);
+        Long max = integer(255);
+        fixture.add(bytes, zero);
+        fixture.add(bytes, middle);
+        fixture.add(bytes, max);
+
+        Object[] first = bytes.indexedSnapshotForRuntime();
+        Object[] second = bytes.indexedSnapshotForRuntime();
+        assertNotSame(first, second);
+        assertEquals(3, first.length);
+        assertSame(zero, first[0]);
+        assertSame(middle, first[1]);
+        assertSame(max, first[2]);
+
+        // Writing the array does not reach the Bytes receiver.
+        second[0] = integer(7);
+        assertSame(zero, bytes.indexedAt(0));
+
+        // Later receiver mutation does not reach an earlier snapshot.
+        Long replacement = integer(9);
+        bytes.indexedPut(1, replacement);
+        bytes.indexedRemoveAt(0);
+        bytes.indexedAdd(integer(42));
+        assertEquals(3, first.length);
+        assertSame(zero, first[0]);
+        assertSame(middle, first[1]);
+        assertSame(max, first[2]);
+        assertSame(replacement, bytes.indexedAt(0));
+
+        // The public list snapshot keeps its previous immutable copy contract.
+        List<Object> listed = bytes.indexedSnapshot();
+        assertEquals(3, listed.size());
+        assertSame(replacement, listed.get(0));
+        assertSame(max, listed.get(1));
+        assertThrows(UnsupportedOperationException.class, () -> listed.set(0, zero));
+        bytes.indexedAdd(integer(1));
+        assertEquals(3, listed.size());
+    }
+
     private static Long integer(long value) {
         return Long.valueOf(value);
     }

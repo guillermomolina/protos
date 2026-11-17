@@ -275,7 +275,7 @@ final class ProtosStructuredEachCalls {
 
     static final class PreparedBytesEachCall implements PreparedIndexedEachCall {
         private final ProtosBytesValue bytes;
-        private final List<Object> snapshot;
+        private final Object[] snapshot;
         private final Object block;
         private final ProtosActivation activation;
         private int index;
@@ -296,12 +296,12 @@ final class ProtosStructuredEachCalls {
             ProtosStandardBytesProtocol.requireInvokableForStructured(
                     block,
                     activation);
-            this.snapshot = value.indexedSnapshot();
+            this.snapshot = value.indexedSnapshotForRuntime();
         }
 
         @Override
         public boolean hasNext() {
-            return index < snapshot.size();
+            return index < snapshot.length;
         }
 
         @Override
@@ -312,7 +312,7 @@ final class ProtosStructuredEachCalls {
             }
             return ProtosCallRequest.call(
                     block,
-                    new Object[] {snapshot.get(index)},
+                    new Object[] {snapshot[index]},
                     activation);
         }
 

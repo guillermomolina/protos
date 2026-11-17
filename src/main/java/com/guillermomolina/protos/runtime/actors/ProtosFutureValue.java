@@ -418,8 +418,8 @@ public final class ProtosFutureValue extends ProtosObjectValue {
     }
 
     private boolean transition(State terminal, Object resolved, ProtosObjectValue failed) {
-        List<Waiter> wake;
-        List<Observer> notify;
+        Waiter[] wake;
+        Observer[] notify;
         ProtosFutureValue adoptionSource;
         Observer adoptionObserver;
         synchronized (this) {
@@ -431,13 +431,19 @@ public final class ProtosFutureValue extends ProtosObjectValue {
             adoptionObserver = adoptedObserver;
             adoptedSource = null;
             adoptedObserver = null;
-            wake = List.copyOf(waiters);
+            wake = new Waiter[waiters.size()];
+            for (int index = 0; index < wake.length; index++) {
+                wake[index] = waiters.get(index);
+            }
             waiters.clear();
-            notify = List.copyOf(observers);
+            notify = new Observer[observers.size()];
+            for (int index = 0; index < notify.length; index++) {
+                notify[index] = observers.get(index);
+            }
             observers.clear();
         }
         if (adoptionSource != null && adoptionObserver != null) adoptionSource.removeObserver(adoptionObserver);
-        boolean soleWaiter = wake.size() == 1;
+        boolean soleWaiter = wake.length == 1;
         for (Waiter waiter : wake) waiter.ready(soleWaiter);
         for (Observer observer : notify) observer.terminal(this);
         return true;

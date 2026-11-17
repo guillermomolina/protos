@@ -201,6 +201,17 @@ final class ProtosActorTerminationTest {
         });
         carriers.runNext();
         assertEquals(ProtosTask.State.SUSPENDED, suspended.state());
+        Dependency secondWait = new Dependency();
+        AtomicInteger secondSuspendedSegments = new AtomicInteger();
+        ProtosTask secondSuspended = actor.executionDomain().createTask(null, current -> {
+            secondSuspendedSegments.incrementAndGet();
+            if (current.cancellationRequested()) current.observeCancellation();
+            else current.suspend(secondWait);
+        });
+        carriers.runNext();
+        assertEquals(ProtosTask.State.SUSPENDED, secondSuspended.state());
+        assertEquals(1, suspendedSegments.get());
+        assertEquals(1, secondSuspendedSegments.get());
         AtomicInteger neverRanOrdinaryBody = new AtomicInteger();
         ProtosTask neverStarted = actor.executionDomain().createTask(null, current -> {
             neverRanOrdinaryBody.incrementAndGet();
@@ -210,13 +221,18 @@ final class ProtosActorTerminationTest {
         actor.reference().requestStopForRuntime();
         assertEquals(ProtosActor.LifecycleState.TERMINATING, actor.lifecycleState());
         assertTrue(suspended.cancellationRequested());
+        assertTrue(secondSuspended.cancellationRequested());
         assertTrue(neverStarted.cancellationRequested());
-        assertEquals(2, actor.executionDomain().liveTaskCount());
+        assertEquals(3, actor.executionDomain().liveTaskCount());
 
         carriers.runNext();
         assertEquals(ProtosTask.State.CANCELLED, suspended.state());
+        assertEquals(ProtosTask.State.CANCELLED, secondSuspended.state());
         assertEquals(ProtosTask.State.CANCELLED, neverStarted.state());
+        assertEquals(2, suspendedSegments.get());
+        assertEquals(2, secondSuspendedSegments.get());
         assertEquals(0, neverRanOrdinaryBody.get());
+        assertEquals(0, actor.executionDomain().liveTaskCount());
         assertEquals(ProtosActor.LifecycleState.TERMINATED, actor.lifecycleState());
     }
 

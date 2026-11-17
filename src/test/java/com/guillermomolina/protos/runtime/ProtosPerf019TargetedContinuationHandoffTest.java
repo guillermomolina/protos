@@ -194,4 +194,109 @@ final class ProtosPerf019TargetedContinuationHandoffTest {
         assertEquals(ProtosTask.State.CANCELLED, target.state());
         assertEquals(List.of("unrelated"), order);
     }
+
+    @Test
+    void twoWaitersAreBothWokenThroughOrdinaryResumptionWithoutTargetedHandoff() {
+        ProtosObjectValue context =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosActivation activation =
+                ProtosTestPrelude.activation(context, List.of(), context);
+        ProtosActorExecutionDomain domain = activation.executionDomain();
+        ProtosFutureValue future =
+                new ProtosFutureValue(
+                        new ProtosObjectValue(ProtosObjectValue.rootObject()),
+                        domain);
+
+        List<String> order = new ArrayList<>();
+        AtomicInteger firstSegments = new AtomicInteger();
+        AtomicInteger secondSegments = new AtomicInteger();
+        AtomicInteger resolutions = new AtomicInteger();
+        ProtosTask first =
+                waitingTask(domain, activation, future, firstSegments, "first", order);
+        ProtosTask second =
+                waitingTask(domain, activation, future, secondSegments, "second", order);
+
+        assertTrue(domain.dispatchOne());
+        assertTrue(domain.dispatchOne());
+        assertEquals(ProtosTask.State.SUSPENDED, first.state());
+        assertEquals(ProtosTask.State.SUSPENDED, second.state());
+        assertEquals(2, future.waiterCountForTesting());
+
+        domain.enqueueTargetedFutureCompletionForRuntime(
+                future,
+                () -> {
+                    resolutions.incrementAndGet();
+                    return future.resolve(new ProtosStringValue("done"), activation);
+                });
+
+        // Two waiters are never a sole terminal waiter: the completion only readies both,
+        // and neither continuation runs preferentially inside the completion dispatch.
+        assertTrue(domain.dispatchOne());
+        assertEquals(1, resolutions.get());
+        assertEquals(ProtosFutureValue.State.RESOLVED, future.state());
+        assertEquals(0, future.waiterCountForTesting());
+        assertTrue(order.isEmpty());
+        assertEquals(ProtosTask.State.RUNNABLE, first.state());
+        assertEquals(ProtosTask.State.RUNNABLE, second.state());
+        assertEquals(2, domain.runnableCount());
+
+        domain.dispatchUntilIdle();
+
+        assertEquals(List.of("first", "second"), order);
+        assertEquals(ProtosTask.State.COMPLETED, first.state());
+        assertEquals(ProtosTask.State.COMPLETED, second.state());
+        assertEquals(2, firstSegments.get());
+        assertEquals(2, secondSegments.get());
+        assertEquals(1, resolutions.get());
+        assertEquals(0, future.waiterCountForTesting());
+    }
+
+    private static ProtosTask waitingTask(
+            ProtosActorExecutionDomain domain,
+            ProtosActivation activation,
+            ProtosFutureValue future,
+            AtomicInteger segments,
+            String name,
+            List<String> order) {
+        AtomicReference<ProtosTask.WaitDependency> dependency =
+                new AtomicReference<>();
+        AtomicReference<Supplier<Object>> resumer =
+                new AtomicReference<>();
+        return domain.createTask(
+                null,
+                task -> {
+                    if (segments.getAndIncrement() == 0) {
+                        ProtosActivation taskActivation =
+                                ProtosActivation.withPreludeAndModuleState(
+                                        new ProtosObjectValue(ProtosObjectValue.rootObject()),
+                                        activation.capturedLexicalEnvironmentForRuntime(),
+                                        activation.receiver(),
+                                        activation.preludeOrNullForRuntime(),
+                                        activation.actorModuleState(),
+                                        null,
+                                        domain);
+                        taskActivation.attachTask(task);
+                        Object marker =
+                                future.observeValueForContinuationForRuntime(
+                                        taskActivation,
+                                        (waiting, resume) -> {
+                                            dependency.set(waiting);
+                                            resumer.set(resume);
+                                            assertTrue(task.suspend(waiting));
+                                            return ProtosNullValue.INSTANCE;
+                                        });
+                        assertSame(ProtosNullValue.INSTANCE, marker);
+                        return;
+                    }
+
+                    assertTrue(task.consumeResume(dependency.get()));
+                    ProtosStringValue resolved =
+                            assertInstanceOf(
+                                    ProtosStringValue.class,
+                                    resumer.get().get());
+                    assertEquals("done", resolved.value());
+                    order.add(name);
+                    task.complete(name);
+                });
+    }
 }

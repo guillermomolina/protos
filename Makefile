@@ -397,7 +397,7 @@ test-protos-foreign:
 # TEST009-AM: the strict full-corpus Truffle compilation gate is an explicit
 # audit target (`make check-truffle-compilation`)
 # and is never a prerequisite of `make check`; neither is `make test`.
-check: toolchain check-local-range-index-pe check-local-range-operands-pe check-local-accessor-pe check-bytecode-api-pe check-generated-bytecode-bci-pe check-directory-file-limit
+check: toolchain check-local-range-index-pe check-local-range-operands-pe check-local-accessor-pe check-bytecode-api-pe check-generated-bytecode-bci-pe check-native-runtime-compilation check-directory-file-limit
 
 verify:
 	$(MVN) $(MVN_FLAGS) clean verify

@@ -26,9 +26,15 @@ class ProtosDirectionalShutdownTest {
     @Test void readShutdownCutsOverPendingReadToNullAndLeavesWriteUsable() throws Exception {
         var f=fixture(); var b=new HalfBackend(); ProtosStandardByteIoProtocol.install(f.r,f.bp,f.a,b);
         var read=(ProtosFutureValue)ProtosInvocation.invokeMessage(f.r,"read",List.of(i(4)),f.a);
+        var read2=(ProtosFutureValue)ProtosInvocation.invokeMessage(f.r,"read",List.of(i(2)),f.a);
         var shut=(ProtosFutureValue)ProtosInvocation.invokeMessage(f.r,"shutdownRead",List.of(),f.a);
-        assertSame(ProtosNullValue.INSTANCE,read.resolvedValue().orElseThrow()); assertEquals(ProtosFutureValue.State.PENDING,shut.state());
-        b.readShutdown.get().succeeded(); assertSame(f.r,shut.resolvedValue().orElseThrow());
+        assertSame(ProtosNullValue.INSTANCE,read.resolvedValue().orElseThrow()); assertSame(ProtosNullValue.INSTANCE,read2.resolvedValue().orElseThrow());
+        assertEquals(ProtosFutureValue.State.PENDING,shut.state());
+        var shut2=(ProtosFutureValue)ProtosInvocation.invokeMessage(f.r,"shutdownRead",List.of(),f.a);
+        assertNotSame(shut,shut2); assertEquals(ProtosFutureValue.State.PENDING,shut2.state()); assertEquals(1,b.readShutdownCalls.get());
+        b.readShutdown.get().succeeded(); assertSame(f.r,shut.resolvedValue().orElseThrow()); assertSame(f.r,shut2.resolvedValue().orElseThrow());
+        var shut3=(ProtosFutureValue)ProtosInvocation.invokeMessage(f.r,"shutdownRead",List.of(),f.a);
+        assertNotSame(shut,shut3); assertNotSame(shut2,shut3); assertSame(f.r,shut3.resolvedValue().orElseThrow()); assertEquals(1,b.readShutdownCalls.get());
         var later=(ProtosFutureValue)ProtosInvocation.invokeMessage(f.r,"read",List.of(i(1)),f.a);assertSame(ProtosNullValue.INSTANCE,later.resolvedValue().orElseThrow());
         var w=(ProtosFutureValue)ProtosInvocation.invokeMessage(f.r,"write",List.of(bytes(f.bp,1)),f.a);b.write.get().succeeded();assertSame(f.r,w.resolvedValue().orElseThrow());
     }
@@ -36,20 +42,32 @@ class ProtosDirectionalShutdownTest {
     @Test void writeShutdownWaitsForPrecedingWriteRejectsLaterWriteAndUsesFreshFollowers() throws Exception {
         var f=fixture(); var b=new HalfBackend(); ProtosStandardByteIoProtocol.install(f.r,f.bp,f.a,b);
         var w=(ProtosFutureValue)ProtosInvocation.invokeMessage(f.r,"write",List.of(bytes(f.bp,7)),f.a);
+        var w2=(ProtosFutureValue)ProtosInvocation.invokeMessage(f.r,"write",List.of(bytes(f.bp,9)),f.a);
         var s1=(ProtosFutureValue)ProtosInvocation.invokeMessage(f.r,"shutdownWrite",List.of(),f.a);
         var s2=(ProtosFutureValue)ProtosInvocation.invokeMessage(f.r,"shutdownWrite",List.of(),f.a);
         assertNotSame(s1,s2); assertNull(b.writeShutdown.get());
         var rejected=(ProtosFutureValue)ProtosInvocation.invokeMessage(f.r,"write",List.of(bytes(f.bp,8)),f.a);assertEquals(ProtosFutureValue.State.FAILED,rejected.state());
-        b.write.get().succeeded(); assertNotNull(b.writeShutdown.get()); b.writeShutdown.get().succeeded();
+        b.write.get().succeeded(); assertSame(f.r,w.resolvedValue().orElseThrow());
+        assertNull(b.writeShutdown.get()); assertEquals(0,b.writeShutdownCalls.get());
+        assertEquals(ProtosFutureValue.State.PENDING,s1.state()); assertEquals(ProtosFutureValue.State.PENDING,s2.state());
+        b.write.get().succeeded(); assertSame(f.r,w2.resolvedValue().orElseThrow());
+        assertNotNull(b.writeShutdown.get()); assertEquals(1,b.writeShutdownCalls.get());
+        assertEquals(ProtosFutureValue.State.PENDING,s1.state()); assertEquals(ProtosFutureValue.State.PENDING,s2.state());
+        b.writeShutdown.get().succeeded();
         assertSame(f.r,s1.resolvedValue().orElseThrow()); assertSame(f.r,s2.resolvedValue().orElseThrow());
+        var s3=(ProtosFutureValue)ProtosInvocation.invokeMessage(f.r,"shutdownWrite",List.of(),f.a);
+        assertNotSame(s1,s3); assertNotSame(s2,s3); assertSame(f.r,s3.resolvedValue().orElseThrow()); assertEquals(1,b.writeShutdownCalls.get());
     }
 
     @Test void shutdownIsCommittedSoCancellationCannotRewriteItAndFailureIsStable() throws Exception {
         var f=fixture(); var b=new HalfBackend(); ProtosStandardByteIoProtocol.install(f.r,f.bp,f.a,b);
         var s=(ProtosFutureValue)ProtosInvocation.invokeMessage(f.r,"shutdownWrite",List.of(),f.a);assertTrue(s.cancelRequest());assertEquals(ProtosFutureValue.State.PENDING,s.state());
-        b.writeShutdown.get().failed();assertEquals(ProtosFutureValue.State.FAILED,s.state());
+        var s2=(ProtosFutureValue)ProtosInvocation.invokeMessage(f.r,"shutdownWrite",List.of(),f.a);
+        assertNotSame(s,s2); assertEquals(ProtosFutureValue.State.PENDING,s2.state()); assertEquals(1,b.writeShutdownCalls.get());
+        b.writeShutdown.get().failed();assertEquals(ProtosFutureValue.State.FAILED,s.state());assertEquals(ProtosFutureValue.State.FAILED,s2.state());
+        assertSame(s.failedError().orElseThrow(),s2.failedError().orElseThrow());
         var again=(ProtosFutureValue)ProtosInvocation.invokeMessage(f.r,"shutdownWrite",List.of(),f.a);assertEquals(ProtosFutureValue.State.FAILED,again.state());
-        assertSame(s.failedError().orElseThrow(),again.failedError().orElseThrow());
+        assertSame(s.failedError().orElseThrow(),again.failedError().orElseThrow()); assertEquals(1,b.writeShutdownCalls.get());
     }
 
     private static class PlainBackend implements ProtosByteIoFlow.Backend {
@@ -61,9 +79,11 @@ class ProtosDirectionalShutdownTest {
         final AtomicReference<ProtosByteIoFlow.WriteCompletion> write=new AtomicReference<>();
         final AtomicReference<ProtosByteIoFlow.ShutdownCompletion> readShutdown=new AtomicReference<>();
         final AtomicReference<ProtosByteIoFlow.ShutdownCompletion> writeShutdown=new AtomicReference<>();
+        final AtomicInteger readShutdownCalls=new AtomicInteger();
+        final AtomicInteger writeShutdownCalls=new AtomicInteger();
         @Override public ProtosByteIoFlow.Cancellation read(int n,ProtosByteIoFlow.ReadCompletion c){read.set(c);return()->{};}
         @Override public ProtosByteIoFlow.Cancellation write(byte[] x,ProtosByteIoFlow.WriteCompletion c){write.set(c);return()->{};}
-        public ProtosByteIoFlow.Cancellation shutdownRead(ProtosByteIoFlow.ShutdownCompletion c){readShutdown.set(c);return()->{};}
-        public ProtosByteIoFlow.Cancellation shutdownWrite(ProtosByteIoFlow.ShutdownCompletion c){writeShutdown.set(c);return()->{};}
+        public ProtosByteIoFlow.Cancellation shutdownRead(ProtosByteIoFlow.ShutdownCompletion c){readShutdownCalls.incrementAndGet();readShutdown.set(c);return()->{};}
+        public ProtosByteIoFlow.Cancellation shutdownWrite(ProtosByteIoFlow.ShutdownCompletion c){writeShutdownCalls.incrementAndGet();writeShutdown.set(c);return()->{};}
     }
 }

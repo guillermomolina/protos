@@ -18,6 +18,13 @@ public final class ProtosBytesValue extends ProtosObjectValue{
  public Object indexedAdd(Object v){if(!isOpen())throw new IllegalStateException("bytes is not open");octets.add(Objects.requireNonNull(v));return v;}
  public Object indexedRemoveAt(int i){if(!isOpen())throw new IllegalStateException("bytes is not open");return octets.remove(index(i));}
  public List<Object> indexedSnapshot(){return List.copyOf(octets);}
+ public Object[] indexedSnapshotForRuntime() {
+    Object[] snapshot = new Object[octets.size()];
+    for (int index = 0; index < snapshot.length; index++) {
+        snapshot[index] = octets.get(index);
+    }
+    return snapshot;
+ }
  /**
   * Host octet copy of the current content. Every element is an Integer in 0..255 by the Bytes
   * invariant, so a violation is an internal failure rather than a guest-visible outcome.

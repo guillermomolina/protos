@@ -226,7 +226,7 @@ public final class ProtosByteIoFlow {
             if(readState==DirectionState.FAILED){follower.fail(readShutdownError);return follower;}
             if(readState==DirectionState.SHUTTING){readShutdownFollowers.add(follower);return follower;}
             readState=DirectionState.SHUTTING;readShutdownFollowers.add(follower);
-            for(Request r:java.util.List.copyOf(operations))if(r.kind==Kind.READ&&!r.op.committed()&&!r.op.terminal()){
+            for(Request r:operations)if(r.kind==Kind.READ&&!r.op.committed()&&!r.op.terminal()){
                 r.shutdownDiscard=true;cutover.add(r);
             }
         }
@@ -270,16 +270,22 @@ public final class ProtosByteIoFlow {
     }
 
     private void finishReadShutdown(ProtosActivation a,ProtosObjectValue error){
-        java.util.List<ProtosFutureValue> fs; synchronized(this){
+        ProtosFutureValue[] fs; synchronized(this){
             if(readState!=DirectionState.SHUTTING)return; readShutdownError=error;
-            readState=error==null?DirectionState.SUCCEEDED:DirectionState.FAILED;fs=java.util.List.copyOf(readShutdownFollowers);readShutdownFollowers.clear();
+            readState=error==null?DirectionState.SUCCEEDED:DirectionState.FAILED;
+            fs=new ProtosFutureValue[readShutdownFollowers.size()];
+            for(int index=0;index<fs.length;index++)fs[index]=readShutdownFollowers.get(index);
+            readShutdownFollowers.clear();
         }
         for(ProtosFutureValue f:fs)if(error==null)f.resolve(receiver,a);else f.fail(error);
     }
     private void finishWriteShutdown(ProtosActivation a,ProtosObjectValue error){
-        java.util.List<ProtosFutureValue> fs; synchronized(this){
+        ProtosFutureValue[] fs; synchronized(this){
             if(writeState!=DirectionState.SHUTTING)return; writeShutdownError=error;
-            writeState=error==null?DirectionState.SUCCEEDED:DirectionState.FAILED;fs=java.util.List.copyOf(writeShutdownFollowers);writeShutdownFollowers.clear();
+            writeState=error==null?DirectionState.SUCCEEDED:DirectionState.FAILED;
+            fs=new ProtosFutureValue[writeShutdownFollowers.size()];
+            for(int index=0;index<fs.length;index++)fs[index]=writeShutdownFollowers.get(index);
+            writeShutdownFollowers.clear();
         }
         for(ProtosFutureValue f:fs)if(error==null)f.resolve(receiver,a);else f.fail(error);
     }

@@ -241,6 +241,11 @@ final class ProtosTcpConnectionDuplexLifecycleTest {
                 future(writeConnection, "write", List.of(bytes(prelude, 4)), writeActivation);
         ProtosFutureValue shutdownWrite =
                 future(writeConnection, "shutdownWrite", List.of(), writeActivation);
+        ProtosFutureValue secondShutdownWrite =
+                future(writeConnection, "shutdownWrite", List.of(), writeActivation);
+        assertNotSame(shutdownWrite, secondShutdownWrite);
+        assertEquals(ProtosFutureValue.State.PENDING, shutdownWrite.state());
+        assertEquals(ProtosFutureValue.State.PENDING, secondShutdownWrite.state());
         assertEquals(0, writeBackend.shutdownWriteStarts);
         assertFailedAs(
                 future(writeConnection, "write", List.of(bytes(prelude, 5)), writeActivation),
@@ -251,15 +256,22 @@ final class ProtosTcpConnectionDuplexLifecycleTest {
         assertSame(writeConnection, first.resolvedValue().orElseThrow());
         assertEquals(2, writeBackend.writeStarts);
         assertEquals(0, writeBackend.shutdownWriteStarts);
+        assertEquals(ProtosFutureValue.State.PENDING, shutdownWrite.state());
+        assertEquals(ProtosFutureValue.State.PENDING, secondShutdownWrite.state());
         writeBackend.writeCompletions.removeFirst().succeeded();
         assertSame(writeConnection, second.resolvedValue().orElseThrow());
         assertEquals(1, writeBackend.shutdownWriteStarts);
+        assertEquals(ProtosFutureValue.State.PENDING, shutdownWrite.state());
+        assertEquals(ProtosFutureValue.State.PENDING, secondShutdownWrite.state());
         writeBackend.shutdownWriteCompletion.succeeded();
         assertSame(writeConnection, shutdownWrite.resolvedValue().orElseThrow());
+        assertSame(writeConnection, secondShutdownWrite.resolvedValue().orElseThrow());
+        assertEquals(1, writeBackend.shutdownWriteStarts);
 
         ProtosFutureValue repeatedWriteShutdown =
                 future(writeConnection, "shutdownWrite", List.of(), writeActivation);
         assertNotSame(shutdownWrite, repeatedWriteShutdown);
+        assertNotSame(secondShutdownWrite, repeatedWriteShutdown);
         assertSame(writeConnection, repeatedWriteShutdown.resolvedValue().orElseThrow());
         assertEquals(1, writeBackend.shutdownWriteStarts);
 

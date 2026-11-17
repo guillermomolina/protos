@@ -184,7 +184,7 @@ public final class ProtosIoLifecycle {
                     closeActivation=activation;
                     closeFollowers.add(follower);
                     terminationCleanupReserved=reserveGuestCleanup;
-                    for (ProtosIoOperation operation : List.copyOf(operations)) {
+                    for (ProtosIoOperation operation : operations) {
                         ProtosIoOperation.CloseCutoverAction action =
                                 operation.closeCutoverLocked();
                         if (action != null) {
@@ -360,12 +360,15 @@ public final class ProtosIoLifecycle {
     }
 
     private void finishClose(ProtosObjectValue error) {
-        List<ProtosFutureValue> followers;
+        ProtosFutureValue[] followers;
         synchronized(this) {
             if (state != State.CLOSING) return;
             closeError=error;
             state=error==null ? State.CLOSED_SUCCESS : State.CLOSED_FAILED;
-            followers=List.copyOf(closeFollowers);
+            followers = new ProtosFutureValue[closeFollowers.size()];
+            for (int index = 0; index < followers.length; index++) {
+                followers[index] = closeFollowers.get(index);
+            }
             closeFollowers.clear();
         }
         ProtosActivation activation;

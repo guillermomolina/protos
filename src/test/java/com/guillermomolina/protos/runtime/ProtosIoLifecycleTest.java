@@ -35,8 +35,11 @@ class ProtosIoLifecycleTest {
     }
     @Test void repeatedCloseUsesFreshFuturesOneReleaseAndStableFailureIdentity() throws Exception {
         var x=fixture(); var first=x.lifecycle.close(x.activation); var second=x.lifecycle.close(x.activation); assertNotSame(first,second); assertEquals(1,x.releaseStarts.get());
+        var fourth=x.lifecycle.close(x.activation); assertNotSame(first,fourth); assertNotSame(second,fourth); assertEquals(1,x.releaseStarts.get());
+        assertEquals(ProtosFutureValue.State.PENDING,first.state()); assertEquals(ProtosFutureValue.State.PENDING,second.state()); assertEquals(ProtosFutureValue.State.PENDING,fourth.state());
         var failure=ProtosCoreErrors.newOccurrence(x.activation,ProtosCoreErrors.StandardError.I_O_ERROR); x.completion.get().failed(failure);
-        assertSame(failure,first.failedError().orElseThrow()); assertSame(failure,second.failedError().orElseThrow());
+        assertSame(failure,first.failedError().orElseThrow()); assertSame(failure,second.failedError().orElseThrow()); assertSame(failure,fourth.failedError().orElseThrow());
+        assertEquals(1,x.releaseStarts.get());
         var third=x.lifecycle.close(x.activation); assertNotSame(first,third); assertSame(failure,third.failedError().orElseThrow()); assertEquals(1,x.releaseStarts.get());
     }
     @Test void actorTerminationRequestsCancellationWithoutRevertingCommittedOperation() throws Exception {
@@ -211,15 +214,32 @@ class ProtosIoLifecycleTest {
             releases.incrementAndGet();
             c.succeeded();
         });
+        var hooks=new java.util.ArrayList<String>();
         var operation=lifecycle.beginOperation(a);
-        operation.onCancellation(()->cancelled.set(true));
+        operation.onCancellation(()->{cancelled.set(true);hooks.add("first");});
+        var second=lifecycle.beginOperation(a);
+        second.onCancellation(()->hooks.add("second"));
+        var third=lifecycle.beginOperation(a);
+        third.onCancellation(()->hooks.add("third"));
 
         var close=lifecycle.close(a);
 
         assertTrue(cancelled.get());
+        assertEquals(java.util.List.of("first","second","third"),hooks);
         assertEquals(ProtosFutureValue.State.FAILED,operation.future().state());
+        assertEquals(ProtosFutureValue.State.FAILED,second.future().state());
+        assertEquals(ProtosFutureValue.State.FAILED,third.future().state());
+        assertEquals(0,d.actorIoOperationCountForTesting());
         assertEquals(1,releases.get());
         assertEquals(ProtosFutureValue.State.RESOLVED,close.state());
+
+        assertFalse(operation.future().cancelRequest());
+        assertFalse(third.future().cancelRequest());
+        var repeated=lifecycle.close(a);
+        assertNotSame(close,repeated);
+        assertEquals(ProtosFutureValue.State.RESOLVED,repeated.state());
+        assertEquals(java.util.List.of("first","second","third"),hooks);
+        assertEquals(1,releases.get());
     }
 
     private record Fixture(ProtosPrelude prelude, ProtosActorExecutionDomain domain, ProtosActivation activation, ProtosObjectValue receiver,
@@ -251,5 +271,36 @@ class ProtosIoLifecycleTest {
         assertEquals(ProtosFutureValue.State.RESOLVED,close.state());
         assertEquals(ProtosFutureValue.State.RESOLVED,concurrentClose.state());
         assertSame(x.receiver,close.resolvedValue().orElseThrow());
+    }
+
+    @Test
+    void terminalObserversRunOnceInRegistrationOrderAndLateObserversRunImmediately() throws Exception {
+        var x=fixture();
+        var operation=x.lifecycle.beginOperation(x.activation);
+        var future=operation.future();
+        var events=new java.util.ArrayList<String>();
+        ProtosFutureValue.Observer first=f->events.add("first");
+        ProtosFutureValue.Observer removed=f->events.add("removed");
+        ProtosFutureValue.Observer nested=f->events.add("nested");
+        ProtosFutureValue.Observer third=f->{events.add("third");f.observe(nested);};
+        future.observe(first); future.observe(removed); future.observe(third);
+        assertEquals(3,future.observerCountForTesting());
+        future.removeObserver(removed);
+        assertEquals(2,future.observerCountForTesting());
+
+        assertTrue(operation.beginFirstEffectAttempt());
+        assertTrue(future.cancelRequest());
+        assertTrue(events.isEmpty());
+        assertFalse(operation.finishFirstEffectAttempt(false));
+
+        assertEquals(ProtosFutureValue.State.CANCELLED,future.state());
+        assertEquals(java.util.List.of("first","third","nested"),events);
+        assertEquals(0,future.observerCountForTesting());
+
+        future.observe(f->events.add("late"));
+        assertEquals(java.util.List.of("first","third","nested","late"),events);
+        assertEquals(0,future.observerCountForTesting());
+        assertFalse(future.cancelRequest());
+        assertEquals(java.util.List.of("first","third","nested","late"),events);
     }
 }

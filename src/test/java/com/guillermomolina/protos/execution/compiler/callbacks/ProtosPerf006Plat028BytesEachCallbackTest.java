@@ -86,8 +86,10 @@ final class ProtosPerf006Plat028BytesEachCallbackTest {
             ProtosPrelude prelude = core();
             ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
             ProtosActivation module = activation(prelude, domain);
-            ProtosBytesValue bytes = bytes(prelude, 1, 2);
+            ProtosBytesValue bytes = bytes(prelude, 1, 2, 3);
+            List<Object> captured = List.of(bytes.indexedAt(0), bytes.indexedAt(1), bytes.indexedAt(2));
             List<Long> observed = new ArrayList<>();
+            List<Object> observedReferences = new ArrayList<>();
 
             module.context().createLocalSlot("bytes", bytes);
             module.context().createLocalSlot(
@@ -97,10 +99,13 @@ final class ProtosPerf006Plat028BytesEachCallbackTest {
                                 Long octet =
                                         (Long) supplied.get(0);
                                 observed.add(octet.longValue());
+                                observedReferences.add(octet);
                                 if (observed.size() == 1) {
                                     bytes.indexedPut(
                                             1,
                                             Long.valueOf(99));
+                                    bytes.indexedRemoveAt(2);
+                                    bytes.indexedAdd(Long.valueOf(55));
                                 }
                                 return Long.valueOf(77);
                             }));
@@ -118,8 +123,13 @@ final class ProtosPerf006Plat028BytesEachCallbackTest {
             assertEquals(ProtosTask.State.COMPLETED, task.state());
             assertSame(bytes, task.result().orElseThrow());
             assertEquals(
-                    List.of(1L, 2L),
+                    List.of(1L, 2L, 3L),
                     observed);
+            for (int index = 0; index < captured.size(); index++) {
+                assertSame(captured.get(index), observedReferences.get(index));
+            }
+            assertEquals(3, bytes.indexedSize());
+            assertEquals("55", com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(bytes.indexedAt(2)));
             assertEquals(String.valueOf("99"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(bytes.indexedAt(1)));
         }
 

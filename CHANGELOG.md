@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.154-SNAPSHOT
+
+- **I115.** Replace collection-copy snapshots in Future terminal transitions, I/O lifecycle close cutover and publication, and Actor termination cancellation with typed array snapshots taken under the existing monitors, removing JDK collection factories from Native Image compilation paths. Extend Future observer, I/O close cutover and follower, multi-waiter resumption and multi-task Actor termination regressions.
+
 ## 0.4.153-SNAPSHOT
 
 - **I115.** Clear composed-sequence scratch, discarded-prefix sink and completed-store locals after their last use in Bytecode lowering. Add while-loop conformance tests (results, binding/transfer, suspension/cancellation), extend while inline-callback, while-once census and compact-boolean while regressions, and verify a real host-entry suspension in the suspending selected-addition test.

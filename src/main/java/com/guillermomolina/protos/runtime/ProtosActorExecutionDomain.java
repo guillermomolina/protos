@@ -719,9 +719,9 @@ public final class ProtosActorExecutionDomain {
 
     /** TERMINATING cutover hook: request cooperative cancellation without undoing commitments. */
     public void actorTerminationBegun() {
-        List<ProtosTask> tasks;
-        List<ProtosIoOperation> io;
-        List<ProtosFutureValue> nonTask;
+        ProtosTask[] tasks;
+        ProtosIoOperation[] io;
+        ProtosFutureValue[] nonTask;
         java.util.List<TargetedRuntimeCompletion> dropped;
         synchronized (this) {
             actorTerminationBegun = true;
@@ -741,9 +741,21 @@ public final class ProtosActorExecutionDomain {
             notifyAll();
             // Independent snapshots taken under the monitor; the live registries may change as
             // soon as the lock is released.
-            tasks = new ArrayList<>(liveTasks);
-            io = new ArrayList<>(actorIoOperations);
-            nonTask = new ArrayList<>(actorNonTaskFutures);
+            tasks = new ProtosTask[liveTasks.size()];
+            int taskIndex = 0;
+            for (ProtosTask task : liveTasks) {
+                tasks[taskIndex++] = task;
+            }
+            io = new ProtosIoOperation[actorIoOperations.size()];
+            int operationIndex = 0;
+            for (ProtosIoOperation operation : actorIoOperations) {
+                io[operationIndex++] = operation;
+            }
+            nonTask = new ProtosFutureValue[actorNonTaskFutures.size()];
+            int futureIndex = 0;
+            for (ProtosFutureValue future : actorNonTaskFutures) {
+                nonTask[futureIndex++] = future;
+            }
         }
         // Reconcile host custody before cancelling remaining operations.
         // Never run cleanup under the domain lock or execute guest code here.
