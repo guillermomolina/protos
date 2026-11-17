@@ -52,7 +52,7 @@ abstract class ProtosNumberDivideNode extends Node {
 
     @Specialization(guards = "selection.execute(frame, SELECTOR, left)")
     static Object doLL(VirtualFrame frame, boolean terminal, long left, long right,
-            @Bind Node node,
+            @Bind("$node") Node node,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
             @Shared("selection") @Cached ProtosNumericSelectionNode selection) {
         if (right != 0L && (left != Long.MIN_VALUE || right != -1L)

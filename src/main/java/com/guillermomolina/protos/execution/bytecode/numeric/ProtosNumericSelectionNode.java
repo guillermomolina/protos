@@ -101,9 +101,8 @@ abstract class ProtosNumericSelectionNode extends Node {
             @Cached("prelude") ProtosPrelude cachedPrelude,
             @Cached("selectNumeric(frozenBoundPrototype(selectBinding(cachedPrelude, SMALL_INTEGER_BINDING)), cachedSelector)")
                     ProtosValueLookup.StructuralSelection selection,
-            @Cached(value = "allOwnersFrozen(selection)", neverDefault = false) boolean frozen,
-            @Cached(value = "frozenStandard(frozen, cachedSelector, receiver, selection, cachedPrelude)",
-                    neverDefault = false) boolean standard) {
+            @Cached(value = "allOwnersFrozen(selection)") boolean frozen,
+            @Cached(value = "frozenStandard(frozen, cachedSelector, receiver, selection, cachedPrelude)") boolean standard) {
         return standard;
     }
 
@@ -135,8 +134,7 @@ abstract class ProtosNumericSelectionNode extends Node {
             @Cached("selectNumeric(frozenBoundPrototype(selectBinding(cachedPrelude, SMALL_INTEGER_BINDING)), cachedSelector)")
                     ProtosValueLookup.StructuralSelection selection,
             @Cached("finalAssumption(selection)") Assumption selectionAssumption,
-            @Cached(value = "stableStandard(cachedSelector, receiver, selection, cachedPrelude)",
-                    neverDefault = false) boolean standard) {
+            @Cached(value = "stableStandard(cachedSelector, receiver, selection, cachedPrelude)") boolean standard) {
         return standard;
     }
 
@@ -164,9 +162,8 @@ abstract class ProtosNumericSelectionNode extends Node {
             @Cached("prelude") ProtosPrelude cachedPrelude,
             @Cached("selectNumeric(frozenBoundPrototype(selectBinding(cachedPrelude, SMALL_INTEGER_BINDING)), cachedSelector)")
                     ProtosValueLookup.StructuralSelection selection,
-            @Cached(value = "allOwnersFrozen(selection)", neverDefault = false) boolean frozen,
-            @Cached(value = "frozenStandard(frozen, cachedSelector, receiver, selection, cachedPrelude)",
-                    neverDefault = false) boolean standard) {
+            @Cached(value = "allOwnersFrozen(selection)") boolean frozen,
+            @Cached(value = "frozenStandard(frozen, cachedSelector, receiver, selection, cachedPrelude)") boolean standard) {
         return standard;
     }
 
@@ -197,8 +194,7 @@ abstract class ProtosNumericSelectionNode extends Node {
             @Cached("selectNumeric(frozenBoundPrototype(selectBinding(cachedPrelude, SMALL_INTEGER_BINDING)), cachedSelector)")
                     ProtosValueLookup.StructuralSelection selection,
             @Cached("finalAssumption(selection)") Assumption selectionAssumption,
-            @Cached(value = "stableStandard(cachedSelector, receiver, selection, cachedPrelude)",
-                    neverDefault = false) boolean standard) {
+            @Cached(value = "stableStandard(cachedSelector, receiver, selection, cachedPrelude)") boolean standard) {
         return standard;
     }
 
@@ -228,9 +224,8 @@ abstract class ProtosNumericSelectionNode extends Node {
             @Cached("prelude") ProtosPrelude cachedPrelude,
             @Cached("selectNumeric(frozenBoundPrototype(selectBinding(cachedPrelude, FLOAT_BINDING)), cachedSelector)")
                     ProtosValueLookup.StructuralSelection selection,
-            @Cached(value = "allOwnersFrozen(selection)", neverDefault = false) boolean frozen,
-            @Cached(value = "frozenStandard(frozen, cachedSelector, receiver, selection, cachedPrelude)",
-                    neverDefault = false) boolean standard) {
+            @Cached(value = "allOwnersFrozen(selection)") boolean frozen,
+            @Cached(value = "frozenStandard(frozen, cachedSelector, receiver, selection, cachedPrelude)") boolean standard) {
         return standard;
     }
 
@@ -262,8 +257,7 @@ abstract class ProtosNumericSelectionNode extends Node {
             @Cached("selectNumeric(frozenBoundPrototype(selectBinding(cachedPrelude, FLOAT_BINDING)), cachedSelector)")
                     ProtosValueLookup.StructuralSelection selection,
             @Cached("finalAssumption(selection)") Assumption selectionAssumption,
-            @Cached(value = "stableStandard(cachedSelector, receiver, selection, cachedPrelude)",
-                    neverDefault = false) boolean standard) {
+            @Cached(value = "stableStandard(cachedSelector, receiver, selection, cachedPrelude)") boolean standard) {
         return standard;
     }
 
@@ -291,9 +285,8 @@ abstract class ProtosNumericSelectionNode extends Node {
             @Cached("prelude") ProtosPrelude cachedPrelude,
             @Cached("selectNumeric(frozenBoundPrototype(selectBinding(cachedPrelude, FLOAT_BINDING)), cachedSelector)")
                     ProtosValueLookup.StructuralSelection selection,
-            @Cached(value = "allOwnersFrozen(selection)", neverDefault = false) boolean frozen,
-            @Cached(value = "frozenStandard(frozen, cachedSelector, receiver, selection, cachedPrelude)",
-                    neverDefault = false) boolean standard) {
+            @Cached(value = "allOwnersFrozen(selection)") boolean frozen,
+            @Cached(value = "frozenStandard(frozen, cachedSelector, receiver, selection, cachedPrelude)") boolean standard) {
         return standard;
     }
 
@@ -324,8 +317,7 @@ abstract class ProtosNumericSelectionNode extends Node {
             @Cached("selectNumeric(frozenBoundPrototype(selectBinding(cachedPrelude, FLOAT_BINDING)), cachedSelector)")
                     ProtosValueLookup.StructuralSelection selection,
             @Cached("finalAssumption(selection)") Assumption selectionAssumption,
-            @Cached(value = "stableStandard(cachedSelector, receiver, selection, cachedPrelude)",
-                    neverDefault = false) boolean standard) {
+            @Cached(value = "stableStandard(cachedSelector, receiver, selection, cachedPrelude)") boolean standard) {
         return standard;
     }
 
@@ -359,9 +351,8 @@ abstract class ProtosNumericSelectionNode extends Node {
             @Cached("prototype") ProtosObjectValue cachedPrototype,
             @Cached("selectNumeric(cachedPrototype, cachedSelector)")
                     ProtosValueLookup.StructuralSelection selection,
-            @Cached(value = "allOwnersFrozen(selection)", neverDefault = false) boolean frozen,
-            @Cached(value = "frozenStandard(frozen, cachedSelector, receiver, selection, cachedPrelude)",
-                    neverDefault = false) boolean frozenStandard) {
+            @Cached(value = "allOwnersFrozen(selection)") boolean frozen,
+            @Cached(value = "frozenStandard(frozen, cachedSelector, receiver, selection, cachedPrelude)") boolean frozenStandard) {
         if (frozen) {
             return frozenStandard;
         }
@@ -390,9 +381,8 @@ abstract class ProtosNumericSelectionNode extends Node {
             @Cached("prototype") ProtosObjectValue cachedPrototype,
             @Cached("selectNumeric(cachedPrototype, cachedSelector)")
                     ProtosValueLookup.StructuralSelection selection,
-            @Cached(value = "allOwnersFrozen(selection)", neverDefault = false) boolean frozen,
-            @Cached(value = "frozenStandard(frozen, cachedSelector, receiver, selection, cachedPrelude)",
-                    neverDefault = false) boolean frozenStandard) {
+            @Cached(value = "allOwnersFrozen(selection)") boolean frozen,
+            @Cached(value = "frozenStandard(frozen, cachedSelector, receiver, selection, cachedPrelude)") boolean frozenStandard) {
         if (frozen) {
             return frozenStandard;
         }

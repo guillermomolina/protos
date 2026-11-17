@@ -54,7 +54,7 @@ abstract class ProtosNumberAddNode extends ProtosNumberAddFastPathsBase {
 
     @Specialization(guards = "selection.execute(frame, SELECTOR, left)", replaces = "doLL")
     static Object doLLOvf(VirtualFrame frame, boolean terminal, long left, long right,
-            @Bind Node node,
+            @Bind("$node") Node node,
             @Shared("selection") @Cached ProtosNumericSelectionNode selection) {
         return addOrPromote(frame, node, left, right);
     }

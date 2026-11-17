@@ -26,6 +26,7 @@ import com.oracle.truffle.api.bytecode.ConstantOperand;
 import com.oracle.truffle.api.bytecode.OperationProxy;
 import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
+import com.oracle.truffle.api.dsl.Cached.Exclusive;
 import com.oracle.truffle.api.dsl.GenerateInline;
 import com.oracle.truffle.api.dsl.GenerateUncached;
 import com.oracle.truffle.api.dsl.Specialization;
@@ -90,7 +91,7 @@ abstract class ProtosExperimentalWriteGlobalNode extends Node {
             @Cached("context") ProtosObjectValue cachedContext,
             @Cached("ownLocationOrNull(cachedContext, name)")
                     ProtosModuleBindingLocation location,
-            @Cached DynamicObject.GetNode getNode) {
+            @Exclusive @Cached DynamicObject.GetNode getNode) {
         if (!location.isPresent(getNode)) {
             return selectLexically(frame.getArguments(), name);
         }
@@ -114,7 +115,7 @@ abstract class ProtosExperimentalWriteGlobalNode extends Node {
             @Cached("closure") ProtosClosureValue cachedClosure,
             @Cached("locationOrNull(cachedClosure, name, lexicalDepth)")
                     ProtosModuleBindingLocation location,
-            @Cached DynamicObject.GetNode getNode) {
+            @Exclusive @Cached DynamicObject.GetNode getNode) {
         if (!location.isPresent(getNode)) {
             return selectLexically(frame.getArguments(), name);
         }

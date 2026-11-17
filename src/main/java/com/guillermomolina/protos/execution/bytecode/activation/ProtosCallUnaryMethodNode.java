@@ -28,6 +28,7 @@ import com.oracle.truffle.api.bytecode.ForceQuickening;
 import com.oracle.truffle.api.bytecode.OperationProxy;
 import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
+import com.oracle.truffle.api.dsl.Cached.Exclusive;
 import com.oracle.truffle.api.dsl.GenerateInline;
 import com.oracle.truffle.api.dsl.GenerateUncached;
 import com.oracle.truffle.api.dsl.Idempotent;
@@ -94,13 +95,13 @@ abstract class ProtosCallUnaryMethodNode extends Node {
             boolean terminal,
             ProtosClosureValue callable,
             Object a0,
-            @Bind("$node") Node inliningTarget,
+            @Bind Node inliningTarget,
             @Bind("bytecodeOf($node)") BytecodeNode bytecode,
             @Bind("bytecode.getBytecodeIndex(frame)") int bytecodeIndex,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
             @Cached(value = "callable", weak = true)
                     ProtosClosureValue cachedCallable,
-            @Cached(value = "rootCallSelection()", allowUncached = true)
+            @Exclusive @Cached(value = "rootCallSelection()", allowUncached = true)
                     ProtosStandardObjectProtocol.CanonicalRootCallSelection rootSelection,
             @Cached("cachedCallable.codeStableAssumptionForRuntime()")
                     Assumption cachedCodeStable,
@@ -114,8 +115,8 @@ abstract class ProtosCallUnaryMethodNode extends Node {
                     Assumption cachedCallerNeedsStable,
             @Cached("classifyReturnHome(cachedCallable, cachedCallee)")
                     ProtosFunctionCallDispatchers.ReturnHomeMode cachedHomeMode,
-            @Cached ProtosFunctionCallDispatchers.FunctionDirectInvokeNode invoke,
-            @Cached InlinedConditionProfile taskPresence) {
+            @Exclusive @Cached ProtosFunctionCallDispatchers.FunctionDirectInvokeNode invoke,
+            @Exclusive @Cached InlinedConditionProfile taskPresence) {
         Object[] arguments = ProtosFrameArguments.dispatchedCall1(
                 null, ProtosFrameArguments.functionCallMarker(),
                 null, null, null, a0);
@@ -174,13 +175,13 @@ abstract class ProtosCallUnaryMethodNode extends Node {
             boolean terminal,
             ProtosClosureValue callable,
             Object a0,
-            @Bind("$node") Node inliningTarget,
+            @Bind Node inliningTarget,
             @Bind("bytecodeOf($node)") BytecodeNode bytecode,
             @Bind("bytecode.getBytecodeIndex(frame)") int bytecodeIndex,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
             @Bind("callable.preparedExecutionPlanOrNullForRuntime()")
                     ProtosClosureExecutionPlan currentPlan,
-            @Cached(value = "rootCallSelection()", allowUncached = true)
+            @Exclusive @Cached(value = "rootCallSelection()", allowUncached = true)
                     ProtosStandardObjectProtocol.CanonicalRootCallSelection rootSelection,
             @Cached("currentPlan") ProtosClosureExecutionPlan cachedPlan,
             @Cached("singleContextTargetOrNull(callable, root)")
@@ -191,8 +192,8 @@ abstract class ProtosCallUnaryMethodNode extends Node {
                     ProtosBytecodeRootNode cachedCallee,
             @Cached("cachedCallee.callerNeedsStability()")
                     Assumption cachedCallerNeedsStable,
-            @Cached ProtosFunctionCallDispatchers.FunctionDirectInvokeNode invoke,
-            @Cached InlinedConditionProfile taskPresence) {
+            @Exclusive @Cached ProtosFunctionCallDispatchers.FunctionDirectInvokeNode invoke,
+            @Exclusive @Cached InlinedConditionProfile taskPresence) {
         Object[] arguments = ProtosFrameArguments.dispatchedCall1(
                 null, ProtosFrameArguments.functionCallMarker(),
                 null, null, null, a0);
@@ -213,6 +214,7 @@ abstract class ProtosCallUnaryMethodNode extends Node {
      * body enters the function dispatcher directly without reselecting.
      */
     @Specialization(
+            limit = "3",
             guards = {
                     "isSourceFunction(callable)",
                     "canonicalCallSelected(callable, rootSelection)"
@@ -225,13 +227,13 @@ abstract class ProtosCallUnaryMethodNode extends Node {
             boolean terminal,
             ProtosClosureValue callable,
             Object a0,
-            @Bind("$node") Node inliningTarget,
+            @Bind Node inliningTarget,
             @Bind("bytecodeOf($node)") BytecodeNode bytecode,
             @Bind("bytecode.getBytecodeIndex(frame)") int bytecodeIndex,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
-            @Cached(value = "rootCallSelection()", allowUncached = true)
+            @Exclusive @Cached(value = "rootCallSelection()", allowUncached = true)
                     ProtosStandardObjectProtocol.CanonicalRootCallSelection rootSelection,
-            @Cached ProtosFunctionCallDispatchers.FunctionCachedCallNode call) {
+            @Exclusive @Cached ProtosFunctionCallDispatchers.FunctionCachedCallNode call) {
         Object outcome = call.execute(
                 frame, inliningTarget, terminal, callable,
                 ProtosFrameArguments.dispatchedCall1(
@@ -249,11 +251,11 @@ abstract class ProtosCallUnaryMethodNode extends Node {
             boolean terminal,
             ProtosBoundMethod method,
             Object a0,
-            @Bind("$node") Node inliningTarget,
+            @Bind Node inliningTarget,
             @Bind("bytecodeOf($node)") BytecodeNode bytecode,
             @Bind("bytecode.getBytecodeIndex(frame)") int bytecodeIndex,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
-            @Cached ProtosFunctionCallDispatchers.FunctionCachedCallNode call) {
+            @Exclusive @Cached ProtosFunctionCallDispatchers.FunctionCachedCallNode call) {
         Object[] arguments = ProtosFrameArguments.dispatchedCall1(
                 null, ProtosFrameArguments.functionCallMarker(), null, null, null, a0);
         ProtosFrameArguments.bindMethod(arguments, method.receiver(), method.methodHome());

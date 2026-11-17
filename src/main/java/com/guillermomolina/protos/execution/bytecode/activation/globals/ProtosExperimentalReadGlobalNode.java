@@ -27,6 +27,7 @@ import com.oracle.truffle.api.bytecode.ConstantOperand;
 import com.oracle.truffle.api.bytecode.OperationProxy;
 import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
+import com.oracle.truffle.api.dsl.Cached.Exclusive;
 import com.oracle.truffle.api.dsl.GenerateInline;
 import com.oracle.truffle.api.dsl.GenerateUncached;
 import com.oracle.truffle.api.dsl.Specialization;
@@ -110,7 +111,7 @@ abstract class ProtosExperimentalReadGlobalNode extends Node {
             @Cached("context") ProtosObjectValue cachedContext,
             @Cached("ownLocationOrNull(cachedContext, name)")
                     ProtosModuleBindingLocation location,
-            @Cached DynamicObject.GetNode getNode) {
+            @Exclusive @Cached DynamicObject.GetNode getNode) {
         Object value = location.readOrNull(getNode);
         if (value == null) {
             return readModuleBinding(frame.getArguments(), name, lexicalDepth, candidate);
@@ -136,7 +137,7 @@ abstract class ProtosExperimentalReadGlobalNode extends Node {
             @Cached("closure") ProtosClosureValue cachedClosure,
             @Cached("locationOrNull(cachedClosure, name, lexicalDepth)")
                     ProtosModuleBindingLocation location,
-            @Cached DynamicObject.GetNode getNode) {
+            @Exclusive @Cached DynamicObject.GetNode getNode) {
         Object value = location.readOrNull(getNode);
         if (value == null) {
             return readModuleBinding(frame.getArguments(), name, lexicalDepth, candidate);

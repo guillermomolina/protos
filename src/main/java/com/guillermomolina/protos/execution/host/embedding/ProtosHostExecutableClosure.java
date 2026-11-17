@@ -189,7 +189,7 @@ final class ProtosHostExecutableClosure implements TruffleObject {
         static Object generic(
                 ProtosHostExecutableClosure receiver,
                 Object[] arguments,
-                @Bind("$node") Node node)
+                @Bind Node node)
                 throws ArityException, UnsupportedTypeException {
             Object[] supplied = receiver.admitArguments(arguments, node);
             ProtosEmbeddedProcess embedding = receiver.embedding;
@@ -230,7 +230,7 @@ final class ProtosHostExecutableClosure implements TruffleObject {
         static Object sourceZeroCached(
                 ProtosHostExecutableClosure receiver,
                 Object[] arguments,
-                @Bind("$node") Node inliningTarget,
+                @Bind Node inliningTarget,
                 @Cached(value = "receiver", weak = true)
                         ProtosHostExecutableClosure cachedReceiver,
                 @Cached @Shared("sourceZeroCall")
@@ -252,7 +252,7 @@ final class ProtosHostExecutableClosure implements TruffleObject {
         static Object sourceZero(
                 ProtosHostExecutableClosure receiver,
                 Object[] arguments,
-                @Bind("$node") Node inliningTarget,
+                @Bind Node inliningTarget,
                 @Cached @Shared("sourceZeroCall")
                         ProtosFunctionCallDispatchers.FunctionCachedCallNode callNode) {
             return executeSourceZero(receiver, inliningTarget, callNode);
@@ -309,7 +309,7 @@ final class ProtosHostExecutableClosure implements TruffleObject {
         static Object source(
                 ProtosHostExecutableClosure receiver,
                 Object[] arguments,
-                @Bind("$node") Node node,
+                @Bind Node node,
                 @Cached ProtosFunctionCallDispatchers.CallNode callNode)
                 throws ArityException, UnsupportedTypeException {
             Object[] supplied = receiver.admitArguments(arguments, node);

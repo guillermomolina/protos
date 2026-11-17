@@ -24,6 +24,7 @@ import com.oracle.truffle.api.bytecode.ConstantOperand;
 import com.oracle.truffle.api.bytecode.OperationProxy;
 import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
+import com.oracle.truffle.api.dsl.Cached.Exclusive;
 import com.oracle.truffle.api.dsl.GenerateInline;
 import com.oracle.truffle.api.dsl.GenerateUncached;
 import com.oracle.truffle.api.dsl.NonIdempotent;
@@ -57,7 +58,7 @@ abstract class ProtosCallNilaryMethodNode extends Node {
 
     abstract Object execute(VirtualFrame frame, boolean terminal, Object callable);
 
-    @Specialization(guards = {
+    @Specialization(limit = "3", guards = {
             "isSourceFunction(callable)",
             "canonicalCallSelected(callable, rootSelection)"
         })
@@ -65,13 +66,13 @@ abstract class ProtosCallNilaryMethodNode extends Node {
             VirtualFrame frame,
             boolean terminal,
             ProtosClosureValue callable,
-            @Bind("$node") Node inliningTarget,
+            @Bind Node inliningTarget,
             @Bind("bytecodeOf($node)") BytecodeNode bytecode,
             @Bind("bytecode.getBytecodeIndex(frame)") int bytecodeIndex,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
             @Cached(value = "rootCallSelection()", allowUncached = true)
                     ProtosStandardObjectProtocol.CanonicalRootCallSelection rootSelection,
-            @Cached ProtosFunctionCallDispatchers.FunctionCachedCallNode call) {
+            @Exclusive @Cached ProtosFunctionCallDispatchers.FunctionCachedCallNode call) {
         Object outcome = call.execute(
                 frame, inliningTarget, terminal, callable,
                 ProtosFrameArguments.dispatchedCall0(
@@ -87,11 +88,11 @@ abstract class ProtosCallNilaryMethodNode extends Node {
             VirtualFrame frame,
             boolean terminal,
             ProtosBoundMethod method,
-            @Bind("$node") Node inliningTarget,
+            @Bind Node inliningTarget,
             @Bind("bytecodeOf($node)") BytecodeNode bytecode,
             @Bind("bytecode.getBytecodeIndex(frame)") int bytecodeIndex,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
-            @Cached ProtosFunctionCallDispatchers.FunctionCachedCallNode call) {
+            @Exclusive @Cached ProtosFunctionCallDispatchers.FunctionCachedCallNode call) {
         Object[] arguments = ProtosFrameArguments.dispatchedCall0(
                 null, ProtosFrameArguments.functionCallMarker(), null, null, null);
         ProtosFrameArguments.bindMethod(arguments, method.receiver(), method.methodHome());

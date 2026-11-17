@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.133-SNAPSHOT
+
+- **I115 — Explicit Truffle DSL contracts.** Operations declare bytecode-index storage, stable guards declare idempotence, and inlining-target binds and cache-sharing declarations follow DSL conventions. The generated-bytecode baseline includes shared-plan unary dispatch. Default Java test parallelism is reduced from eight jobs to six.
+
 ## 0.4.132-SNAPSHOT
 
 - **I115 — Task transport elision for proven Task-free callees.** Lowering records a conservative effective-root proof that a body cannot observe a Task. Direct calls omit Task transport only while that proof and invocation guards hold; unproven calls retain ordinary inheritance. Added proof, direct-header, shared-target and deferred-caller regressions.

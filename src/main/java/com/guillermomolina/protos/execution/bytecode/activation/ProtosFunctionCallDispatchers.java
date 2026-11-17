@@ -37,6 +37,7 @@ import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
+import com.oracle.truffle.api.dsl.Cached.Exclusive;
 import com.oracle.truffle.api.dsl.GenerateCached;
 import com.oracle.truffle.api.dsl.GenerateInline;
 import com.oracle.truffle.api.dsl.GenerateUncached;
@@ -147,7 +148,7 @@ final class ProtosFunctionCallDispatchers {
                 Object callerReference,
                 ProtosBytecodeRootNode root);
 
-        @Specialization(guards = {
+        @Specialization(limit = "3", guards = {
                 "isSourceFunction(callable)",
                 "!isFunctionCall(arguments) || hasCanonicalCallSelection(callable, rootSelection)"
         })
@@ -158,8 +159,8 @@ final class ProtosFunctionCallDispatchers {
                 Object[] arguments,
                 Object callerReference,
                 ProtosBytecodeRootNode root,
-                @Bind("$node") Node inliningTarget,
-                @Cached(value = "rootCallSelection()", allowUncached = true)
+                @Bind Node inliningTarget,
+                @Exclusive @Cached(value = "rootCallSelection()", allowUncached = true)
                     ProtosStandardObjectProtocol.CanonicalRootCallSelection rootSelection,
                 @Cached FunctionCachedCallNode cachedCall) {
             return cachedCall.execute(
@@ -167,7 +168,7 @@ final class ProtosFunctionCallDispatchers {
                     callerReference, root, currentContext(inliningTarget));
         }
 
-        @Specialization(guards = {
+        @Specialization(limit = "3", guards = {
                 "isBuiltin(callable)",
                 "isFunctionCall(arguments)",
                 "hasCanonicalCallSelection(callable, rootSelection)"
@@ -179,8 +180,8 @@ final class ProtosFunctionCallDispatchers {
                 Object[] arguments,
                 Object callerReference,
                 ProtosBytecodeRootNode root,
-                @Bind("$node") Node inliningTarget,
-                @Cached(value = "rootCallSelection()", allowUncached = true)
+                @Bind Node inliningTarget,
+                @Exclusive @Cached(value = "rootCallSelection()", allowUncached = true)
                     ProtosStandardObjectProtocol.CanonicalRootCallSelection rootSelection,
                 @Cached BuiltinFunctionCachedCallNode cachedCall) {
             return cachedCall.execute(
@@ -199,7 +200,7 @@ final class ProtosFunctionCallDispatchers {
                 Object[] arguments,
                 Object callerReference,
                 ProtosBytecodeRootNode root,
-                @Bind("$node") Node inliningTarget,
+                @Bind Node inliningTarget,
                 @Cached BuiltinMethodCachedCallNode cachedCall) {
             return cachedCall.execute(
                     frame, inliningTarget, terminal, callable, arguments,
@@ -219,7 +220,7 @@ final class ProtosFunctionCallDispatchers {
                 Object[] arguments,
                 Object callerReference,
                 ProtosBytecodeRootNode root,
-                @Cached(inline = false) CallNode selectedCall) {
+                @Exclusive @Cached CallNode selectedCall) {
             ProtosFrameArguments.bindMethod(arguments, method.receiver(), method.methodHome());
             return selectedCall.execute(
                     frame, terminal, method.callable(), arguments, callerReference, root);
@@ -261,7 +262,7 @@ final class ProtosFunctionCallDispatchers {
                 Object[] arguments,
                 Object callerReference,
                 ProtosBytecodeRootNode root,
-                @Cached(inline = false) CallNode selectedCall) {
+                @Exclusive @Cached CallNode selectedCall) {
             Object receiver = ProtosNumericValueSupport.guestValue(callable);
             ProtosSlotLookupResult selected = selectCall(
                     receiver,
@@ -494,7 +495,7 @@ final class ProtosFunctionCallDispatchers {
                 Object[] arguments,
                 Object callerReference,
                 ProtosBytecodeRootNode root,
-                @Bind("$node") Node inliningTarget,
+                @Bind Node inliningTarget,
                 @Cached FunctionCachedCallNode cachedCall) {
             return cachedCall.execute(
                     frame, inliningTarget, terminal, closure, arguments,
@@ -509,7 +510,7 @@ final class ProtosFunctionCallDispatchers {
                 Object[] arguments,
                 Object callerReference,
                 ProtosBytecodeRootNode root,
-                @Bind("$node") Node inliningTarget,
+                @Bind Node inliningTarget,
                 @Cached BuiltinFunctionCachedCallNode cachedCall) {
             return cachedCall.execute(
                     frame, inliningTarget, terminal, closure, arguments,
@@ -589,8 +590,8 @@ final class ProtosFunctionCallDispatchers {
                         Assumption cachedCallerNeedsStable,
                 @Cached("classifyReturnHome(cachedClosure, cachedCallee)")
                         ReturnHomeMode cachedHomeMode,
-                @Cached FunctionDirectInvokeNode invoke,
-                @Cached InlinedConditionProfile taskPresence) {
+                @Exclusive @Cached FunctionDirectInvokeNode invoke,
+                @Exclusive @Cached InlinedConditionProfile taskPresence) {
             /*
              * the mode is a per-entry constant of this identity PIC,
              * so partial evaluation keeps exactly one of the three routes.
@@ -659,8 +660,8 @@ final class ProtosFunctionCallDispatchers {
                         ProtosBytecodeRootNode cachedCallee,
                 @Cached("cachedCallee.callerNeedsStability()")
                         Assumption cachedCallerNeedsStable,
-                @Cached FunctionDirectInvokeNode invoke,
-                @Cached InlinedConditionProfile taskPresence) {
+                @Exclusive @Cached FunctionDirectInvokeNode invoke,
+                @Exclusive @Cached InlinedConditionProfile taskPresence) {
             return invokeSharedTarget(
                     frame, inliningTarget, taskPresence, invoke, callNode,
                     cachedCallee, closure, arguments, callerReference);

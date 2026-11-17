@@ -28,6 +28,7 @@ import com.oracle.truffle.api.bytecode.ForceQuickening;
 import com.oracle.truffle.api.bytecode.OperationProxy;
 import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
+import com.oracle.truffle.api.dsl.Cached.Exclusive;
 import com.oracle.truffle.api.dsl.GenerateInline;
 import com.oracle.truffle.api.dsl.GenerateUncached;
 import com.oracle.truffle.api.dsl.Idempotent;
@@ -79,7 +80,7 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
             ProtosClosureValue callable,
             Object receiver,
             Object a0,
-            @Bind("$node") Node inliningTarget,
+            @Bind Node inliningTarget,
             @Bind("bytecodeOf($node)") BytecodeNode bytecode,
             @Bind("bytecode.getBytecodeIndex(frame)") int bytecodeIndex,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
@@ -130,7 +131,7 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
         return ProtosFunctionCallDispatchers.classifyReturnHome(closure, callee);
     }
 
-    @Specialization(guards = {
+    @Specialization(limit = "3", guards = {
                     "!methodSend",
                     "isSourceFunction(callable)",
                     "canonicalCallSelected(callable, rootSelection)"
@@ -142,7 +143,7 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
             ProtosClosureValue callable,
             Object a0,
             Object a1,
-            @Bind("$node") Node inliningTarget,
+            @Bind Node inliningTarget,
             @Bind("bytecodeOf($node)") BytecodeNode bytecode,
             @Bind("bytecode.getBytecodeIndex(frame)") int bytecodeIndex,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
@@ -150,7 +151,7 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
                     value = "rootCallSelection()",
                     allowUncached = true)
                     ProtosStandardObjectProtocol.CanonicalRootCallSelection rootSelection,
-            @Cached ProtosFunctionCallDispatchers.FunctionCachedCallNode call) {
+            @Exclusive @Cached ProtosFunctionCallDispatchers.FunctionCachedCallNode call) {
         Object outcome = call.execute(
                 frame, inliningTarget, terminal, callable,
                 ProtosFrameArguments.dispatchedCall2(
@@ -174,11 +175,11 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
             ProtosBoundMethod method,
             Object a0,
             Object a1,
-            @Bind("$node") Node inliningTarget,
+            @Bind Node inliningTarget,
             @Bind("bytecodeOf($node)") BytecodeNode bytecode,
             @Bind("bytecode.getBytecodeIndex(frame)") int bytecodeIndex,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
-            @Cached ProtosFunctionCallDispatchers.FunctionCachedCallNode call) {
+            @Exclusive @Cached ProtosFunctionCallDispatchers.FunctionCachedCallNode call) {
         Object[] arguments = ProtosFrameArguments.dispatchedCall2(
                 null, ProtosFrameArguments.functionCallMarker(),
                 null, null, null, a0, a1);
@@ -205,7 +206,7 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
             @Bind("bytecodeOf($node)") BytecodeNode bytecode,
             @Bind("bytecode.getBytecodeIndex(frame)") int bytecodeIndex,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
-            @Cached ProtosFunctionCallDispatchers.CallNode call) {
+            @Exclusive @Cached ProtosFunctionCallDispatchers.CallNode call) {
         Object outcome = call.execute(
                 frame, terminal, callable,
                 ProtosFrameArguments.dispatchedCall2(
@@ -235,7 +236,7 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
             @Bind("bytecodeOf($node)") BytecodeNode bytecode,
             @Bind("bytecode.getBytecodeIndex(frame)") int bytecodeIndex,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
-            @Cached ProtosFunctionCallDispatchers.CallNode call) {
+            @Exclusive @Cached ProtosFunctionCallDispatchers.CallNode call) {
         Object[] arguments = ProtosFrameArguments.dispatchedCall1(
                 null, receiver, receiverHomeOrNull(receiver),
                 null, null, a0);

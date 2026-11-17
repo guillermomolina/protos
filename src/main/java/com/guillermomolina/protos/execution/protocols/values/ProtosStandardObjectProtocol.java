@@ -34,6 +34,7 @@ import com.guillermomolina.protos.runtime.ProtosTask;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+import com.oracle.truffle.api.dsl.NonIdempotent;
 import com.oracle.truffle.api.object.DynamicObject;
 import com.oracle.truffle.api.object.Property;
 import com.oracle.truffle.api.object.Shape;
@@ -146,6 +147,7 @@ public final class ProtosStandardObjectProtocol {
      */
     public record CanonicalRootCallSelection(Shape rootShape, Assumption callSelectionStable) {
         /** Whether the root {@code call} slot was not mutated since issuance. */
+        @NonIdempotent
         public boolean isValid() {
             return callSelectionStable.isValid();
         }

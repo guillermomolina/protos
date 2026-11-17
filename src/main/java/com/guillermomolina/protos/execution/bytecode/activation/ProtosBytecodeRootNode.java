@@ -82,11 +82,13 @@ import com.oracle.truffle.api.bytecode.Instrumentation;
 import com.oracle.truffle.api.bytecode.Operation;
 import com.oracle.truffle.api.bytecode.OperationProxy;
 import com.oracle.truffle.api.bytecode.Prolog;
+import com.oracle.truffle.api.bytecode.StoreBytecodeIndex;
 import com.oracle.truffle.api.bytecode.Variadic;
 import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.Cached.Shared;
 import com.oracle.truffle.api.dsl.Fallback;
+import com.oracle.truffle.api.dsl.Idempotent;
 import com.oracle.truffle.api.dsl.NonIdempotent;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.exception.AbstractTruffleException;
@@ -835,7 +837,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         return ProtosTailCallContinuation.isSuspended(result);
     }
 
-    @Operation
+    @Operation(storeBytecodeIndex = false)
     @ConstantOperand(type = boolean.class, name = "callerReference")
     public static final class CurrentActivation {
         /*
@@ -898,7 +900,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      */
 
     /** Supplied positional argument {@code index}, or canonical null (D203). */
-    @Operation
+    @Operation(storeBytecodeIndex = false)
     @ConstantOperand(type = int.class, name = "index")
     public static final class LoadSuppliedArgument {
         @Specialization
@@ -937,7 +939,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /** Whether the call supplied positional argument {@code index}. */
-    @Operation
+    @Operation(storeBytecodeIndex = false)
     @ConstantOperand(type = int.class, name = "index")
     public static final class HasSuppliedArgument {
         @Specialization
@@ -951,7 +953,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * The frozen Array of the supplied arguments after the first {@code
      * positionalParametersBeforeRest}, the value of a rest parameter.
      */
-    @Operation
+    @Operation(storeBytecodeIndex = false)
     @ConstantOperand(type = int.class, name = "positionalParametersBeforeRest")
     public static final class LoadRestArguments {
         @Specialization
@@ -982,7 +984,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /** Captured cell {@code index} of the invoked Closure, read at root entry. */
-    @Operation
+    @Operation(storeBytecodeIndex = false)
     @ConstantOperand(type = int.class, name = "index")
     public static final class LoadCapturedCell {
         @Specialization
@@ -998,7 +1000,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * unqualified-lookup Error; every other cell read uses {@link
      * LoadLexicalCell}.
      */
-    @Operation
+    @Operation(storeBytecodeIndex = true)
     public static final class LoadCell {
         @Specialization
         public static Object perform(ProtosLexicalCell cell, @Bind VirtualFrame frame) {
@@ -1018,7 +1020,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /** Stores the guest value {@code value} into {@code cell}. */
-    @Operation
+    @Operation(storeBytecodeIndex = true)
     public static final class StoreCell {
         @Specialization
         public static void perform(
@@ -1311,7 +1313,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * {@link #absent} (a cleared or never-written local) continues with live
      * lexical selection and is only compiled once some activation misses.
      */
-    @Operation
+    @Operation(storeBytecodeIndex = true)
     @ConstantOperand(type = String.class, name = "name")
     @ConstantOperand(type = LocalAccessor.class, name = "local")
     public static final class LoadLexicalLocal {
@@ -1350,7 +1352,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * value while it is PRESENT, else live lexical selection, which may reach
      * an outer binding or the receiver. Presence belongs to the cell itself.
      */
-    @Operation
+    @Operation(storeBytecodeIndex = true)
     @ConstantOperand(type = String.class, name = "name")
     public static final class LoadLexicalCell {
         @NonIdempotent
@@ -1379,7 +1381,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * before its right-hand side: the binding's own local while it is
      * PRESENT, else the destination selected by live lexical selection.
      */
-    @Operation
+    @Operation(storeBytecodeIndex = true)
     @ConstantOperand(type = String.class, name = "name")
     @ConstantOperand(type = LocalAccessor.class, name = "local")
     public static final class SelectLexicalLocalWrite {
@@ -1404,7 +1406,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * be PRESENT and its Context not FROZEN, exactly as an assignment through
      * the Context; otherwise the assignment Error is signaled.
      */
-    @Operation
+    @Operation(storeBytecodeIndex = true)
     @ConstantOperand(type = String.class, name = "name")
     @ConstantOperand(type = LocalAccessor.class, name = "local")
     public static final class AssignLexicalLocal {
@@ -1437,7 +1439,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * its right-hand side: the cell itself while its binding is PRESENT, else
      * the destination selected by live lexical selection.
      */
-    @Operation
+    @Operation(storeBytecodeIndex = true)
     @ConstantOperand(type = String.class, name = "name")
     public static final class SelectLexicalCellWrite {
         @Specialization
@@ -1459,7 +1461,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * SelectLexicalCellWrite}; never selects again. A selected cell must still
      * be PRESENT and its owner's Context not FROZEN.
      */
-    @Operation
+    @Operation(storeBytecodeIndex = true)
     @ConstantOperand(type = String.class, name = "name")
     public static final class AssignLexicalCell {
         @Specialization
@@ -1489,7 +1491,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * PRESENT (a duplicate creation) or its Context CLOSED/FROZEN: the
      * ordinary {@code :} rules, then the store into the same local.
      */
-    @Operation
+    @Operation(storeBytecodeIndex = true)
     @ConstantOperand(type = String.class, name = "name")
     @ConstantOperand(type = LocalAccessor.class, name = "local")
     public static final class CreateLexicalLocal {
@@ -1516,7 +1518,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * establishes the value in the same cell, which every capturing Closure
      * keeps sharing.
      */
-    @Operation
+    @Operation(storeBytecodeIndex = true)
     @ConstantOperand(type = String.class, name = "name")
     public static final class CreateLexicalCell {
         @Specialization
@@ -1729,7 +1731,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * kernel and invokes any other selected implementation through
      * {@link ProtosNumericOverloadNode}.
      */
-    @Operation
+    @Operation(storeBytecodeIndex = true)
     @ConstantOperand(type = boolean.class, name = "terminal")
     public static final class NumberQuotient {
         static final String SELECTOR = "div";
@@ -1767,7 +1769,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * Exact truncating Integer remainder {@code mod}, with the same
      * selection discipline as {@link NumberQuotient}.
      */
-    @Operation
+    @Operation(storeBytecodeIndex = true)
     @ConstantOperand(type = boolean.class, name = "terminal")
     public static final class NumberRemainder {
         static final String SELECTOR = "mod";
@@ -2355,7 +2357,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * write-target selection (which stays separate from its assignment).
      * Both are performed by the single {@link ProtosLexicalSelectionNode}.
      */
-    @Operation
+    @Operation(storeBytecodeIndex = true)
     @ConstantOperand(type = ProtosNamedLexicalAccess.class, name = "access")
     public static final class AccessNamedLexical {
         @Specialization
@@ -2381,7 +2383,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * the destination is the one live lexical selection chose before the
      * right-hand side; it is assigned without selecting again.
      */
-    @Operation
+    @Operation(storeBytecodeIndex = true)
     public static final class WriteGlobal {
         @Specialization
         public static Object perform(
@@ -2422,7 +2424,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      */
 
     /** The observed prefix of a multiple creation. */
-    @Operation
+    @Operation(storeBytecodeIndex = true)
     public static final class ObserveMultipleCreatePrefix {
         @Specialization
         public static Object[] perform(
@@ -2459,7 +2461,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * pass it as a separate bytecode operand. Runtime creation uses
      * exactly the existing authority, presence and mutability checks.
      */
-    @Operation
+    @Operation(storeBytecodeIndex = true)
     @ConstantOperand(type = String.class, name = "name")
     public static final class CreateDiscardedModuleBinding {
         @Specialization
@@ -2548,7 +2550,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * both property presence and mutation admission. Expression-result and
      * evaluation-order preservation belong to the lowerer.
      */
-    @Operation
+    @Operation(storeBytecodeIndex = true)
     @ConstantOperand(type = String.class, name = "name")
     public static final class SetAttribute {
         @ForceQuickening
@@ -2601,6 +2603,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return ProtosValueLookup.hasProperty(shape, name);
         }
 
+        @Idempotent
         static boolean isWritableShape(Shape shape) {
             return !ProtosObjectValue.isFrozenShape(shape);
         }
@@ -2622,7 +2625,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * The slot is established through the authoritative creation path, as a
      * property of the receiver itself.
      */
-    @Operation
+    @Operation(storeBytecodeIndex = true)
     @ConstantOperand(type = String.class, name = "name")
     public static final class CreateAttribute {
         @Specialization
@@ -2669,7 +2672,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * Inherited members, other representations and absent members use
      * {@link #doGeneric}.
      */
-    @Operation
+    @Operation(storeBytecodeIndex = true)
     @ConstantOperand(type = String.class, name = "name")
     public static final class GetAttribute {
         @Specialization(
@@ -2746,7 +2749,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * value is read through the {@code PropertyGetter} and, when it is a
      * Closure, extracted freshly with its receiver and real owner.
      */
-    @Operation
+    @Operation(storeBytecodeIndex = true)
     @ConstantOperand(type = String.class, name = "name")
     public static final class ReadMember {
         @Specialization(
@@ -3026,7 +3029,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * definition that may observe its ReturnHome ({@code ^}) keeps the * construction with the creator's ReturnHome. Inherited-only captures
      * retain the existing chain without creating a new creator context.
      */
-    @Operation
+    @Operation(storeBytecodeIndex = true)
     @ConstantOperand(type = boolean.class, name = "compactCapture")
     @ConstantOperand(type = boolean.class, name = "capturesCreatorContext")
     @ConstantOperand(type = boolean.class, name = "requiresInheritedLexicalEnvironment")
@@ -3264,6 +3267,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return ProtosFrameArguments.admittedCompactCreatorOrNull(frame.getArguments());
         }
 
+        @Idempotent
         static boolean isSingleContext() {
             return ProtosCallUnaryMethodNode.isSingleContext();
         }
@@ -3438,7 +3442,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * labels. Only this operation freezes the P,K packet. Ordinary
      * positional Call*Method operations are unaffected.
      */
-    @Operation
+    @Operation(storeBytecodeIndex = true)
     public static final class CallNamedMethod {
         @Specialization
         public static Object perform(
@@ -3478,7 +3482,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * {@link ProtosResultKind} (a miss sentinel, a carrier type or a C-prime
      * gate); see that type for each predicate.
      */
-    @Operation
+    @Operation(storeBytecodeIndex = false)
     @ConstantOperand(type = ProtosResultKind.class, name = "kind")
     public static final class IsResultKind {
         /*
@@ -4130,7 +4134,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * fresh standard Error; the exact activation is resolved only on that
      * error path, so the success path allocates nothing.
      */
-    @Operation
+    @Operation(storeBytecodeIndex = true)
     @ConstantOperand(type = boolean.class, name = "polarity")
     public static final class CanonicalControlCondition {
         /* A guest Boolean is a Java boolean: it is consumed directly. */
@@ -4199,7 +4203,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * activated. A value that is not a semantic Closure signals the fresh
      * standard Error; an invokable non-Closure is not accepted.
      */
-    @Operation
+    @Operation(storeBytecodeIndex = false)
     public static final class RequireLoopClosure {
         @Specialization
         public static ProtosClosureValue doClosure(ProtosClosureValue value) {
@@ -4207,6 +4211,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
 
         @Fallback
+        @StoreBytecodeIndex
         public static Object doOther(
                 Object value,
                 @Bind VirtualFrame frame,
@@ -4227,7 +4232,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * Future await/adoption) signals the fresh standard Error after the
      * callback completed.
      */
-    @Operation
+    @Operation(storeBytecodeIndex = false)
     public static final class RequireCanonicalBooleanResult {
         @Specialization
         public static boolean doBoolean(boolean value) {
@@ -4235,6 +4240,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
 
         @Fallback
+        @StoreBytecodeIndex
         public static Object doOther(
                 Object value,
                 @Bind VirtualFrame frame,
@@ -4375,7 +4381,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /** The same transfer accounting at a resumed release callback, without replay. */
-    @Operation
+    @Operation(storeBytecodeIndex = true)
     public static final class IoReleaseResumeChild {
         @Specialization(
                 guards = "result.getContinuationRootNode() == cachedRoot",
@@ -4489,7 +4495,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * retains its own execution state; this operation only resumes
      * that state and propagates control transfers.
      */
-    @Operation
+    @Operation(storeBytecodeIndex = true)
     public static final class ResumeDispatchedContinuation {
 
         @Specialization

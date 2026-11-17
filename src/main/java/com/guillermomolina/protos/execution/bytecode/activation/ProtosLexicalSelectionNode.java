@@ -105,14 +105,14 @@ abstract class ProtosLexicalSelectionNode extends Node {
             ProtosActivation activation,
             String name,
             boolean write,
-            @Cached(value = "name", neverDefault = true) String cachedName,
-            @Cached(value = "activation.capturedLexicalEnvironmentForRuntime()", neverDefault = false)
+            @Cached(value = "name") String cachedName,
+            @Cached(value = "activation.capturedLexicalEnvironmentForRuntime()")
                     ProtosLexicalEnvironment cachedEnvironment,
-            @Cached(value = "ownerDepth(cachedEnvironment, cachedName)", neverDefault = false)
+            @Cached(value = "ownerDepth(cachedEnvironment, cachedName)")
                     int cachedDepth,
-            @Cached(value = "ownerOrNull(cachedEnvironment, cachedDepth)", neverDefault = false)
+            @Cached(value = "ownerOrNull(cachedEnvironment, cachedDepth)")
                     ProtosLexicalEnvironment cachedOwner,
-            @Cached(value = "moduleLocationOrNull(cachedOwner, cachedName)", neverDefault = false)
+            @Cached(value = "moduleLocationOrNull(cachedOwner, cachedName)")
                     ProtosModuleBindingLocation location,
             @Cached DynamicObject.GetNode getNode) {
         Object value = location != null
@@ -140,12 +140,12 @@ abstract class ProtosLexicalSelectionNode extends Node {
             ProtosActivation activation,
             String name,
             boolean write,
-            @Cached(value = "name", neverDefault = true) String cachedName,
-            @Cached(value = "activation.capturedLexicalEnvironmentForRuntime()", neverDefault = false)
+            @Cached(value = "name") String cachedName,
+            @Cached(value = "activation.capturedLexicalEnvironmentForRuntime()")
                     ProtosLexicalEnvironment cachedEnvironment,
-            @Cached(value = "ownerDepth(cachedEnvironment, cachedName)", neverDefault = false)
+            @Cached(value = "ownerDepth(cachedEnvironment, cachedName)")
                     int cachedDepth,
-            @Cached(value = "chainLength(cachedEnvironment)", neverDefault = false)
+            @Cached(value = "chainLength(cachedEnvironment)")
                     int cachedChainLength) {
         return readReceiverOrThrow(activation, name);
     }
@@ -170,14 +170,14 @@ abstract class ProtosLexicalSelectionNode extends Node {
             ProtosActivation activation,
             String name,
             boolean write,
-            @Cached(value = "name", neverDefault = true) String cachedName,
-            @Cached(value = "activation.capturedLexicalEnvironmentForRuntime()", neverDefault = false)
+            @Cached(value = "name") String cachedName,
+            @Cached(value = "activation.capturedLexicalEnvironmentForRuntime()")
                     ProtosLexicalEnvironment cachedEnvironment,
-            @Cached(value = "ownerDepth(cachedEnvironment, cachedName)", neverDefault = false)
+            @Cached(value = "ownerDepth(cachedEnvironment, cachedName)")
                     int cachedDepth,
-            @Cached(value = "ownerTargetOrNull(cachedEnvironment, cachedDepth, cachedName)", neverDefault = false)
+            @Cached(value = "ownerTargetOrNull(cachedEnvironment, cachedDepth, cachedName)")
                     ResolvedLexicalWriteTarget cachedTarget,
-            @Cached(value = "ownerOrNull(cachedEnvironment, cachedDepth)", neverDefault = false)
+            @Cached(value = "ownerOrNull(cachedEnvironment, cachedDepth)")
                     ProtosLexicalEnvironment cachedOwner) {
         if (ownerHolds(cachedOwner, cachedName)) {
             return cachedTarget;

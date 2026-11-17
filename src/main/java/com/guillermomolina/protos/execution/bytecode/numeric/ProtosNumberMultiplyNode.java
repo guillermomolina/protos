@@ -51,7 +51,7 @@ abstract class ProtosNumberMultiplyNode extends ProtosNumberMultiplyFastPathsBas
 
     @Specialization(guards = "selection.execute(frame, SELECTOR, left)", replaces = "doLL")
     static Object doLLOvf(VirtualFrame frame, boolean terminal, long left, long right,
-            @Bind Node node,
+            @Bind("$node") Node node,
             @Shared("selection") @Cached ProtosNumericSelectionNode selection) {
         return multiplyOrPromote(frame, node, left, right);
     }
