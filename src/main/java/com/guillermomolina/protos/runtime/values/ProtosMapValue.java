@@ -20,6 +20,7 @@ import com.guillermomolina.protos.runtime.numeric.ProtosNumericHashKey;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -160,7 +161,7 @@ public final class ProtosMapValue extends ProtosObjectValue {
                 snapshot.add(entry);
             }
         }
-        return List.copyOf(snapshot);
+        return Collections.unmodifiableList(snapshot);
     }
 
     public Candidates candidatesForRecordedHash(ProtosNumericHashKey hash) {

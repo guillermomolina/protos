@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import java.util.List;
 import java.util.NoSuchElementException;
 import org.junit.jupiter.api.Test;
@@ -86,6 +87,62 @@ class ProtosPreludeTest {
                 contextPrototype,
                 activation.context().parent().orElseThrow());
         assertSame(prelude, activation.prelude().orElseThrow());
+    }
+
+    @Test
+    void moduleActivationCapturesExactlyTheBindingsContext() {
+        ProtosObjectValue contextPrototype =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosPrelude prelude = frozenPrelude(contextPrototype);
+        ProtosObjectValue moduleContext = prelude.newExecutionContext();
+
+        ProtosActivation activation = prelude.newModuleActivation(
+                new ProtosActorModuleState(),
+                null,
+                moduleContext,
+                new ProtosActorExecutionDomain());
+
+        List<ProtosObjectValue> captured = activation.capturedLexicalContexts();
+        assertEquals(1, captured.size());
+        assertSame(prelude.bindings(), captured.get(0));
+        assertSame(moduleContext, activation.context());
+    }
+
+    @Test
+    void moduleInitializerActivationCapturesPublicModuleThenBindings() {
+        ProtosObjectValue contextPrototype =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosPrelude prelude = frozenPrelude(contextPrototype);
+        ProtosObjectValue privateContext = prelude.newExecutionContext();
+        ProtosObjectValue publicModule =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+
+        ProtosActivation activation = prelude.newModuleInitializerActivation(
+                new ProtosActorModuleState(),
+                ProtosModuleKey.module("test:initializer"),
+                privateContext,
+                publicModule,
+                new ProtosActorExecutionDomain());
+
+        List<ProtosObjectValue> captured = activation.capturedLexicalContexts();
+        assertEquals(2, captured.size());
+        assertSame(publicModule, captured.get(0));
+        assertSame(prelude.bindings(), captured.get(1));
+        assertSame(privateContext, activation.context());
+        assertSame(publicModule, activation.receiver());
+    }
+
+    private static ProtosPrelude frozenPrelude(ProtosObjectValue contextPrototype) {
+        ProtosObjectValue bindings = new ProtosObjectValue(contextPrototype);
+        bindings.createLocalSlot("Context", contextPrototype);
+        bindings.createLocalSlot(
+                "Error",
+                new ProtosObjectValue(ProtosObjectValue.rootObject()));
+        bindings.createLocalSlot(
+                "Array",
+                new ProtosObjectValue(ProtosObjectValue.rootObject()));
+        bindings.freeze();
+        return new ProtosPrelude(bindings, contextPrototype);
     }
 
     @Test

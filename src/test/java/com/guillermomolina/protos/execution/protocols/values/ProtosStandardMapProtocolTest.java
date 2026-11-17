@@ -1,6 +1,7 @@
 /* APL-1.0 licensed work; see LICENSE.TXT. */
 package com.guillermomolina.protos.execution;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -8,7 +9,9 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
+import com.guillermomolina.protos.runtime.numeric.ProtosNumericHashKey;
 import java.nio.file.Path;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class ProtosStandardMapProtocolTest {
@@ -129,5 +132,64 @@ class ProtosStandardMapProtocolTest {
                         + "}\n"
                         + "m[make(1, 1180591620717411303424)] = 1\n"
                         + "m.containsKey(probe)"));
+    }
+
+    @Test
+    void stableSnapshotIsAnIndependentInsertionOrderedCaptureOfRecordedHashes() throws Exception {
+        ProtosActivation activation = core().newModuleActivation();
+        ProtosMapValue map = (ProtosMapValue) ProtosTestExecutionSupport.evaluate(
+                KEYS
+                        + "k1: make(1, 11)\n"
+                        + "k2: make(2, 22)\n"
+                        + "k3: make(3, 33)\n"
+                        + "m: Map()\n"
+                        + "m[k2] = \"b\"\n"
+                        + "m[k1] = \"a\"\n"
+                        + "m[k3] = \"c\"\n"
+                        + "m",
+                activation);
+
+        List<ProtosStandardMapProtocol.StableAssociation> snapshot =
+                ProtosStandardMapProtocol.stableSnapshot(map);
+        List<ProtosMapValue.Entry> entries = map.keyedSnapshot();
+        assertEquals(3, snapshot.size());
+        assertEquals(List.of(22L, 11L, 33L), hashSources(snapshot));
+        for (int index = 0; index < snapshot.size(); index++) {
+            ProtosStandardMapProtocol.StableAssociation association = snapshot.get(index);
+            assertSame(entries.get(index).key(), association.key());
+            assertSame(entries.get(index).recordedHash(), association.recordedHash());
+            assertSame(entries.get(index).value(), association.value());
+        }
+        Object capturedReplacedValue = snapshot.get(1).value();
+        Object capturedRemovedValue = snapshot.get(2).value();
+        assertThrows(UnsupportedOperationException.class, () -> snapshot.remove(0));
+        assertThrows(UnsupportedOperationException.class, () -> entries.remove(0));
+
+        ProtosTestExecutionSupport.evaluate(
+                "k2.h = 99\n"
+                        + "m[k1] = \"replaced\"\n"
+                        + "m.remove(k3)\n"
+                        + "m[make(4, 44)] = \"d\"\n",
+                activation);
+
+        assertEquals(3, snapshot.size());
+        assertEquals(List.of(22L, 11L, 33L), hashSources(snapshot));
+        assertSame(capturedReplacedValue, snapshot.get(1).value());
+        assertSame(capturedRemovedValue, snapshot.get(2).value());
+        assertEquals(3, entries.size());
+    }
+
+    private static List<Long> hashSources(
+            List<ProtosStandardMapProtocol.StableAssociation> snapshot) {
+        Long[] hashes = new Long[snapshot.size()];
+        for (int index = 0; index < hashes.length; index++) {
+            ProtosNumericHashKey recorded = snapshot.get(index).recordedHash();
+            for (long candidate : new long[] {11L, 22L, 33L, 44L, 99L}) {
+                if (recorded.equals(ProtosNumericHashKey.ofLong(candidate))) {
+                    hashes[index] = candidate;
+                }
+            }
+        }
+        return List.of(hashes);
     }
 }

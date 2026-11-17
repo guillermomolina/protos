@@ -91,8 +91,8 @@ final class ProtosEmbeddedFilesystemCustody implements ProtosStandardFilesystemP
 
     private final TruffleFile base;
     private final String separator;
-    /* Guarded by this; the open-File set is created by the first successful open. */
-    private Set<ChannelResource> openResources;
+    /* Guarded by this; the open-File custody list is created by the first successful open. */
+    private ArrayList<ChannelResource> openResources;
     private boolean closed;
     private int acquisitions;
 
@@ -392,17 +392,32 @@ final class ProtosEmbeddedFilesystemCustody implements ProtosStandardFilesystemP
             return false;
         }
         if (openResources == null) {
-            openResources = new HashSet<>();
+            openResources = new ArrayList<>();
         }
-        openResources.add(resource);
+        if (indexOfOpenResource(resource) < 0) {
+            openResources.add(resource);
+        }
         acquisitions++;
         return true;
     }
 
     private synchronized void unregister(ChannelResource resource) {
         if (openResources != null) {
-            openResources.remove(resource);
+            int index = indexOfOpenResource(resource);
+            if (index >= 0) {
+                openResources.remove(index);
+            }
         }
+    }
+
+    /** Identity position of {@code resource} in the custody list, or {@code -1}. */
+    private int indexOfOpenResource(ChannelResource resource) {
+        for (int index = 0; index < openResources.size(); index++) {
+            if (openResources.get(index) == resource) {
+                return index;
+            }
+        }
+        return -1;
     }
 
     /**
@@ -410,10 +425,14 @@ final class ProtosEmbeddedFilesystemCustody implements ProtosStandardFilesystemP
      * work, and a concurrent File operation observes its closed channel as an ordinary failure.
      */
     void close() {
-        List<ChannelResource> retired;
+        ChannelResource[] retired;
         synchronized (this) {
             closed = true;
-            retired = openResources == null ? List.of() : List.copyOf(openResources);
+            int count = openResources == null ? 0 : openResources.size();
+            retired = new ChannelResource[count];
+            for (int index = 0; index < count; index++) {
+                retired[index] = openResources.get(index);
+            }
             openResources = null;
         }
         for (ChannelResource resource : retired) {

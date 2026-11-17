@@ -88,7 +88,7 @@ public final class ProtosStandardMapProtocol {
                    entry.recordedHash(),
                    entry.value()));
   }
-  return List.copyOf(snapshot);
+  return java.util.Collections.unmodifiableList(snapshot);
  }
 
  static ProtosNumericHashKey queryHash(

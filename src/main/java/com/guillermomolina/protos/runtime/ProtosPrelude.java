@@ -956,7 +956,7 @@ public final class ProtosPrelude {
             ProtosActorExecutionDomain executionDomain) {
         return ProtosActivation.withPreludeAndModuleState(
                 Objects.requireNonNull(moduleContext, "moduleContext"),
-                java.util.List.of(bindings),
+                ProtosLexicalEnvironment.materialized(bindings, null),
                 moduleContext,
                 this,
                 Objects.requireNonNull(actorModuleState, "actorModuleState"),
@@ -984,7 +984,9 @@ public final class ProtosPrelude {
         }
         return ProtosActivation.withPreludeAndModuleState(
                 privateContext,
-                java.util.List.of(publicModule, bindings),
+                ProtosLexicalEnvironment.materialized(
+                        publicModule,
+                        ProtosLexicalEnvironment.materialized(bindings, null)),
                 publicModule,
                 this,
                 Objects.requireNonNull(actorModuleState, "actorModuleState"),

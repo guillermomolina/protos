@@ -810,6 +810,66 @@ final class ProtosEmbeddedFilesystemTest {
     }
 
     @Test
+    void custodyTracksSeveralOpenFilesThroughIndividualAndGlobalClose() throws Exception {
+        Files.writeString(temporary.resolve("first.txt"), "1");
+        Files.writeString(temporary.resolve("second.txt"), "2");
+        Files.writeString(temporary.resolve("third.txt"), "3");
+        try (Context context = hostFiles(temporary)) {
+            context.eval(ProtosLanguage.ID, PROGRAM);
+            ProtosEmbeddedFilesystemCustody custody = custody(context);
+            assertFalse(custody.operationalStateMaterializedForTesting(), "custody is lazy");
+
+            RecordingOpen[] opens = {new RecordingOpen(), new RecordingOpen(), new RecordingOpen()};
+            String[] names = {"first.txt", "second.txt", "third.txt"};
+            context.enter();
+            try {
+                for (int index = 0; index < opens.length; index++) {
+                    custody.open(
+                            path(names[index]), ProtosFilesystemOpenOptions.defaults(), opens[index]);
+                }
+            } finally {
+                context.leave();
+            }
+            for (RecordingOpen open : opens) {
+                assertNotNull(open.resource, "each direct backend open acquires its resource");
+            }
+            assertTrue(custody.operationalStateMaterializedForTesting());
+            assertEquals(3, custody.openResourceCountForTesting());
+            assertEquals(3, custody.acquisitionCountForTesting());
+
+            RecordingClose individual = new RecordingClose();
+            opens[1].resource.close(individual);
+            assertEquals(1, individual.succeeded);
+            assertEquals(0, individual.failed);
+            assertEquals(2, custody.openResourceCountForTesting(), "only the closed File leaves");
+
+            RecordingClose repeated = new RecordingClose();
+            opens[1].resource.close(repeated);
+            assertEquals(1, repeated.succeeded, "a repeated close is an idempotent success");
+            assertEquals(2, custody.openResourceCountForTesting(), "no other File is unregistered");
+
+            RecordingRead survivor = new RecordingRead();
+            ((ProtosFileFlow.ReadableResource) opens[2].resource).readAt(0L, 1, survivor);
+            assertFalse(survivor.failed, "the remaining Files stay usable");
+
+            custody.close();
+            assertTrue(custody.isClosedForTesting());
+            assertEquals(0, custody.openResourceCountForTesting());
+            assertFalse(custody.operationalStateMaterializedForTesting(), "custody is retired");
+            for (int index : new int[] {0, 2}) {
+                RecordingRead read = new RecordingRead();
+                ((ProtosFileFlow.ReadableResource) opens[index].resource).readAt(0L, 1, read);
+                assertTrue(read.failed, "global close released every remaining File");
+            }
+
+            custody.close(); // idempotent
+            assertTrue(custody.isClosedForTesting());
+            assertEquals(0, custody.openResourceCountForTesting());
+            assertEquals(3, custody.acquisitionCountForTesting());
+        }
+    }
+
+    @Test
     void cancellingABusyContextReleasesItsFilesWithoutBlocking() throws Exception {
         Files.writeString(temporary.resolve("plain.txt"), "held");
         ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -895,6 +955,21 @@ final class ProtosEmbeddedFilesystemTest {
         @Override
         public void failed() {
             failed = true;
+        }
+    }
+
+    private static final class RecordingClose implements ProtosFileFlow.CloseCompletion {
+        int succeeded;
+        int failed;
+
+        @Override
+        public void succeeded() {
+            succeeded++;
+        }
+
+        @Override
+        public void failed() {
+            failed++;
         }
     }
 

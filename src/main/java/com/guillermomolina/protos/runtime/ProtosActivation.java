@@ -189,14 +189,14 @@ public final class ProtosActivation {
 
     static ProtosActivation withPreludeAndModuleState(
             ProtosObjectValue context,
-            List<ProtosObjectValue> capturedLexicalContexts,
+            ProtosLexicalEnvironment capturedEnvironment,
             Object receiver,
             ProtosPrelude prelude,
             ProtosActorModuleState actorModuleState,
             ProtosModuleKey currentModuleKey,
             ProtosActorExecutionDomain executionDomain) {
         return new ProtosActivation(
-                context, capturedLexicalContexts, receiver,
+                context, capturedEnvironment, receiver,
                 Objects.requireNonNull(prelude, "prelude"), null, null, null, false, false,
                 Objects.requireNonNull(actorModuleState, "actorModuleState"), currentModuleKey,
                 Objects.requireNonNull(executionDomain, "executionDomain"));

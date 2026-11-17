@@ -617,6 +617,15 @@ final class ProtosPlat070IoCPrimeTransferAccountingTest {
             assertEquals(1, firstClose.invocations());
             assertEquals(0, secondClose.invocations());
             assertFalse(harness.release().terminal());
+            ProtosActivation cPrime = harness.release().deferredCPrimeActivationForRuntime();
+            assertTrue(
+                    cPrime.capturedLexicalContexts().isEmpty(),
+                    "the release C-prime must not inherit the caller's lexical captures");
+            assertSame(harness.module().prelude().orElseThrow(), cPrime.prelude().orElseThrow());
+            assertSame(harness.module().actorModuleState(), cPrime.actorModuleState());
+            assertEquals(harness.module().currentModuleKey(), cPrime.currentModuleKey());
+            assertSame(harness.module().executionDomain(), cPrime.executionDomain());
+            assertSame(harness.module().receiver(), cPrime.receiver());
 
             assertTrue(callbackWait.resolve(ProtosNullValue.INSTANCE, harness.module()));
             assertNull(harness.drain(), "the next finalizer suspends with the later transfer held");
@@ -624,6 +633,11 @@ final class ProtosPlat070IoCPrimeTransferAccountingTest {
             assertEquals(1, firstClose.invocations(), "the callback prefix must not replay");
             assertEquals(1, secondClose.invocations());
             assertFalse(harness.release().terminal());
+            assertSame(
+                    cPrime,
+                    harness.release().deferredCPrimeActivationForRuntime(),
+                    "resumption reuses the same deferred C-prime activation");
+            assertTrue(cPrime.capturedLexicalContexts().isEmpty());
 
             assertTrue(closeWait.resolve(ProtosNullValue.INSTANCE, harness.module()));
             assertSame(later, harness.drain(), "the resumed transfer keeps its exact identity");

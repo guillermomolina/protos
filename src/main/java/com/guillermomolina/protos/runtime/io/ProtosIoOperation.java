@@ -113,7 +113,7 @@ public final class ProtosIoOperation {
                 ProtosActivation created =
                         ProtosActivation.withPreludeAndModuleState(
                                 prelude.newExecutionContext(),
-                                java.util.List.of(),
+                                null,
                                 origin.receiver(),
                                 prelude,
                                 origin.actorModuleState(),

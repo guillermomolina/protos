@@ -86,6 +86,16 @@ final class ProtosPerf006C3FLifecycleReleaseCarrierTest {
                 "PLAT030 release-owned suspension must enter Bytecode yield/resume");
         assertSame(release, suspension.release());
 
+        ProtosActivation cPrime = release.deferredCPrimeActivationForRuntime();
+        assertTrue(cPrime.capturedLexicalContexts().isEmpty());
+        assertSame(cPrime, release.deferredCPrimeActivationForRuntime());
+        assertSame(activation.executionDomain(), cPrime.executionDomain());
+        assertTrue(
+                ProtosBytecodeRootNode.IsContinuation.perform(suspension),
+                "the carrier stays a continuation after the C-prime activation exists");
+        assertSame(release, suspension.release());
+        assertSame(cPrime, release.deferredCPrimeActivationForRuntime());
+
         assertTrue(release.succeed());
         assertEquals(ProtosFutureValue.State.RESOLVED, close.state());
         assertSame(receiver, close.resolvedValue().orElseThrow());

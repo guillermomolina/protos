@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.150-SNAPSHOT
+
+- **I115.** Pass lexical environments to Prelude activations and replace hashed filesystem custody and list snapshots in Native Image paths. Extend Prelude, filesystem, map and I/O release regressions.
+
 ## 0.4.149-SNAPSHOT
 
 - **I115.** Bound logical-case facility shutdown in cancellation coverage and refine TextWriter, TextReader and test logical-case Native Image compilation paths.

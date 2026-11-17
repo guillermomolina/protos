@@ -1,7 +1,6 @@
 /* APL-1.0 licensed work; see LICENSE.TXT. */
 package com.guillermomolina.protos.runtime;
 
-import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -58,7 +57,7 @@ public final class ProtosIoReleaseExecution {
                 ProtosActivation created =
                         ProtosActivation.withPreludeAndModuleState(
                                 prelude.newExecutionContext(),
-                                List.of(),
+                                null,
                                 origin.receiver(),
                                 prelude,
                                 origin.actorModuleState(),
