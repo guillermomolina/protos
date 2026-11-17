@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.132-SNAPSHOT
+
+- **I115 — Task transport elision for proven Task-free callees.** Lowering records a conservative effective-root proof that a body cannot observe a Task. Direct calls omit Task transport only while that proof and invocation guards hold; unproven calls retain ordinary inheritance. Added proof, direct-header, shared-target and deferred-caller regressions.
+
 ## 0.4.131-SNAPSHOT
 
 - **I115 — Specialized Closure creation and host entry.** Closure creation specializes admitted frame shapes, and zero-argument host entries cache adapter identity while retaining shared dispatch, RootActor admission and suspension handling. Root `call` mutation continues to invalidate canonical selection assumptions. Added host-entry, dispatch and Closure-creation regressions.

@@ -27,7 +27,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosFutureValue;
+import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosTask;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.bytecode.Instruction;
@@ -594,6 +597,151 @@ final class ProtosI115UnaryPICConvergenceTest {
      * sites, each the shared CallUnaryMethod, and none of the retired
      * experimental callee-context operations.
      */
+    /**
+     * A Task-free unary callee keeps its exact target and results through
+     * the identity PIC, the shared prepared-target PIC and the megamorphic
+     * transition; an Object.call override is still selected; a new exact
+     * caller need withdraws the omission and the next calls keep their
+     * results and Task-free callers stay unpublished.
+     */
+    @Test
+    void taskFreeUnaryCalleeConvergesAndYieldsToNewCallerNeeds() throws Exception {
+        withCore(module -> {
+            evaluate(FOCAL, "i115-task-free-define.protos", module);
+            evaluate("""
+                    makeIdentity: () => { (value) => { value } }
+                    makeOffset: (seed) => { (value) => { value + seed } }
+                    callOne: (f, value) => { f(value) }
+                    overridden: makeIdentity()
+                    overridden.call: (value) => { 100 + value }
+                    """, "i115-task-free-companions.protos", module);
+            ProtosClosureValue sample = closure("makeIdentity()\n", module);
+            RootCallTarget target = sample.preparedExecutionPlanOrNullForRuntime()
+                    .bytecodeActivationTargetForComposition();
+            ProtosBytecodeRootNode callee = (ProtosBytecodeRootNode) target.getRootNode();
+            assertTrue(callee.taskObservationProvenAbsent());
+            assertTrue(callee.admitsTaskTransportOmission());
+            assertFalse(rootOf("callOne\n", module).taskObservationProvenAbsent());
+
+            for (int i = 0; i < 4 * PAST_CACHE_LIMITS; i++) {
+                assertInteger(1, evaluate("run()\n", "i115-task-free-run.protos", module));
+                assertInteger(i, evaluate("callOne(makeIdentity(), " + i + ")\n",
+                        "i115-task-free-shared.protos", module));
+            }
+            assertSame(target, closure("makeIdentity()\n", module)
+                    .preparedExecutionPlanOrNullForRuntime()
+                    .bytecodeActivationTargetForComposition(), "the exact target is kept");
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                assertInteger(1 + i, evaluate("callOne(makeOffset(" + i + "), 1)\n",
+                        "i115-task-free-mega.protos", module));
+            }
+            assertInteger(105, evaluate("callOne(overridden, 5)\n",
+                    "i115-task-free-override.protos", module));
+            assertInteger(5, evaluate("callOne(makeIdentity(), 5)\n",
+                    "i115-task-free-after-override.protos", module));
+
+            callee.requestCallerNeed(ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION);
+            assertTrue(callee.taskObservationProvenAbsent(), "the static proof is kept");
+            assertFalse(callee.admitsTaskTransportOmission(), "the omission is withdrawn");
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                assertInteger(1, evaluate("run()\n", "i115-task-free-run-after.protos", module));
+                assertInteger(i, evaluate("callOne(makeIdentity(), " + i + ")\n",
+                        "i115-task-free-shared-after.protos", module));
+            }
+        });
+    }
+
+    /**
+     * Inside a real Task, a call site that reaches a Task-free callee, a
+     * Task-observing callee and a suspending callee (directly, through the
+     * shared target and past saturation) delivers the exact Task to every
+     * observer; the suspending root never claims a non-suspension or
+     * Task-absence proof, and its result arrives after resumption.
+     */
+    @Test
+    void taskObservingAndSuspendingCalleesKeepTheirTaskAtSaturatedSites() throws Exception {
+        withCore(module -> {
+            ProtosPrelude prelude = module.prelude().orElseThrow();
+            List<ProtosTask> observed = new java.util.ArrayList<>();
+            var currentWait = new java.util.concurrent.atomic.AtomicReference<ProtosFutureValue>();
+            module.context().createLocalSlot("currentWait", ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> currentWait.get()));
+            module.context().createLocalSlot("observe", ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> {
+                        observed.add(activation.taskForRuntime());
+                        return ProtosNullValue.INSTANCE;
+                    }));
+            evaluate("""
+                    makeIdentity: () => { (value) => { value } }
+                    makeObserving: () => { (value) => { observe()\n value } }
+                    waiting: (value) => { currentWait().value()\n observe()\n value }
+                    callOne: (f, value) => { f(value) }
+                    outer: () => {
+                        callOne(makeIdentity(), 1) + callOne(makeObserving(), 2) + callOne(waiting, 3)
+                    }
+                    """, "i115-task-pic-define.protos", module);
+            ProtosBytecodeRootNode waitingRoot = rootOf("waiting\n", module);
+            assertFalse(waitingRoot.provablyNonSuspendingBody());
+            assertFalse(waitingRoot.taskObservationProvenAbsent());
+            ProtosClosureValue outer = closure("outer\n", module);
+
+            for (int round = 0; round < PAST_CACHE_LIMITS; round++) {
+                ProtosFutureValue wait =
+                        new ProtosFutureValue(prelude.futurePrototype(), module.executionDomain());
+                currentWait.set(wait);
+                observed.clear();
+                ProtosTask task = module.executionDomain().createTask(null, current ->
+                        ProtosBytecodeTaskExecution.executeRequest(
+                                current,
+                                ProtosCallRequest.taskEntry(outer, current, List.of(), module)));
+                assertTrue(module.executionDomain().dispatchOne());
+                assertEquals(ProtosTask.State.SUSPENDED, task.state(), "round " + round);
+                assertTrue(wait.resolve(ProtosNullValue.INSTANCE, module));
+                assertTrue(module.executionDomain().dispatchOne());
+                assertEquals(ProtosTask.State.COMPLETED, task.state(), "round " + round);
+                assertInteger(6, task.result().orElseThrow());
+                assertEquals(2, observed.size(), "round " + round);
+                for (ProtosTask seen : observed) {
+                    assertSame(task, seen, "every observer sees the exact running Task");
+                }
+            }
+        });
+    }
+
+    /**
+     * A Closure from another Context is entered through the entered
+     * Context's own projection; the projected root carries the proof its own
+     * lowering established and never borrows the foreign root.
+     */
+    @Test
+    void foreignContextClosureNeverBorrowsTheForeignRootProof() throws Exception {
+        try (Harness origin = new Harness(null);
+                Harness receiver = new Harness(null)) {
+            ProtosClosureValue foreign = origin.call(() -> closure(
+                    "(value) => { value }\n", origin.module()));
+            ProtosClosureExecutionPlan template = foreign.preparedExecutionPlanOrNullForRuntime();
+            assertNotNull(template);
+            ProtosBytecodeRootNode foreignRoot = template.bytecodeActivationRootForTesting();
+            receiver.run(() -> {
+                ProtosActivation module = receiver.module();
+                ProtosClosureValue holder = closure("holder: () => { 0 }\nholder\n", module);
+                holder.createLocalSlot("foreign", foreign);
+                evaluate("callOne: (f, value) => { f(value) }\n",
+                        "i115-task-foreign-define.protos", module);
+                for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                    assertInteger(i, evaluate("callOne(holder.foreign, " + i + ")\n",
+                            "i115-task-foreign-call.protos", module));
+                }
+                ProtosClosureExecutionPlan projected = ProtosLanguageContext.current()
+                        .bytecodeExecutionPlanForDefinition(foreign.definition(), template);
+                ProtosBytecodeRootNode projectedRoot = projected.bytecodeActivationRootForTesting();
+                assertNotSame(foreignRoot, projectedRoot);
+                assertTrue(projectedRoot.taskObservationProvenAbsent(),
+                        "the projection's own lowering establishes its proof");
+            });
+        }
+    }
+
     private static void assertSharedUnaryCallRoot(ProtosBytecodeRootNode root, int calls) {
         List<String> names = root.getBytecodeNode().getInstructionsAsList().stream()
                 .map(Instruction::getName)

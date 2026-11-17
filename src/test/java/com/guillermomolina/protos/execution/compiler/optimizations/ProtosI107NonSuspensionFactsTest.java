@@ -35,6 +35,7 @@ import com.guillermomolina.protos.semantic.Canonicalizer;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalCreate;
 import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
+import com.guillermomolina.protos.semantic.ast.CanonicalLookup;
 import com.guillermomolina.protos.semantic.ast.CanonicalSend;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import java.util.EnumSet;
@@ -487,6 +488,171 @@ class ProtosI107NonSuspensionFactsTest {
         assertSame(analysis.scopeOf(closure).orElseThrow(),
                 analysis.identityOf(create).orElseThrow().owner());
         assertTrue(canonicalBody("() => { x: 1\n x }").proven());
+    }
+
+    @Test
+    void taskObservationAbsenceIsProvenForPureParameterBodies() {
+        for (String source : List.of(
+                "() => { 1 }",
+                "() => { null\n \"text\"\n true }",
+                "(value) => { value }",
+                "(a, b) => { a === b }",
+                "(a, b) => { a !== b }",
+                "(first, second) => { second\n 1\n first === second\n first }")) {
+            assertTrue(noTaskObservation(source), source);
+        }
+    }
+
+    @Test
+    void taskObservationAbsenceRejectsEveryUnprovenForm() {
+        for (String source : List.of(
+                "() => { Task.current() }",
+                "() => { context }",
+                "(f) => { f() }",
+                "(f, a) => { f(a) }",
+                "(o) => { o.message() }",
+                "(o) => { o.value }",
+                "(a) => { a + 1 }",
+                "(a, b) => { a == b }",
+                "(a, b) => { a != b }",
+                "(value: 1) => { value }",
+                "(...rest) => { rest }",
+                "(first, ...rest) => { first }",
+                "(value) => { () => { value } }",
+                "() => { () => { 1 } }",
+                "() => { made: { a: 1 }\n made }",
+                "() => { Error().signal() }",
+                "() => { Error.handle(() => { 1 }, (caught) => { 0 }) }",
+                "(value) => { ^value }",
+                "(body, cleanup) => { body.ensure(cleanup) }",
+                "(future) => { future.value() }",
+                "() => { x: 1\n x }",
+                "(value) => { value = 2\n value }",
+                "(items) => { items[0] }",
+                "(items) => { items[0] = 1 }",
+                "() => { unresolved }",
+                "(value) => { other }")) {
+            assertFalse(noTaskObservation(source), source);
+        }
+    }
+
+    @Test
+    void taskObservationAbsenceRejectsCapturedAndDynamicReferences() {
+        CanonicalSequence program = canonicalize("x: 1\n((value) => { x })");
+        CanonicalClosure inner =
+                assertInstanceOf(CanonicalClosure.class, program.expressions().get(1));
+        CanonicalBindingAnalysis global = CanonicalBindingAnalyzer.analyzeModule(program);
+        CanonicalLexicalScope scope = global.scopeOf(inner).orElseThrow();
+        CanonicalCompilationFacts facts = new CanonicalCompilationFacts();
+        assertFalse(CanonicalCompilationFacts.provesNoTaskObservation(
+                facts.effectiveRoot(inner, global, scope), inner.body(), inner, global, scope));
+    }
+
+    @Test
+    void taskObservationAbsenceRequiresTheMatchingEffectiveRoot() {
+        CanonicalClosure closure = closure("(value) => { value }");
+        CanonicalClosure other = closure("(value) => { value }");
+        CanonicalBindingAnalysis analysis = CanonicalBindingAnalyzer.analyzeClosure(closure);
+        CanonicalLexicalScope scope = analysis.scopeOf(closure).orElseThrow();
+        CanonicalBindingAnalysis otherAnalysis = CanonicalBindingAnalyzer.analyzeClosure(other);
+        CanonicalLexicalScope otherScope = otherAnalysis.scopeOf(other).orElseThrow();
+        CanonicalCompilationFacts facts = new CanonicalCompilationFacts();
+        CanonicalCompilationFacts.EffectiveRoot root = facts.effectiveRoot(closure, analysis, scope);
+
+        assertTrue(CanonicalCompilationFacts.provesNoTaskObservation(
+                root, closure.body(), closure, analysis, scope));
+        // A root of another definition.
+        assertFalse(CanonicalCompilationFacts.provesNoTaskObservation(
+                facts.effectiveRoot(other, otherAnalysis, otherScope),
+                closure.body(), closure, analysis, scope));
+        // A transformed body that is not the analyzed definition body.
+        CanonicalSequence transformed = new CanonicalSequence(
+                closure.body().expressions(), closure.body().span());
+        assertFalse(CanonicalCompilationFacts.provesNoTaskObservation(
+                root, transformed, closure, analysis, scope));
+        // A scope or analysis that is not the definition's own.
+        assertFalse(CanonicalCompilationFacts.provesNoTaskObservation(
+                root, closure.body(), closure, analysis, otherScope));
+        assertFalse(CanonicalCompilationFacts.provesNoTaskObservation(
+                root, closure.body(), closure, otherAnalysis, scope));
+        // Missing evidence fails closed.
+        assertFalse(CanonicalCompilationFacts.provesNoTaskObservation(
+                null, closure.body(), closure, analysis, scope));
+        assertFalse(CanonicalCompilationFacts.provesNoTaskObservation(
+                root, closure.body(), closure, null, scope));
+    }
+
+    @Test
+    void taskObservationAbsenceAdmitsOnlyDirectParameterReads() {
+        CanonicalClosure closure = closure("(value) => { value }");
+        CanonicalBindingAnalysis analysis = CanonicalBindingAnalyzer.analyzeClosure(closure);
+        CanonicalLexicalScope scope = analysis.scopeOf(closure).orElseThrow();
+        CanonicalLookup read =
+                assertInstanceOf(CanonicalLookup.class, closure.body().expressions().get(0));
+
+        assertInstanceOf(CanonicalBindingResolution.Resolved.class,
+                analysis.resolutionOf(read).orElseThrow());
+        assertEquals(CanonicalBindingAnalysis.LexicalAccess.DIRECT, analysis.accessOf(read));
+        assertTrue(CanonicalCompilationFacts.provesNoTaskObservation(
+                new CanonicalCompilationFacts().effectiveRoot(closure, analysis, scope),
+                closure.body(), closure, analysis, scope));
+    }
+
+    @Test
+    void taskObservationAbsenceRejectsPresenceCheckedReads() {
+        CanonicalSequence program = canonicalize(
+                "(() => { x: 1\n y: x\n saved: context\n x })");
+        CanonicalClosure closure =
+                assertInstanceOf(CanonicalClosure.class, program.expressions().get(0));
+        CanonicalLookup lastRead =
+                assertInstanceOf(CanonicalLookup.class, closure.body().expressions().get(3));
+        CanonicalBindingAnalysis analysis = CanonicalBindingAnalyzer.analyzeModule(program);
+        CanonicalLexicalScope scope = analysis.scopeOf(closure).orElseThrow();
+
+        assertEquals(CanonicalBindingAnalysis.LexicalAccess.PRESENCE_CHECKED,
+                analysis.accessOf(lastRead));
+        assertFalse(CanonicalCompilationFacts.provesNoTaskObservation(
+                new CanonicalCompilationFacts().effectiveRoot(closure, analysis, scope),
+                closure.body(), closure, analysis, scope));
+    }
+
+    @Test
+    void taskObservationAbsenceRejectsSelectedReads() {
+        CanonicalSequence program = canonicalize(
+                "(() => { x: 1\n middle: (() => { saved: context\n (() => x) })\n middle })");
+        CanonicalClosure outer =
+                assertInstanceOf(CanonicalClosure.class, program.expressions().get(0));
+        CanonicalClosure middle = assertInstanceOf(CanonicalClosure.class,
+                assertInstanceOf(CanonicalCreate.class, outer.body().expressions().get(1)).value());
+        CanonicalClosure reader =
+                assertInstanceOf(CanonicalClosure.class, middle.body().expressions().get(1));
+        CanonicalLookup read =
+                assertInstanceOf(CanonicalLookup.class, reader.body().expressions().get(0));
+        CanonicalBindingAnalysis analysis = CanonicalBindingAnalyzer.analyzeModule(program);
+        CanonicalLexicalScope scope = analysis.scopeOf(reader).orElseThrow();
+
+        assertEquals(CanonicalBindingAnalysis.LexicalAccess.SELECTED, analysis.accessOf(read));
+        assertFalse(CanonicalCompilationFacts.provesNoTaskObservation(
+                new CanonicalCompilationFacts().effectiveRoot(reader, analysis, scope),
+                reader.body(), reader, analysis, scope));
+    }
+
+    @Test
+    void taskObservationAbsenceIsIndependentOfNonSuspension() {
+        // Proven non-suspending, yet observing state other than parameters.
+        assertTrue(canonicalBody("() => { x: 1\n x }").proven());
+        assertFalse(noTaskObservation("() => { x: 1\n x }"));
+        assertTrue(canonicalBody("() => { () => { unknown() } }").proven());
+        assertFalse(noTaskObservation("() => { () => { unknown() } }"));
+    }
+
+    private boolean noTaskObservation(String source) {
+        CanonicalClosure closure = closure(source);
+        CanonicalBindingAnalysis analysis = CanonicalBindingAnalyzer.analyzeClosure(closure);
+        CanonicalLexicalScope scope = analysis.scopeOf(closure).orElseThrow();
+        return CanonicalCompilationFacts.provesNoTaskObservation(
+                new CanonicalCompilationFacts().effectiveRoot(closure, analysis, scope),
+                closure.body(), closure, analysis, scope);
     }
 
     /** A stand-in for the lowerer's selection producer (literal Boolean receivers). */

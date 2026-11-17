@@ -1482,6 +1482,26 @@ final class CanonicalToBytecodeLowerer {
                                 .proven()
                         && (loweringRefinementAccepted
                                 || rootPlan.plannedEffectiveRoot().proven()));
+        /*
+         * The Task-observation proof of the same effective root: the emitted
+         * body is the analyzed definition body, no generic or terminal
+         * invocation was emitted, every lowerer refinement was accepted, no
+         * composed default exists and the root is published non-suspending.
+         * Any mismatch publishes false.
+         */
+        result.recordTaskObservationProvenAbsent(
+                activationDefinition != null
+                        && !emittedGenericInvocation
+                        && !emittedTerminalInvocation
+                        && loweringRefinementAccepted
+                        && !hasComposedDefault(activationDefinition)
+                        && result.provablyNonSuspendingBody()
+                        && CanonicalCompilationFacts.provesNoTaskObservation(
+                                effectiveRoot,
+                                sequence,
+                                activationDefinition,
+                                rootFacts.bindingAnalysis(),
+                                scopeForThisRoot));
         recordLexicalFrameLayout(result, scopeForThisRoot);
         if (ProtosDiagnosticRootIdentity.ENABLED) {
             ProtosDiagnosticRootIdentity.record(

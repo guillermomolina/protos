@@ -966,8 +966,10 @@ final class ProtosFunctionCallDispatchers {
     /**
      * UNOBSERVABLE route: no physical home exists, so nothing is bound,
      * closed or consumed here and no non-local return handler is installed;
-     * transfers crossing the CallTarget propagate unchanged. The Task is still
-     * inherited, and a Task-free invocation may still suspend and is sealed.
+     * transfers crossing the CallTarget propagate unchanged. The Task is
+     * inherited unless the cached callee root admits omitting its transport
+     * (see omitsTaskTransport), and a Task-free invocation may still suspend
+     * and is sealed.
      */
     static Object invokeUnobservableHome(
             VirtualFrame frame,
@@ -981,9 +983,11 @@ final class ProtosFunctionCallDispatchers {
         Object transportedCaller = prepareCallerForCallee(frame, callee, explicitCaller);
         ProtosFrameArguments.completeDispatchedHeader(
                 arguments, closure, transportedCaller, ProtosReturnHome.unobservable());
-        prepareInvocationTask(
-                frame, arguments, explicitCaller,
-                inliningTarget, taskPresence);
+        if (!omitsTaskTransport(frame, callee, explicitCaller)) {
+            prepareInvocationTask(
+                    frame, arguments, explicitCaller,
+                    inliningTarget, taskPresence);
+        }
         Object outcome = callNode.call(arguments);
         if (callee != null && callee.provablyNonSuspendingBody()) {
             return outcome;
@@ -1054,6 +1058,25 @@ final class ProtosFunctionCallDispatchers {
         return invoke.execute(
                 frame, inliningTarget, callNode, callee,
                 closure, arguments, explicitCaller);
+    }
+
+    /*
+     * Task demand of the callee. The callee is the root of the cached
+     * effective CallTarget, so its capability is a compilation constant and
+     * the caller-needs Assumption held by every consuming site deoptimizes
+     * this decision when an exact activation becomes needed. Only a guest
+     * caller frame without an explicit caller Activation qualifies: then
+     * the Task the callee would have inherited is exactly the Task of the
+     * caller that cold recovery finds on the active stack, so a later
+     * materialization observes the same Task. An explicit Task already in
+     * B5[2] is never replaced and a method's B5[2] methodHome is untouched.
+     */
+    private static boolean omitsTaskTransport(
+            VirtualFrame frame, ProtosBytecodeRootNode callee, Object explicitCaller) {
+        return callee != null
+                && callee.admitsTaskTransportOmission()
+                && frame != null
+                && !(explicitCaller instanceof ProtosActivation);
     }
 
     /** Preserve Task reachability even when the callee needs no caller state. */

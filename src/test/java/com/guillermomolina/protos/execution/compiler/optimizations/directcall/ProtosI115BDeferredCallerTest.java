@@ -2576,6 +2576,212 @@ final class ProtosI115BDeferredCallerTest {
         });
     }
 
+    /**
+     * A callee whose effective root proves it never observes its Task
+     * receives no prepared Task: B5[2] keeps exactly what the call site
+     * supplied, the caller frame stays unpublished, and the result is the
+     * exact argument. A callee without the proof, or one that registered an
+     * exact caller need, keeps the ordinary inherited Task transport.
+     */
+    @Test
+    void taskFreeCalleeSkipsOnlyTheUnconsumedTaskTransport() throws Exception {
+        withCore(module -> {
+            ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+            ProtosTask inherited = domain.createTask(null, current -> {});
+            ProtosTask explicit = domain.createTask(null, current -> {});
+            ProtosActivation owner = domainModule(module, domain);
+            owner.attachTask(inherited);
+            module.context().createLocalSlot("observe", ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> supplied.get(0)));
+            ProtosClosureValue callerClosure = closure("() => 0", module);
+            ProtosClosureValue free = closure("(value) => { value }\n", module);
+            // A local creation fails the Task proof without needing the caller:
+            // the synthetic caller frame is not on the Truffle stack.
+            ProtosClosureValue demanding = closure("(value) => { x: 1\n value }\n", module);
+            RootCallTarget freeTarget = directTarget(free);
+            RootCallTarget demandingTarget = directTarget(demanding);
+            ProtosBytecodeRootNode freeRoot = (ProtosBytecodeRootNode) freeTarget.getRootNode();
+            ProtosBytecodeRootNode demandingRoot =
+                    (ProtosBytecodeRootNode) demandingTarget.getRootNode();
+            assertTrue(freeRoot.taskObservationProvenAbsent());
+            assertTrue(freeRoot.admitsTaskTransportOmission());
+            assertFalse(demandingRoot.taskObservationProvenAbsent());
+            assertFalse(demandingRoot.admitsTaskTransportOmission());
+
+            Object[] published = ProtosFrameArguments.compactDirectClosureCallOne(
+                    callerClosure, owner, null, SUPPLIED);
+            ProtosActivation publishedCaller = ProtosFrameArguments.activation(published);
+            List<Object[]> callerHeaders = List.of(
+                    ProtosFrameArguments.compactDirectClosureCallOne(
+                            callerClosure, owner, null, SUPPLIED),
+                    published,
+                    ProtosFrameArguments.compactDirectClosureCallOne(
+                            callerClosure, owner, explicit, SUPPLIED),
+                    ProtosFrameArguments.compactDirectClosureCallOne(
+                            callerClosure, module, null, SUPPLIED));
+            ProtosTask[] callerTasks = {inherited, inherited, explicit, null};
+            assertSame(inherited, publishedCaller.task().orElseThrow());
+
+            for (int index = 0; index < callerHeaders.size(); index++) {
+                Object[] callerHeader = callerHeaders.get(index);
+                var frame = com.oracle.truffle.api.Truffle.getRuntime().createVirtualFrame(
+                        callerHeader,
+                        com.oracle.truffle.api.frame.FrameDescriptor.newBuilder().build());
+                assertSame(callerTasks[index],
+                        ProtosFrameArguments.admittedCompactTask(callerHeader));
+                for (ProtosTask suppliedTask : new ProtosTask[] {null, explicit}) {
+                    Object token = new ProtosObjectValue(ProtosObjectValue.rootObject());
+                    Object[] freeHeader =
+                            ProtosFrameArguments.functionCallArguments(new Object[] {token});
+                    freeHeader[2] = suppliedTask;
+                    assertSame(token, unobservable(frame, freeRoot, freeTarget, free, freeHeader));
+                    assertSame(free, freeHeader[0], "the callee is never published");
+                    assertSame(ProtosFrameArguments.functionCallMarker(), freeHeader[1]);
+                    assertSame(suppliedTask, freeHeader[2], "no Task is prepared or replaced");
+                    assertSame(null, freeHeader[3], "no caller is transported");
+                    assertSame(ProtosReturnHome.unobservable(), freeHeader[4]);
+
+                    Object[] demandingHeader =
+                            ProtosFrameArguments.functionCallArguments(new Object[] {token});
+                    demandingHeader[2] = suppliedTask;
+                    assertSame(token, unobservable(
+                            frame, demandingRoot, demandingTarget, demanding, demandingHeader));
+                    assertSame(suppliedTask != null ? suppliedTask : callerTasks[index],
+                            demandingHeader[2], "a demanding callee keeps the inherited Task");
+                }
+                if (callerHeader != published) {
+                    assertUnpublished(callerHeader);
+                }
+            }
+
+            // An exact-activation need withdraws the omission for later calls.
+            com.oracle.truffle.api.Assumption stability = freeRoot.callerNeedsStability();
+            assertTrue(stability.isValid());
+            assertTrue(freeRoot.admitsTaskTransportOmission());
+            freeRoot.requestCallerNeed(ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION);
+            assertFalse(stability.isValid(), "the previous stability Assumption is invalidated");
+            assertTrue(freeRoot.taskObservationProvenAbsent(), "the static proof is kept");
+            assertFalse(freeRoot.admitsTaskTransportOmission());
+            Object[] callerHeader = ProtosFrameArguments.compactDirectClosureCallOne(
+                    callerClosure, owner, null, SUPPLIED);
+            var frame = com.oracle.truffle.api.Truffle.getRuntime().createVirtualFrame(
+                    callerHeader,
+                    com.oracle.truffle.api.frame.FrameDescriptor.newBuilder().build());
+            Object[] header = ProtosFrameArguments.functionCallArguments(new Object[] {SUPPLIED});
+            assertSame(SUPPLIED, unobservable(frame, freeRoot, freeTarget, free, header),
+                    "the guest result is unchanged");
+            assertSame(inherited, header[2], "the exact Task is transported");
+            assertInstanceOf(ProtosActivation.class, header[3], "the required caller is transported");
+            assertSame(inherited, ((ProtosActivation) header[3]).task().orElseThrow());
+
+            // An explicit structured caller keeps the ordinary transport.
+            ProtosClosureValue other = closure("(item) => { item }\n", module);
+            RootCallTarget otherTarget = directTarget(other);
+            ProtosBytecodeRootNode otherRoot = (ProtosBytecodeRootNode) otherTarget.getRootNode();
+            if (otherRoot.admitsTaskTransportOmission()) {
+                Object[] structured =
+                        ProtosFrameArguments.functionCallArguments(new Object[] {SUPPLIED});
+                ProtosFunctionCallDispatchers.invokeUnobservableHome(
+                        frame, null,
+                        com.oracle.truffle.api.profiles.InlinedConditionProfile.getUncached(),
+                        com.oracle.truffle.api.nodes.DirectCallNode.create(otherTarget),
+                        otherRoot, other, structured, publishedCaller);
+                assertSame(inherited, structured[2]);
+                assertSame(publishedCaller, structured[3]);
+            }
+        });
+    }
+
+    /**
+     * Inside a real Task, Task-free callees and Task-demanding callees (Task
+     * observation, nested calls, methods, lexical captures, non-local
+     * return, Error handling and suspension with resumption) all keep the
+     * exact Task identity, across rounds that pass every cache limit.
+     */
+    @Test
+    void taskDemandingCalleesKeepTheExactTaskAroundTaskFreeCallees() throws Exception {
+        withCore(module -> {
+            ProtosPrelude prelude = module.prelude().orElseThrow();
+            List<ProtosTask> observed = new ArrayList<>();
+            var currentWait = new java.util.concurrent.atomic.AtomicReference<ProtosFutureValue>();
+            Object token = new ProtosObjectValue(ProtosObjectValue.rootObject());
+            module.context().createLocalSlot("token", token);
+            module.context().createLocalSlot("currentWait", ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> currentWait.get()));
+            module.context().createLocalSlot("observe", ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> {
+                        observed.add(activation.taskForRuntime());
+                        return ProtosNullValue.INSTANCE;
+                    }));
+            evaluate("""
+                    leaf: (value) => { value }
+                    same: (left, right) => { left === right }
+                    observing: (value) => { observe()\n value }
+                    nested: (value) => { observing(leaf(value)) }
+                    holder: { step: (value) => { observe()\n leaf(value) } }
+                    captured: 5
+                    capturing: (value) => { observe()\n captured }
+                    escaping: () => { true.ifTrue(() => { observe()\n ^ leaf(3) })\n 0 }
+                    guarded: () => {
+                        Error.handle(() => { leaf(1)\n Error().signal() },
+                            (caught) => { observe()\n 10 })
+                    }
+                    waiting: () => { currentWait().value()\n observe()\n leaf(1) }
+                    outer: () => {
+                        leaf(1) + observing(2) + nested(3) + holder.step(4) + capturing(0) + escaping() + guarded() + waiting()
+                    }
+                    """, "i115-task-demand.protos", module);
+            assertTrue(functionRoot("leaf", module).taskObservationProvenAbsent());
+            assertTrue(functionRoot("same", module).taskObservationProvenAbsent());
+            for (String demanding : List.of(
+                    "observing", "nested", "capturing", "escaping", "guarded", "waiting")) {
+                assertFalse(functionRoot(demanding, module).taskObservationProvenAbsent(), demanding);
+            }
+            ProtosClosureValue outer = closure("outer", module);
+
+            for (int round = 0; round < PAST_CACHE_LIMITS; round++) {
+                ProtosFutureValue wait =
+                        new ProtosFutureValue(prelude.futurePrototype(), module.executionDomain());
+                currentWait.set(wait);
+                observed.clear();
+                ProtosTask task = module.executionDomain().createTask(null, current ->
+                        ProtosBytecodeTaskExecution.executeRequest(
+                                current,
+                                ProtosCallRequest.taskEntry(outer, current, List.of(), module)));
+                assertTrue(module.executionDomain().dispatchOne());
+                assertEquals(ProtosTask.State.SUSPENDED, task.state(), "round " + round);
+                assertTrue(wait.resolve(ProtosNullValue.INSTANCE, module));
+                assertTrue(module.executionDomain().dispatchOne());
+                assertEquals(ProtosTask.State.COMPLETED, task.state(), "round " + round);
+                assertInteger(29, task.result().orElseThrow());
+                assertEquals(7, observed.size(), "round " + round);
+                for (ProtosTask seen : observed) {
+                    assertSame(task, seen, "every observation sees the exact running Task");
+                }
+            }
+            for (int round = 0; round < PAST_CACHE_LIMITS; round++) {
+                assertSame(token, evaluate("leaf(token)", "i115-task-free.protos", module));
+                assertEquals(Boolean.TRUE, evaluate("same(token, token)", "i115-task-free.protos", module));
+            }
+            assertFalse(functionRoot("leaf", module)
+                    .hasCallerNeed(ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION),
+                    "a Task-free callee is never materialized");
+        });
+    }
+
+    private static Object unobservable(
+            com.oracle.truffle.api.frame.VirtualFrame frame,
+            ProtosBytecodeRootNode root,
+            RootCallTarget target,
+            ProtosClosureValue callee,
+            Object[] arguments) {
+        return ProtosFunctionCallDispatchers.invokeUnobservableHome(
+                frame, null,
+                com.oracle.truffle.api.profiles.InlinedConditionProfile.getUncached(),
+                com.oracle.truffle.api.nodes.DirectCallNode.create(target),
+                root, callee, arguments, null);
+    }
+
     private static void assertInteger(long expected, Object actual) {
         // Compact Truffle roots may return JVM primitive integers.
         if (actual instanceof Long number) {

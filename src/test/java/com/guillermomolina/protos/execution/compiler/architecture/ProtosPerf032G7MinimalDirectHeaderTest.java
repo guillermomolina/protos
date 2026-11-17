@@ -972,6 +972,79 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
         });
     }
 
+    /**
+     * B5[2] is shared by a function call's explicit Task and a method call's
+     * methodHome. The compiled Task accessor tells them apart by type alone:
+     * a function header keeps its marker and answers its explicit Task before
+     * the inherited one; a method header keeps its receiver and methodHome,
+     * never reads the methodHome as a Task and takes the Task from B5[3]; a
+     * published activation answers its own Task; an unadmitted header is
+     * rejected by the general accessor.
+     */
+    @Test
+    void sharedTaskAndMethodHomeSlotKeepsBothProvenances() throws Exception {
+        withCore(module -> {
+            ProtosPrelude prelude = module.prelude().orElseThrow();
+            var domain = new com.guillermomolina.protos.runtime.ProtosActorExecutionDomain();
+            ProtosTask inherited = domain.createTask(null, current -> {});
+            ProtosTask explicit = domain.createTask(null, current -> {});
+            ProtosActivation owner = prelude.newModuleActivation(
+                    new com.guillermomolina.protos.runtime.ProtosActorModuleState(),
+                    null, prelude.newExecutionContext(), domain);
+            owner.attachTask(inherited);
+            ProtosClosureValue callee =
+                    parsedClosure("(value) => { value }", "g7-task-slot.protos", module);
+            Object supplied = ProtosNullValue.INSTANCE;
+
+            Object[] inheritedCall = ProtosFrameArguments.compactDirectClosureCallOne(
+                    callee, owner, null, supplied);
+            assertSame(ProtosFrameArguments.functionCallMarker(), inheritedCall[1]);
+            assertNull(inheritedCall[2]);
+            assertSame(inherited, ProtosFrameArguments.admittedCompactTask(inheritedCall));
+            assertSame(inherited, ProtosFrameArguments.compactTask(inheritedCall));
+
+            Object[] explicitCall = ProtosFrameArguments.compactDirectClosureCallOne(
+                    callee, owner, explicit, supplied);
+            assertSame(ProtosFrameArguments.functionCallMarker(), explicitCall[1]);
+            assertSame(explicit, explicitCall[2]);
+            assertSame(explicit, ProtosFrameArguments.admittedCompactTask(explicitCall),
+                    "the explicit Task wins over the inherited one");
+            assertSame(explicit, ProtosFrameArguments.compactTask(explicitCall));
+
+            Object receiver = new ProtosObjectValue(ProtosObjectValue.rootObject());
+            ProtosObjectValue methodHome = new ProtosObjectValue(ProtosObjectValue.rootObject());
+            Object[] methodCall = ProtosFrameArguments.compactImmediateMethodCallOne(
+                    callee, receiver, methodHome, owner,
+                    ProtosReturnHome.unobservable(), supplied);
+            assertSame(receiver, methodCall[1]);
+            assertSame(methodHome, methodCall[2]);
+            assertSame(inherited, ProtosFrameArguments.admittedCompactTask(methodCall),
+                    "a methodHome is never a Task; B5[3] supplies it");
+            assertSame(inherited, ProtosFrameArguments.compactTask(methodCall));
+            assertSame(methodHome, methodCall[2]);
+
+            Object[] taskFreeMethod = ProtosFrameArguments.compactImmediateMethodCallOne(
+                    callee, receiver, methodHome, module,
+                    ProtosReturnHome.unobservable(), supplied);
+            assertNull(ProtosFrameArguments.admittedCompactTask(taskFreeMethod));
+
+            Object[] published = ProtosFrameArguments.compactDirectClosureCallOne(
+                    callee, owner, explicit, supplied);
+            ProtosActivation activation = ProtosFrameArguments.activation(published);
+            assertSame(activation, published[0]);
+            assertSame(explicit, activation.task().orElseThrow());
+            assertSame(explicit, ProtosFrameArguments.admittedCompactTask(published),
+                    "a published activation keeps its own provenance");
+
+            Object[] unadmitted = {receiver, ProtosFrameArguments.functionCallMarker(),
+                    explicit, owner, ProtosReturnHome.unobservable()};
+            assertThrows(IllegalStateException.class,
+                    () -> ProtosFrameArguments.admittedCompactTask(unadmitted));
+            assertThrows(IllegalStateException.class,
+                    () -> ProtosFrameArguments.admittedCompactTask(new Object[] {callee}));
+        });
+    }
+
     private interface CoreTest {
         void run(ProtosActivation module) throws Exception;
     }

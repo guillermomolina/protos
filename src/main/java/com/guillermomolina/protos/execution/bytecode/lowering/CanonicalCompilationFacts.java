@@ -794,6 +794,87 @@ final class CanonicalCompilationFacts {
         return scope == null || dependsOnInheritedEnvironment(definition, analysis, scope);
     }
 
+    /**
+     * Conservative proof that the effective body of {@code definition},
+     * emitted as the root of {@code effectiveRoot}, executes without reading
+     * or observing the Task received from its caller. Independent of the
+     * non-suspension proof: neither implies the other.
+     *
+     * <p>Admitted: a definition whose analysis, scope and effective root all
+     * match by identity; ordinary parameters (no default, no rest) owned by
+     * that scope; and a body made only of side-effect-free literals, reads of
+     * those parameters {@code Resolved} to that scope with {@code DIRECT}
+     * access (never presence-checked or selected), guest identity
+     * comparisons of admitted operands, and sequences of them. Every other
+     * form (calls, sends, member access, nested Closures, construction,
+     * intrinsics, returns, assignments, creations, indexing, spreads,
+     * Candidate, Dynamic or captured resolutions, any unknown form) and any
+     * missing analysis fail closed.
+     */
+    static boolean provesNoTaskObservation(
+            EffectiveRoot effectiveRoot,
+            CanonicalSequence body,
+            CanonicalClosure definition,
+            CanonicalBindingAnalysis analysis,
+            CanonicalLexicalScope scope) {
+        if (effectiveRoot == null
+                || definition == null
+                || analysis == null
+                || scope == null
+                || effectiveRoot.canonicalRoot() != definition
+                || body != definition.body()
+                || analysis.scopeOf(definition).orElse(null) != scope) {
+            return false;
+        }
+        java.util.Set<CanonicalBindingIdentity> parameters =
+                java.util.Collections.newSetFromMap(new IdentityHashMap<>());
+        for (CanonicalParameter parameter : definition.parameters()) {
+            if (parameter.rest() || parameter.defaultValue().isPresent()) {
+                return false;
+            }
+            CanonicalBindingIdentity identity = analysis.identityOf(parameter).orElse(null);
+            if (identity == null || identity.owner() != scope) {
+                return false;
+            }
+            parameters.add(identity);
+        }
+        return observesNoTask(body, analysis, scope, parameters);
+    }
+
+    private static boolean observesNoTask(
+            CanonicalExpression expression,
+            CanonicalBindingAnalysis analysis,
+            CanonicalLexicalScope scope,
+            java.util.Set<CanonicalBindingIdentity> parameters) {
+        return switch (expression) {
+            case CanonicalLiteral literal -> true;
+            case CanonicalLookup lookup ->
+                    analysis.resolutionOf(lookup).orElse(null)
+                                    instanceof CanonicalBindingResolution.Resolved resolved
+                            && resolved.identity().owner() == scope
+                            && parameters.contains(resolved.identity())
+                            && analysis.accessOf(lookup)
+                                    == CanonicalBindingAnalysis.LexicalAccess.DIRECT;
+            case CanonicalSequence sequence -> {
+                for (CanonicalExpression child : sequence.expressions()) {
+                    if (!observesNoTask(child, analysis, scope, parameters)) {
+                        yield false;
+                    }
+                }
+                yield true;
+            }
+            // The Identity operation compares representations only; it runs
+            // no guest code and reads no execution state.
+            case CanonicalIdentity identity ->
+                    observesNoTask(identity.left(), analysis, scope, parameters)
+                            && observesNoTask(identity.right(), analysis, scope, parameters);
+            case CanonicalNotIdentity identity ->
+                    observesNoTask(identity.left(), analysis, scope, parameters)
+                            && observesNoTask(identity.right(), analysis, scope, parameters);
+            default -> false;
+        };
+    }
+
     private static boolean dependsOnInheritedEnvironment(
             CanonicalExpression expression,
             CanonicalBindingAnalysis analysis,

@@ -1576,6 +1576,12 @@ final class ProtosFrameArguments {
 
 
 
+    /**
+     * Compiled-path form of {@link #compactTask}: a published activation
+     * answers its exact Task; an unpublished admitted header answers its
+     * explicit Task, then its exact caller's Task, otherwise {@code null}.
+     * Any other header leaves compiled code for the general accessor.
+     */
     static ProtosTask admittedCompactTask(Object[] arguments) {
         if (arguments.length >= HEADER_LENGTH) {
             Object first = arguments[CLOSURE_INDEX];
@@ -1583,8 +1589,10 @@ final class ProtosFrameArguments {
                 return activation.taskForRuntime();
             }
             if (first instanceof ProtosClosureValue) {
-                if (arguments[RECEIVER_INDEX] == DIRECT_CLOSURE_CALL
-                        && arguments[TASK_INDEX] instanceof ProtosTask explicit) {
+                // Slot 2 holds a ProtosTask only for a function call: a
+                // method call stores its ProtosObjectValue methodHome there,
+                // so the type test alone identifies an explicit Task.
+                if (arguments[TASK_INDEX] instanceof ProtosTask explicit) {
                     return explicit;
                 }
                 Object caller = arguments[CALLER_INDEX];

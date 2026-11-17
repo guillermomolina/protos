@@ -478,6 +478,15 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return stable.isValid() && (registered & need) == need;
         }
 
+        /*
+         * Fail-closed absence: true only while the stability Assumption is
+         * valid and no part of {@code need} was ever registered. A change is published together with the
+         * invalidation of the stability Assumption consumed by callers.
+         */
+        boolean lacks(int need) {
+            return stable.isValid() && (registered & need) == 0;
+        }
+
         Assumption stability() {
             return stable;
         }
@@ -528,6 +537,43 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
     final boolean provablyNonSuspendingBody() {
         return provablyNonSuspendingBody;
+    }
+
+    /*
+     * Conservative static capability of this emitted root: its effective
+     * body binds only ordinary parameters and evaluates only literals, reads
+     * of those parameters and identity comparisons, so it never reads the
+     * Task received from its caller. Recorded once per parse with the
+     * non-suspension proof, immutable afterwards and never recomputed per
+     * call. Missing evidence is false.
+     */
+    @CompilationFinal private transient boolean taskObservationProvenAbsent;
+
+    final void recordTaskObservationProvenAbsent(boolean proven) {
+        this.taskObservationProvenAbsent = proven;
+    }
+
+    final boolean taskObservationProvenAbsent() {
+        return taskObservationProvenAbsent;
+    }
+
+    /*
+     * Whether a direct call site that cached this exact root may leave the
+     * caller's Task untransported. Requires the static capability together
+     * with the non-suspension and unobservable-ReturnHome proofs of this
+     * same root, no registered exact-activation caller need (consumers hold
+     * callerNeedsStability(), so a later publication or materialization
+     * deoptimizes them before the next omitted transport) and no enabled
+     * trace probe. A materialized activation of an invocation entered this
+     * way still recovers its exact caller, and therefore the caller's Task,
+     * through the ordinary cold caller recovery.
+     */
+    final boolean admitsTaskTransportOmission() {
+        return taskObservationProvenAbsent
+                && provablyNonSuspendingBody
+                && returnHomeProvenUnobservable
+                && !needsTraceAndProfileInstrumentation()
+                && callerNeeds.lacks(NEEDS_EXACT_ACTIVATION);
     }
 
     /*

@@ -1009,6 +1009,76 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
         });
     }
 
+    /**
+     * The Task-observation proof belongs to the effective root shared by
+     * every fresh Closure of one plan, never to a Closure: distinct creators
+     * keep their own Prelude and module key, a fresh Closure is created per
+     * execution, and a call site that saturates its identity PIC still
+     * enters the same proven root with the exact result. Roots that call,
+     * capture or observe execution state never acquire the proof.
+     */
+    @Test
+    void taskObservationProofBelongsToTheSharedEffectiveRoot() throws Exception {
+        withCore(module -> {
+            evaluate("""
+                    run: () => { (value) => { value } }
+                    apply: (f, value) => { f(value) }
+                    calling: (f) => { f() }
+                    capturing: (value) => { inner: () => { value }\n inner() }
+                    contextual: () => { context }
+                    """, "perf042-task-proof.protos", module);
+            ProtosClosureValue run = assertInstanceOf(
+                    ProtosClosureValue.class,
+                    module.context().readLocalSlot("run").orElseThrow());
+            RootCallTarget creatorTarget =
+                    run.executionPlan().orElseThrow().bytecodeActivationTargetForComposition();
+            enterCachedTier("apply", module);
+            ProtosPrelude other = new ProtosCoreBootstrap().bootstrap(CORE)
+                    .newModuleActivation().prelude().orElseThrow();
+            ProtosClosureValue first = creator(
+                    run, module.prelude().orElseThrow(), ProtosModuleKey.module("perf042-task-a"));
+            ProtosClosureValue second =
+                    creator(run, other, ProtosModuleKey.module("perf042-task-b"));
+
+            module.context().createLocalSlot("probe", ProtosNullValue.INSTANCE);
+            module.context().createLocalSlot("token", ProtosNullValue.INSTANCE);
+            ProtosBytecodeRootNode provenRoot = null;
+            ProtosClosureValue previous = null;
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                for (ProtosClosureValue creator : List.of(first, second)) {
+                    ProtosClosureValue fresh = create(creatorTarget, creator, module);
+                    assertNotSame(previous, fresh, "every execution creates a fresh Closure");
+                    previous = fresh;
+                    assertSame(creator.preludeOrNullForRuntime(), fresh.preludeOrNullForRuntime());
+                    assertSame(creator.definingModuleKeyOrNullForRuntime(),
+                            fresh.definingModuleKeyOrNullForRuntime());
+                    RootCallTarget target =
+                            effectiveTarget(fresh, ProtosLanguageContext.current());
+                    ProtosBytecodeRootNode root =
+                            assertInstanceOf(ProtosBytecodeRootNode.class, target.getRootNode());
+                    if (provenRoot == null) {
+                        provenRoot = root;
+                    }
+                    assertSame(provenRoot, root, "one effective root for every Closure");
+                    assertTrue(root.taskObservationProvenAbsent());
+                    assertTrue(root.provablyNonSuspendingBody());
+
+                    module.context().assignLocalSlot("probe", fresh);
+                    Object token = new ProtosObjectValue(ProtosObjectValue.rootObject());
+                    module.context().assignLocalSlot("token", token);
+                    assertSame(token, evaluate(
+                            "apply(probe, token)", "perf042-task-apply.protos", module));
+                }
+            }
+            assertTrue(provenRoot.taskObservationProvenAbsent(),
+                    "a saturated identity PIC keeps the root's proof");
+            assertTrue(provenRoot.admitsTaskTransportOmission());
+            for (String unproven : List.of("apply", "calling", "capturing", "contextual", "run")) {
+                assertFalse(functionRoot(unproven, module).taskObservationProvenAbsent(), unproven);
+            }
+        });
+    }
+
     /** A copy of {@code template} with its own Prelude and module key. */
     private static ProtosClosureValue creator(
             ProtosClosureValue template, ProtosPrelude prelude, ProtosModuleKey moduleKey) {
