@@ -20,14 +20,14 @@ package com.guillermomolina.protos.execution;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 
 /**
- * I115-H4-B EXPERIMENTAL internal trace probe, enabled only by the JVM system property {@code
- * protos.i115.trace}, read once at class initialization. It is not a Protos
+ * EXPERIMENTAL internal trace probe, enabled only by the JVM system property {@code
+ * protos.experimental.trace}, read once at class initialization. It is not a Protos
  * option and not a general tracing facility. Values are reported by Java
  * class name only; no guest value is converted to text.
  */
 final class ProtosExperimentalTraceHooks {
 
-    static final boolean ENABLED = Boolean.getBoolean("protos.i115.trace");
+    static final boolean ENABLED = Boolean.getBoolean("protos.experimental.trace");
 
     enum Event {
         CALL,
@@ -43,7 +43,7 @@ final class ProtosExperimentalTraceHooks {
         if (!ENABLED) {
             return;
         }
-        System.err.println("I115_H4B_TRACE=" + event
+        System.err.println("PROTOS_EXPERIMENTAL_TRACE=" + event
                 + " ROOT=" + (root == null ? "NULL" : root.getName())
                 + " BCI=" + bytecodeIndex
                 + " VALUE_CLASS=" + (value == null ? "NULL" : value.getClass().getName()));

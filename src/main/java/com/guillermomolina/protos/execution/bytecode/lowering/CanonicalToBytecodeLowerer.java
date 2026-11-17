@@ -369,9 +369,9 @@ final class CanonicalToBytecodeLowerer {
     private static final boolean COMPACT_ROOT_CLOSURE_CAPTURE = true;
 
     /* the name prefix of the root local holding one free cell. */
-    static final String FREE_CELL_LOCAL_PREFIX = "i115FreeCell:";
+    static final String FREE_CELL_LOCAL_PREFIX = "freeCell:";
     static final String NORMAL_INLINE_CALLBACK_BINDING_LOCAL_PREFIX =
-            "i095CallbackScalar:";
+            "inlineCallbackScalar:";
     // Preorder identities of semantic inline RootTags within the current physical root.
     // Stored as BytecodeLocal info and replayed with the tags during instrumentation reparses.
     private int nextInlineCallbackRegion;
@@ -1182,7 +1182,7 @@ final class CanonicalToBytecodeLowerer {
                 && activationDefinition.parameters().isEmpty()
                 && scopeForThisRoot.declaredNames().isEmpty()
                 && minimalTerminal != null) {
-            constant = i101Constant(
+            constant = foldConstant(
                     minimalTerminal, java.util.Map.of(), scopeForThisRoot);
         }
 
@@ -1227,7 +1227,7 @@ final class CanonicalToBytecodeLowerer {
                             && primitiveNumericSendCandidate(numericSend)
                             && terminalNumericOperand(numericSend.receiver())
                             && terminalNumericOperand(numericSend.arguments().get(0));
-            boolean emptyControlTerminal = isI115EliminableControl(last);
+            boolean emptyControlTerminal = isEliminableControl(last);
 
             if (numericTerminal || emptyControlTerminal) {
                 if (expressions.size() > 1) {
@@ -1573,7 +1573,7 @@ final class CanonicalToBytecodeLowerer {
      * I101-C1: one typed, bounded compile-time evaluator for arithmetic,
      * numeric comparison, semantic equality and identity.
      */
-    private Object i101Constant(
+    private Object foldConstant(
             CanonicalExpression expression,
             java.util.Map<String, Object> known,
             CanonicalLexicalScope scope) {
@@ -1604,23 +1604,23 @@ final class CanonicalToBytecodeLowerer {
         }
 
         if (expression instanceof CanonicalIdentity identity) {
-            Object left = i101Constant(identity.left(), known, scope);
-            Object right = i101Constant(identity.right(), known, scope);
+            Object left = foldConstant(identity.left(), known, scope);
+            Object right = foldConstant(identity.right(), known, scope);
             return left == null || right == null ? null
-                    : Boolean.valueOf(i101Identity(left, right));
+                    : Boolean.valueOf(foldIdentity(left, right));
         }
 
         if (expression instanceof CanonicalNotIdentity identity) {
-            Object left = i101Constant(identity.left(), known, scope);
-            Object right = i101Constant(identity.right(), known, scope);
+            Object left = foldConstant(identity.left(), known, scope);
+            Object right = foldConstant(identity.right(), known, scope);
             return left == null || right == null ? null
-                    : Boolean.valueOf(!i101Identity(left, right));
+                    : Boolean.valueOf(!foldIdentity(left, right));
         }
 
         if (expression instanceof CanonicalDerivedInequality inequality) {
-            Object left = i101Constant(inequality.left(), known, scope);
-            Object right = i101Constant(inequality.right(), known, scope);
-            Object equal = i101Equality(left, right);
+            Object left = foldConstant(inequality.left(), known, scope);
+            Object right = foldConstant(inequality.right(), known, scope);
+            Object equal = foldEquality(left, right);
             return equal instanceof Boolean booleanValue
                     ? Boolean.valueOf(!booleanValue.booleanValue()) : null;
         }
@@ -1631,21 +1631,21 @@ final class CanonicalToBytecodeLowerer {
         }
 
         if (java.util.Set.of("+", "-", "*", "/").contains(send.message())) {
-            return i101IntegerArithmetic(send, known, scope);
+            return foldIntegerArithmetic(send, known, scope);
         }
 
-        Object left = i101Constant(send.receiver(), known, scope);
-        Object right = i101Constant(send.arguments().get(0), known, scope);
+        Object left = foldConstant(send.receiver(), known, scope);
+        Object right = foldConstant(send.arguments().get(0), known, scope);
 
         if ("==".equals(send.message())) {
-            return i101Equality(left, right);
+            return foldEquality(left, right);
         }
 
-        if (!i101Numeric(left) || !i101Numeric(right)) {
+        if (!isFoldableNumeric(left) || !isFoldableNumeric(right)) {
             return null;
         }
 
-        var relation = i101Compare(left, right);
+        var relation = foldCompare(left, right);
         Boolean value = switch (send.message()) {
             case "<" -> relation ==
                     ProtosStandardNumberOrderingProtocol.Comparison.LESS;
@@ -1673,22 +1673,22 @@ final class CanonicalToBytecodeLowerer {
      * overflows, or a division is not exact. It only proves a constant
      * result; it never selects an executable operation.
      */
-    private Long i101IntegerArithmetic(
+    private Long foldIntegerArithmetic(
             CanonicalExpression expression,
             java.util.Map<String, Object> known,
             CanonicalLexicalScope scope) {
         if (!(expression instanceof CanonicalSend send)) {
-            return i101Constant(expression, known, scope) instanceof Long integer
+            return foldConstant(expression, known, scope) instanceof Long integer
                     ? integer
                     : null;
         }
         if (send.arguments().size() != 1) {
             return null;
         }
-        Long left = i101IntegerArithmetic(send.receiver(), known, scope);
+        Long left = foldIntegerArithmetic(send.receiver(), known, scope);
         Long right = left == null
                 ? null
-                : i101IntegerArithmetic(send.arguments().get(0), known, scope);
+                : foldIntegerArithmetic(send.arguments().get(0), known, scope);
         if (right == null) {
             return null;
         }
@@ -1715,19 +1715,19 @@ final class CanonicalToBytecodeLowerer {
         }
     }
 
-    private static boolean i101Numeric(Object value) {
+    private static boolean isFoldableNumeric(Object value) {
         return value instanceof Long
                 || value instanceof Double
                 || value instanceof BigInteger;
     }
 
-    private static BigInteger i101Integer(Object value) {
+    private static BigInteger foldInteger(Object value) {
         return value instanceof Long integer
                 ? BigInteger.valueOf(integer) : (BigInteger) value;
     }
 
     private static ProtosStandardNumberOrderingProtocol.Comparison
-            i101Compare(Object left, Object right) {
+            foldCompare(Object left, Object right) {
         if (left instanceof Double floating) {
             if (Double.isNaN(floating)) {
                 return ProtosStandardNumberOrderingProtocol
@@ -1744,19 +1744,19 @@ final class CanonicalToBytecodeLowerer {
                         : ProtosStandardNumberOrderingProtocol
                                 .Comparison.LESS;
             }
-            return i101Sign(new java.math.BigDecimal(floating)
-                    .compareTo(new java.math.BigDecimal(i101Integer(right))));
+            return foldSign(new java.math.BigDecimal(floating)
+                    .compareTo(new java.math.BigDecimal(foldInteger(right))));
         }
 
         if (right instanceof Double) {
             return ProtosCurrentNumericRelations.reverse(
-                    i101Compare(right, left));
+                    foldCompare(right, left));
         }
-        return i101Sign(i101Integer(left).compareTo(i101Integer(right)));
+        return foldSign(foldInteger(left).compareTo(foldInteger(right)));
     }
 
     private static ProtosStandardNumberOrderingProtocol.Comparison
-            i101Sign(int sign) {
+            foldSign(int sign) {
         if (sign < 0) {
             return ProtosStandardNumberOrderingProtocol.Comparison.LESS;
         }
@@ -1766,12 +1766,12 @@ final class CanonicalToBytecodeLowerer {
         return ProtosStandardNumberOrderingProtocol.Comparison.EQUAL;
     }
 
-    private static Object i101Equality(Object left, Object right) {
+    private static Object foldEquality(Object left, Object right) {
         if (left == null || right == null) {
             return null;
         }
-        if (i101Numeric(left) && i101Numeric(right)) {
-            return Boolean.valueOf(i101Compare(left, right)
+        if (isFoldableNumeric(left) && isFoldableNumeric(right)) {
+            return Boolean.valueOf(foldCompare(left, right)
                     == ProtosStandardNumberOrderingProtocol
                             .Comparison.EQUAL);
         }
@@ -1786,8 +1786,8 @@ final class CanonicalToBytecodeLowerer {
         return null;
     }
 
-    private static boolean i101Identity(Object left, Object right) {
-        if (i101Numeric(left) && i101Numeric(right)) {
+    private static boolean foldIdentity(Object left, Object right) {
+        if (isFoldableNumeric(left) && isFoldableNumeric(right)) {
             if (left instanceof Double floating) {
                 if (!(right instanceof Double other)) {
                     return false;
@@ -1797,7 +1797,7 @@ final class CanonicalToBytecodeLowerer {
                                 == Double.doubleToRawLongBits(other);
             }
             return !(right instanceof Double)
-                    && i101Integer(left).equals(i101Integer(right));
+                    && foldInteger(left).equals(foldInteger(right));
         }
         return left == right;
     }
@@ -2462,7 +2462,7 @@ final class CanonicalToBytecodeLowerer {
 
                 builder.beginBlock();
                 if (!requiresContinuationScratch(defaultExpression)
-                        || i115DirectUnaryCall(defaultExpression)
+                        || isDirectUnaryCall(defaultExpression)
                         || (defaultExpression instanceof CanonicalSend numericDefault
                                 && isDirectNumericOperand(numericDefault))) {
                     beginStoreParameter(builder, parameter, checkCreation);
@@ -2888,7 +2888,7 @@ final class CanonicalToBytecodeLowerer {
         DiscardSink sink = null;
 
         for (CanonicalExpression expression : expressions) {
-            if (isI115EliminableControl(expression)) {
+            if (isEliminableControl(expression)) {
                 continue;
             }
 
@@ -3198,7 +3198,7 @@ final class CanonicalToBytecodeLowerer {
         builder.beginSourceSection(span.startOffset(), span.length());
 
         if (expression instanceof CanonicalSend send) {
-            emitI115DirectUnaryOperation(
+            emitDirectUnaryOperation(
                     builder, InvocationShape.SEND,
                     send.receiver(), send.message(), send.arguments().get(0),
                     true, true);
@@ -3364,7 +3364,7 @@ final class CanonicalToBytecodeLowerer {
      * existing Yield/ResumeDispatchedContinuation protocol.
      */
 
-    private boolean i115DirectLookup(CanonicalLookup lookup) {
+    private boolean isDirectLookup(CanonicalLookup lookup) {
         if (currentNormalCallbackScalarLocals.containsKey(lookup.name())) {
             CanonicalBindingResolution resolution =
                     currentNormalCallbackScalarAnalysis == null
@@ -3397,15 +3397,15 @@ final class CanonicalToBytecodeLowerer {
         return isStaticModuleBinding(resolution, identity);
     }
 
-    private boolean i115DirectUnaryOperand(CanonicalExpression expression) {
+    private boolean isDirectUnaryOperand(CanonicalExpression expression) {
         if (expression instanceof CanonicalLiteral literal) {
             return primitiveNumberLiteralOrNull(literal) != null;
         }
         if (expression instanceof CanonicalLookup lookup) {
-            return i115DirectLookup(lookup);
+            return isDirectLookup(lookup);
         }
         if (expression instanceof CanonicalMember member) {
-            return i115DirectUnaryOperand(member.receiver());
+            return isDirectUnaryOperand(member.receiver());
         }
         if (expression instanceof CanonicalSend send) {
             /*
@@ -3419,7 +3419,7 @@ final class CanonicalToBytecodeLowerer {
         return false;
     }
 
-    private static boolean i115StructuredSelector(String selector) {
+    private static boolean isStructuredSelector(String selector) {
         return switch (selector) {
             case "ensure", "caseOf", "import", "match", "each",
                     "eachStep", "atPut", "atIfAbsent", "remove",
@@ -3428,29 +3428,29 @@ final class CanonicalToBytecodeLowerer {
         };
     }
 
-    private boolean i115AdmitsDirectUnaryInvocation(
+    private boolean admitsDirectUnaryInvocation(
             InvocationShape shape,
             CanonicalExpression receiver,
             String selector,
             java.util.List<CanonicalExpression> arguments) {
         if (arguments.size() != 1 || hasVectorArgument(arguments)
-                || !i115DirectUnaryOperand(arguments.get(0))) {
+                || !isDirectUnaryOperand(arguments.get(0))) {
             return false;
         }
 
         if (shape == InvocationShape.CALL) {
             return (receiver instanceof CanonicalLookup
                             || receiver instanceof CanonicalMember)
-                    && i115DirectUnaryOperand(receiver);
+                    && isDirectUnaryOperand(receiver);
         }
 
         if (shape == InvocationShape.SEND) {
             return selector != null
                     && !primitiveNumericSelector(selector)
                     && !"at".equals(selector)
-                    && !i115StructuredSelector(selector)
+                    && !isStructuredSelector(selector)
                     && ControlSelector.of(selector, arguments) == null
-                    && i115DirectUnaryOperand(receiver);
+                    && isDirectUnaryOperand(receiver);
         }
         return false;
     }
@@ -3594,21 +3594,21 @@ final class CanonicalToBytecodeLowerer {
         builder.endIfThenElse();
     }
 
-    private boolean i115DirectUnaryCall(CanonicalExpression expression) {
+    private boolean isDirectUnaryCall(CanonicalExpression expression) {
         if (expression instanceof CanonicalCall call) {
-            return i115AdmitsDirectUnaryInvocation(
+            return admitsDirectUnaryInvocation(
                     InvocationShape.CALL, call.receiver(),
                     null, call.arguments());
         }
         if (expression instanceof CanonicalSend send) {
-            return i115AdmitsDirectUnaryInvocation(
+            return admitsDirectUnaryInvocation(
                     InvocationShape.SEND, send.receiver(),
                     send.message(), send.arguments());
         }
         return false;
     }
 
-    private void emitI115DirectUnaryOperand(
+    private void emitDirectUnaryOperand(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalExpression expression,
             boolean carrier) {
@@ -3626,7 +3626,7 @@ final class CanonicalToBytecodeLowerer {
         }
         if (expression instanceof CanonicalMember member) {
             builder.beginGetAttribute(attributeName(member.name()));
-            emitI115DirectUnaryOperand(builder, member.receiver(), false);
+            emitDirectUnaryOperand(builder, member.receiver(), false);
             builder.endGetAttribute();
             return;
         }
@@ -3644,7 +3644,7 @@ final class CanonicalToBytecodeLowerer {
                         + expression.getClass().getSimpleName());
     }
 
-    private void emitI115DirectUnaryOperation(
+    private void emitDirectUnaryOperation(
             ProtosBytecodeRootNodeGen.Builder builder,
             InvocationShape shape,
             CanonicalExpression receiver,
@@ -3661,8 +3661,8 @@ final class CanonicalToBytecodeLowerer {
 
         if (shape == InvocationShape.CALL) {
             builder.beginCallUnaryMethod(terminal);
-            emitI115DirectUnaryOperand(builder, receiver, false);
-            emitI115DirectUnaryOperand(builder, argument, true);
+            emitDirectUnaryOperand(builder, receiver, false);
+            emitDirectUnaryOperand(builder, argument, true);
             builder.endCallUnaryMethod();
         } else if (shape == InvocationShape.SEND) {
             builder.beginBlock();
@@ -3671,7 +3671,7 @@ final class CanonicalToBytecodeLowerer {
             if (terminal) {
                 emitTerminalCallOperand(builder, receiver);
             } else {
-                emitI115DirectUnaryOperand(builder, receiver, false);
+                emitDirectUnaryOperand(builder, receiver, false);
             }
             StackValue receiverValue = builder.endBindStackValue();
 
@@ -3679,7 +3679,7 @@ final class CanonicalToBytecodeLowerer {
             if (terminal) {
                 emitTerminalCallOneArgument(builder, argument);
             } else {
-                emitI115DirectUnaryOperand(builder, argument, true);
+                emitDirectUnaryOperand(builder, argument, true);
             }
             StackValue argumentValue = builder.endBindStackValue();
 
@@ -3752,11 +3752,11 @@ final class CanonicalToBytecodeLowerer {
         builder.endBlock();
     }
 
-    private void emitI115DirectUnaryValue(
+    private void emitDirectUnaryValue(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalExpression expression,
             boolean primitiveCarrierResult) {
-        if (!i115DirectUnaryCall(expression)) {
+        if (!isDirectUnaryCall(expression)) {
             throw new AssertionError("Unadmitted direct unary call");
         }
 
@@ -3765,13 +3765,13 @@ final class CanonicalToBytecodeLowerer {
                 expression.span().length());
 
         if (expression instanceof CanonicalCall call) {
-            emitI115DirectUnaryOperation(
+            emitDirectUnaryOperation(
                     builder, InvocationShape.CALL,
                     call.receiver(), null, call.arguments().get(0),
                     primitiveCarrierResult, false);
         } else {
             CanonicalSend send = (CanonicalSend) expression;
-            emitI115DirectUnaryOperation(
+            emitDirectUnaryOperation(
                     builder, InvocationShape.SEND,
                     send.receiver(), send.message(), send.arguments().get(0),
                     primitiveCarrierResult, false);
@@ -4040,17 +4040,17 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
-        if (isI115EliminableControl(expression)) {
+        if (isEliminableControl(expression)) {
             builder.beginStoreLocal(target);
             builder.emitLoadConstant(ProtosNullValue.INSTANCE);
             builder.endStoreLocal();
             return;
         }
-        if (i115DirectUnaryCall(expression)) {
+        if (isDirectUnaryCall(expression)) {
             builder.beginStoreLocal(target);
             emitComposedDirectUnaryValue(
                     builder,
-                    () -> emitI115DirectUnaryValue(builder, expression, true),
+                    () -> emitDirectUnaryValue(builder, expression, true),
                     childResult, resumeValue, false);
             builder.endStoreLocal();
             return;
@@ -4250,7 +4250,7 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
-        if (i115DirectUnaryCall(expression)
+        if (isDirectUnaryCall(expression)
                 || (expression instanceof CanonicalSend send
                         && isDirectNumericOperand(send))) {
             builder.beginStoreLocal(target);
@@ -6123,7 +6123,7 @@ final class CanonicalToBytecodeLowerer {
             OperandStager stager,
             SpreadStager spreadStager,
             boolean primitiveCarrierResult) {
-        if (i115AdmitsDirectUnaryInvocation(shape, receiver, selector, arguments)) {
+        if (admitsDirectUnaryInvocation(shape, receiver, selector, arguments)) {
             if (result == null) {
                 builder.beginDiscardValue();
             } else {
@@ -6132,7 +6132,7 @@ final class CanonicalToBytecodeLowerer {
 
             emitComposedDirectUnaryValue(
                     builder,
-                    () -> emitI115DirectUnaryOperation(
+                    () -> emitDirectUnaryOperation(
                             builder, shape, receiver, selector,
                             arguments.get(0), true, false),
                     childResult, resumeValue, primitiveCarrierResult);
@@ -6437,7 +6437,7 @@ final class CanonicalToBytecodeLowerer {
                 send.receiver(), send.arguments());
     }
 
-    private boolean isI115EliminableControl(CanonicalExpression expression) {
+    private boolean isEliminableControl(CanonicalExpression expression) {
         StaticControlSelection control = classifyStaticControlSelection(expression);
         return control != null && control.eliminable();
     }
@@ -6462,7 +6462,7 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal scratch,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
-        if (isI115EliminableControl(expression)) {
+        if (isEliminableControl(expression)) {
             return;
         }
         CanonicalSend saved = discardedControlStatement;
@@ -6514,14 +6514,14 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal childResult,
             BytecodeLocal resumeValue,
             boolean primitiveCarrierResult) {
-        if (isI115EliminableControl(expression)) {
+        if (isEliminableControl(expression)) {
             builder.emitLoadConstant(ProtosNullValue.INSTANCE);
             return;
         }
-        if (i115DirectUnaryCall(expression)) {
+        if (isDirectUnaryCall(expression)) {
             emitComposedDirectUnaryValue(
                     builder,
-                    () -> emitI115DirectUnaryValue(builder, expression, true),
+                    () -> emitDirectUnaryValue(builder, expression, true),
                     childResult, resumeValue, primitiveCarrierResult);
             return;
         }
@@ -6581,11 +6581,11 @@ final class CanonicalToBytecodeLowerer {
             }
             return;
         }
-        if (i115DirectUnaryCall(expression)) {
+        if (isDirectUnaryCall(expression)) {
             builder.beginDiscardValue();
             emitComposedDirectUnaryValue(
                     builder,
-                    () -> emitI115DirectUnaryValue(builder, expression, true),
+                    () -> emitDirectUnaryValue(builder, expression, true),
                     childResult, resumeValue, true);
             builder.endDiscardValue();
             return;
@@ -6843,7 +6843,7 @@ final class CanonicalToBytecodeLowerer {
                 CanonicalExpression expression = expressions.get(index);
                 boolean last = index == expressions.size() - 1;
                 if ((!last || mode == InlineBodyResult.DISCARD)
-                        && isI115EliminableControl(expression)) {
+                        && isEliminableControl(expression)) {
                     continue;
                 }
                 if (last && mode != InlineBodyResult.DISCARD && sink != null) {
@@ -8577,8 +8577,8 @@ final class CanonicalToBytecodeLowerer {
 
     /* whether an operand is emitted straight onto the operand stack. */
     private boolean isDirectNumericOperand(CanonicalExpression expression) {
-        return i115DirectUnaryOperand(expression)
-                || i115DirectUnaryCall(expression);
+        return isDirectUnaryOperand(expression)
+                || isDirectUnaryCall(expression);
     }
 
     /**
@@ -8595,16 +8595,16 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
-        if (i115DirectUnaryCall(expression)) {
+        if (isDirectUnaryCall(expression)) {
             emitComposedDirectUnaryValue(
                     builder,
-                    () -> emitI115DirectUnaryValue(builder, expression, true),
+                    () -> emitDirectUnaryValue(builder, expression, true),
                     childResult, resumeValue, true);
             return;
         }
         if (expression instanceof CanonicalMember member
-                && i115DirectUnaryOperand(member)) {
-            emitI115DirectUnaryOperand(builder, member, true);
+                && isDirectUnaryOperand(member)) {
+            emitDirectUnaryOperand(builder, member, true);
             return;
         }
         if (expression instanceof CanonicalLiteral literal) {
@@ -8659,11 +8659,11 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
-        if (i115DirectUnaryCall(expression)) {
+        if (isDirectUnaryCall(expression)) {
             builder.beginStoreLocal(target);
             emitComposedDirectUnaryValue(
                     builder,
-                    () -> emitI115DirectUnaryValue(builder, expression, true),
+                    () -> emitDirectUnaryValue(builder, expression, true),
                     childResult, resumeValue, true);
             builder.endStoreLocal();
             return;
@@ -8781,10 +8781,10 @@ final class CanonicalToBytecodeLowerer {
                     || primitiveNumberLiteralOrNull(literal) != null;
         }
         if (expression instanceof CanonicalLookup lookup) {
-            return i115DirectLookup(lookup);
+            return isDirectLookup(lookup);
         }
         return expression instanceof CanonicalMember member
-                && i115DirectUnaryOperand(member);
+                && isDirectUnaryOperand(member);
     }
 
     /*

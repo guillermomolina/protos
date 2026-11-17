@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.156-SNAPSHOT
+
+- **I115.** Remove the migration-only semantic performance gate (Makefile targets `semantic-performance-gate`, `i115-performance-baseline`, `i115-performance-probe` and `test-semantic-performance-gate`, `tools/i115_semantic_performance_gate.py`, `tools/i115_gate_java/`, `tools/baselines/` and their `tools/tests` suites) and the I115 compiler-graph diagnostics (`tools/i115_q_graph_capture.py`, `tools/i115_tier1_run_graph.sh`, `tools/i115_tier2_run_graph.sh` and their opt-in tests). Remove the temporary `I115_NATIVE_TERM_DIAG` Process termination diagnostic. Drop issue identifiers from product-code names: Bytecode lowering constant-folding and direct-unary helpers, free-cell and inline-callback local-name prefixes, and the experimental trace property (now `protos.experimental.trace`).
+
 ## 0.4.155-SNAPSHOT
 
 - **I115.** Require Native guest Tier-2 JIT in `native-test.sh`: both the Bytecode DSL root and the builtin-call root must reach a successful Tier-2 compilation with no opt, compilation, FrameWithoutBoxing or fallback-runtime failures (supersedes the PLAT045 interpreter-only probe). Initialize the test-only shared Polyglot context owner `ProtosTestExecutionSupport` at image run time in the `native-tls-tests` profile so the JUnit image no longer retains a builder-created Engine, Context or thread. Update the Native profile static regression.
