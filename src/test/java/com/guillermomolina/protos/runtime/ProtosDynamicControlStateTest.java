@@ -258,6 +258,111 @@ class ProtosDynamicControlStateTest {
         assertFalse(state.hasActiveEnsureFrames());
     }
 
+    /** An invocation key equal to another by {@code equals} never shares or exposes its frame. */
+    private static final class EqualKey {
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof EqualKey;
+        }
+
+        @Override
+        public int hashCode() {
+            return 1;
+        }
+    }
+
+    @Test
+    void invocationIdentityIsStrictReferenceIdentityNotEquality() {
+        ProtosDynamicControlState state = new ProtosDynamicControlState();
+        EqualKey firstKey = new EqualKey();
+        EqualKey equalKey = new EqualKey();
+
+        ProtosDynamicControlState.Frame first =
+                state.enterFrame(firstKey, ProtosDynamicControlState.FrameKind.HANDLER);
+        assertTrue(state.frameForInvocation(equalKey).isEmpty());
+
+        // An equal but distinct invocation enters its own frame, even with another kind.
+        ProtosDynamicControlState.Frame second =
+                state.enterFrame(equalKey, ProtosDynamicControlState.FrameKind.ENSURE);
+        assertNotSame(first, second);
+        assertSame(first, state.frameForInvocation(firstKey).orElseThrow());
+        assertSame(second, state.frameForInvocation(equalKey).orElseThrow());
+        assertEquals(List.of(second, first), state.framesNewestFirst());
+
+        state.leaveFrame(second);
+        assertTrue(state.frameForInvocation(equalKey).isEmpty());
+        assertSame(first, state.frameForInvocation(firstKey).orElseThrow());
+        state.leaveFrame(first);
+        assertTrue(state.frameForInvocation(firstKey).isEmpty());
+    }
+
+    @Test
+    void nestedInvocationsReuseTheirOwnFramesAndLeaveInLifoOrder() {
+        ProtosDynamicControlState state = new ProtosDynamicControlState();
+        Object outerInvocation = new Object();
+        Object middleInvocation = new Object();
+        Object innerInvocation = new Object();
+
+        ProtosDynamicControlState.Frame outer =
+                state.enterFrame(outerInvocation, ProtosDynamicControlState.FrameKind.HANDLER);
+        ProtosDynamicControlState.Frame middle =
+                state.enterFrame(middleInvocation, ProtosDynamicControlState.FrameKind.ENSURE);
+        ProtosDynamicControlState.Frame inner =
+                state.enterFrame(innerInvocation, ProtosDynamicControlState.FrameKind.HANDLER);
+
+        // Re-entering an outer invocation reuses its frame and does not reorder the stack.
+        assertSame(outer,
+                state.enterFrame(outerInvocation, ProtosDynamicControlState.FrameKind.HANDLER));
+        assertSame(middle,
+                state.enterFrame(middleInvocation, ProtosDynamicControlState.FrameKind.ENSURE));
+        assertEquals(List.of(inner, middle, outer), state.framesNewestFirst());
+
+        assertThrows(IllegalStateException.class, () -> state.leaveFrame(middle));
+        assertThrows(IllegalStateException.class, () -> state.leaveFrame(outer));
+        state.leaveFrame(inner);
+        assertFalse(inner.active());
+        assertThrows(IllegalArgumentException.class, () -> state.leaveFrame(inner));
+        assertThrows(IllegalArgumentException.class, () -> state.deactivate(inner));
+        state.leaveFrame(middle);
+        state.leaveFrame(outer);
+        assertTrue(state.framesNewestFirst().isEmpty());
+
+        // After removal the same invocation identity enters a fresh frame.
+        ProtosDynamicControlState.Frame reentered =
+                state.enterFrame(outerInvocation, ProtosDynamicControlState.FrameKind.HANDLER);
+        assertNotSame(outer, reentered);
+        assertTrue(reentered.active());
+        state.leaveFrame(reentered);
+    }
+
+    @Test
+    void handlerSelectionSkipsDeactivatedFramesAndCancellationCleanupFollowsTheExactFrame() {
+        ProtosDynamicControlState state = new ProtosDynamicControlState();
+        ProtosObjectValue errorRoot = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosObjectValue occurrence = new ProtosObjectValue(errorRoot);
+        Object ensureInvocation = new Object();
+
+        ProtosDynamicControlState.Frame outer = state.enterHandlerFrame(new Object(), errorRoot);
+        ProtosDynamicControlState.Frame inner = state.enterHandlerFrame(new Object(), errorRoot);
+        ProtosDynamicControlState.Frame ensure =
+                state.enterFrame(ensureInvocation, ProtosDynamicControlState.FrameKind.ENSURE);
+
+        state.deactivate(inner);
+        assertSame(outer, state.selectMatchingHandler(occurrence).orElseThrow());
+        assertTrue(state.selectMatchingHandler(occurrence).isEmpty());
+
+        Object cancellation = new Object();
+        state.beginEnsureCleanup(
+                ensure, ProtosDynamicControlState.EnsureExitKind.CANCELLATION, cancellation);
+        assertTrue(state.hasActiveCancellationEnsureCleanupForRuntime());
+        assertSame(ensure, state.frameForInvocation(ensureInvocation).orElseThrow());
+        state.leaveFrame(ensure);
+        assertFalse(state.hasActiveCancellationEnsureCleanupForRuntime());
+        state.leaveFrame(inner);
+        state.leaveFrame(outer);
+        assertTrue(state.framesNewestFirst().isEmpty());
+    }
+
     @Test
     void framesSnapshotIsIndependentOfLaterFrameChanges() {
         ProtosDynamicControlState state = new ProtosDynamicControlState();

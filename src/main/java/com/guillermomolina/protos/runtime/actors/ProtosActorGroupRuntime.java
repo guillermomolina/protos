@@ -18,13 +18,10 @@ package com.guillermomolina.protos.runtime;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
+import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 
 /** Internal ActorGroup identity, membership, and pre-acceptance routing substrate. */
@@ -41,10 +38,11 @@ public final class ProtosActorGroupRuntime {
     }
 
     private final UUID groupIdentity = UUID.randomUUID();
-    private final Map<Long, Member> members = new LinkedHashMap<>();
+    /** Authoritative ordered membership; at most one member per Actor incarnation identity. */
     private final ArrayList<Member> memberOrder = new ArrayList<>();
     private final ArrayDeque<RoutingOperation> pending = new ArrayDeque<>();
-    private final Set<RoutingOperation> active = new LinkedHashSet<>();
+    /** Ordered active routing operations; membership compares instance identity only. */
+    private final ArrayList<RoutingOperation> active = new ArrayList<>();
     private LifecycleState lifecycle = LifecycleState.LIVE;
     private int nextSelectionIndex;
     private int nextLocalSelectionIndex;
@@ -67,7 +65,7 @@ public final class ProtosActorGroupRuntime {
             if (lifecycle != LifecycleState.LIVE) {
                 throw new IllegalStateException("terminated Group cannot acquire members");
             }
-            added = members.putIfAbsent(member.identity(), member) == null;
+            added = findMemberLocked(member.identity()) == null;
             if (added) {
                 memberOrder.add(member);
             }
@@ -94,7 +92,7 @@ public final class ProtosActorGroupRuntime {
             if (lifecycle != LifecycleState.LIVE) {
                 throw new IllegalStateException("terminated Group cannot acquire members");
             }
-            added = members.putIfAbsent(member.identity(), member) == null;
+            added = findMemberLocked(member.identity()) == null;
             if (added) {
                 memberOrder.add(member);
             }
@@ -125,7 +123,7 @@ public final class ProtosActorGroupRuntime {
             if (lifecycle != LifecycleState.LIVE) {
                 throw new IllegalStateException("terminated Group cannot acquire members");
             }
-            added = members.putIfAbsent(member.identity(), member) == null;
+            added = findMemberLocked(member.identity()) == null;
             if (added) {
                 memberOrder.add(member);
             }
@@ -142,14 +140,14 @@ public final class ProtosActorGroupRuntime {
         Member removed;
         List<RoutingOperation> operations;
         synchronized (this) {
-            Member current = members.get(actor.incarnationIdentityForRuntime());
+            Member current = findMemberLocked(actor.incarnationIdentityForRuntime());
             if (current == null || current.localActor != actor) {
                 return false;
             }
-            removed = members.remove(current.identity());
+            removed = current;
             removeMemberFromOrderLocked(removed);
             normalizeSelectionIndexLocked();
-            operations = List.copyOf(active);
+            operations = activeSnapshotLocked();
         }
         actor.unregisterRoutingGroupForRuntime(this);
         for (RoutingOperation operation : operations) {
@@ -165,14 +163,14 @@ public final class ProtosActorGroupRuntime {
         Member removed;
         List<RoutingOperation> operations;
         synchronized (this) {
-            Member current = members.get(reference.incarnationIdentityForRuntime());
+            Member current = findMemberLocked(reference.incarnationIdentityForRuntime());
             if (current == null || current.localActor != null) {
                 return false;
             }
-            removed = members.remove(current.identity());
+            removed = current;
             removeMemberFromOrderLocked(removed);
             normalizeSelectionIndexLocked();
-            operations = List.copyOf(active);
+            operations = activeSnapshotLocked();
         }
         for (RoutingOperation operation : operations) {
             operation.memberBecameIneligibleForRuntime(removed.reference);
@@ -205,7 +203,7 @@ public final class ProtosActorGroupRuntime {
     }
 
     private Member selectEligibleMemberLocked() {
-        if (lifecycle != LifecycleState.LIVE || members.isEmpty()) {
+        if (lifecycle != LifecycleState.LIVE || memberOrder.isEmpty()) {
             return null;
         }
         List<Member> eligible = new ArrayList<>();
@@ -235,6 +233,17 @@ public final class ProtosActorGroupRuntime {
         }
     }
 
+    /** Exact numeric incarnation-identity lookup in {@link #memberOrder}; caller holds the monitor. */
+    private Member findMemberLocked(long identity) {
+        for (int index = 0; index < memberOrder.size(); index++) {
+            Member member = memberOrder.get(index);
+            if (member.identity() == identity) {
+                return member;
+            }
+        }
+        return null;
+    }
+
     private void removeMemberFromOrderLocked(Member removed) {
         for (int index = 0; index < memberOrder.size(); index++) {
             if (memberOrder.get(index) == removed) {
@@ -262,8 +271,12 @@ public final class ProtosActorGroupRuntime {
         synchronized (this) {
             terminated = lifecycle != LifecycleState.LIVE;
             if (!terminated) {
-                active.add(operation);
-                pending.addLast(operation);
+                if (!activeContains(operation)) {
+                    active.add(operation);
+                }
+                if (!pendingContains(operation)) {
+                    pending.addLast(operation);
+                }
             }
         }
         if (terminated) {
@@ -277,10 +290,10 @@ public final class ProtosActorGroupRuntime {
     boolean requeueAfterPreacceptFailureForRuntime(RoutingOperation operation) {
         boolean queued;
         synchronized (this) {
-            if (lifecycle != LifecycleState.LIVE || !active.contains(operation)) {
+            if (lifecycle != LifecycleState.LIVE || !activeContains(operation)) {
                 return false;
             }
-            queued = !pending.contains(operation);
+            queued = !pendingContains(operation);
             if (queued) {
                 pending.addLast(operation);
             }
@@ -294,26 +307,73 @@ public final class ProtosActorGroupRuntime {
     /** Cancels Group-owned routing even if a drain selected a member but acceptance is still known absent. */
     boolean cancelRoutingBeforeAcceptanceForRuntime(RoutingOperation operation) {
         synchronized (this) {
-            if (!active.contains(operation)) {
+            if (!activeContains(operation)) {
                 return false;
             }
-            pending.remove(operation);
+            pendingRemove(operation);
             return true;
         }
     }
 
     void operationFinishedForRuntime(RoutingOperation operation) {
         synchronized (this) {
-            pending.remove(operation);
-            active.remove(operation);
+            pendingRemove(operation);
+            for (int i = 0; i < active.size(); i++) {
+                if (active.get(i) == operation) {
+                    active.remove(i);
+                    break;
+                }
+            }
         }
+    }
+
+    /** Identity membership in {@link #active}; callers hold this runtime's monitor. */
+    private boolean activeContains(RoutingOperation operation) {
+        for (int i = 0; i < active.size(); i++) {
+            if (active.get(i) == operation) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Identity membership in {@link #pending}; callers hold this runtime's monitor. */
+    private boolean pendingContains(RoutingOperation operation) {
+        Iterator<RoutingOperation> iterator = pending.iterator();
+        while (iterator.hasNext()) {
+            if (iterator.next() == operation) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Removes the first queued entry that is this exact instance; callers hold the monitor. */
+    private boolean pendingRemove(RoutingOperation operation) {
+        Iterator<RoutingOperation> iterator = pending.iterator();
+        while (iterator.hasNext()) {
+            if (iterator.next() == operation) {
+                iterator.remove();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Independent ordered snapshot of {@link #active}; callers hold this runtime's monitor. */
+    private ArrayList<RoutingOperation> activeSnapshotLocked() {
+        ArrayList<RoutingOperation> snapshot = new ArrayList<>(active.size());
+        for (int i = 0; i < active.size(); i++) {
+            snapshot.add(active.get(i));
+        }
+        return snapshot;
     }
 
     /** READY/termination changes can make a pending local route possible or invalidate one target. */
     void memberLifecycleChangedForRuntime(ProtosActor actor) {
         Objects.requireNonNull(actor, "actor");
         synchronized (this) {
-            Member member = members.get(actor.incarnationIdentityForRuntime());
+            Member member = findMemberLocked(actor.incarnationIdentityForRuntime());
             if (member == null || member.localActor != actor || lifecycle != LifecycleState.LIVE) {
                 return;
             }
@@ -338,7 +398,7 @@ public final class ProtosActorGroupRuntime {
                 return;
             }
             draining = true;
-            budget = Math.max(1, pending.size() * Math.max(1, members.size()));
+            budget = Math.max(1, pending.size() * Math.max(1, memberOrder.size()));
         }
         try {
             while (budget-- > 0) {
@@ -378,12 +438,12 @@ public final class ProtosActorGroupRuntime {
             }
             lifecycle = LifecycleState.TERMINATED;
             pending.clear();
-            operations = List.copyOf(active);
+            operations = activeSnapshotLocked();
             ArrayList<Member> snapshot = new ArrayList<>(memberOrder.size());
             for (int index = 0; index < memberOrder.size(); index++) {
                 snapshot.add(memberOrder.get(index));
             }
-            currentMembers = List.copyOf(snapshot);
+            currentMembers = snapshot;
         }
         for (Member member : currentMembers) {
             if (member.localActor != null) {
@@ -397,7 +457,7 @@ public final class ProtosActorGroupRuntime {
     }
 
     synchronized int memberCountForTesting() {
-        return members.size();
+        return memberOrder.size();
     }
 
     synchronized int pendingOperationCountForTesting() {

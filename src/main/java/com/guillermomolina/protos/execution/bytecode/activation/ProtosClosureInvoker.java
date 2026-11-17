@@ -118,6 +118,20 @@ public final class ProtosClosureInvoker {
             ProtosObjectValue methodHome,
             List<?> supplied,
             ProtosActivation caller) {
+        Objects.requireNonNull(supplied, "supplied");
+        return invokeImmediateMethod(closure, receiver, methodHome, supplied.toArray(), caller);
+    }
+
+    /**
+     * {@link #invokeImmediateMethod(ProtosClosureValue, Object, ProtosObjectValue, List,
+     * ProtosActivation)} for prepared positional arguments, passed to the dispatcher as is.
+     */
+    public static Object invokeImmediateMethod(
+            ProtosClosureValue closure,
+            Object receiver,
+            ProtosObjectValue methodHome,
+            Object[] supplied,
+            ProtosActivation caller) {
         Objects.requireNonNull(closure, "closure");
         Objects.requireNonNull(receiver, "receiver");
         Objects.requireNonNull(methodHome, "methodHome");
@@ -128,7 +142,7 @@ public final class ProtosClosureInvoker {
                 caller,
                 () -> callWithEnteredContext(
                         () -> ProtosFunctionCallDispatchers.callMethodUncached(
-                                closure, receiver, methodHome, supplied.toArray(), caller)));
+                                closure, receiver, methodHome, supplied, caller)));
     }
 
     /*
@@ -157,14 +171,21 @@ public final class ProtosClosureInvoker {
 
     /** Any callable value, invoked through the shared dispatcher by {@code caller}. */
     static Object invokeCallable(Object callable, List<?> supplied, ProtosActivation caller) {
+        Objects.requireNonNull(supplied, "supplied");
+        return invokeCallable(callable, supplied.toArray(), caller);
+    }
+
+    /** {@link #invokeCallable(Object, List, ProtosActivation)} for prepared positional arguments. */
+    static Object invokeCallable(Object callable, Object[] supplied, ProtosActivation caller) {
         Objects.requireNonNull(callable, "callable");
+        Objects.requireNonNull(supplied, "supplied");
         Objects.requireNonNull(caller, "caller");
         requireOutsideTask(caller, "synchronous invocation");
         return synchronous(
                 caller,
                 () -> callWithEnteredContext(
                         () -> ProtosFunctionCallDispatchers.callFunctionUncached(
-                                callable, supplied.toArray(), caller)));
+                                callable, supplied, caller)));
     }
 
     /**

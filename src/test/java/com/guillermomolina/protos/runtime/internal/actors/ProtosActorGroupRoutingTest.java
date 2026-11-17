@@ -117,6 +117,234 @@ final class ProtosActorGroupRoutingTest {
                 () -> group.acquireReferenceForRuntime(groupRefPrototype(), UUID.randomUUID()));
     }
 
+    /** Records Group callbacks; optionally equal to every other instance of this class. */
+    private static final class RecordingOperation
+            implements ProtosActorGroupRuntime.RoutingOperation {
+        private final String name;
+        private final java.util.List<String> log;
+        private final boolean equalToAll;
+
+        RecordingOperation(String name, java.util.List<String> log, boolean equalToAll) {
+            this.name = name;
+            this.log = log;
+            this.equalToAll = equalToAll;
+        }
+
+        @Override
+        public void routeToForRuntime(ProtosActorRefValue member) {
+            log.add(name + ":route");
+        }
+
+        @Override
+        public void memberBecameIneligibleForRuntime(ProtosActorRefValue member) {
+            log.add(name + ":ineligible");
+        }
+
+        @Override
+        public void groupTerminatedBeforeAcceptanceForRuntime() {
+            log.add(name + ":terminated");
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return equalToAll ? other instanceof RecordingOperation : this == other;
+        }
+
+        @Override
+        public int hashCode() {
+            return equalToAll ? 1 : System.identityHashCode(this);
+        }
+    }
+
+    @Test
+    void activeRoutingMembershipIsByIdentityAndPreservesSubmissionOrder() {
+        ProtosActorGroupRuntime group = new ProtosActorGroupRuntime();
+        java.util.List<String> log = new java.util.ArrayList<>();
+        RecordingOperation first = new RecordingOperation("first", log, true);
+        RecordingOperation second = new RecordingOperation("second", log, true);
+
+        // No eligible member: both stay pending and active, distinct despite equality.
+        group.submitRoutingForRuntime(first);
+        group.submitRoutingForRuntime(second);
+        assertEquals(2, group.pendingOperationCountForTesting());
+
+        assertTrue(group.markTerminatedForRuntime());
+        assertEquals(java.util.List.of("first:terminated", "second:terminated"), log);
+        assertEquals(0, group.pendingOperationCountForTesting());
+        assertFalse(group.markTerminatedForRuntime());
+        assertEquals(2, log.size());
+    }
+
+    @Test
+    void cancellationBeforeAcceptanceAndTerminalRemovalFollowTheExactOperation() {
+        ProtosActorGroupRuntime group = new ProtosActorGroupRuntime();
+        java.util.List<String> log = new java.util.ArrayList<>();
+        RecordingOperation cancelled = new RecordingOperation("cancelled", log, false);
+        RecordingOperation kept = new RecordingOperation("kept", log, false);
+        RecordingOperation never = new RecordingOperation("never", log, false);
+
+        group.submitRoutingForRuntime(cancelled);
+        group.submitRoutingForRuntime(kept);
+        assertFalse(group.cancelRoutingBeforeAcceptanceForRuntime(never));
+
+        // Cancellation leaves pending routing but keeps the operation active until it finishes.
+        assertTrue(group.cancelRoutingBeforeAcceptanceForRuntime(cancelled));
+        assertEquals(1, group.pendingOperationCountForTesting());
+        assertTrue(group.cancelRoutingBeforeAcceptanceForRuntime(cancelled));
+
+        group.operationFinishedForRuntime(cancelled);
+        assertFalse(group.cancelRoutingBeforeAcceptanceForRuntime(cancelled));
+        assertFalse(group.requeueAfterPreacceptFailureForRuntime(cancelled));
+        group.operationFinishedForRuntime(cancelled);
+
+        // A finished operation is no longer notified; the remaining one is notified once.
+        assertTrue(group.markTerminatedForRuntime());
+        assertEquals(java.util.List.of("kept:terminated"), log);
+    }
+
+    @Test
+    void resubmittingTheSameOperationKeepsOneActiveEntry() {
+        ProtosActorGroupRuntime group = new ProtosActorGroupRuntime();
+        java.util.List<String> log = new java.util.ArrayList<>();
+        RecordingOperation operation = new RecordingOperation("only", log, false);
+
+        group.submitRoutingForRuntime(operation);
+        group.submitRoutingForRuntime(operation);
+        assertEquals(1, group.pendingOperationCountForTesting());
+        assertTrue(group.requeueAfterPreacceptFailureForRuntime(operation));
+        assertEquals(1, group.pendingOperationCountForTesting());
+
+        assertTrue(group.markTerminatedForRuntime());
+        assertEquals(java.util.List.of("only:terminated"), log);
+    }
+
+    @Test
+    void cancellingAnEqualButDistinctOperationLeavesTheFirstPending() {
+        ProtosActorGroupRuntime group = new ProtosActorGroupRuntime();
+        java.util.List<String> log = new java.util.ArrayList<>();
+        RecordingOperation first = new RecordingOperation("first", log, true);
+        RecordingOperation second = new RecordingOperation("second", log, true);
+        assertEquals(first, second);
+
+        group.submitRoutingForRuntime(first);
+        group.submitRoutingForRuntime(second);
+        assertTrue(group.cancelRoutingBeforeAcceptanceForRuntime(second));
+        assertEquals(1, group.pendingOperationCountForTesting());
+
+        // Only the exact remaining instance is routed once a member becomes eligible.
+        assertTrue(group.addMemberForRuntime(readyActor()));
+        assertEquals(java.util.List.of("first:route"), log);
+        assertEquals(0, group.pendingOperationCountForTesting());
+    }
+
+    @Test
+    void finishingAnOperationNeverRetiresAnEqualButDistinctOne() {
+        ProtosActorGroupRuntime group = new ProtosActorGroupRuntime();
+        java.util.List<String> log = new java.util.ArrayList<>();
+        RecordingOperation first = new RecordingOperation("first", log, true);
+        RecordingOperation second = new RecordingOperation("second", log, true);
+
+        group.submitRoutingForRuntime(first);
+        group.submitRoutingForRuntime(second);
+        group.operationFinishedForRuntime(second);
+        assertEquals(1, group.pendingOperationCountForTesting());
+        assertFalse(group.cancelRoutingBeforeAcceptanceForRuntime(second));
+
+        assertTrue(group.markTerminatedForRuntime());
+        assertEquals(java.util.List.of("first:terminated"), log);
+    }
+
+    @Test
+    void requeueChecksPendingByExactInstanceAndKeepsFifoOrder() {
+        ProtosActorGroupRuntime group = new ProtosActorGroupRuntime();
+        java.util.List<String> log = new java.util.ArrayList<>();
+        RecordingOperation first = new RecordingOperation("first", log, true);
+        RecordingOperation second = new RecordingOperation("second", log, true);
+
+        group.submitRoutingForRuntime(first);
+        group.submitRoutingForRuntime(second);
+        assertTrue(group.cancelRoutingBeforeAcceptanceForRuntime(first));
+        assertEquals(1, group.pendingOperationCountForTesting());
+
+        // An equal but distinct pending entry must not suppress requeueing the exact instance.
+        assertTrue(group.requeueAfterPreacceptFailureForRuntime(first));
+        assertEquals(2, group.pendingOperationCountForTesting());
+        assertTrue(group.requeueAfterPreacceptFailureForRuntime(first));
+        assertEquals(2, group.pendingOperationCountForTesting());
+
+        assertTrue(group.addMemberForRuntime(readyActor()));
+        assertEquals(java.util.List.of("second:route", "first:route"), log);
+    }
+
+    @Test
+    void pendingRoutingDrainsInSubmissionOrder() {
+        ProtosActorGroupRuntime group = new ProtosActorGroupRuntime();
+        java.util.List<String> log = new java.util.ArrayList<>();
+        RecordingOperation first = new RecordingOperation("first", log, true);
+        RecordingOperation second = new RecordingOperation("second", log, true);
+        RecordingOperation third = new RecordingOperation("third", log, false);
+
+        group.submitRoutingForRuntime(first);
+        group.submitRoutingForRuntime(second);
+        group.submitRoutingForRuntime(third);
+        assertTrue(group.addMemberForRuntime(readyActor()));
+        assertEquals(java.util.List.of("first:route", "second:route", "third:route"), log);
+    }
+
+    @Test
+    void repeatedMembershipAcquisitionKeepsOneMemberPerIncarnation() {
+        ProtosActorGroupRuntime group = new ProtosActorGroupRuntime();
+        ProtosActor actor = readyActor();
+
+        assertTrue(group.addMemberForRuntime(actor));
+        assertFalse(group.addMemberForRuntime(actor));
+        assertFalse(group.addInitialMemberReferenceForRuntime(actor.reference()));
+        assertEquals(1, group.memberCountForTesting());
+
+        assertTrue(group.removeMemberForRuntime(actor));
+        assertFalse(group.removeMemberForRuntime(actor));
+        assertEquals(0, group.memberCountForTesting());
+
+        assertTrue(group.addMemberForRuntime(actor));
+        assertEquals(1, group.memberCountForTesting());
+        assertSame(actor, group.selectEligibleMemberForRuntime().orElseThrow());
+    }
+
+    @Test
+    void removingAMemberPreservesTheOrderOfTheRemainingMembers() {
+        ProtosActorGroupRuntime group = new ProtosActorGroupRuntime();
+        ProtosActor first = readyActor();
+        ProtosActor second = readyActor();
+        ProtosActor third = readyActor();
+        ProtosActor outsider = readyActor();
+        group.addMemberForRuntime(first);
+        group.addMemberForRuntime(second);
+        group.addMemberForRuntime(third);
+
+        assertFalse(group.removeMemberForRuntime(outsider));
+        assertTrue(group.removeMemberForRuntime(second));
+        assertEquals(2, group.memberCountForTesting());
+        assertSame(first, group.selectEligibleMemberForRuntime().orElseThrow());
+        assertSame(third, group.selectEligibleMemberForRuntime().orElseThrow());
+        assertSame(first, group.selectEligibleMemberForRuntime().orElseThrow());
+
+        assertTrue(group.addMemberForRuntime(second));
+        assertEquals(3, group.memberCountForTesting());
+    }
+
+    @Test
+    void submissionAfterTerminationIsRejectedBeforeAcceptanceWithoutRegistration() {
+        ProtosActorGroupRuntime group = new ProtosActorGroupRuntime();
+        java.util.List<String> log = new java.util.ArrayList<>();
+        RecordingOperation late = new RecordingOperation("late", log, false);
+        assertTrue(group.markTerminatedForRuntime());
+
+        group.submitRoutingForRuntime(late);
+        assertEquals(java.util.List.of("late:terminated"), log);
+        assertFalse(group.cancelRoutingBeforeAcceptanceForRuntime(late));
+        assertEquals(0, group.pendingOperationCountForTesting());
+    }
+
     private static ProtosActor readyActor() {
         ProtosActor actor = new ProtosActor(actorRefPrototype());
         assertTrue(actor.completeInitialization(new ProtosObjectValue(ProtosObjectValue.rootObject())));

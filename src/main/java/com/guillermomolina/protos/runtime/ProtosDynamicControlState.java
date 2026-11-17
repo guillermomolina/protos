@@ -20,7 +20,6 @@ package com.guillermomolina.protos.runtime;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -207,7 +206,6 @@ public final class ProtosDynamicControlState {
         }
     }
 
-    private final IdentityHashMap<Object, Frame> framesByInvocation = new IdentityHashMap<>();
     private final ArrayDeque<Frame> framesNewestFirst = new ArrayDeque<>();
     private long nextFrameId = 1L;
     private long nextTransferId = 1L;
@@ -217,7 +215,7 @@ public final class ProtosDynamicControlState {
         Objects.requireNonNull(invocationIdentity, "invocationIdentity");
         Objects.requireNonNull(kind, "kind");
 
-        Frame existing = framesByInvocation.get(invocationIdentity);
+        Frame existing = findFrame(invocationIdentity);
         if (existing != null) {
             if (existing.kind() != kind) {
                 throw new IllegalStateException(
@@ -230,7 +228,6 @@ public final class ProtosDynamicControlState {
         }
 
         Frame created = new Frame(nextFrameId++, kind, invocationIdentity);
-        framesByInvocation.put(invocationIdentity, created);
         framesNewestFirst.addFirst(created);
         return created;
     }
@@ -332,7 +329,7 @@ public final class ProtosDynamicControlState {
 
     public Optional<Frame> frameForInvocation(Object invocationIdentity) {
         Objects.requireNonNull(invocationIdentity, "invocationIdentity");
-        return Optional.ofNullable(framesByInvocation.get(invocationIdentity));
+        return Optional.ofNullable(findFrame(invocationIdentity));
     }
 
     @TruffleBoundary
@@ -353,7 +350,6 @@ public final class ProtosDynamicControlState {
         }
         frame.deactivate();
         framesNewestFirst.removeFirst();
-        framesByInvocation.remove(frame.invocationIdentity());
     }
 
     public Transfer beginTransfer(TransferKind kind, Object payload) {
@@ -389,9 +385,22 @@ public final class ProtosDynamicControlState {
 
     private void requirePresent(Frame frame) {
         Objects.requireNonNull(frame, "frame");
-        Frame present = framesByInvocation.get(frame.invocationIdentity());
+        Frame present = findFrame(frame.invocationIdentity());
         if (present != frame) {
             throw new IllegalArgumentException("dynamic control frame is not present in this task state");
         }
+    }
+
+    /**
+     * Finds the frame entered for an invocation identity, scanning the existing frame stack newest
+     * first and comparing invocation identities only by reference.
+     */
+    private Frame findFrame(Object invocationIdentity) {
+        for (Frame frame : framesNewestFirst) {
+            if (frame.invocationIdentity() == invocationIdentity) {
+                return frame;
+            }
+        }
+        return null;
     }
 }

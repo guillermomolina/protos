@@ -201,6 +201,104 @@ final class ProtosNioFilesystemTreeCaptureBackendTest {
         }
     }
 
+    @Test
+    void repeatedExplicitReleaseIsIdempotentAndEndsNewAcquisitions() throws Exception {
+        Files.writeString(authorityRoot.resolve("value.txt"), "value", StandardCharsets.UTF_8);
+
+        try (ProtosNioReadOnlyTreeFilesystemBackend source =
+                new ProtosNioReadOnlyTreeFilesystemBackend(authorityRoot)) {
+            assumeTrue(
+                    source.secureConfinementAvailable(),
+                    "host provider has no SecureDirectoryStream");
+
+            CaptureResult captured = captureRoot(source);
+            assertTrue(openSucceeded(captured.backend(), relative("value.txt")));
+
+            captured.release().run();
+            captured.release().run();
+
+            assertFalse(openSucceeded(captured.backend(), relative("value.txt")));
+            // A released backend view answers no further observation either.
+            assertNull(entriesOrNull(captured.backend(), relative()));
+        }
+    }
+
+    @Test
+    void fileOpenedBeforeReleaseKeepsItsBytesAfterSourceCloseAndBackendRelease()
+            throws Exception {
+        Files.writeString(authorityRoot.resolve("kept.txt"), "kept", StandardCharsets.UTF_8);
+
+        ProtosFileFlow.ReadableResource resource;
+        Runnable resourceRelease;
+        CaptureResult captured;
+        try (ProtosNioReadOnlyTreeFilesystemBackend source =
+                new ProtosNioReadOnlyTreeFilesystemBackend(authorityRoot)) {
+            assumeTrue(
+                    source.secureConfinementAvailable(),
+                    "host provider has no SecureDirectoryStream");
+            captured = captureRoot(source);
+
+            AtomicReference<ProtosFileFlow.Resource> opened = new AtomicReference<>();
+            AtomicReference<Runnable> release = new AtomicReference<>();
+            captured.backend().open(
+                    relative("kept.txt"),
+                    ProtosFilesystemOpenOptions.defaults(),
+                    new ProtosStandardFilesystemProtocol.OpenCompletion() {
+                        @Override
+                        public boolean commitPortableEffect() {
+                            return true;
+                        }
+
+                        @Override
+                        public void succeeded(
+                                ProtosFileFlow.Resource selected,
+                                ProtosFileFlow.Capabilities capabilities,
+                                Runnable releaseIfUntransferred) {
+                            opened.set(selected);
+                            release.set(releaseIfUntransferred);
+                        }
+
+                        @Override
+                        public void failed() {}
+                    });
+            assertNotNull(opened.get());
+            resource = (ProtosFileFlow.ReadableResource) opened.get();
+            resourceRelease = release.get();
+        }
+
+        // The source is closed and its directory mutated; the backend custody is released.
+        Files.delete(authorityRoot.resolve("kept.txt"));
+        captured.release().run();
+
+        AtomicReference<byte[]> bytes = new AtomicReference<>();
+        AtomicBoolean failed = new AtomicBoolean();
+        resource.readAt(
+                0L,
+                64,
+                new ProtosFileFlow.ReadCompletion() {
+                    @Override
+                    public void data(byte[] data) {
+                        bytes.set(data);
+                    }
+
+                    @Override
+                    public void eof() {
+                        failed.set(true);
+                    }
+
+                    @Override
+                    public void failed() {
+                        failed.set(true);
+                    }
+                });
+        assertFalse(failed.get());
+        assertArrayEquals("kept".getBytes(StandardCharsets.UTF_8), bytes.get());
+
+        resourceRelease.run();
+        resourceRelease.run();
+        assertFalse(openSucceeded(captured.backend(), relative("kept.txt")));
+    }
+
     private static List<ProtosFilesystemTreeObservationFlow.Entry> entries(
             ProtosStandardFilesystemProtocol.Backend backend, ProtosPathComponents path) {
         List<ProtosFilesystemTreeObservationFlow.Entry> result = entriesOrNull(backend, path);

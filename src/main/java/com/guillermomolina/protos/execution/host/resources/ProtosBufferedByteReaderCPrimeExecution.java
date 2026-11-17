@@ -94,11 +94,12 @@ public final class ProtosBufferedByteReaderCPrimeExecution {
                 ProtosIoOperation operation,
                 ProtosBufferedByteIo reader,
                 Object target,
-                List<?> arguments) {
+                Object[] arguments) {
             this.operation = Objects.requireNonNull(operation, "operation");
             this.reader = Objects.requireNonNull(reader, "reader");
             this.target = Objects.requireNonNull(target, "target");
-            this.arguments = List.copyOf(Objects.requireNonNull(arguments, "arguments")).toArray();
+            // Already an independent validated snapshot owned by this state; never written.
+            this.arguments = Objects.requireNonNull(arguments, "arguments");
         }
 
         Object target() {
@@ -294,6 +295,40 @@ public final class ProtosBufferedByteReaderCPrimeExecution {
             ProtosBufferedByteIo reader,
             Object target,
             List<?> arguments) {
+        Objects.requireNonNull(arguments, "arguments");
+        Object[] snapshot = new Object[arguments.size()];
+        for (int index = 0; index < snapshot.length; index++) {
+            snapshot[index] = Objects.requireNonNull(arguments.get(index), "argument");
+        }
+        scheduleSnapshot(plan, operation, reader, target, snapshot);
+    }
+
+    /**
+     * {@link #schedule(Plan, ProtosIoOperation, ProtosBufferedByteIo, Object, List)} for already
+     * prepared positional arguments; the deferred call retains an independent snapshot of the
+     * array, so later writes to the caller's array cannot change the prepared arguments.
+     */
+    public static void schedule(
+            Plan plan,
+            ProtosIoOperation operation,
+            ProtosBufferedByteIo reader,
+            Object target,
+            Object[] arguments) {
+        Objects.requireNonNull(arguments, "arguments");
+        Object[] snapshot = new Object[arguments.length];
+        for (int index = 0; index < snapshot.length; index++) {
+            snapshot[index] = Objects.requireNonNull(arguments[index], "argument");
+        }
+        scheduleSnapshot(plan, operation, reader, target, snapshot);
+    }
+
+    /** Schedules with an exact-size validated snapshot owned exclusively by the new call state. */
+    private static void scheduleSnapshot(
+            Plan plan,
+            ProtosIoOperation operation,
+            ProtosBufferedByteIo reader,
+            Object target,
+            Object[] arguments) {
         Objects.requireNonNull(plan, "plan");
         Objects.requireNonNull(operation, "operation");
         Objects.requireNonNull(reader, "reader");

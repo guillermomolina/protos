@@ -27,6 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.oracle.truffle.api.debug.Debugger;
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosBinary64Rounding;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -1381,6 +1382,115 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
         return String.join("\n", withoutBlocks.lines()
                 .filter(line -> !line.stripLeading().startsWith("//"))
                 .toList());
+    }
+
+    /**
+     * Exact Integer to binary64 rounding keeps the primitive Long route and isolates the
+     * arbitrary-precision route: nearest, ties to even, overflow to infinity and the
+     * {@code Long.MIN_VALUE} extremes.
+     */
+    @Test
+    void exactIntegerRoundingIsNearestTiesToEvenAcrossPrimitiveAndLargeIntegers()
+            throws Exception {
+        withCore(module -> {
+            ProtosPrelude prelude = module.preludeOrNullForRuntime();
+            java.math.BigInteger twoTo53 = java.math.BigInteger.ONE.shiftLeft(53);
+
+            assertEquals(-0x1p63, ProtosBinary64Rounding.roundExactInteger(Long.MIN_VALUE));
+            assertEquals(0x1p63, ProtosBinary64Rounding.roundExactInteger(Long.MAX_VALUE));
+            assertEquals(0x1p53, ProtosBinary64Rounding.roundExactInteger((1L << 53) + 1L));
+
+            Object large = ProtosNumericValueSupport.integerFromHost(
+                    java.math.BigInteger.ONE.shiftLeft(64).add(java.math.BigInteger.ONE), prelude);
+            assertFalse(large instanceof Long);
+            assertEquals(0x1p64, ProtosBinary64Rounding.roundExactInteger(large));
+
+            // Both ties round to the even significand: down for 2^53+1, up for 2^53+3.
+            Object tie = ProtosNumericValueSupport.integerFromHost(
+                    twoTo53.add(java.math.BigInteger.ONE).shiftLeft(20), prelude);
+            assertEquals(0x1p73, ProtosBinary64Rounding.roundExactInteger(tie));
+            Object upperTie = ProtosNumericValueSupport.integerFromHost(
+                    twoTo53.add(java.math.BigInteger.valueOf(3)).shiftLeft(20), prelude);
+            assertEquals(
+                    (0x1p53 + 4.0) * 0x1p20,
+                    ProtosBinary64Rounding.roundExactInteger(upperTie));
+
+            Object huge = ProtosNumericValueSupport.integerFromHost(
+                    java.math.BigInteger.ONE.shiftLeft(1024), prelude);
+            Object negativeHuge = ProtosNumericValueSupport.integerFromHost(
+                    java.math.BigInteger.ONE.shiftLeft(1024).negate(), prelude);
+            assertEquals(
+                    Double.POSITIVE_INFINITY, ProtosBinary64Rounding.roundExactInteger(huge));
+            assertEquals(
+                    Double.NEGATIVE_INFINITY,
+                    ProtosBinary64Rounding.roundExactInteger(negativeHuge));
+        });
+    }
+
+    @Test
+    void exactIntegerQuotientRoundingKeepsSignedZeroAndLongMinValueExtremes()
+            throws Exception {
+        withCore(module -> {
+            ProtosPrelude prelude = module.preludeOrNullForRuntime();
+
+            assertEquals(0x1p63, ProtosBinary64Rounding.divideExactIntegers(Long.MIN_VALUE, -1L));
+            assertEquals(-0x1p62, ProtosBinary64Rounding.divideExactIntegers(Long.MIN_VALUE, 2L));
+            assertEquals(1.0 / 3.0, ProtosBinary64Rounding.divideExactIntegers(1L, 3L));
+            assertThrows(
+                    ArithmeticException.class,
+                    () -> ProtosBinary64Rounding.divideExactIntegers(1L, 0L));
+
+            Object twoTo64 = ProtosNumericValueSupport.integerFromHost(
+                    java.math.BigInteger.ONE.shiftLeft(64), prelude);
+            // Mixed primitive and large operands take the arbitrary-precision route.
+            assertEquals(0x1p63, ProtosBinary64Rounding.divideExactIntegers(twoTo64, 2L));
+            assertEquals(0x1p-64, ProtosBinary64Rounding.divideExactIntegers(1L, twoTo64));
+
+            Object negativeTiny = ProtosNumericValueSupport.integerFromHost(
+                    java.math.BigInteger.ONE.shiftLeft(1200).negate(), prelude);
+            double underflow = ProtosBinary64Rounding.divideExactIntegers(1L, negativeTiny);
+            assertEquals(
+                    Double.doubleToRawLongBits(-0.0), Double.doubleToRawLongBits(underflow),
+                    "a nonzero quotient that rounds to zero keeps its sign");
+        });
+    }
+
+    /** Mixed Integer and Float addition stays exact where binary64 represents the result. */
+    @Test
+    void mixedIntegerAndFloatAdditionKeepsTheFloatFamily() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue add = closure("(x, y) => x + y", module);
+            assertEquals(1.5, call(add, module, 1L, 0.5));
+            assertEquals(1.5, call(add, module, 0.5, 1L));
+            assertEquals(3L, normalized(call(add, module, 1L, 2L)));
+        });
+    }
+
+    /**
+     * A runtime value without a standard representation reports its concrete host class from the
+     * exceptional delegation path, which never yields a parent.
+     */
+    @Test
+    void unsupportedRepresentationDelegationReportsTheConcreteReceiverClass() throws Exception {
+        withCore(module -> {
+            ProtosPrelude prelude = module.preludeOrNullForRuntime();
+            final class UnrepresentedValue {}
+            UnsupportedOperationException failure =
+                    assertThrows(
+                            UnsupportedOperationException.class,
+                            () -> ProtosValueLookup.delegationParent(
+                                    new UnrepresentedValue(), prelude));
+            assertEquals(
+                    "Standard delegation parent is not implemented for runtime value representation "
+                            + UnrepresentedValue.class.getName(),
+                    failure.getMessage());
+            // The specialized branches still answer their parents.
+            assertTrue(ProtosValueLookup.delegationParent(1L, prelude).isPresent());
+            assertTrue(ProtosValueLookup.delegationParent(1.0, prelude).isPresent());
+            assertSame(
+                    ProtosObjectValue.rootObject(),
+                    ProtosValueLookup.delegationParent(Boolean.TRUE, prelude).orElseThrow());
+        });
     }
 
     private static Object normalized(Object value) {

@@ -17,9 +17,7 @@
 package com.guillermomolina.protos.runtime;
 
 import java.util.ArrayList;
-import java.util.IdentityHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.BiFunction;
@@ -383,11 +381,20 @@ public final class ProtosFutureValue extends ProtosObjectValue {
     }
 
     private boolean adoptionReaches(ProtosFutureValue target) {
-        Map<ProtosFutureValue, Boolean> seen = new IdentityHashMap<>();
+        // Visited chain compared by identity only; a revisit means the chain is cyclic.
+        ArrayList<ProtosFutureValue> seen = new ArrayList<>();
         ProtosFutureValue current = this;
-        while (current != null && seen.put(current, Boolean.TRUE) == null) {
+        while (current != null && !visitedByIdentity(seen, current)) {
+            seen.add(current);
             if (current == target) return true;
             synchronized (current) { current = current.adoptedSource; }
+        }
+        return false;
+    }
+
+    private static boolean visitedByIdentity(ArrayList<ProtosFutureValue> seen, ProtosFutureValue candidate) {
+        for (int i = 0; i < seen.size(); i++) {
+            if (seen.get(i) == candidate) return true;
         }
         return false;
     }

@@ -42,16 +42,18 @@ public final class ProtosBinary64Rounding {
         if (integer instanceof Long small) {
             return (double) small.longValue();
         }
-        return roundLarge(ProtosNumericValueSupport.exactBigInteger(integer));
+        return roundLarge(integer);
     }
 
     /*
      * BigInteger.doubleValue() is correctly rounded to nearest, ties to even, and overflows to
-     * infinity; a large Integer is never zero, so no signed-zero case arises.
+     * infinity; a large Integer is never zero, so no signed-zero case arises. The exact
+     * BigInteger conversion of the admitted Integer is arbitrary-precision work and stays inside
+     * this boundary.
      */
     @TruffleBoundary
-    private static double roundLarge(BigInteger value) {
-        return value.doubleValue();
+    private static double roundLarge(Object integer) {
+        return ProtosNumericValueSupport.exactBigInteger(integer).doubleValue();
     }
 
     /**
@@ -69,6 +71,12 @@ public final class ProtosBinary64Rounding {
             }
             return dividePrimitiveIntegers(smallNumerator.longValue(), exactDenominator);
         }
+        return divideLargeIntegers(numerator, denominator);
+    }
+
+    /* The exact BigInteger conversions of a non-primitive quotient stay arbitrary-precision work. */
+    @TruffleBoundary
+    private static double divideLargeIntegers(Object numerator, Object denominator) {
         return divideLarge(
                 ProtosNumericValueSupport.exactBigInteger(numerator),
                 ProtosNumericValueSupport.exactBigInteger(denominator));

@@ -463,17 +463,16 @@ public final class ProtosBufferedByteIo {
         }
     }
 
-    @TruffleBoundary
-    private static List<Object> noArguments() {
-        return List.of();
+    /* Prepared positional arguments of the lower target calls: a fresh exact-size array. */
+    private static Object[] noArguments() {
+        return new Object[0];
     }
 
-    @TruffleBoundary
-    private static List<Object> singletonArguments(Object value) {
-        return List.of(value);
+    private static Object[] singletonArguments(Object value) {
+        return new Object[] {Objects.requireNonNull(value, "argument")};
     }
 
-    private List<?> readArguments(Req req) {
+    private Object[] readArguments(Req req) {
         return singletonArguments(
                 ProtosNumericValueSupport.integer(
                                 Math.max(req.maximum, READ_AHEAD)));
@@ -1345,7 +1344,7 @@ public final class ProtosBufferedByteIo {
     private ProtosFutureValue invokeFuture(
             ProtosObjectValue object,
             String message,
-            List<?> arguments,
+            Object[] arguments,
             ProtosActivation activation) {
         try {
             Object value =

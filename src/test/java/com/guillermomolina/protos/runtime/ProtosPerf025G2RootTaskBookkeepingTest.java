@@ -44,7 +44,10 @@ final class ProtosPerf025G2RootTaskBookkeepingTest {
         assertTrue(task.contains("ProtosTask parentForRuntime()"));
         assertFalse(task.contains("private ProtosTask parent;"));
 
-        assertTrue(domain.contains("Collections.newSetFromMap(new IdentityHashMap<>())"));
+        assertTrue(domain.contains("private final List<ProtosTask> liveTasks = new ArrayList<>();"));
+        assertTrue(domain.contains("addIdentity(liveTasks, task);"));
+        assertTrue(domain.contains("removeIdentity(liveTasks, task);"));
+        assertFalse(domain.contains("IdentityHashMap"));
         assertFalse(
                 domain.contains(
                         "private final Set<ProtosTask> liveTasks = new LinkedHashSet<>()"));

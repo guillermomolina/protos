@@ -216,6 +216,46 @@ final class ProtosExternalPackageResourceScopeTest {
         }
     }
 
+    @Test
+    void repeatedCustodyCloseIsIdempotentAndKeepsReadsClosed() throws Exception {
+        Path source = temporaryRoot.resolve("source");
+        Files.createDirectories(source);
+        Files.write(source.resolve("data.bin"), BINARY);
+        assumeSecureConfinement(source);
+
+        ProtosCapturedFilesystemCustody custody =
+                ProtosCapturedFilesystemCustody.captureSelectedRoot(source);
+        ProtosPackageResourceName name = ProtosPackageResourceName.parse("data.bin");
+        assertArrayEquals(BINARY, custody.readResource(name));
+
+        custody.close();
+        assertDoesNotThrow(custody::close);
+        assertThrows(IllegalStateException.class, () -> custody.readResource(name));
+        assertDoesNotThrow(custody::close);
+        assertThrows(IllegalStateException.class, () -> custody.readResource(name));
+        // The source tree itself is never touched by releasing the capture.
+        assertArrayEquals(BINARY, Files.readAllBytes(source.resolve("data.bin")));
+    }
+
+    @Test
+    void capturedBytesRemainReadableAfterTheSourceTreeIsRemoved() throws Exception {
+        Path source = temporaryRoot.resolve("source");
+        Files.createDirectories(source.resolve("nested"));
+        Files.write(source.resolve("nested/data.bin"), BINARY);
+        assumeSecureConfinement(source);
+
+        try (ProtosCapturedFilesystemCustody custody =
+                ProtosCapturedFilesystemCustody.captureSelectedRoot(source)) {
+            Files.delete(source.resolve("nested/data.bin"));
+            Files.delete(source.resolve("nested"));
+            Files.delete(source);
+
+            ProtosPackageResourceName name = ProtosPackageResourceName.parse("nested/data.bin");
+            assertArrayEquals(BINARY, custody.readResource(name));
+            assertArrayEquals(BINARY, custody.readResource(name));
+        }
+    }
+
     // ---- 1:1 scope reconciliation ----
 
     @Test

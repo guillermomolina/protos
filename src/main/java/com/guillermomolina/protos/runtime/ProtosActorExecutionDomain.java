@@ -19,13 +19,11 @@ package com.guillermomolina.protos.runtime;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 
 import java.util.ArrayDeque;
-import java.util.Collections;
-import java.util.IdentityHashMap;
+import java.util.ArrayList;
 import java.util.Iterator;
-import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.BooleanSupplier;
 
 /**
@@ -65,15 +63,17 @@ public final class ProtosActorExecutionDomain {
             new ArrayDeque<>();
     /*
      * PERF025-G2: Task is backend-private runtime identity and live-task iteration order is not a
-     * Protos semantic. Avoid one linked-set entry node per live Task while retaining exact Task
-     * enumeration for Actor TERMINATING cancellation.
+     * Protos semantic. Exact Task enumeration is retained for Actor TERMINATING cancellation.
+     *
+     * The registries below are ordered linear storage guarded by this domain's monitor. Membership,
+     * insertion and removal compare instance identity only (see addIdentity, containsIdentity and
+     * removeIdentity), so each registered object has at most one entry in registration order.
      */
-    private final Set<ProtosTask> liveTasks =
-            Collections.newSetFromMap(new IdentityHashMap<>());
-    private final Set<ProtosIoOperation> actorIoOperations = new LinkedHashSet<>();
-    private final Set<ProtosIoReleaseExecution> actorIoReleases = new LinkedHashSet<>();
-    private final Set<ProtosIoLifecycle> actorIoLifecycleCleanup = new LinkedHashSet<>();
-    private final Set<ProtosFutureValue> actorNonTaskFutures = new LinkedHashSet<>();
+    private final List<ProtosTask> liveTasks = new ArrayList<>();
+    private final List<ProtosIoOperation> actorIoOperations = new ArrayList<>();
+    private final List<ProtosIoReleaseExecution> actorIoReleases = new ArrayList<>();
+    private final List<ProtosIoLifecycle> actorIoLifecycleCleanup = new ArrayList<>();
+    private final List<ProtosFutureValue> actorNonTaskFutures = new ArrayList<>();
     private ProtosActor ownerActor;
     private Runnable schedulerWakeup = NOOP_WAKEUP;
     /*
@@ -199,7 +199,7 @@ public final class ProtosActorExecutionDomain {
             if (parent != null) {
                 parent.addChild(task);
             }
-            liveTasks.add(task);
+            addIdentity(liveTasks, task);
             return ownerActor != null
                     && ownerActor.lifecycleState() == ProtosActor.LifecycleState.TERMINATING;
         }
@@ -312,7 +312,7 @@ public final class ProtosActorExecutionDomain {
         Objects.requireNonNull(operation, "operation");
         Runnable wakeup = null;
         synchronized (this) {
-            if (!actorIoOperations.contains(operation)) {
+            if (!containsIdentity(actorIoOperations, operation)) {
                 return;
             }
             runnable.addLast(operation);
@@ -330,7 +330,7 @@ public final class ProtosActorExecutionDomain {
         Objects.requireNonNull(release, "release");
         Runnable wakeup = null;
         synchronized (this) {
-            if (!actorIoReleases.contains(release)) return;
+            if (!containsIdentity(actorIoReleases, release)) return;
             runnable.addLast(release);
             notifyAll();
             wakeup = schedulerWakeup;
@@ -455,7 +455,7 @@ public final class ProtosActorExecutionDomain {
         Objects.requireNonNull(continuation, "continuation");
         ProtosTask task = new ProtosTask(this, null, null, continuation);
         synchronized (this) {
-            liveTasks.add(task);
+            addIdentity(liveTasks, task);
         }
         if (!task.beginDirectDispatch()) {
             throw new IllegalStateException("fresh mailbox task could not begin dispatch");
@@ -657,7 +657,7 @@ public final class ProtosActorExecutionDomain {
         ProtosActor actor;
         synchronized (this) {
             requireOwned(task);
-            liveTasks.remove(task);
+            removeIdentity(liveTasks, task);
             notifyAll();
             ProtosTask parent = task.parentForRuntime();
             if (parent != null) {
@@ -675,14 +675,14 @@ public final class ProtosActorExecutionDomain {
         synchronized (this) {
             if (ownerActor != null && ownerActor.lifecycleState() == ProtosActor.LifecycleState.TERMINATED)
                 throw new IllegalStateException("terminated Actor cannot acquire lifecycle-release guest execution");
-            actorIoReleases.add(release);
+            addIdentity(actorIoReleases, release);
         }
     }
 
     @TruffleBoundary
     public void terminalActorIoReleaseForRuntime(ProtosIoReleaseExecution release) {
         ProtosActor actor;
-        synchronized (this) { actorIoReleases.remove(release); notifyAll(); actor=ownerActor; }
+        synchronized (this) { removeIdentity(actorIoReleases, release); notifyAll(); actor=ownerActor; }
         if (actor != null) actor.tryCompleteTerminationForRuntime();
     }
 
@@ -691,25 +691,25 @@ public final class ProtosActorExecutionDomain {
         synchronized (this) {
             if (ownerActor != null && ownerActor.lifecycleState() == ProtosActor.LifecycleState.TERMINATED)
                 throw new IllegalStateException("terminated Actor cannot acquire lifecycle cleanup obligation");
-            actorIoLifecycleCleanup.add(lifecycle);
+            addIdentity(actorIoLifecycleCleanup, lifecycle);
         }
     }
 
     @TruffleBoundary
     void terminalActorIoLifecycleCleanupForRuntime(ProtosIoLifecycle lifecycle) {
         ProtosActor actor;
-        synchronized (this) { actorIoLifecycleCleanup.remove(lifecycle); notifyAll(); actor=ownerActor; }
+        synchronized (this) { removeIdentity(actorIoLifecycleCleanup, lifecycle); notifyAll(); actor=ownerActor; }
         if (actor != null) actor.tryCompleteTerminationForRuntime();
     }
 
     @TruffleBoundary
     void registerActorIoOperation(ProtosIoOperation operation) {
-        synchronized (this) { actorIoOperations.add(Objects.requireNonNull(operation, "operation")); }
+        synchronized (this) { addIdentity(actorIoOperations, Objects.requireNonNull(operation, "operation")); }
     }
 
     @TruffleBoundary
     void terminalActorIoOperation(ProtosIoOperation operation) {
-        synchronized (this) { actorIoOperations.remove(operation); }
+        synchronized (this) { removeIdentity(actorIoOperations, operation); }
     }
 
     /** Includes Actor domains without a separately bound Actor. */
@@ -719,14 +719,14 @@ public final class ProtosActorExecutionDomain {
 
     /** TERMINATING cutover hook: request cooperative cancellation without undoing commitments. */
     public void actorTerminationBegun() {
-        Set<ProtosTask> tasks;
-        Set<ProtosIoOperation> io;
-        Set<ProtosFutureValue> nonTask;
+        List<ProtosTask> tasks;
+        List<ProtosIoOperation> io;
+        List<ProtosFutureValue> nonTask;
         java.util.List<TargetedRuntimeCompletion> dropped;
         synchronized (this) {
             actorTerminationBegun = true;
             java.util.List<TargetedRuntimeCompletion> discarded =
-                    new java.util.ArrayList<>();
+                    new ArrayList<>();
             Iterator<TargetedRuntimeCompletion> pending =
                     targetedRuntimeCompletions.iterator();
             while (pending.hasNext()) {
@@ -736,11 +736,14 @@ public final class ProtosActorExecutionDomain {
                     pending.remove();
                 }
             }
-            dropped = java.util.List.copyOf(discarded);
+            // discarded is a fresh local list, never a view of the mutable registry.
+            dropped = discarded;
             notifyAll();
-            tasks = Set.copyOf(liveTasks);
-            io = Set.copyOf(actorIoOperations);
-            nonTask = Set.copyOf(actorNonTaskFutures);
+            // Independent snapshots taken under the monitor; the live registries may change as
+            // soon as the lock is released.
+            tasks = new ArrayList<>(liveTasks);
+            io = new ArrayList<>(actorIoOperations);
+            nonTask = new ArrayList<>(actorNonTaskFutures);
         }
         // Reconcile host custody before cancelling remaining operations.
         // Never run cleanup under the domain lock or execute guest code here.
@@ -771,7 +774,7 @@ public final class ProtosActorExecutionDomain {
         boolean cancelNow;
         synchronized (this) {
             if (!future.isPending()) return;
-            actorNonTaskFutures.add(future);
+            addIdentity(actorNonTaskFutures, future);
             cancelNow = ownerActor != null
                     && (ownerActor.lifecycleState() == ProtosActor.LifecycleState.TERMINATING
                             || ownerActor.lifecycleState() == ProtosActor.LifecycleState.TERMINATED);
@@ -781,7 +784,7 @@ public final class ProtosActorExecutionDomain {
     }
 
     void terminalActorNonTaskFuture(ProtosFutureValue future) {
-        synchronized (this) { actorNonTaskFutures.remove(future); }
+        synchronized (this) { removeIdentity(actorNonTaskFutures, future); }
     }
 
     synchronized boolean hasLiveTasksForRuntime() { return !liveTasks.isEmpty(); }
@@ -833,6 +836,33 @@ public final class ProtosActorExecutionDomain {
     private void requireOwned(ProtosTask task) {
         if (task.owner() != this) {
             throw new IllegalArgumentException("task belongs to another Actor execution domain");
+        }
+    }
+
+    /** Identity membership over an ordered registry; callers hold this domain's monitor. */
+    private static boolean containsIdentity(List<?> registry, Object element) {
+        for (int i = 0; i < registry.size(); i++) {
+            if (registry.get(i) == element) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Appends {@code element} unless the same instance is already registered. */
+    private static <T> void addIdentity(List<T> registry, T element) {
+        if (!containsIdentity(registry, element)) {
+            registry.add(element);
+        }
+    }
+
+    /** Removes the entry holding exactly {@code element}, preserving the order of the rest. */
+    private static void removeIdentity(List<?> registry, Object element) {
+        for (int i = 0; i < registry.size(); i++) {
+            if (registry.get(i) == element) {
+                registry.remove(i);
+                return;
+            }
         }
     }
 

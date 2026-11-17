@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.parser.ProtosParser;
@@ -322,6 +323,223 @@ final class ProtosPlat070IoCPrimeTransferAccountingTest {
         }
 
         System.out.println("PLAT070_IO_RELEASE_BODY_FINALIZER_TRANSFER_NEXT_FINALIZER=RUN");
+    }
+
+    /*
+     * Prepared positional argument arrays reach the target selectors unchanged, in step order,
+     * and each step is invoked and committed exactly once by the release C-prime.
+     */
+    @Test
+    void preparedArgumentStepsDeliverExactArgumentsAndCommitEachStepOnce() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            Harness harness = new Harness(scope.language());
+            List<String> order = new ArrayList<>();
+            List<List<?>> seen = new ArrayList<>();
+            Object payload = new ProtosObjectValue(ProtosObjectValue.rootObject());
+            StepProbe write =
+                    harness.probeRecording("write", order, seen, harness.resolvedFuture());
+            StepProbe flush =
+                    harness.probeRecording("flush", order, seen, harness.resolvedFuture());
+            StepProbe close =
+                    harness.probeRecording("close", order, seen, harness.resolvedFuture());
+            ProtosObjectValue target =
+                    harness.target("write", write, "flush", flush, "close", close);
+
+            harness.close(
+                    List.of(
+                            ProtosIoReleaseCPrimeExecution.Step.ordinary(
+                                    target,
+                                    "write",
+                                    new Object[] {payload},
+                                    write::resolved,
+                                    write::failed),
+                            ProtosIoReleaseCPrimeExecution.Step.ordinary(
+                                    target, "flush", new Object[0], flush::resolved, flush::failed),
+                            ProtosIoReleaseCPrimeExecution.Step.mandatoryFinalizer(
+                                    target, "close", new Object[0], close::resolved, close::failed)));
+
+            assertNull(harness.drain(), "no transfer escapes an ordinary release");
+            assertEquals(List.of("write", "flush", "close"), order);
+            assertEquals(1, seen.get(0).size());
+            assertSame(payload, seen.get(0).get(0));
+            assertEquals(List.of(), seen.get(1));
+            assertEquals(List.of(), seen.get(2));
+            write.assertInvokedAndResolvedOnce();
+            flush.assertInvokedAndResolvedOnce();
+            close.assertInvokedAndResolvedOnce();
+            assertTrue(harness.release().terminal(), "the release is terminalized exactly once");
+        }
+    }
+
+    @Test
+    void preparedArgumentStepKeepsItsArgumentsWhenTheSourceArrayChangesLater() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            Harness harness = new Harness(scope.language());
+            List<String> order = new ArrayList<>();
+            List<List<?>> seen = new ArrayList<>();
+            Object original = new ProtosObjectValue(ProtosObjectValue.rootObject());
+            Object replacement = new ProtosObjectValue(ProtosObjectValue.rootObject());
+            StepProbe write =
+                    harness.probeRecording("write", order, seen, harness.resolvedFuture());
+            StepProbe close =
+                    harness.probeRecording("close", order, seen, harness.resolvedFuture());
+            ProtosObjectValue target = harness.target("write", write, "close", close);
+            Object[] source = {original};
+
+            ProtosIoReleaseCPrimeExecution.Step step =
+                    ProtosIoReleaseCPrimeExecution.Step.ordinary(
+                            target, "write", source, write::resolved, write::failed);
+            source[0] = replacement;
+            harness.close(
+                    List.of(
+                            step,
+                            ProtosIoReleaseCPrimeExecution.Step.mandatoryFinalizer(
+                                    target, "close", new Object[0], close::resolved, close::failed)));
+
+            assertNull(harness.drain());
+            assertEquals(List.of("write", "close"), order);
+            assertEquals(1, seen.get(0).size());
+            assertSame(original, seen.get(0).get(0), "the step received the prepared value");
+            write.assertInvokedAndResolvedOnce();
+            close.assertInvokedAndResolvedOnce();
+        }
+    }
+
+    @Test
+    void preparedArgumentsStayStableAcrossReleaseSuspensionAndResumption() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            Harness harness = new Harness(scope.language());
+            List<String> order = new ArrayList<>();
+            List<List<?>> seen = new ArrayList<>();
+            ProtosFutureValue flushing = harness.pendingFuture();
+            Object flushArgument = new ProtosObjectValue(ProtosObjectValue.rootObject());
+            Object closeArgument = new ProtosObjectValue(ProtosObjectValue.rootObject());
+            Object replacement = new ProtosObjectValue(ProtosObjectValue.rootObject());
+            StepProbe flush = harness.probeRecording("flush", order, seen, flushing);
+            StepProbe close =
+                    harness.probeRecording("close", order, seen, harness.resolvedFuture());
+            ProtosObjectValue target = harness.target("flush", flush, "close", close);
+            Object[] flushSource = {flushArgument};
+            Object[] closeSource = {closeArgument};
+
+            harness.close(
+                    List.of(
+                            ProtosIoReleaseCPrimeExecution.Step.ordinary(
+                                    target, "flush", flushSource, flush::resolved, flush::failed),
+                            ProtosIoReleaseCPrimeExecution.Step.mandatoryFinalizer(
+                                    target,
+                                    "close",
+                                    closeSource,
+                                    close::resolved,
+                                    close::failed)));
+
+            assertNull(harness.drain(), "the flush suspends on its pending Future");
+            assertEquals(List.of("flush"), order);
+            assertFalse(harness.release().terminal());
+
+            // Writes to the caller's arrays during the suspension must not reach prepared steps.
+            flushSource[0] = replacement;
+            closeSource[0] = replacement;
+
+            assertTrue(flushing.resolve(ProtosNullValue.INSTANCE, harness.module()));
+            assertNull(harness.drain());
+            assertEquals(List.of("flush", "close"), order);
+            assertSame(flushArgument, seen.get(0).get(0));
+            assertSame(closeArgument, seen.get(1).get(0));
+            flush.assertInvokedAndResolvedOnce();
+            close.assertInvokedAndResolvedOnce();
+            assertTrue(harness.release().terminal());
+        }
+    }
+
+    @Test
+    void preparedSequenceKeepsItsStepsWhenTheSourceListChangesLater() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            Harness harness = new Harness(scope.language());
+            List<String> order = new ArrayList<>();
+            List<List<?>> seen = new ArrayList<>();
+            ProtosFutureValue flushing = harness.pendingFuture();
+            Object closeArgument = new ProtosObjectValue(ProtosObjectValue.rootObject());
+            StepProbe flush = harness.probeRecording("flush", order, seen, flushing);
+            StepProbe write =
+                    harness.probeRecording("write", order, seen, harness.resolvedFuture());
+            StepProbe close =
+                    harness.probeRecording("close", order, seen, harness.resolvedFuture());
+            ProtosObjectValue target =
+                    harness.target("flush", flush, "write", write, "close", close);
+            ProtosIoReleaseCPrimeExecution.Step closeStep =
+                    ProtosIoReleaseCPrimeExecution.Step.mandatoryFinalizer(
+                            target,
+                            "close",
+                            new Object[] {closeArgument},
+                            close::resolved,
+                            close::failed);
+            List<ProtosIoReleaseCPrimeExecution.Step> source = new ArrayList<>();
+            source.add(
+                    ProtosIoReleaseCPrimeExecution.Step.ordinary(
+                            target, "flush", new Object[0], flush::resolved, flush::failed));
+            source.add(closeStep);
+
+            harness.close(source);
+
+            assertNull(harness.drain(), "the flush suspends on its pending Future");
+            assertEquals(List.of("flush"), order);
+
+            // Changes to the caller's list after preparation must not reach the sequence.
+            source.remove(closeStep);
+            source.add(
+                    ProtosIoReleaseCPrimeExecution.Step.ordinary(
+                            target, "write", new Object[0], write::resolved, write::failed));
+
+            assertTrue(flushing.resolve(ProtosNullValue.INSTANCE, harness.module()));
+            assertNull(harness.drain());
+            assertEquals(List.of("flush", "close"), order);
+            assertEquals(1, seen.get(1).size());
+            assertSame(closeArgument, seen.get(1).get(0));
+            flush.assertInvokedAndResolvedOnce();
+            close.assertInvokedAndResolvedOnce();
+            assertTrue(harness.release().terminal());
+        }
+    }
+
+    @Test
+    void preparedArgumentStepsRejectNullArgumentsBeforeAnyInvocation() {
+        ProtosObjectValue target = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        assertThrows(
+                NullPointerException.class,
+                () -> ProtosIoReleaseCPrimeExecution.Step.ordinary(
+                        target, "write", new Object[] {null}, () -> {}, ignored -> {}));
+        assertThrows(
+                NullPointerException.class,
+                () -> ProtosIoReleaseCPrimeExecution.Step.mandatoryFinalizer(
+                        target, "close", (Object[]) null, () -> {}, ignored -> {}));
+    }
+
+    @Test
+    void cancellationOfAPreparedArgumentStepStillRunsTheMandatoryCloseOnce() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            Harness harness = new Harness(scope.language());
+            ProtosTaskCancellationException cancellation = new ProtosTaskCancellationException();
+            StepProbe write = harness.probeThrowing(cancellation);
+            StepProbe close = harness.probeAnswering(harness.resolvedFuture());
+            ProtosObjectValue target = harness.target("write", write, "close", close);
+
+            harness.close(
+                    List.of(
+                            ProtosIoReleaseCPrimeExecution.Step.ordinary(
+                                    target,
+                                    "write",
+                                    new Object[] {ProtosNullValue.INSTANCE},
+                                    write::resolved,
+                                    write::failed),
+                            ProtosIoReleaseCPrimeExecution.Step.mandatoryFinalizer(
+                                    target, "close", new Object[0], close::resolved, close::failed)));
+
+            assertSame(cancellation, harness.drain(), "the original cancellation propagates");
+            write.assertFailedOnce();
+            close.assertInvokedAndResolvedOnce();
+            harness.assertReleaseFailed();
+        }
     }
 
     @Test
@@ -699,6 +917,21 @@ final class ProtosPlat070IoCPrimeTransferAccountingTest {
                     nativeClosure(
                             (activation, supplied) -> {
                                 invocations.incrementAndGet();
+                                return result;
+                            }),
+                    invocations);
+        }
+
+        /** A probe recording its selector and exact supplied arguments before answering. */
+        StepProbe probeRecording(
+                String selector, List<String> order, List<List<?>> seen, Object result) {
+            AtomicInteger invocations = new AtomicInteger();
+            return new StepProbe(
+                    nativeClosure(
+                            (activation, supplied) -> {
+                                invocations.incrementAndGet();
+                                order.add(selector);
+                                seen.add(List.copyOf(supplied));
                                 return result;
                             }),
                     invocations);

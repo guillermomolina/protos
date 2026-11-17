@@ -41,8 +41,27 @@ public final class ProtosInvocation {
         return ProtosClosureInvoker.invokeCallable(receiver, supplied, caller);
     }
 
+    /** {@link #invoke(Object, List, ProtosActivation)} for prepared positional arguments. */
+    public static Object invoke(Object receiver, Object[] supplied, ProtosActivation caller) {
+        Objects.requireNonNull(receiver, "receiver");
+        Objects.requireNonNull(supplied, "supplied");
+        Objects.requireNonNull(caller, "caller");
+        return ProtosClosureInvoker.invokeCallable(receiver, supplied, caller);
+    }
+
     public static Object invokeMessage(
             Object receiver, String selector, List<?> supplied, ProtosActivation caller) {
+        Objects.requireNonNull(supplied, "supplied");
+        return invokeMessage(receiver, selector, supplied.toArray(), caller);
+    }
+
+    /**
+     * Ordinary message invocation with prepared positional arguments: the same slot selection,
+     * foreign projection check, method binding and error handling as the list form, which converts
+     * its arguments once and delegates here. The array is read, never written.
+     */
+    public static Object invokeMessage(
+            Object receiver, String selector, Object[] supplied, ProtosActivation caller) {
         Objects.requireNonNull(receiver, "receiver");
         Objects.requireNonNull(selector, "selector");
         Objects.requireNonNull(supplied, "supplied");
@@ -271,11 +290,11 @@ public final class ProtosInvocation {
             throw new ProtosSignalException(ProtosCoreErrors.newError(caller));
         }
 
-        return invokeSelected(caller.receiver(), selected, supplied, caller);
+        return invokeSelected(caller.receiver(), selected, supplied.toArray(), caller);
     }
 
     private static Object invokeSelected(
-            Object receiver, ProtosSlotLookupResult selected, List<?> supplied, ProtosActivation caller) {
+            Object receiver, ProtosSlotLookupResult selected, Object[] supplied, ProtosActivation caller) {
         if (!(selected.value() instanceof ProtosClosureValue closure)) {
             throw new ProtosSignalException(ProtosCoreErrors.newError(caller));
         }

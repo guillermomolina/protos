@@ -470,6 +470,225 @@ final class ProtosActorExecutionDomainTest {
         assertEquals(0, domain.liveTaskCount());
     }
 
+    private static ProtosFutureValue pendingFuture(ProtosActorExecutionDomain domain) {
+        return new ProtosFutureValue(
+                new ProtosObjectValue(ProtosObjectValue.rootObject()), domain);
+    }
+
+    @Test
+    void nonTaskFutureRegistryIsIdempotentByIdentityAndRetiresOnTerminal() {
+        ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+        ProtosFutureValue first = pendingFuture(domain);
+        ProtosFutureValue second = pendingFuture(domain);
+
+        domain.registerActorNonTaskFuture(first);
+        domain.registerActorNonTaskFuture(first);
+        domain.registerActorNonTaskFuture(second);
+        assertEquals(2, domain.actorNonTaskFutureCountForTesting());
+
+        // Removing one identity leaves the other registered; repeated removal is a no-op.
+        domain.terminalActorNonTaskFuture(first);
+        domain.terminalActorNonTaskFuture(first);
+        assertEquals(1, domain.actorNonTaskFutureCountForTesting());
+
+        // A terminal transition retires the registration through its observer.
+        assertTrue(second.cancelRequest());
+        assertEquals(ProtosFutureValue.State.CANCELLED, second.state());
+        assertEquals(0, domain.actorNonTaskFutureCountForTesting());
+
+        // A non-pending Future is never registered.
+        domain.registerActorNonTaskFuture(second);
+        assertEquals(0, domain.actorNonTaskFutureCountForTesting());
+    }
+
+    @Test
+    void releaseAndLifecycleCleanupRegistriesAreIdempotentAndGateTerminationCleanup()
+            throws Exception {
+        ProtosPrelude prelude =
+                new com.guillermomolina.protos.execution.ProtosCoreBootstrap()
+                        .bootstrap(java.nio.file.Path.of("protos", "lib", "core"));
+        ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+        ProtosActivation activation =
+                prelude.newModuleActivation(
+                        new ProtosActorModuleState(), null, prelude.newExecutionContext(), domain);
+        ProtosIoLifecycle lifecycle =
+                new ProtosIoLifecycle(
+                        new ProtosObjectValue(ProtosObjectValue.rootObject()),
+                        prelude.futurePrototype(),
+                        domain,
+                        ignored -> {});
+        ProtosIoLifecycle.ReleaseCompletion completion =
+                new ProtosIoLifecycle.ReleaseCompletion() {
+                    @Override
+                    public void succeeded() {}
+
+                    @Override
+                    public void failed(ProtosObjectValue error) {}
+                };
+        ProtosIoReleaseExecution release =
+                new ProtosIoReleaseExecution(lifecycle, activation, completion);
+        ProtosIoReleaseExecution unregistered =
+                new ProtosIoReleaseExecution(lifecycle, activation, completion);
+
+        assertFalse(domain.hasTerminationCleanupForRuntime());
+        domain.registerActorIoReleaseForRuntime(release);
+        domain.registerActorIoReleaseForRuntime(release);
+        assertEquals(1, domain.actorIoReleaseCountForTesting());
+        assertTrue(domain.hasTerminationCleanupForRuntime());
+
+        // Only a registered release can be published as runnable.
+        int runnableBefore = domain.runnableCount();
+        domain.enqueueActorIoReleaseForRuntime(unregistered);
+        assertEquals(runnableBefore, domain.runnableCount());
+
+        domain.terminalActorIoReleaseForRuntime(unregistered);
+        assertEquals(1, domain.actorIoReleaseCountForTesting());
+        domain.terminalActorIoReleaseForRuntime(release);
+        domain.terminalActorIoReleaseForRuntime(release);
+        assertEquals(0, domain.actorIoReleaseCountForTesting());
+        assertFalse(domain.hasTerminationCleanupForRuntime());
+
+        domain.registerActorIoLifecycleCleanupForRuntime(lifecycle);
+        domain.registerActorIoLifecycleCleanupForRuntime(lifecycle);
+        assertEquals(1, domain.actorIoLifecycleCleanupCountForTesting());
+        assertTrue(domain.hasTerminationCleanupForRuntime());
+        domain.terminalActorIoLifecycleCleanupForRuntime(lifecycle);
+        domain.terminalActorIoLifecycleCleanupForRuntime(lifecycle);
+        assertEquals(0, domain.actorIoLifecycleCleanupCountForTesting());
+        assertFalse(domain.hasTerminationCleanupForRuntime());
+
+        // Operations: one entry per identity, retired exactly by identity.
+        ProtosIoOperation operation = lifecycle.beginOperation(activation);
+        assertEquals(1, domain.actorIoOperationCountForTesting());
+        domain.registerActorIoOperation(operation);
+        assertEquals(1, domain.actorIoOperationCountForTesting());
+        assertTrue(operation.commit());
+        assertTrue(operation.resolve(ProtosNullValue.INSTANCE));
+        assertEquals(0, domain.actorIoOperationCountForTesting());
+        domain.terminalActorIoOperation(operation);
+        assertEquals(0, domain.actorIoOperationCountForTesting());
+    }
+
+    @Test
+    void terminationSnapshotCancelsEveryRegisteredTaskAndFutureExactlyOnce() {
+        ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+        Dependency dependency = new Dependency();
+        List<ProtosTask> tasks = new ArrayList<>();
+        for (int index = 0; index < 3; index++) {
+            tasks.add(domain.createTask(null, current -> current.suspend(dependency)));
+        }
+        while (domain.dispatchOne()) {
+            // Suspend every Task.
+        }
+        List<ProtosFutureValue> futures = new ArrayList<>();
+        for (int index = 0; index < 3; index++) {
+            ProtosFutureValue future = pendingFuture(domain);
+            domain.registerActorNonTaskFuture(future);
+            futures.add(future);
+        }
+        assertEquals(3, domain.liveTaskCount());
+        assertEquals(3, domain.actorNonTaskFutureCountForTesting());
+
+        domain.actorTerminationBegun();
+
+        for (ProtosTask task : tasks) {
+            assertTrue(task.cancellationRequested());
+            assertEquals(ProtosTask.State.RUNNABLE, task.state());
+        }
+        for (ProtosFutureValue future : futures) {
+            assertEquals(ProtosFutureValue.State.CANCELLED, future.state());
+        }
+        // Futures retired from the live registry while termination iterated its snapshot.
+        assertEquals(0, domain.actorNonTaskFutureCountForTesting());
+        assertEquals(0, dependency.cancellationCalls());
+        assertTrue(domain.actorTerminationBegunForRuntime());
+    }
+
+    @Test
+    void terminationIteratesSnapshotsIndependentOfRegistriesMutatedByCallbacks() {
+        ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+        List<ProtosFutureValue> lateFutures = new ArrayList<>();
+        List<ProtosFutureValue> futures = new ArrayList<>();
+        for (int index = 0; index < 3; index++) {
+            ProtosFutureValue future = pendingFuture(domain);
+            // Each cancellation callback mutates the live registry while termination iterates.
+            future.attachCancellationProducer(
+                    () -> {
+                        ProtosFutureValue late = pendingFuture(domain);
+                        lateFutures.add(late);
+                        domain.registerActorNonTaskFuture(late);
+                        future.cancelTerminal();
+                    });
+            domain.registerActorNonTaskFuture(future);
+            futures.add(future);
+        }
+
+        domain.actorTerminationBegun();
+
+        for (ProtosFutureValue future : futures) {
+            assertEquals(ProtosFutureValue.State.CANCELLED, future.state());
+        }
+        // Futures registered after the snapshot are not part of this termination pass.
+        assertEquals(3, lateFutures.size());
+        for (ProtosFutureValue late : lateFutures) {
+            assertEquals(ProtosFutureValue.State.PENDING, late.state());
+        }
+        assertEquals(3, domain.actorNonTaskFutureCountForTesting());
+    }
+
+    @Test
+    void concurrentRegistrationRacingTerminationLeavesNoStaleOrDuplicateEntries()
+            throws Exception {
+        ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+        int perThread = 200;
+        int threads = 4;
+        List<List<ProtosFutureValue>> registered = new ArrayList<>();
+        CountDownLatch start = new CountDownLatch(1);
+        List<Thread> workers = new ArrayList<>();
+        for (int worker = 0; worker < threads; worker++) {
+            List<ProtosFutureValue> own = new ArrayList<>();
+            registered.add(own);
+            Thread thread =
+                    new Thread(
+                            () ->
+                                    await(
+                                            start,
+                                            () -> {
+                                                for (int index = 0; index < perThread; index++) {
+                                                    ProtosFutureValue future =
+                                                            pendingFuture(domain);
+                                                    own.add(future);
+                                                    domain.registerActorNonTaskFuture(future);
+                                                    domain.registerActorNonTaskFuture(future);
+                                                }
+                                            }));
+            workers.add(thread);
+            thread.start();
+        }
+        start.countDown();
+        domain.actorTerminationBegun();
+        for (Thread thread : workers) {
+            thread.join();
+        }
+
+        // Each Future is either cancelled by the termination snapshot (and retired) or was
+        // registered after it and remains registered exactly once.
+        int stillPending = 0;
+        for (List<ProtosFutureValue> own : registered) {
+            assertEquals(perThread, own.size());
+            for (ProtosFutureValue future : own) {
+                ProtosFutureValue.State state = future.state();
+                assertTrue(
+                        state == ProtosFutureValue.State.CANCELLED
+                                || state == ProtosFutureValue.State.PENDING);
+                if (state == ProtosFutureValue.State.PENDING) {
+                    stillPending++;
+                }
+            }
+        }
+        assertEquals(stillPending, domain.actorNonTaskFutureCountForTesting());
+    }
+
     private static void await(CountDownLatch latch, Runnable action) {
         try {
             latch.await();

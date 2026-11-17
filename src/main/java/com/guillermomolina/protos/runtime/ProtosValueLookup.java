@@ -353,7 +353,14 @@ public final class ProtosValueLookup {
                             "represented delegation parent"));
         }
         CompilerDirectives.transferToInterpreter();
-        throw new UnsupportedOperationException(
+        throw unsupportedDelegationRepresentation(receiver);
+    }
+
+    /* Exceptional diagnostic construction stays out of compiled lookup. */
+    @TruffleBoundary
+    private static UnsupportedOperationException unsupportedDelegationRepresentation(
+            Object receiver) {
+        return new UnsupportedOperationException(
                 "Standard delegation parent is not implemented for runtime value representation "
                         + receiver.getClass().getName());
     }

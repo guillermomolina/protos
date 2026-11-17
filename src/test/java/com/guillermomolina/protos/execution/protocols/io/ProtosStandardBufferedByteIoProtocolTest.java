@@ -369,6 +369,52 @@ class ProtosStandardBufferedByteIoProtocolTest {
     }
 
     @Test
+    void deferredLowerReadKeepsItsPreparedArgumentsUntilTheLowerFutureSettles()
+            throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosFutureValue lower =
+                new ProtosFutureValue(
+                        activation.prelude().orElseThrow().futurePrototype(),
+                        activation.executionDomain());
+        List<List<?>> supplied = new java.util.ArrayList<>();
+        List<Object> firstSeen = new java.util.ArrayList<>();
+        ProtosObjectValue source = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        source.createLocalSlot(
+                "read",
+                ProtosClosureValue.nativeClosure(
+                        (x, args) -> {
+                            supplied.add(args);
+                            firstSeen.add(args.get(0));
+                            return lower;
+                        }));
+        ProtosObjectValue reader =
+                (ProtosObjectValue)
+                        call(
+                                ProtosStandardModuleMemberTestSupport.bufferedReaderFactory(prelude),
+                                "call",
+                                List.of(source),
+                                activation);
+
+        ProtosFutureValue read =
+                (ProtosFutureValue) call(reader, "read", List.of(i(2)), activation);
+        assertEquals(1, supplied.size(), "the lower read is entered once and then deferred");
+        assertEquals(ProtosFutureValue.State.PENDING, read.state());
+
+        lower.resolve(
+                bytes(new ProtosObjectValue(ProtosObjectValue.rootObject()), 1, 2),
+                activation);
+        com.guillermomolina.protos.execution.ProtosTestExecutionSupport.dispatchUntilIdle(
+                activation.executionDomain());
+
+        assertEquals(List.of(1, 2), ints((ProtosBytesValue) read.resolvedValue().orElseThrow()));
+        assertEquals(1, supplied.size(), "resumption never re-enters the lower read");
+        assertEquals(1, supplied.get(0).size());
+        assertSame(firstSeen.get(0), supplied.get(0).get(0));
+        assertEquals(ProtosNumericValueSupport.integer(8192), firstSeen.get(0));
+    }
+
+    @Test
     void closeCutoverTerminatesUncommittedReadsWithoutWaitingForDiscardedLowerAftermath()
             throws Exception {
         ProtosPrelude prelude = core();
@@ -1039,6 +1085,97 @@ class ProtosStandardBufferedByteIoProtocolTest {
                             return future;
                         }));
         return source;
+    }
+
+    /**
+     * A lower target that records, in order, each selector it receives together with the exact
+     * positional arguments, and resolves every operation with the target itself.
+     */
+    private static ProtosObjectValue recordingTarget(List<String> log, List<List<?>> arguments) {
+        ProtosObjectValue target = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosObjectValue bytesPrototype = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosStandardBytesProtocol.install(bytesPrototype);
+        target.createLocalSlot("bp", bytesPrototype);
+        for (String selector : List.of("write", "flush", "close")) {
+            target.createLocalSlot(
+                    selector,
+                    ProtosClosureValue.nativeClosure(
+                            (x, args) -> {
+                                log.add(selector);
+                                arguments.add(List.copyOf(args));
+                                ProtosFutureValue future =
+                                        new ProtosFutureValue(
+                                                x.prelude().orElseThrow().futurePrototype(),
+                                                x.executionDomain());
+                                future.resolve(target, x);
+                                return future;
+                            }));
+        }
+        return target;
+    }
+
+    @Test
+    void lowerWriteFlushAndCloseReceiveExactPreparedArgumentsInOrder() throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosActivation activation = prelude.newModuleActivation();
+        List<String> log = new ArrayList<>();
+        List<List<?>> arguments = new ArrayList<>();
+        ProtosObjectValue target = recordingTarget(log, arguments);
+        ProtosObjectValue factory =
+                ProtosStandardModuleMemberTestSupport.bufferedWriterFactory(prelude);
+        ProtosObjectValue owned =
+                (ProtosObjectValue) call(factory, "owning", List.of(target), activation);
+
+        ProtosObjectValue bytesPrototype =
+                (ProtosObjectValue) target.readLocalSlot("bp").orElseThrow();
+        call(owned, "write", List.of(bytes(bytesPrototype, 0, 255)), activation);
+        call(owned, "write", List.of(bytes(bytesPrototype, 7)), activation);
+        assertTrue(log.isEmpty());
+
+        ProtosFutureValue flush =
+                (ProtosFutureValue) call(owned, "flush", List.of(), activation);
+        assertSame(owned, flush.resolvedValue().orElseThrow());
+        assertEquals(List.of("write", "flush"), log);
+        // One unary write carrying the whole buffered prefix, then a nullary flush.
+        assertEquals(1, arguments.get(0).size());
+        assertEquals(
+                List.of(0, 255, 7), ints((ProtosBytesValue) arguments.get(0).get(0)));
+        assertEquals(List.of(), arguments.get(1));
+
+        ProtosFutureValue close =
+                (ProtosFutureValue) call(owned, "close", List.of(), activation);
+        assertSame(owned, close.resolvedValue().orElseThrow());
+        // Nothing is pending, so the owning close performs only the nullary target close.
+        assertEquals(List.of("write", "flush", "close"), log);
+        assertEquals(List.of(), arguments.get(2));
+    }
+
+    @Test
+    void owningCloseWithPendingBytesWritesFlushesThenClosesExactlyOnce() throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosActivation activation = prelude.newModuleActivation();
+        List<String> log = new ArrayList<>();
+        List<List<?>> arguments = new ArrayList<>();
+        ProtosObjectValue target = recordingTarget(log, arguments);
+        ProtosObjectValue factory =
+                ProtosStandardModuleMemberTestSupport.bufferedWriterFactory(prelude);
+        ProtosObjectValue owned =
+                (ProtosObjectValue) call(factory, "owning", List.of(target), activation);
+        ProtosObjectValue bytesPrototype =
+                (ProtosObjectValue) target.readLocalSlot("bp").orElseThrow();
+        call(owned, "write", List.of(bytes(bytesPrototype, 1, 2, 3)), activation);
+
+        ProtosFutureValue first =
+                (ProtosFutureValue) call(owned, "close", List.of(), activation);
+        ProtosFutureValue second =
+                (ProtosFutureValue) call(owned, "close", List.of(), activation);
+        assertSame(owned, first.resolvedValue().orElseThrow());
+        assertSame(owned, second.resolvedValue().orElseThrow());
+
+        assertEquals(List.of("write", "flush", "close"), log);
+        assertEquals(List.of(1, 2, 3), ints((ProtosBytesValue) arguments.get(0).get(0)));
+        assertEquals(List.of(), arguments.get(1));
+        assertEquals(List.of(), arguments.get(2));
     }
 
     private static ProtosObjectValue target(ProtosActivation activation) {

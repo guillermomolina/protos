@@ -60,13 +60,14 @@ public final class ProtosIoReleaseCPrimeExecution {
         private Step(
                 Object target,
                 String selector,
-                List<?> arguments,
+                Object[] arguments,
                 boolean runAfterFailure,
                 Runnable resolvedAction,
                 Consumer<ProtosObjectValue> failedAction) {
             this.target = Objects.requireNonNull(target, "target");
             this.selector = Objects.requireNonNull(selector, "selector");
-            this.arguments = List.copyOf(Objects.requireNonNull(arguments, "arguments")).toArray();
+            // Already an independent snapshot owned by this step; never written afterwards.
+            this.arguments = arguments;
             this.runAfterFailure = runAfterFailure;
             this.resolvedAction = Objects.requireNonNull(resolvedAction, "resolvedAction");
             this.failedAction = Objects.requireNonNull(failedAction, "failedAction");
@@ -79,7 +80,22 @@ public final class ProtosIoReleaseCPrimeExecution {
                 Runnable resolvedAction,
                 Consumer<ProtosObjectValue> failedAction) {
             return new Step(
-                    target, selector, arguments, false, resolvedAction, failedAction);
+                    target, selector, snapshot(arguments), false, resolvedAction, failedAction);
+        }
+
+        /**
+         * {@link #ordinary(Object, String, List, Runnable, Consumer)} for already prepared
+         * positional arguments; the step retains an independent snapshot of the array, so later
+         * writes to the caller's array cannot change the prepared arguments.
+         */
+        public static Step ordinary(
+                Object target,
+                String selector,
+                Object[] arguments,
+                Runnable resolvedAction,
+                Consumer<ProtosObjectValue> failedAction) {
+            return new Step(
+                    target, selector, snapshot(arguments), false, resolvedAction, failedAction);
         }
 
         public static Step mandatoryFinalizer(
@@ -89,7 +105,41 @@ public final class ProtosIoReleaseCPrimeExecution {
                 Runnable resolvedAction,
                 Consumer<ProtosObjectValue> failedAction) {
             return new Step(
-                    target, selector, arguments, true, resolvedAction, failedAction);
+                    target, selector, snapshot(arguments), true, resolvedAction, failedAction);
+        }
+
+        /**
+         * {@link #mandatoryFinalizer(Object, String, List, Runnable, Consumer)} for already
+         * prepared positional arguments; the step retains an independent snapshot of the array.
+         */
+        public static Step mandatoryFinalizer(
+                Object target,
+                String selector,
+                Object[] arguments,
+                Runnable resolvedAction,
+                Consumer<ProtosObjectValue> failedAction) {
+            return new Step(
+                    target, selector, snapshot(arguments), true, resolvedAction, failedAction);
+        }
+
+        /** Exact-size positional snapshot; elements keep their order and identity. */
+        private static Object[] snapshot(List<?> arguments) {
+            Objects.requireNonNull(arguments, "arguments");
+            Object[] snapshot = new Object[arguments.size()];
+            for (int index = 0; index < snapshot.length; index++) {
+                snapshot[index] = Objects.requireNonNull(arguments.get(index), "argument");
+            }
+            return snapshot;
+        }
+
+        /** Exact-size positional snapshot; elements keep their order and identity. */
+        private static Object[] snapshot(Object[] arguments) {
+            Objects.requireNonNull(arguments, "arguments");
+            Object[] snapshot = new Object[arguments.length];
+            for (int index = 0; index < snapshot.length; index++) {
+                snapshot[index] = Objects.requireNonNull(arguments[index], "argument");
+            }
+            return snapshot;
         }
     }
 
@@ -164,7 +214,7 @@ public final class ProtosIoReleaseCPrimeExecution {
 
     public static final class Sequence {
         private final ProtosIoReleaseExecution release;
-        private final List<Step> steps;
+        private final Step[] steps;
         private int index;
         private ProtosObjectValue primaryFailure;
         private boolean transferEscaped;
@@ -178,20 +228,25 @@ public final class ProtosIoReleaseCPrimeExecution {
                 List<Step> steps) {
             this.release = Objects.requireNonNull(release, "release");
             this.primaryFailure = initialFailure;
-            this.steps = List.copyOf(Objects.requireNonNull(steps, "steps"));
+            Objects.requireNonNull(steps, "steps");
+            Step[] snapshot = new Step[steps.size()];
+            for (int position = 0; position < snapshot.length; position++) {
+                snapshot[position] = Objects.requireNonNull(steps.get(position), "step");
+            }
+            this.steps = snapshot;
         }
 
         private void skipSuppressedSteps() {
-            while (index < steps.size()
+            while (index < steps.length
                     && primaryFailure != null
-                    && !steps.get(index).runAfterFailure) {
+                    && !steps[index].runAfterFailure) {
                 index++;
             }
         }
 
         boolean hasNextStep() {
             skipSuppressedSteps();
-            return index < steps.size();
+            return index < steps.length;
         }
 
         private Step currentStep() {
@@ -199,7 +254,7 @@ public final class ProtosIoReleaseCPrimeExecution {
                 throw new IllegalStateException(
                         "lifecycle release has no current guest step");
             }
-            return steps.get(index);
+            return steps[index];
         }
 
         Object target() {
@@ -321,15 +376,15 @@ public final class ProtosIoReleaseCPrimeExecution {
             }
             accountInterruptedStep();
             while (hasNextStep()) {
-                recordFailure(steps.get(index), ioError());
+                recordFailure(steps[index], ioError());
                 index++;
             }
             terminalizeAfterTransfer();
         }
 
         private void accountInterruptedStep() {
-            if (index < steps.size()) {
-                recordFailure(steps.get(index), ioError());
+            if (index < steps.length) {
+                recordFailure(steps[index], ioError());
                 index++;
             }
         }
@@ -345,7 +400,7 @@ public final class ProtosIoReleaseCPrimeExecution {
 
         Outcome finish() {
             skipSuppressedSteps();
-            if (index != steps.size()) {
+            if (index != steps.length) {
                 throw new IllegalStateException(
                         "lifecycle release finished before exhausting guest steps");
             }

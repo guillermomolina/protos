@@ -5,7 +5,7 @@
 
     <groupId>com.guillermomolina</groupId>
     <artifactId>protos</artifactId>
-    <version>0.4.142-SNAPSHOT</version>
+    <version>0.4.143-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <name>Protos</name>
@@ -389,6 +389,12 @@
                                     compilation step is involved.
                                 -->
                                 <buildArg>--enable-native-access=ALL-UNNAMED</buildArg>
+                                <!--
+                                    The captured-tree filesystem backend owns a
+                                    static java.lang.ref.Cleaner, which must not
+                                    be stored in the image heap.
+                                -->
+                                <buildArg>--initialize-at-run-time=com.guillermomolina.protos.execution.ProtosNioCapturedTreeFilesystemBackend</buildArg>
                             </buildArgs>
                         </configuration>
                     </plugin>
