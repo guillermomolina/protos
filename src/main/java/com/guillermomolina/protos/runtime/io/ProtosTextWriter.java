@@ -32,7 +32,6 @@ import com.guillermomolina.protos.runtime.ProtosIoReleaseExecution;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import java.util.ArrayDeque;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -290,7 +289,7 @@ public final class ProtosTextWriter {
                 invokeFuture(
                         target,
                         "write",
-                        List.of(payload),
+                        new Object[] {payload},
                         request.activation);
         if (lower == null) {
             failCommittedOutput(request, ioError(request.activation));
@@ -395,7 +394,7 @@ public final class ProtosTextWriter {
             return;
         }
 
-        ProtosFutureValue lower = invokeFuture(target, "flush", List.of(), request.activation);
+        ProtosFutureValue lower = invokeFuture(target, "flush", new Object[0], request.activation);
         if (lower == null) {
             failCommittedOutput(request, ioError(request.activation));
             return;
@@ -503,28 +502,32 @@ public final class ProtosTextWriter {
             }
         }
 
-        ArrayList<ProtosIoReleaseCPrimeExecution.Step> steps = new ArrayList<>();
-        if (primary == null && finalBytes.length > 0) {
+        boolean writeFinal = primary == null && finalBytes.length > 0;
+        int stepCount = (writeFinal ? 1 : 0) + (owning ? 1 : 0);
+        ProtosIoReleaseCPrimeExecution.Step[] steps =
+                new ProtosIoReleaseCPrimeExecution.Step[stepCount];
+        int stepIndex = 0;
+        if (writeFinal) {
             ProtosBytesValue payload = bytes(finalBytes, activation);
-            steps.add(
+            steps[stepIndex++] =
                     ProtosIoReleaseCPrimeExecution.Step.ordinary(
                             target,
                             "write",
-                            List.of(payload),
+                            new Object[] {payload},
                             () -> {},
-                            this::recordReleaseOutputFailure));
+                            this::recordReleaseOutputFailure);
         }
         if (owning) {
-            steps.add(
+            steps[stepIndex++] =
                     ProtosIoReleaseCPrimeExecution.Step.mandatoryFinalizer(
                             target,
                             "close",
-                            List.of(),
+                            new Object[0],
                             () -> {},
-                            ignored -> {}));
+                            ignored -> {});
         }
 
-        if (steps.isEmpty()) {
+        if (stepCount == 0) {
             if (primary == null) completion.succeeded();
             else completion.failed(primary);
             return;
@@ -598,7 +601,7 @@ public final class ProtosTextWriter {
                 invokeFuture(
                         target,
                         "write",
-                        List.of(bytes(finalBytes, activation)),
+                        new Object[] {bytes(finalBytes, activation)},
                         activation);
         if (lower == null) {
             finishRelease(ioError(activation), completion, activation);
@@ -629,7 +632,7 @@ public final class ProtosTextWriter {
             return;
         }
 
-        ProtosFutureValue targetClose = invokeFuture(target, "close", List.of(), activation);
+        ProtosFutureValue targetClose = invokeFuture(target, "close", new Object[0], activation);
         if (targetClose == null) {
             completion.failed(primary != null ? primary : ioError(activation));
             return;
@@ -661,7 +664,7 @@ public final class ProtosTextWriter {
     private ProtosFutureValue invokeFuture(
             Object object,
             String selector,
-            List<?> arguments,
+            Object[] arguments,
             ProtosActivation activation) {
         try {
             Object result = ProtosInvocation.invokeMessage(object, selector, arguments, activation);

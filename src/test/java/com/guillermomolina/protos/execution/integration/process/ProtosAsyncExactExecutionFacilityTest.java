@@ -27,6 +27,7 @@ import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.List;
 import java.util.Objects;
@@ -94,6 +95,51 @@ final class ProtosAsyncExactExecutionFacilityTest {
             assertEquals(ProtosFutureValue.State.CANCELLED, future.state());
             assertEquals(1, submission.cancelledCount());
             assertFalse(submission.runNext(), "withdrawn host work must not execute");
+        }
+    }
+
+    @Test
+    void middleCancellationLeavesNeighbouringOperationsAndCloseUnaffected() throws Exception {
+        ManualSubmission submission = new ManualSubmission();
+        Fixture fixture = fixture();
+        ProtosAsyncExactExecutionFacility facility =
+                ProtosAsyncExactExecutionFacility.install(
+                        fixture.activation,
+                        fixture.runtimeHost,
+                        submission);
+        try {
+            ProtosFutureValue first = invoke(fixture, exactSource("first-of-three", 1));
+            ProtosFutureValue second = invoke(fixture, exactSource("second-of-three", 2));
+            ProtosFutureValue third = invoke(fixture, exactSource("third-of-three", 3));
+            assertEquals(3, submission.queuedCount());
+
+            assertTrue(second.cancelRequest());
+            assertEquals(ProtosFutureValue.State.CANCELLED, second.state());
+            assertEquals(1, submission.cancelledCount());
+            assertEquals(ProtosFutureValue.State.PENDING, first.state());
+            assertEquals(ProtosFutureValue.State.PENDING, third.state());
+
+            assertTrue(submission.runNext(), "first accepted operation must execute");
+            assertFalse(submission.runNext(), "withdrawn middle operation must not execute");
+            assertTrue(submission.runNext(), "third accepted operation must execute");
+            assertEquals(0, submission.queuedCount());
+
+            dispatchUntilTerminal(first, fixture.activation.executionDomain());
+            dispatchUntilTerminal(third, fixture.activation.executionDomain());
+
+            assertCompletedObservation(first, 1, "first-of-three\n");
+            assertEquals(ProtosFutureValue.State.CANCELLED, second.state());
+            assertCompletedObservation(third, 3, "third-of-three\n");
+
+            assertTimeoutPreemptively(
+                    Duration.ofSeconds(30),
+                    facility::close,
+                    "close must not retain custody once every operation is terminal");
+        } finally {
+            while (submission.queuedCount() > 0) {
+                submission.runNext();
+            }
+            fixture.close();
         }
     }
 

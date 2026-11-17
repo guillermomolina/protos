@@ -18,6 +18,7 @@ package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -83,10 +84,22 @@ final class ProtosNioTcpListenerBackendTest {
                 awaitTerminal(close(connection2, x.activation));
             }
 
+            ProtosFutureValue pendingAtClose = accept(listener, x.activation);
+            assertEquals(ProtosFutureValue.State.PENDING, pendingAtClose.state());
+
             ProtosFutureValue close = close(listener, x.activation);
             awaitTerminal(close);
             assertSame(listener, close.resolvedValue().orElseThrow());
+            awaitTerminal(pendingAtClose);
+            assertNotEquals(
+                    ProtosFutureValue.State.RESOLVED,
+                    pendingAtClose.state(),
+                    "an accept pending at close must not admit a connection");
             assertFailedAs(accept(listener, x.activation), x.prelude, "IOLifecycleError");
+            assertThrows(
+                    IOException.class,
+                    () -> connect4(port).close(),
+                    "closed listener components must refuse new peers");
         }
     }
 

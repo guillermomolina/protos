@@ -23,10 +23,9 @@ import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
-import java.util.LinkedHashSet;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 
 /**
  * Bootstrap-local asynchronous one-exact-execution bridge.
@@ -81,7 +80,7 @@ public final class ProtosAsyncExactExecutionFacility implements AutoCloseable {
     private final ProtosPolyglotRuntimeHost runtimeHost;
     private final Submission submission;
     private final SourceExecution sourceExecution;
-    private final Set<Operation> outstanding = new LinkedHashSet<>();
+    private final ArrayList<Operation> outstanding = new ArrayList<>();
     private boolean closed;
 
     private ProtosAsyncExactExecutionFacility(
@@ -341,12 +340,25 @@ public final class ProtosAsyncExactExecutionFacility implements AutoCloseable {
             throw new IllegalStateException(
                     "async exact execution facility is closed");
         }
-        outstanding.add(Objects.requireNonNull(operation, "operation"));
+        Objects.requireNonNull(operation, "operation");
+        if (indexOfOutstanding(operation) < 0) {
+            outstanding.add(operation);
+        }
+    }
+
+    private int indexOfOutstanding(Operation operation) {
+        for (int index = 0; index < outstanding.size(); index++) {
+            if (outstanding.get(index) == operation) return index;
+        }
+        return -1;
     }
 
     private void operationTerminal(Operation operation) {
         synchronized (this) {
-            outstanding.remove(operation);
+            int index = indexOfOutstanding(operation);
+            if (index >= 0) {
+                outstanding.remove(index);
+            }
             notifyAll();
         }
     }

@@ -287,6 +287,57 @@ final class ProtosStandardTextWriterProtocolTest {
         assertEquals(1, target.closes);
     }
 
+    @Test
+    void owningCloseAfterSuccessfulWriteClosesTargetExactlyOnceAndResolves()
+            throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosActivation activation = prelude.newModuleActivation();
+        ScriptedTarget target = new ScriptedTarget(activation, false, true);
+
+        ProtosObjectValue writer =
+                writer(
+                        prelude,
+                        activation,
+                        target.target,
+                        encoding(prelude, "UTF8"),
+                        true);
+
+        ProtosFutureValue write = writeText(writer, activation, "A");
+        assertEquals(ProtosFutureValue.State.RESOLVED, write.state());
+
+        ProtosFutureValue close = close(writer, activation);
+        assertEquals(ProtosFutureValue.State.RESOLVED, close.state());
+        assertEquals(1, target.writes);
+        assertArrayEquals(new byte[] {'A'}, target.payloads.get(0));
+        assertEquals(1, target.closes);
+    }
+
+    @Test
+    void owningCloseWithoutEarlierFailureReportsTargetCloseFailure()
+            throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosActivation activation = prelude.newModuleActivation();
+        ScriptedTarget target = new ScriptedTarget(activation, false, true);
+        ProtosObjectValue closeError =
+                ProtosCoreErrors.newOccurrence(
+                        activation, ProtosCoreErrors.StandardError.I_O_ERROR);
+        target.failClose(closeError);
+
+        ProtosObjectValue writer =
+                writer(
+                        prelude,
+                        activation,
+                        target.target,
+                        encoding(prelude, "UTF8"),
+                        true);
+
+        ProtosFutureValue close = close(writer, activation);
+        assertEquals(ProtosFutureValue.State.FAILED, close.state());
+        assertSame(closeError, close.failedError().orElseThrow());
+        assertEquals(0, target.writes);
+        assertEquals(1, target.closes);
+    }
+
     private static ProtosPrelude core() throws Exception {
         return new ProtosCoreBootstrap().bootstrap(CORE);
     }

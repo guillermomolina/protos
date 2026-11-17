@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.148-SNAPSHOT
+
+- **I115.** Snapshot TCP listener selection keys into an array, refine async facility and TextWriter paths, and assert the exact target-close error in regressions.
+
 ## 0.4.147-SNAPSHOT
 
 - **I115.** Pass array-backed supplied arguments to taskEntry in deferred-caller and unary direct-call convergence tests.

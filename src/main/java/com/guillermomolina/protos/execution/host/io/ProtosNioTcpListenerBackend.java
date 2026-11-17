@@ -236,7 +236,8 @@ final class ProtosNioTcpListenerBackend
 
     private void refreshAcceptInterest() {
         boolean enable = !pendingAccepts.isEmpty() && !physicalClosed.get();
-        for (SelectionKey key : List.copyOf(keys)) {
+        SelectionKey[] snapshot = keys.toArray(new SelectionKey[keys.size()]);
+        for (SelectionKey key : snapshot) {
             if (!key.isValid()) continue;
             try {
                 int current = key.interestOps();
@@ -338,7 +339,8 @@ final class ProtosNioTcpListenerBackend
 
     private boolean closePhysical() {
         if (!physicalClosed.compareAndSet(false, true)) return true;
-        for (SelectionKey key : List.copyOf(keys)) {
+        SelectionKey[] snapshot = keys.toArray(new SelectionKey[keys.size()]);
+        for (SelectionKey key : snapshot) {
             try {
                 key.cancel();
             } catch (RuntimeException ignored) {
