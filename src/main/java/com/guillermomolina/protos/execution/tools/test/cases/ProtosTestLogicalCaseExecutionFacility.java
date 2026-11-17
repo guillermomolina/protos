@@ -25,11 +25,9 @@ import com.guillermomolina.protos.runtime.ProtosStringValue;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 
 /**
  * TOOL009 asynchronous execution boundary for one discovered logical Case.
@@ -50,7 +48,7 @@ public final class ProtosTestLogicalCaseExecutionFacility implements AutoCloseab
             sourceRoots;
     private final Map<String, Path> projectTreeCasesRootByCorpusId;
     private final ProtosAsyncExactExecutionFacility.Submission submission;
-    private final Set<Operation> outstanding = new LinkedHashSet<>();
+    private final ArrayList<Operation> outstanding = new ArrayList<>();
     private boolean closed;
 
     private ProtosTestLogicalCaseExecutionFacility(
@@ -321,15 +319,25 @@ public final class ProtosTestLogicalCaseExecutionFacility implements AutoCloseab
                     "logical Case execution facility is closed");
         }
 
-        outstanding.add(
-                Objects.requireNonNull(
-                        operation,
-                        "operation"));
+        Objects.requireNonNull(operation, "operation");
+        if (indexOfOutstanding(operation) < 0) {
+            outstanding.add(operation);
+        }
+    }
+
+    private int indexOfOutstanding(Operation operation) {
+        for (int index = 0; index < outstanding.size(); index++) {
+            if (outstanding.get(index) == operation) return index;
+        }
+        return -1;
     }
 
     private void operationTerminal(Operation operation) {
         synchronized (this) {
-            outstanding.remove(operation);
+            int index = indexOfOutstanding(operation);
+            if (index >= 0) {
+                outstanding.remove(index);
+            }
             notifyAll();
         }
     }

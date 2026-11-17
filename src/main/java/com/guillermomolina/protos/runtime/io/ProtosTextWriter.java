@@ -32,7 +32,6 @@ import com.guillermomolina.protos.runtime.ProtosIoReleaseExecution;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import java.util.ArrayDeque;
-import java.util.List;
 import java.util.Objects;
 
 /** One ordered transactional encoder/output/lifecycle domain for a standard TextWriter. */
@@ -281,7 +280,7 @@ public final class ProtosTextWriter {
             startCPrimeTarget(
                     request,
                     "write",
-                    List.of(payload));
+                    new Object[] {payload});
             return;
         }
 
@@ -302,7 +301,7 @@ public final class ProtosTextWriter {
     private void startCPrimeTarget(
             Request request,
             String selector,
-            List<?> arguments) {
+            Object[] arguments) {
         ProtosTextWriterCPrimeExecution.schedule(
                 Objects.requireNonNull(request.cPrimePlan, "request.cPrimePlan"),
                 request.operation,
@@ -390,7 +389,7 @@ public final class ProtosTextWriter {
             startCPrimeTarget(
                     request,
                     "flush",
-                    List.of());
+                    new Object[0]);
             return;
         }
 

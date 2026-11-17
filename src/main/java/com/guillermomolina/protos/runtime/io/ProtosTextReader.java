@@ -1153,10 +1153,14 @@ public final class ProtosTextReader {
     }
 
     private byte[] snapshotBytes(ProtosBytesValue bytes) {
-        List<Object> values = bytes.indexedSnapshot();
-        byte[] result = new byte[values.size()];
-        for (int index = 0; index < values.size(); index++) {
-            Object octet = values.get(index);
+        int size = bytes.indexedSize();
+        Object[] values = new Object[size];
+        for (int index = 0; index < size; index++) {
+            values[index] = bytes.indexedAt(index);
+        }
+        byte[] result = new byte[values.length];
+        for (int index = 0; index < values.length; index++) {
+            Object octet = values[index];
             if (!ProtosNumericValueSupport.isUnsignedIntegerWithin(octet, Byte.SIZE)) return null;
             result[index] = (byte) ProtosNumericValueSupport.exactInt(octet);
         }

@@ -18,6 +18,7 @@ import com.oracle.truffle.api.source.Source;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.Test;
 
@@ -410,6 +411,74 @@ final class ProtosPerf006Plat029TextWriterCallbackTest {
 
         System.out.println("PLAT029_TEXT_WRITER_FLUSH_CALLBACK_CPRIME=PASS");
         System.out.println("PLAT029_TEXT_WRITER_CLOSE_INCLUDED=NO");
+    }
+
+    @Test
+    void flushSendsZeroArgumentsAndPreparedArgumentsAreIndependentOfSuppliedArray()
+            throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            Fixture f = fixture();
+            AtomicInteger flushes = new AtomicInteger();
+            AtomicReference<ProtosIoOperation> captured = new AtomicReference<>();
+            f.target.createLocalSlot(
+                    "write",
+                    ProtosClosureValue.nativeClosure(
+                            (activation, supplied) -> {
+                                ProtosFutureValue immediate = future(f);
+                                immediate.resolve(f.target, activation);
+                                return immediate;
+                            }));
+            f.target.createLocalSlot(
+                    "flush",
+                    ProtosClosureValue.nativeClosure(
+                            (activation, supplied) -> {
+                                flushes.incrementAndGet();
+                                assertEquals(0, supplied.size());
+                                captured.set(
+                                        activation.deferredCPrimeOperationForRuntime()
+                                                .orElseThrow());
+                                ProtosFutureValue immediate = future(f);
+                                immediate.resolve(f.target, activation);
+                                return immediate;
+                            }));
+            ProtosObjectValue writer = writer(f, false);
+            f.module.context().createLocalSlot("writer", writer);
+
+            ProtosFutureValue outer =
+                    invokeCPrimeReturningFuture(
+                            scope.language(),
+                            f,
+                            "writer.flush()",
+                            "text-writer-flush-zero-arguments.protos");
+            assertTrue(f.domain.dispatchOne());
+            assertEquals(ProtosFutureValue.State.RESOLVED, outer.state());
+            assertSame(writer, outer.resolvedValue().orElseThrow());
+            assertEquals(1, flushes.get());
+            assertFalse(f.domain.dispatchOne());
+
+            ProtosTextWriterCPrimeExecution.Completion inert =
+                    new ProtosTextWriterCPrimeExecution.Completion() {
+                        @Override public void lowerResolved() {}
+                        @Override public void lowerFailed(ProtosObjectValue error) {}
+                        @Override public void lowerCancelled() {}
+                        @Override public void invalidLowerFuture() {}
+                        @Override public void invocationFailed() {}
+                    };
+            Object first = new ProtosStringValue("first");
+            Object[] supplied = {first};
+            ProtosTextWriterCPrimeExecution.CallState state =
+                    new ProtosTextWriterCPrimeExecution.CallState(
+                            captured.get(), f.target, "write", supplied, inert);
+            supplied[0] = new ProtosStringValue("replaced");
+            Object[] prepared = state.arguments();
+            assertNotSame(supplied, prepared);
+            assertEquals(1, prepared.length);
+            assertSame(first, prepared[0]);
+            assertThrows(
+                    NullPointerException.class,
+                    () -> new ProtosTextWriterCPrimeExecution.CallState(
+                            captured.get(), f.target, "write", new Object[] {null}, inert));
+        }
     }
 
     /*

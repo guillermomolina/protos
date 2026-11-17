@@ -297,6 +297,50 @@ final class ProtosTextReaderLineProtocolTest {
         }
     }
 
+    @Test
+    void validSourceBytesAreSnapshottedInOrderWithoutRereading() throws Exception {
+        Fixture f = fixture("UTF8");
+        f.source.bytes('z', 0xc3, 0xa9, 'y', '\n');
+
+        assertEquals("z\u00e9y", stringResult(readLine(f.reader, f.activation)));
+        assertEquals(1, f.source.reads);
+    }
+
+    @Test
+    void invalidOctetInSourceBytesFailsWithIOErrorWithoutRereading() throws Exception {
+        Fixture f = fixture("UTF8");
+        Pending pending = f.source.pending(true);
+
+        ProtosFutureValue line = readLine(f.reader, f.activation);
+        assertEquals(ProtosFutureValue.State.PENDING, line.state());
+
+        ProtosBytesValue invalid = bytes(f.prelude, 'a');
+        invalid.indexedAdd(Long.valueOf(256L));
+        invalid.indexedAdd(Long.valueOf('\n'));
+        pending.resolve(invalid, f.activation);
+
+        assertEquals(ProtosFutureValue.State.FAILED, line.state());
+        assertErrorParent(f.prelude, line.failedError().orElseThrow(), "IOError");
+        assertEquals(1, f.source.reads);
+    }
+
+    @Test
+    void lateValidBytesAfterCancellationAreRetainedInOrderWithoutRereading()
+            throws Exception {
+        Fixture f = fixture("UTF8");
+        Pending pending = f.source.pending(true);
+
+        ProtosFutureValue cancelled = readLine(f.reader, f.activation);
+        assertTrue(cancelled.cancelRequest());
+        assertEquals(ProtosFutureValue.State.CANCELLED, cancelled.state());
+        assertEquals(1, pending.cancelRequests);
+
+        pending.resolve(bytes(f.prelude, 'q', 0xc3, 0xa9, 'r', '\n'), f.activation);
+
+        assertEquals("q\u00e9r", stringResult(readLine(f.reader, f.activation)));
+        assertEquals(1, f.source.reads, "late bytes must be retained, not reread");
+    }
+
     private static ProtosFutureValue observedDepth(
             ProtosFutureValue future, long[] depths, int index) {
         assertEquals(ProtosFutureValue.State.PENDING, future.state());

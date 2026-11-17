@@ -25,7 +25,6 @@ import com.oracle.truffle.api.bytecode.BytecodeConfig;
 import com.oracle.truffle.api.bytecode.BytecodeLocal;
 import com.oracle.truffle.api.bytecode.BytecodeRootNodes;
 import com.oracle.truffle.api.interop.TruffleObject;
-import java.util.List;
 import java.util.Objects;
 
 /**
@@ -119,13 +118,18 @@ public final class ProtosTextWriterCPrimeExecution {
                 ProtosIoOperation operation,
                 Object target,
                 String selector,
-                List<?> arguments,
+                Object[] arguments,
                 Completion completion) {
             this.operation = Objects.requireNonNull(operation, "operation");
             this.completion = Objects.requireNonNull(completion, "completion");
             this.target = Objects.requireNonNull(target, "target");
             this.selector = Objects.requireNonNull(selector, "selector");
-            this.arguments = List.copyOf(Objects.requireNonNull(arguments, "arguments")).toArray();
+            Objects.requireNonNull(arguments, "arguments");
+            Object[] copy = new Object[arguments.length];
+            for (int i = 0; i < arguments.length; i++) {
+                copy[i] = Objects.requireNonNull(arguments[i], "arguments element");
+            }
+            this.arguments = copy;
         }
 
         Object target() {
@@ -331,7 +335,7 @@ public final class ProtosTextWriterCPrimeExecution {
             ProtosIoOperation operation,
             Object target,
             String selector,
-            List<?> arguments,
+            Object[] arguments,
             Completion completion) {
         Objects.requireNonNull(plan, "plan");
         Objects.requireNonNull(operation, "operation");

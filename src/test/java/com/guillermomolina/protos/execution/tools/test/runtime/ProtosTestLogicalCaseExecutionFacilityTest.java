@@ -17,6 +17,7 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -163,6 +164,149 @@ final class ProtosTestLogicalCaseExecutionFacilityTest {
                                     .orElseThrow());
 
             assertEquals(String.valueOf("22"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value));
+        }
+    }
+
+    @SuppressWarnings("try")
+    @Test
+    void cancellingMiddleOperationLeavesNeighboursAndCloseIntact(
+            @TempDir Path root) throws Exception {
+        Path suite = root.resolve("suite.protos");
+
+        String source =
+                """
+                TestValue: import("std:test/test")
+
+                tests: Array(
+                    TestValue("first", () => {
+                        1
+                    }),
+                    TestValue("second", () => {
+                        2
+                    }),
+                    TestValue("third", () => {
+                        3
+                    })
+                )
+                """;
+
+        Files.writeString(
+                suite,
+                source,
+                StandardCharsets.UTF_8);
+
+        ManualSubmission submission =
+                new ManualSubmission();
+
+        ProtosBundledToolModuleResolver resolver =
+                resolver();
+
+        ProtosPrelude prelude =
+                new ProtosCoreBootstrap()
+                        .bootstrap(CORE, resolver);
+
+        ProtosActivation activation =
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test");
+
+        List<String> signature =
+                List.of("first", "second", "third");
+
+        try (ProtosPolyglotRuntimeHost runtimeHost =
+                        ProtosPolyglotRuntimeHost.open()) {
+            ProtosTestLogicalCaseExecutionFacility facility =
+                    ProtosTestLogicalCaseExecutionFacility.install(
+                            activation,
+                            CORE,
+                            resolver,
+                            List.of(
+                                    new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
+                                            "test-corpus",
+                                            root)),
+                            runtimeHost,
+                            submission);
+            try {
+                ProtosFutureValue first =
+                        invoke(prelude, activation, source, signature, "first");
+                ProtosFutureValue second =
+                        invoke(prelude, activation, source, signature, "second");
+                ProtosFutureValue third =
+                        invoke(prelude, activation, source, signature, "third");
+
+                assertEquals(3, submission.queuedCount());
+
+                assertTrue(second.cancelRequest());
+                assertEquals(
+                        ProtosFutureValue.State.CANCELLED,
+                        second.state());
+
+                assertTrue(submission.runNext());
+                assertTrue(
+                        activation.executionDomain().dispatchOne());
+                assertEquals(
+                        ProtosFutureValue.State.RESOLVED,
+                        first.state());
+
+                /* The withdrawn job is consumed without running; runNext reports false. */
+                assertFalse(submission.runNext());
+                assertEquals(
+                        ProtosFutureValue.State.CANCELLED,
+                        second.state());
+                assertEquals(
+                        ProtosFutureValue.State.PENDING,
+                        third.state());
+
+                assertTrue(submission.runNext());
+                assertTrue(
+                        activation.executionDomain().dispatchOne());
+                assertEquals(
+                        ProtosFutureValue.State.RESOLVED,
+                        third.state());
+
+                assertEquals(0, submission.queuedCount());
+                assertEquals(
+                        ProtosFutureValue.State.RESOLVED,
+                        first.state());
+                assertEquals(
+                        ProtosFutureValue.State.CANCELLED,
+                        second.state());
+            } finally {
+                /*
+                 * close() keeps custody of outstanding operations, so an early
+                 * assertion failure must not leave queued jobs behind it.
+                 * queuedCount() decides emptiness: runNext() reports false for
+                 * a withdrawn job it consumes.
+                 */
+                try {
+                    while (submission.queuedCount() > 0) {
+                        submission.runNext();
+                    }
+                } finally {
+                    closeWithinSafetyBound(facility);
+                }
+            }
+        }
+    }
+
+    private static void closeWithinSafetyBound(
+            ProtosTestLogicalCaseExecutionFacility facility)
+            throws InterruptedException {
+        Throwable[] failure = new Throwable[1];
+        Thread closer = new Thread(() -> {
+            try {
+                facility.close();
+            } catch (Throwable t) {
+                failure[0] = t;
+            }
+        }, "logical-case-facility-close");
+        closer.setDaemon(true);
+        closer.start();
+        closer.join(10_000L);
+        assertFalse(
+                closer.isAlive(),
+                () -> "facility.close() did not finish within 10 seconds; closer thread state: "
+                        + closer.getState());
+        if (failure[0] != null) {
+            throw new AssertionError("facility.close() failed", failure[0]);
         }
     }
 
