@@ -1605,7 +1605,7 @@ final class ProtosI115BDeferredCallerTest {
                     expectedTask.set(current);
                     ProtosBytecodeTaskExecution.executeRequest(
                             current, ProtosCallRequest.taskEntry(
-                                    owner, current, List.of(seed), module));
+                                    owner, current, new Object[] {seed}, module));
                 });
                 assertTrue(module.executionDomain().dispatchOne());
                 assertEquals(ProtosTask.State.COMPLETED, task.state(), () -> "failure=" + task.failure());
@@ -1690,7 +1690,7 @@ final class ProtosI115BDeferredCallerTest {
                 current -> ProtosBytecodeTaskExecution.executeRequest(
                         current,
                         ProtosCallRequest.taskEntry(
-                                owner, current, List.of(future), module)));
+                                owner, current, new Object[] {future}, module)));
         assertTrue(domain.dispatchOne());
         assertEquals(ProtosTask.State.SUSPENDED, task.state(), "really suspended");
         return task;
@@ -2149,7 +2149,7 @@ final class ProtosI115BDeferredCallerTest {
                                 ProtosBytecodeTaskExecution.executeRequest(
                                         current,
                                         ProtosCallRequest.taskEntry(
-                                                entry, current, List.of(wait), module)));
+                                                entry, current, new Object[] {wait}, module)));
                         assertTrue(domain.dispatchOne());
                         assertEquals(ProtosTask.State.SUSPENDED, task.state(),
                                 name + ": really suspended");
@@ -2747,7 +2747,7 @@ final class ProtosI115BDeferredCallerTest {
                 ProtosTask task = module.executionDomain().createTask(null, current ->
                         ProtosBytecodeTaskExecution.executeRequest(
                                 current,
-                                ProtosCallRequest.taskEntry(outer, current, List.of(), module)));
+                                ProtosCallRequest.taskEntry(outer, current, new Object[0], module)));
                 assertTrue(module.executionDomain().dispatchOne());
                 assertEquals(ProtosTask.State.SUSPENDED, task.state(), "round " + round);
                 assertTrue(wait.resolve(ProtosNullValue.INSTANCE, module));

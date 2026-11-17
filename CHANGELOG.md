@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.147-SNAPSHOT
+
+- **I115.** Pass array-backed supplied arguments to taskEntry in deferred-caller and unary direct-call convergence tests.
+
 ## 0.4.146-SNAPSHOT
 
 - **I115.** Mark nilary, binary, ternary and quaternary direct-call cache parameters exclusive to satisfy Truffle DSL cache ownership.

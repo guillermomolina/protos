@@ -693,7 +693,7 @@ final class ProtosI115UnaryPICConvergenceTest {
                 ProtosTask task = module.executionDomain().createTask(null, current ->
                         ProtosBytecodeTaskExecution.executeRequest(
                                 current,
-                                ProtosCallRequest.taskEntry(outer, current, List.of(), module)));
+                                ProtosCallRequest.taskEntry(outer, current, new Object[0], module)));
                 assertTrue(module.executionDomain().dispatchOne());
                 assertEquals(ProtosTask.State.SUSPENDED, task.state(), "round " + round);
                 assertTrue(wait.resolve(ProtosNullValue.INSTANCE, module));
