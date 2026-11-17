@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.129-SNAPSHOT
+
+- **I115 — Proven non-suspending direct calls.** Cached direct Closure calls use the effective root's immutable non-suspension proof to omit outcome classification, retaining the suspension path for unproven bodies. Closure creation reads the admitted creator Prelude without redundant recovery. Added continuation, terminal-send, direct-header and deferred-caller regressions.
+
 ## 0.4.128-SNAPSHOT
 
 - **I115 — Unified guarded invocation sites.** Direct and indirect Closure dispatch now share one guarded call site per path while preserving owned and captured return-home control transfers. Added dispatch admission and unary-cache regressions; the opt-in Tier 2 graph diagnostic reports remaining invocations and enables inlining traces.

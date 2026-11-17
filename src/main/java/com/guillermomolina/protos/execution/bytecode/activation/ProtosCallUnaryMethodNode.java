@@ -118,21 +118,23 @@ abstract class ProtosCallUnaryMethodNode extends Node {
         Object[] arguments = ProtosFrameArguments.dispatchedCall1(
                 null, ProtosFrameArguments.functionCallMarker(),
                 null, null, null, a0);
+        Object outcome;
         if (cachedHomeMode == ProtosFunctionCallDispatchers.ReturnHomeMode.UNOBSERVABLE) {
-            Object outcome = ProtosFunctionCallDispatchers.invokeUnobservableHome(
+            outcome = ProtosFunctionCallDispatchers.invokeUnobservableHome(
                     frame, inliningTarget, taskPresence, callNode, cachedCallee, callable, arguments, null);
-            return ProtosTailCallContinuation.completeCall(
-                    terminal, outcome, bytecode, bytecodeIndex);
-        }
-        if (cachedHomeMode == ProtosFunctionCallDispatchers.ReturnHomeMode.CAPTURED) {
-            Object outcome = ProtosFunctionCallDispatchers.invokeCapturedHome(
+        } else if (cachedHomeMode == ProtosFunctionCallDispatchers.ReturnHomeMode.CAPTURED) {
+            outcome = ProtosFunctionCallDispatchers.invokeCapturedHome(
                     frame, inliningTarget, taskPresence, callNode, cachedCallee, callable, arguments, null);
-            return ProtosTailCallContinuation.completeCall(
-                    terminal, outcome, bytecode, bytecodeIndex);
+        } else {
+            outcome = invoke.execute(
+                    frame, inliningTarget, callNode, cachedCallee,
+                    callable, arguments, null);
         }
-        Object outcome = invoke.execute(
-                frame, inliningTarget, callNode, cachedCallee,
-                callable, arguments, null);
+        // The cached effective root's compilation-final proof: a proven body
+        // never yields a suspended outcome, so no terminal classification.
+        if (cachedCallee.provablyNonSuspendingBody()) {
+            return outcome;
+        }
         return ProtosTailCallContinuation.completeCall(
                 terminal, outcome, bytecode, bytecodeIndex);
     }

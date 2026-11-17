@@ -212,6 +212,118 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
         });
     }
 
+    /**
+     * Two separate properties of the direct Closure-call path.
+     *
+     * <p>A. Compiler-proven direct calls: the identity definition {@code
+     * make} is the fixture already classified as proven by
+     * freshCallOneClosuresConvergeOnTheDefinitionTier. Fresh instances share
+     * the exact effective target, keep their own identity, return their
+     * exact results and keep canonical {@code Object.call} selection.
+     *
+     * <p>B. Captured lexical state: {@code makeHolder(seed)} instances share
+     * the definition-level target but keep independent captured
+     * environments, across repeated calls and across a {@code call} override
+     * that is added and then removed. No proof classification is asserted
+     * for this body; its effective-root proof is whatever the existing
+     * source-level rules publish, and the guest results must hold either way.
+     * The dynamic forwarder stays unproven, as an {@code f()} body does in
+     * ProtosI107ContinuationEmissionTest.
+     */
+    @Test
+    void provenDirectClosureCallPreservesIdentityAndSelection() throws Exception {
+        withCore(module -> {
+            evaluate("""
+                    make: () => { (value) => { value } }
+                    makeHolder: (seed) => { (value) => { seed } }
+                    makeForwarder: () => { (f) => { f() } }
+                    callOne: (f, value) => { f(value) }
+                    """, "perf042-proven-define.protos", module);
+            ProtosLanguageContext context = ProtosLanguageContext.current();
+
+            // A. Compiler-proven identity definition.
+            RootCallTarget proven = null;
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                ProtosClosureValue first = closure("make()\n", module);
+                ProtosClosureValue second = closure("make()\n", module);
+                assertNotSame(first, second);
+                assertSame(first.definition(), second.definition());
+                RootCallTarget target = effectiveTarget(first, context);
+                assertNotNull(target);
+                assertSame(target, effectiveTarget(second, context));
+                if (proven == null) {
+                    proven = target;
+                }
+                assertSame(proven, target, "stable shared executable target");
+                assertTrue(nonSuspendingRoot(target));
+                assertSame(first, dispatchedAsFunction(first), "canonical Object.call");
+                assertSame(second, dispatchedAsFunction(second), "canonical Object.call");
+                module.context().createLocalSlot("identityA" + i, first);
+                module.context().createLocalSlot("identityB" + i, second);
+                assertInteger(i, evaluate(
+                        "callOne(identityA" + i + ", " + i + ")\n",
+                        "perf042-proven-a.protos", module));
+                assertInteger(i + 1, evaluate(
+                        "callOne(identityB" + i + ", " + (i + 1) + ")\n",
+                        "perf042-proven-b.protos", module));
+            }
+
+            // B. Captured lexical state; no proof classification is required.
+            RootCallTarget holderTarget = null;
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                ProtosClosureValue first = closure("makeHolder(" + i + ")\n", module);
+                ProtosClosureValue second = closure("makeHolder(" + (i * 10) + ")\n", module);
+                assertNotSame(first, second);
+                assertSame(first.definition(), second.definition());
+                RootCallTarget target = effectiveTarget(first, context);
+                assertNotNull(target);
+                assertSame(target, effectiveTarget(second, context));
+                if (holderTarget == null) {
+                    holderTarget = target;
+                }
+                assertSame(holderTarget, target, "shared definition-level target");
+                module.context().createLocalSlot("holderA" + i, first);
+                module.context().createLocalSlot("holderB" + i, second);
+                for (int repeat = 0; repeat < 2; repeat++) {
+                    assertInteger(i, evaluate(
+                            "callOne(holderA" + i + ", 1)\n", "perf042-holder-a.protos", module));
+                    assertInteger(i * 10, evaluate(
+                            "callOne(holderB" + i + ", 1)\n", "perf042-holder-b.protos", module));
+                }
+            }
+
+            ProtosClosureValue forwarder = closure("makeForwarder()\n", module);
+            RootCallTarget dynamic = effectiveTarget(forwarder, context);
+            assertNotNull(dynamic);
+            assertFalse(nonSuspendingRoot(dynamic));
+            module.context().createLocalSlot("forwarder", forwarder);
+            assertInteger(5, evaluate(
+                    "callOne(forwarder, () => { 5 })\n", "perf042-dynamic.protos", module));
+
+            evaluate("""
+                    overridden: makeHolder(1)
+                    overridden.call: (value) => { 500 + value }
+                    """, "perf042-holder-override.protos", module);
+            assertInteger(502, evaluate(
+                    "callOne(overridden, 2)\n", "perf042-holder-overridden.protos", module));
+            ProtosClosureValue overridden = assertInstanceOf(
+                    ProtosClosureValue.class,
+                    module.context().readLocalSlot("overridden").orElseThrow());
+            assertNull(dispatchedAsFunction(overridden));
+            assertNull(effectiveTarget(overridden, context));
+            assertInteger(0, evaluate(
+                    "callOne(holderA0, 1)\n", "perf042-holder-unaffected.protos", module));
+
+            evaluate("overridden.removeSlot(\"call\")\n", "perf042-holder-remove.protos", module);
+            for (int repeat = 0; repeat < 2; repeat++) {
+                assertInteger(1, evaluate(
+                        "callOne(overridden, 2)\n", "perf042-holder-restored.protos", module));
+            }
+            assertSame(overridden, dispatchedAsFunction(overridden));
+            assertSame(holderTarget, effectiveTarget(overridden, context));
+        });
+    }
+
     @Test
     void admissionBoundariesRejectAndFallBack() throws Exception {
         withCore(module -> {

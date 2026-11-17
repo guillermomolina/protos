@@ -513,10 +513,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * transformations, never the canonical body alone. It does not prove a
      * complete invocation: receiver evaluation, Object.call selection,
      * Context and ReturnHome remain the run-time guards of its consumers.
-     * Recorded once per parse, before the root is published; never consulted
-     * as a per-call compiler check beyond these guards.
+     * Recorded once per parse, before the root is published, and immutable
+     * afterwards; never recomputed per call. Because it is compilation-final,
+     * specialized direct call sites that cache this exact root consume it as
+     * a compilation constant to omit suspension classification of the
+     * outcome; an unproven root keeps every suspension check.
      */
-    private transient boolean provablyNonSuspendingBody;
+    @CompilationFinal private transient boolean provablyNonSuspendingBody;
 
     final void recordProvablyNonSuspendingBody(boolean proven) {
         this.provablyNonSuspendingBody = proven;

@@ -261,6 +261,57 @@ final class ProtosPerf038ITerminalMethodSendTest {
     }
 
     /**
+     * A terminal send whose selected method root is proven non-suspending
+     * keeps its single CallBinaryMethod, enters the direct source-send tier
+     * and returns the ordinary result with no continuation; receiver and
+     * method home are unchanged and a selection mutation is observed. The
+     * site is moved to the cached Bytecode tier by enterCachedTier, and
+     * tierEntries reads the {@code callDirectSourceSend} specialization cache
+     * of that site's CallBinaryMethod, so the single entry asserted below is
+     * the existing direct source-send specialization, not a new operation.
+     * The unproven suspending case is
+     * terminalMethodSendSuspendsAndResumesWithoutReplay.
+     */
+    @Test
+    void provenDirectTerminalSendPreservesSelectionAndResult() throws Exception {
+        withCore(module -> {
+            evaluate("""
+                    holder: {
+                        pick: (value) => { value }
+                        self: (ignored) => { this }
+                    }
+                    child: holder {}
+                    pick: (n) => { holder.pick(n) }
+                    selfOf: (receiver) => { receiver.self(0) }
+                    """, "perf038i-proven-define.protos", module);
+            assertTrue(methodRoot("holder.pick\n", module).provablyNonSuspendingBody(),
+                    "proven fixture");
+            enterCachedTier("pick", module);
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                Object result = evaluate("pick(" + i + ")\n", "perf038i-proven.protos", module);
+                assertFalse(result instanceof ProtosCallRequest, "no continuation request");
+                assertFalse(ProtosTailCallContinuation.isSuspended(result));
+                assertInteger(i, result);
+            }
+            assertTerminalSite("pick", module);
+            assertEquals(1, tierEntries("pick", module).size(), "one direct source-send entry");
+
+            Object holder = module.context().readLocalSlot("holder").orElseThrow();
+            Object child = module.context().readLocalSlot("child").orElseThrow();
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                assertSame(holder, evaluate("selfOf(holder)\n", "perf038i-proven-self.protos", module));
+                assertSame(child, evaluate("selfOf(child)\n", "perf038i-proven-child.protos", module));
+            }
+
+            evaluate("holder.pick = (value) => { value + 100 }\n",
+                    "perf038i-proven-mutate.protos", module);
+            assertInteger(105, evaluate("pick(5)\n", "perf038i-proven-mutated.protos", module));
+            assertTerminalSite("pick", module);
+        });
+        System.out.println("PERF038_I_PROVEN_DIRECT_SEND=PASS");
+    }
+
+    /**
      * PERF038-I-SEM-02: a terminal send whose method really suspends is
      * executed by the terminal fallback; the Task suspends and resumes the
      * method's own state without replaying its prefix (adapted from

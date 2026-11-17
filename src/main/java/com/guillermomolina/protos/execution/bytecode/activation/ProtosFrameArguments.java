@@ -1070,10 +1070,14 @@ final class ProtosFrameArguments {
 
 
     /**
-     * The Prelude a new Closure retains from its creator: the admitted one
-     * read from the creator's header, without publishing an activation. When
-     * the creator inherits a Prelude its caller did not transport, the
-     * non-publishing recovery runs behind a boundary.
+     * The Prelude a new Closure retains from its creator, read from the
+     * creator's admitted header without publishing an activation, registering
+     * caller needs or writing the header. A published activation yields its
+     * own Prelude; a compact Closure header yields the Closure's own Prelude,
+     * otherwise the caller-transported one, either possibly null. Both are
+     * the complete answer for that header, so no second recovery read
+     * follows. Inputs in neither admitted shape keep the non-publishing
+     * recovery behind a boundary.
      */
     static ProtosPrelude creatorPreludeForClosureCreation(Object[] arguments) {
         if (arguments.length >= HEADER_LENGTH) {
@@ -1086,10 +1090,7 @@ final class ProtosFrameArguments {
                 if (own != null) {
                     return own;
                 }
-                ProtosPrelude transported = callerPreludeOrNull(arguments);
-                if (transported != null) {
-                    return transported;
-                }
+                return callerPreludeOrNull(arguments);
             }
         }
         return recoveredCreatorPrelude(arguments);

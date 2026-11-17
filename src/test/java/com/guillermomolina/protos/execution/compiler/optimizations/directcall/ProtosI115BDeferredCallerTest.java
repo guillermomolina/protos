@@ -1231,6 +1231,60 @@ final class ProtosI115BDeferredCallerTest {
         });
     }
 
+    /**
+     * A new Closure's creator Prelude is answered from the admitted header
+     * alone: compact headers stay unpublished, slot 3 keeps its payload and
+     * no caller need is registered merely by observing the header.
+     *
+     * <p>A published Activation without a Prelude is not constructed here:
+     * the existing activation constructor requires the Prelude as a
+     * precondition, so its absence is not a missing fallback to implement.
+     */
+    @Test
+    void creatorPreludeUsesAdmittedHeaderWithoutPublishingCaller() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue template = closure("(value) => { value }\n", module);
+            ProtosBytecodeRootNode root =
+                    template.executionPlan().orElseThrow().bytecodeActivationRootForTesting();
+            boolean preludeNeed = root.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE);
+            boolean exactNeed = root.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION);
+            var stability = root.callerNeedsStability();
+            ProtosPrelude own = module.prelude().orElseThrow();
+            ProtosActivation other = otherPreludeModule();
+            ProtosPrelude transported = other.prelude().orElseThrow();
+            assertNotSame(own, transported);
+
+            record Case(ProtosClosureValue callee, Object payload, ProtosPrelude expected) {}
+            List<Case> compact = List.of(
+                    new Case(ownPrelude(template, own), transported, own),
+                    new Case(preludeFree(template), transported, transported),
+                    new Case(preludeFree(template), other, transported),
+                    new Case(preludeFree(template), null, null));
+            for (Case test : compact) {
+                Object[] header = ProtosFrameArguments.compactDirectClosureCallOneNoHome(
+                        test.callee(), test.payload(), SUPPLIED);
+                assertSame(test.expected(),
+                        ProtosFrameArguments.creatorPreludeForClosureCreation(header));
+                assertSame(test.payload(), header[3], "caller slot 3 is not overwritten");
+                assertSame(test.callee(), header[0]);
+                assertUnpublished(header);
+            }
+
+            Object[] published = ProtosFrameArguments.compactDirectClosureCallOneNoHome(
+                    template, (Object) module, SUPPLIED);
+            ProtosActivation child = ProtosFrameArguments.activation(published);
+            assertSame(child, published[0]);
+            assertSame(child.preludeOrNullForRuntime(),
+                    ProtosFrameArguments.creatorPreludeForClosureCreation(published));
+            assertSame(own, ProtosFrameArguments.creatorPreludeForClosureCreation(published));
+            assertSame(module, published[3]);
+
+            assertEquals(preludeNeed, root.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE));
+            assertEquals(exactNeed, root.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION));
+            assertSame(stability, root.callerNeedsStability());
+        });
+    }
+
     @Test
     void independentHeadersPublishOnceAndKeepTaskAndReturnHome() throws Exception {
         withCore(module -> {
@@ -1881,9 +1935,133 @@ final class ProtosI115BDeferredCallerTest {
                             com.oracle.truffle.api.nodes.DirectCallNode.create(target),
                             root, callee, arguments, null);
             assertFalse(ProtosTailCallContinuation.isSuspended(outcome));
+            // The proven effective root returns its exact outcome with no
+            // suspension seal, so B5[3] keeps whatever transport supplied.
+            assertTrue(root.provablyNonSuspendingBody());
+            assertSame(SUPPLIED, outcome);
             if (!root.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE)
                     && !root.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION)) {
                 assertSame(null, arguments[3], "an ordinary result publishes no caller");
+            }
+        });
+    }
+
+    /**
+     * Each ReturnHome route of the cached identity PIC, driven through the
+     * existing route methods of ProtosFunctionCallDispatchers with the
+     * fixture's route asserted first (never assumed):
+     *
+     * <ul>
+     *   <li>UNOBSERVABLE: the identity definition already proven by
+     *       identityTargetIsProvenAndEntersSynchronously returns its exact
+     *       result, carries the unobservable marker and publishes no caller
+     *       it does not need.
+     *   <li>CAPTURED: a Closure capturing its owner's physical home carries
+     *       that exact home; completing the callee leaves the owner's home
+     *       active, and the owner later consumes its own ^. No proof is
+     *       asserted for this callee: an unproven root keeps the
+     *       suspension-aware route, and its real suspension is covered by
+     *       capturedRouteSuspensionKeepsTheOwnerHomeForTheResumedReturn.
+     *   <li>OWNED_PHYSICAL: the general FunctionDirectInvokeNode owns a fresh
+     *       materialized home, consumes the ^ that targets it and closes it.
+     *       The Task-owned ownership regression remains
+     *       identityRoutesKeepCapturedHomeTaskAndReturnOwnershipIndependent.
+     * </ul>
+     */
+    @Test
+    void returnHomeRoutesKeepResultsHomesAndOwnership() throws Exception {
+        withCore(module -> {
+            // UNOBSERVABLE
+            evaluate("make: () => { (value) => { value } }\n", "i115b-route-unobservable.protos", module);
+            ProtosClosureValue identity = closure("make()\n", module);
+            RootCallTarget identityTarget = directTarget(identity);
+            ProtosBytecodeRootNode identityRoot =
+                    (ProtosBytecodeRootNode) identityTarget.getRootNode();
+            assertTrue(identityRoot.provablyNonSuspendingBody(), "established proven fixture");
+            assertEquals(ProtosFunctionCallDispatchers.ReturnHomeMode.UNOBSERVABLE,
+                    ProtosFunctionCallDispatchers.classifyReturnHome(identity, identityRoot));
+            ProtosClosureValue callerClosure = closure("() => 0", module);
+            ProtosActivation caller = ProtosActivation.forClosureInvocation(
+                    callerClosure, List.of(), module.prelude().orElseThrow());
+            var frame = com.oracle.truffle.api.Truffle.getRuntime().createVirtualFrame(
+                    ProtosFrameArguments.publishedInvocation(caller, directTarget(callerClosure)),
+                    com.oracle.truffle.api.frame.FrameDescriptor.newBuilder().build());
+            Object[] unobservable =
+                    ProtosFrameArguments.functionCallArguments(new Object[] {SUPPLIED});
+            Object identityOutcome = ProtosFunctionCallDispatchers.invokeUnobservableHome(
+                    frame, null,
+                    com.oracle.truffle.api.profiles.InlinedConditionProfile.getUncached(),
+                    com.oracle.truffle.api.nodes.DirectCallNode.create(identityTarget),
+                    identityRoot, identity, unobservable, null);
+            assertSame(SUPPLIED, identityOutcome, "exact result");
+            assertSame(ProtosReturnHome.unobservable(), unobservable[4]);
+            if (!identityRoot.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE)
+                    && !identityRoot.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION)) {
+                assertSame(null, unobservable[3], "an ordinary result publishes no caller");
+            }
+
+            // CAPTURED
+            List<ProtosReturnHome> captured = new ArrayList<>();
+            module.context().createLocalSlot("viaCapturedRoute", ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> {
+                        ProtosClosureValue callee = (ProtosClosureValue) supplied.get(0);
+                        RootCallTarget target = directTarget(callee);
+                        ProtosBytecodeRootNode root = (ProtosBytecodeRootNode) target.getRootNode();
+                        assertEquals(ProtosFunctionCallDispatchers.ReturnHomeMode.CAPTURED,
+                                ProtosFunctionCallDispatchers.classifyReturnHome(callee, root));
+                        ProtosReturnHome home = callee.capturedReturnHomeOrNullForRuntime();
+                        assertTrue(home.isMaterialized());
+                        assertTrue(home.isActive());
+                        Object[] arguments = ProtosFrameArguments.functionCallArguments(
+                                new Object[] {supplied.get(1)});
+                        Object outcome = ProtosFunctionCallDispatchers.invokeCapturedHome(
+                                null, null,
+                                com.oracle.truffle.api.profiles.InlinedConditionProfile.getUncached(),
+                                com.oracle.truffle.api.nodes.DirectCallNode.create(target),
+                                root, callee, arguments, activation);
+                        assertFalse(ProtosTailCallContinuation.isSuspended(outcome));
+                        assertInteger(2, outcome);
+                        assertSame(home, arguments[4], "the exact captured home");
+                        assertTrue(home.isActive(), "the callee never closes the owner's home");
+                        captured.add(home);
+                        return ProtosNullValue.INSTANCE;
+                    }));
+            evaluate("""
+                    capturedOwner: () => {
+                        escape: (flag) => {
+                            flag.ifTrue() { ^1 }
+                            2
+                        }
+                        viaCapturedRoute(escape, false)
+                        escape(true)
+                        0
+                    }
+                    """, "i115b-route-captured.protos", module);
+            for (int round = 0; round < 2; round++) {
+                captured.clear();
+                assertInteger(1, evaluate("capturedOwner()\n", "i115b-route-captured-run.protos", module));
+                assertEquals(1, captured.size());
+                assertFalse(captured.get(0).isActive(), "only the owner closed its home");
+            }
+
+            // OWNED_PHYSICAL
+            ProtosClosureValue owner = closure(
+                    "(value) => { escape: () => { ^value }\n escape()\n 0 }\n", module);
+            RootCallTarget ownerTarget = directTarget(owner);
+            ProtosBytecodeRootNode ownerRoot = (ProtosBytecodeRootNode) ownerTarget.getRootNode();
+            assertEquals(ProtosFunctionCallDispatchers.ReturnHomeMode.OWNED_PHYSICAL,
+                    ProtosFunctionCallDispatchers.classifyReturnHome(owner, ownerRoot));
+            for (int round = 0; round < 2; round++) {
+                Object[] owned = ProtosFrameArguments.functionCallArguments(new Object[] {SUPPLIED});
+                Object ownedOutcome = ProtosFunctionCallDispatchersFactory.FunctionDirectInvokeNodeGen
+                        .getUncached()
+                        .execute(null, null,
+                                com.oracle.truffle.api.nodes.DirectCallNode.create(ownerTarget),
+                                ownerRoot, owner, owned, module);
+                assertSame(SUPPLIED, ownedOutcome, "the owned home consumed its ^");
+                ProtosReturnHome home = assertInstanceOf(ProtosReturnHome.class, owned[4]);
+                assertTrue(home.isMaterialized());
+                assertFalse(home.isActive(), "the owner closed its home");
             }
         });
     }

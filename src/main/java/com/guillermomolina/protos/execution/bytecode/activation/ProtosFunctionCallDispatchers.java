@@ -982,6 +982,9 @@ final class ProtosFunctionCallDispatchers {
                 frame, arguments, explicitCaller,
                 inliningTarget, taskPresence);
         Object outcome = callNode.call(arguments);
+        if (callee != null && callee.provablyNonSuspendingBody()) {
+            return outcome;
+        }
         return sealIfSuspended(frame, arguments, explicitCaller, outcome);
     }
 
@@ -1008,6 +1011,9 @@ final class ProtosFunctionCallDispatchers {
                 frame, arguments, explicitCaller,
                 inliningTarget, taskPresence);
         Object outcome = callNode.call(arguments);
+        if (callee != null && callee.provablyNonSuspendingBody()) {
+            return outcome;
+        }
         return sealIfSuspended(frame, arguments, explicitCaller, outcome);
     }
 
@@ -1121,6 +1127,9 @@ final class ProtosFunctionCallDispatchers {
                     return completeOwnedTransfer(home, transfer);
                 }
                 throw transfer;
+            }
+            if (callee != null && callee.provablyNonSuspendingBody()) {
+                return outcome;
             }
             return sealIfSuspended(frame, arguments, explicitCaller, outcome);
         }

@@ -255,6 +255,44 @@ final class ProtosI107ContinuationEmissionTest {
         }
     }
 
+    /**
+     * The effective-root proof is a compilation constant for specialized
+     * direct call sites, so it must be compilation-final, published once by
+     * the lowering and stable across completion of the Bytecode root group;
+     * every unknown or terminal-call body stays unproven. Positive cases are
+     * restricted to fixtures already classified as proven by
+     * generalSafeBodiesPublishTheEffectiveRootCapability; this test asserts
+     * the field's stability, not new proof rules.
+     */
+    @Test
+    void effectiveRootNonSuspensionProofIsCompilationFinalAndConservative() throws Exception {
+        java.lang.reflect.Field field = ProtosBytecodeRootNode.class
+                .getDeclaredField("provablyNonSuspendingBody");
+        assertTrue(field.isAnnotationPresent(
+                com.oracle.truffle.api.CompilerDirectives.CompilationFinal.class));
+        record Case(String source, boolean proven) {}
+        List<Case> cases = List.of(
+                new Case("() => { 7 }", true),
+                new Case("(value: 7) => { value }", true),
+                new Case("() => { a: 1\n b: a\n b }", true),
+                new Case("(f) => { f.value() }", false),
+                new Case("(f) => { f() }", false),
+                new Case("(f) => { f(1) }", false));
+        try (Harness normal = new Harness(false)) {
+            normal.run(() -> {
+                for (Case test : cases) {
+                    ProtosBytecodeRootNode activation =
+                            activationRoot(compile(test.source(), "proof"));
+                    boolean published = activation.provablyNonSuspendingBody();
+                    assertEquals(test.proven(), published, test.source());
+                    activation.getRootNodes().ensureComplete();
+                    assertEquals(published, activation.provablyNonSuspendingBody(),
+                            test.source());
+                }
+            });
+        }
+    }
+
     /** Guarded sites keep the complete fallback even when the expected body is trivial. */
     @Test
     void dynamicSelectionsKeepTheirPhysicalFallback() throws Exception {

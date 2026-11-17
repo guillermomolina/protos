@@ -559,6 +559,95 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
         });
     }
 
+    /**
+     * The shared direct dispatcher returns a proven root's outcome without
+     * suspension classification, yet leaves the B5 header exactly as the
+     * unproven route does: supplied order, ReturnHome, inherited Task, caller
+     * payload and publication state, and the raw (unprojected) result.
+     *
+     * <p>Scope: {@link #dispatchDirect} exercises only the uncached {@code
+     * FunctionDirectInvokeNode} (the OWNED_PHYSICAL/general route); it does
+     * not cover the UNOBSERVABLE or CAPTURED routes selected by the cached
+     * identity PIC. Those are covered by ProtosI115BDeferredCallerTest.
+     *
+     * <p>The unknown root stays on the suspension-aware route, but its
+     * synchronous completion here only shows that its result and header are
+     * unchanged; it does not exercise the suspension-sealing branch. A real
+     * suspension through this boundary is covered by
+     * suspendedB5KeepsItsCallerTaskAndOwnedHomeThroughCompletionOrCancellation.
+     */
+    @Test
+    void provenDirectDispatchKeepsTheB5HeaderAndRawResult() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue proven =
+                    parsedClosure("(x, y) => { x }", "g7-proven-dispatch.protos", module);
+            ProtosClosureValue unknown =
+                    parsedClosure("(x, y) => { x + y }", "g7-unknown-dispatch.protos", module);
+            assertTrue(provablyNonSuspending(fastDirect(proven, module, integer(1), integer(2))));
+            assertFalse(provablyNonSuspending(fastDirect(unknown, module, integer(1), integer(2))));
+
+            Object[] supplied = {integer(8), integer(9)};
+            Object[] arguments = ProtosFrameArguments.functionCallArguments(supplied.clone());
+            Object outcome = dispatchDirect(proven, arguments, module);
+            DirectEntry reference = fastDirect(proven, module, supplied.clone());
+            Object expected = ProtosDispatchTestSupport.enterRaw(reference);
+            assertFalse(ProtosTailCallContinuation.isSuspended(outcome));
+            assertEquals(expected.getClass(), outcome.getClass(), "raw representation");
+            assertEquals(expected, outcome);
+            assertEquals("8", integerValue(ProtosDispatchTestSupport.enter(
+                    fastDirect(proven, module, supplied.clone()))));
+            assertEquals(ProtosFrameArguments.HEADER_LENGTH + 2, arguments.length);
+            assertSame(supplied[0], arguments[ProtosFrameArguments.HEADER_LENGTH]);
+            assertSame(supplied[1], arguments[ProtosFrameArguments.HEADER_LENGTH + 1]);
+            assertSame(reference.targetArguments()[4], arguments[4], "same ReturnHome mode");
+            assertSame(ProtosReturnHome.unobservable(), arguments[4]);
+            assertNull(arguments[2], "no Task is invented");
+            assertSame(module, arguments[3], "caller payload is unchanged");
+            assertEquals(ProtosFrameArguments.hasPublishedActivation(reference.targetArguments()),
+                    ProtosFrameArguments.hasPublishedActivation(arguments));
+
+            Object[] unknownArguments = ProtosFrameArguments.functionCallArguments(supplied.clone());
+            Object unknownOutcome = dispatchDirect(unknown, unknownArguments, module);
+            // Synchronous completion: result and header only; the sealing
+            // branch is not reached here (see the real-suspension test).
+            assertFalse(ProtosTailCallContinuation.isSuspended(unknownOutcome));
+            assertEquals("17", integerValue(
+                    com.guillermomolina.protos.runtime.ProtosNumericValueSupport.guestValue(unknownOutcome)));
+            assertSame(module, unknownArguments[3]);
+
+            AtomicReference<Object[]> taskArguments = new AtomicReference<>();
+            AtomicReference<Object> taskOutcome = new AtomicReference<>();
+            ProtosTask task = module.executionDomain().createTask(null, current -> {
+                Object[] owned = ProtosFrameArguments.taskFunctionCallArguments(
+                        current, supplied.clone());
+                taskArguments.set(owned);
+                taskOutcome.set(dispatchDirect(proven, owned, module));
+            });
+            assertTrue(module.executionDomain().dispatchOne());
+            assertSame(task, taskArguments.get()[2], "the inherited Task is retained");
+            assertSame(module, taskArguments.get()[3]);
+            assertFalse(ProtosTailCallContinuation.isSuspended(taskOutcome.get()));
+            assertEquals("8", integerValue(
+                    com.guillermomolina.protos.runtime.ProtosNumericValueSupport.guestValue(taskOutcome.get())));
+        });
+    }
+
+    /**
+     * One invocation through the uncached {@code FunctionDirectInvokeNode},
+     * with an explicit caller and no frame. It does not select among the
+     * cached identity-PIC routes.
+     */
+    private static Object dispatchDirect(
+            ProtosClosureValue closure, Object[] arguments, ProtosActivation caller) {
+        RootCallTarget target = ProtosDispatchTestSupport.target(closure);
+        return ProtosFunctionCallDispatchersFactory.FunctionDirectInvokeNodeGen
+                .getUncached()
+                .execute(null, null,
+                        com.oracle.truffle.api.nodes.DirectCallNode.create(target),
+                        (ProtosBytecodeRootNode) target.getRootNode(),
+                        closure, arguments, caller);
+    }
+
     @Test
     void perf038HLiteralOnlyCallHasProvenNonSuspendingEntry()
             throws Exception {
