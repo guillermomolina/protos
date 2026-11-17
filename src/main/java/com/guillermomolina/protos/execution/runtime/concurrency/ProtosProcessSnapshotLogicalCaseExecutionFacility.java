@@ -28,10 +28,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 
 /**
  * TOOL009-E / D178 suite-native Logical Case protocol adapter for the Process-snapshot Test Tool
@@ -61,7 +59,7 @@ public final class ProtosProcessSnapshotLogicalCaseExecutionFacility implements 
     private final List<ProtosTestToolFileSelectionFacility.CorpusSourceRoot>
             sourceRoots;
     private final ProtosAsyncExactExecutionFacility.Submission submission;
-    private final Set<Operation> outstanding = new LinkedHashSet<>();
+    private final ArrayList<Operation> outstanding = new ArrayList<>();
     private boolean closed;
 
     private ProtosProcessSnapshotLogicalCaseExecutionFacility(
@@ -230,12 +228,28 @@ public final class ProtosProcessSnapshotLogicalCaseExecutionFacility implements 
             throw new IllegalStateException(
                     "process-snapshot logical Case execution facility is closed");
         }
-        outstanding.add(Objects.requireNonNull(operation, "operation"));
+        Objects.requireNonNull(operation, "operation");
+        if (indexOfOutstanding(operation) < 0) {
+            outstanding.add(operation);
+        }
+    }
+
+    /* Must be called while holding this facility's monitor. */
+    private int indexOfOutstanding(Operation operation) {
+        for (int i = 0; i < outstanding.size(); i++) {
+            if (outstanding.get(i) == operation) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     private void operationTerminal(Operation operation) {
         synchronized (this) {
-            outstanding.remove(operation);
+            int index = indexOfOutstanding(operation);
+            if (index >= 0) {
+                outstanding.remove(index);
+            }
             notifyAll();
         }
     }

@@ -657,6 +657,34 @@ final class ProtosPlat070IoCPrimeTransferAccountingTest {
     }
 
     @Test
+    void bufferedWriterFirstCallArgumentsArePreparedAsExactSizeArrays() throws Exception {
+        String writer = read("ProtosBufferedByteWriterCPrimeExecution");
+        assertFalse(writer.contains("List.of("), "no list-backed argument preparation");
+        assertFalse(writer.contains("List.copyOf("), "no list-backed argument copy");
+        assertTrue(writer.contains("private final Object[] firstArguments;"));
+        assertTrue(writer.contains("Object[] firstArguments) {"));
+        assertTrue(writer.contains("Object[] copy = new Object[firstArguments.length];"),
+                "the prepared arguments are an independent exact-size copy");
+        assertTrue(writer.contains(
+                "? new Object[] {Objects.requireNonNull(pendingPayload, \"pendingPayload\")}"),
+                "a pending write prepares exactly one payload argument");
+        assertTrue(writer.contains(": new Object[0];"), "a bare flush prepares zero arguments");
+
+        String root = Files.readString(
+                Path.of(
+                        "src/main/java/com/guillermomolina/protos/execution/bytecode/activation",
+                        "ProtosBytecodeRootNode.java"),
+                StandardCharsets.UTF_8);
+        int at = root.indexOf("public static ProtosCallRequest bufferedWriterFirst(");
+        assertTrue(at > 0);
+        int end = root.indexOf("@Specialization", at);
+        String specialization = root.substring(at, end);
+        assertFalse(specialization.contains("List."), "no intermediate list conversion");
+        assertTrue(specialization.contains("new Object[0]"));
+        assertTrue(specialization.contains("state.firstArguments()"));
+    }
+
+    @Test
     void hostIoAndSchedulerEntriesAreBoundariesWhileGuestControlStaysCompilable()
             throws Exception {
         String main = "src/main/java/com/guillermomolina/protos/";

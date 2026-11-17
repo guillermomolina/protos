@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.145-SNAPSHOT
+
+- **I115.** Use array-backed BufferedWriter arguments and remove hashed outstanding-operation removal from process logical-case execution. Extend transfer-accounting and facility regressions.
+
 ## 0.4.144-SNAPSHOT
 
 - **I115.** Resolve Native Image compilation paths in interop member names, Actor termination and text I/O. Extend transfer-accounting, termination, interop and gate regression coverage.

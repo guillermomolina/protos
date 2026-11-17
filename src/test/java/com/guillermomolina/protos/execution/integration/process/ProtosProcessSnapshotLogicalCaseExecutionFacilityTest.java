@@ -17,9 +17,12 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
@@ -34,6 +37,8 @@ import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -250,6 +255,122 @@ final class ProtosProcessSnapshotLogicalCaseExecutionFacilityTest {
                         Boolean.TRUE, observation.readLocalSlot("value").orElseThrow());
             }
         }
+    }
+
+    @Test
+    void outstandingOperationsTerminalizeIndependentlyAndCloseWaitsForTheRemainingOne(
+            @org.junit.jupiter.api.io.TempDir Path root) throws Exception {
+        ManualSubmission submission = new ManualSubmission();
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, fallbackResolver());
+        ProtosActivation activation = com.guillermomolina.protos.execution.ProtosTestExecutionSupport.toolHarnessActivation(prelude, "test");
+        String source = identitySource();
+
+        Files.writeString(
+                root.resolve("snapshot-identity.protos"),
+                source,
+                StandardCharsets.UTF_8);
+
+        ProtosProcessSnapshotLogicalCaseExecutionFacility facility =
+                ProtosProcessSnapshotLogicalCaseExecutionFacility.install(
+                        activation,
+                        prelude,
+                        List.of(
+                                new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
+                                        "test-corpus",
+                                        root)),
+                        submission);
+
+        ProtosFutureValue first =
+                invoke(prelude, activation, source, List.of("identity"), "identity");
+        ProtosFutureValue second =
+                invoke(prelude, activation, source, List.of("identity"), "identity");
+        ProtosFutureValue third =
+                invoke(prelude, activation, source, List.of("identity"), "identity");
+
+        assertEquals(3, submission.queuedCount());
+
+        // Cancel the middle operation before it starts: it is withdrawn by identity
+        // while the first and third remain outstanding.
+        assertTrue(second.cancelRequest());
+        assertEquals(ProtosFutureValue.State.CANCELLED, second.state());
+        assertFalse(second.cancelRequest());
+
+        // Run the first operation; the withdrawn job is skipped by the queue.
+        assertTrue(submission.runNext());
+        assertTrue(activation.executionDomain().dispatchOne());
+        assertEquals(ProtosFutureValue.State.RESOLVED, first.state());
+
+        // A repeated terminalization request on settled operations has no effect on
+        // the still-outstanding third operation.
+        assertFalse(first.cancelRequest());
+        assertFalse(second.cancelRequest());
+        assertEquals(ProtosFutureValue.State.PENDING, third.state());
+        assertFalse(submission.runNext());
+        assertEquals(1, submission.queuedCount());
+
+        AtomicReference<Throwable> closeFailure = new AtomicReference<>();
+        Thread closer =
+                new Thread(
+                        () -> {
+                            try {
+                                facility.close();
+                            } catch (Throwable failure) {
+                                closeFailure.set(failure);
+                            }
+                        },
+                        "logical-case-facility-close");
+        // Daemon only so a regression cannot keep the test JVM alive; termination is
+        // still asserted explicitly below.
+        closer.setDaemon(true);
+        closer.start();
+
+        try {
+            // close() must block on the remaining outstanding operation. The deadline
+            // is only a safety bound against a regression, not a synchronization means.
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+            Thread.State observed;
+            while ((observed = closer.getState()) != Thread.State.WAITING) {
+                if (!closer.isAlive()) {
+                    fail("close() returned while an operation was outstanding"
+                            + (closeFailure.get() == null
+                                    ? ""
+                                    : ": " + closeFailure.get()));
+                }
+                if (System.nanoTime() - deadline > 0) {
+                    fail("close() did not block on the outstanding operation within 10s;"
+                            + " observed thread state " + observed);
+                }
+                Thread.onSpinWait();
+            }
+            assertTrue(closer.isAlive());
+
+            assertTrue(submission.runNext());
+
+            closer.join(TimeUnit.SECONDS.toMillis(10));
+            assertFalse(
+                    closer.isAlive(),
+                    "close() did not return within 10s after the last operation terminated;"
+                            + " observed thread state " + closer.getState());
+            assertNull(closeFailure.get(), () -> "close() failed: " + closeFailure.get());
+        } finally {
+            try {
+                // On an assertion failure, drain every remaining job, including
+                // withdrawn ones, so close() can return. runNext() returns false for a
+                // withdrawn job even when later jobs are still queued.
+                while (submission.queuedCount() > 0) {
+                    submission.runNext();
+                }
+            } finally {
+                if (closer.isAlive()) {
+                    closer.interrupt();
+                }
+            }
+        }
+
+        assertTrue(activation.executionDomain().dispatchOne());
+        assertEquals(ProtosFutureValue.State.RESOLVED, third.state());
+        assertEquals(ProtosFutureValue.State.CANCELLED, second.state());
+        assertEquals(ProtosFutureValue.State.RESOLVED, first.state());
     }
 
     private static String identitySource() {

@@ -11,7 +11,6 @@ import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.bytecode.BytecodeConfig;
 import com.oracle.truffle.api.bytecode.BytecodeLocal;
 import com.oracle.truffle.api.bytecode.BytecodeRootNodes;
-import java.util.List;
 import java.util.Objects;
 
 /**
@@ -106,14 +105,18 @@ public final class ProtosBufferedByteWriterCPrimeExecution {
                 Object target,
                 boolean writeFirst,
                 int pendingLength,
-                List<?> firstArguments) {
+                Object[] firstArguments) {
             this.operation = Objects.requireNonNull(operation, "operation");
             this.writer = Objects.requireNonNull(writer, "writer");
             this.target = Objects.requireNonNull(target, "target");
             this.writeFirst = writeFirst;
             this.pendingLength = pendingLength;
-            this.firstArguments =
-                    List.copyOf(Objects.requireNonNull(firstArguments, "firstArguments")).toArray();
+            Objects.requireNonNull(firstArguments, "firstArguments");
+            Object[] copy = new Object[firstArguments.length];
+            for (int i = 0; i < firstArguments.length; i++) {
+                copy[i] = Objects.requireNonNull(firstArguments[i], "firstArguments element");
+            }
+            this.firstArguments = copy;
         }
 
         Object target() {
@@ -522,10 +525,10 @@ public final class ProtosBufferedByteWriterCPrimeExecution {
         Objects.requireNonNull(pending, "pending");
 
         boolean writeFirst = pending.length > 0;
-        List<?> firstArguments =
+        Object[] firstArguments =
                 writeFirst
-                        ? List.of(Objects.requireNonNull(pendingPayload, "pendingPayload"))
-                        : List.of();
+                        ? new Object[] {Objects.requireNonNull(pendingPayload, "pendingPayload")}
+                        : new Object[0];
 
         CallState state =
                 new CallState(
