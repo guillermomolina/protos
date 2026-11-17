@@ -191,6 +191,47 @@ class ProtosMapMatchProtocolTest {
     }
 
     @Test
+    void snapshotsSurviveRemovalAndInsertionDuringChildren() throws Exception {
+        ProtosPrelude prelude = core();
+
+        Object result =
+                evaluate(
+                        prelude,
+                        """
+                        Never: {
+                            match: (subject) => false
+                        }
+
+                        Second: {
+                            match: (subject) => subject == 2
+                        }
+
+                        matcher: Map()
+                        subject: Map()
+
+                        First: {
+                            match: (value) => {
+                                matcher.remove("second")
+                                matcher["third"] = Never
+                                subject.remove("second")
+                                subject["third"] = 3
+                                true
+                            }
+                        }
+
+                        matcher["first"] = First
+                        matcher["second"] = Second
+
+                        subject["first"] = 1
+                        subject["second"] = 2
+
+                        matcher.match(subject)
+                        """);
+
+        assertSame(Boolean.TRUE, result);
+    }
+
+    @Test
     void usesQuerySideEqualityForSubjectAssociationSearch() throws Exception {
         ProtosPrelude prelude = core();
 

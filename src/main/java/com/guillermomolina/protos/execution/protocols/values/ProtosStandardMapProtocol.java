@@ -75,20 +75,19 @@ public final class ProtosStandardMapProtocol {
   }
  }
 
- static List<StableAssociation> stableSnapshot(ProtosMapValue map) {
+ static StableAssociation[] stableSnapshot(ProtosMapValue map) {
   Objects.requireNonNull(map, "map");
-  List<ProtosMapValue.Entry> entries = map.keyedSnapshot();
-  java.util.ArrayList<StableAssociation> snapshot =
-          new java.util.ArrayList<>(entries.size());
-  for (int index = 0; index < entries.size(); index++) {
-   ProtosMapValue.Entry entry = entries.get(index);
-   snapshot.add(
+  ProtosMapValue.Entry[] entries = map.keyedEntrySnapshotForRuntime();
+  StableAssociation[] snapshot = new StableAssociation[entries.length];
+  for (int index = 0; index < entries.length; index++) {
+   ProtosMapValue.Entry entry = entries[index];
+   snapshot[index] =
            new StableAssociation(
                    entry.key(),
                    entry.recordedHash(),
-                   entry.value()));
+                   entry.value());
   }
-  return java.util.Collections.unmodifiableList(snapshot);
+  return snapshot;
  }
 
  static ProtosNumericHashKey queryHash(
@@ -100,12 +99,12 @@ public final class ProtosStandardMapProtocol {
 
  static int findStableAssociationIndex(
          ProtosMapValue map,
-         List<StableAssociation> snapshot,
+         StableAssociation[] snapshot,
          Object queryKey,
          ProtosNumericHashKey queryHash,
          ProtosActivation activation) {
-  for (int index = 0; index < snapshot.size(); index++) {
-   StableAssociation association = snapshot.get(index);
+  for (int index = 0; index < snapshot.length; index++) {
+   StableAssociation association = snapshot[index];
    if (matchesStoredKey(
            map,
            queryKey,
@@ -398,8 +397,8 @@ public final class ProtosStandardMapProtocol {
    return Boolean.FALSE;
   }
 
-  List<StableAssociation> matcherSnapshot = stableSnapshot(matcher);
-  List<StableAssociation> subjectSnapshot = stableSnapshot(subject);
+  StableAssociation[] matcherSnapshot = stableSnapshot(matcher);
+  StableAssociation[] subjectSnapshot = stableSnapshot(subject);
 
   List<Object> childMatchers = new ArrayList<>();
   List<Object> selectedValues = new ArrayList<>();
@@ -418,7 +417,7 @@ public final class ProtosStandardMapProtocol {
    }
 
    childMatchers.add(requirement.value());
-   selectedValues.add(subjectSnapshot.get(subjectIndex).value());
+   selectedValues.add(subjectSnapshot[subjectIndex].value());
   }
 
   List<Object> captures = new ArrayList<>();

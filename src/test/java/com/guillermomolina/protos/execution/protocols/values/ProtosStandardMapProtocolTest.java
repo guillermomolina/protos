@@ -2,6 +2,7 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -149,21 +150,33 @@ class ProtosStandardMapProtocolTest {
                         + "m",
                 activation);
 
-        List<ProtosStandardMapProtocol.StableAssociation> snapshot =
+        ProtosStandardMapProtocol.StableAssociation[] snapshot =
                 ProtosStandardMapProtocol.stableSnapshot(map);
         List<ProtosMapValue.Entry> entries = map.keyedSnapshot();
-        assertEquals(3, snapshot.size());
+        assertEquals(3, snapshot.length);
         assertEquals(List.of(22L, 11L, 33L), hashSources(snapshot));
-        for (int index = 0; index < snapshot.size(); index++) {
-            ProtosStandardMapProtocol.StableAssociation association = snapshot.get(index);
+        for (int index = 0; index < snapshot.length; index++) {
+            ProtosStandardMapProtocol.StableAssociation association = snapshot[index];
             assertSame(entries.get(index).key(), association.key());
             assertSame(entries.get(index).recordedHash(), association.recordedHash());
             assertSame(entries.get(index).value(), association.value());
         }
-        Object capturedReplacedValue = snapshot.get(1).value();
-        Object capturedRemovedValue = snapshot.get(2).value();
-        assertThrows(UnsupportedOperationException.class, () -> snapshot.remove(0));
+        Object capturedKey = snapshot[0].key();
+        ProtosNumericHashKey capturedHash = snapshot[0].recordedHash();
+        Object capturedReplacedValue = snapshot[1].value();
+        Object capturedRemovedValue = snapshot[2].value();
         assertThrows(UnsupportedOperationException.class, () -> entries.remove(0));
+
+        ProtosMapValue.Entry[] runtimeEntries = map.keyedEntrySnapshotForRuntime();
+        assertNotSame(runtimeEntries, map.keyedEntrySnapshotForRuntime());
+        assertNotSame(snapshot, ProtosStandardMapProtocol.stableSnapshot(map));
+        runtimeEntries[0] = null;
+        ProtosStandardMapProtocol.StableAssociation overwritten = snapshot[0];
+        snapshot[0] = null;
+        assertEquals(3, map.keyedSize());
+        assertSame(entries.get(0), map.keyedEntrySnapshotForRuntime()[0]);
+        assertSame(capturedKey, ProtosStandardMapProtocol.stableSnapshot(map)[0].key());
+        snapshot[0] = overwritten;
 
         ProtosTestExecutionSupport.evaluate(
                 "k2.h = 99\n"
@@ -172,18 +185,29 @@ class ProtosStandardMapProtocolTest {
                         + "m[make(4, 44)] = \"d\"\n",
                 activation);
 
-        assertEquals(3, snapshot.size());
+        assertEquals(3, snapshot.length);
         assertEquals(List.of(22L, 11L, 33L), hashSources(snapshot));
-        assertSame(capturedReplacedValue, snapshot.get(1).value());
-        assertSame(capturedRemovedValue, snapshot.get(2).value());
+        assertSame(capturedKey, snapshot[0].key());
+        assertSame(capturedHash, snapshot[0].recordedHash());
+        assertSame(capturedReplacedValue, snapshot[1].value());
+        assertSame(capturedRemovedValue, snapshot[2].value());
         assertEquals(3, entries.size());
+
+        ProtosStandardMapProtocol.StableAssociation[] later =
+                ProtosStandardMapProtocol.stableSnapshot(map);
+        assertEquals(3, later.length);
+        assertEquals(List.of(22L, 11L, 44L), hashSources(later));
+        assertSame(capturedKey, later[0].key());
+        assertNotSame(capturedReplacedValue, later[1].value());
+        assertSame(map.keyedSnapshot().get(1).value(), later[1].value());
+        assertSame(map.keyedSnapshot().get(2).value(), later[2].value());
     }
 
     private static List<Long> hashSources(
-            List<ProtosStandardMapProtocol.StableAssociation> snapshot) {
-        Long[] hashes = new Long[snapshot.size()];
+            ProtosStandardMapProtocol.StableAssociation[] snapshot) {
+        Long[] hashes = new Long[snapshot.length];
         for (int index = 0; index < hashes.length; index++) {
-            ProtosNumericHashKey recorded = snapshot.get(index).recordedHash();
+            ProtosNumericHashKey recorded = snapshot[index].recordedHash();
             for (long candidate : new long[] {11L, 22L, 33L, 44L, 99L}) {
                 if (recorded.equals(ProtosNumericHashKey.ofLong(candidate))) {
                     hashes[index] = candidate;

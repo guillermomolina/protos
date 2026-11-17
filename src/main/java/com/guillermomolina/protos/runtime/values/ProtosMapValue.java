@@ -164,6 +164,23 @@ public final class ProtosMapValue extends ProtosObjectValue {
         return Collections.unmodifiableList(snapshot);
     }
 
+    /**
+     * Independent runtime snapshot of the physical entries in insertion order.
+     * The returned array is freshly allocated and never shares storage with
+     * this Map.
+     */
+    public Entry[] keyedEntrySnapshotForRuntime() {
+        Entry[] snapshot = new Entry[size];
+        int next = 0;
+        for (int index = 0; index < orderUsed; index++) {
+            Entry entry = order[index];
+            if (entry != null) {
+                snapshot[next++] = entry;
+            }
+        }
+        return snapshot;
+    }
+
     public Candidates candidatesForRecordedHash(ProtosNumericHashKey hash) {
         Candidates candidates = lookupBucket(Objects.requireNonNull(hash));
         return candidates == null ? Candidates.NONE : candidates;

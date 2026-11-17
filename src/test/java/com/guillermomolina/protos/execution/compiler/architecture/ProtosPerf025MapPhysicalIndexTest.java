@@ -342,7 +342,7 @@ final class ProtosPerf025MapPhysicalIndexTest {
 
         assertTrue(
                 identityMapProtocol.contains(
-                        "m.candidatesForRecordedIdentityHash(h)"));
+                        "m.findIdentical(k,h)"));
         assertFalse(
                 identityMapProtocol.contains(
                         "m.keyedSnapshot()"));
@@ -362,8 +362,17 @@ final class ProtosPerf025MapPhysicalIndexTest {
 
         assertTrue(
                 mapProtocol.contains(
-                        "List<ProtosMapValue.Entry> entries = map.keyedSnapshot();"),
+                        "ProtosMapValue.Entry[] entries = map.keyedEntrySnapshotForRuntime();"),
                 "Map.match stable snapshot remains intentionally independent");
+
+        int stableStart = mapProtocol.indexOf("static StableAssociation[] stableSnapshot(");
+        assertTrue(stableStart >= 0, "Map.match stable snapshot is a typed array");
+        int stableEnd = mapProtocol.indexOf("static ProtosNumericHashKey queryHash(", stableStart);
+        assertTrue(stableEnd > stableStart);
+        String stableSnapshot = mapProtocol.substring(stableStart, stableEnd);
+        assertFalse(stableSnapshot.contains("Collections.unmodifiableList"));
+        assertFalse(stableSnapshot.contains("List.copyOf"));
+        assertFalse(stableSnapshot.contains("keyedSnapshot()"));
     }
 
     private static int occurrences(String source, String needle) {

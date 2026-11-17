@@ -36,8 +36,8 @@ final class ProtosStructuredMapQueryCalls {
     static final class PreparedMapMatchCall {
         private final ProtosActivation activation;
         private final ProtosMapValue subject;
-        private final List<ProtosStandardMapProtocol.StableAssociation> matcherSnapshot;
-        private final List<ProtosStandardMapProtocol.StableAssociation> subjectSnapshot;
+        private final ProtosStandardMapProtocol.StableAssociation[] matcherSnapshot;
+        private final ProtosStandardMapProtocol.StableAssociation[] subjectSnapshot;
         private final List<Object> childMatchers = new ArrayList<>();
         private final List<Object> selectedValues = new ArrayList<>();
         private final List<Object> captures = new ArrayList<>();
@@ -72,8 +72,8 @@ final class ProtosStructuredMapQueryCalls {
             Object subjectValue = supplied[0];
             if (!(subjectValue instanceof ProtosMapValue subjectMap)) {
                 subject = null;
-                matcherSnapshot = List.of();
-                subjectSnapshot = List.of();
+                matcherSnapshot = new ProtosStandardMapProtocol.StableAssociation[0];
+                subjectSnapshot = new ProtosStandardMapProtocol.StableAssociation[0];
                 mismatch = true;
                 return;
             }
@@ -87,7 +87,7 @@ final class ProtosStructuredMapQueryCalls {
 
         boolean hasRequirement() {
             return !mismatch
-                    && requirementIndex < matcherSnapshot.size();
+                    && requirementIndex < matcherSnapshot.length;
         }
 
         void enterComparison() {
@@ -119,7 +119,7 @@ final class ProtosStructuredMapQueryCalls {
             }
 
             return ProtosCallRequest.send(
-                    matcherSnapshot.get(requirementIndex).key(),
+                    matcherSnapshot[requirementIndex].key(),
                     "hash",
                     activation,
                     new Object[0]);
@@ -151,14 +151,14 @@ final class ProtosStructuredMapQueryCalls {
                 return false;
             }
 
-            while (candidateIndex < subjectSnapshot.size()
-                    && !subjectSnapshot.get(candidateIndex)
+            while (candidateIndex < subjectSnapshot.length
+                    && !subjectSnapshot[candidateIndex]
                             .recordedHash()
                             .equals(queryHash)) {
                 candidateIndex++;
             }
 
-            return candidateIndex < subjectSnapshot.size();
+            return candidateIndex < subjectSnapshot.length;
         }
 
         ProtosCallRequest prepareEquality() {
@@ -168,10 +168,10 @@ final class ProtosStructuredMapQueryCalls {
             }
 
             return ProtosCallRequest.send(
-                    matcherSnapshot.get(requirementIndex).key(),
+                    matcherSnapshot[requirementIndex].key(),
                     "==",
                     activation,
-                    new Object[] {subjectSnapshot.get(candidateIndex).key()});
+                    new Object[] {subjectSnapshot[candidateIndex].key()});
         }
 
         void acceptEquality(Object result) {
@@ -191,7 +191,7 @@ final class ProtosStructuredMapQueryCalls {
 
             if (equal) {
                 selectedAssociation =
-                        subjectSnapshot.get(candidateIndex);
+                        subjectSnapshot[candidateIndex];
             } else {
                 candidateIndex++;
             }
@@ -215,7 +215,7 @@ final class ProtosStructuredMapQueryCalls {
             }
 
             ProtosStandardMapProtocol.StableAssociation requirement =
-                    matcherSnapshot.get(requirementIndex);
+                    matcherSnapshot[requirementIndex];
 
             childMatchers.add(requirement.value());
             selectedValues.add(selectedAssociation.value());
