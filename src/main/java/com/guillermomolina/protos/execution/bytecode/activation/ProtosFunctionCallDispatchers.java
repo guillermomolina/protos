@@ -659,10 +659,11 @@ final class ProtosFunctionCallDispatchers {
                         ProtosBytecodeRootNode cachedCallee,
                 @Cached("cachedCallee.callerNeedsStability()")
                         Assumption cachedCallerNeedsStable,
-                @Cached FunctionDirectInvokeNode invoke) {
-            return invoke.execute(
-                    frame, inliningTarget, callNode, cachedCallee,
-                    closure, arguments, callerReference);
+                @Cached FunctionDirectInvokeNode invoke,
+                @Cached InlinedConditionProfile taskPresence) {
+            return invokeSharedTarget(
+                    frame, inliningTarget, taskPresence, invoke, callNode,
+                    cachedCallee, closure, arguments, callerReference);
         }
 
         /* Last resort: different effective targets beyond the secondary PIC. */
@@ -907,6 +908,7 @@ final class ProtosFunctionCallDispatchers {
     private static ProtosReturnHome invocationHome(
             ProtosClosureValue closure, ProtosBytecodeRootNode effectiveRoot) {
         if (closure.capturedReturnHomeOrNullForRuntime() == null
+                && closure.hasNativeBody()
                 && ProtosStandardIntegerProtocol.isCanonicalArithmetic(closure)) {
             return ProtosReturnHome.unobservable();
         }
@@ -948,7 +950,8 @@ final class ProtosFunctionCallDispatchers {
         if (captured != null) {
             return ReturnHomeMode.CAPTURED;
         }
-        if (ProtosStandardIntegerProtocol.isCanonicalArithmetic(closure)) {
+        if (closure.hasNativeBody()
+                && ProtosStandardIntegerProtocol.isCanonicalArithmetic(closure)) {
             return ReturnHomeMode.UNOBSERVABLE;
         }
         if (!closure.hasNativeBody()
@@ -1015,6 +1018,42 @@ final class ProtosFunctionCallDispatchers {
             return outcome;
         }
         return sealIfSuspended(frame, arguments, explicitCaller, outcome);
+    }
+
+    /**
+     * Invocation through a cached executable shared by several Closures. The
+     * ReturnHome route is selected from the current Closure on every call,
+     * because Closures sharing one target may capture different homes: a
+     * captured home travels with its exact identity, an uncaptured source
+     * Closure whose effective root proves its home unobservable uses the
+     * shared marker, and every other case owns a fresh physical home.
+     */
+    static Object invokeSharedTarget(
+            VirtualFrame frame,
+            Node inliningTarget,
+            InlinedConditionProfile taskPresence,
+            FunctionDirectInvokeNode invoke,
+            DirectCallNode callNode,
+            ProtosBytecodeRootNode callee,
+            ProtosClosureValue closure,
+            Object[] arguments,
+            Object explicitCaller) {
+        if (closure.capturedReturnHomeOrNullForRuntime() != null) {
+            return invokeCapturedHome(
+                    frame, inliningTarget, taskPresence,
+                    callNode, callee, closure, arguments, explicitCaller);
+        }
+        if (!closure.hasNativeBody()
+                && closure.definition() != null
+                && callee != null
+                && callee.returnHomeProvenUnobservable()) {
+            return invokeUnobservableHome(
+                    frame, inliningTarget, taskPresence,
+                    callNode, callee, closure, arguments, explicitCaller);
+        }
+        return invoke.execute(
+                frame, inliningTarget, callNode, callee,
+                closure, arguments, explicitCaller);
     }
 
     /** Preserve Task reachability even when the callee needs no caller state. */

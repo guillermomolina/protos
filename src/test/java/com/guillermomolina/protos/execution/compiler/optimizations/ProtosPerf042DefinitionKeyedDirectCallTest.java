@@ -35,6 +35,7 @@ import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
 
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.RootCallTarget;
+import com.oracle.truffle.api.bytecode.Instruction;
 import com.oracle.truffle.api.source.Source;
 import java.nio.file.Path;
 import java.util.List;
@@ -939,6 +940,120 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
      * Moves the named module function's root to the cached Bytecode tier on
      * its next entry, so its operation nodes and their caches exist.
      */
+    /**
+     * Once the identity PIC of one CallUnaryMethod site saturates, fresh
+     * instances of one definition are admitted by the cache keyed on their
+     * shared prepared plan and target. The site itself is inspected: its
+     * quickened name names the single active cache tier.
+     */
+    @Test
+    void unarySiteAdmitsTheSharedPreparedTargetPastTheIdentityCache() throws Exception {
+        withCore(module -> {
+            evaluate("""
+                    run: () => {
+                        identity: (value) => { value }
+                        identity(1)
+                    }
+                    make: () => { (value) => { value } }
+                    makeHolder: (seed) => { (value) => { seed } }
+                    callOne: (f, value) => { f(value) }
+                    """, "perf042-prepared-define.protos", module);
+            enterCachedTier("run", module);
+            enterCachedTier("callOne", module);
+            ProtosLanguageContext context = ProtosLanguageContext.current();
+
+            // The benchmark site: every run() creates a fresh literal instance.
+            for (int i = 1; i <= PAST_CACHE_LIMITS; i++) {
+                assertInteger(1, evaluate("run()\n", "perf042-prepared-run.protos", module));
+                assertEquals(
+                        i <= 4
+                                ? "c.CallUnaryMethod$CallCachedClosure"
+                                : "c.CallUnaryMethod$CallPreparedTarget",
+                        unaryInstructionName("run", module),
+                        "run site after call " + i);
+            }
+
+            // A site fed distinct instances of one definition.
+            RootCallTarget shared = null;
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                ProtosClosureValue first = closure("make()\n", module);
+                ProtosClosureValue second = closure("make()\n", module);
+                assertNotSame(first, second);
+                RootCallTarget target = effectiveTarget(first, context);
+                assertNotNull(target);
+                assertSame(target, effectiveTarget(second, context));
+                if (shared == null) {
+                    shared = target;
+                }
+                assertSame(shared, target, "one shared target for the definition");
+                module.context().createLocalSlot("preparedA" + i, first);
+                module.context().createLocalSlot("preparedB" + i, second);
+                assertSame(first, evaluate(
+                        "callOne(preparedA" + i + ", preparedA" + i + ")\n",
+                        "perf042-prepared-a.protos", module));
+                assertInteger(i, evaluate(
+                        "callOne(preparedB" + i + ", " + i + ")\n",
+                        "perf042-prepared-b.protos", module));
+            }
+            assertEquals(
+                    "c.CallUnaryMethod$CallPreparedTarget",
+                    unaryInstructionName("callOne", module),
+                    "callOne site past the identity cache");
+
+            // Captured state is read from the current instance, never from
+            // another instance admitted by the same shared target.
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                module.context().createLocalSlot(
+                        "preparedHolder" + i, closure("makeHolder(" + (i * 3) + ")\n", module));
+            }
+            for (int repeat = 0; repeat < 2; repeat++) {
+                for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                    assertInteger(i * 3, evaluate(
+                            "callOne(preparedHolder" + i + ", 1)\n",
+                            "perf042-prepared-holder.protos", module));
+                }
+            }
+
+            // An overridden `call` enters dynamic selection at the same site.
+            evaluate("""
+                    preparedOverride: make()
+                    preparedOverride.call: (value) => { 400 + value }
+                    """, "perf042-prepared-override.protos", module);
+            ProtosClosureValue overridden = assertInstanceOf(
+                    ProtosClosureValue.class,
+                    module.context().readLocalSlot("preparedOverride").orElseThrow());
+            assertInteger(403, evaluate(
+                    "callOne(preparedOverride, 3)\n", "perf042-prepared-overridden.protos", module));
+            assertNull(dispatchedAsFunction(overridden));
+            assertInteger(3, evaluate(
+                    "callOne(preparedA0, 3)\n", "perf042-prepared-unaffected.protos", module));
+
+            // Removing the override re-admits standard execution of the
+            // shared target.
+            evaluate("preparedOverride.removeSlot(\"call\")\n",
+                    "perf042-prepared-remove.protos", module);
+            for (int repeat = 0; repeat < 2; repeat++) {
+                assertInteger(3, evaluate(
+                        "callOne(preparedOverride, 3)\n", "perf042-prepared-restored.protos", module));
+            }
+            assertSame(overridden, dispatchedAsFunction(overridden));
+            assertSame(shared, effectiveTarget(overridden, context));
+        });
+    }
+
+    private static String unaryInstructionName(String function, ProtosActivation module) {
+        List<String> names = functionRoot(function, module)
+                .getBytecodeNode()
+                .getInstructionsAsList()
+                .stream()
+                .map(Instruction::getName)
+                .filter(name -> name.equals("c.CallUnaryMethod")
+                        || name.startsWith("c.CallUnaryMethod$"))
+                .toList();
+        assertEquals(1, names.size(), function + ": " + names);
+        return names.get(0);
+    }
+
     private static void enterCachedTier(String function, ProtosActivation module) {
         functionRoot(function, module).getBytecodeNode().setUncachedThreshold(0);
     }

@@ -46,8 +46,9 @@ import com.oracle.truffle.api.profiles.InlinedConditionProfile;
  * (its receiver is not counted among the arguments) or any other object.
  *
  * <p>The B5 frame-argument array is built once here and becomes the callee
- * frame's arguments. Source functions use a identity-keyed
- * unary direct-call cache before entering the existing call dispatcher.
+ * frame's arguments. Source functions use an identity-keyed
+ * unary direct-call cache, then a cache keyed by the shared prepared
+ * execution plan, before entering the existing call dispatcher.
  * A bound source method preserves its receiver and methodHome and uses
  * the shared PIC; other callables use {@link
  * ProtosFunctionCallDispatchers.CallNode}. No call is prepared.
@@ -145,15 +146,78 @@ abstract class ProtosCallUnaryMethodNode extends Node {
     }
 
     /*
-     * megamorphic transition for source functions.
-     * Reuse the existing CallNode and its current dispatch implementation.
+     * Once the identity PIC saturates, distinct Closures may still share one
+     * prepared execution plan. Cache that plan and its effective target,
+     * never a Closure: lexical captures and the ReturnHome are read from the
+     * current Closure on every call. A deferred plan, a Context-local
+     * projection or a foreign-language plan is never admitted here.
+     */
+    @ForceQuickening
+    @Specialization(
+            guards = {
+                    "isSourceFunction(callable)",
+                    "isSingleContext()",
+                    "canonicalCallSelected(callable, rootSelection)",
+                    "currentPlan != null",
+                    "currentPlan == cachedPlan",
+                    "!callable.requiresContextLocalExecutionProjectionForRuntime()",
+                    "cachedTarget != null",
+                    "currentPlan.bytecodeActivationTargetForComposition() == cachedTarget",
+                    "cachedCallee != null"
+            },
+            assumptions = "cachedCallerNeedsStable",
+            excludeForUncached = true,
+            limit = "3",
+            replaces = "callCachedClosure")
+    static Object callPreparedTarget(
+            VirtualFrame frame,
+            boolean terminal,
+            ProtosClosureValue callable,
+            Object a0,
+            @Bind("$node") Node inliningTarget,
+            @Bind("bytecodeOf($node)") BytecodeNode bytecode,
+            @Bind("bytecode.getBytecodeIndex(frame)") int bytecodeIndex,
+            @Bind("rootOf($node)") ProtosBytecodeRootNode root,
+            @Bind("callable.preparedExecutionPlanOrNullForRuntime()")
+                    ProtosClosureExecutionPlan currentPlan,
+            @Cached(value = "rootCallSelection()", allowUncached = true)
+                    ProtosStandardObjectProtocol.CanonicalRootCallSelection rootSelection,
+            @Cached("currentPlan") ProtosClosureExecutionPlan cachedPlan,
+            @Cached("singleContextTargetOrNull(callable, root)")
+                    RootCallTarget cachedTarget,
+            @Cached("createDirectCallNodeOrNull(cachedTarget)")
+                    DirectCallNode callNode,
+            @Cached(value = "calleeRootOrNull(cachedTarget)", adopt = false)
+                    ProtosBytecodeRootNode cachedCallee,
+            @Cached("cachedCallee.callerNeedsStability()")
+                    Assumption cachedCallerNeedsStable,
+            @Cached ProtosFunctionCallDispatchers.FunctionDirectInvokeNode invoke,
+            @Cached InlinedConditionProfile taskPresence) {
+        Object[] arguments = ProtosFrameArguments.dispatchedCall1(
+                null, ProtosFrameArguments.functionCallMarker(),
+                null, null, null, a0);
+        Object outcome = ProtosFunctionCallDispatchers.invokeSharedTarget(
+                frame, inliningTarget, taskPresence, invoke, callNode,
+                cachedCallee, callable, arguments, null);
+        // Compilation-final proof of the shared effective root.
+        if (cachedCallee.provablyNonSuspendingBody()) {
+            return outcome;
+        }
+        return ProtosTailCallContinuation.completeCall(
+                terminal, outcome, bytecode, bytecodeIndex);
+    }
+
+    /*
+     * General transition once both direct caches are exhausted. The guard
+     * already proves the canonical `call` selection, so the selected source
+     * body enters the function dispatcher directly without reselecting.
      */
     @Specialization(
             guards = {
                     "isSourceFunction(callable)",
                     "canonicalCallSelected(callable, rootSelection)"
             },
-            replaces = "callCachedClosure")
+            replaces = {"callCachedClosure", "callPreparedTarget"})
     @Megamorphic
     @InliningCutoff
     static Object callSourceMegamorphic(
@@ -161,18 +225,20 @@ abstract class ProtosCallUnaryMethodNode extends Node {
             boolean terminal,
             ProtosClosureValue callable,
             Object a0,
+            @Bind("$node") Node inliningTarget,
             @Bind("bytecodeOf($node)") BytecodeNode bytecode,
             @Bind("bytecode.getBytecodeIndex(frame)") int bytecodeIndex,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
             @Cached(value = "rootCallSelection()", allowUncached = true)
                     ProtosStandardObjectProtocol.CanonicalRootCallSelection rootSelection,
-            @Cached ProtosFunctionCallDispatchers.CallNode call) {
+            @Cached ProtosFunctionCallDispatchers.FunctionCachedCallNode call) {
         Object outcome = call.execute(
-                frame, terminal, callable,
+                frame, inliningTarget, terminal, callable,
                 ProtosFrameArguments.dispatchedCall1(
                         null, ProtosFrameArguments.functionCallMarker(),
                         null, null, null, a0),
-                null, root);
+                null, root,
+                ProtosFunctionCallDispatchers.currentContext(inliningTarget));
         return ProtosTailCallContinuation.completeCall(
                 terminal, outcome, bytecode, bytecodeIndex);
     }

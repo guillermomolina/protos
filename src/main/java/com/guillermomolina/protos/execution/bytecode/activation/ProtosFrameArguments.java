@@ -1016,6 +1016,22 @@ final class ProtosFrameArguments {
     }
 
     /**
+     * The lexical module origin of a Closure created from a B5 header the
+     * Bytecode DSL root has already admitted. Argument 0 alone discriminates
+     * the published activation from the compact Closure (see {@link
+     * #isUnmaterializedCompactCall}), so the header is neither revalidated nor
+     * materialized, mutated or registered as a caller need.
+     */
+    static ProtosModuleKey admittedDefiningModuleKeyForClosureCreation(
+            Object[] arguments) {
+        Object first = arguments[CLOSURE_INDEX];
+        if (first instanceof ProtosActivation activation) {
+            return activation.currentModuleKey().orElse(null);
+        }
+        return ((ProtosClosureValue) first).definingModuleKeyOrNullForRuntime();
+    }
+
+    /**
      * PERF025-H1: true while {@code arguments} are still in compact
      * source-call form, i.e. no rich activation has been materialized and
      * published for this invocation yet. The invocation's execution context

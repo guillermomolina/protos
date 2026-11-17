@@ -3002,7 +3002,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Bind VirtualFrame frame) {
             return ProtosClosureValue.experimentalNonCapturing(
                     definition, cachedPlan,
-                    ProtosFrameArguments.definingModuleKeyForClosureCreation(
+                    ProtosFrameArguments.admittedDefiningModuleKeyForClosureCreation(
                             frame.getArguments()),
                     ProtosFrameArguments.creatorPreludeForClosureCreation(
                             frame.getArguments()));
@@ -3025,7 +3025,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Bind VirtualFrame frame) {
             return ProtosClosureValue.experimentalNonCapturing(
                     definition, executionPlanCell.plan(),
-                    ProtosFrameArguments.definingModuleKeyForClosureCreation(
+                    ProtosFrameArguments.admittedDefiningModuleKeyForClosureCreation(
                             frame.getArguments()),
                     ProtosFrameArguments.creatorPreludeForClosureCreation(
                             frame.getArguments()));

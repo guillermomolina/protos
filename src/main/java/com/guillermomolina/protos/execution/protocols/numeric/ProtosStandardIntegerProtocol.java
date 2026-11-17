@@ -252,7 +252,7 @@ public final class ProtosStandardIntegerProtocol {
         Objects.requireNonNull(home, "home");
         Objects.requireNonNull(selector, "selector");
 
-        ProtosNativeClosureBody body = behavior.nativeBody().orElse(null);
+        ProtosNativeClosureBody body = behavior.nativeBodyOrNullForRuntime();
         if (!(body instanceof StandardIntegerBody standard)
                 || !standard.isCanonicalSelection(
                         behavior,
@@ -266,14 +266,14 @@ public final class ProtosStandardIntegerProtocol {
 
     /** Stable proof that this exact installed native body cannot observe a return home. */
     static boolean isCanonicalArithmetic(ProtosClosureValue closure) {
-        return closure.nativeBody().orElse(null) instanceof StandardIntegerBody standard
+        return closure.nativeBodyOrNullForRuntime() instanceof StandardIntegerBody standard
                 && standard.owner == closure;
     }
 
     /** Classifies an already selected method without performing another lookup. */
     static CanonicalIntegerOperation canonicalOperationForSelection(
             ProtosClosureValue closure, ProtosObjectValue home, ProtosPrelude prelude) {
-        if (!(closure.nativeBody().orElse(null) instanceof StandardIntegerBody standard)) {
+        if (!(closure.nativeBodyOrNullForRuntime() instanceof StandardIntegerBody standard)) {
             return null;
         }
         return canonicalOperationForSelection(closure, home, standard.operation.selector(), prelude);

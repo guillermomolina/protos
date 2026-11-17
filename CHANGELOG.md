@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.130-SNAPSHOT
+
+- **I115 — Shared-plan unary call caching.** After the Closure-identity cache saturates, unary source calls cache shared prepared execution plans while reading captures and return homes from the current Closure. Deferred and Context-local plans retain general dispatch. Added shared-target, captured-home and cache-convergence regressions.
+
 ## 0.4.129-SNAPSHOT
 
 - **I115 — Proven non-suspending direct calls.** Cached direct Closure calls use the effective root's immutable non-suspension proof to omit outcome classification, retaining the suspension path for unproven bodies. Closure creation reads the admitted creator Prelude without redundant recovery. Added continuation, terminal-send, direct-header and deferred-caller regressions.

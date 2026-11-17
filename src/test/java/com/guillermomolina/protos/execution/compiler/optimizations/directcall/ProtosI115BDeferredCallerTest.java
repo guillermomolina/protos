@@ -1565,6 +1565,137 @@ final class ProtosI115BDeferredCallerTest {
         }
     }
 
+    /**
+     * Past the identity cache, one CallUnaryMethod site admits distinct
+     * Closures of one definition through their shared prepared target. Each
+     * captures the home of a different owner invocation: the home travels
+     * with its exact identity, its ^ reaches only that owner, the owner alone
+     * closes it, and the Task stays the owner's.
+     */
+    @Test
+    void sharedTargetClosuresKeepTheirOwnCapturedHomes() throws Exception {
+        withCore(module -> {
+            List<ProtosReturnHome> observed = new ArrayList<>();
+            var expectedTask = new java.util.concurrent.atomic.AtomicReference<ProtosTask>();
+            module.context().createLocalSlot("observeSharedHome", ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> {
+                        ProtosReturnHome home = ((ProtosClosureValue) supplied.get(0))
+                                .capturedReturnHomeOrNullForRuntime();
+                        assertTrue(home.isMaterialized());
+                        assertTrue(home.isActive());
+                        assertSame(expectedTask.get(), home.ownerTaskForRuntime());
+                        observed.add(home);
+                        return ProtosNullValue.INSTANCE;
+                    }));
+            evaluate("""
+                    callOne: (f, value) => { f(value) }
+                    owner: (seed) => {
+                        escape: (value) => { ^(seed + value) }
+                        observeSharedHome(escape)
+                        callOne(escape, 1)
+                        0
+                    }
+                    """, "i115b-shared-homes-define.protos", module);
+            enterCachedTier("callOne", module);
+            RootCallTarget shared = null;
+            for (int round = 0; round < PAST_CACHE_LIMITS; round++) {
+                ProtosClosureValue owner = closure("owner", module);
+                long seed = round * 10L;
+                ProtosTask task = module.executionDomain().createTask(null, current -> {
+                    expectedTask.set(current);
+                    ProtosBytecodeTaskExecution.executeRequest(
+                            current, ProtosCallRequest.taskEntry(
+                                    owner, current, List.of(seed), module));
+                });
+                assertTrue(module.executionDomain().dispatchOne());
+                assertEquals(ProtosTask.State.COMPLETED, task.state(), () -> "failure=" + task.failure());
+                assertInteger(seed + 1, task.result().orElseThrow());
+                assertEquals(round + 1, observed.size());
+                ProtosReturnHome home = observed.get(round);
+                for (int earlier = 0; earlier < round; earlier++) {
+                    assertNotSame(observed.get(earlier), home, "each owner has its own home");
+                }
+                assertFalse(home.isActive(), "only the owner closed its home");
+                assertSame(null, home.ownerTaskForRuntime(), "closing released the Task");
+            }
+            String site = functionRoot("callOne", module).getBytecodeNode()
+                    .getInstructionsAsList().stream()
+                    .map(com.oracle.truffle.api.bytecode.Instruction::getName)
+                    .filter(name -> name.startsWith("c.CallUnaryMethod"))
+                    .findFirst().orElseThrow();
+            assertEquals("c.CallUnaryMethod$CallPreparedTarget", site);
+        });
+    }
+
+    /**
+     * Shared-target Closures of an unproven root really suspend through the
+     * captured route. Two owners are suspended at once and resumed in reverse
+     * order: each sealed continuation returns through its own owner's home.
+     */
+    @Test
+    void sharedTargetSuspensionKeepsEachOwnerHome() throws Exception {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
+                ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+                ProtosActivation module =
+                        prelude.newModuleActivation(
+                                new ProtosActorModuleState(), null, prelude.newExecutionContext(), domain);
+                evaluate("""
+                        callOne: (f, value) => { f(value) }
+                        owner: (future) => {
+                            callOne((ignored) => {
+                                result: future.value()
+                                ^result
+                            }, 0)
+                            0
+                        }
+                        """, "i115b-shared-suspend-define.protos", module);
+                enterCachedTier("callOne", module);
+                ProtosClosureValue owner = closure("owner", module);
+                for (int round = 0; round < PAST_CACHE_LIMITS; round++) {
+                    ProtosFutureValue first = new ProtosFutureValue(prelude.futurePrototype(), domain);
+                    ProtosFutureValue second = new ProtosFutureValue(prelude.futurePrototype(), domain);
+                    ProtosTask taskA = suspendedOwner(domain, module, owner, first);
+                    ProtosTask taskB = suspendedOwner(domain, module, owner, second);
+                    ProtosObjectValue resolvedA = new ProtosObjectValue(ProtosObjectValue.rootObject());
+                    ProtosObjectValue resolvedB = new ProtosObjectValue(ProtosObjectValue.rootObject());
+
+                    assertTrue(second.resolve(resolvedB, module));
+                    assertTrue(domain.dispatchOne());
+                    assertEquals(ProtosTask.State.COMPLETED, taskB.state(), () -> "failure=" + taskB.failure());
+                    assertEquals(ProtosTask.State.SUSPENDED, taskA.state());
+                    assertSame(resolvedB, taskB.result().orElseThrow());
+
+                    assertTrue(first.resolve(resolvedA, module));
+                    assertTrue(domain.dispatchOne());
+                    assertEquals(ProtosTask.State.COMPLETED, taskA.state(), () -> "failure=" + taskA.failure());
+                    assertSame(resolvedA, taskA.result().orElseThrow());
+                }
+            } finally {
+                context.leave();
+            }
+        }
+    }
+
+    private static ProtosTask suspendedOwner(
+            ProtosActorExecutionDomain domain,
+            ProtosActivation module,
+            ProtosClosureValue owner,
+            ProtosFutureValue future) {
+        ProtosTask task = domain.createTask(
+                null,
+                current -> ProtosBytecodeTaskExecution.executeRequest(
+                        current,
+                        ProtosCallRequest.taskEntry(
+                                owner, current, List.of(future), module)));
+        assertTrue(domain.dispatchOne());
+        assertEquals(ProtosTask.State.SUSPENDED, task.state(), "really suspended");
+        return task;
+    }
+
     /** Caller needs belong to one Context's root: registering in one leaves the other unchanged. */
     @Test
     void callerNeedsAreIsolatedBetweenContexts() throws Exception {

@@ -478,14 +478,14 @@ final class ProtosI115UnaryPICConvergenceTest {
     }
 
     @Test
-    void unaryCallQuickensByClosureIdentityThenBecomesMegamorphic()
+    void unaryCallQuickensByClosureIdentityThenBySharedPreparedTarget()
             throws Exception {
         withCore(module -> {
             evaluate(FOCAL, "i115-identity-quickening-define.protos", module);
             ProtosBytecodeRootNode root = runRoot(module);
 
             int specializedSnapshots = 0;
-            int genericSnapshots = 0;
+            int preparedSnapshots = 0;
 
             for (int i = 1; i <= 101; i++) {
                 assertInteger(
@@ -509,7 +509,7 @@ final class ProtosI115UnaryPICConvergenceTest {
 
                     String expected = i <= 4
                             ? "c.CallUnaryMethod$CallCachedClosure"
-                            : "c.CallUnaryMethod";
+                            : "c.CallUnaryMethod$CallPreparedTarget";
 
                     assertEquals(
                             expected,
@@ -519,13 +519,13 @@ final class ProtosI115UnaryPICConvergenceTest {
                     if (i <= 4) {
                         specializedSnapshots++;
                     } else {
-                        genericSnapshots++;
+                        preparedSnapshots++;
                     }
                 }
             }
 
             assertEquals(4, specializedSnapshots);
-            assertEquals(97, genericSnapshots);
+            assertEquals(97, preparedSnapshots);
         });
     }
 

@@ -618,6 +618,11 @@ public final class ProtosClosureValue extends ProtosObjectValue {
         return java.util.Optional.ofNullable(nativeBody);
     }
 
+    /** Allocation-free nullable read of the installed native body for runtime dispatch. */
+    public ProtosNativeClosureBody nativeBodyOrNullForRuntime() {
+        return nativeBody;
+    }
+
     /*
      * P projections retain the executable's captured-cell layout but never
      * share the source Actor's cells. The destination's absent cells cannot
