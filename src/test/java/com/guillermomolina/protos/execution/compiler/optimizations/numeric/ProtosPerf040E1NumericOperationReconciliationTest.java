@@ -27,6 +27,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.oracle.truffle.api.debug.Debugger;
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
+import com.guillermomolina.protos.runtime.ProtosActorModuleState;
 import com.guillermomolina.protos.runtime.ProtosBinary64Rounding;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
@@ -38,6 +40,7 @@ import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.bytecode.Instruction;
 import com.oracle.truffle.api.dsl.Specialization;
+import com.oracle.truffle.api.interop.InteropLibrary;
 import com.oracle.truffle.api.source.Source;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
@@ -280,6 +283,51 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
                             + " && Error.handle(() => { lt(1, \"a\") }, error => { true })"
                             + " && lt(1, 2)");
 
+    /*
+     * One root reuses several operations of different result representations:
+     * a Boolean comparison next to a Long, Double or BigInteger sum, in both
+     * orders and nested. Every operation owns its temporaries.
+     */
+    private static final List<String> SHARED_ROOT_SEQUENCES =
+            List.of(
+                    // comparison followed by addition
+                    "cmpAdd: (x, y) => {\n"
+                            + "    less: x < y\n"
+                            + "    sum: x + y\n"
+                            + "    less.ifTrueIfFalse(() => { sum }, () => { 0 - sum })\n"
+                            + "}\n"
+                            + "(cmpAdd(3, 4) == 7) && (cmpAdd(4, 3) == (0 - 7)) && (cmpAdd(1, 2) == 3)",
+                    // addition followed by comparison
+                    "addCmp: (x, y) => {\n"
+                            + "    sum: x + y\n"
+                            + "    sum < 10\n"
+                            + "}\n"
+                            + "addCmp(3, 4) && !addCmp(6, 5) && (addCmp(1, 1) == true)",
+                    // nested operations
+                    "nest: (a, b, c) => ((a + b) * c) < (a + (b * c))\n"
+                            + "sumNest: (a, b, c) => (a + b) + ((b + c) < 6).ifTrueIfFalse(() => { 1 }, () => { 2 })\n"
+                            + "!nest(1, 2, 3) && nest(0 - 1, 2, 3) && (sumNest(1, 2, 3) == 4)"
+                            + " && (sumNest(1, 2, 4) == 5) && nest(0 - 1, 2, 3)",
+                    // Long -> Double -> Long through one root
+                    "mixed: (x, y) => {\n"
+                            + "    s: x + y\n"
+                            + "    l: s < 10\n"
+                            + "    l.ifTrueIfFalse(() => { s + 1 }, () => { s - 1 })\n"
+                            + "}\n"
+                            + "(mixed(1, 2) == 4) && SmallInteger.recognizes(mixed(1, 2))"
+                            + " && (mixed(1, 2.5) == 4.5) && Float.recognizes(mixed(1, 2.5))"
+                            + " && (mixed(3, 4) == 8) && SmallInteger.recognizes(mixed(3, 4))"
+                            + " && (mixed(6, 6) == 11)",
+                    // Long overflow promotes exactly next to a comparison
+                    "step: (x) => {\n"
+                            + "    next: x + 1\n"
+                            + "    (next > x).ifTrueIfFalse(() => { next }, () => { 0 })\n"
+                            + "}\n"
+                            + "high: 9223372036854775807\n"
+                            + "(step(1) == 2) && BigInteger.recognizes(step(high))"
+                            + " && ((step(high) - 1) == high) && (step(5) == 6)"
+                            + " && SmallInteger.recognizes(step(5))");
+
     private static String orderingSequence(String selector, String numeric) {
         return "lt: (x, y) => x " + selector + " y\n"
                 + "Error.handle(() => { lt(\"a\", \"b\") }, error => { false })\n"
@@ -304,6 +352,129 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
             }
         }
         System.out.println("PERF040_E1_SAME_SITE_SEQUENCES=PASS");
+    }
+
+    @Test
+    void sharedRootSequencesReuseOneRootAcrossRepresentations() {
+        for (boolean debug : new boolean[] {false, true}) {
+            try (Context context = context(debug)) {
+                for (String sequence : SHARED_ROOT_SEQUENCES) {
+                    assertTrue(eval(context, sequence), () -> mode(debug) + ":\n" + sequence);
+                    assertTrue(eval(context, sequence), () -> mode(debug) + " again:\n" + sequence);
+                }
+            }
+        }
+        System.out.println("PERF040_E1_SHARED_ROOT_SEQUENCES=PASS");
+    }
+
+    /**
+     * One root holding a comparison and an addition: standard selection,
+     * then a redefined {@code +}, then the standard selection again.
+     */
+    @Test
+    void sharedRootReturnsToStandardSelectionAfterRedefinition() throws Exception {
+        withCanonicalPrelude(canonical -> {
+            Object standardPlus =
+                    canonical.integerPrototype().readLocalSlot("+").orElseThrow();
+            AlternativeIntegers alternative =
+                    alternativeIntegers(canonical, standardPlus, false);
+            ProtosActivation module = alternative.prelude().newModuleActivation();
+            ProtosClosureValue site = closure(
+                    "(x, y) => {\n    ordered: x < y\n    sum: x + y\n"
+                            + "    ordered.ifTrueIfFalse(() => { sum }, () => { sum + 100 })\n}",
+                    module);
+            for (long round = 0; round < 3; round++) {
+                alternative.integer().assignLocalSlot("+", standardPlus);
+                assertEquals(3L, normalized(call(site, module, 1L, 2L)));
+                assertEquals(103L, normalized(call(site, module, 2L, 1L)));
+                assertTrue(ProtosNumericValueSupport.isLargeInteger(
+                        call(site, module, 1L, Long.MAX_VALUE)));
+                alternative.integer().assignLocalSlot("+", answering(5L));
+                assertEquals(5L, normalized(call(site, module, 1L, 2L)));
+                assertEquals(5L, normalized(call(site, module, 2L, 1L)));
+            }
+            alternative.integer().assignLocalSlot("+", standardPlus);
+            assertEquals(3L, normalized(call(site, module, 1L, 2L)));
+        });
+        System.out.println("PERF040_E1_SHARED_ROOT_STANDARD_REDEFINED=PASS");
+    }
+
+    /**
+     * A selected {@code +} that suspends inside a task resumes the operation
+     * once: its operands are not evaluated again, the method runs once and the
+     * following comparison consumes exactly one result.
+     */
+    @Test
+    void suspendingSelectedAdditionResumesWithoutRepeatingOperands() throws Exception {
+        withCanonicalPrelude(canonical -> {
+            int[] operands = new int[1];
+            int[] selected = new int[1];
+            ProtosClosureValue next = ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> {
+                        operands[0]++;
+                        return Long.valueOf(operands[0]);
+                    });
+            ProtosClosureValue mark = ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> {
+                        selected[0]++;
+                        return Long.valueOf(selected[0]);
+                    });
+            /*
+             * The outermost standard host entry of the embedded Process is
+             * the suspendible Task-free entry: both modules share the
+             * RootActor execution domain, so the pending Future.value()
+             * yields its continuation and the host entry resumes it.
+             */
+            ProtosEmbeddedProcess embedding =
+                    ProtosLanguageContext.current().embeddedProcessForHostEntry();
+            ProtosActorExecutionDomain rootDomain = embedding.rootExecutionDomain();
+            ProtosActivation canonicalModule = canonical.newModuleActivation(
+                    new ProtosActorModuleState(), null,
+                    canonical.newExecutionContext(), rootDomain);
+            Object suspendingPlus = call(
+                    closure("(mark) => (other) => {\n    mark()\n"
+                            + "    (() => { 42 }).future().value()\n}", canonicalModule),
+                    canonicalModule,
+                    mark);
+            AlternativeIntegers alternative =
+                    alternativeIntegers(canonical, suspendingPlus, true);
+            ProtosActivation module = alternative.prelude().newModuleActivation(
+                    new ProtosActorModuleState(), null,
+                    alternative.prelude().newExecutionContext(), rootDomain);
+            ProtosClosureValue site = closure(
+                    "(next) => {\n"
+                            + "    (() => {\n"
+                            + "        sum: next() + next()\n"
+                            + "        (sum < 50).ifTrueIfFalse(() => { sum }, () => { 0 })\n"
+                            + "    }).future().value()\n"
+                            + "}",
+                    module);
+            ProtosHostExecutableClosure hostEntry =
+                    ProtosHostExecutableClosure.prepareForEmbeddingRuntime(
+                            site, module, embedding);
+            /*
+             * Read-only observation of a real host-entry suspension. It proves the outermost
+             * entry held a suspended continuation; it does not by itself prove that the
+             * redefined + suspended inside its Task (no read-only Task observation exists).
+             */
+            java.util.concurrent.atomic.AtomicInteger hostSuspensions =
+                    new java.util.concurrent.atomic.AtomicInteger();
+            java.util.function.Consumer<com.guillermomolina.protos.runtime.ProtosFutureValue>
+                    previous = ProtosHostEntrySuspension.suspendedForTesting;
+            ProtosHostEntrySuspension.suspendedForTesting =
+                    future -> hostSuspensions.incrementAndGet();
+            try {
+                assertEquals(42L, normalized(
+                        InteropLibrary.getUncached().execute(hostEntry, next)));
+                assertEquals(2, operands[0], "each operand is evaluated once");
+                assertEquals(1, selected[0], "the selected method runs once");
+                assertTrue(hostSuspensions.get() >= 1,
+                        "the host entry really suspended at least once");
+            } finally {
+                ProtosHostEntrySuspension.suspendedForTesting = previous;
+            }
+        });
+        System.out.println("PERF040_E1_SUSPENDING_SELECTED_ADDITION=PASS");
     }
 
     /** Regression for the original I115-LONG-5 overflow in a standalone module root. */

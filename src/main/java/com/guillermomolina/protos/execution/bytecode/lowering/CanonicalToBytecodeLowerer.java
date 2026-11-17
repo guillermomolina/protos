@@ -1417,6 +1417,8 @@ final class CanonicalToBytecodeLowerer {
 
                 endStatement(builder);
 
+                emitClearComposedSequenceScratch(builder, sharedScratch);
+
                 builder.beginReturn();
                 builder.emitLoadLocal(result);
                 builder.endReturn();
@@ -2855,10 +2857,22 @@ final class CanonicalToBytecodeLowerer {
     private void emitDiscardedPrefix(
             ProtosBytecodeRootNodeGen.Builder builder,
             java.util.List<CanonicalExpression> expressions) {
-        emitDiscardedPrefix(
-                builder,
-                expressions,
-                createComposedSequenceScratch(builder, expressions));
+        ComposedSequenceScratch scratch =
+                createComposedSequenceScratch(builder, expressions);
+        emitDiscardedPrefix(builder, expressions, scratch);
+        emitClearComposedSequenceScratch(builder, scratch);
+    }
+
+    /* Clears scratch locals owned by the caller after their last use. */
+    private static void emitClearComposedSequenceScratch(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            ComposedSequenceScratch scratch) {
+        if (scratch == null) {
+            return;
+        }
+        builder.emitClearLocal(scratch.preparedCall());
+        builder.emitClearLocal(scratch.childResult());
+        builder.emitClearLocal(scratch.resumeValue());
     }
 
     private void emitDiscardedPrefix(
@@ -2946,6 +2960,9 @@ final class CanonicalToBytecodeLowerer {
                         builder, expression, sink, preparedCall, childResult, resumeValue);
                 endStatement(builder);
             }
+        }
+        if (sink != null) {
+            sink.emitClear(builder);
         }
     }
 
@@ -5610,6 +5627,9 @@ final class CanonicalToBytecodeLowerer {
             builder.emitLoadLocal(cell);
             builder.emitLoadLocal(completed);
             builder.endStoreCell();
+            if (result == null) {
+                builder.emitClearLocal(completed);
+            }
             return;
         }
         BytecodeLocal local = storage.local();
@@ -6472,6 +6492,13 @@ final class CanonicalToBytecodeLowerer {
             }
             return local;
         }
+
+        /* Clears the sink after its last use, only if it was created. */
+        void emitClear(ProtosBytecodeRootNodeGen.Builder builder) {
+            if (local != null) {
+                builder.emitClearLocal(local);
+            }
+        }
     }
 
     /**
@@ -6819,6 +6846,11 @@ final class CanonicalToBytecodeLowerer {
                         && isI115EliminableControl(expression)) {
                     continue;
                 }
+                if (last && mode != InlineBodyResult.DISCARD && sink != null) {
+                    // The value-producing last statement never uses the sink;
+                    // in STACK mode it must remain the Block's last child.
+                    sink.emitClear(builder);
+                }
                 beginStatement(builder, expression);
                 if (!last || mode == InlineBodyResult.DISCARD) {
                     if (sink == null && classifyStaticControlSelection(expression) == null) {
@@ -6835,6 +6867,9 @@ final class CanonicalToBytecodeLowerer {
                             scratch, childResult, resumeValue);
                 }
                 endStatement(builder);
+            }
+            if (mode == InlineBodyResult.DISCARD && sink != null) {
+                sink.emitClear(builder);
             }
             if (mode == InlineBodyResult.STACK) {
                 builder.endBlock();
@@ -8608,7 +8643,11 @@ final class CanonicalToBytecodeLowerer {
         builder.beginBlock();
         emitComposedNumericOperandToLocal(
                 builder, expression, operand, preparedCall, childResult, resumeValue);
+        builder.beginBindStackValue();
         builder.emitLoadLocal(operand);
+        StackValue operandValue = builder.endBindStackValue();
+        builder.emitClearLocal(operand);
+        builder.emitLoadStackValue(operandValue);
         builder.endBlock();
     }
 
@@ -8662,8 +8701,13 @@ final class CanonicalToBytecodeLowerer {
      * continues the selected invocation and never re-evaluates the operands
      * or the operation. An ordering result must then be a canonical Boolean.
      *
-     * <p>The site reuses the caller's continuation locals when it has them
-     * and otherwise creates its own.
+     * <p>Every site owns its result and resumption locals. They are never
+     * shared with the caller's continuation locals, so results of different
+     * representations never meet in one frame slot. The resumption local is
+     * cleared once the composition completes. The completed (and, for an
+     * ordering, validated) result is bound as a stack value, the result local
+     * is cleared, and the bound value becomes the Block's value, so the
+     * result does not stay live in the frame after it is consumed.
      */
     private void emitDirectNumericOperation(
             ProtosBytecodeRootNodeGen.Builder builder,
@@ -8672,12 +8716,8 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
         noteDynamicInvocation();
-        BytecodeLocal numericResult = childResult != null
-                ? childResult
-                : builder.createLocal("numericResult", null);
-        BytecodeLocal numericResume = resumeValue != null
-                ? resumeValue
-                : builder.createLocal("numericResume", null);
+        BytecodeLocal numericResult = builder.createLocal("numericResult", null);
+        BytecodeLocal numericResume = builder.createLocal("numericResume", null);
 
         builder.beginBlock();
 
@@ -8691,7 +8731,9 @@ final class CanonicalToBytecodeLowerer {
         builder.endStoreLocal();
 
         emitDispatchedContinuationComposition(builder, numericResult, numericResume);
+        builder.emitClearLocal(numericResume);
 
+        builder.beginBindStackValue();
         if (isOrderingSelector(send.message())) {
             builder.beginRequireCanonicalBooleanResult();
             builder.emitLoadLocal(numericResult);
@@ -8699,6 +8741,10 @@ final class CanonicalToBytecodeLowerer {
         } else {
             builder.emitLoadLocal(numericResult);
         }
+        StackValue completedValue = builder.endBindStackValue();
+
+        builder.emitClearLocal(numericResult);
+        builder.emitLoadStackValue(completedValue);
 
         builder.endBlock();
     }

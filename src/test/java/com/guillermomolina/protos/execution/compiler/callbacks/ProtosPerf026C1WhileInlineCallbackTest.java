@@ -670,6 +670,212 @@ final class ProtosPerf026C1WhileInlineCallbackTest {
     }
 
     /**
+     * Comparison and arithmetic share one root: every numeric operation keeps
+     * its own temporaries, so a Boolean comparison result and a Long sum never
+     * alias. One and eight iterations, with exact evaluation counts.
+     */
+    @Test
+    void comparisonAndArithmeticShareOneInlineRoot() throws Exception {
+        assertInlineNumericLoop(
+                """
+                run: () => {
+                    i: 0
+                    (() => {
+                        probe()
+                        i < 1
+                    }).whileTrue() {
+                        probe()
+                        i = i + 1
+                    }
+                    i
+                }
+                run()
+                """,
+                1, 3, 3);
+        assertInlineNumericLoop(
+                """
+                run: () => {
+                    i: 0
+                    (() => {
+                        probe()
+                        i < 8
+                    }).whileTrue() {
+                        probe()
+                        i = i + 1
+                    }
+                    i
+                }
+                run()
+                """,
+                8, 17, 3);
+        System.out.println("PERF026_C1_NUMERIC_TEMPORARIES_ONE_AND_EIGHT=YES");
+    }
+
+    @Test
+    void consecutiveInlineLoopsReuseTheSameLexicalBindings() throws Exception {
+        assertInlineNumericLoop(
+                """
+                run: () => {
+                    n: 0
+                    total: 0
+                    (() => {
+                        probe()
+                        n < 2
+                    }).whileTrue() {
+                        probe()
+                        total = total + n
+                        n = n + 1
+                    }
+                    n = 0
+                    (() => {
+                        probe()
+                        n < 3
+                    }).whileTrue() {
+                        probe()
+                        total = total + n
+                        n = n + 1
+                    }
+                    total
+                }
+                run()
+                """,
+                // 0 + 1, then 0 + 1 + 2; (3 + 2) and (4 + 3) evaluations.
+                4, 12, 5);
+        System.out.println("PERF026_C1_CONSECUTIVE_NUMERIC_LOOPS=YES");
+    }
+
+    @Test
+    void nestedLoopsAccumulateArithmeticExactly() throws Exception {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                Probe probe = new Probe();
+                ProtosBytecodeRootNode root =
+                        lowerRoot(
+                                """
+                                run: () => {
+                                    i: 0
+                                    acc: 0
+                                    (() => { i < 3 }).whileTrue() {
+                                        j: 0
+                                        (() => { j < 2 }).whileTrue() {
+                                            probe()
+                                            acc = acc + i + j
+                                            j = j + 1
+                                        }
+                                        i = i + 1
+                                    }
+                                    acc
+                                }
+                                run()
+                                """);
+                // (0 + 1) + (1 + 2) + (2 + 3)
+                assertInteger(9, root.getCallTarget().call(probe.module()));
+                assertEquals(6, probe.calls.get(), "three outer by two inner bodies");
+            } finally {
+                context.leave();
+            }
+        }
+        System.out.println("PERF026_C1_NESTED_NUMERIC_LOOPS=YES");
+    }
+
+    @Test
+    void conditionCountsItsEvaluationsAndTerminatesNormally() throws Exception {
+        assertInlineNumericLoop(
+                """
+                run: () => {
+                    evaluations: 0
+                    n: 0
+                    (() => {
+                        evaluations = evaluations + 1
+                        n < 4
+                    }).whileTrue() {
+                        probe()
+                        n = n + 1
+                    }
+                    evaluations * 10 + n
+                }
+                run()
+                """,
+                54, 4, 3);
+        System.out.println("PERF026_C1_CONDITION_EVALUATION_COUNT=YES");
+    }
+
+    @Test
+    void lastBodyValueIsTheWhileTrueResult() throws Exception {
+        assertInlineNumericLoop(
+                """
+                run: () => {
+                    n: 0
+                    r: (() => { n < 3 }).whileTrue() {
+                        probe()
+                        n = n + 1
+                        n * 2
+                    }
+                    r
+                }
+                run()
+                """,
+                6, 3, 3);
+        System.out.println("PERF026_C1_LAST_NUMERIC_BODY_VALUE=YES");
+    }
+
+    @Test
+    void discardedBodyResultKeepsCounterReadableAfterTheLoop() throws Exception {
+        assertInlineNumericLoop(
+                """
+                run: () => {
+                    n: 0
+                    count: 0
+                    (() => { n < 5 }).whileTrue() {
+                        probe()
+                        count = count + 1
+                        n = n + 1
+                    }
+                    count
+                }
+                run()
+                """,
+                5, 5, 3);
+        System.out.println("PERF026_C1_DISCARDED_NUMERIC_BODY=YES");
+    }
+
+    /**
+     * Every probe call sees run's own root directly below it (the inline
+     * loop runs in its source root), and run's tag tree holds its own RootTag
+     * plus one per inline condition and body.
+     */
+    private static void assertInlineNumericLoop(
+            String characters, long expected, int probeCalls, int runRootTags)
+            throws Exception {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                Probe probe = new Probe();
+                ProtosBytecodeRootNode root = lowerRoot(characters);
+
+                assertInteger(expected, root.getCallTarget().call(probe.module()));
+                assertEquals(probeCalls, probe.calls.get(), characters);
+                assertEquals(List.of(2), probe.depths(), () -> characters + " stacks=" + probe.stacks);
+                ProtosBytecodeRootNode runRoot =
+                        assertInstanceOf(
+                                ProtosBytecodeRootNode.class,
+                                probe.stacks.get(0).get(0));
+                for (List<RootNode> stack : probe.stacks) {
+                    assertSame(runRoot, stack.get(0));
+                    assertSame(root, stack.get(1));
+                }
+                runRoot.getRootNodes().ensureComplete();
+                assertEquals(runRootTags, rootTags(runRoot.getBytecodeNode()), characters);
+            } finally {
+                context.leave();
+            }
+        }
+    }
+
+    /**
      * A non-admitted pair inside {@code run}: the probing callback runs in its
      * own physical root, invoked by the loop in run's own root.
      */

@@ -595,6 +595,178 @@ final class ProtosI115PCompactBooleanWhileTest {
         System.out.println("I115_P_NON_BOOLEAN_MISS_CONDITION=PASS");
     }
 
+    /**
+     * A long comparison condition and a long addition body in one root: the
+     * Boolean comparison result and the Long sum are produced internally and
+     * never share a temporary.
+     */
+    @Test
+    void longComparisonConditionWithLongAdditionBody() throws Exception {
+        Census census = runCompact(
+                "long-lt-long-add",
+                """
+                run: () => {
+                    i: 0
+                    total: 0
+                    (() => i < 4).whileTrue() {
+                        total = total + i
+                        i = i + 1
+                    }
+                    total * 10 + i
+                }
+                """,
+                result -> assertEquals(64, result.asInt()));
+        assertLtCondition(census.names());
+        assertInternalNumericOperations(census.names(), 1);
+        System.out.println("I115_P_LONG_LT_LONG_ADD=PASS");
+    }
+
+    @Test
+    void conditionalSelectionAroundTheLoopKeepsNumericResults() throws Exception {
+        List<String> names = executeOrdinary(
+                "selection-around-loop",
+                """
+                run: () => {
+                    i: 0
+                    before: (1 < 2).ifTrueIfFalse(() => { 10 }, () => { 20 })
+                    (() => i < 3).whileTrue() {
+                        i = i + 1
+                    }
+                    after: (i < 3).ifTrueIfFalse(() => { 1 }, () => { 2 })
+                    before + after + i + 1
+                }
+                """,
+                16);
+        assertInternalNumericOperations(names, 3);
+        System.out.println("I115_P_SELECTION_AROUND_LOOP=PASS");
+    }
+
+    @Test
+    void differentBooleanConditionsShareOneRoot() throws Exception {
+        Census census = runCompact(
+                "different-conditions",
+                """
+                run: () => {
+                    i: 0
+                    active: true
+                    flips: 0
+                    (() => i < 4).whileTrue() {
+                        i = i + 1
+                    }
+                    (() => active).whileTrue() {
+                        flips = flips + 1
+                        active = flips < 3
+                    }
+                    (() => i > 0).whileTrue() {
+                        i = i - 1
+                    }
+                    flips * 10 + i
+                }
+                """,
+                result -> assertEquals(30, result.asInt()));
+        assertBooleanConversion(census);
+        assertInternalNumericOperations(census.names(), 2);
+        System.out.println("I115_P_DIFFERENT_CONDITIONS=PASS");
+    }
+
+    /* Computed canonical true and false alternate; no truthiness is applied. */
+    @Test
+    void alternatingCanonicalBooleansDriveTheLoop() throws Exception {
+        runCompact(
+                "alternating-booleans",
+                """
+                run: () => {
+                    n: 0
+                    parity: 0
+                    even: true
+                    seen: 0
+                    (() => n < 6).whileTrue() {
+                        seen = seen + parity
+                        parity = 1 - parity
+                        even = parity < 1
+                        n = n + 1
+                    }
+                    (() => even).whileTrue() {
+                        even = false
+                        seen = seen + 100
+                    }
+                    seen
+                }
+                """,
+                result -> assertEquals(103, result.asInt()));
+        System.out.println("I115_P_ALTERNATING_BOOLEANS=PASS");
+    }
+
+    /* An arithmetic condition result is not a Boolean: the standard Error, no body. */
+    @Test
+    void arithmeticNonBooleanConditionSignalsStandardErrorWithoutBody() throws Exception {
+        withCore(module -> {
+            int[] iterations = new int[1];
+            ProtosClosureValue mark = ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> {
+                        iterations[0]++;
+                        return Boolean.FALSE;
+                    });
+            ProtosClosureValue run = closure(
+                    "(seed, mark) => { (() => seed + 1).whileTrue() {\nmark(0)\n}\n0 }",
+                    module);
+            List<String> names = instructionNames(run);
+            assertTrue(names.stream().anyMatch(name -> name.startsWith("c.NumberAdd")),
+                    "the condition addition is internal: " + names);
+            ProtosSignalException signal = assertThrows(
+                    ProtosSignalException.class,
+                    () -> enter(fastDirect(run, module, Long.valueOf(1), mark)));
+            assertSame(
+                    ProtosCoreErrors.prototype(module, ProtosCoreErrors.StandardError.ERROR),
+                    signal.error().parent().orElse(null));
+            assertEquals(0, iterations[0], "no body runs after an invalid condition");
+        });
+        System.out.println("I115_P_ARITHMETIC_NON_BOOLEAN_CONDITION=PASS");
+    }
+
+    /* A non-admitted condition Closure keeps its ordinary invocation. */
+    @Test
+    void nonAdmittedConditionClosureKeepsOrdinaryExecution() throws Exception {
+        executeOrdinary(
+                "non-admitted-condition",
+                """
+                run: () => {
+                    i: 0
+                    condition: () => i < 3
+                    condition.whileTrue() {
+                        i = i + 1
+                    }
+                    i
+                }
+                """,
+                3);
+        System.out.println("I115_P_NON_ADMITTED_CONDITION=PASS");
+    }
+
+    private static List<String> executeOrdinary(
+            String name, String source, int expected) throws Exception {
+        try (ProtosStandaloneHostedSession session = openSession(name, source)) {
+            ProtosStandaloneHostedSession.PreparedTopLevel prepared =
+                    session.prepareTopLevel("run");
+            ProtosBytecodeRootNode run = selectedRoot(prepared);
+            assertEquals(expected, prepared.executable().execute().asInt(), name);
+            return run.getBytecodeNode().getInstructionsAsList().stream()
+                    .map(ProtosInstructionNames::of)
+                    .toList();
+        }
+    }
+
+    /* Standard comparisons and additions remain internal operations, not sends. */
+    private static void assertInternalNumericOperations(List<String> names, int minimumAdds) {
+        assertTrue(names.stream().anyMatch(name -> name.startsWith("c.RichCompare")),
+                "comparison must be an internal operation: " + names);
+        assertTrue(names.stream().filter(name -> name.startsWith("c.NumberAdd")).count()
+                        >= minimumAdds,
+                "addition must be an internal operation: " + names);
+        assertFalse(names.stream().anyMatch(name -> name.contains("c.CallNilaryMethod")),
+                "control must not dispatch nilary messages: " + names);
+    }
+
     private interface CoreTest {
         void run(ProtosActivation module) throws Exception;
     }

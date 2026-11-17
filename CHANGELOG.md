@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.153-SNAPSHOT
+
+- **I115.** Clear composed-sequence scratch, discarded-prefix sink and completed-store locals after their last use in Bytecode lowering. Add while-loop conformance tests (results, binding/transfer, suspension/cancellation), extend while inline-callback, while-once census and compact-boolean while regressions, and verify a real host-entry suspension in the suspending selected-addition test.
+
 ## 0.4.152-SNAPSHOT
 
 - **I115.** Align inline-callback stack-depth, Native fallback-runtime and buffered-argument boundary test oracles with current lowering and packaging, and update Makefile runtime selection.

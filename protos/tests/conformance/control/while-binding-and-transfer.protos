@@ -172,6 +172,86 @@ tests: [
                 (bodyCalls == 0)
         }
         Assertions.require(tool009LegacyCase() === true)
+    }),
+    Test("inline loop keeps captured bindings and its last result", () => {
+        total: 100
+        n: 0
+        reader: () => total
+        result: (() => { (n < 4) && (total < 1000) }).whileTrue() {
+            total = total + n
+            n = n + 1
+            total * 2
+        }
+        Assertions.require(n == 4)
+        Assertions.require(total == 106)
+        Assertions.require(reader() == 106)
+        Assertions.require(result == 212)
+        total = total + 1
+        Assertions.require(reader() == 107)
+    }),
+    Test("inline numeric loop error keeps its identity and bindings", () => {
+        n: 0
+        total: 0
+        expected: Error()
+        handled: Error.handle(
+            () => {
+                (() => { n < 10 }).whileTrue() {
+                    total = total + n
+                    n = n + 1
+                    if(n == 3) {
+                        expected.signal()
+                    }
+                    total
+                }
+                false
+            },
+            (caught) => caught === expected
+        )
+        Assertions.require(handled === true)
+        Assertions.require(n == 3)
+        Assertions.require(total == 3)
+    }),
+    Test("inline numeric loop nonlocal return keeps its identity", () => {
+        tool009LegacyCase: () => {
+            marker: {}
+            n: 0
+            total: 0
+            afterLoop: 0
+            outer: () => {
+                (() => { n < 10 }).whileTrue() {
+                    total = total + n
+                    n = n + 1
+                    if(n == 4) {
+                        ^marker
+                    }
+                    total
+                }
+                afterLoop = afterLoop + 1
+                null
+            }
+            result: outer()
+            (result === marker) &&
+                (n == 4) &&
+                (total == 6) &&
+                (afterLoop == 0)
+        }
+        Assertions.require(tool009LegacyCase() === true)
+    }),
+    Test("whileTrue nested inside another Closure keeps outer bindings", () => {
+        count: 0
+        sum: 0
+        accumulate: (limit) => {
+            i: 0
+            (() => { i < limit }).whileTrue() {
+                count = count + 1
+                sum = sum + i
+                i = i + 1
+            }
+        }
+        Assertions.require(accumulate(3) == 3)
+        Assertions.require(accumulate(4) == 4)
+        Assertions.require(count == 7)
+        Assertions.require(sum == 9)
     })
 ]
 tests.freeze()

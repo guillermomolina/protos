@@ -51,6 +51,28 @@ final class ProtosPerf039WhileOnceCensusTest {
             }
             """;
 
+    private static final String ZERO_SOURCE = """
+            run: () => {
+                i: 1
+                (() => false).whileTrue() {
+                    i = i + 1
+                }
+                i
+            }
+            """;
+
+    private static final String COUNTED_SOURCE = """
+            run: () => {
+                i: 0
+                (() => i < 8).whileTrue() {
+                    i = i + 1
+                }
+                i
+            }
+            """;
+
+    private static final String CASE = "primitive-while-once";
+
     @Test
     void censusWhileOnceFullDsl() throws Exception {
         try (ProtosStandaloneHostedSession session = openSession()) {
@@ -60,7 +82,7 @@ final class ProtosPerf039WhileOnceCensusTest {
             ProtosBytecodeRootNode root =
                     selectedRoot(prepared);
 
-            census(root, "dsl-only");
+            census(root, CASE, "dsl-only");
 
             assertEquals(1, prepared.executable().execute().asInt());
 
@@ -122,7 +144,7 @@ final class ProtosPerf039WhileOnceCensusTest {
                     "protos-root:[0-9a-f]{16}\\[CLOSURE\\|[^\\] ]+\\]"),
                     "Cannot identify selected Closure: " + targetName);
 
-            census(root, "tier" + requestedTier);
+            census(root, CASE, "tier" + requestedTier);
 
             Value run = prepared.executable();
 
@@ -192,12 +214,132 @@ final class ProtosPerf039WhileOnceCensusTest {
         }
     }
 
+    /**
+     * The three primitive-while workloads in one matrix. The active loops keep
+     * a native Bytecode DSL loop with internal comparison and addition, clear
+     * their numeric temporaries, never send whileTrue, and keep the condition
+     * and body inline with their own RootTags in run's root.
+     */
+    @Test
+    void censusPrimitiveWhileMatrix() throws Exception {
+        assertPrimitiveWhileCase("primitive-while-zero", ZERO_SOURCE, 1, false);
+        assertPrimitiveWhileCase("primitive-while-once", SOURCE, 1, true);
+        assertPrimitiveWhileCase("primitive-while-counted", COUNTED_SOURCE, 8, true);
+        System.out.println("PERF039_PRIMITIVE_WHILE_MATRIX=PASS");
+    }
+
+    private static void assertPrimitiveWhileCase(
+            String caseName, String source, int expected, boolean activeLoop)
+            throws Exception {
+        try (ProtosStandaloneHostedSession session = openSession(caseName, source)) {
+            ProtosStandaloneHostedSession.PreparedTopLevel prepared =
+                    session.prepareTopLevel("run");
+            ProtosBytecodeRootNode root = selectedRoot(prepared);
+
+            census(root, caseName, "matrix");
+            assertEquals(expected, prepared.executable().execute().asInt(), caseName);
+
+            List<Instruction> instructions =
+                    root.getBytecodeNode().getInstructionsAsList();
+            List<String> signatures =
+                    instructions.stream().map(ProtosPerf039WhileOnceCensusTest::signature).toList();
+
+            assertFalse(signatures.stream().anyMatch(text -> text.contains("(whileTrue)")),
+                    () -> caseName + " must not send whileTrue: " + signatures);
+            assertFalse(signatures.stream().anyMatch(text -> text.startsWith("c.CallNilaryMethod")
+                            || text.contains("MaterializeCurrentClosure")),
+                    () -> caseName + " must not dispatch or materialize callbacks: " + signatures);
+
+            if (!activeLoop) {
+                return;
+            }
+
+            assertTrue(signatures.stream().anyMatch(text -> text.startsWith("branch.false")),
+                    () -> caseName + " must test its Boolean condition: " + signatures);
+            boolean backwardEdge = false;
+            for (Instruction instruction : instructions) {
+                int current = instruction.getBytecodeIndex();
+                for (Instruction.Argument argument : instruction.getArguments()) {
+                    if (argument.getKind() == Instruction.Argument.Kind.BYTECODE_INDEX
+                            && argument.asBytecodeIndex() < current) {
+                        backwardEdge = true;
+                    }
+                }
+            }
+            assertTrue(backwardEdge,
+                    () -> caseName + " requires a native loop backward edge: " + signatures);
+            assertTrue(signatures.stream().anyMatch(text -> text.contains("RichCompareLt")),
+                    () -> caseName + " requires RichCompareLt: " + signatures);
+            assertTrue(signatures.stream().anyMatch(text -> text.contains("NumberAdd")),
+                    () -> caseName + " requires NumberAdd: " + signatures);
+
+            java.util.Map<String, java.util.Set<Integer>> numericOffsets =
+                    new java.util.HashMap<>();
+            for (var local : root.getBytecodeNode().getLocals()) {
+                Object name = local.getName();
+                if ("numericResult".equals(name) || "numericResume".equals(name)
+                        || "numericOperand".equals(name)) {
+                    numericOffsets.computeIfAbsent((String) name, key -> new java.util.HashSet<>())
+                            .add(local.getLocalOffset());
+                }
+            }
+            java.util.Set<Integer> clearedOffsets = new java.util.HashSet<>();
+            instructions.stream()
+                    .filter(instruction -> ProtosInstructionNames.of(instruction).equals("clear.local"))
+                    .flatMap(instruction -> instruction.getArguments().stream())
+                    .filter(argument -> argument.getKind() == Instruction.Argument.Kind.LOCAL_OFFSET)
+                    .forEach(argument -> clearedOffsets.add(argument.asLocalOffset()));
+            assertTrue(numericOffsets.containsKey("numericResult"),
+                    () -> caseName + " must own numericResult temporaries: " + numericOffsets);
+            assertTrue(numericOffsets.containsKey("numericResume"),
+                    () -> caseName + " must own numericResume temporaries: " + numericOffsets);
+            for (var entry : numericOffsets.entrySet()) {
+                for (int offset : entry.getValue()) {
+                    assertTrue(clearedOffsets.contains(offset),
+                            () -> caseName + " must clear " + entry.getKey() + " at offset "
+                                    + offset + ": " + signatures);
+                }
+            }
+
+            root.getRootNodes().ensureComplete();
+            List<String> inlineRoots = new ArrayList<>();
+            collectRootTagSources(root.getBytecodeNode().getTagTree(), inlineRoots);
+            assertEquals(3, inlineRoots.size(),
+                    () -> caseName + " run plus inline condition and body: " + inlineRoots);
+            assertTrue(inlineRoots.stream().anyMatch(text -> text.contains("i < ")
+                            && !text.contains("i = i + 1")),
+                    () -> caseName + " inline condition RootTag: " + inlineRoots);
+            assertTrue(inlineRoots.stream().anyMatch(text -> text.contains("i = i + 1")
+                            && !text.contains("whileTrue")),
+                    () -> caseName + " inline body RootTag: " + inlineRoots);
+        }
+    }
+
+    private static void collectRootTagSources(
+            com.oracle.truffle.api.bytecode.TagTree tree, List<String> sources) {
+        if (tree == null) {
+            return;
+        }
+        if (tree.hasTag(com.oracle.truffle.api.instrumentation.StandardTags.RootTag.class)) {
+            var section = tree.getSourceSection();
+            sources.add(section == null ? "" : section.getCharacters().toString());
+        }
+        for (com.oracle.truffle.api.bytecode.TagTree child : tree.getTreeChildren()) {
+            collectRootTagSources(child, sources);
+        }
+    }
+
     private static ProtosStandaloneHostedSession openSession()
             throws IOException {
+        return openSession(CASE, SOURCE);
+    }
+
+    private static ProtosStandaloneHostedSession openSession(
+            String caseName, String source) throws IOException {
         Files.createDirectories(OUTPUT);
 
-        Path sourceFile = OUTPUT.resolve("primitive-while-once.protos");
-        Files.writeString(sourceFile, SOURCE, StandardCharsets.UTF_8);
+        Path sourceFile = OUTPUT.resolve(caseName + ".protos");
+        Files.writeString(sourceFile, source, StandardCharsets.UTF_8);
 
         ProtosStandaloneHostedSession session =
                 ProtosStandaloneHostedSession.open(CORE, sourceFile);
@@ -222,7 +364,8 @@ final class ProtosPerf039WhileOnceCensusTest {
         return selectedRoot(prepared);
     }
 
-    private static void census(ProtosBytecodeRootNode root, String lane)
+    private static void census(
+            ProtosBytecodeRootNode root, String caseName, String lane)
             throws IOException {
 
         // DEFAULT bytecode with source information, not instrumented DEBUG.
@@ -235,7 +378,7 @@ final class ProtosPerf039WhileOnceCensusTest {
 
         StringBuilder report = new StringBuilder();
 
-        report.append("PERF039_CASE=primitive-while-once\n");
+        report.append("PERF039_CASE=").append(caseName).append('\n');
         report.append("PERF039_LANE=").append(lane).append('\n');
         report.append("PERF039_CONFIG=BytecodeConfig.DEFAULT\n");
         report.append("PERF039_ROOT_COUNT=").append(roots.size())
@@ -276,7 +419,9 @@ final class ProtosPerf039WhileOnceCensusTest {
         report.append("PERF039_DSL_FULL_TOTAL=")
                 .append(total).append('\n');
 
-        Path file = OUTPUT.resolve("dsl-" + lane + ".txt");
+        Path file = OUTPUT.resolve(CASE.equals(caseName)
+                ? "dsl-" + lane + ".txt"
+                : "dsl-" + caseName + "-" + lane + ".txt");
         Files.writeString(file, report, StandardCharsets.UTF_8);
 
         System.out.print(report);

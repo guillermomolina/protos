@@ -343,6 +343,118 @@ tests: [
             n = n + 1
             "bound"
         }) == "bound")
+    }),
+    Test("whileTrue zero one and eight iterations give exact results", () => {
+        zero: 1
+        zeroResult: (() => false).whileTrue() {
+            zero = zero + 1
+        }
+        Assertions.require(zeroResult === null)
+        Assertions.require(zero == 1)
+        once: 0
+        onceResult: (() => once < 1).whileTrue() {
+            once = once + 1
+        }
+        Assertions.require(onceResult == 1)
+        Assertions.require(once == 1)
+        counted: 0
+        countedResult: (() => counted < 8).whileTrue() {
+            counted = counted + 1
+        }
+        Assertions.require(countedResult == 8)
+        Assertions.require(counted == 8)
+    }),
+    Test("consecutive loops share one counter", () => {
+        i: 0
+        total: 0
+        (() => i < 3).whileTrue() {
+            total = total + i
+            i = i + 1
+        }
+        Assertions.require(i == 3)
+        i = 0
+        (() => i < 4).whileTrue() {
+            total = total + i
+            i = i + 1
+        }
+        Assertions.require(i == 4)
+        Assertions.require(total == 9)
+    }),
+    Test("nested loops keep distinct counters", () => {
+        outer: 0
+        inner: 0
+        visits: 0
+        (() => outer < 3).whileTrue() {
+            inner = 0
+            (() => inner < 4).whileTrue() {
+                visits = visits + outer + 1
+                inner = inner + 1
+            }
+            outer = outer + 1
+        }
+        Assertions.require(outer == 3)
+        Assertions.require(inner == 4)
+        Assertions.require(visits == 24)
+    }),
+    Test("condition combines comparison and arithmetic", () => {
+        i: 0
+        steps: 0
+        (() => (i * 2) + 1 < 10).whileTrue() {
+            i = i + 1
+            steps = steps + 1
+        }
+        Assertions.require(i == 5)
+        Assertions.require(steps == 5)
+    }),
+    Test("alternating canonical conditions keep their Boolean results", () => {
+        n: 0
+        parity: 0
+        trues: 0
+        falses: 0
+        sequence: 0
+        flag: true
+        (() => n < 4).whileTrue() {
+            flag = parity < 1
+            if(flag === true) {
+                trues = trues + 1
+                sequence = sequence * 10 + 1
+            }
+            if(flag === false) {
+                falses = falses + 1
+                sequence = sequence * 10 + 2
+            }
+            parity = 1 - parity
+            n = n + 1
+        }
+        Assertions.require(trues == 2)
+        Assertions.require(falses == 2)
+        Assertions.require(sequence == 1212)
+        Assertions.require(flag === false)
+    }),
+    Test("last object body result keeps its identity", () => {
+        marker: {}
+        n: 0
+        result: (() => n < 3).whileTrue() {
+            n = n + 1
+            marker
+        }
+        Assertions.require(result === marker)
+        Assertions.require(n == 3)
+    }),
+    Test("Boolean and numeric loop results share one root", () => {
+        n: 0
+        booleanResult: (() => n < 2).whileTrue() {
+            n = n + 1
+            n < 2
+        }
+        m: 0
+        numericResult: (() => m < 3).whileTrue() {
+            m = m + 1
+            m * 10
+        }
+        Assertions.require(booleanResult === false)
+        Assertions.require(numericResult == 30)
+        Assertions.require((n + m) == 5)
     })
 ]
 tests.freeze()

@@ -232,6 +232,115 @@ tests: [
         }
         futureValue: tool009LegacyCase().value()
         Assertions.require(futureValue === 221)
+    }),
+    Test("suspending numeric operands are evaluated once per comparison and sum", () => {
+        work: () => {
+            n: 0
+            readRuns: 0
+            limitRuns: 0
+            stepRuns: 0
+            conditionRuns: 0
+            bodyRuns: 0
+            current: () => {
+                readRuns = readRuns + 1
+                n
+            }
+            limit: () => {
+                limitRuns = limitRuns + 1
+                (() => { 3 }).future().value()
+            }
+            step: () => {
+                stepRuns = stepRuns + 1
+                (() => { 2 }).future().value()
+            }
+            result: (() => {
+                conditionRuns = conditionRuns + 1
+                current() < limit()
+            }).whileTrue() {
+                bodyRuns = bodyRuns + 1
+                n = current() + step()
+            }
+            (result == 4) &&
+                (n == 4) &&
+                (conditionRuns == 3) &&
+                (limitRuns == 3) &&
+                (bodyRuns == 2) &&
+                (stepRuns == 2) &&
+                (readRuns == 5)
+        }
+        Assertions.require(work.future().value() === true)
+    }),
+    Test("suspended numeric loop error propagates and stops later iterations", () => {
+        work: () => {
+            n: 0
+            bodyRuns: 0
+            stepRuns: 0
+            expected: Error()
+            step: () => {
+                stepRuns = stepRuns + 1
+                resolved: (() => { 1 }).future().value()
+                if(stepRuns == 3) {
+                    expected.signal()
+                }
+                resolved
+            }
+            handled: Error.handle(
+                () => {
+                    (() => { n < 10 }).whileTrue() {
+                        bodyRuns = bodyRuns + 1
+                        n = n + step()
+                    }
+                    false
+                },
+                (caught) => caught === expected
+            )
+            handled &&
+                (n == 2) &&
+                (bodyRuns == 3) &&
+                (stepRuns == 3)
+        }
+        Assertions.require(work.future().value() === true)
+    }),
+    Test("numeric loop cancellation runs no later iteration", () => {
+        observation: () => {
+            n: 0
+            bodyRuns: 0
+            afterBoundary: 0
+            cleanupRuns: 0
+            saved: "unset"
+            future: (() => {
+                dependency: Future.all().then((values) => 7)
+                (() => {
+                    saved = (() => { n < 5 }).whileTrue() {
+                        bodyRuns = bodyRuns + 1
+                        n = n + 1
+                        if(n == 2) {
+                            future.cancel()
+                        }
+                        if(n > 1) {
+                            n = n + dependency.value()
+                            afterBoundary = afterBoundary + 1
+                        }
+                        n
+                    }
+                }).ensure(() => {
+                    cleanupRuns = cleanupRuns + 1
+                })
+            }).future()
+            observer: (() => {
+                Error.handle(
+                    () => future.value(),
+                    (ignored) => null
+                )
+                (saved == "unset") &&
+                    (n == 2) &&
+                    (bodyRuns == 2) &&
+                    (afterBoundary == 0) &&
+                    (cleanupRuns == 1)
+            }).future()
+            observer
+        }
+        Assertions.require(observation().value() === true)
     })
 ]
 tests.freeze()
