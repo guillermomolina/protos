@@ -236,6 +236,20 @@ public final class ProtosIoReleaseCPrimeExecution {
             this.steps = snapshot;
         }
 
+        private Sequence(
+                ProtosIoReleaseExecution release,
+                ProtosObjectValue initialFailure,
+                Step[] steps) {
+            this.release = Objects.requireNonNull(release, "release");
+            this.primaryFailure = initialFailure;
+            Objects.requireNonNull(steps, "steps");
+            Step[] snapshot = new Step[steps.length];
+            for (int position = 0; position < snapshot.length; position++) {
+                snapshot[position] = Objects.requireNonNull(steps[position], "step");
+            }
+            this.steps = snapshot;
+        }
+
         private void skipSuppressedSteps() {
             while (index < steps.length
                     && primaryFailure != null
@@ -455,6 +469,17 @@ public final class ProtosIoReleaseCPrimeExecution {
             ProtosIoReleaseExecution release,
             ProtosObjectValue initialFailure,
             List<Step> steps) {
+        return new Sequence(release, initialFailure, steps);
+    }
+
+    /**
+     * Array form of {@link #sequence(ProtosIoReleaseExecution, ProtosObjectValue, List)}; the
+     * sequence retains an independent snapshot of {@code steps}.
+     */
+    public static Sequence sequence(
+            ProtosIoReleaseExecution release,
+            ProtosObjectValue initialFailure,
+            Step[] steps) {
         return new Sequence(release, initialFailure, steps);
     }
 

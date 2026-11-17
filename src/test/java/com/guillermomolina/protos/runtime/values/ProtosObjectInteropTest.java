@@ -21,6 +21,7 @@ import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.oracle.truffle.api.interop.InteropLibrary;
+import com.oracle.truffle.api.interop.InvalidArrayIndexException;
 import com.oracle.truffle.api.interop.UnknownIdentifierException;
 import com.oracle.truffle.api.interop.UnsupportedMessageException;
 import org.junit.jupiter.api.Test;
@@ -74,6 +75,38 @@ final class ProtosObjectInteropTest {
         Object freshMembers = interop.getMembers(value, false);
         InteropLibrary freshInterop = InteropLibrary.getUncached(freshMembers);
         assertEquals(3L, freshInterop.getArraySize(freshMembers));
+    }
+
+    @Test
+    void memberNameSnapshotPreservesOrderAndValidatesIndexes() throws Exception {
+        ProtosObjectValue value = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        value.createLocalSlot("alpha", Long.valueOf(1L));
+        value.createLocalSlot("beta", Long.valueOf(2L));
+        value.createLocalSlot("gamma", Long.valueOf(3L));
+
+        Object members = interop.getMembers(value, false);
+        InteropLibrary memberInterop = InteropLibrary.getUncached(members);
+        assertEquals(3L, memberInterop.getArraySize(members));
+        assertEquals("alpha", memberInterop.readArrayElement(members, 0));
+        assertEquals("beta", memberInterop.readArrayElement(members, 1));
+        assertEquals("gamma", memberInterop.readArrayElement(members, 2));
+
+        assertTrue(memberInterop.isArrayElementReadable(members, 0));
+        assertTrue(memberInterop.isArrayElementReadable(members, 2));
+        assertFalse(memberInterop.isArrayElementReadable(members, -1));
+        assertFalse(memberInterop.isArrayElementReadable(members, 3));
+        assertFalse(memberInterop.isArrayElementReadable(members, Long.MAX_VALUE));
+        assertThrows(
+                InvalidArrayIndexException.class,
+                () -> memberInterop.readArrayElement(members, -1));
+        assertThrows(
+                InvalidArrayIndexException.class,
+                () -> memberInterop.readArrayElement(members, 3));
+
+        value.createLocalSlot("delta", Long.valueOf(4L));
+        assertEquals(3L, memberInterop.getArraySize(members));
+        assertFalse(memberInterop.isArrayElementReadable(members, 3));
+        assertEquals("gamma", memberInterop.readArrayElement(members, 2));
     }
 
     @Test

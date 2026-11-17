@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.runtime;
 
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.interop.TruffleObject;
 
 /**
@@ -32,9 +33,14 @@ interface ProtosRepresentedValue extends TruffleObject {
 
     static ProtosPrelude requirePrelude(ProtosPrelude prelude, String family) {
         if (prelude == null) {
-            throw new UnsupportedOperationException(
-                    "represented " + family + " lookup requires an owning Core prelude");
+            throw missingPrelude(family);
         }
         return prelude;
+    }
+
+    @TruffleBoundary
+    private static UnsupportedOperationException missingPrelude(String family) {
+        return new UnsupportedOperationException(
+                "represented " + family + " lookup requires an owning Core prelude");
     }
 }

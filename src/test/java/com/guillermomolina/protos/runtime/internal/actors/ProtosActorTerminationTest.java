@@ -97,6 +97,48 @@ final class ProtosActorTerminationTest {
     }
 
     @Test
+    void cancelledObservationsAreRetiredByIdentityAndSurvivorsResolveExactlyOnce()
+            throws Exception {
+        Fixture x = fixture();
+        ProtosActor target = x.readyTarget(1, behavior());
+        ProtosActorRefValue reference = target.reference();
+        ProtosFutureValue first = x.termination(reference);
+        ProtosFutureValue second = x.termination(reference);
+        ProtosFutureValue third = x.termination(reference);
+        ProtosFutureValue fourth = x.termination(reference);
+        AtomicInteger firstTerminal = new AtomicInteger();
+        AtomicInteger thirdTerminal = new AtomicInteger();
+        first.observe(ignored -> firstTerminal.incrementAndGet());
+        third.observe(ignored -> thirdTerminal.incrementAndGet());
+
+        // Retire the middle and the last registrations; the others stay registered.
+        second.cancelRequest();
+        fourth.cancelRequest();
+        assertEquals(ProtosFutureValue.State.CANCELLED, second.state());
+        assertEquals(ProtosFutureValue.State.CANCELLED, fourth.state());
+        assertEquals(ProtosFutureValue.State.PENDING, first.state());
+        assertEquals(ProtosFutureValue.State.PENDING, third.state());
+
+        reference.requestStopForRuntime();
+        assertEquals(ProtosActor.LifecycleState.TERMINATED, target.lifecycleState());
+        assertFalse(target.markTerminated(), "termination completes only once");
+
+        assertEquals(ProtosFutureValue.State.RESOLVED, first.state());
+        assertEquals(ProtosFutureValue.State.RESOLVED, third.state());
+        assertSame(reference, first.resolvedValue().orElseThrow());
+        assertSame(reference, third.resolvedValue().orElseThrow());
+        assertEquals(1, firstTerminal.get());
+        assertEquals(1, thirdTerminal.get());
+        assertEquals(ProtosFutureValue.State.CANCELLED, second.state());
+        assertEquals(ProtosFutureValue.State.CANCELLED, fourth.state());
+
+        // Retiring after termination finds nothing registered and changes nothing.
+        assertFalse(first.cancelRequest());
+        assertEquals(ProtosFutureValue.State.RESOLVED, first.state());
+        assertEquals(1, firstTerminal.get());
+    }
+
+    @Test
     void observationRegistrationAndTerminationRaceHasNoLostWakeup() throws Exception {
         Fixture x = fixture();
         for (int i = 0; i < 200; i++) {

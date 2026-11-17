@@ -859,8 +859,17 @@ class GraphFailureClassificationTest(GateCase):
         self.assertIn("-J-ea:jdk.graal.compiler.debug.Assertions", graph_args)
         native = profiles.profile_plugin("native")
         native_args = [a.text for a in native.findall("m:configuration/m:buildArgs/m:buildArg", ns)]
+        deferred_init = ("--initialize-at-run-time="
+                         "com.guillermomolina.protos.execution.ProtosNioCapturedTreeFilesystemBackend")
         self.assertEqual([a for a in native_args if not a.startswith("@")],
-                         ["-march=compatibility", "--enable-native-access=ALL-UNNAMED"])
+                         ["-march=compatibility", "--enable-native-access=ALL-UNNAMED",
+                          deferred_init])
+        for profile in tree.getroot().findall("m:profiles/m:profile", ns):
+            profile_id = profile.findtext("m:id", namespaces=ns)
+            if profile_id == "native":
+                continue
+            args = [a.text for a in profile.iter("{%s}buildArg" % ns["m"])]
+            self.assertNotIn(deferred_init, args, profile_id)
         self.assertFalse(any((a or "").startswith("-J-ea") for a in native_args))
         self.assertFalse(any((a or "").startswith("-H:") for a in native_args))
 

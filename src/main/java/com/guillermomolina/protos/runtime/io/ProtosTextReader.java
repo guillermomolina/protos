@@ -653,8 +653,8 @@ public final class ProtosTextReader {
     }
 
     /** PLAT029 leaf arguments for one source.read callback. */
-    public List<?> sourceReadArgumentsForCPrimeRuntime() {
-        return List.of(ProtosNumericValueSupport.integer(SOURCE_READ_AHEAD));
+    public Object[] sourceReadArgumentsForCPrimeRuntime() {
+        return new Object[] {ProtosNumericValueSupport.integer(SOURCE_READ_AHEAD)};
     }
 
     /**
@@ -912,7 +912,7 @@ public final class ProtosTextReader {
                     ProtosInvocation.invokeMessage(
                             source,
                             "read",
-                            List.of(ProtosNumericValueSupport.integer(SOURCE_READ_AHEAD)),
+                            new Object[] {ProtosNumericValueSupport.integer(SOURCE_READ_AHEAD)},
                             request.activation);
         } catch (ProtosSignalException signaled) {
             synchronized (this) { request.lowerFailure = signaled.error(); }
@@ -1090,13 +1090,13 @@ public final class ProtosTextReader {
                 ProtosIoReleaseCPrimeExecution.sequence(
                         release,
                         null,
-                        List.of(
+                        new ProtosIoReleaseCPrimeExecution.Step[] {
                                 ProtosIoReleaseCPrimeExecution.Step.mandatoryFinalizer(
                                         source,
                                         "close",
-                                        List.of(),
+                                        new Object[0],
                                         () -> {},
-                                        ignored -> {})));
+                                        ignored -> {})});
         try {
             ProtosIoReleaseCPrimeExecution.schedule(
                     plan,
@@ -1112,7 +1112,7 @@ public final class ProtosTextReader {
             ProtosActivation activation) {
         final Object result;
         try {
-            result = ProtosInvocation.invokeMessage(source, "close", List.of(), activation);
+            result = ProtosInvocation.invokeMessage(source, "close", new Object[0], activation);
         } catch (ProtosSignalException signaled) {
             completion.failed(signaled.error());
             return;

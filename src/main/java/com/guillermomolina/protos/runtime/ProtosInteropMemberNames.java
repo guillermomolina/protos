@@ -25,9 +25,6 @@ import com.oracle.truffle.api.interop.TruffleObject;
 import com.oracle.truffle.api.library.ExportLibrary;
 import com.oracle.truffle.api.library.ExportMessage;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
 import java.util.Objects;
 
 /**
@@ -38,11 +35,19 @@ import java.util.Objects;
  */
 @ExportLibrary(InteropLibrary.class)
 final class ProtosInteropMemberNames implements TruffleObject {
-    private final List<String> names;
+    private final String[] names;
 
-    ProtosInteropMemberNames(Collection<String> names) {
+    /**
+     * Takes an independent snapshot of {@code names}; later changes to the
+     * caller's array do not alter this projection.
+     */
+    ProtosInteropMemberNames(String[] names) {
         Objects.requireNonNull(names, "names");
-        this.names = List.copyOf(new ArrayList<>(names));
+        String[] snapshot = new String[names.length];
+        for (int i = 0; i < names.length; i++) {
+            snapshot[i] = Objects.requireNonNull(names[i], "member name");
+        }
+        this.names = snapshot;
     }
 
     @ExportMessage
@@ -53,13 +58,13 @@ final class ProtosInteropMemberNames implements TruffleObject {
     @ExportMessage
     @TruffleBoundary
     long getArraySize() {
-        return names.size();
+        return names.length;
     }
 
     @ExportMessage
     @TruffleBoundary
     boolean isArrayElementReadable(long index) {
-        return index >= 0 && index < names.size();
+        return index >= 0 && index < names.length;
     }
 
     @ExportMessage
@@ -67,7 +72,7 @@ final class ProtosInteropMemberNames implements TruffleObject {
         if (!isArrayElementReadable(index)) {
             throw InvalidArrayIndexException.create(index);
         }
-        return names.get((int) index);
+        return names[(int) index];
     }
 
     @ExportMessage

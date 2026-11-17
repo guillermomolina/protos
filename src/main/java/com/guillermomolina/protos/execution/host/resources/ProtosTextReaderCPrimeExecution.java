@@ -14,7 +14,6 @@ import com.oracle.truffle.api.bytecode.BytecodeConfig;
 import com.oracle.truffle.api.bytecode.BytecodeLocal;
 import com.oracle.truffle.api.bytecode.BytecodeRootNodes;
 import com.oracle.truffle.api.exception.AbstractTruffleException;
-import java.util.List;
 import java.util.Objects;
 
 /**
@@ -136,7 +135,7 @@ public final class ProtosTextReaderCPrimeExecution {
          */
         @TruffleBoundary
         Object[] arguments() {
-            return reader.sourceReadArgumentsForCPrimeRuntime().toArray();
+            return reader.sourceReadArgumentsForCPrimeRuntime();
         }
 
         SourceInvocation invocationSucceeded(Object result) {

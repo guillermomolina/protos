@@ -503,6 +503,36 @@ final class ProtosPlat070IoCPrimeTransferAccountingTest {
     }
 
     @Test
+    void arrayPreparedSequenceKeepsItsStepsAndRunsTheMandatoryCloseOnce() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            Harness harness = new Harness(scope.language());
+            List<String> order = new ArrayList<>();
+            List<List<?>> seen = new ArrayList<>();
+            StepProbe write =
+                    harness.probeRecording("write", order, seen, harness.resolvedFuture());
+            StepProbe close =
+                    harness.probeRecording("close", order, seen, harness.resolvedFuture());
+            ProtosObjectValue target = harness.target("write", write, "close", close);
+            ProtosIoReleaseCPrimeExecution.Step[] steps = {
+                ProtosIoReleaseCPrimeExecution.Step.mandatoryFinalizer(
+                        target, "close", new Object[0], close::resolved, close::failed)
+            };
+
+            harness.close(steps);
+            // Writes to the caller's array after preparation must not reach the sequence.
+            steps[0] =
+                    ProtosIoReleaseCPrimeExecution.Step.ordinary(
+                            target, "write", new Object[0], write::resolved, write::failed);
+
+            assertNull(harness.drain(), "no transfer escapes an ordinary release");
+            assertEquals(List.of("close"), order);
+            assertEquals(List.of(), seen.get(0));
+            close.assertInvokedAndResolvedOnce();
+            assertTrue(harness.release().terminal(), "the release is terminalized exactly once");
+        }
+    }
+
+    @Test
     void preparedArgumentStepsRejectNullArgumentsBeforeAnyInvocation() {
         ProtosObjectValue target = new ProtosObjectValue(ProtosObjectValue.rootObject());
         assertThrows(
@@ -1003,6 +1033,28 @@ final class ProtosPlat070IoCPrimeTransferAccountingTest {
                     home,
                     prelude,
                     plan);
+        }
+
+        /** Array form of {@link #close(List)}. */
+        void close(ProtosIoReleaseCPrimeExecution.Step[] steps) {
+            ProtosIoLifecycle[] lifecycle = new ProtosIoLifecycle[1];
+            lifecycle[0] =
+                    new ProtosIoLifecycle(
+                            new ProtosObjectValue(ProtosObjectValue.rootObject()),
+                            prelude.futurePrototype(),
+                            domain,
+                            completion -> {
+                                release =
+                                        lifecycle[0].beginReleaseExecutionForRuntime(
+                                                module, completion);
+                                ProtosIoReleaseCPrimeExecution.schedule(
+                                        ProtosIoReleaseCPrimeExecution.planForEnteredContext(),
+                                        release,
+                                        ProtosIoReleaseCPrimeExecution.sequence(
+                                                release, null, steps));
+                            });
+            closed = lifecycle[0].close(module);
+            assertNotNull(release, "the release must have started");
         }
 
         /** Closes a lifecycle whose release runs {@code steps} through the release C-prime. */

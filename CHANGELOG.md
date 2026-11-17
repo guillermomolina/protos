@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.144-SNAPSHOT
+
+- **I115.** Resolve Native Image compilation paths in interop member names, Actor termination and text I/O. Extend transfer-accounting, termination, interop and gate regression coverage.
+
 ## 0.4.143-SNAPSHOT
 
 - **I115.** Replace generic list copies with exact-size array snapshots in C-prime I/O, Actor routing, dynamic control and runtime paths. Refine Closure invocation and Native Image initialization configuration.

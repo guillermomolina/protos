@@ -672,9 +672,9 @@ public class ProtosObjectValue extends DynamicObject implements TruffleObject {
             throw UnsupportedMessageException.create();
         }
         Object[] keys = getKeyArray.execute(this);
-        java.util.ArrayList<String> names = new java.util.ArrayList<>(keys.length);
-        for (Object key : keys) {
-            names.add((String) key);
+        String[] names = new String[keys.length];
+        for (int i = 0; i < keys.length; i++) {
+            names[i] = (String) keys[i];
         }
         return new ProtosInteropMemberNames(names);
     }

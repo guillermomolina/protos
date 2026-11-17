@@ -56,8 +56,8 @@ public final class ProtosActor {
             new AtomicReference<>(LifecycleState.INITIALIZING);
     private final AtomicReference<ProtosObjectValue> currentBehavior =
             new AtomicReference<>();
-    private final Set<ProtosActorTerminationObservation> terminationObservers =
-            new LinkedHashSet<>();
+    private final ArrayList<ProtosActorTerminationObservation> terminationObservers =
+            new ArrayList<>();
     private final Set<ProtosActorGroupRuntime> routingGroups = new LinkedHashSet<>();
     private boolean terminationCutoverCleanupComplete;
     /** I158: custodian of this incarnation's suspendible initialization, while one is live. */
@@ -468,7 +468,9 @@ public final class ProtosActor {
             if (lifecycle.get() == LifecycleState.TERMINATED) {
                 return false;
             }
-            terminationObservers.add(observation);
+            if (indexOfTerminationObservation(observation) < 0) {
+                terminationObservers.add(observation);
+            }
             return true;
         }
     }
@@ -476,8 +478,21 @@ public final class ProtosActor {
     void unregisterTerminationObservationForRuntime(
             ProtosActorTerminationObservation observation) {
         synchronized (this) {
-            terminationObservers.remove(observation);
+            int index = indexOfTerminationObservation(observation);
+            if (index >= 0) {
+                terminationObservers.remove(index);
+            }
         }
+    }
+
+    /** Identity search; callers hold this actor's monitor. */
+    private int indexOfTerminationObservation(ProtosActorTerminationObservation observation) {
+        for (int i = 0; i < terminationObservers.size(); i++) {
+            if (terminationObservers.get(i) == observation) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     /**
@@ -486,7 +501,7 @@ public final class ProtosActor {
      * @return true only for the call that performs TERMINATING -> TERMINATED
      */
     public boolean markTerminated() {
-        List<ProtosActorTerminationObservation> notify;
+        ProtosActorTerminationObservation[] notify;
         synchronized (this) {
             LifecycleState current = lifecycle.get();
             if (current == LifecycleState.TERMINATED) {
@@ -502,7 +517,8 @@ public final class ProtosActor {
                 return false;
             }
             lifecycle.set(LifecycleState.TERMINATED);
-            notify = new ArrayList<>(terminationObservers);
+            notify = terminationObservers.toArray(
+                    new ProtosActorTerminationObservation[terminationObservers.size()]);
             terminationObservers.clear();
         }
         deliveryAdmission.lifecycleChanged();
