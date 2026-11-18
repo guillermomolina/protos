@@ -306,12 +306,19 @@ final class ProtosHttpHostFactoryIntegrationTest {
     void abortingTheHostLeavesTheRootActorServiceRunning() throws Exception {
         try (RootService x = new RootService()) {
             assertEquals(body("1"), x.get("/hit"));
-            // The aborting session itself may be cancelled before it answers.
+
             try (Socket socket = x.connect()) {
                 send(socket, "GET /abort HTTP/1.1\r\nHost: a\r\n\r\n");
+
+                // Host shutdown completes after mandatory connection cleanup.
+                // Synchronize with that completion before requiring TCP EOF.
+                x.out.awaitLine("host abort");
+
+                // The aborting session may be cancelled before answering, but
+                // its connection must still be retired.
                 readAll(socket);
             }
-            x.out.awaitLine("host abort");
+
             assertFalse(x.session.isTerminated());
         }
     }
@@ -320,22 +327,33 @@ final class ProtosHttpHostFactoryIntegrationTest {
     void rootActorFailureTerminatesTheProcessAndRetiresEveryWorker() throws Exception {
         try (RootService x = new RootService()) {
             assertEquals(body("1"), x.get("/hit"));
+
             try (Socket socket = x.connect()) {
                 send(socket, "GET /fail HTTP/1.1\r\nHost: a\r\n\r\n");
+
+                // The handler sends an asynchronous message. Observe the RootActor
+                // failure and Process termination before checking connection cleanup.
+                x.out.awaitLine("failing");
+
+                Entry terminated =
+                        new Entry(
+                                () -> {
+                                    x.session.awaitTermination();
+                                    return true;
+                                });
+
+                Object outcome = terminated.await();
+                assertEquals(Boolean.TRUE, outcome, "the Process terminated");
+                assertTrue(x.session.isTerminated());
+                assertTrue(
+                        x.session.failedFromRoot(),
+                        "the Process terminated because the RootActor failed");
+
+                // Termination must retire the admitted connection without help
+                // from the client or an explicit close of the hosting session.
                 readAll(socket);
             }
-            // The fail message reached the RootActor; nothing on the host side requests
-            // termination: the RootActor fails by itself and so ends its Process.
-            x.out.awaitLine("failing");
-            Entry terminated =
-                    new Entry(
-                            () -> {
-                                x.session.awaitTermination();
-                                return true;
-                            });
-            Object outcome = terminated.await();
-            assertEquals(Boolean.TRUE, outcome, "the Process terminated");
-            assertTrue(x.session.isTerminated());
+
             x.close();
             assertThrows(IOException.class, () -> x.get("/hit"), "no Worker accepts any more");
         }

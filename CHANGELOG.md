@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.158-SNAPSHOT
+
+- **BUG038.** Synchronize the RootActor-failure and Host-abort HTTP hosting integration tests with the observable termination events (`failing` plus Process termination caused by the RootActor failure, and `host abort`) before requiring connection EOF, so the socket read timeout no longer measures unbounded asynchronous dispatch and termination latency. The tests still require every admitted connection to be retired; no timeout is relaxed and no production code changes.
+
 ## 0.4.157-SNAPSHOT
 
 - **BUG037.** Admit inline callbacks that reach an outer Closure binding the physical parent already transports as a free cell, and keep those cells as cells when the custom-selection branch of the same site creates the callback as a genuine Closure. Complete a logical Case's Future when its host worker fails with a stack overflow instead of stranding the Test Tool. Extend boolean inline-callback regressions (carried cells, non-local return home on boolean and custom paths) and logical-case facility regressions.
