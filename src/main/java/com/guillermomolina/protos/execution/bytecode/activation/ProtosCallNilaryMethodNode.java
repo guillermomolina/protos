@@ -123,12 +123,18 @@ abstract class ProtosCallNilaryMethodNode extends Node {
                     ProtosFunctionCallDispatchers.ReturnHomeMode cachedHomeMode,
             @Exclusive @Cached ProtosFunctionCallDispatchers.FunctionDirectInvokeNode invoke,
             @Exclusive @Cached InlinedConditionProfile taskPresence,
-            @Exclusive @Cached InlinedConditionProfile explicitTaskPresence) {
+            @Exclusive @Cached InlinedConditionProfile explicitTaskPresence,
+            @Exclusive @Cached InlinedConditionProfile publishedActivationPresence,
+            @Exclusive @Cached InlinedConditionProfile closureHeaderPresence,
+            @Exclusive @Cached InlinedConditionProfile callerActivationPresence,
+            @Exclusive @Cached InlinedConditionProfile suspensionPresence) {
         Object[] arguments = ProtosFrameArguments.dispatchedCall0(
                 null, ProtosFrameArguments.functionCallMarker(),
                 null, null, null);
         Object outcome = ProtosFunctionCallDispatchers.invokeCachedClosure(
-                frame, inliningTarget, cachedHomeMode, taskPresence, explicitTaskPresence, invoke,
+                frame, inliningTarget, cachedHomeMode, taskPresence, explicitTaskPresence,
+                publishedActivationPresence, closureHeaderPresence,
+                callerActivationPresence, suspensionPresence, invoke,
                 callNode, cachedCallee, callable, arguments, null);
         // The cached effective root's compilation-final proof: a proven body
         // never yields a suspended outcome, so no terminal classification.

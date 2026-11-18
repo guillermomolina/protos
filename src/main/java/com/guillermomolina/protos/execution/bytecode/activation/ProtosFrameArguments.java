@@ -1600,19 +1600,29 @@ final class ProtosFrameArguments {
      * Any other header leaves compiled code for the general accessor.
      */
     static ProtosTask admittedCompactTask(Object[] arguments) {
-        return admittedCompactTask(arguments, null, null);
+        return admittedCompactTask(
+                arguments, null, null, null, null, null);
     }
 
     static ProtosTask admittedCompactTask(
             Object[] arguments,
             Node inliningTarget,
-            InlinedConditionProfile explicitTaskPresence) {
+            InlinedConditionProfile explicitTaskPresence,
+            InlinedConditionProfile publishedActivationPresence,
+            InlinedConditionProfile closureHeaderPresence,
+            InlinedConditionProfile callerActivationPresence) {
         if (arguments.length >= HEADER_LENGTH) {
             Object first = arguments[CLOSURE_INDEX];
-            if (first instanceof ProtosActivation activation) {
-                return activation.taskForRuntime();
+            boolean publishedActivation = first instanceof ProtosActivation;
+            if (publishedActivationPresence != null
+                    ? publishedActivationPresence.profile(inliningTarget, publishedActivation)
+                    : publishedActivation) {
+                return ((ProtosActivation) first).taskForRuntime();
             }
-            if (first instanceof ProtosClosureValue) {
+            boolean sourceClosure = first instanceof ProtosClosureValue;
+            if (closureHeaderPresence != null
+                    ? closureHeaderPresence.profile(inliningTarget, sourceClosure)
+                    : sourceClosure) {
                 // Slot 2 holds a ProtosTask only for a function call: a
                 // method call stores its ProtosObjectValue methodHome there,
                 // so the type test alone identifies an explicit Task.
@@ -1626,9 +1636,13 @@ final class ProtosFrameArguments {
                 }
 
                 Object caller = arguments[CALLER_INDEX];
-                return caller instanceof ProtosActivation activation
-                        ? activation.taskForRuntime()
-                        : null;
+                boolean hasCallerActivation = caller instanceof ProtosActivation;
+                if (callerActivationPresence != null
+                        ? callerActivationPresence.profile(inliningTarget, hasCallerActivation)
+                        : hasCallerActivation) {
+                    return ((ProtosActivation) caller).taskForRuntime();
+                }
+                return null;
             }
         }
         CompilerDirectives.transferToInterpreter();
