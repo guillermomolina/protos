@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.166-SNAPSHOT
+
+- **I115.** Refresh the generated-bytecode BCI partial-evaluation baseline and the profile-specialized epilogue expectation after removing boolean boxing elimination. Add the factorial/Fibonacci graph-budget reporting tool.
+
 ## 0.4.165-SNAPSHOT
 
 - **I115.** Remove boolean from Bytecode DSL boxing elimination. Add primitive-comparison control regressions and update the Native generated-structure policy expectations.

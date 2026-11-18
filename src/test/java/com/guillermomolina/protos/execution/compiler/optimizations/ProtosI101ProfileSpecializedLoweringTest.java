@@ -1555,7 +1555,7 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                 // epilogue: EpilogForReturn, then return.
                 assertEquals(
                         List.of(
-                                "c.EpilogForReturn INTEGER=0 BYTECODE_INDEX=bci INTEGER=1 NODE_PROFILE=profile",
+                                "c.EpilogForReturn INTEGER=0 INTEGER=1 NODE_PROFILE=profile",
                                 "return"),
                         afterReparse.subList(
                                 beforeReparse.size(), afterReparse.size()),
