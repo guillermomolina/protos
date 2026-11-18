@@ -89,7 +89,15 @@ class ProtosStaticDefinitionsTest {
         int assignmentTarget = source.indexOf("value", source.indexOf("=>"));
         int laterRead = source.lastIndexOf("value");
 
-        assertTrue(definition(source, assignmentTarget).isEmpty());
+        int parameter = source.indexOf("value");
+
+        ProtosStaticDefinitionResult target = definition(source, assignmentTarget).orElseThrow();
+        assertEquals(
+                new SourceSpan(assignmentTarget, assignmentTarget + "value".length()),
+                target.referenceSpan());
+        assertEquals(
+                new SourceSpan(parameter, parameter + "value".length()),
+                target.targets().get(0).span());
         assertTrue(definition(source, laterRead).isPresent());
     }
 
@@ -312,6 +320,250 @@ class ProtosStaticDefinitionsTest {
 
         session.putDocument("workspace", new ProtosDocumentSnapshot("doc", 2L, source + "\n"));
         assertFalse(session.isCurrent("workspace", result));
+    }
+
+    @Test
+    void localSlotCreationIsTheOriginOfALaterRead() {
+        String source = "mensaje: \"Hola\"\nmensaje";
+        assertProven(source, source.lastIndexOf("mensaje"), 0, "mensaje");
+    }
+
+    @Test
+    void closureStoredInSlotIsTheOriginOfItsCallReceiver() {
+        String source = "saludar: (nombre) => {\n  print(nombre)\n}\n\nsaludar(\"Hola\")";
+        assertProven(source, source.lastIndexOf("saludar"), 0, "saludar");
+        assertProven(
+                source, source.indexOf("nombre", source.indexOf("print")),
+                source.indexOf("nombre"), "nombre");
+    }
+
+    @Test
+    void localCreationInsideClosureIsTheOriginInThatActivation() {
+        String source = "f: () => {\n  local: 1\n  local\n}";
+        assertProven(source, source.lastIndexOf("local"), source.indexOf("local"), "local");
+    }
+
+    @Test
+    void assignmentKeepsTheOriginalCreationForLaterReads() {
+        String source = "count: 1\ncount = 2\ncount";
+        assertProven(source, source.lastIndexOf("count"), 0, "count");
+    }
+
+    @Test
+    void assignmentTargetResolvesToTheOriginalCreation() {
+        String source = "count: 1\ncount = 2\ncount";
+        int target = source.indexOf("count =");
+        ProtosStaticDefinitionResult result = assertProven(source, target, 0, "count");
+        assertEquals("count", slice(source, result.referenceSpan()));
+        assertEquals("count", slice(source, result.targets().get(0).span()));
+    }
+
+    @Test
+    void groupedCreationProvesEveryTargetAfterTheValue() {
+        String source = "(a, b): [1, 2]\na\nb";
+        assertProven(source, source.lastIndexOf("a"), source.indexOf("a"), "a");
+        assertProven(source, source.lastIndexOf("b"), source.indexOf("b"), "b");
+    }
+
+    @Test
+    void slotCreatedAfterOpaqueInvocationIsProvenWithoutOlderFacts() {
+        String source = "old: 1\nsink()\nfresh: 2\nfresh\nold";
+        assertProven(source, source.lastIndexOf("fresh"), source.indexOf("fresh"), "fresh");
+        assertTrue(definition(source, source.lastIndexOf("old")).isEmpty());
+    }
+
+    @Test
+    void ownMemberOfBareObjectLiteralResolvesToItsDeclaration() {
+        String source = "obj: {\n  dato: 1\n}\nobj.dato";
+        int selector = source.lastIndexOf("dato");
+        ProtosStaticDefinitionResult result =
+                assertProven(source, selector, source.indexOf("dato"), "dato");
+        assertEquals(new SourceSpan(selector, selector + "dato".length()), result.referenceSpan());
+        assertProven(source, source.lastIndexOf("obj"), 0, "obj");
+    }
+
+    @Test
+    void closureStoredInOwnMemberResolvesAtItsCall() {
+        String source = "obj: {\n  saludar: () => { 42 }\n}\nobj.saludar()";
+        assertProven(
+                source, source.lastIndexOf("saludar"), source.indexOf("saludar"), "saludar");
+    }
+
+    @Test
+    void sameNamedMembersOfDifferentObjectsResolveToTheirOwnDeclarations() {
+        String source = "a: {\n  dato: 1\n}\nb: {\n  dato: 2\n}\na.dato\nb.dato";
+        int firstDeclaration = source.indexOf("dato");
+        int secondDeclaration = source.indexOf("dato", firstDeclaration + 1);
+        assertProven(source, source.indexOf("a.dato") + 2, firstDeclaration, "dato");
+        assertProven(source, source.indexOf("b.dato") + 2, secondDeclaration, "dato");
+    }
+
+    @Test
+    void readBeforeCreationHasNoOrigin() {
+        String source = "later\nlater: 1";
+        assertTrue(definition(source, 0).isEmpty());
+    }
+
+    @Test
+    void slotIsNotVisibleOutsideItsActivation() {
+        String source = "f: () => {\n  inner: 1\n}\ninner";
+        assertTrue(definition(source, source.lastIndexOf("inner")).isEmpty());
+    }
+
+    @Test
+    void sameNameInUnprovenOuterActivationHasNoOrigin() {
+        String source = "x: 1\nf: () => {\n  x\n}";
+        assertTrue(definition(source, source.lastIndexOf("x")).isEmpty());
+    }
+
+    @Test
+    void parameterOfAnotherClosureIsNotAnOrigin() {
+        String source = "f: (p) => { p }\ng: () => { p }";
+        assertTrue(definition(source, source.lastIndexOf("p")).isEmpty());
+    }
+
+    @Test
+    void opaqueInvocationInvalidatesSlotOrigin() {
+        String source = "v: 1\nsink()\nv";
+        assertTrue(definition(source, source.lastIndexOf("v")).isEmpty());
+    }
+
+    @Test
+    void opaqueInvocationInvalidatesObjectMembers() {
+        String source = "obj: {\n  dato: 1\n}\nsink()\nobj.dato";
+        assertTrue(definition(source, source.lastIndexOf("dato")).isEmpty());
+        String method = "obj: {\n  m: () => { 1 }\n  dato: 2\n}\nobj.m()\nobj.dato";
+        assertTrue(definition(method, method.lastIndexOf("dato")).isEmpty());
+    }
+
+    @Test
+    void unknownMemberReceiverHasNoOrigin() {
+        String source = "unknown.dato";
+        assertTrue(definition(source, source.indexOf("dato")).isEmpty());
+        String parameter = "f: (o) => { o.dato }";
+        assertTrue(definition(parameter, parameter.indexOf("dato")).isEmpty());
+    }
+
+    @Test
+    void absentMemberThatCouldBeInheritedHasNoOrigin() {
+        String source = "obj: {\n  dato: 1\n}\nobj.toString";
+        assertTrue(definition(source, source.indexOf("toString")).isEmpty());
+    }
+
+    @Test
+    void objectSlotsAreNotLexicalSlotsOfTheOuterActivation() {
+        String source = "obj: {\n  dato: 1\n}\ndato";
+        assertTrue(definition(source, source.lastIndexOf("dato")).isEmpty());
+    }
+
+    @Test
+    void explicitParentObjectHasNoMemberProvenance() {
+        String source = "base: {\n  dato: 1\n}\nobj: base {\n  propio: 2\n}\nobj.propio\nobj.dato";
+        assertTrue(definition(source, source.lastIndexOf("propio")).isEmpty());
+        assertTrue(definition(source, source.lastIndexOf("dato")).isEmpty());
+    }
+
+    @Test
+    void compositionObjectHasNoMemberProvenance() {
+        String source = "mixin: {\n  dato: 1\n}\nobj: {\n  ...mixin\n  propio: 2\n}\nobj.propio";
+        assertTrue(definition(source, source.lastIndexOf("propio")).isEmpty());
+    }
+
+    @Test
+    void aliasedObjectLosesMemberProvenance() {
+        String source = "obj: {\n  dato: 1\n}\nalias: obj\nalias.nuevo: 2\nobj.dato";
+        assertTrue(definition(source, source.lastIndexOf("dato")).isEmpty());
+    }
+
+    @Test
+    void namedArgumentLabelIsNotAReference() {
+        String source = "value: 1\nsink(value: value)";
+        int label = source.indexOf("value", source.indexOf("sink"));
+        assertTrue(definition(source, label).isEmpty());
+        assertProven(source, source.lastIndexOf("value"), 0, "value");
+    }
+
+    @Test
+    void creationTargetsAreNotReferences() {
+        String source = "x: 1\nobj: {\n  dato: 1\n}";
+        assertTrue(definition(source, 0).isEmpty());
+        assertTrue(definition(source, source.indexOf("dato")).isEmpty());
+        String grouped = "(a, b): [1, 2]";
+        assertTrue(definition(grouped, grouped.indexOf("a")).isEmpty());
+    }
+
+    @Test
+    void invalidSyntaxAndOutOfDocumentPositionsHaveNoOrigin() {
+        String invalid = "x: 1\nx(";
+        assertTrue(definition(invalid, invalid.lastIndexOf("x")).isEmpty());
+        String source = "x: 1\nx";
+        assertTrue(definition(source, -1).isEmpty());
+        assertTrue(definition(source, source.length()).isEmpty());
+    }
+
+    @Test
+    void contextMemberWriteReplacingSlotValueInvalidatesMemberProvenance() {
+        String source = "obj: {\n  dato: 1\n}\ncontext.obj = {\n  otro: 2\n}\nobj.dato";
+        assertTrue(definition(source, source.lastIndexOf("dato")).isEmpty());
+    }
+
+    @Test
+    void contextMemberWriteWithSameNamedMemberNeverResolvesToTheOldDeclaration() {
+        String source = "obj: {\n  dato: 1\n}\ncontext.obj = {\n  dato: 2\n}\nobj.dato";
+        assertTrue(definition(source, source.lastIndexOf("dato")).isEmpty());
+    }
+
+    @Test
+    void contextMemberWriteDoesNotKeepUnprovenSlotOrigin() {
+        String source = "obj: {\n  dato: 1\n}\ncontext.obj = {\n  otro: 2\n}\nobj";
+        assertTrue(definition(source, source.lastIndexOf("obj")).isEmpty());
+        // The write receiver is the context, not a read of the slot.
+        assertTrue(definition(source, source.indexOf("obj =")).isEmpty());
+        String before = "obj: {\n  dato: 1\n}\nobj\ncontext.obj = 2";
+        assertProven(before, before.indexOf("obj\ncontext"), 0, "obj");
+    }
+
+    @Test
+    void contextMemberCreationInvalidatesSlotAndMemberFacts() {
+        String source = "obj: {\n  dato: 1\n}\ncontext.otro: 2\nobj.dato\nobj";
+        assertTrue(definition(source, source.lastIndexOf("dato")).isEmpty());
+        assertTrue(definition(source, source.lastIndexOf("obj")).isEmpty());
+    }
+
+    @Test
+    void thisMemberWriteInvalidatesFacts() {
+        String source = "obj: {\n  dato: 1\n}\nthis.obj = 2\nobj.dato";
+        assertTrue(definition(source, source.lastIndexOf("dato")).isEmpty());
+    }
+
+    @Test
+    void writeToKnownOwnMemberKeepsItsDeclaration() {
+        String source = "obj: {\n  dato: 1\n}\nobj.dato = 2\nobj.dato";
+        int declaration = source.indexOf("dato");
+        assertProven(source, source.lastIndexOf("dato"), declaration, "dato");
+        assertProven(source, source.lastIndexOf("obj"), 0, "obj");
+    }
+
+    @Test
+    void memberWriteOnUnprovenReceiverInvalidatesObjectFacts() {
+        String source = "f: (o) => {\n  obj: {\n    dato: 1\n  }\n  obj.dato\n"
+                + "  o.campo = 3\n  obj.dato\n}";
+        int declaration = source.indexOf("dato");
+        assertProven(source, source.indexOf("dato", declaration + 1), declaration, "dato");
+        assertTrue(definition(source, source.lastIndexOf("dato")).isEmpty());
+        String creation = "f: (o) => {\n  obj: {\n    dato: 1\n  }\n  o.campo: 3\n  obj.dato\n}";
+        assertTrue(definition(creation, creation.lastIndexOf("dato")).isEmpty());
+    }
+
+    private ProtosStaticDefinitionResult assertProven(
+            String source, int reference, int declaration, String name) {
+        ProtosStaticDefinitionResult result = definition(source, reference).orElseThrow();
+        assertEquals(new SourceSpan(reference, reference + name.length()), result.referenceSpan());
+        assertEquals(1, result.targets().size());
+        assertEquals(
+                new SourceSpan(declaration, declaration + name.length()),
+                result.targets().get(0).span());
+        return result;
     }
 
     private Optional<ProtosStaticDefinitionResult> definition(String source, int sourceOffset) {

@@ -82,11 +82,16 @@ import org.eclipse.lsp4j.services.TextDocumentService;
  * <p>The adapter keeps all currently open editor buffers in one server-local
  * custody domain. G1 parses only each exact immutable buffer snapshot and emits
  * parser-derived diagnostics. G2 derives D079 document symbols from the same
- * current parser-authoritative snapshot. G4 definition queries consume only
- * D110 proof results after the workspace edge confirms exact canonical
- * ProjectBinding source ownership. H1 adds D124 references by inverting only
- * those D110-proven identities; the open-document domain itself never becomes
- * project/package/module authority. LM011-D1 formats the exact current open
+ * current parser-authoritative snapshot. Definition queries consume only
+ * complete D110 proof results computed from the exact current open snapshot:
+ * they may answer for any open Protos document, project member or not, and
+ * publish only targets inside that same URI and snapshot. External targets are
+ * not admitted, and answering a definition never gives the open document a
+ * project identity. H1 adds D124 references by inverting only D110-proven
+ * identities, and references keep requiring the workspace edge to confirm exact
+ * canonical ProjectBinding source ownership; the open-document domain itself
+ * never becomes project/package/module authority. No Protos code is executed
+ * to answer any of these queries. LM011-D1 formats the exact current open
  * snapshot through the TOOL010 whole-document authority and returns at most
  * one full-document edit; editor formatting options never select style.
  * LM010-A hover publishes only D110-proven bindings and explicitly labeled
@@ -100,8 +105,8 @@ import org.eclipse.lsp4j.services.TextDocumentService;
  * rather than a false parameter highlight. Under D209-C (LM013) these three
  * document-local capabilities answer for any open snapshot, project member or
  * not: they need only the exact current snapshot and URI, never canonical
- * ProjectBinding ownership, while definition and references keep the
- * canonical-source authority gate.</p>
+ * ProjectBinding ownership. Same-document definition follows the same rule,
+ * while references keep the canonical-source authority gate.</p>
  */
 final class ProtosTextDocumentService implements TextDocumentService {
     static final String OPEN_DOCUMENTS_DOMAIN = "lsp:open-documents";
@@ -257,11 +262,6 @@ final class ProtosTextDocumentService implements TextDocumentService {
                 Objects.requireNonNull(params.getTextDocument(), "textDocument").getUri(),
                 "textDocument.uri");
 
-        Predicate<String> authority = navigationSourceAuthority;
-        if (!authority.test(uri)) {
-            return noDefinition();
-        }
-
         Optional<ProtosDocumentSnapshot> current =
                 session.currentSnapshot(OPEN_DOCUMENTS_DOMAIN, uri);
         if (current.isEmpty()) {
@@ -286,7 +286,7 @@ final class ProtosTextDocumentService implements TextDocumentService {
 
         ProtosStaticDefinitionResult proven = definition.get();
         if (!session.isCurrent(OPEN_DOCUMENTS_DOMAIN, proven)
-                || !authority.test(uri)
+                || !proven.referenceSnapshot().equals(current.get())
                 || !proven.referenceSnapshot().documentId().equals(uri)) {
             return noDefinition();
         }

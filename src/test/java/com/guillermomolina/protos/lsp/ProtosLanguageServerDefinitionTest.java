@@ -47,7 +47,7 @@ class ProtosLanguageServerDefinitionTest {
     @TempDir Path temporary;
 
     @Test
-    void advertisesDefinitionAndReturnsExactCanonicalOpenOverlayLocation() throws Exception {
+    void canonicalOverlayLocationSurvivesLossOfProjectBinding() throws Exception {
         ProjectFixture project = project("definition");
         AtomicReference<Optional<ProtosProjectBinding>> current =
                 new AtomicReference<>(Optional.of(project.binding()));
@@ -76,12 +76,14 @@ class ProtosLanguageServerDefinitionTest {
         assertEquals(new Position(0, 4), locations.get(0).getRange().getStart());
         assertEquals(new Position(0, 9), locations.get(0).getRange().getEnd());
 
+        // The proof belongs entirely to the open snapshot, so losing canonical
+        // project authority does not erase it.
         current.set(Optional.empty());
-        assertTrue(definitions(server, uri, 1, 2).isEmpty());
+        assertParameterLocation(definitions(server, uri, 1, 2), uri);
     }
 
     @Test
-    void looseOrNonCanonicalOpenDocumentNeverGainsDefinitionAuthority() throws Exception {
+    void looseOrNonCanonicalOpenDocumentAnswersSameDocumentDefinition() throws Exception {
         ProjectFixture project = project("authority");
         ProtosLanguageServer server = initialized(
                 project,
@@ -95,14 +97,139 @@ class ProtosLanguageServerDefinitionTest {
         Files.writeString(loose, source);
         String looseUri = loose.toUri().toString();
         server.textDocuments().didOpen(open(looseUri, 1, source));
-        assertTrue(definitions(server, looseUri, 0, 14).isEmpty());
+        assertParameterLocation(definitions(server, looseUri, 0, 14), looseUri);
 
         String canonicalUri = project.source().toUri().toString();
         String nonCanonicalUri = canonicalUri.replace(
                 "/Main.protos",
                 "/./Main.protos");
         server.textDocuments().didOpen(open(nonCanonicalUri, 1, source));
-        assertTrue(definitions(server, nonCanonicalUri, 0, 14).isEmpty());
+        // The textual alias is kept verbatim; it is never rewritten to the
+        // canonical project URI.
+        assertParameterLocation(
+                definitions(server, nonCanonicalUri, 0, 14),
+                nonCanonicalUri);
+    }
+
+    @Test
+    void workspaceWithoutProjectMetadataAnswersSameDocumentDefinition() throws Exception {
+        Path root = Files.createDirectory(temporary.resolve("no-metadata")).toRealPath();
+        Path source = root.resolve("Main.protos");
+        Files.writeString(source, "diskOnly: 1\n");
+        assertTrue(Files.notExists(root.resolve("package.toml")));
+        assertTrue(Files.notExists(root.resolve("protos.lock")));
+        assertTrue(Files.notExists(root.resolve("protos.project")));
+
+        ProtosLanguageServer server =
+                new ProtosLanguageServer(code -> {}, candidate -> Optional.empty());
+        server.initialize(initializeParams(root)).join();
+
+        String uri = source.toUri().toString();
+        server.textDocuments().didOpen(open(uri, 1, "f: (value) => {\n  value\n}\n"));
+
+        assertParameterLocation(definitions(server, uri, 1, 2), uri);
+        assertTrue(definitions(server, uri, 99, 0).isEmpty());
+        assertTrue(definitions(server, uri, 1, 99).isEmpty());
+    }
+
+    @Test
+    void unprovenSitesWithoutProjectBindingReturnOrdinaryNoResult() throws Exception {
+        Path root = Files.createDirectory(temporary.resolve("unproven")).toRealPath();
+        ProtosLanguageServer server =
+                new ProtosLanguageServer(code -> {}, candidate -> Optional.empty());
+        server.initialize(initializeParams(root)).join();
+
+        // The parameter declaration itself is not a read.
+        String declaration = root.resolve("Declaration.protos").toUri().toString();
+        server.textDocuments().didOpen(open(declaration, 1, "f: (value) => value\n"));
+        assertTrue(definitions(server, declaration, 0, 5).isEmpty());
+        assertParameterLocation(definitions(server, declaration, 0, 14), declaration);
+
+        // A member name never resolves by textual coincidence with a binding;
+        // only the receiver read is proven.
+        String member = root.resolve("Member.protos").toUri().toString();
+        server.textDocuments().didOpen(open(member, 1, "f: (value) => value.value\n"));
+        assertTrue(definitions(server, member, 0, 21).isEmpty());
+        assertParameterLocation(definitions(server, member, 0, 15), member);
+
+        // A completed slot creation is the proven origin of a later read; the
+        // creation target itself is not a read.
+        String slot = root.resolve("Slot.protos").toUri().toString();
+        server.textDocuments().didOpen(open(slot, 1, "count: 1\ncount\n"));
+        assertLocation(definitions(server, slot, 1, 1), slot, 0, 0, 0, 5);
+        assertTrue(definitions(server, slot, 0, 1).isEmpty());
+
+        // A read after an opaque invocation stays unresolved.
+        String opaque = root.resolve("Opaque.protos").toUri().toString();
+        server.textDocuments().didOpen(
+                open(opaque, 1, "f: (value) => {\n  sink(value)\n  value\n}\n"));
+        assertTrue(definitions(server, opaque, 2, 2).isEmpty());
+
+        // A named-argument label is not a read.
+        String label = root.resolve("Label.protos").toUri().toString();
+        server.textDocuments().didOpen(open(
+                label,
+                1,
+                "f: (value) => {\n  ((other) => other)(value: value)\n}\n"));
+        assertTrue(definitions(server, label, 1, 23).isEmpty());
+
+        // A source that does not parse yields no locations.
+        String broken = root.resolve("Broken.protos").toUri().toString();
+        server.textDocuments().didOpen(open(broken, 1, "f: (value) => {\n  value\n"));
+        assertTrue(definitions(server, broken, 1, 2).isEmpty());
+
+        // Invalid positions and unopened documents yield the ordinary empty result.
+        assertTrue(definitions(server, declaration, 5, 0).isEmpty());
+        assertTrue(definitions(server, declaration, 0, 200).isEmpty());
+        assertTrue(definitions(
+                server,
+                root.resolve("Unopened.protos").toUri().toString(),
+                0,
+                0).isEmpty());
+    }
+
+    @Test
+    void slotAndObjectMemberOriginsWithoutProjectBindingStayInTheDocument() throws Exception {
+        Path root = Files.createDirectory(temporary.resolve("slots")).toRealPath();
+        assertTrue(Files.notExists(root.resolve("package.toml")));
+        assertTrue(Files.notExists(root.resolve("protos.lock")));
+        assertTrue(Files.notExists(root.resolve("protos.project")));
+        ProtosLanguageServer server =
+                new ProtosLanguageServer(code -> {}, candidate -> Optional.empty());
+        server.initialize(initializeParams(root)).join();
+
+        String closure = root.resolve("Closure.protos").toUri().toString();
+        server.textDocuments().didOpen(open(
+                closure,
+                1,
+                "saludar: (nombre) => {\n  print(nombre)\n}\nsaludar(\"Hola\")\n"));
+        assertLocation(definitions(server, closure, 3, 2), closure, 0, 0, 0, 7);
+        assertLocation(definitions(server, closure, 1, 9), closure, 0, 10, 0, 16);
+
+        String object = root.resolve("Object.protos").toUri().toString();
+        server.textDocuments().didOpen(open(
+                object,
+                1,
+                "obj: {\n  dato: 1\n  saludar: () => { 42 }\n}\nobj.dato\nobj.saludar()\n"));
+        // The selector range is exactly the member token.
+        assertTrue(definitions(server, object, 4, 3).isEmpty());
+        assertLocation(definitions(server, object, 4, 4), object, 1, 2, 1, 6);
+        assertLocation(definitions(server, object, 4, 7), object, 1, 2, 1, 6);
+        assertTrue(definitions(server, object, 4, 8).isEmpty());
+        assertLocation(definitions(server, object, 4, 1), object, 0, 0, 0, 3);
+        assertLocation(definitions(server, object, 5, 6), object, 2, 2, 2, 9);
+
+        // A textual URI alias is answered under exactly the requested URI.
+        String alias = root.toUri().toString() + "./Alias.protos";
+        server.textDocuments().didOpen(open(alias, 1, "mensaje: \"Hola\"\nmensaje\n"));
+        assertLocation(definitions(server, alias, 1, 3), alias, 0, 0, 0, 7);
+
+        // Opaque effects remove slot and member proofs.
+        String opaque = root.resolve("Opaque.protos").toUri().toString();
+        server.textDocuments().didOpen(open(
+                opaque, 1, "v: 1\nobj: {\n  dato: 1\n}\nsink()\nv\nobj.dato\n"));
+        assertTrue(definitions(server, opaque, 5, 0).isEmpty());
+        assertTrue(definitions(server, opaque, 6, 5).isEmpty());
     }
 
     @Test
@@ -231,6 +358,26 @@ class ProtosLanguageServerDefinitionTest {
                 server.getTextDocumentService().definition(params).join();
         assertTrue(response.isLeft());
         return List.copyOf(response.getLeft());
+    }
+
+    private static void assertParameterLocation(List<Location> locations, String uri) {
+        assertEquals(1, locations.size());
+        assertEquals(uri, locations.get(0).getUri());
+        assertEquals(new Position(0, 4), locations.get(0).getRange().getStart());
+        assertEquals(new Position(0, 9), locations.get(0).getRange().getEnd());
+    }
+
+    private static void assertLocation(
+            List<Location> locations,
+            String uri,
+            int startLine,
+            int startCharacter,
+            int endLine,
+            int endCharacter) {
+        assertEquals(1, locations.size());
+        assertEquals(uri, locations.get(0).getUri());
+        assertEquals(new Position(startLine, startCharacter), locations.get(0).getRange().getStart());
+        assertEquals(new Position(endLine, endCharacter), locations.get(0).getRange().getEnd());
     }
 
     private static DidOpenTextDocumentParams open(

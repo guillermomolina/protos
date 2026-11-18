@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.167-SNAPSHOT
+
+- **I168.** Prove language-server Definition for local slots, Closures stored in slots, assignment targets and own members of bare object literals. Member writes or creations on the current context, `this` or an unproven receiver conservatively invalidate proven facts; References keeps inverting only proven definitions. Workspace Symbols tests read either response variant.
+
 ## 0.4.166-SNAPSHOT
 
 - **I115.** Refresh the generated-bytecode BCI partial-evaluation baseline and the profile-specialized epilogue expectation after removing boolean boxing elimination. Add the factorial/Fibonacci graph-budget reporting tool.

@@ -75,6 +75,7 @@ import org.eclipse.lsp4j.TextDocumentItem;
 import org.eclipse.lsp4j.TextEdit;
 import org.eclipse.lsp4j.VersionedTextDocumentIdentifier;
 import org.eclipse.lsp4j.WorkspaceFolder;
+import org.eclipse.lsp4j.WorkspaceSymbolParams;
 import org.eclipse.lsp4j.jsonrpc.Launcher;
 import org.eclipse.lsp4j.launch.LSPLauncher;
 import org.eclipse.lsp4j.services.LanguageClient;
@@ -242,7 +243,7 @@ class ProtosLanguageServerIntegratedEditorTest {
 
     @Test
     @Timeout(10)
-    void documentLocalAnswersFollowSnapshotsWhileNavigationKeepsProjectAuthority()
+    void localDefinitionFollowsSnapshotsWhileCrossSourceNavigationKeepsProjectAuthority()
             throws Exception {
         ProjectFixture project = project("authority");
         connection = connect(project);
@@ -264,8 +265,9 @@ class ProtosLanguageServerIntegratedEditorTest {
         assertNull(connection.hover(uri, 1, 3));
         assertEmptyComplete(connection.completion(uri, 1, 3));
 
-        // D209-C: loose and non-canonical open documents get document-local
-        // intelligence, but never Definition or References authority.
+        // Loose and non-canonical open documents get document-local
+        // intelligence, including same-document Definition, but never
+        // References authority.
         String source = "f: (value) => value\n((a) => a)(1)";
         String nonCanonicalUri = uri.replace("/Main.protos", "/./Main.protos");
         connection.open(nonCanonicalUri, 1, source);
@@ -276,7 +278,10 @@ class ProtosLanguageServerIntegratedEditorTest {
                 "(a)",
                 connection.signatureHelp(nonCanonicalUri, 1, 12, null)
                         .getSignatures().get(0).getLabel());
-        assertTrue(connection.definition(nonCanonicalUri, 0, 14).isEmpty());
+        assertSingleLocation(
+                connection.definition(nonCanonicalUri, 0, 14),
+                nonCanonicalUri,
+                range(0, 4, 0, 9));
         assertTrue(connection.references(nonCanonicalUri, 0, 14).isEmpty());
 
         Path loose = temporary.resolve("Loose.protos");
@@ -296,22 +301,27 @@ class ProtosLanguageServerIntegratedEditorTest {
         assertEquals(
                 List.of("value", "this", "context", "true", "false", "null"),
                 looseCompletion.getItems().stream().map(CompletionItem::getLabel).toList());
-        assertTrue(connection.definition(looseUri, 0, 14).isEmpty());
+        assertSingleLocation(
+                connection.definition(looseUri, 0, 14),
+                looseUri,
+                range(0, 4, 0, 9));
         assertTrue(connection.references(looseUri, 0, 14).isEmpty());
         assertNull(connection.hover(looseUri, 99, 0));
 
         connection.change(looseUri, 2, "f: (a, b) => a\nf(1, ");
         assertNull(connection.signatureHelp(looseUri, 1, 5, ","));
         assertNull(connection.hover(looseUri, 0, 16));
+        assertTrue(connection.definition(looseUri, 0, 13).isEmpty());
 
         connection.close(looseUri);
         assertNull(connection.hover(looseUri, 0, 3));
         assertEmptyComplete(connection.completion(looseUri, 0, 19));
+        assertTrue(connection.definition(looseUri, 0, 14).isEmpty());
     }
 
     @Test
     @Timeout(10)
-    void standaloneDocumentWithoutWorkspaceHasLocalIntelligenceButNoNavigation()
+    void standaloneDocumentWithoutWorkspaceHasLocalDefinitionButNoReferences()
             throws Exception {
         ProjectFixture project = project("standalone");
         connection = connectWithoutWorkspace(project);
@@ -343,13 +353,142 @@ class ProtosLanguageServerIntegratedEditorTest {
         assertNotNull(signature);
         assertEquals("(a)", signature.getSignatures().get(0).getLabel());
 
-        assertTrue(connection.definition(uri, 0, 16).isEmpty());
+        assertSingleLocation(connection.definition(uri, 0, 16), uri, range(0, 4, 0, 9));
         assertTrue(connection.references(uri, 0, 16).isEmpty());
+        assertTrue(connection.workspaceSymbols("value").isEmpty());
+        assertTrue(connection.workspaceSymbols("f").isEmpty());
 
         connection.close(uri);
         assertNull(connection.hover(uri, 0, 16));
         assertEmptyComplete(connection.completion(uri, 0, 19));
         assertNull(connection.signatureHelp(uri, 1, 12, null));
+        assertTrue(connection.definition(uri, 0, 16).isEmpty());
+    }
+
+    @Test
+    @Timeout(10)
+    void localDefinitionTracksEachSnapshotOfOneLooseDocument() throws Exception {
+        ProjectFixture project = project("currency");
+        connection = connectWithoutWorkspace(project);
+        String uri = temporary.resolve("Currency.protos").toUri().toString();
+
+        connection.open(uri, 1, "f: (first) => first");
+        assertSingleLocation(connection.definition(uri, 0, 15), uri, range(0, 4, 0, 9));
+
+        connection.change(uri, 2, "f: (second) => second");
+        assertSingleLocation(connection.definition(uri, 0, 16), uri, range(0, 4, 0, 10));
+        // The former read site now lies inside the new parameter declaration.
+        assertTrue(connection.definition(uri, 0, 5).isEmpty());
+
+        connection.change(uri, 3, "f: (second) => {\n  second\n");
+        assertTrue(connection.definition(uri, 1, 3).isEmpty());
+
+        connection.change(uri, 4, "f: (value) => {\n  sink(value)\n  value\n}\n");
+        assertTrue(connection.definition(uri, 2, 2).isEmpty());
+        assertTrue(connection.references(uri, 1, 7).isEmpty());
+
+        connection.change(uri, 5, "first: 1\nfirst\n");
+        assertSingleLocation(connection.definition(uri, 1, 2), uri, range(0, 0, 0, 5));
+
+        // A different local creation in the new snapshot never reuses the
+        // former location.
+        connection.change(uri, 6, "\nsecond: 2\nsecond\nfirst\n");
+        assertSingleLocation(connection.definition(uri, 2, 2), uri, range(1, 0, 1, 6));
+        assertTrue(connection.definition(uri, 3, 2).isEmpty());
+
+        connection.close(uri);
+        assertTrue(connection.definition(uri, 1, 7).isEmpty());
+        assertTrue(connection.definition(uri, 2, 2).isEmpty());
+    }
+
+    @Test
+    @Timeout(10)
+    void standaloneDocumentResolvesProvenSlotsAndObjectMembers() throws Exception {
+        ProjectFixture project = project("slots");
+        connection = connectWithoutWorkspace(project);
+
+        String message = temporary.resolve("Message.protos").toUri().toString();
+        connection.open(message, 1, "mensaje: \"Hola\"\nmensaje\n");
+        assertSingleLocation(connection.definition(message, 1, 3), message, range(0, 0, 0, 7));
+
+        String greet = temporary.resolve("Greet.protos").toUri().toString();
+        connection.open(greet, 1, "saludar: (nombre) => {\n  print(nombre)\n}\nsaludar()\n");
+        assertSingleLocation(connection.definition(greet, 3, 2), greet, range(0, 0, 0, 7));
+
+        String local = temporary.resolve("Local.protos").toUri().toString();
+        connection.open(local, 1, "f: () => {\n  local: 1\n  local\n}\n");
+        assertSingleLocation(connection.definition(local, 2, 3), local, range(1, 2, 1, 7));
+
+        String object = temporary.resolve("Object.protos").toUri().toString();
+        connection.open(
+                object,
+                1,
+                "obj: {\n  dato: 1\n  saludar: () => { 42 }\n}\nobj.dato\nobj.saludar()\n");
+        assertSingleLocation(connection.definition(object, 4, 5), object, range(1, 2, 1, 6));
+        assertSingleLocation(connection.definition(object, 5, 6), object, range(2, 2, 2, 9));
+
+        String twin = temporary.resolve("Twin.protos").toUri().toString();
+        connection.open(
+                twin,
+                1,
+                "a: {\n  dato: 1\n}\nb: {\n  dato: 2\n}\na.dato\nb.dato\n");
+        assertSingleLocation(connection.definition(twin, 6, 3), twin, range(1, 2, 1, 6));
+        assertSingleLocation(connection.definition(twin, 7, 3), twin, range(4, 2, 4, 6));
+
+        String unknown = temporary.resolve("Unknown.protos").toUri().toString();
+        connection.open(unknown, 1, "f: (o) => {\n  o.dato\n}\n");
+        assertTrue(connection.definition(unknown, 1, 5).isEmpty());
+        assertTrue(connection.references(object, 4, 5).isEmpty());
+    }
+
+    @Test
+    @Timeout(10)
+    void localDefinitionStaysInsideEachRequestedUri() throws Exception {
+        ProjectFixture project = project("isolation");
+        connection = connect(project);
+        String canonicalUri = project.source().toUri().toString();
+        String aliasUri = canonicalUri.replace("/Main.protos", "/./Main.protos");
+        String otherUri = temporary.resolve("Other.protos").toUri().toString();
+
+        connection.open(canonicalUri, 1, "f: (value) => value");
+        connection.open(aliasUri, 1, "g: (other, value) => value");
+        connection.open(otherUri, 1, "h: (value) => value");
+
+        assertSingleLocation(
+                connection.definition(canonicalUri, 0, 14),
+                canonicalUri,
+                range(0, 4, 0, 9));
+        assertSingleLocation(
+                connection.definition(aliasUri, 0, 21),
+                aliasUri,
+                range(0, 11, 0, 16));
+        assertSingleLocation(
+                connection.definition(otherUri, 0, 14),
+                otherUri,
+                range(0, 4, 0, 9));
+
+        // Cross-source navigation stays bound to canonical project authority.
+        assertTrue(connection.references(aliasUri, 0, 21).isEmpty());
+        assertTrue(connection.references(otherUri, 0, 14).isEmpty());
+        assertFalse(connection.references(canonicalUri, 0, 14).isEmpty());
+    }
+
+    @Test
+    @Timeout(10)
+    void localDefinitionRangesUseUtf16OffsetsAcrossCrlfLines() throws Exception {
+        ProjectFixture project = project("utf16");
+        connection = connectWithoutWorkspace(project);
+        String uri = temporary.resolve("Wide.protos").toUri().toString();
+
+        // U+1F600 occupies two UTF-16 code units before both the declaration
+        // line and the read site.
+        connection.open(
+                uri,
+                1,
+                "g: \"\uD83D\uDE00\"\r\nf: (value) => {\r\n  [\"\uD83D\uDE00\", value]\r\n}\r\n");
+
+        assertSingleLocation(connection.definition(uri, 2, 10), uri, range(1, 4, 1, 9));
+        assertTrue(connection.references(uri, 2, 10).isEmpty());
     }
 
     @Test
@@ -442,6 +581,15 @@ class ProtosLanguageServerIntegratedEditorTest {
                 .getCapabilities();
         server.initialized(new InitializedParams());
         return capabilities;
+    }
+
+    private static void assertSingleLocation(
+            List<? extends Location> locations,
+            String uri,
+            Range range) {
+        assertEquals(1, locations.size());
+        assertEquals(uri, locations.get(0).getUri());
+        assertEquals(range, locations.get(0).getRange());
     }
 
     private static void assertEmptyComplete(CompletionList list) {
@@ -607,6 +755,16 @@ class ProtosLanguageServerIntegratedEditorTest {
                             new Position(line, character),
                             new ReferenceContext(true)))
                     .get(WAIT_SECONDS, TimeUnit.SECONDS);
+        }
+
+        private List<?> workspaceSymbols(String query) throws Exception {
+            var symbols = server.getWorkspaceService()
+                    .symbol(new WorkspaceSymbolParams(query))
+                    .get(WAIT_SECONDS, TimeUnit.SECONDS);
+            assertNotNull(symbols);
+            List<?> present = symbols.isLeft() ? symbols.getLeft() : symbols.getRight();
+            assertNotNull(present);
+            return present;
         }
 
         private PublishDiagnosticsParams nextDiagnostics() throws Exception {

@@ -223,6 +223,22 @@ class ProtosStaticCompletionTest {
         assertTrue(session.completionCurrent("w", "doc", source.length()).isEmpty());
     }
 
+    @Test
+    void definitionSlotOriginsAreNotCompletionCandidates() {
+        String source = "f: (parameter) => {\n  local: 1\n  local\n  \n}\n";
+        int blank = source.indexOf("\n  \n") + 3;
+        int localRead = source.lastIndexOf("local");
+
+        // Definition proves the ordinary slot origin at its read.
+        assertEquals(
+                span(source.indexOf("local"), "local"),
+                core.definition(snapshot(source), localRead).orElseThrow().targets().get(0).span());
+
+        ProtosStaticCompletionResult result = complete(source, blank).orElseThrow();
+        assertEquals(List.of("parameter"), labels(result, Kind.PROVEN_BINDING));
+        assertEquals(RESERVED, labels(result, Kind.SYNTAX));
+    }
+
     private Optional<ProtosStaticCompletionResult> complete(String source, int offset) {
         return core.completion(snapshot(source), offset);
     }

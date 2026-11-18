@@ -37,7 +37,7 @@ and the portable JVM distributions.
 | Formatting | `textDocument/formatting` | Any open document |
 | Document symbols | `textDocument/documentSymbol` | Any open document; advertised only when the client supports hierarchical symbols |
 | Workspace symbols | `workspace/symbol` | Sources of a bound project (see below) |
-| Go to definition | `textDocument/definition` | Open sources of a bound project |
+| Go to definition | `textDocument/definition` | Any open Protos document, for complete same-document proven origins only |
 | Find references | `textDocument/references` | Open sources of a bound project |
 | Hover | `textDocument/hover` | Any open Protos document |
 | Completion | `textDocument/completion` | Any open Protos document |
@@ -77,7 +77,8 @@ canonical, or one whole-document edit. Invalid source gets no edit.
 
 ## Document-local intelligence
 
-Hover, completion, and signature help answer for **any open Protos document**,
+Hover, completion, signature help, and go to definition answer for **any open
+Protos document**,
 including a loose file or a file outside every project. They use only the
 exact current (possibly unsaved) buffer and never read the file on disk, other
 files, or project metadata. A closed document gets no answer.
@@ -95,34 +96,71 @@ project:
 - **Signature help** works only when the callee is a literal Closure, for
   example `((a, b: 1) => { a + b })(`, showing source-text parameter labels.
   Calls through a name or a receiver get no signature help.
+- **Go to definition** returns a location only when every origin is proven
+  inside the same open snapshot, and the location always uses the exact URI of
+  the requested document. The proof reads neither the file on disk nor any
+  other file. A source without a complete proof (including source that does
+  not parse) returns an empty result.
 
-Opening a document never makes it part of a project: these answers grant no
-navigation authority.
+Opening a document never makes it part of a project: these answers create no
+project binding and grant no cross-source navigation authority.
 
 ## Navigation needs a bound project
 
-Workspace symbols, definition, and references work only for documents that
+**Local definitions** do not need a bound project: go to definition answers
+whenever all origins are proven inside the same open snapshot (see
+[Document-local intelligence](#document-local-intelligence)).
+
+**References and workspace symbols** work only for documents that
 belong to a **Protos project** whose root is
 exactly one of the editor's workspace folders. The server checks that root for
 `package.toml`, `protos.lock`, and the generated `protos.project` metadata, and
 it reads nothing outside it. Exact legacy `protos.toml` entries in the root or declared member are rejected, including symlinks and coexistence. It does not search parent or child directories.
 
 For a loose file, a file outside the workspace folder, or a folder without that
-project metadata, these requests return empty results. Diagnostics, formatting,
-document symbols, hover, completion, and signature help still work.
+project metadata, references and workspace symbols return empty results.
+Diagnostics, formatting, document symbols, hover, completion, signature help,
+and same-document go to definition still work.
 
 **Current limitation:** no public `protos` command writes `protos.lock` or
 `protos.project` yet (see [Package Tool](package-tool.md)). Until the Package
-Tool publishes that operation, navigation features are available only for
-projects that already carry exact, canonical metadata files; for an ordinary
-new project expect diagnostics, formatting, document symbols, hover,
-completion, and signature help only.
+Tool publishes that operation, references and workspace symbols are available
+only for projects that already carry exact, canonical metadata files; for an
+ordinary new project expect diagnostics, formatting, document symbols, hover,
+completion, signature help, and same-document go to definition only.
 
-Within a bound project the analysis is deliberately narrow:
+The analysis behind definition and references is deliberately narrow. The
+current generation mainly proves:
 
-- **Definition and references** resolve Closure parameters and match bindings
-  only when the analysis proves the binding, and only within the same
-  document. Slots, module members, imports, and other files are not resolved.
+- Closure parameters;
+- certain parameters of the contextual `for` form;
+- references whose origin remains unambiguous before any opaque effect (such
+  as an invocation) intervenes.
+
+Go to definition additionally proves, inside the same activation and only
+until an opaque effect intervenes:
+
+- local slot creations: after `mensaje: "Hola"` (or a grouped creation such as
+  `(a, b): pair`), a later read of `mensaje` goes to the creation. A read before
+  the creation, or from another Closure, is not resolved;
+- Closures stored in such slots, including the receiver of a later call such
+  as `saludar("Hola")`;
+- the target of an assignment such as `count = 2` when the slot it selects is
+  proven; the assignment keeps the original creation as the origin;
+- own members of a bare object literal stored in a proven local slot, for
+  example `obj.dato` after `obj: { dato: 1 }`, and methods stored as values of
+  those members, such as `obj.saludar()`. The object must have no parent
+  expression and no composition, and its members must be built from literals,
+  Closure literals, or such nested objects.
+
+The server never infers a project and never runs Protos code to answer. It
+does not resolve inherited members, members reached through dynamic
+delegation, objects that may have been changed through an alias or by an
+invocation, modules, imports, or other files. Whenever a proof is incomplete,
+the answer is empty. References stay within the same document.
+
+Within a bound project:
+
 - **Workspace symbols** search the project's own sources; dependencies and
   `std:` modules are excluded, and at most 100 results are returned.
 
@@ -137,8 +175,9 @@ particular editor shows can still differ:
 - document symbols appear only when the editor declares hierarchical symbol
   support;
 - an editor that opens a single file without a workspace folder gets no
-  workspace symbols, definition, or references, because no project can be
-  bound; hover, completion, and signature help still work.
+  workspace symbols or references, because no project can be bound; hover,
+  completion, signature help, and provable same-document go to definition
+  still work.
 
 This repository does not test any particular editor. The official VS Code
 extension is maintained in its own repository, and other editors are untested.

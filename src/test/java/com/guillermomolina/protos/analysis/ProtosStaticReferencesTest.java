@@ -314,6 +314,99 @@ class ProtosStaticReferencesTest {
         assertFalse(session.isCurrent("workspace", result));
     }
 
+    @Test
+    void ordinarySlotReadsReferenceTheirExactCreation() {
+        String source = "x: 1\nx\nx";
+        int first = source.indexOf("x", 1);
+        int second = source.lastIndexOf("x");
+        ProtosStaticReferenceResult result = references(source, second).orElseThrow();
+        assertEquals(new SourceSpan(0, 1), result.target().span());
+        assertEquals(List.of(new SourceSpan(first, first + 1), new SourceSpan(second, second + 1)),
+                spans(result));
+        assertSameProvenOrigin(source, result);
+    }
+
+    @Test
+    void closureStoredInSlotIsReferencedAtEachCallReceiver() {
+        // The call is an opaque invocation, so only receivers up to it are proven.
+        String source = "f: () => { 1 }\nf\nf()\nf";
+        int first = source.indexOf("f\nf()");
+        int second = source.indexOf("f()");
+        ProtosStaticReferenceResult result = references(source, second).orElseThrow();
+        assertEquals(new SourceSpan(0, 1), result.target().span());
+        assertEquals(List.of(new SourceSpan(first, first + 1), new SourceSpan(second, second + 1)),
+                spans(result));
+        assertSameProvenOrigin(source, result);
+        assertTrue(references(source, source.lastIndexOf("f")).isEmpty());
+    }
+
+    @Test
+    void assignmentTargetReferencesTheInitialSlotCreation() {
+        String source = "count: 1\ncount = 2\ncount";
+        int target = source.indexOf("count =");
+        int read = source.lastIndexOf("count");
+        ProtosStaticReferenceResult result = references(source, read).orElseThrow();
+        assertEquals(new SourceSpan(0, "count".length()), result.target().span());
+        assertEquals(
+                List.of(new SourceSpan(target, target + "count".length()),
+                        new SourceSpan(read, read + "count".length())),
+                spans(result));
+        assertSameProvenOrigin(source, result);
+    }
+
+    @Test
+    void sameNamedSlotsInDifferentActivationsDoNotMerge() {
+        String source = "a: () => {\n  v: 1\n  v\n}\nb: () => {\n  v: 2\n  v\n}";
+        int firstCreation = source.indexOf("v:");
+        int firstRead = source.indexOf("v", firstCreation + 1);
+        int secondCreation = source.lastIndexOf("v:");
+        int secondRead = source.lastIndexOf("v");
+        ProtosStaticReferenceResult first = references(source, firstRead).orElseThrow();
+        ProtosStaticReferenceResult second = references(source, secondRead).orElseThrow();
+        assertEquals(new SourceSpan(firstCreation, firstCreation + 1), first.target().span());
+        assertEquals(List.of(new SourceSpan(firstRead, firstRead + 1)), spans(first));
+        assertEquals(new SourceSpan(secondCreation, secondCreation + 1), second.target().span());
+        assertEquals(List.of(new SourceSpan(secondRead, secondRead + 1)), spans(second));
+        assertSameProvenOrigin(source, first);
+        assertSameProvenOrigin(source, second);
+    }
+
+    @Test
+    void slotReadAfterOpaqueInvocationIsNotAReference() {
+        String source = "x: 1\nx\nsink()\nx";
+        int first = source.indexOf("x", 1);
+        ProtosStaticReferenceResult result = references(source, first).orElseThrow();
+        assertEquals(List.of(new SourceSpan(first, first + 1)), spans(result));
+        assertSameProvenOrigin(source, result);
+        assertTrue(references(source, source.lastIndexOf("x")).isEmpty());
+    }
+
+    @Test
+    void memberSelectorsAndObjectSlotDeclarationsHaveNoReferences() {
+        String source = "obj: {\n  dato: 1\n}\nobj.dato";
+        assertTrue(references(source, source.indexOf("dato")).isEmpty());
+        assertTrue(references(source, source.lastIndexOf("dato")).isEmpty());
+        String replaced = "obj: {\n  dato: 1\n}\ncontext.obj = {\n  dato: 2\n}\nobj.dato";
+        assertTrue(references(replaced, replaced.lastIndexOf("dato")).isEmpty());
+    }
+
+    private static List<SourceSpan> spans(ProtosStaticReferenceResult result) {
+        return result.occurrences().stream()
+                .map(ProtosStaticReferenceResult.Occurrence::span)
+                .toList();
+    }
+
+    private void assertSameProvenOrigin(String source, ProtosStaticReferenceResult result) {
+        for (ProtosStaticReferenceResult.Occurrence occurrence : result.occurrences()) {
+            ProtosStaticDefinitionResult proof = core.definition(
+                            new ProtosDocumentSnapshot("test.protos", 1L, source),
+                            occurrence.span().startOffset())
+                    .orElseThrow();
+            assertEquals(occurrence.span(), proof.referenceSpan());
+            assertEquals(List.of(result.target()), proof.targets());
+        }
+    }
+
     private Optional<ProtosStaticReferenceResult> references(
             String source,
             int sourceOffset) {

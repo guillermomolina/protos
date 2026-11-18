@@ -299,6 +299,20 @@ class ProtosStaticHoverTest {
         assertTrue(session.hoverCurrent("workspace", "doc", 3).isEmpty());
     }
 
+    @Test
+    void provenOrdinarySlotIsNeverDescribedAsAClosureParameter() {
+        String source = "mensaje: \"Hola\"\nmensaje";
+        int reference = source.lastIndexOf("mensaje");
+
+        // Definition proves the slot origin, but hover describes only parameters.
+        assertTrue(core.definition(snapshot(source), reference).isPresent());
+        Optional<ProtosStaticHoverResult> result = hover(source, reference);
+        assertTrue(result.isEmpty()
+                || result.get().sections().stream()
+                        .flatMap(section -> section.facts().stream())
+                        .noneMatch(fact -> fact.startsWith("Closure parameter")));
+    }
+
     private Optional<ProtosStaticHoverResult> hover(String source, int sourceOffset) {
         return core.hover(snapshot(source), sourceOffset);
     }

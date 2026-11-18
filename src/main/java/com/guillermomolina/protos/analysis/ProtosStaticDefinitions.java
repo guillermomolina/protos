@@ -45,25 +45,40 @@ import com.guillermomolina.protos.parser.ast.SurfaceSlotCreation;
 import com.guillermomolina.protos.parser.ast.SurfaceSuperSend;
 import com.guillermomolina.protos.parser.ast.SurfaceUnary;
 import com.guillermomolina.protos.source.SourceSpan;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 /**
- * D110 generation-1 exact definition proof over one parser-authoritative snapshot.
+ * D110 exact definition proof over one parser-authoritative snapshot.
  *
- * <p>This resolver deliberately knows only source origins that can be proved from
- * the current activation: Closure parameters. It never falls back to same-name,
- * workspace-symbol, receiver, member, module, or runtime lookup. Guest invocation
- * invalidates current exact-origin facts because an invoked Closure can mutate or
- * remove slots of a captured execution context.</p>
+ * <p>This resolver knows only source origins that can be proved from the current
+ * activation in evaluation order: Closure parameters, bare-name slot creations
+ * ({@code x: value} and grouped creations) that completed before the read, the
+ * proven target of a bare-name assignment, and the own members of a bare object
+ * literal that is still the proven value of a local slot. A slot origin is
+ * recorded only after its value has been evaluated, because creation evaluates
+ * the value before creating the slot in the current context. Object provenance
+ * is limited to literals whose construction runs no guest code; inherited
+ * members are never attributed.</p>
  *
- * <p>One {@link ProofWalker} owns the generation-1 fact propagation. Definition
- * asks it for the proven origin of the read under an offset; LM010-B completion
- * asks it for the complete proven fact set at one exact read site. Facts are
- * query-local; no index outlives a call.</p>
+ * <p>Guest invocation, and any other effect whose impact cannot be proved,
+ * invalidates current exact-origin and object facts because invoked code can
+ * mutate or remove slots of a captured execution context or of a reachable
+ * object. A local object also loses its member facts once its value escapes as
+ * an ordinary read or its slot is overwritten with an unknown value. The
+ * resolver never executes Protos code and never falls back to same-name,
+ * workspace-symbol, module, or runtime lookup.</p>
+ *
+ * <p>One {@link ProofWalker} owns the fact propagation. Definition asks it for
+ * the proven origin under an offset; LM010-B completion asks it for the proven
+ * Closure-parameter names at one exact read site, which ordinary slot facts do
+ * not extend. Facts are query-local; no index outlives a call.</p>
  */
 final class ProtosStaticDefinitions {
     private ProtosStaticDefinitions() {
@@ -90,6 +105,28 @@ final class ProtosStaticDefinitions {
                     return false;
                 }
                 result = ProtosStaticDefinitionResult.singleton(snapshot, name.span(), origin);
+                return true;
+            }
+
+            @Override
+            boolean visitAssignmentTarget(SurfaceName name, Facts facts) {
+                return visitRead(name, facts);
+            }
+
+            @Override
+            boolean visitMember(SurfaceMember member, Facts facts) {
+                SourceSpan selector = selectorSpan(snapshot, member);
+                if (selector == null || !contains(selector, sourceOffset)) {
+                    return false;
+                }
+                if (!(member.receiver() instanceof SurfaceName receiver)) {
+                    return false;
+                }
+                SourceSpan origin = facts.memberOrigin(receiver.name(), member.name());
+                if (origin == null) {
+                    return false;
+                }
+                result = ProtosStaticDefinitionResult.singleton(snapshot, selector, origin);
                 return true;
             }
 
@@ -124,7 +161,7 @@ final class ProtosStaticDefinitions {
                 if (!name.span().equals(readSpan)) {
                     return false;
                 }
-                names = facts.names();
+                names = facts.parameterNames();
                 return true;
             }
 
@@ -138,16 +175,27 @@ final class ProtosStaticDefinitions {
     }
 
     /**
-     * D110 generation-1 fact propagation in evaluation order.
+     * D110 fact propagation in evaluation order.
      *
      * <p>{@link #visitRead} observes every {@link SurfaceName} read with the
-     * facts proven at that point; it must not retain or mutate them. Returning
-     * {@code true} stops the walk.</p>
+     * facts proven at that point; {@link #visitAssignmentTarget} observes a
+     * bare-name assignment target at its selection point, before the assigned
+     * value is evaluated; {@link #visitMember} observes a member access after
+     * its receiver has been analyzed. Observers must not retain or mutate the
+     * facts. Returning {@code true} stops the walk.</p>
      */
     private abstract static class ProofWalker<R> {
         private boolean done;
 
         abstract boolean visitRead(SurfaceName name, Facts facts);
+
+        boolean visitAssignmentTarget(SurfaceName name, Facts facts) {
+            return false;
+        }
+
+        boolean visitMember(SurfaceMember member, Facts facts) {
+            return false;
+        }
 
         abstract Optional<R> result();
 
@@ -168,7 +216,7 @@ final class ProtosStaticDefinitions {
                 }
                 case SurfaceSequence sequence -> analyzeSequence(sequence, facts);
                 case SurfaceGroup group -> analyze(group.expression(), facts);
-                case SurfaceMember member -> analyze(member.receiver(), facts);
+                case SurfaceMember member -> analyzeMember(member, facts);
                 case SurfaceCall call -> {
                     analyze(call.receiver(), facts);
                     analyzeArguments(call.arguments(), facts);
@@ -272,16 +320,19 @@ final class ProtosStaticDefinitions {
                     analyze(nonLocalReturn.expression(), facts);
                     facts.clear();
                 }
-                case SurfaceSlotCreation creation -> {
-                    analyzeMutationTarget(creation.target(), facts);
+                case SurfaceSlotCreation creation -> analyzeSlotCreation(creation, facts);
+                case SurfaceMultipleSlotCreation creation -> {
+                    // D143 evaluates the source once and observes Array state
+                    // without user-visible sends; every target exists, left to
+                    // right, only after that evaluation completes normally.
                     analyze(creation.value(), facts);
+                    if (!done) {
+                        for (SurfaceName target : creation.targets()) {
+                            facts.putSlot(target.name(), target.span(), null);
+                        }
+                    }
                 }
-                case SurfaceMultipleSlotCreation creation ->
-                        analyze(creation.value(), facts);
-                case SurfaceAssignment assignment -> {
-                    analyzeMutationTarget(assignment.target(), facts);
-                    analyze(assignment.value(), facts);
-                }
+                case SurfaceAssignment assignment -> analyzeAssignment(assignment, facts);
                 case SurfaceSuperSend superSend -> {
                     analyzeArguments(superSend.arguments(), facts);
                     opaqueInvocationBarrier(facts);
@@ -293,6 +344,97 @@ final class ProtosStaticDefinitions {
 
         private void analyzeName(SurfaceName name, Facts facts) {
             done = visitRead(name, facts);
+            // The value escapes: an alias may later change the object's slots
+            // without naming this slot.
+            facts.forgetObject(name.name());
+        }
+
+        private void analyzeReceiver(SurfaceExpression receiver, Facts facts) {
+            if (receiver instanceof SurfaceName name) {
+                // A direct member receiver is read without exposing the value.
+                done = visitRead(name, facts);
+                return;
+            }
+            analyze(receiver, facts);
+        }
+
+        private void analyzeMember(SurfaceMember member, Facts facts) {
+            analyzeReceiver(member.receiver(), facts);
+            if (!done) {
+                done = visitMember(member, facts);
+            }
+        }
+
+        private void analyzeSlotCreation(SurfaceSlotCreation creation, Facts facts) {
+            analyzeMutationTarget(creation.target(), facts);
+            if (done) {
+                return;
+            }
+            // Creation evaluates the value first and only then creates the slot
+            // in the current context.
+            analyze(creation.value(), facts);
+            if (done) {
+                return;
+            }
+            if (creation.target() instanceof SurfaceName name) {
+                facts.putSlot(name.name(), name.span(), literalMembers(creation.value()));
+            } else if (creation.target() instanceof SurfaceMember member) {
+                if (member.receiver() instanceof SurfaceName receiver
+                        && facts.knowsObject(receiver.name())) {
+                    // A new own slot of a proven literal object changes only
+                    // that object's member set.
+                    facts.forgetObject(receiver.name());
+                } else {
+                    // The receiver may be the current context or an alias of
+                    // it, so any slot or object fact may have changed.
+                    facts.clear();
+                }
+            }
+        }
+
+        private void analyzeAssignment(SurfaceAssignment assignment, Facts facts) {
+            if (assignment.target() instanceof SurfaceName name) {
+                // The target slot is selected before the value is evaluated.
+                done = visitAssignmentTarget(name, facts);
+                if (done) {
+                    return;
+                }
+                SourceSpan selected = facts.origin(name.name());
+                analyze(assignment.value(), facts);
+                if (done) {
+                    return;
+                }
+                // The write changes the selected slot's value, not its presence
+                // or origin; object provenance follows only a proven new value.
+                if (selected != null && selected.equals(facts.origin(name.name()))) {
+                    facts.replaceObject(name.name(), literalMembers(assignment.value()));
+                } else {
+                    facts.forgetObject(name.name());
+                }
+                return;
+            }
+
+            analyzeMutationTarget(assignment.target(), facts);
+            if (done) {
+                return;
+            }
+            analyze(assignment.value(), facts);
+            if (done) {
+                return;
+            }
+            if (assignment.target() instanceof SurfaceMember member) {
+                if (!(member.receiver() instanceof SurfaceName receiver
+                        && facts.memberOrigin(receiver.name(), member.name()) != null)) {
+                    // Only a write to a known own member of a proven literal
+                    // object keeps its facts. Any other receiver, including the
+                    // current context, this, or an unproven value, may replace
+                    // slots whose facts are held here.
+                    facts.clear();
+                }
+            } else if (assignment.target() instanceof SurfaceIndex) {
+                // Indexed writes are ordinary sends to the receiver.
+                opaqueInvocationBarrier(facts);
+            }
         }
 
         private void analyzeSequence(SurfaceSequence sequence, Facts facts) {
@@ -318,7 +460,7 @@ final class ProtosStaticDefinitions {
                 return;
             }
             if (target instanceof SurfaceMember member) {
-                analyze(member.receiver(), facts);
+                analyzeReceiver(member.receiver(), facts);
                 return;
             }
             if (target instanceof SurfaceIndex index) {
@@ -341,8 +483,9 @@ final class ProtosStaticDefinitions {
 
             // Object construction is not the current Closure activation. Direct
             // object-body reads therefore cannot consume the caller's local-origin
-            // facts in G4-A1. Nested Closures are still discoverable.
-            Facts constructionFacts = new Facts();
+            // facts, and object-body creations make object slots, never lexical
+            // slots of any activation. Nested Closures are still discoverable.
+            Facts constructionFacts = Facts.objectBody();
             for (SurfaceObjectItem item : object.items()) {
                 analyze(item.expression(), constructionFacts);
                 if (done) {
@@ -350,9 +493,50 @@ final class ProtosStaticDefinitions {
                 }
             }
 
-            // The object body is ordinary guest execution and may invoke behavior
-            // that mutates a captured caller context.
-            facts.clear();
+            // A general object body is ordinary guest execution and may invoke
+            // behavior that mutates a captured caller context. A bare literal
+            // body whose items construct only literals runs no guest code.
+            if (literalMembers(object) == null) {
+                facts.clear();
+            }
+        }
+
+        /**
+         * Returns the own member declarations of a bare object literal whose
+         * construction runs no guest code, or {@code null} when the value is not
+         * such a literal. The literal must have no parent expression and no
+         * composition, and every item must be a distinct bare-name creation
+         * whose value is a literal, a Closure literal, or such an object literal.
+         */
+        private static Map<String, SourceSpan> literalMembers(SurfaceExpression value) {
+            SurfaceExpression unwrapped = value;
+            while (unwrapped instanceof SurfaceGroup group) {
+                unwrapped = group.expression();
+            }
+            if (!(unwrapped instanceof SurfaceObject object) || object.parent().isPresent()) {
+                return null;
+            }
+            LinkedHashMap<String, SourceSpan> members = new LinkedHashMap<>();
+            for (SurfaceObjectItem item : object.items()) {
+                if (item.composition()
+                        || !(item.expression() instanceof SurfaceSlotCreation creation)
+                        || !(creation.target() instanceof SurfaceName name)
+                        || !constructsWithoutGuestCode(creation.value())
+                        || members.putIfAbsent(name.name(), name.span()) != null) {
+                    return null;
+                }
+            }
+            return members;
+        }
+
+        private static boolean constructsWithoutGuestCode(SurfaceExpression value) {
+            if (value instanceof SurfaceLiteral || value instanceof SurfaceClosure) {
+                return true;
+            }
+            if (value instanceof SurfaceGroup group) {
+                return constructsWithoutGuestCode(group.expression());
+            }
+            return value instanceof SurfaceObject && literalMembers(value) != null;
         }
 
         private void analyzeClosure(SurfaceClosure closure) {
@@ -371,7 +555,7 @@ final class ProtosStaticDefinitions {
 
                 // On every successful path the parameter slot exists only after
                 // its supplied/default value has completed normally.
-                activation.put(parameter.name(), parameter.span());
+                activation.putParameter(parameter.name(), parameter.span());
             }
 
             analyze(closure.body(), activation);
@@ -390,44 +574,138 @@ final class ProtosStaticDefinitions {
         return span.startOffset() <= offset && offset < span.endOffset();
     }
 
+    /**
+     * Returns the selector token of a member access, derived from the end of
+     * the member span as document symbols do, or {@code null} when the span
+     * does not end with exactly the member name in this snapshot.
+     */
+    private static SourceSpan selectorSpan(ProtosDocumentSnapshot snapshot, SurfaceMember member) {
+        String text = snapshot.characters();
+        String name = member.name();
+        int end = member.span().endOffset();
+        int start = end - name.length();
+        if (name.isEmpty()
+                || start < member.span().startOffset()
+                || start < 0
+                || end > text.length()
+                || !text.regionMatches(start, name, 0, name.length())) {
+            return null;
+        }
+        return new SourceSpan(start, end);
+    }
+
+    /**
+     * Query-local proven facts of one activation at the current walk point.
+     *
+     * <p>An origin entry means that a read of the name selects exactly that
+     * declaration here; it does not mean the value is immutable. Parameter
+     * provenance is kept separately so completion keeps its contract of
+     * proven Closure-parameter names. Object entries map a slot whose current
+     * value is a proven bare object literal to that literal's own member
+     * declarations; they exist only while the slot origin is proven.</p>
+     */
     private static final class Facts {
+        private final boolean recordsSlots;
         private final LinkedHashMap<String, SourceSpan> origins;
+        private final Set<String> parameters;
+        private final Map<String, Map<String, SourceSpan>> objects;
 
         Facts() {
-            this.origins = new LinkedHashMap<>();
+            this(true, new LinkedHashMap<>(), new HashSet<>(), new HashMap<>());
         }
 
-        private Facts(LinkedHashMap<String, SourceSpan> origins) {
+        private Facts(
+                boolean recordsSlots,
+                LinkedHashMap<String, SourceSpan> origins,
+                Set<String> parameters,
+                Map<String, Map<String, SourceSpan>> objects) {
+            this.recordsSlots = recordsSlots;
             this.origins = origins;
+            this.parameters = parameters;
+            this.objects = objects;
+        }
+
+        /** Facts for an object body, whose creations are object slots. */
+        static Facts objectBody() {
+            return new Facts(false, new LinkedHashMap<>(), new HashSet<>(), new HashMap<>());
         }
 
         Facts copy() {
-            return new Facts(new LinkedHashMap<>(origins));
+            return new Facts(
+                    recordsSlots,
+                    new LinkedHashMap<>(origins),
+                    new HashSet<>(parameters),
+                    new HashMap<>(objects));
         }
 
         SourceSpan origin(String name) {
             return origins.get(name);
         }
 
-        List<String> names() {
-            return List.copyOf(origins.keySet());
+        List<String> parameterNames() {
+            return origins.keySet().stream().filter(parameters::contains).toList();
         }
 
-        void put(String name, SourceSpan origin) {
+        SourceSpan memberOrigin(String receiver, String member) {
+            Map<String, SourceSpan> members = objects.get(receiver);
+            return members == null ? null : members.get(member);
+        }
+
+        void putParameter(String name, SourceSpan origin) {
             origins.put(name, origin);
+            parameters.add(name);
+            objects.remove(name);
+        }
+
+        void putSlot(String name, SourceSpan origin, Map<String, SourceSpan> members) {
+            if (!recordsSlots) {
+                return;
+            }
+            origins.put(name, origin);
+            parameters.remove(name);
+            replaceObject(name, members);
+        }
+
+        void replaceObject(String name, Map<String, SourceSpan> members) {
+            if (members == null || !origins.containsKey(name)) {
+                objects.remove(name);
+            } else {
+                objects.put(name, Map.copyOf(members));
+            }
+        }
+
+        boolean knowsObject(String name) {
+            return objects.containsKey(name);
+        }
+
+        void forgetObject(String name) {
+            objects.remove(name);
         }
 
         void replaceWithIntersection(Facts left, Facts right) {
             origins.clear();
+            parameters.clear();
+            objects.clear();
             for (Map.Entry<String, SourceSpan> entry : left.origins.entrySet()) {
-                if (entry.getValue().equals(right.origins.get(entry.getKey()))) {
-                    origins.put(entry.getKey(), entry.getValue());
+                String name = entry.getKey();
+                if (!entry.getValue().equals(right.origins.get(name))) {
+                    continue;
+                }
+                origins.put(name, entry.getValue());
+                if (left.parameters.contains(name) && right.parameters.contains(name)) {
+                    parameters.add(name);
+                }
+                Map<String, SourceSpan> members = left.objects.get(name);
+                if (members != null && members.equals(right.objects.get(name))) {
+                    objects.put(name, members);
                 }
             }
         }
 
         void clear() {
             origins.clear();
+            parameters.clear();
+            objects.clear();
         }
     }
 
