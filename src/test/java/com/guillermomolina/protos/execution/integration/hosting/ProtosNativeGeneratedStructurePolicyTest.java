@@ -284,8 +284,15 @@ final class ProtosNativeGeneratedStructurePolicyTest {
         assertFalse(phase.contains("ordinal()"));
 
         assertTrue(root.contains(
-                "boxingEliminationTypes = {boolean.class, long.class, double.class}"));
+                "boxingEliminationTypes = {long.class, double.class}"));
         assertFalse(root.contains("int.class}"));
+        for (String relation : List.of("Lt", "Le", "Gt", "Ge")) {
+            String comparison = mainSource(
+                    "execution/bytecode/numeric/ProtosRichCompare"
+                            + relation + "Node.java");
+            assertTrue(comparison.contains("static boolean doLL("), relation);
+            assertTrue(comparison.contains("static boolean doDD("), relation);
+        }
     }
 
     @Test

@@ -158,7 +158,7 @@ import com.oracle.truffle.api.source.Source;
         defaultUncachedThreshold = "4",
         enableTailCallHandlers = true,
         enableUncachedInterpreter = true,
-        boxingEliminationTypes = {boolean.class, long.class, double.class},
+        boxingEliminationTypes = {long.class, double.class},
         sourceContentSupplier = "loadSourceContent",
         tagTreeNodeLibrary = ProtosBytecodeTagTreeNodeExports.class,
         /*

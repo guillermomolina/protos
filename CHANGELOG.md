@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.165-SNAPSHOT
+
+- **I115.** Remove boolean from Bytecode DSL boxing elimination. Add primitive-comparison control regressions and update the Native generated-structure policy expectations.
+
 ## 0.4.164-SNAPSHOT
 
 - **I115.** Profile explicit Task presence in admitted compact headers and thread that profile through direct invocation paths. Update deferred-caller home-invocation calls and extend unary dispatch regressions.

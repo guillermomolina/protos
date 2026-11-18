@@ -630,6 +630,27 @@ final class ProtosI095BooleanControlInlineTest {
         }
     }
 
+    @Test
+    void primitiveComparisonResultsRemainCanonicalUnderControl() throws Exception {
+        String definition = """
+                row: (a, b) => {
+                    lt: if(a < b) { 1 } else { 0 }
+                    le: if(a <= b) { 1 } else { 0 }
+                    gt: if(a > b) { 1 } else { 0 }
+                    ge: if(a >= b) { 1 } else { 0 }
+                    lt * 1000 + le * 100 + gt * 10 + ge
+                }
+                """;
+
+        assertParity(definition + """
+                row(1, 2) * 100000 + row(2, 2) * 100 + row(3, 2)
+                """, 110010111L);
+
+        assertParity(definition + """
+                row(1.5, 2.5) * 100000 + row(2.5, 2.5) * 100 + row(3.5, 2.5)
+                """, 110010111L);
+    }
+
     /** The same program produces the same result with and without a debugger attached. */
     private static void assertParity(String source, long expected) throws Exception {
         assertInteger(expected, execute(false, source).value());
