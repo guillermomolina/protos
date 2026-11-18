@@ -1205,6 +1205,86 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
     }
 
     /**
+     * Entering the fallback route does not disable the primitive lanes: on
+     * one site per operation, a standard long, a standard double, a
+     * redefined selector, the restored standard selector and a long again,
+     * repeated so the site is warm, for every arithmetic and ordering
+     * selector.
+     */
+    @Test
+    void fallbackRouteKeepsPrimitiveLanesAfterRedefinitionAndRestore() throws Exception {
+        withCanonicalPrelude(canonical -> {
+            Object standardPlus =
+                    canonical.integerPrototype().readLocalSlot("+").orElseThrow();
+            AlternativeIntegers alternative =
+                    alternativeIntegers(canonical, standardPlus, false);
+            ProtosActivation module = alternative.prelude().newModuleActivation();
+            ProtosObjectValue integer = alternative.integer();
+            Map<String, long[]> arithmetic = Map.of(
+                    "+", new long[] {6L, 3L, 9L},
+                    "-", new long[] {6L, 3L, 3L},
+                    "*", new long[] {6L, 3L, 18L},
+                    "/", new long[] {6L, 3L, 2L});
+            Map<String, Double> doubles = Map.of("+", 4.5d, "-", 1.5d, "*", 4.5d, "/", 2.0d);
+            for (Map.Entry<String, long[]> entry : arithmetic.entrySet()) {
+                String selector = entry.getKey();
+                long[] lane = entry.getValue();
+                ProtosClosureValue site = closure("(x, y) => x " + selector + " y", module);
+                Object standard = integer.readLocalSlot(selector).orElse(null);
+                for (long round = 0; round < 20; round++) {
+                    String where = selector + " round " + round;
+                    assertEquals(lane[2], normalized(call(site, module, lane[0], lane[1])), where);
+                    assertEquals(doubles.get(selector), call(site, module, 3.0d, 1.5d), where);
+                    setOrCreate(integer, selector, answering(round + 1000L));
+                    assertEquals(round + 1000L,
+                            normalized(call(site, module, lane[0], lane[1])), where);
+                    restore(integer, selector, standard);
+                    assertEquals(lane[2], normalized(call(site, module, lane[0], lane[1])),
+                            where + ": restored standard selection");
+                    assertTrue(call(site, module, lane[0], lane[1]) instanceof Long, where);
+                }
+            }
+            for (String selector : List.of("<", "<=", ">", ">=")) {
+                ProtosClosureValue site = closure("(x, y) => x " + selector + " y", module);
+                Object standard = integer.readLocalSlot(selector).orElse(null);
+                boolean less = selector.startsWith("<");
+                long left = less ? 1L : 2L;
+                long right = less ? 2L : 1L;
+                for (int round = 0; round < 20; round++) {
+                    String where = selector + " round " + round;
+                    assertSame(Boolean.TRUE, call(site, module, left, right), where);
+                    assertSame(Boolean.TRUE, call(site, module, (double) left, (double) right),
+                            where + " on Float");
+                    setOrCreate(integer, selector, answeringFalse());
+                    assertSame(Boolean.FALSE, call(site, module, left, right), where);
+                    restore(integer, selector, standard);
+                    assertSame(Boolean.TRUE, call(site, module, left, right),
+                            where + ": restored standard selection");
+                    assertSame(Boolean.FALSE, call(site, module, right, left), where);
+                }
+            }
+        });
+        System.out.println("PERF040_E1_FALLBACK_KEEPS_PRIMITIVE_LANES=PASS");
+    }
+
+    private static void setOrCreate(ProtosObjectValue owner, String selector, Object value) {
+        if (owner.readLocalSlot(selector).isPresent()) {
+            owner.assignLocalSlot(selector, value);
+        } else {
+            owner.createLocalSlot(selector, value);
+        }
+    }
+
+    /* Restores the local slot, or removes it when the selector was inherited. */
+    private static void restore(ProtosObjectValue owner, String selector, Object standard) {
+        if (standard == null) {
+            owner.removeLocalSlot(selector);
+        } else {
+            owner.assignLocalSlot(selector, standard);
+        }
+    }
+
+    /**
      * Selectors are independent: redefining {@code +} on a mutable Integer
      * prototype leaves {@code -}, {@code *} and {@code <} standard at their
      * own warmed sites, before and after the change.
@@ -1346,7 +1426,8 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
     /*
      * @Fallback (CLASS retention) and @OperationProxy (SOURCE retention) are
      * invisible to reflection, so they are checked in the source itself:
-     * every node owns exactly one in-node generic route (no MISS result), and
+     * every node owns exactly one in-node generic route (no MISS result),
+     * declared as the DSL @Fallback after every primitive specialization, and
      * the root registers every canonical operation under its own name and no
      * retired TryPrimitiveNumeric* operation.
      */
@@ -1356,10 +1437,19 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
             String activeSource = activeSource(
                     EXECUTION_SOURCES.resolve("bytecode/numeric")
                             .resolve(node.getSimpleName() + ".java"));
-            // One unguarded generic specialization, ordered last and never
-            // replacing the primitive ones, re-checks the selection and
-            // separates the selected-implementation dispatch.
+            // One generic route, the DSL @Fallback taken when no primitive
+            // specialization applies, ordered last and never replacing the
+            // primitive ones, re-checks the selection and separates the
+            // selected-implementation dispatch.
             assertEquals(1, occurrences(activeSource, "doGeneric("), node.getSimpleName());
+            assertEquals(1, occurrences(activeSource, "@Fallback"), node.getSimpleName());
+            assertTrue(activeSource.contains(
+                    "@Fallback\n    @StoreBytecodeIndex\n    @InliningCutoff\n"
+                            + "    static Object doGeneric("),
+                    node.getSimpleName());
+            int fallback = activeSource.indexOf("@Fallback");
+            assertTrue(activeSource.lastIndexOf("@Specialization") < fallback,
+                    node.getSimpleName() + ": the fallback follows every specialization");
             assertTrue(activeSource.contains("@InliningCutoff"), node.getSimpleName());
             assertTrue(activeSource.contains("ProtosNumericOverloadNode overload"),
                     node.getSimpleName());

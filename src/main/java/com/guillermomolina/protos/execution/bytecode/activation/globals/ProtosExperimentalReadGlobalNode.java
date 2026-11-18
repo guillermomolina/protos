@@ -24,6 +24,7 @@ import com.guillermomolina.protos.runtime.ProtosModuleBindingLocation;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.bytecode.ConstantOperand;
+import com.oracle.truffle.api.bytecode.ForceQuickening;
 import com.oracle.truffle.api.bytecode.OperationProxy;
 import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
@@ -93,6 +94,7 @@ abstract class ProtosExperimentalReadGlobalNode extends Node {
     abstract Object execute(
             VirtualFrame frame, TruffleString name, int lexicalDepth, boolean candidate);
 
+    @ForceQuickening
     @Specialization(
             excludeForUncached = true,
             guards = {
@@ -120,6 +122,7 @@ abstract class ProtosExperimentalReadGlobalNode extends Node {
         return value;
     }
 
+    @ForceQuickening
     @Specialization(
             excludeForUncached = true,
             guards = {

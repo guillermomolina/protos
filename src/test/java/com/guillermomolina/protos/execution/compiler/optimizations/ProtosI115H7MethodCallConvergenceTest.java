@@ -2033,6 +2033,8 @@ final class ProtosI115H7MethodCallConvergenceTest {
             Object before = session.processContextForTesting().callForRuntime(
                     () -> location.readOrNull(DynamicObject.GetNode.getUncached()));
 
+            int readGlobals = readGlobalCount(session, "hot");
+            assertTrue(readGlobals >= 1, "the global read lowers to ReadGlobal");
             Value hot = session.prepareTopLevel("hot").executable();
             for (int call = 0; call < WARM; call++) {
                 assertEquals(4950L, hot.execute().asLong());
@@ -2041,6 +2043,8 @@ final class ProtosI115H7MethodCallConvergenceTest {
             for (int call = 0; call < WARM; call++) {
                 assertEquals(14950L, hot.execute().asLong(), "the rebound global is read");
             }
+            assertEquals(readGlobals, readGlobalCount(session, "hot"),
+                    "warming keeps exactly the same ReadGlobal operations");
             session.processContextForTesting().callForRuntime(() -> {
                 Object after = location.readOrNull(DynamicObject.GetNode.getUncached());
                 assertNotSame(before, after, "the location reads the storage, not a copy");
@@ -2058,6 +2062,8 @@ final class ProtosI115H7MethodCallConvergenceTest {
         try (ProtosStandaloneHostedSession session = open("r4-object-location", METHOD_CALL)) {
             ProtosClosureValue anchor =
                     session.prepareTopLevel("run").closureForTesting();
+            int readGlobals = readGlobalCount(session, "run");
+            assertTrue(readGlobals >= 1, "the global read lowers to ReadGlobal");
             Value run = session.prepareTopLevel("run").executable();
 
             for (int call = 0; call < WARM; call++) {
@@ -2078,6 +2084,8 @@ final class ProtosI115H7MethodCallConvergenceTest {
             });
 
             assertEquals(499500L, run.execute().asLong());
+            assertEquals(readGlobals, readGlobalCount(session, "run"),
+                    "warming keeps exactly the same ReadGlobal operations");
         }
     }
 
@@ -2098,6 +2106,8 @@ final class ProtosI115H7MethodCallConvergenceTest {
                 """)) {
             ProtosClosureValue anchor =
                     session.prepareTopLevel("hot").closureForTesting();
+            int readGlobals = readGlobalCount(session, "hot");
+            assertTrue(readGlobals >= 1, "the global read lowers to ReadGlobal");
             Value hot = session.prepareTopLevel("hot").executable();
 
             for (int call = 0; call < WARM; call++) {
@@ -2121,6 +2131,8 @@ final class ProtosI115H7MethodCallConvergenceTest {
             for (int call = 0; call < WARM; call++) {
                 assertEquals(107L, hot.execute().asLong());
             }
+            assertEquals(readGlobals, readGlobalCount(session, "hot"),
+                    "warming keeps exactly the same ReadGlobal operations");
 
             session.processContextForTesting().callForRuntime(() -> {
                 Object after = moduleBinding(anchor, "target");
@@ -2255,6 +2267,8 @@ final class ProtosI115H7MethodCallConvergenceTest {
                         """)) {
             ProtosClosureValue anchor =
                     session.prepareTopLevel("reader").closureForTesting();
+            int readGlobals = readGlobalCount(session, "reader");
+            assertTrue(readGlobals >= 1, "the global read lowers to ReadGlobal");
             for (int call = 0; call < WARM; call++) {
                 assertNumber(session, "reader", 41L);
             }
@@ -2286,6 +2300,8 @@ final class ProtosI115H7MethodCallConvergenceTest {
             for (int call = 0; call < WARM; call++) {
                 assertNumber(session, "reader", 4294967296L);
             }
+            assertEquals(readGlobals, readGlobalCount(session, "reader"),
+                    "warming keeps exactly the same ReadGlobal operations");
         }
     }
 
@@ -2296,12 +2312,16 @@ final class ProtosI115H7MethodCallConvergenceTest {
                 plain: { f: 5 }
                 missing: () => { plain.absent(1) }
                 """)) {
+            int readGlobals = readGlobalCount(session, "missing");
+            assertTrue(readGlobals >= 1, "the global read lowers to ReadGlobal");
             Value missing = session.prepareTopLevel("missing").executable();
             for (int attempt = 0; attempt < 3; attempt++) {
                 PolyglotException failure = assertThrows(PolyglotException.class, missing::execute);
                 assertTrue(failure.isGuestException(), "a guest Error: " + failure);
                 assertFalse(failure.isInternalError(), failure.toString());
             }
+            assertEquals(readGlobals, readGlobalCount(session, "missing"),
+                    "warming keeps exactly the same ReadGlobal operations");
         }
         try (ProtosStandaloneHostedSession session =
                 open("generic-unadmitted", METHOD_CALL)) {
@@ -2583,6 +2603,12 @@ final class ProtosI115H7MethodCallConvergenceTest {
     private static Object moduleBinding(ProtosClosureValue anchor, String name) {
         return anchor.capturedLexicalEnvironmentForRuntime()
                 .readLocalSlotForRuntime(name).orElseThrow();
+    }
+
+    /* ReadGlobal operations, quickened or not, across the root's bytecode root group. */
+    private static int readGlobalCount(ProtosStandaloneHostedSession session, String name)
+            throws Exception {
+        return count(unquickened(names(root(session, name))), "c.ReadGlobal");
     }
 
     private static int count(List<String> names, String name) {

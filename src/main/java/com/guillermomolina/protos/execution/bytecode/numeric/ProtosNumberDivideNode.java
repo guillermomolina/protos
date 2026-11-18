@@ -26,6 +26,7 @@ import com.oracle.truffle.api.bytecode.StoreBytecodeIndex;
 import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.Cached.Shared;
+import com.oracle.truffle.api.dsl.Fallback;
 import com.oracle.truffle.api.dsl.GenerateInline;
 import com.oracle.truffle.api.dsl.GenerateUncached;
 import com.oracle.truffle.api.dsl.Specialization;
@@ -81,7 +82,7 @@ abstract class ProtosNumberDivideNode extends Node {
         return left / right;
     }
 
-    @Specialization
+    @Fallback
     @StoreBytecodeIndex
     @InliningCutoff
     static Object doGeneric(VirtualFrame frame, boolean terminal, Object left, Object right,

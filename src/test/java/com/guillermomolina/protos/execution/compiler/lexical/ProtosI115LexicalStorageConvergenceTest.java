@@ -98,6 +98,9 @@ final class ProtosI115LexicalStorageConvergenceTest {
             Set.of("EnsureCurrentClosureLexicalView", "PublishCurrentClosureContext");
 
     /* The first invocation precedes x's establishment in the captured module. */
+    /* Executions that warm an activation root before its reads are rechecked. */
+    private static final int WARM_ROUNDS = 200;
+
     private static final String MODULE_CANDIDATE_SOURCE =
             "reader: (() => x)\n"
                     + "receiver: { x: {}\n read: reader }\n"
@@ -335,6 +338,14 @@ final class ProtosI115LexicalStorageConvergenceTest {
 
                     fixture.module.context().assignLocalSlot("x", 9L);
                     assertEquals(9L, execute(fixture, closure));
+                    int readGlobals = readGlobalCount(closure);
+                    for (long round = 0; round < WARM_ROUNDS; round++) {
+                        fixture.module.context().assignLocalSlot("x", round);
+                        assertEquals(round, execute(fixture, closure), "the warmed read observes the module context");
+                    }
+                    fixture.module.context().assignLocalSlot("x", 2.5d);
+                    assertEquals(2.5d, execute(fixture, closure), "a representation change is observed");
+                    assertEquals(readGlobals, readGlobalCount(closure));
                 });
     }
 
@@ -349,6 +360,15 @@ final class ProtosI115LexicalStorageConvergenceTest {
 
                     assertTrue(names.contains("ReadGlobal"), names::toString);
                     assertSame(receiver.readLocalSlot("x").orElseThrow(), slot(fixture.module, "before"));
+                    int readGlobals = readGlobalCount(reader);
+                    Object moduleValue = slot(fixture.module, "x");
+                    for (int round = 0; round < WARM_ROUNDS; round++) {
+                        assertSame(moduleValue, execute(fixture, reader));
+                    }
+                    fixture.module.context().removeLocalSlot("x");
+                    assertSame(receiver.readLocalSlot("x").orElseThrow(), run(fixture, "receiver.read()"),
+                            "after warming, an absent binding still falls back to the exact receiver value");
+                    assertEquals(readGlobals, readGlobalCount(reader));
                 });
     }
 
@@ -363,6 +383,13 @@ final class ProtosI115LexicalStorageConvergenceTest {
                     assertTrue(names.contains("ReadGlobal"), names::toString);
                     assertNotSame(slot(fixture.module, "before"), moduleValue);
                     assertSame(moduleValue, run(fixture, "receiver.read()"));
+                    int readGlobals = readGlobalCount(reader);
+                    for (int round = 0; round < WARM_ROUNDS; round++) {
+                        assertSame(moduleValue, execute(fixture, reader));
+                    }
+                    assertSame(moduleValue, run(fixture, "receiver.read()"),
+                            "after warming, the module binding still takes precedence");
+                    assertEquals(readGlobals, readGlobalCount(reader));
                 });
     }
 
@@ -383,6 +410,31 @@ final class ProtosI115LexicalStorageConvergenceTest {
                             ProtosCoreErrors.prototype(
                                     fixture.module, ProtosCoreErrors.StandardError.SLOT_NOT_FOUND),
                             failure.error().parent().orElseThrow());
+                    int readGlobals = readGlobalCount(reader);
+                    for (int round = 0; round < WARM_ROUNDS; round++) {
+                        ProtosSignalException absent =
+                                assertThrows(ProtosSignalException.class, () -> execute(fixture, reader));
+                        assertSame(
+                                ProtosCoreErrors.prototype(
+                                        fixture.module, ProtosCoreErrors.StandardError.SLOT_NOT_FOUND),
+                                absent.error().parent().orElseThrow(),
+                                "an absent binding signals SlotNotFound");
+                    }
+                    fixture.module.context().createLocalSlot("x", 3L);
+                    for (int round = 0; round < WARM_ROUNDS; round++) {
+                        assertEquals(3L, execute(fixture, reader), "an established binding is observed");
+                    }
+                    fixture.module.context().removeLocalSlot("x");
+                    ProtosSignalException warmed =
+                            assertThrows(ProtosSignalException.class, () -> execute(fixture, reader));
+                    assertSame(
+                            ProtosCoreErrors.prototype(
+                                    fixture.module, ProtosCoreErrors.StandardError.SLOT_NOT_FOUND),
+                            warmed.error().parent().orElseThrow(),
+                            "after warming, a removed binding still signals SlotNotFound");
+                    fixture.module.context().createLocalSlot("x", 4L);
+                    assertEquals(4L, execute(fixture, reader), "a recreated binding is observed");
+                    assertEquals(readGlobals, readGlobalCount(reader));
                 });
     }
 
@@ -556,6 +608,14 @@ final class ProtosI115LexicalStorageConvergenceTest {
                     assertFalse(names.contains("Lookup"), names::toString);
                     assertTrue(names.stream().noneMatch(FRAME_PUBLICATION::contains), names::toString);
                     assertEquals(5L, execute(fixture, reader));
+                    int readGlobals = readGlobalCount(reader);
+                    for (int round = 0; round < WARM_ROUNDS; round++) {
+                        assertEquals(5L, execute(fixture, reader));
+                    }
+                    fixture.module.context().assignLocalSlot("x", 6L);
+                    assertEquals(6L, execute(fixture, reader), "the warmed read observes the new value");
+                    assertEquals(readGlobals, readGlobalCount(reader));
+                    assertFalse(operations(activationNode(reader)).contains("Lookup"));
                 });
     }
 
@@ -787,6 +847,13 @@ final class ProtosI115LexicalStorageConvergenceTest {
                 .map(name -> name.startsWith("c.") ? name.substring(2) : name)
                 .map(name -> name.indexOf('$') < 0 ? name : name.substring(0, name.indexOf('$')))
                 .toList();
+    }
+
+    /* ReadGlobal operations, quickened or not, of the Closure's activation root. */
+    private static int readGlobalCount(ProtosClosureValue closure) {
+        return (int) operations(activationNode(closure)).stream()
+                .filter("ReadGlobal"::equals)
+                .count();
     }
 
     private static BytecodeNode activationNode(ProtosClosureValue closure) {

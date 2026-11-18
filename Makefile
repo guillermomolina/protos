@@ -82,7 +82,7 @@ TRUFFLE_ROOT_SELECTOR ?=
 TRUFFLE_ROOT_EXPANSION ?= method
 TRUFFLE_ROOT_DUMP_LEVEL ?= 1
 
-.PHONY: help toolchain compile build test test-java java-test-phase test-java-parallel test-java-serial test-java-confirm test-java-stress test-local-range-pe-guard check-local-range-index-pe check-local-range-operands-pe check-local-accessor-pe check-bytecode-api-pe check-generated-bytecode-bci-pe check-native-runtime-compilation check-truffle-compilation diagnose-truffle-compilation truffle-root-catalog diagnose-truffle-root test-protos test-protos-suite test-protos-foreign check verify clean artifacts artifacts-verify artifacts-publish-d064 dist dist-validate build-native test-native clean-native
+.PHONY: help toolchain compile build test test-java java-test-phase test-java-parallel test-java-serial test-java-confirm test-java-stress test-local-range-pe-guard check-local-range-index-pe check-local-range-operands-pe check-local-accessor-pe check-bytecode-api-pe check-generated-bytecode-bci-pe check-native-runtime-compilation check-truffle-compilation diagnose-truffle-compilation truffle-root-catalog diagnose-truffle-root check-factorial-fibonacci-graph-budget test-protos test-protos-suite test-protos-foreign check verify clean artifacts artifacts-verify artifacts-publish-d064 dist dist-validate build-native test-native clean-native
 
 help:
 	@printf '%s\n' \
@@ -129,6 +129,10 @@ help:
 		'                      TRUFFLE_ROOT_EXPANSION=method|node|none and a Graal' \
 		'                      Dump=Truffle:TRUFFLE_ROOT_DUMP_LEVEL; stops at the fresh' \
 		'                      BGV capture under target/ (handoff for external analysis)' \
+		'  make check-factorial-fibonacci-graph-budget  Physical Graal IR budget for' \
+		'                      factorial/Fibonacci run and recursive roots at Tier 1/2:' \
+		'                      eight independent Maven JVMs, artifacts under a temporary' \
+		'                      directory outside the repository (explicit; not in make test)' \
 		'  make test-local-range-pe-guard  Compatibility alias of check-local-range-index-pe' \
 		'  make test-protos    Build Protos and run the native Protos test suite' \
 		'                      (test-protos-suite + test-protos-foreign, one build)' \
@@ -348,6 +352,11 @@ diagnose-truffle-root:
 		--timeout $(TRUFFLE_COMPILATION_TIMEOUT) \
 		--artifacts $(TRUFFLE_COMPILATION_DIR) \
 		-- $(TRUFFLE_ROOT_TEST_ARGS)
+
+# I115: explicit physical graph-budget gate; one fresh JVM per workload/root/tier.
+check-factorial-fibonacci-graph-budget:
+	$(PYTHON) tools/tests/test_factorial_fibonacci_graph_budget.py
+	$(PYTHON) tools/factorial_fibonacci_graph_budget.py --mvn '$(MVN)'
 
 # Historical PERF030-F name, kept for compatibility.
 test-local-range-pe-guard: check-local-range-index-pe
