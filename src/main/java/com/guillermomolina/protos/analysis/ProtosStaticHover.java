@@ -94,7 +94,10 @@ final class ProtosStaticHover {
         // D110 generation 1 proves only Closure parameter origins. Describe the
         // proof only when its target is exactly one parsed parameter declaration.
         SurfaceParameter parameter =
-                findParameter(parsed.program(), proven.targets().get(0).span());
+                findParameter(
+                        parsed.snapshot().characters(),
+                        parsed.program(),
+                        proven.targets().get(0).span());
         if (parameter == null) {
             return Optional.empty();
         }
@@ -115,13 +118,14 @@ final class ProtosStaticHover {
                 sections));
     }
 
-    private static SurfaceParameter findParameter(SurfaceExpression expression, SourceSpan span) {
+    private static SurfaceParameter findParameter(
+            String source, SurfaceExpression expression, SourceSpan span) {
         if (!encloses(expression.span(), span)) {
             return null;
         }
         if (expression instanceof SurfaceClosure closure) {
             for (SurfaceParameter parameter : closure.parameters()) {
-                if (parameter.span().equals(span)) {
+                if (isParameterName(source, parameter, span)) {
                     return parameter;
                 }
             }
@@ -129,11 +133,11 @@ final class ProtosStaticHover {
         // D231-F2-PURE: the contextual for binder is spelled in the header,
         // outside its body Closure's span, so the Closure branch cannot reach it.
         if (expression instanceof SurfaceContextualFor loop
-                && loop.binder().span().equals(span)) {
+                && isParameterName(source, loop.binder(), span)) {
             return loop.binder();
         }
         for (SurfaceExpression child : children(expression)) {
-            SurfaceParameter found = findParameter(child, span);
+            SurfaceParameter found = findParameter(source, child, span);
             if (found != null) {
                 return found;
             }
@@ -238,6 +242,11 @@ final class ProtosStaticHover {
      * or defaulted parameter starts at its identifier; a rest parameter ends at
      * its identifier. The source text must spell the name exactly there.</p>
      */
+    private static boolean isParameterName(
+            String source, SurfaceParameter parameter, SourceSpan span) {
+        return parameterNameSpan(source, parameter).filter(span::equals).isPresent();
+    }
+
     static Optional<SourceSpan> parameterNameSpan(String source, SurfaceParameter parameter) {
         int length = parameter.name().length();
         int start = parameter.rest()

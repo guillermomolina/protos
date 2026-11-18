@@ -271,7 +271,8 @@ final class ProtosStaticReferences {
 
         private void collectClosure(SurfaceClosure closure) {
             for (SurfaceParameter parameter : closure.parameters()) {
-                addDeclaration(parameter.name(), parameter.span());
+                ProtosStaticHover.parameterNameSpan(source, parameter)
+                        .ifPresent(name -> addDeclaration(parameter.name(), name));
                 parameter.defaultValue().ifPresent(this::collect);
             }
             collect(closure.body());

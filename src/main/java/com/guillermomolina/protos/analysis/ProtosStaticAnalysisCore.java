@@ -78,11 +78,17 @@ public final class ProtosStaticAnalysisCore {
     }
 
     /**
-     * Resolves the complete generation-1 D110 definition proof for one source
-     * offset in the supplied immutable snapshot.
+     * Resolves declaration navigation for one source offset in the supplied
+     * immutable snapshot.
      *
-     * <p>Parse failure, a non-reference offset, or an unproven definition is an
-     * ordinary empty result.</p>
+     * <p>An exact generation-1 origin proof is returned when one exists.
+     * Otherwise a bare-name read may resolve to its lexical declarations: the
+     * source declarations its AST chain of lexical contexts can select,
+     * including from deferred Closures and callbacks. Such a target is a
+     * navigation candidate and does not claim that the slot is present when
+     * the read runs; hover and references keep using the exact proof only.
+     * Parse failure, a non-reference offset, or a read without either kind of
+     * origin is an ordinary empty result.</p>
      */
     public Optional<ProtosStaticDefinitionResult> definition(
             ProtosDocumentSnapshot snapshot,
@@ -93,7 +99,7 @@ public final class ProtosStaticAnalysisCore {
         if (!(parsed instanceof ProtosStaticParseResult.Parsed successful)) {
             return Optional.empty();
         }
-        return ProtosStaticDefinitions.resolve(successful, sourceOffset);
+        return ProtosStaticDefinitions.resolveDeclaration(successful, sourceOffset);
     }
 
     /**

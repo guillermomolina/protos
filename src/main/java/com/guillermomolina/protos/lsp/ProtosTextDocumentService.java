@@ -275,11 +275,30 @@ final class ProtosTextDocumentService implements TextDocumentService {
             return noDefinition();
         }
 
+        int requestedOffset = sourceOffset.getAsInt();
+
         Optional<ProtosStaticDefinitionResult> definition =
                 session.definitionCurrent(
                         OPEN_DOCUMENTS_DOMAIN,
                         uri,
-                        sourceOffset.getAsInt());
+                        requestedOffset);
+
+        // An editor cursor, including the active end of a selection made from
+        // left to right, may sit just after the last character of a reference.
+        // Reference spans stay half-open; only a proof whose span ends exactly
+        // at the requested offset is accepted for that cursor.
+        if (definition.isEmpty() && requestedOffset > 0) {
+            Optional<ProtosStaticDefinitionResult> preceding =
+                    session.definitionCurrent(
+                            OPEN_DOCUMENTS_DOMAIN,
+                            uri,
+                            requestedOffset - 1);
+
+            if (preceding.isPresent()
+                    && preceding.get().referenceSpan().endOffset() == requestedOffset) {
+                definition = preceding;
+            }
+        }
         if (definition.isEmpty()) {
             return noDefinition();
         }

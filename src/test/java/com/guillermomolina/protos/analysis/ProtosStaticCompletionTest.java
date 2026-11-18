@@ -239,6 +239,67 @@ class ProtosStaticCompletionTest {
         assertEquals(RESERVED, labels(result, Kind.SYNTAX));
     }
 
+    @Test
+    void immediatelyInvokedActivationOffersOnlyItsOwnParameters() {
+        String source = "f: (exterior) => {\n  ((interior) => {\n    \n  })(1)\n}\n";
+        int blank = source.indexOf("\n    \n") + 5;
+
+        // The captured exterior parameter is proven for Definition but is not a
+        // parameter of the inner activation, so Completion does not publish it.
+        assertEquals(
+                List.of("interior"),
+                labels(complete(source, blank).orElseThrow(), Kind.PROVEN_BINDING));
+    }
+
+    @Test
+    void capturedContextNamesAreNotPublishedAsCompletionCandidates() {
+        String source = "x: 1\n(() => {\n  y: 2\n  \n})()\n";
+        int blank = source.indexOf("\n  \n") + 3;
+        assertEquals(List.of(), labels(complete(source, blank).orElseThrow(), Kind.PROVEN_BINDING));
+
+        String parameter = "f: (exterior) => {\n  (() => {\n    \n  })()\n}\n";
+        int inner = parameter.indexOf("\n    \n") + 5;
+        assertEquals(
+                List.of(),
+                labels(complete(parameter, inner).orElseThrow(), Kind.PROVEN_BINDING));
+    }
+
+    @Test
+    void unknownCallInImmediatelyInvokedActivationKeepsItsInvalidation() {
+        String source = "((a) => {\n  desconocido()\n  \n})(1)\n";
+        int blank = source.indexOf("\n  \n") + 3;
+        assertEquals(List.of(), labels(complete(source, blank).orElseThrow(), Kind.PROVEN_BINDING));
+    }
+
+    @Test
+    void deferredOrUnprovenCapturesOfferNoLexicalNames() {
+        String source = "f: (exterior) => {\n  g: () => {\n    \n  }\n}\n";
+        int blank = source.indexOf("\n    \n") + 5;
+        assertEquals(List.of(), labels(complete(source, blank).orElseThrow(), Kind.PROVEN_BINDING));
+
+        String effectful = "f: (exterior) => {\n  ((a) => {\n    \n  })(desconocido())\n}\n";
+        int inner = effectful.indexOf("\n    \n") + 5;
+        assertEquals(
+                List.of("a"),
+                labels(complete(effectful, inner).orElseThrow(), Kind.PROVEN_BINDING));
+    }
+
+    @Test
+    void lexicalNavigationDoesNotWidenCompletionCandidates() {
+        // Definition reaches the outer slot and parameter lexically from the
+        // deferred callback, but Completion keeps its proven-parameter policy:
+        // only the callback's own parameter is offered.
+        String source = "x: 1\nf: (exterior) => {\n  ejecutar((item) => {\n    x\n    \n  })\n}\n";
+        int read = source.indexOf("    x\n") + 4;
+        int blank = source.indexOf("\n    \n") + 5;
+        assertEquals(
+                span(0, "x"),
+                core.definition(snapshot(source), read).orElseThrow().targets().get(0).span());
+        assertEquals(
+                List.of("item"),
+                labels(complete(source, blank).orElseThrow(), Kind.PROVEN_BINDING));
+    }
+
     private Optional<ProtosStaticCompletionResult> complete(String source, int offset) {
         return core.completion(snapshot(source), offset);
     }

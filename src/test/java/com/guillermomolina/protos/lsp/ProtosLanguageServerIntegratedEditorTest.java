@@ -383,8 +383,9 @@ class ProtosLanguageServerIntegratedEditorTest {
         connection.change(uri, 3, "f: (second) => {\n  second\n");
         assertTrue(connection.definition(uri, 1, 3).isEmpty());
 
+        // After the opaque call the read keeps only its lexical declaration.
         connection.change(uri, 4, "f: (value) => {\n  sink(value)\n  value\n}\n");
-        assertTrue(connection.definition(uri, 2, 2).isEmpty());
+        assertSingleLocation(connection.definition(uri, 2, 2), uri, range(0, 4, 0, 9));
         assertTrue(connection.references(uri, 1, 7).isEmpty());
 
         connection.change(uri, 5, "first: 1\nfirst\n");
@@ -443,6 +444,34 @@ class ProtosLanguageServerIntegratedEditorTest {
 
     @Test
     @Timeout(10)
+    void nestedObjectReadsNeverNavigateToTheOuterObjectMember() throws Exception {
+        ProjectFixture project = project("nested-objects");
+        connection = connectWithoutWorkspace(project);
+
+        // Line 4 "    copia: dato" reads "dato" at characters 11-15; line 5
+        // "    ejecutar: () => dato" captures "dato" at characters 20-24. The
+        // outer object's slot (line 2) is in neither lexical chain.
+        String nested = temporary.resolve("Nested.protos").toUri().toString();
+        connection.open(
+                nested,
+                1,
+                "dato: 9\nobj: {\n  dato: 1\n  interior: {\n    copia: dato\n"
+                        + "    ejecutar: () => dato\n  }\n}\n");
+        assertSingleLocation(connection.definition(nested, 4, 12), nested, range(0, 0, 0, 4));
+        assertSingleLocation(connection.definition(nested, 4, 15), nested, range(0, 0, 0, 4));
+        assertSingleLocation(connection.definition(nested, 5, 21), nested, range(0, 0, 0, 4));
+        assertSingleLocation(connection.definition(nested, 5, 24), nested, range(0, 0, 0, 4));
+
+        String alone = temporary.resolve("NestedAlone.protos").toUri().toString();
+        connection.open(
+                alone,
+                1,
+                "obj: {\n  dato: 1\n  interior: {\n    copia: dato\n  }\n}\n");
+        assertTrue(connection.definition(alone, 3, 12).isEmpty());
+    }
+
+    @Test
+    @Timeout(10)
     void localDefinitionStaysInsideEachRequestedUri() throws Exception {
         ProjectFixture project = project("isolation");
         connection = connect(project);
@@ -489,6 +518,192 @@ class ProtosLanguageServerIntegratedEditorTest {
 
         assertSingleLocation(connection.definition(uri, 2, 10), uri, range(1, 4, 1, 9));
         assertTrue(connection.references(uri, 2, 10).isEmpty());
+    }
+
+    @Test
+    @Timeout(10)
+    void slotsExampleDefinitionAnswersInsideAndJustAfterEachReference() throws Exception {
+        ProjectFixture project = project("slots-example");
+        connection = connectWithoutWorkspace(project);
+        Path example = Path.of("protos", "examples", "basics", "slots.protos");
+        String source = Files.readString(example);
+        String uri = example.toAbsolutePath().toUri().toString();
+        connection.open(uri, 1, source);
+
+        int creation = source.indexOf("x: 10");
+        Range declaration = new Range(
+                ProtosLspSourcePositions.position(source, creation),
+                ProtosLspSourcePositions.position(source, creation + 1));
+
+        int assignmentTarget = source.indexOf("x = 20");
+        int read = source.indexOf("print(x)") + "print(".length();
+        for (int reference : new int[] {assignmentTarget, read}) {
+            Position inside = ProtosLspSourcePositions.position(source, reference);
+            Position after = ProtosLspSourcePositions.position(source, reference + 1);
+            assertSingleLocation(
+                    connection.definition(uri, inside.getLine(), inside.getCharacter()),
+                    uri,
+                    declaration);
+            assertSingleLocation(
+                    connection.definition(uri, after.getLine(), after.getCharacter()),
+                    uri,
+                    declaration);
+        }
+    }
+
+    @Test
+    @Timeout(10)
+    void hundredDoorsExampleDefinitionAnswersTheClosureSlotAndTheCallbackCapture()
+            throws Exception {
+        ProjectFixture project = project("doors-example");
+        connection = connectWithoutWorkspace(project);
+        Path example = Path.of("protos", "examples", "algorithms", "100-doors.protos");
+        String source = Files.readString(example);
+        String uri = example.toAbsolutePath().toUri().toString();
+        connection.open(uri, 1, source);
+
+        String name = "doorsAfterPasses";
+        int creation = source.indexOf(name + ":");
+        Range declaration = new Range(
+                ProtosLspSourcePositions.position(source, creation),
+                ProtosLspSourcePositions.position(source, creation + name.length()));
+
+        int read = source.indexOf(name, source.indexOf("finalDoors:"));
+        for (int offset : new int[] {read, read + name.length() / 2, read + name.length()}) {
+            Position position = ProtosLspSourcePositions.position(source, offset);
+            assertSingleLocation(
+                    connection.definition(uri, position.getLine(), position.getCharacter()),
+                    uri,
+                    declaration);
+        }
+
+        // The read of finalDoors inside the Closure passed to each(...) belongs
+        // lexically to the SOURCE context where the Closure is constructed. Its
+        // declaration is found from the AST alone, without knowing when or
+        // whether each(...) invokes the Closure. The cursor at the start, in
+        // the middle, and just after the fully selected word all agree.
+        String captured = "finalDoors";
+        int finalDoors = source.indexOf(captured + ":");
+        Range finalDeclaration = new Range(
+                ProtosLspSourcePositions.position(source, finalDoors),
+                ProtosLspSourcePositions.position(source, finalDoors + captured.length()));
+        int capture = source.indexOf("finalDoors[index]");
+        assertTrue(capture > finalDoors);
+        for (int offset : new int[] {
+                capture, capture + captured.length() / 2, capture + captured.length()}) {
+            Position position = ProtosLspSourcePositions.position(source, offset);
+            assertSingleLocation(
+                    connection.definition(uri, position.getLine(), position.getCharacter()),
+                    uri,
+                    finalDeclaration);
+        }
+
+        // An edit produces a new snapshot; the target follows its offsets.
+        String edited = "\n" + source;
+        connection.change(uri, 2, edited);
+        int editedCapture = edited.indexOf("finalDoors[index]");
+        int editedDeclaration = edited.indexOf(captured + ":");
+        Position editedPosition = ProtosLspSourcePositions.position(edited, editedCapture);
+        assertSingleLocation(
+                connection.definition(uri, editedPosition.getLine(), editedPosition.getCharacter()),
+                uri,
+                new Range(
+                        ProtosLspSourcePositions.position(edited, editedDeclaration),
+                        ProtosLspSourcePositions.position(
+                                edited, editedDeclaration + captured.length())));
+
+        // Navigation needs no ProjectBinding, and grants no References authority.
+        assertTrue(connection.references(
+                uri, editedPosition.getLine(), editedPosition.getCharacter()).isEmpty());
+        connection.close(uri);
+        assertTrue(connection.definition(
+                uri, editedPosition.getLine(), editedPosition.getCharacter()).isEmpty());
+    }
+
+    @Test
+    @Timeout(10)
+    void callbacksOfArbitrarySelectorsNavigateToTheirLexicalDeclarationsOverJsonRpc()
+            throws Exception {
+        ProjectFixture project = project("generic-callbacks");
+        connection = connectWithoutWorkspace(project);
+        String uri = temporary.resolve("Callbacks.protos").toUri().toString();
+
+        // Line 0 "valor: 42"; line 2 "  print(valor)" inside a literal callback
+        // of ejecutar; line 5 "  print(valor)" inside a callback stored in a
+        // slot and later passed to procesarConRetraso.
+        connection.open(
+                uri,
+                1,
+                "valor: 42\nejecutar((item) => {\n  print(valor)\n})\n"
+                        + "callback: (item) => {\n  print(valor)\n}\n"
+                        + "procesarConRetraso(callback)\n");
+
+        for (int line : new int[] {2, 5}) {
+            assertSingleLocation(connection.definition(uri, line, 8), uri, range(0, 0, 0, 5));
+            assertSingleLocation(connection.definition(uri, line, 13), uri, range(0, 0, 0, 5));
+        }
+        // The stored Closure itself is an exact slot origin.
+        assertSingleLocation(connection.definition(uri, 7, 19), uri, range(4, 0, 4, 8));
+    }
+
+    @Test
+    @Timeout(10)
+    void cursorJustAfterASelectorCountsUtf16CodeUnitsBeforeIt() throws Exception {
+        ProjectFixture project = project("utf16-selector");
+        connection = connectWithoutWorkspace(project);
+        String uri = temporary.resolve("WideSelector.protos").toUri().toString();
+
+        // U+1F600 occupies two UTF-16 code units, so "dato" spans characters
+        // 13-17 of line 3 even though only 16 code points precede its end.
+        connection.open(
+                uri,
+                1,
+                "obj: {\n  dato: 1\n}\n/* 😀 */ obj.dato\n");
+
+        assertSingleLocation(connection.definition(uri, 3, 13), uri, range(1, 2, 1, 6));
+        assertSingleLocation(connection.definition(uri, 3, 16), uri, range(1, 2, 1, 6));
+        assertSingleLocation(connection.definition(uri, 3, 17), uri, range(1, 2, 1, 6));
+        assertSingleLocation(connection.definition(uri, 3, 12), uri, range(0, 0, 0, 3));
+        assertTrue(connection.definition(uri, 3, 18).isEmpty());
+    }
+
+    @Test
+    @Timeout(10)
+    void immediatelyInvokedCaptureNavigatesOverJsonRpcWithoutProjectBinding() throws Exception {
+        ProjectFixture project = project("immediate-capture");
+        connection = connectWithoutWorkspace(project);
+        String uri = temporary.resolve("Capture.protos").toUri().toString();
+
+        // The captured read "x" spans line 1 characters 7-8.
+        connection.open(uri, 1, "x: 1\n(() => x)()\n");
+
+        assertSingleLocation(connection.definition(uri, 1, 7), uri, range(0, 0, 0, 1));
+        assertSingleLocation(connection.definition(uri, 1, 8), uri, range(0, 0, 0, 1));
+    }
+
+    @Test
+    @Timeout(10)
+    void captureAfterRemovalOrUnknownCallNavigatesOnlyToItsLexicalDeclaration()
+            throws Exception {
+        ProjectFixture project = project("invalidated-capture");
+        connection = connectWithoutWorkspace(project);
+
+        // The captured read "x" spans line 4 characters 2-3 in both documents.
+        String removed = temporary.resolve("Removed.protos").toUri().toString();
+        connection.open(
+                removed,
+                1,
+                "x: 1\nexterior: context\n(() => {\n  exterior.removeSlot(\"x\")\n  x\n})()\n");
+        // The exact origin is no longer proven, but the lexical declaration is
+        // still the SOURCE creation; a member write through the alias is not a
+        // declaration.
+        assertSingleLocation(connection.definition(removed, 4, 2), removed, range(0, 0, 0, 1));
+        assertSingleLocation(connection.definition(removed, 4, 3), removed, range(0, 0, 0, 1));
+
+        String unknown = temporary.resolve("Unknown.protos").toUri().toString();
+        connection.open(unknown, 1, "x: 1\n(() => {\n  y: 2\n  desconocido()\n  x\n})()\n");
+        assertSingleLocation(connection.definition(unknown, 4, 2), unknown, range(0, 0, 0, 1));
+        assertSingleLocation(connection.definition(unknown, 4, 3), unknown, range(0, 0, 0, 1));
     }
 
     @Test

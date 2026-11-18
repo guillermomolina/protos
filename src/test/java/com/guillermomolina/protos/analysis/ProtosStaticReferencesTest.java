@@ -390,6 +390,109 @@ class ProtosStaticReferencesTest {
         assertTrue(references(replaced, replaced.lastIndexOf("dato")).isEmpty());
     }
 
+    @Test
+    void immediatelyInvokedCaptureIsAReferenceOfTheCapturedSlot() {
+        String source = "x: 1\nx\n(() => x)()\nx\n";
+        int topRead = source.indexOf("x", 2);
+        int capture = source.indexOf("x", source.indexOf("=>"));
+
+        ProtosStaticReferenceResult result = references(source, capture).orElseThrow();
+
+        assertEquals(new SourceSpan(0, 1), result.target().span());
+        // The invocation is still an opaque barrier for the caller, so the
+        // final read is not re-proven and is omitted.
+        assertEquals(
+                List.of(new SourceSpan(topRead, topRead + 1), new SourceSpan(capture, capture + 1)),
+                spans(result));
+        assertSameProvenOrigin(source, result);
+    }
+
+    @Test
+    void capturedAndShadowingLocalReadsAreDistinctReferences() {
+        String source = "x: 1\n(() => {\n  x\n  x: 2\n  x\n})()\n";
+        int captured = source.indexOf("x", source.indexOf("=>"));
+        int local = source.lastIndexOf("x");
+
+        ProtosStaticReferenceResult outer = references(source, captured).orElseThrow();
+        assertEquals(new SourceSpan(0, 1), outer.target().span());
+        assertEquals(List.of(new SourceSpan(captured, captured + 1)), spans(outer));
+
+        ProtosStaticReferenceResult inner = references(source, local).orElseThrow();
+        int innerDeclaration = source.indexOf("x: 2");
+        assertEquals(
+                new SourceSpan(innerDeclaration, innerDeclaration + 1), inner.target().span());
+        assertEquals(List.of(new SourceSpan(local, local + 1)), spans(inner));
+        assertSameProvenOrigin(source, outer);
+        assertSameProvenOrigin(source, inner);
+    }
+
+    @Test
+    void capturedReadsAfterOpaqueEffectsOrInOtherActivationsAreOmitted() {
+        String source =
+                "x: 1\n(() => {\n  x\n  desconocido()\n  x\n})()\nf: () => x\n";
+        int before = source.indexOf("x", source.indexOf("=>"));
+
+        ProtosStaticReferenceResult result = references(source, before).orElseThrow();
+
+        assertEquals(new SourceSpan(0, 1), result.target().span());
+        // Neither the read after the unknown call nor the same-name read in
+        // the deferred Closure f re-proves the captured origin.
+        assertEquals(List.of(new SourceSpan(before, before + 1)), spans(result));
+        assertTrue(references(source, source.lastIndexOf("x")).isEmpty());
+    }
+
+    @Test
+    void lexicalNavigationOfACapturedReadIsNotAnExactReference() {
+        String source = "valor: 1\nvalor\nejecutar(() => valor)\ncontext.removeSlot(\"valor\")\n";
+        int exact = source.indexOf("valor", 1);
+        int capture = source.indexOf("valor", source.indexOf("=>"));
+        ProtosDocumentSnapshot snapshot = new ProtosDocumentSnapshot("test.protos", 1L, source);
+
+        // Definition navigates from the deferred capture to its lexical
+        // declaration, but that is not a proof of the slot selected when the
+        // Closure runs: the slot may be removed before any invocation.
+        assertEquals(
+                List.of(new SourceSpan(0, "valor".length())),
+                core.definition(snapshot, capture).orElseThrow().targets().stream()
+                        .map(ProtosStaticDefinitionResult.Target::span)
+                        .toList());
+
+        // References keeps the strict proof: the capture is neither a seed nor
+        // an occurrence of the exactly proven read.
+        assertTrue(references(source, capture).isEmpty());
+        ProtosStaticReferenceResult result = references(source, exact).orElseThrow();
+        assertEquals(new SourceSpan(0, "valor".length()), result.target().span());
+        assertEquals(List.of(new SourceSpan(exact, exact + "valor".length())), spans(result));
+        assertSameProvenOrigin(source, result);
+    }
+
+    @Test
+    void ordinaryDefaultedAndRestParametersShareTheIdentifierTargetFromBothSeeds() {
+        assertParameterReferences("f: (valor) => valor", "valor", -1);
+        assertParameterReferences("f: (valor: 3) => valor", "valor", "f: (valor: ".length());
+        assertParameterReferences("f: (...valor) => valor", "valor", "f: (".length());
+    }
+
+    private void assertParameterReferences(String source, String name, int nonNameOffset) {
+        int declaration = source.indexOf(name);
+        int read = source.lastIndexOf(name);
+        SourceSpan target = new SourceSpan(declaration, declaration + name.length());
+
+        ProtosStaticReferenceResult fromDeclaration =
+                references(source, declaration).orElseThrow();
+        ProtosStaticReferenceResult fromRead = references(source, read).orElseThrow();
+
+        assertEquals(target, fromDeclaration.target().span());
+        assertEquals(fromDeclaration.target(), fromRead.target());
+        assertEquals(List.of(new SourceSpan(read, read + name.length())), spans(fromRead));
+        assertEquals(fromDeclaration.occurrences(), fromRead.occurrences());
+        if (nonNameOffset >= 0) {
+            // The default value text or the rest prefix is not a selection
+            // of the declaration.
+            assertTrue(references(source, nonNameOffset).isEmpty(), source);
+        }
+    }
+
     private static List<SourceSpan> spans(ProtosStaticReferenceResult result) {
         return result.occurrences().stream()
                 .map(ProtosStaticReferenceResult.Occurrence::span)

@@ -96,11 +96,75 @@ project:
 - **Signature help** works only when the callee is a literal Closure, for
   example `((a, b: 1) => { a + b })(`, showing source-text parameter labels.
   Calls through a name or a receiver get no signature help.
-- **Go to definition** returns a location only when every origin is proven
-  inside the same open snapshot, and the location always uses the exact URI of
-  the requested document. The proof reads neither the file on disk nor any
-  other file. A source without a complete proof (including source that does
-  not parse) returns an empty result.
+- **Go to definition** answers from one of two analyses, both inside the same
+  open snapshot, and the location always uses the exact URI of the requested
+  document. Neither reads the file on disk nor any other file, and source that
+  does not parse returns an empty result.
+  - *Exact binding proof.* When the analysis proves which slot a read selects
+    under the dynamic rules for presence, removal, recreation and effects (see
+    *Captured slots* below), the answer is that origin.
+  - *Lexical declaration navigation.* Otherwise a bare-name read or assignment
+    target navigates to its lexical declarations: the parameters and `name:`
+    creations that the AST's chain of lexical contexts around the read can
+    select, nearest context first. This works inside Closures and callbacks
+    however and whenever they are invoked: a Closure passed to `each(...)` or
+    to any other message, stored in a slot and called later, or nested several
+    levels deep. A nearer parameter or creation shadows an outer one; an
+    assignment `x = ...` never declares. While an object is being constructed
+    it is the current context of its body, so a direct read there can navigate
+    to a slot of that object created earlier in the body (a slot created later
+    does not satisfy the read). Closures created in the object body do not
+    capture that object, and a nested object does not add the outer object to
+    its chain of lexical contexts: both continue from the genuine context of
+    the construction. When one context creates the same name more than once, every
+    such creation is returned. A name that only the dynamic receiver can
+    supply has no lexical declaration and returns an empty result.
+  A lexical declaration is a navigation target, not a proof, including an
+  object-body slot or a context reached past an object: an unknown call,
+  `context.removeSlot(...)`, or a write through an alias of the context may
+  leave the exact binding unproven while the lexical declaration is still
+  shown. Hover, completion and references keep using the exact proof only.
+  This lexical navigation widens the strict generation-1 definition contract
+  ratified in D110 and D258; harmonizing that formal contract is pending, and
+  the lexical result carries no D110 exact-origin guarantee.
+- **Cursor position for go to definition.** The request is answered with the
+  cursor anywhere inside a proven reference, and also with the cursor just
+  after its last character, which is where the editor leaves the cursor after
+  selecting a whole name from left to right. Only a reference whose range ends
+  exactly at the cursor qualifies: the server steps back one character at
+  most, never skips spaces, and never searches for nearby names. This
+  tolerance belongs to `textDocument/definition` alone; it changes neither the
+  parser's source ranges nor what counts as proven, and it never turns a
+  textual match into a definition.
+- **Captured slots.** For the exact binding proof, a read inside a Closure of
+  a slot that belongs to an enclosing context is proven only when the analysis
+  proves its exact origin
+  under the rules for mutable contexts: the captured context can lose, regain,
+  or replace that slot before the Closure runs (for example through
+  `context.removeSlot("x")` followed by a new `x:`). Concretely:
+  - *Immediate invocation, proven context and effects.* A Closure literal
+    called on the spot with literal positional arguments, such as
+    `(() => x)()` or `((a) => x)(1)`, runs at once in a fresh activation
+    whose lexical parent is the context at the call. A captured read there
+    navigates to the creation or parameter that is proven at the call, through
+    any number of such nested invocations.
+  - *Deferred captures and unknown calls.* A Closure stored in a slot and
+    called later, a Closure whose arguments or defaults run other code, and
+    any read after an unknown call inside the Closure, have no exact proof:
+    the captured context may have changed in between. Go to definition still
+    offers their lexical declaration.
+  - *Mutation, removal, recreation and shadowing.* A slot created inside the
+    invoked Closure shadows the captured one from its creation onwards, so an
+    earlier read still names the outer slot and a later read names the local
+    one. Assigning a new value keeps the slot's origin. Removing or creating
+    slots through `context` or an alias of it leaves later captured reads
+    without an exact proof.
+  - *Methods and callbacks.* Reads inside a Closure invoked as a method
+    (`obj.method()`) or passed to a message like `each(...)` have no exact
+    proof, because which behavior runs, and when, is decided at run time.
+    Their lexical declarations are still navigable, for example `finalDoors`
+    inside the `each(...)` callback of
+    `protos/examples/algorithms/100-doors.protos`.
 
 Opening a document never makes it part of a project: these answers create no
 project binding and grant no cross-source navigation authority.
@@ -108,7 +172,7 @@ project binding and grant no cross-source navigation authority.
 ## Navigation needs a bound project
 
 **Local definitions** do not need a bound project: go to definition answers
-whenever all origins are proven inside the same open snapshot (see
+from the exact proof or the lexical declarations inside the same open snapshot (see
 [Document-local intelligence](#document-local-intelligence)).
 
 **References and workspace symbols** work only for documents that
@@ -137,12 +201,13 @@ current generation mainly proves:
 - references whose origin remains unambiguous before any opaque effect (such
   as an invocation) intervenes.
 
-Go to definition additionally proves, inside the same activation and only
-until an opaque effect intervenes:
+Go to definition additionally proves exactly, inside the same activation and
+only until an opaque effect intervenes (lexical declaration navigation, above,
+may still answer where this proof stops):
 
 - local slot creations: after `mensaje: "Hola"` (or a grouped creation such as
   `(a, b): pair`), a later read of `mensaje` goes to the creation. A read before
-  the creation, or from another Closure, is not resolved;
+  the creation, or from another Closure, has no exact proof;
 - Closures stored in such slots, including the receiver of a later call such
   as `saludar("Hola")`;
 - the target of an assignment such as `count = 2` when the slot it selects is

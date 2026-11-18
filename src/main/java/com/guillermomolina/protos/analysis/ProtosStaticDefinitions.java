@@ -45,8 +45,10 @@ import com.guillermomolina.protos.parser.ast.SurfaceSlotCreation;
 import com.guillermomolina.protos.parser.ast.SurfaceSuperSend;
 import com.guillermomolina.protos.parser.ast.SurfaceUnary;
 import com.guillermomolina.protos.source.SourceSpan;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -75,6 +77,18 @@ import java.util.Set;
  * resolver never executes Protos code and never falls back to same-name,
  * workspace-symbol, module, or runtime lookup.</p>
  *
+ * <p>A Closure body is analyzed against captured facts only when the Closure
+ * literal is invoked immediately with literal positional arguments; its fresh
+ * activation then consults its own slots first and only afterwards the facts of
+ * the lexical parent proven at the invocation point. A Closure whose invocation
+ * time is not proven never sees captured facts.</p>
+ *
+ * <p>Declaration navigation ({@link #resolveDeclaration}) additionally uses
+ * the lexical identity of each read: the chain of source contexts built from
+ * the AST, which does not depend on when a Closure is invoked. A lexical
+ * declaration is a navigation candidate, not an exact origin proof; the strict
+ * queries never consult it.</p>
+ *
  * <p>One {@link ProofWalker} owns the fact propagation. Definition asks it for
  * the proven origin under an offset; LM010-B completion asks it for the proven
  * Closure-parameter names at one exact read site, which ordinary slot facts do
@@ -84,15 +98,46 @@ final class ProtosStaticDefinitions {
     private ProtosStaticDefinitions() {
     }
 
+    /**
+     * Resolves the exact origin proof under one offset. Only an origin
+     * proven at the read site under the dynamic presence, removal, re-creation
+     * and effect rules is returned; References and Hover rely on this mode.
+     */
     static Optional<ProtosStaticDefinitionResult> resolve(
             ProtosStaticParseResult.Parsed parsed,
             int sourceOffset) {
+        return resolve(parsed, sourceOffset, false);
+    }
+
+    /**
+     * Resolves declaration navigation under one offset.
+     *
+     * <p>An exact origin proof is preferred. When none survives, a bare-name
+     * read or assignment target falls back to its lexical declarations: the
+     * source declarations that the read's chain of lexical contexts, built from
+     * the AST alone, can select. This holds regardless of when, by whom, or
+     * whether a Closure on that chain is invoked. A lexical declaration is a
+     * navigation candidate, not a proof that the slot is present when the read
+     * runs. Several declarations of one name in one context are all returned;
+     * a read whose only possible origin is the dynamic receiver has none.</p>
+     */
+    static Optional<ProtosStaticDefinitionResult> resolveDeclaration(
+            ProtosStaticParseResult.Parsed parsed,
+            int sourceOffset) {
+        return resolve(parsed, sourceOffset, true);
+    }
+
+    private static Optional<ProtosStaticDefinitionResult> resolve(
+            ProtosStaticParseResult.Parsed parsed,
+            int sourceOffset,
+            boolean lexicalNavigation) {
         Objects.requireNonNull(parsed, "parsed");
         if (sourceOffset < 0 || sourceOffset >= parsed.snapshot().characters().length()) {
             return Optional.empty();
         }
         ProtosDocumentSnapshot snapshot = parsed.snapshot();
-        ProofWalker<ProtosStaticDefinitionResult> walker = new ProofWalker<>() {
+        ProofWalker<ProtosStaticDefinitionResult> walker =
+                new ProofWalker<>(lexicalNavigation) {
             private ProtosStaticDefinitionResult result;
 
             @Override
@@ -101,10 +146,23 @@ final class ProtosStaticDefinitions {
                     return false;
                 }
                 SourceSpan origin = facts.origin(name.name());
-                if (origin == null) {
+                if (origin != null) {
+                    result = ProtosStaticDefinitionResult.singleton(snapshot, name.span(), origin);
+                    return true;
+                }
+                if (!lexicalNavigation) {
                     return false;
                 }
-                result = ProtosStaticDefinitionResult.singleton(snapshot, name.span(), origin);
+                List<SourceSpan> declarations = lexicalDeclarations(name);
+                if (declarations.isEmpty()) {
+                    return false;
+                }
+                result = new ProtosStaticDefinitionResult(
+                        snapshot,
+                        name.span(),
+                        declarations.stream()
+                                .map(span -> new ProtosStaticDefinitionResult.Target(snapshot, span))
+                                .toList());
                 return true;
             }
 
@@ -153,7 +211,7 @@ final class ProtosStaticDefinitions {
             SourceSpan readSpan) {
         Objects.requireNonNull(program, "program");
         Objects.requireNonNull(readSpan, "readSpan");
-        ProofWalker<List<String>> walker = new ProofWalker<>() {
+        ProofWalker<List<String>> walker = new ProofWalker<>(false) {
             private List<String> names;
 
             @Override
@@ -183,9 +241,25 @@ final class ProtosStaticDefinitions {
      * value is evaluated; {@link #visitMember} observes a member access after
      * its receiver has been analyzed. Observers must not retain or mutate the
      * facts. Returning {@code true} stops the walk.</p>
+     *
+     * <p>When constructed with lexical scopes, the walk first runs once in a
+     * collecting pass that observes nothing and records, by AST node identity,
+     * every lexical context of the source: its lexical parent, the point where
+     * it is constructed, and the parameters and bare-name creations it
+     * declares. The observing pass then tracks the current {@link Scope}, so an
+     * observer may ask for {@link #lexicalDeclarations}. Scopes are independent
+     * of {@link Facts}: an effect that clears facts never changes where a
+     * declaration was written.</p>
      */
     private abstract static class ProofWalker<R> {
+        private final IdentityHashMap<Object, Scope> scopes;
+        private boolean collecting;
+        private Scope scope;
         private boolean done;
+
+        ProofWalker(boolean lexicalScopes) {
+            scopes = lexicalScopes ? new IdentityHashMap<>() : null;
+        }
 
         abstract boolean visitRead(SurfaceName name, Facts facts);
 
@@ -200,7 +274,105 @@ final class ProtosStaticDefinitions {
         abstract Optional<R> result();
 
         final void walk(SurfaceSequence program) {
+            if (scopes != null) {
+                Scope root = new Scope(null, false, false, program.span().startOffset());
+                collecting = true;
+                scope = root;
+                analyze(program, new Facts());
+                collecting = false;
+                done = false;
+                scope = root;
+            }
             analyze(program, new Facts());
+        }
+
+        /**
+         * Returns the lexical declarations a bare-name read or assignment target
+         * at the current walk point can select, nearest context first, or an
+         * empty list when only the dynamic receiver can supply the name.
+         *
+         * <p>In the read's own context only declarations completed before the
+         * read are present. Each enclosing context is entered at the point where
+         * its child context was constructed. While every context crossed so far
+         * runs eagerly at construction (an object body), the enclosing context is
+         * observed exactly at that point. Once a Closure activation has been
+         * crossed, its invocation time is unknown: a declaration completed before
+         * construction is present and ends the search, while a later one is
+         * only possibly present and the search continues outward. An object
+         * under construction is the current context of a direct read in its
+         * body, so its slots created before the read are selected first. It is
+         * never a lexical context of the Closures or nested objects it
+         * constructs: their lexical parent is the genuine context of the
+         * construction.</p>
+         */
+        final List<SourceSpan> lexicalDeclarations(SurfaceName name) {
+            ArrayList<SourceSpan> found = new ArrayList<>();
+            Scope current = scope;
+            int point = name.span().startOffset();
+            boolean deferred = false;
+            while (current != null) {
+                boolean present = false;
+                for (Declaration declaration : current.declarations(name.name())) {
+                    if (declaration.completedAt() <= point) {
+                        present = true;
+                        found.add(declaration.origin());
+                    } else if (deferred) {
+                        found.add(declaration.origin());
+                    }
+                }
+                if (present) {
+                    break;
+                }
+                deferred |= current.deferred;
+                point = current.constructedAt;
+                current = current.parent;
+            }
+            return List.copyOf(found);
+        }
+
+        private boolean observeRead(SurfaceName name, Facts facts) {
+            return !collecting && visitRead(name, facts);
+        }
+
+        private void inScope(
+                Object node,
+                boolean objectBody,
+                boolean deferred,
+                int constructedAt,
+                Runnable action) {
+            if (scopes == null) {
+                action.run();
+                return;
+            }
+            Scope saved = scope;
+            Scope entered = collecting ? null : scopes.get(node);
+            if (entered == null) {
+                // An object under construction is the current context only of
+                // its own direct reads; a context created in its body links to
+                // the genuine lexical context of the construction.
+                Scope lexicalParent = saved;
+                while (lexicalParent != null && lexicalParent.objectBody) {
+                    lexicalParent = lexicalParent.parent;
+                }
+                entered = new Scope(lexicalParent, objectBody, deferred, constructedAt);
+                scopes.put(node, entered);
+            }
+            scope = entered;
+            try {
+                action.run();
+            } finally {
+                scope = saved;
+            }
+        }
+
+        private void inDeferredScope(SurfaceExpression node, Runnable action) {
+            inScope(node, false, true, node.span().startOffset(), action);
+        }
+
+        private void declare(SurfaceName name, SourceSpan origin, int completedAt) {
+            if (collecting) {
+                scope.declare(name.name(), new Declaration(origin, completedAt));
+            }
         }
 
         private void analyze(SurfaceExpression expression, Facts facts) {
@@ -218,15 +390,21 @@ final class ProtosStaticDefinitions {
                 case SurfaceGroup group -> analyze(group.expression(), facts);
                 case SurfaceMember member -> analyzeMember(member, facts);
                 case SurfaceCall call -> {
-                    analyze(call.receiver(), facts);
-                    analyzeArguments(call.arguments(), facts);
+                    SurfaceClosure invoked = immediatelyInvokedClosure(call);
+                    if (invoked != null) {
+                        analyzeImmediateInvocation(invoked, call.arguments(), facts);
+                    } else {
+                        analyze(call.receiver(), facts);
+                        analyzeArguments(call.arguments(), facts);
+                    }
                     opaqueInvocationBarrier(facts);
                 }
                 case SurfaceContextualWhile loop -> {
                     // D210-Q2 lowers the condition to a parameterless Closure and
                     // the body is a Closure literal; neither runs in the current
                     // activation, so neither may consume its facts.
-                    analyze(loop.condition(), new Facts());
+                    inDeferredScope(loop.condition(),
+                            () -> analyze(loop.condition(), new Facts()));
                     if (!done) {
                         analyzeClosure(loop.body());
                     }
@@ -253,7 +431,8 @@ final class ProtosStaticDefinitions {
                     // opaque invocation.
                     analyzeClosure(loop.body());
                     if (!done) {
-                        analyze(loop.condition(), new Facts());
+                        inDeferredScope(loop.condition(),
+                                () -> analyze(loop.condition(), new Facts()));
                     }
                     opaqueInvocationBarrier(facts);
                 }
@@ -310,7 +489,8 @@ final class ProtosStaticDefinitions {
                         // && / || lower the right operand to a parameterless Closure.
                         // Its bare names are captured outer bindings, which G4-A1
                         // deliberately does not claim.
-                        analyze(binary.right(), new Facts());
+                        inDeferredScope(binary.right(),
+                                () -> analyze(binary.right(), new Facts()));
                     } else {
                         analyze(binary.right(), facts);
                     }
@@ -328,6 +508,7 @@ final class ProtosStaticDefinitions {
                     analyze(creation.value(), facts);
                     if (!done) {
                         for (SurfaceName target : creation.targets()) {
+                            declare(target, target.span(), creation.span().endOffset());
                             facts.putSlot(target.name(), target.span(), null);
                         }
                     }
@@ -343,7 +524,7 @@ final class ProtosStaticDefinitions {
         }
 
         private void analyzeName(SurfaceName name, Facts facts) {
-            done = visitRead(name, facts);
+            done = observeRead(name, facts);
             // The value escapes: an alias may later change the object's slots
             // without naming this slot.
             facts.forgetObject(name.name());
@@ -352,7 +533,7 @@ final class ProtosStaticDefinitions {
         private void analyzeReceiver(SurfaceExpression receiver, Facts facts) {
             if (receiver instanceof SurfaceName name) {
                 // A direct member receiver is read without exposing the value.
-                done = visitRead(name, facts);
+                done = observeRead(name, facts);
                 return;
             }
             analyze(receiver, facts);
@@ -360,7 +541,7 @@ final class ProtosStaticDefinitions {
 
         private void analyzeMember(SurfaceMember member, Facts facts) {
             analyzeReceiver(member.receiver(), facts);
-            if (!done) {
+            if (!done && !collecting) {
                 done = visitMember(member, facts);
             }
         }
@@ -377,6 +558,7 @@ final class ProtosStaticDefinitions {
                 return;
             }
             if (creation.target() instanceof SurfaceName name) {
+                declare(name, name.span(), creation.span().endOffset());
                 facts.putSlot(name.name(), name.span(), literalMembers(creation.value()));
             } else if (creation.target() instanceof SurfaceMember member) {
                 if (member.receiver() instanceof SurfaceName receiver
@@ -395,7 +577,7 @@ final class ProtosStaticDefinitions {
         private void analyzeAssignment(SurfaceAssignment assignment, Facts facts) {
             if (assignment.target() instanceof SurfaceName name) {
                 // The target slot is selected before the value is evaluated.
-                done = visitAssignmentTarget(name, facts);
+                done = !collecting && visitAssignmentTarget(name, facts);
                 if (done) {
                     return;
                 }
@@ -486,11 +668,16 @@ final class ProtosStaticDefinitions {
             // facts, and object-body creations make object slots, never lexical
             // slots of any activation. Nested Closures are still discoverable.
             Facts constructionFacts = Facts.objectBody();
-            for (SurfaceObjectItem item : object.items()) {
-                analyze(item.expression(), constructionFacts);
-                if (done) {
-                    return;
+            inScope(object, true, false, object.span().startOffset(), () -> {
+                for (SurfaceObjectItem item : object.items()) {
+                    analyze(item.expression(), constructionFacts);
+                    if (done) {
+                        return;
+                    }
                 }
+            });
+            if (done) {
+                return;
             }
 
             // A general object body is ordinary guest execution and may invoke
@@ -539,7 +726,16 @@ final class ProtosStaticDefinitions {
             return value instanceof SurfaceObject && literalMembers(value) != null;
         }
 
+        /**
+         * Analyzes a Closure whose invocation time is not proven. Its fresh
+         * activation sees no captured facts, but its lexical scope keeps the
+         * context where the literal is constructed as its lexical parent.
+         */
         private void analyzeClosure(SurfaceClosure closure) {
+            inDeferredScope(closure, () -> analyzeActivation(closure));
+        }
+
+        private void analyzeActivation(SurfaceClosure closure) {
             Facts activation = new Facts();
 
             for (SurfaceParameter parameter : closure.parameters()) {
@@ -555,10 +751,99 @@ final class ProtosStaticDefinitions {
 
                 // On every successful path the parameter slot exists only after
                 // its supplied/default value has completed normally.
-                activation.putParameter(parameter.name(), parameter.span());
+                declareParameter(parameter);
+                activation.putParameter(parameter);
             }
 
             analyze(closure.body(), activation);
+        }
+
+        /**
+         * Returns the Closure literal of a call whose activation is proven to
+         * run immediately with an exact, effect-free argument association, or
+         * {@code null} for every other call.
+         *
+         * <p>The receiver must be a Closure literal, optionally grouped, so the
+         * value is freshly constructed and cannot escape before invocation. A
+         * fresh Closure has no own slots and the standard {@code Object} is
+         * frozen, so the ordinary {@code call} lookup can only select the
+         * standard {@code Object.call}, whose Closure branch directly activates
+         * that literal. Every argument must be positional, non-spread and a
+         * literal; every parameter must be non-rest, and any declared default
+         * must be a literal, so no guest code runs between capture and body
+         * entry and each parameter binding is known exactly.</p>
+         */
+        private static SurfaceClosure immediatelyInvokedClosure(SurfaceCall call) {
+            SurfaceExpression receiver = call.receiver();
+            while (receiver instanceof SurfaceGroup group) {
+                receiver = group.expression();
+            }
+            if (!(receiver instanceof SurfaceClosure closure)) {
+                return null;
+            }
+            List<SurfaceParameter> parameters = closure.parameters();
+            List<SurfaceArgument> arguments = call.arguments();
+            if (arguments.size() > parameters.size()) {
+                return null;
+            }
+            for (SurfaceArgument argument : arguments) {
+                if (argument.spread()
+                        || argument.name().isPresent()
+                        || !(argument.expression() instanceof SurfaceLiteral)) {
+                    return null;
+                }
+            }
+            for (int index = 0; index < parameters.size(); index++) {
+                SurfaceParameter parameter = parameters.get(index);
+                if (parameter.rest()) {
+                    return null;
+                }
+                Optional<SurfaceExpression> defaultValue = parameter.defaultValue();
+                if (defaultValue.isPresent()
+                        ? !(defaultValue.get() instanceof SurfaceLiteral)
+                        : index >= arguments.size()) {
+                    return null;
+                }
+            }
+            return closure;
+        }
+
+        /**
+         * Analyzes a Closure literal whose immediate invocation was proven by
+         * {@link #immediatelyInvokedClosure}. The literal is both the call
+         * receiver and the invoked body, so its construction is analyzed once,
+         * here; constructing it and evaluating literal arguments touch no
+         * facts. The fresh activation holds exactly its parameters and is
+         * lexically linked to an independent copy of the caller facts proven
+         * at the invocation point. The link proves which context a captured
+         * read consults, not that its slots survive: every barrier inside the
+         * body drops the link together with the local facts. The caller's own
+         * post-invocation barrier remains the caller's responsibility.
+         */
+        private void analyzeImmediateInvocation(
+                SurfaceClosure closure,
+                List<SurfaceArgument> arguments,
+                Facts caller) {
+            analyzeArguments(arguments, caller);
+            if (done) {
+                return;
+            }
+            inDeferredScope(closure, () -> {
+                Facts activation = Facts.capturing(caller.copy());
+                for (SurfaceParameter parameter : closure.parameters()) {
+                    declareParameter(parameter);
+                    activation.putParameter(parameter);
+                }
+                analyze(closure.body(), activation);
+            });
+        }
+
+        private void declareParameter(SurfaceParameter parameter) {
+            if (collecting) {
+                scope.declare(parameter.name(), new Declaration(
+                        parameterIdentifier(parameter),
+                        parameter.span().endOffset()));
+            }
         }
 
         private boolean isLazyBoolean(SurfaceBinary binary) {
@@ -568,6 +853,19 @@ final class ProtosStaticDefinitions {
         private void opaqueInvocationBarrier(Facts facts) {
             facts.clear();
         }
+    }
+
+    /**
+     * Returns the parameter's identifier. The syntactic parameter span also
+     * covers a default value or the rest prefix; the identifier starts the span,
+     * or ends it for a rest parameter.
+     */
+    private static SourceSpan parameterIdentifier(SurfaceParameter parameter) {
+        String name = parameter.name();
+        int start = parameter.rest()
+                ? parameter.span().endOffset() - name.length()
+                : parameter.span().startOffset();
+        return new SourceSpan(start, start + name.length());
     }
 
     private static boolean contains(SourceSpan span, int offset) {
@@ -594,6 +892,43 @@ final class ProtosStaticDefinitions {
         return new SourceSpan(start, end);
     }
 
+    /** A source declaration and the offset after which it has completed. */
+    private record Declaration(SourceSpan origin, int completedAt) {
+    }
+
+    /**
+     * Query-local lexical identity of one source context: a Closure activation,
+     * a lowered parameterless Closure ({@code while}/{@code until} conditions,
+     * the right operand of {@code &&}/{@code ||}), an object body, or the SOURCE
+     * root. It records the lexical parent, the parent offset where this context
+     * is constructed, whether its execution may be deferred past construction,
+     * and the declarations it makes, keyed by name in source order. Assignments
+     * never declare. Object-body creations are slots of the object under
+     * construction, visible only to direct reads in that body.
+     */
+    private static final class Scope {
+        private final Scope parent;
+        private final boolean objectBody;
+        private final boolean deferred;
+        private final int constructedAt;
+        private final Map<String, List<Declaration>> declarations = new HashMap<>();
+
+        Scope(Scope parent, boolean objectBody, boolean deferred, int constructedAt) {
+            this.parent = parent;
+            this.objectBody = objectBody;
+            this.deferred = deferred;
+            this.constructedAt = constructedAt;
+        }
+
+        void declare(String name, Declaration declaration) {
+            declarations.computeIfAbsent(name, ignored -> new ArrayList<>()).add(declaration);
+        }
+
+        List<Declaration> declarations(String name) {
+            return declarations.getOrDefault(name, List.of());
+        }
+    }
+
     /**
      * Query-local proven facts of one activation at the current walk point.
      *
@@ -603,31 +938,60 @@ final class ProtosStaticDefinitions {
      * proven Closure-parameter names. Object entries map a slot whose current
      * value is a proven bare object literal to that literal's own member
      * declarations; they exist only while the slot origin is proven.</p>
+     *
+     * <p>{@code outer} links the facts of the proven lexical parent context of
+     * an immediately invoked activation; it is {@code null} for the SOURCE
+     * root and for every activation whose invocation time is not proven.
+     * {@code complete} means the local origins name every slot of a fresh
+     * activation, so a missing local entry proves local absence and lexical
+     * lookup may continue to {@code outer}. Any invalidation drops both.
+     * {@code activation} identifies the lexical context the facts belong to;
+     * copies share it, so intersections combine only facts of one context.</p>
      */
     private static final class Facts {
         private final boolean recordsSlots;
         private final LinkedHashMap<String, SourceSpan> origins;
         private final Set<String> parameters;
         private final Map<String, Map<String, SourceSpan>> objects;
+        private final Object activation;
+        private Facts outer;
+        private boolean complete;
 
         Facts() {
-            this(true, new LinkedHashMap<>(), new HashSet<>(), new HashMap<>());
+            this(true, new LinkedHashMap<>(), new HashSet<>(), new HashMap<>(),
+                    new Object(), null, true);
         }
 
         private Facts(
                 boolean recordsSlots,
                 LinkedHashMap<String, SourceSpan> origins,
                 Set<String> parameters,
-                Map<String, Map<String, SourceSpan>> objects) {
+                Map<String, Map<String, SourceSpan>> objects,
+                Object activation,
+                Facts outer,
+                boolean complete) {
             this.recordsSlots = recordsSlots;
             this.origins = origins;
             this.parameters = parameters;
             this.objects = objects;
+            this.activation = activation;
+            this.outer = outer;
+            this.complete = complete;
         }
 
         /** Facts for an object body, whose creations are object slots. */
         static Facts objectBody() {
-            return new Facts(false, new LinkedHashMap<>(), new HashSet<>(), new HashMap<>());
+            return new Facts(false, new LinkedHashMap<>(), new HashSet<>(), new HashMap<>(),
+                    new Object(), null, false);
+        }
+
+        /**
+         * Facts for a fresh, immediately invoked activation whose lexical
+         * parent context holds the given facts, owned by the new activation.
+         */
+        static Facts capturing(Facts lexicalParent) {
+            return new Facts(true, new LinkedHashMap<>(), new HashSet<>(), new HashMap<>(),
+                    new Object(), lexicalParent, true);
         }
 
         Facts copy() {
@@ -635,11 +999,23 @@ final class ProtosStaticDefinitions {
                     recordsSlots,
                     new LinkedHashMap<>(origins),
                     new HashSet<>(parameters),
-                    new HashMap<>(objects));
+                    new HashMap<>(objects),
+                    activation,
+                    outer == null ? null : outer.copy(),
+                    complete);
+        }
+
+        private Facts lexicalParent(String name) {
+            return complete && !origins.containsKey(name) ? outer : null;
         }
 
         SourceSpan origin(String name) {
-            return origins.get(name);
+            SourceSpan local = origins.get(name);
+            if (local != null) {
+                return local;
+            }
+            Facts parent = lexicalParent(name);
+            return parent == null ? null : parent.origin(name);
         }
 
         List<String> parameterNames() {
@@ -647,12 +1023,21 @@ final class ProtosStaticDefinitions {
         }
 
         SourceSpan memberOrigin(String receiver, String member) {
+            if (!origins.containsKey(receiver)) {
+                // A local binding of the receiver name shadows outer objects.
+                Facts parent = lexicalParent(receiver);
+                return parent == null ? null : parent.memberOrigin(receiver, member);
+            }
             Map<String, SourceSpan> members = objects.get(receiver);
             return members == null ? null : members.get(member);
         }
 
-        void putParameter(String name, SourceSpan origin) {
-            origins.put(name, origin);
+        /**
+         * Records the parameter's identifier as its origin.
+         */
+        void putParameter(SurfaceParameter parameter) {
+            String name = parameter.name();
+            origins.put(name, parameterIdentifier(parameter));
             parameters.add(name);
             objects.remove(name);
         }
@@ -667,7 +1052,11 @@ final class ProtosStaticDefinitions {
         }
 
         void replaceObject(String name, Map<String, SourceSpan> members) {
-            if (members == null || !origins.containsKey(name)) {
+            if (!origins.containsKey(name)) {
+                // The written slot may belong to a lexical parent; its object
+                // facts no longer describe the value.
+                forgetObject(name);
+            } else if (members == null) {
                 objects.remove(name);
             } else {
                 objects.put(name, Map.copyOf(members));
@@ -680,12 +1069,29 @@ final class ProtosStaticDefinitions {
 
         void forgetObject(String name) {
             objects.remove(name);
+            if (outer != null) {
+                outer.forgetObject(name);
+            }
         }
 
         void replaceWithIntersection(Facts left, Facts right) {
             origins.clear();
             parameters.clear();
             objects.clear();
+            complete = left.complete && right.complete;
+            if (left.outer != null && right.outer != null
+                    && left.outer.activation == right.outer.activation) {
+                Facts parent = left.outer.copy();
+                parent.replaceWithIntersection(left.outer, right.outer);
+                outer = parent;
+            } else {
+                outer = null;
+            }
+            if (left.activation != right.activation) {
+                complete = false;
+                outer = null;
+                return;
+            }
             for (Map.Entry<String, SourceSpan> entry : left.origins.entrySet()) {
                 String name = entry.getKey();
                 if (!entry.getValue().equals(right.origins.get(name))) {
@@ -706,6 +1112,10 @@ final class ProtosStaticDefinitions {
             origins.clear();
             parameters.clear();
             objects.clear();
+            // The link proves only which context is consulted; an effect that
+            // may mutate this activation may equally mutate captured contexts.
+            outer = null;
+            complete = false;
         }
     }
 

@@ -313,6 +313,98 @@ class ProtosStaticHoverTest {
                         .noneMatch(fact -> fact.startsWith("Closure parameter")));
     }
 
+    @Test
+    void capturedOuterParameterProvenByImmediateInvocationIsLabeledProvenBinding() {
+        String source = "f: (exterior) => {\n  (() => exterior)()\n}";
+        int reference = source.lastIndexOf("exterior");
+
+        ProtosStaticHoverResult result = hover(source, reference).orElseThrow();
+
+        assertEquals(span(reference, "exterior"), result.span());
+        assertEquals(
+                List.of(new Section(Kind.PROVEN_BINDING, List.of("Closure parameter: exterior"))),
+                result.sections());
+    }
+
+    @Test
+    void capturedOuterSlotIsNeverDescribedAsAClosureParameter() {
+        String source = "x: 1\n(() => x)()\n";
+        int reference = source.lastIndexOf("x");
+
+        // Definition proves the captured slot origin; hover still describes
+        // only parameters and must not call a `:` slot a Closure parameter.
+        assertEquals(
+                new SourceSpan(0, 1),
+                core.definition(snapshot(source), reference).orElseThrow().targets().get(0).span());
+        Optional<ProtosStaticHoverResult> result = hover(source, reference);
+        assertTrue(result.isEmpty()
+                || result.get().sections().stream()
+                        .flatMap(section -> section.facts().stream())
+                        .noneMatch(fact -> fact.startsWith("Closure parameter")));
+    }
+
+    @Test
+    void identifierOnlyDefinitionTargetsKeepParameterModifiersInHover() {
+        String defaulted = "f: (first, second: 2) => second";
+        int defaultedRead = defaulted.lastIndexOf("second");
+        assertEquals(
+                span(defaulted.indexOf("second"), "second"),
+                core.definition(snapshot(defaulted), defaultedRead)
+                        .orElseThrow().targets().get(0).span());
+        assertEquals(
+                List.of(
+                        new Section(Kind.PROVEN_BINDING, List.of("Closure parameter: second")),
+                        new Section(Kind.SYNTAX, List.of("Default value present"))),
+                hover(defaulted, defaultedRead).orElseThrow().sections());
+
+        String rest = "f: (...items) => items";
+        int restRead = rest.lastIndexOf("items");
+        assertEquals(
+                span(rest.indexOf("items"), "items"),
+                core.definition(snapshot(rest), restRead).orElseThrow().targets().get(0).span());
+        assertEquals(
+                List.of(
+                        new Section(Kind.PROVEN_BINDING, List.of("Closure parameter: items")),
+                        new Section(Kind.SYNTAX, List.of("Rest parameter"))),
+                hover(rest, restRead).orElseThrow().sections());
+    }
+
+    @Test
+    void lexicalNavigationCandidatesAreNotPresentedAsProvenBindings() {
+        // Definition navigates both captures lexically; hover keeps the exact
+        // proof and so publishes no binding for either read.
+        String source = "x: 1\nf: (exterior) => {\n  ejecutar(() => exterior + x)\n}\n";
+        int parameterRead = source.lastIndexOf("exterior");
+        int slotRead = source.lastIndexOf("x");
+        assertEquals(
+                span(source.indexOf("exterior"), "exterior"),
+                core.definition(snapshot(source), parameterRead)
+                        .orElseThrow().targets().get(0).span());
+        assertEquals(
+                new SourceSpan(0, 1),
+                core.definition(snapshot(source), slotRead).orElseThrow().targets().get(0).span());
+        assertNoProvenBinding(hover(source, parameterRead));
+        assertNoProvenBinding(hover(source, slotRead));
+
+        // The parameter declaration itself keeps its exact identifier span and
+        // classification, and an inner parameter is still only its own.
+        String shadow = "f: (valor) => {\n  ejecutar((valor) => valor)\n}\n";
+        int innerRead = shadow.lastIndexOf("valor");
+        int innerDeclaration = shadow.indexOf("valor", shadow.indexOf("ejecutar"));
+        assertEquals(
+                span(innerDeclaration, "valor"),
+                core.definition(snapshot(shadow), innerRead).orElseThrow().targets().get(0).span());
+        assertEquals(
+                List.of(new Section(Kind.PROVEN_BINDING, List.of("Closure parameter: valor"))),
+                hover(shadow, innerRead).orElseThrow().sections());
+    }
+
+    private static void assertNoProvenBinding(Optional<ProtosStaticHoverResult> result) {
+        assertTrue(result.isEmpty()
+                || result.get().sections().stream()
+                        .noneMatch(section -> section.kind() == Kind.PROVEN_BINDING));
+    }
+
     private Optional<ProtosStaticHoverResult> hover(String source, int sourceOffset) {
         return core.hover(snapshot(source), sourceOffset);
     }
