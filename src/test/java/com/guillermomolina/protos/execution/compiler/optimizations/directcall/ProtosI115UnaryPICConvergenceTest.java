@@ -20,6 +20,7 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -351,6 +352,368 @@ final class ProtosI115UnaryPICConvergenceTest {
                 assertInteger(7, evaluate("callWith(late, plain)\n", "i115-pic-argument-plain.protos", module));
             }
         });
+    }
+
+    /*
+     * The canonical selection is specialized on the Closure's cached Shape.
+     * A Shape without `call` keeps the identity-keyed direct entry; creating
+     * or removing `call` changes the Shape and is selected on the next call.
+     */
+    @Test
+    void shapeAdmittedCallSiteStaysDirectThenFollowsLocalCallChanges() throws Exception {
+        withCore(module -> {
+            evaluate("""
+                    make: () => { (value) => { value } }
+                    callOne: (f, value) => { f(value) }
+                    target: make()
+                    """, "shape-admission-define.protos", module);
+            ProtosClosureValue target = closure("target\n", module);
+            assertFalse(target.hasLocalCallSlotForRuntime());
+            // Only the cached interpreter quickens the call instruction.
+            rootOf("callOne\n", module).getBytecodeNode().setUncachedThreshold(0);
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                assertInteger(7, evaluate("callOne(target, 7)\n", "shape-admission-warm.protos", module));
+            }
+            assertSame(target, closure("target\n", module), "the warmed Closure keeps its identity");
+            assertUnaryInstruction(rootOf("callOne\n", module), "c.CallUnaryMethod$CallCachedClosure");
+
+            for (int round = 0; round < 2; round++) {
+                evaluate("target.call: (value) => { 100 + value }\n", "shape-admission-install.protos", module);
+                assertTrue(target.hasLocalCallSlotForRuntime());
+                assertInteger(107, evaluate("callOne(target, 7)\n", "shape-admission-override.protos", module));
+                for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                    assertInteger(107, evaluate("callOne(target, 7)\n", "shape-admission-rewarm-installed.protos",
+                            module));
+                }
+                assertSame(target, closure("target\n", module), "the overridden Closure keeps its identity");
+                // Entering the generic path must not permanently degrade the site.
+                evaluate("target.removeSlot(\"call\")\n", "shape-admission-remove.protos", module);
+                assertFalse(target.hasLocalCallSlotForRuntime());
+                assertInteger(7, evaluate("callOne(target, 7)\n", "shape-admission-restored.protos", module));
+                for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                    assertInteger(7, evaluate("callOne(target, 7)\n", "shape-admission-rewarm-removed.protos",
+                            module));
+                }
+                assertSame(target, closure("target\n", module), "the rewarmed Closure keeps its identity");
+                // A site that observed both selections uses the grouped quickening.
+                List<String> unaryNames = rootOf("callOne\n", module).getBytecodeNode()
+                        .getInstructionsAsList().stream()
+                        .map(Instruction::getName)
+                        .filter(name -> isInstruction(name, "c.CallUnaryMethod"))
+                        .toList();
+                assertEquals(1, unaryNames.size(), unaryNames.toString());
+                String grouped = unaryNames.get(0);
+                assertNotEquals("c.CallUnaryMethod", grouped, "the site stays quickened");
+                assertTrue(grouped.startsWith("c.CallUnaryMethod$"), grouped);
+                List<String> members = List.of(
+                        grouped.substring("c.CallUnaryMethod$".length()).split("#"));
+                assertTrue(members.contains("CallCachedClosure"), grouped);
+                assertTrue(members.contains("Call"), grouped);
+            }
+        });
+    }
+
+    /*
+     * More than three Shapes at one unary call site, mixing canonical
+     * Closures and Closures with a local `call`. Only selection, single
+     * argument evaluation and a later canonical call are asserted; a
+     * saturated site is not required to return to a monomorphic state.
+     */
+    @Test
+    void saturatedShapeCallSiteKeepsSelectionAndSingleArgumentEvaluation() throws Exception {
+        withCore(module -> {
+            int[] armed = new int[1];
+            module.context().createLocalSlot("armProbe", ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> {
+                        armed[0]++;
+                        return ProtosNullValue.INSTANCE;
+                    }));
+            evaluate("""
+                    make: () => { (value) => { value } }
+                    canonical: make()
+                    tagged: make()
+                    tagged.tag: 1
+                    custom: make()
+                    custom.call: (value) => { 100 + value }
+                    taggedCustom: make()
+                    taggedCustom.tag: 2
+                    taggedCustom.call: (value) => { 200 + value }
+                    marked: make()
+                    marked.mark: 3
+                    marked.tag: 4
+                    arg: () => {
+                        armProbe()
+                        7
+                    }
+                    callWith: (f, g) => { f(g()) }
+                    """, "shape-saturation-define.protos", module);
+            assertFalse(closure("canonical\n", module).hasLocalCallSlotForRuntime());
+            assertFalse(closure("tagged\n", module).hasLocalCallSlotForRuntime());
+            assertTrue(closure("custom\n", module).hasLocalCallSlotForRuntime());
+            assertTrue(closure("taggedCustom\n", module).hasLocalCallSlotForRuntime());
+            assertFalse(closure("marked\n", module).hasLocalCallSlotForRuntime());
+            String[] names = {"canonical", "tagged", "custom", "taggedCustom", "marked"};
+            long[] expected = {7, 7, 107, 207, 7};
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                for (int k = 0; k < names.length; k++) {
+                    int before = armed[0];
+                    assertInteger(expected[k], evaluate("callWith(" + names[k] + ", arg)\n",
+                            "shape-saturation-" + names[k] + ".protos", module));
+                    assertEquals(before + 1, armed[0], names[k] + ": the argument ran exactly once");
+                }
+            }
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                int before = armed[0];
+                assertInteger(7, evaluate("callWith(canonical, arg)\n", "shape-saturation-return.protos", module));
+                assertInteger(7, evaluate("callWith(make(), arg)\n", "shape-saturation-fresh.protos", module));
+                assertEquals(before + 2, armed[0], "each argument ran exactly once");
+            }
+        });
+    }
+
+    /*
+     * A stable Shape does not make the value of a present `call` slot
+     * immutable: reassigning it must be observed by the next call.
+     */
+    @Test
+    void reassignedLocalCallWithStableShapeIsSelected() throws Exception {
+        withCore(module -> {
+            evaluate("""
+                    make: () => { (value) => { value } }
+                    callOne: (f, value) => { f(value) }
+                    custom: make()
+                    custom.call: (value) => { 100 + value }
+                    """, "shape-reassign-define.protos", module);
+            ProtosClosureValue custom = closure("custom\n", module);
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                assertInteger(107, evaluate("callOne(custom, 7)\n", "shape-reassign-warm.protos", module));
+            }
+            var shape = custom.getShape();
+            evaluate("custom.call = (value) => { 200 + value }\n", "shape-reassign-assign.protos", module);
+            assertSame(shape, custom.getShape(), "assigning a present slot keeps the Shape");
+            assertInteger(207, evaluate("callOne(custom, 7)\n", "shape-reassign-after.protos", module));
+
+            Object standardCall = com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject()
+                    .readLocalSlot("call").orElseThrow();
+            custom.assignLocalSlot("call", standardCall);
+            assertSame(shape, custom.getShape());
+            assertInteger(7, evaluate("callOne(custom, 7)\n", "shape-reassign-standard.protos", module));
+            evaluate("custom.call = (value) => { 300 + value }\n", "shape-reassign-again.protos", module);
+            assertSame(shape, custom.getShape());
+            assertInteger(307, evaluate("callOne(custom, 7)\n", "shape-reassign-final.protos", module));
+        });
+    }
+
+    /*
+     * Every distinct Closure of one definition passes the same unary site
+     * through inherited, local custom, local standard, same-Shape custom,
+     * removed and inherited `call` selections, past the identity and
+     * prepared-target cache limits; the selected behavior is observed after
+     * every transition.
+     */
+    @Test
+    void canonicalCallShapeTransitionsPreservePicConvergence() throws Exception {
+        withCore(module -> {
+            evaluate("""
+                    makeA: (offset) => { (value) => { value + offset } }
+                    callOne: (f, value) => { f(value) }
+                    custom: (value) => { 100 + value }
+                    other: (value) => { 200 + value }
+                    """, "shape-transitions-define.protos", module);
+            ProtosClosureValue custom = closure("custom\n", module);
+            ProtosClosureValue other = closure("other\n", module);
+            Object standardCall = com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject()
+                    .readLocalSlot("call").orElseThrow();
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                evaluate("f" + i + ": makeA(" + i + ")\n", "shape-transitions-make.protos", module);
+            }
+            ProtosClosureValue first = closure("f0\n", module);
+            for (int round = 0; round < 2; round++) {
+                for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                    String name = "f" + i;
+                    String call = "callOne(" + name + ", 7)\n";
+                    ProtosClosureValue f = closure(name + "\n", module);
+                    assertSame(first.definition(), f.definition());
+
+                    assertInteger(7 + i, evaluate(call, "shape-transitions-inherited.protos", module));
+
+                    f.createLocalSlot("call", custom);
+                    assertInteger(107, evaluate(call, "shape-transitions-custom.protos", module));
+
+                    f.assignLocalSlot("call", standardCall);
+                    var shape = f.getShape();
+                    assertInteger(7 + i, evaluate(call, "shape-transitions-standard.protos", module));
+
+                    f.assignLocalSlot("call", other);
+                    assertSame(shape, f.getShape(), "assigning a present slot keeps the Shape");
+                    assertInteger(207, evaluate(call, "shape-transitions-same-shape.protos", module));
+
+                    f.removeLocalSlot("call");
+                    assertFalse(f.hasLocalCallSlotForRuntime());
+                    assertInteger(7 + i, evaluate(call, "shape-transitions-removed.protos", module));
+                    assertInteger(7 + i, evaluate(call, "shape-transitions-inherited-again.protos", module));
+                }
+            }
+        });
+    }
+
+    /*
+     * Two Closures of one definition share the prepared plan; only the one
+     * with a local `call` selects it, and captures and identities stay
+     * per instance at one call site.
+     */
+    @Test
+    void sameDefinitionClosuresKeepTheirOwnCallSelectionAtOneSite() throws Exception {
+        withCore(module -> {
+            evaluate("""
+                    makeA: (offset) => { (value) => { value + offset } }
+                    callOne: (f, value) => { f(value) }
+                    low: makeA(2)
+                    high: makeA(9)
+                    high.call: (value) => { 100 + value }
+                    """, "shape-siblings-define.protos", module);
+            ProtosClosureValue low = closure("low\n", module);
+            ProtosClosureValue high = closure("high\n", module);
+            assertNotSame(low, high);
+            assertSame(low.definition(), high.definition());
+            assertSame(low.preparedExecutionPlanOrNullForRuntime(),
+                    high.preparedExecutionPlanOrNullForRuntime());
+            for (int i = 0; i < 2 * PAST_CACHE_LIMITS; i++) {
+                assertInteger(9, evaluate("callOne(low, 7)\n", "shape-siblings-low.protos", module));
+                assertInteger(107, evaluate("callOne(high, 7)\n", "shape-siblings-high.protos", module));
+            }
+            evaluate("high.removeSlot(\"call\")\n", "shape-siblings-remove.protos", module);
+            assertInteger(16, evaluate("callOne(high, 7)\n", "shape-siblings-restored.protos", module));
+            assertInteger(9, evaluate("callOne(low, 7)\n", "shape-siblings-low-after.protos", module));
+            assertSame(low, closure("low\n", module));
+            assertSame(high, closure("high\n", module));
+        });
+    }
+
+    /*
+     * Argument evaluation that replaces the value of an existing `call`
+     * slot (same Shape) is observed by that very invocation, and the
+     * argument expression runs exactly once.
+     */
+    @Test
+    void argumentEvaluationReplacingLocalCallValueIsSelected() throws Exception {
+        withCore(module -> {
+            int[] armed = new int[1];
+            module.context().createLocalSlot("armProbe", ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> {
+                        armed[0]++;
+                        return ProtosNullValue.INSTANCE;
+                    }));
+            evaluate("""
+                    make: () => { (value) => { value } }
+                    late: make()
+                    late.call: (value) => { 100 + value }
+                    plain: () => { 7 }
+                    swap: () => {
+                        armProbe()
+                        late.call = (value) => { 200 + value }
+                        7
+                    }
+                    reset: () => {
+                        late.call = (value) => { 100 + value }
+                        7
+                    }
+                    callWith: (f, g) => { f(g()) }
+                    """, "shape-argument-replace-define.protos", module);
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                assertInteger(107, evaluate("callWith(late, plain)\n", "shape-argument-replace-warm.protos", module));
+            }
+            for (int round = 0; round < 2; round++) {
+                int before = armed[0];
+                assertInteger(207, evaluate("callWith(late, swap)\n", "shape-argument-replace-swap.protos", module));
+                assertEquals(before + 1, armed[0], "the argument expression ran exactly once");
+                assertInteger(107, evaluate("callWith(late, reset)\n", "shape-argument-replace-reset.protos", module));
+            }
+        });
+    }
+
+    /*
+     * The canonical -> local `call` -> canonical transition at call sites of
+     * every other arity (CALL0, CALL2, CALL3, CALL4 and varargs). Only
+     * selection, identity and single argument evaluation are asserted.
+     */
+    @Test
+    void otherAritiesFollowLocalCallChangesAndEvaluateArgumentsOnce() throws Exception {
+        withCore(module -> {
+            int[] armed = new int[1];
+            module.context().createLocalSlot("armProbe", ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> {
+                        armed[0]++;
+                        return ProtosNullValue.INSTANCE;
+                    }));
+            evaluate("""
+                    arg: () => {
+                        armProbe()
+                        1
+                    }
+                    t0: () => { 7 }
+                    t2: (a, b) => { a + b }
+                    t3: (a, b, c) => { a + b + c }
+                    t4: (a, b, c, d) => { a + b + c + d }
+                    t5: (a, b, c, d, e) => { a + b + c + d + e }
+                    call0: (f, g) => {
+                        g()
+                        f()
+                    }
+                    call2: (f, g) => { f(g(), g()) }
+                    call3: (f, g) => { f(g(), g(), g()) }
+                    call4: (f, g) => { f(g(), g(), g(), g()) }
+                    call5: (f, g) => { f(g(), g(), g(), g(), g()) }
+                    """, "arity-transition-define.protos", module);
+            String[] targets = {"t0", "t2", "t3", "t4", "t5"};
+            String[] sites = {"call0", "call2", "call3", "call4", "call5"};
+            String[] overrides = {
+                    "() => { 100 }",
+                    "(a, b) => { 100 + a + b }",
+                    "(a, b, c) => { 100 + a + b + c }",
+                    "(a, b, c, d) => { 100 + a + b + c + d }",
+                    "(a, b, c, d, e) => { 100 + a + b + c + d + e }"
+            };
+            long[] canonical = {7, 2, 3, 4, 5};
+            int[] evaluations = {1, 2, 3, 4, 5};
+            for (int k = 0; k < targets.length; k++) {
+                String call = sites[k] + "(" + targets[k] + ", arg)\n";
+                String name = "arity-transition-" + sites[k];
+                ProtosClosureValue target = closure(targets[k] + "\n", module);
+                for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                    int before = armed[0];
+                    assertInteger(canonical[k], evaluate(call, name + "-warm.protos", module));
+                    assertEquals(before + evaluations[k], armed[0], name + ": each argument ran once");
+                }
+                for (int round = 0; round < 2; round++) {
+                    evaluate(targets[k] + ".call: " + overrides[k] + "\n", name + "-install.protos", module);
+                    assertTrue(target.hasLocalCallSlotForRuntime());
+                    for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                        int before = armed[0];
+                        assertInteger(100 + canonical[k] - (k == 0 ? 7 : 0),
+                                evaluate(call, name + "-override.protos", module));
+                        assertEquals(before + evaluations[k], armed[0], name + ": each argument ran once");
+                    }
+                    evaluate(targets[k] + ".removeSlot(\"call\")\n", name + "-remove.protos", module);
+                    assertFalse(target.hasLocalCallSlotForRuntime());
+                    for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                        int before = armed[0];
+                        assertInteger(canonical[k], evaluate(call, name + "-restored.protos", module));
+                        assertEquals(before + evaluations[k], armed[0], name + ": each argument ran once");
+                    }
+                    assertSame(target, closure(targets[k] + "\n", module), name + ": identity is kept");
+                }
+            }
+        });
+    }
+
+    private static void assertUnaryInstruction(ProtosBytecodeRootNode root, String expected) {
+        List<String> unaryNames = root.getBytecodeNode().getInstructionsAsList().stream()
+                .map(Instruction::getName)
+                .filter(name -> isInstruction(name, "c.CallUnaryMethod"))
+                .toList();
+        assertEquals(1, unaryNames.size(), unaryNames.toString());
+        assertEquals(expected, unaryNames.get(0));
     }
 
     /**

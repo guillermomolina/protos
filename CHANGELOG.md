@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.159-SNAPSHOT
+
+- **I115.** Resolve call-slot getters through node-local static helpers instead of ImportStatic in call dispatch nodes. Retain ordinary call selection and add dispatch admission and unary-cache regressions; update the generated-bytecode baseline.
+
 ## 0.4.158-SNAPSHOT
 
 - **BUG038.** Synchronize the RootActor-failure and Host-abort HTTP hosting integration tests with the observable termination events (`failing` plus Process termination caused by the RootActor failure, and `host abort`) before requiring connection EOF, so the socket read timeout no longer measures unbounded asynchronous dispatch and termination latency. The tests still require every admitted connection to be retired; no timeout is relaxed and no production code changes.

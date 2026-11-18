@@ -207,10 +207,94 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
                 assertInteger(107, evaluate("callOne(early)\n", "perf042-after-early.protos", module));
             }
 
+            // Same-Shape alternation of standard and custom local `call`
+            // values on one cached Closure, at the nilary and unary sites.
+            evaluate("""
+                    customOne: (value) => { 400 + value }
+                    customZero: () => { 400 }
+                    """, "perf042-same-shape-define.protos", module);
+            Object standardCall =
+                    ProtosObjectValue.rootObject().readLocalSlot("call").orElseThrow();
+            ProtosClosureValue lateOne = assertInstanceOf(
+                    ProtosClosureValue.class,
+                    module.context().readLocalSlot("late").orElseThrow());
+            ProtosClosureValue lateNilary = assertInstanceOf(
+                    ProtosClosureValue.class,
+                    module.context().readLocalSlot("lateZero").orElseThrow());
+            Object customOne = module.context().readLocalSlot("customOne").orElseThrow();
+            Object customZero = module.context().readLocalSlot("customZero").orElseThrow();
+            var oneShape = lateOne.getShape();
+            var zeroShape = lateNilary.getShape();
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                lateOne.assignLocalSlot("call", standardCall);
+                lateNilary.assignLocalSlot("call", standardCall);
+                assertSame(oneShape, lateOne.getShape());
+                assertSame(zeroShape, lateNilary.getShape());
+                assertInteger(7, evaluate("callOne(late)\n", "perf042-same-shape-standard.protos", module));
+                assertInteger(1, evaluate("callZero(lateZero)\n", "perf042-same-shape-standard0.protos", module));
+                assertInteger(7, evaluate("callOne(make())\n", "perf042-same-shape-fresh.protos", module));
+                assertInteger(1, evaluate("callZero(makeZero())\n", "perf042-same-shape-fresh0.protos", module));
+
+                lateOne.assignLocalSlot("call", customOne);
+                lateNilary.assignLocalSlot("call", customZero);
+                assertSame(oneShape, lateOne.getShape());
+                assertSame(zeroShape, lateNilary.getShape());
+                assertInteger(407, evaluate("callOne(late)\n", "perf042-same-shape-custom.protos", module));
+                assertInteger(400, evaluate("callZero(lateZero)\n", "perf042-same-shape-custom0.protos", module));
+                assertInteger(107, evaluate("callOne(early)\n", "perf042-same-shape-early.protos", module));
+            }
+
             ProtosClosureValue late = assertInstanceOf(
                     ProtosClosureValue.class,
                     module.context().readLocalSlot("late").orElseThrow());
             assertNull(dispatchedAsFunction(late));
+        });
+    }
+
+    /*
+     * Closures of one definition share the executable target but never one
+     * another's `call` behavior. The Shape-specialized selection must keep
+     * identities and captures per instance, restore the canonical selection
+     * once an override is removed, and recover direct dispatch after a call
+     * went through the generic selection path.
+     */
+    @Test
+    void sharedDefinitionKeepsPerInstanceCallSelectionAcrossFallback() throws Exception {
+        withCore(module -> {
+            evaluate("""
+                    makeAdder: (seed) => { (value) => { seed + value } }
+                    callOne: (f) => { f(7) }
+                    plain: makeAdder(1)
+                    custom: makeAdder(2)
+                    custom.call: (value) => { 500 + value }
+                    """, "perf042-shape-shared-define.protos", module);
+            ProtosClosureValue plain = closure("plain\n", module);
+            ProtosClosureValue custom = closure("custom\n", module);
+            ProtosLanguageContext context = ProtosLanguageContext.current();
+            assertNotSame(plain, custom);
+            assertSame(plain.definition(), custom.definition());
+            assertNull(dispatchedAsFunction(custom));
+            RootCallTarget shared = effectiveTarget(plain, context);
+            assertNotNull(shared);
+            assertNull(effectiveTarget(custom, context));
+
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                assertInteger(8, evaluate("callOne(plain)\n", "perf042-shape-plain.protos", module));
+                assertInteger(507, evaluate("callOne(custom)\n", "perf042-shape-custom.protos", module));
+                assertInteger(7 + i, evaluate("callOne(makeAdder(" + i + "))\n",
+                        "perf042-shape-fresh.protos", module));
+            }
+
+            evaluate("custom.removeSlot(\"call\")\n", "perf042-shape-remove.protos", module);
+            assertSame(shared, effectiveTarget(custom, context),
+                    "the restored Closure reuses the shared executable target");
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                assertInteger(9, evaluate("callOne(custom)\n", "perf042-shape-restored.protos", module));
+                assertInteger(8, evaluate("callOne(plain)\n", "perf042-shape-plain-after.protos", module));
+            }
+            assertSame(plain, closure("plain\n", module));
+            assertSame(custom, closure("custom\n", module));
+            assertSame(shared, effectiveTarget(plain, context));
         });
     }
 

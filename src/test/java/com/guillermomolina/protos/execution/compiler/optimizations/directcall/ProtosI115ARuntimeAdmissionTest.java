@@ -29,6 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosExecutionContextValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -1111,6 +1112,172 @@ final class ProtosI115ARuntimeAdmissionTest {
                 assertInteger(7, evaluate("callWith(late, plain)\n", "i115a-argument-plain.protos", module));
             }
         });
+    }
+
+    @Test
+    void shapeSpecializedCallSelectionFollowsShapeAndLocalCallValue() throws Exception {
+        withCore(module -> {
+            evaluate("make: () => { (value) => { value } }\n",
+                    "shape-selection-define.protos", module);
+            ProtosClosureValue source = closure("make()\n", module);
+            var selection = ProtosStandardObjectProtocol.canonicalRootCallSelectionOrNullForRuntime();
+            assertNotNull(selection);
+            assertTrue(selection.isValid());
+            assertTrue(source.usesObjectStorageForRuntime());
+            Object standardCall =
+                    ProtosObjectValue.rootObject().readLocalSlot("call").orElseThrow();
+            ProtosClosureValue custom = closure("make()\n", module);
+
+            // Canonical selection and a current Shape without `call`.
+            Shape plain = source.getShape();
+            assertNull(plain.getProperty("call"));
+            assertTrue(selectedForShape(
+                    source, selection, plain));
+            assertShapeSelectionAgreesWithGeneric(source, selection);
+
+            // An invalidated or missing canonical selection.
+            Assumption invalidated =
+                    com.oracle.truffle.api.Truffle.getRuntime().createAssumption();
+            invalidated.invalidate();
+            var stale = new ProtosStandardObjectProtocol.CanonicalRootCallSelection(
+                    selection.rootShape(), invalidated);
+            assertFalse(stale.isValid());
+            assertFalse(selectedForShape(
+                    source, stale, plain));
+            assertFalse(selectedForShape(
+                    source, null, plain));
+
+            // A custom local `call` changes the Shape and is not canonical.
+            source.createLocalSlot("call", custom);
+            Shape withCall = source.getShape();
+            assertNotSame(plain, withCall);
+            assertNotNull(withCall.getProperty("call"));
+            assertFalse(selectedForShape(
+                    source, selection, plain));
+            assertFalse(selectedForShape(
+                    source, selection, withCall));
+            assertShapeSelectionAgreesWithGeneric(source, selection);
+
+            // The standard implementation installed locally is canonical.
+            source.assignLocalSlot("call", standardCall);
+            assertSame(withCall, source.getShape());
+            assertTrue(selectedForShape(
+                    source, selection, withCall));
+            assertShapeSelectionAgreesWithGeneric(source, selection);
+
+            // Replacing that value without a Shape change is observed.
+            source.assignLocalSlot("call", custom);
+            assertSame(withCall, source.getShape());
+            assertFalse(selectedForShape(
+                    source, selection, withCall));
+            assertShapeSelectionAgreesWithGeneric(source, selection);
+
+            // Restoring the standard implementation is canonical again.
+            source.assignLocalSlot("call", standardCall);
+            assertSame(withCall, source.getShape());
+            assertTrue(selectedForShape(
+                    source, selection, withCall));
+            assertShapeSelectionAgreesWithGeneric(source, selection);
+
+            // Removal yields a Shape without `call`; the stale Shape is rejected.
+            source.removeLocalSlot("call");
+            assertNotSame(withCall, source.getShape());
+            assertFalse(selectedForShape(
+                    source, selection, withCall));
+            assertShapeSelectionAgreesWithGeneric(source, selection);
+        });
+    }
+
+    @Test
+    void sameShapeLocalCallReplacementKeepsDynamicSelection() throws Exception {
+        withCore(module -> {
+            evaluate("""
+                    make: () => { (value) => { value } }
+                    custom: (value) => { 100 + value }
+                    callOne: (f, value) => { f(value) }
+                    late: make()
+                    sibling: make()
+                    """, "same-shape-define.protos", module);
+            ProtosClosureValue late = closure("late\n", module);
+            ProtosClosureValue sibling = closure("sibling\n", module);
+            ProtosClosureValue custom = closure("custom\n", module);
+            Object standardCall =
+                    ProtosObjectValue.rootObject().readLocalSlot("call").orElseThrow();
+
+            // Warm the site with the inherited standard selection.
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                assertInteger(7, evaluate("callOne(late, 7)\n", "same-shape-warm.protos", module));
+            }
+
+            // A local slot holding the standard implementation keeps the body.
+            late.createLocalSlot("call", standardCall);
+            Shape withCall = late.getShape();
+            assertInteger(7, evaluate("callOne(late, 7)\n", "same-shape-standard.protos", module));
+
+            for (int round = 0; round < 2; round++) {
+                // Replacing one local value with another preserves the Shape.
+                late.assignLocalSlot("call", custom);
+                assertSame(withCall, late.getShape());
+                assertInteger(107, evaluate("callOne(late, 7)\n", "same-shape-custom.protos", module));
+                assertInteger(7, evaluate("callOne(sibling, 7)\n", "same-shape-sibling.protos", module));
+
+                late.assignLocalSlot("call", standardCall);
+                assertSame(withCall, late.getShape());
+                assertInteger(7, evaluate("callOne(late, 7)\n", "same-shape-restored.protos", module));
+                assertInteger(7, evaluate("callOne(sibling, 7)\n", "same-shape-sibling-restored.protos", module));
+            }
+
+            // A non-Closure `call` raises the ordinary Error; the body is not entered.
+            late.assignLocalSlot("call", 5L);
+            assertThrows(RuntimeException.class,
+                    () -> evaluate("callOne(late, 7)\n", "same-shape-not-callable.protos", module));
+            late.assignLocalSlot("call", standardCall);
+            assertInteger(7, evaluate("callOne(late, 7)\n", "same-shape-standard-again.protos", module));
+
+            // Removal restores inherited canonical dispatch.
+            late.removeLocalSlot("call");
+            assertFalse(late.hasLocalCallSlotForRuntime());
+            assertInteger(7, evaluate("callOne(late, 7)\n", "same-shape-removed.protos", module));
+            assertInteger(7, evaluate("callOne(sibling, 7)\n", "same-shape-sibling-removed.protos", module));
+        });
+    }
+
+    @Test
+    void canonicalSelectionIsNotInferredFromShapeOfNonObjectBindings() throws Exception {
+        withCore(module -> {
+            evaluate("custom: (value) => { 100 + value }\n", "non-object-define.protos", module);
+            ProtosClosureValue custom = closure("custom\n", module);
+            assertTrue(custom.usesObjectStorageForRuntime());
+
+            // An execution context's bindings live in its own authority, not
+            // in its Shape: a Shape without `call` does not prove absence.
+            ProtosExecutionContextValue context =
+                    new ProtosExecutionContextValue(ProtosObjectValue.rootObject());
+            context.createLocalSlot("call", custom);
+            assertFalse(context.usesObjectStorageForRuntime());
+            assertTrue(context.hasLocalCallSlotForRuntime());
+            assertNull(context.getShape().getProperty("call"));
+            assertNull(ProtosValueLookup.propertyGetterWithFinalAssumption(
+                    context.getShape(), "call"));
+        });
+    }
+
+    private static boolean selectedForShape(
+            ProtosClosureValue closure,
+            ProtosStandardObjectProtocol.CanonicalRootCallSelection selection,
+            Shape cachedShape) {
+        return ProtosFunctionCallDispatchers.hasCanonicalCallSelectionForShape(
+                closure, selection, cachedShape,
+                ProtosValueLookup.propertyGetterWithFinalAssumption(cachedShape, "call"));
+    }
+
+    private static void assertShapeSelectionAgreesWithGeneric(
+            ProtosClosureValue closure,
+            ProtosStandardObjectProtocol.CanonicalRootCallSelection selection) {
+        assertEquals(
+                ProtosFunctionCallDispatchers.hasCanonicalCallSelection(closure, selection),
+                selectedForShape(
+                        closure, selection, closure.getShape()));
     }
 
     @Test

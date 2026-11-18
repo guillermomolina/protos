@@ -18,6 +18,7 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
 import com.oracle.truffle.api.RootCallTarget;
@@ -37,6 +38,8 @@ import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.DirectCallNode;
 import com.oracle.truffle.api.nodes.Node;
+import com.oracle.truffle.api.object.PropertyGetter;
+import com.oracle.truffle.api.object.Shape;
 import com.oracle.truffle.api.profiles.InlinedConditionProfile;
 
 /**
@@ -59,6 +62,10 @@ import com.oracle.truffle.api.profiles.InlinedConditionProfile;
 @OperationProxy.Proxyable(allowUncached = true, storeBytecodeIndex = true)
 abstract class ProtosCallUnaryMethodNode extends Node {
 
+    static PropertyGetter callSlotGetter(Shape shape) {
+        return ProtosFunctionCallDispatchers.callSlotGetter(shape);
+    }
+
     static ProtosStandardObjectProtocol.CanonicalRootCallSelection
             rootCallSelection() {
         return ProtosStandardObjectProtocol
@@ -76,13 +83,14 @@ abstract class ProtosCallUnaryMethodNode extends Node {
     // The direct-call PIC is keyed by Closure identity. Its cached code
     // stability assumption invalidates the installed target when code changes.
     @ForceQuickening
+    @ForceQuickening("callSelection")
     @Specialization(
             guards = {
                     "isSourceFunction(callable)",
                     "isSingleContext()",
                     // D013 selection first: an overridden `call` never
                     // prepares the Closure's own target.
-                    "canonicalCallSelected(callable, rootSelection)",
+                    "canonicalCallSelected(callable, rootSelection, cachedShape, cachedLocalCallGetter)",
                     "callable == cachedCallable",
                     "cachedTarget != null"
             },
@@ -102,6 +110,13 @@ abstract class ProtosCallUnaryMethodNode extends Node {
                     ProtosClosureValue cachedCallable,
             @Exclusive @Cached(value = "rootCallSelection()", allowUncached = true)
                     ProtosStandardObjectProtocol.CanonicalRootCallSelection rootSelection,
+            @Exclusive @Cached(value = "callable.getShape()", allowUncached = true)
+                    Shape cachedShape,
+            @Exclusive @Cached(
+                    value = "callSlotGetter(cachedShape)",
+                    allowUncached = true,
+                    neverDefault = false)
+                    PropertyGetter cachedLocalCallGetter,
             @Cached("cachedCallable.codeStableAssumptionForRuntime()")
                     Assumption cachedCodeStable,
             @Cached("singleContextTargetOrNull(cachedCallable, root)")
@@ -144,11 +159,12 @@ abstract class ProtosCallUnaryMethodNode extends Node {
      * projection or a foreign-language plan is never admitted here.
      */
     @ForceQuickening
+    @ForceQuickening("callSelection")
     @Specialization(
             guards = {
                     "isSourceFunction(callable)",
                     "isSingleContext()",
-                    "canonicalCallSelected(callable, rootSelection)",
+                    "canonicalCallSelected(callable, rootSelection, cachedShape, cachedLocalCallGetter)",
                     "currentPlan != null",
                     "currentPlan == cachedPlan",
                     "!callable.requiresContextLocalExecutionProjectionForRuntime()",
@@ -173,6 +189,13 @@ abstract class ProtosCallUnaryMethodNode extends Node {
                     ProtosClosureExecutionPlan currentPlan,
             @Exclusive @Cached(value = "rootCallSelection()", allowUncached = true)
                     ProtosStandardObjectProtocol.CanonicalRootCallSelection rootSelection,
+            @Exclusive @Cached(value = "callable.getShape()", allowUncached = true)
+                    Shape cachedShape,
+            @Exclusive @Cached(
+                    value = "callSlotGetter(cachedShape)",
+                    allowUncached = true,
+                    neverDefault = false)
+                    PropertyGetter cachedLocalCallGetter,
             @Cached("currentPlan") ProtosClosureExecutionPlan cachedPlan,
             @Cached("singleContextTargetOrNull(callable, root)")
                     RootCallTarget cachedTarget,
@@ -203,11 +226,12 @@ abstract class ProtosCallUnaryMethodNode extends Node {
      * already proves the canonical `call` selection, so the selected source
      * body enters the function dispatcher directly without reselecting.
      */
+    @ForceQuickening("callSelection")
     @Specialization(
             limit = "3",
             guards = {
                     "isSourceFunction(callable)",
-                    "canonicalCallSelected(callable, rootSelection)"
+                    "canonicalCallSelected(callable, rootSelection, cachedShape, cachedLocalCallGetter)"
             },
             replaces = {"callCachedClosure", "callPreparedTarget"})
     @Megamorphic
@@ -223,6 +247,13 @@ abstract class ProtosCallUnaryMethodNode extends Node {
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
             @Exclusive @Cached(value = "rootCallSelection()", allowUncached = true)
                     ProtosStandardObjectProtocol.CanonicalRootCallSelection rootSelection,
+            @Exclusive @Cached(value = "callable.getShape()", allowUncached = true)
+                    Shape cachedShape,
+            @Exclusive @Cached(
+                    value = "callSlotGetter(cachedShape)",
+                    allowUncached = true,
+                    neverDefault = false)
+                    PropertyGetter cachedLocalCallGetter,
             @Exclusive @Cached ProtosFunctionCallDispatchers.FunctionCachedCallNode call) {
         Object outcome = call.execute(
                 frame, inliningTarget, terminal, callable,
@@ -263,14 +294,11 @@ abstract class ProtosCallUnaryMethodNode extends Node {
      * selected call behavior is canonical. Bound methods are already
      * selected and must not perform another callable lookup.
      */
-    static boolean requiresCallableSelection(Object callable) {
-        return !isSourceCallable(callable)
-                || (callable instanceof ProtosClosureValue closure
-                        && !canonicalCallSelected(
-                                closure, rootCallSelection()));
-    }
-
-    @Specialization(guards = "requiresCallableSelection(callable)")
+    // Declared last: ordinary `call` selection for every callable no earlier
+    // specialization admits, including canonical Closures past the
+    // Shape-keyed caches.
+    @ForceQuickening("callSelection")
+    @Specialization
     @InliningCutoff
     static Object call(
             VirtualFrame frame,
@@ -290,24 +318,20 @@ abstract class ProtosCallUnaryMethodNode extends Node {
                 terminal, outcome, bytecode, bytecodeIndex);
     }
 
-    // A local `call` slot may be added or removed between executions.
+    // The cached Shape proves only local `call` slot presence; a present
+    // slot may be reassigned, so its value is checked on every execution.
     @NonIdempotent
     static boolean canonicalCallSelected(
             ProtosClosureValue callable,
-            ProtosStandardObjectProtocol.CanonicalRootCallSelection selection) {
-        return ProtosFunctionCallDispatchers.hasCanonicalCallSelection(
-                callable, selection);
+            ProtosStandardObjectProtocol.CanonicalRootCallSelection selection,
+            Shape cachedShape,
+            PropertyGetter cachedLocalCallGetter) {
+        return ProtosFunctionCallDispatchers.hasCanonicalCallSelectionForShape(
+                callable, selection, cachedShape, cachedLocalCallGetter);
     }
 
     static boolean isSourceFunction(ProtosClosureValue callable) {
         return ProtosFunctionCallDispatchers.CallNode.isSourceFunction(callable);
-    }
-
-    static boolean isSourceCallable(Object callable) {
-        return callable instanceof ProtosClosureValue closure
-                        ? isSourceFunction(closure)
-                        : callable instanceof ProtosBoundMethod method
-                                && isSourceFunction(method.callable());
     }
 
     // Admission-time guard, independent of the generated cache node.

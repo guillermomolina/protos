@@ -52,6 +52,8 @@ import com.oracle.truffle.api.nodes.DirectCallNode;
 import com.oracle.truffle.api.nodes.IndirectCallNode;
 import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.nodes.RootNode;
+import com.oracle.truffle.api.object.PropertyGetter;
+import com.oracle.truffle.api.object.Shape;
 import com.oracle.truffle.api.profiles.InlinedConditionProfile;
 
 /**
@@ -104,6 +106,56 @@ final class ProtosFunctionCallDispatchers {
                         || localCallIsStandardCall(closure));
     }
 
+    /** The ordinary slot name whose selection defines invocation. */
+    static final String CALL_SLOT_NAME = "call";
+
+    /**
+     * The property getter for the local {@code call} slot of {@code shape},
+     * or {@code null} when that Shape has no local {@code call} property.
+     */
+    public static PropertyGetter callSlotGetter(Shape shape) {
+        return ProtosValueLookup.propertyGetterWithFinalAssumption(
+                shape, CALL_SLOT_NAME);
+    }
+
+    /**
+     * The canonical selection test specialized on a call-site cached
+     * {@link Shape} and its cached {@link PropertyGetter} for {@code call}
+     * ({@code null} when that Shape has no local {@code call} property).
+     * The property location is resolved only at specialization time. A
+     * present {@code call} may be reassigned without a Shape change, so its
+     * current value is read on every execution and compared against the
+     * standard implementation. A Closure whose slots are not its own
+     * {@code DynamicObject} properties is answered by the authoritative
+     * {@link #hasCanonicalCallSelection} test: its Shape does not own its
+     * bindings.
+     */
+    static boolean hasCanonicalCallSelectionForShape(
+            ProtosClosureValue closure,
+            ProtosStandardObjectProtocol.CanonicalRootCallSelection selection,
+            Shape cachedShape,
+            PropertyGetter cachedLocalCallGetter) {
+        if (selection == null || !selection.isValid()) {
+            return false;
+        }
+        if (!cachedShape.check(closure)) {
+            return false;
+        }
+        if (!closure.usesObjectStorageForRuntime()) {
+            return hasCanonicalCallSelection(closure, selection);
+        }
+        if (cachedLocalCallGetter == null) {
+            return true;
+        }
+        if (!cachedLocalCallGetter.accepts(closure)) {
+            return false;
+        }
+        Object localCall = cachedLocalCallGetter.get(closure);
+        return localCall instanceof ProtosClosureValue selected
+                && ProtosStandardObjectProtocol
+                        .isStandardCallImplementation(selected);
+    }
+
     @TruffleBoundary
     private static boolean localCallIsStandardCall(ProtosClosureValue closure) {
         return closure.readLocalSlot("call").orElse(null)
@@ -117,20 +169,29 @@ final class ProtosFunctionCallDispatchers {
     @GenerateInline(false)
     abstract static class CallNode extends Node {
 
+        static PropertyGetter callSlotGetter(Shape shape) {
+            return ProtosFunctionCallDispatchers.callSlotGetter(shape);
+        }
+
     static ProtosStandardObjectProtocol.CanonicalRootCallSelection
             rootCallSelection() {
         return ProtosStandardObjectProtocol
                 .canonicalRootCallSelectionOrNullForRuntime();
     }
 
-        // A local `call` slot may be added or removed between executions.
+        // The cached Shape proves only slot presence; a present `call` slot
+        // may be reassigned, so its value is read on every execution.
         @NonIdempotent
-        static boolean hasCanonicalCallSelection(
+        static boolean hasCanonicalCallSelectionForShape(
                 ProtosClosureValue closure,
                 ProtosStandardObjectProtocol.CanonicalRootCallSelection
-                        selection) {
+                        selection,
+                Shape cachedShape,
+                PropertyGetter cachedLocalCallGetter) {
             return ProtosFunctionCallDispatchers
-                    .hasCanonicalCallSelection(closure, selection);
+                    .hasCanonicalCallSelectionForShape(
+                            closure, selection, cachedShape,
+                            cachedLocalCallGetter);
         }
 
         /**
@@ -152,7 +213,7 @@ final class ProtosFunctionCallDispatchers {
 
         @Specialization(limit = "3", guards = {
                 "isSourceFunction(callable)",
-                "!isFunctionCall(arguments) || hasCanonicalCallSelection(callable, rootSelection)"
+                "!isFunctionCall(arguments) || hasCanonicalCallSelectionForShape(callable, rootSelection, cachedShape, cachedLocalCallGetter)"
         })
         static Object functionCall(
                 VirtualFrame frame,
@@ -164,6 +225,13 @@ final class ProtosFunctionCallDispatchers {
                 @Bind Node inliningTarget,
                 @Exclusive @Cached(value = "rootCallSelection()", allowUncached = true)
                     ProtosStandardObjectProtocol.CanonicalRootCallSelection rootSelection,
+                @Exclusive @Cached(value = "callable.getShape()", allowUncached = true)
+                    Shape cachedShape,
+                @Exclusive @Cached(
+                        value = "callSlotGetter(cachedShape)",
+                        allowUncached = true,
+                        neverDefault = false)
+                    PropertyGetter cachedLocalCallGetter,
                 @Cached FunctionCachedCallNode cachedCall) {
             return cachedCall.execute(
                     frame, inliningTarget, terminal, callable, arguments,
@@ -173,7 +241,7 @@ final class ProtosFunctionCallDispatchers {
         @Specialization(limit = "3", guards = {
                 "isBuiltin(callable)",
                 "isFunctionCall(arguments)",
-                "hasCanonicalCallSelection(callable, rootSelection)"
+                "hasCanonicalCallSelectionForShape(callable, rootSelection, cachedShape, cachedLocalCallGetter)"
         })
         static Object builtinFunctionCall(
                 VirtualFrame frame,
@@ -185,6 +253,13 @@ final class ProtosFunctionCallDispatchers {
                 @Bind Node inliningTarget,
                 @Exclusive @Cached(value = "rootCallSelection()", allowUncached = true)
                     ProtosStandardObjectProtocol.CanonicalRootCallSelection rootSelection,
+                @Exclusive @Cached(value = "callable.getShape()", allowUncached = true)
+                    Shape cachedShape,
+                @Exclusive @Cached(
+                        value = "callSlotGetter(cachedShape)",
+                        allowUncached = true,
+                        neverDefault = false)
+                    PropertyGetter cachedLocalCallGetter,
                 @Cached BuiltinFunctionCachedCallNode cachedCall) {
             return cachedCall.execute(
                     frame, inliningTarget, terminal, callable, arguments,
@@ -230,32 +305,14 @@ final class ProtosFunctionCallDispatchers {
 
         /*
          * Generic callable selection: the callable behavior of any other
-         * object is its ordinary `call` slot, invoked as a method on it.
+         * object, or of a Closure whose `call` selection is not canonical,
+         * is its ordinary `call` slot, invoked as a method on it. A selected
+         * method already has its receiver and methodHome and never reaches
+         * this path. Declared last and unguarded: the ordinary selection
+         * is also correct for a canonical Closure past the Shape-keyed
+         * function caches.
          */
-        /*
-         * A selected method already has its receiver and methodHome.
-         * Other values require ordinary callable selection. Function
-         * calls on Closures require it only when Object.call is not
-         * the behavior currently selected.
-         */
-        static boolean requiresCallableSelection(
-                Object callable, Object[] arguments) {
-            if (callable instanceof ProtosBoundMethod) {
-                return false;
-            }
-            if (callable instanceof ProtosClosureValue closure) {
-                if (!isSourceFunction(closure) && !isBuiltin(closure)) {
-                    return true;
-                }
-                return isFunctionCall(arguments)
-                        && !hasCanonicalCallSelection(
-                                closure, rootCallSelection());
-            }
-            return true;
-        }
-
-        @Specialization(
-                guards = "requiresCallableSelection(callable, arguments)")
+        @Specialization
         @InliningCutoff
         static Object doGeneric(
                 VirtualFrame frame,
