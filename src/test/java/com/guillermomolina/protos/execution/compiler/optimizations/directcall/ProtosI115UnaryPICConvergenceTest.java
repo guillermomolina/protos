@@ -1264,6 +1264,26 @@ final class ProtosI115UnaryPICConvergenceTest {
             for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
                 once.accept("callWith(target, plain)\n", 7L);
             }
+            // 8. Ordinary entries without a Task after the saturated caches.
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                once.accept("callWith(target, plain)\n", 7L);
+            }
+            // 9. A Task reappears at the same site.
+            for (int round = 0; round < PAST_CACHE_LIMITS; round++) {
+                int before = armed[0];
+                ProtosTask task = module.executionDomain().createTask(null, current ->
+                        ProtosBytecodeTaskExecution.executeRequest(
+                                current,
+                                ProtosCallRequest.taskEntry(owned, current, new Object[0], module)));
+                assertTrue(module.executionDomain().dispatchOne());
+                assertEquals(ProtosTask.State.COMPLETED, task.state(),
+                        () -> "failure=" + task.failure());
+                assertInteger(7, task.result().orElseThrow());
+                assertTrue(task.failure().isEmpty(), "the Task did not fail");
+                assertEquals(before + 1, armed[0], "the argument ran exactly once in the Task");
+            }
+            // 10. Ordinary entry without a Task again.
+            once.accept("callWith(target, plain)\n", 7L);
             assertSame(target, closure("target\n", module), "the Closure keeps its identity");
         });
     }

@@ -33,6 +33,8 @@ import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.frame.Frame;
+import com.oracle.truffle.api.nodes.Node;
+import com.oracle.truffle.api.profiles.InlinedConditionProfile;
 import java.util.List;
 import java.util.Objects;
 
@@ -1598,6 +1600,13 @@ final class ProtosFrameArguments {
      * Any other header leaves compiled code for the general accessor.
      */
     static ProtosTask admittedCompactTask(Object[] arguments) {
+        return admittedCompactTask(arguments, null, null);
+    }
+
+    static ProtosTask admittedCompactTask(
+            Object[] arguments,
+            Node inliningTarget,
+            InlinedConditionProfile explicitTaskPresence) {
         if (arguments.length >= HEADER_LENGTH) {
             Object first = arguments[CLOSURE_INDEX];
             if (first instanceof ProtosActivation activation) {
@@ -1607,9 +1616,15 @@ final class ProtosFrameArguments {
                 // Slot 2 holds a ProtosTask only for a function call: a
                 // method call stores its ProtosObjectValue methodHome there,
                 // so the type test alone identifies an explicit Task.
-                if (arguments[TASK_INDEX] instanceof ProtosTask explicit) {
-                    return explicit;
+                Object explicit = arguments[TASK_INDEX];
+                boolean hasExplicitTask = explicit instanceof ProtosTask;
+
+                if (explicitTaskPresence != null
+                        ? explicitTaskPresence.profile(inliningTarget, hasExplicitTask)
+                        : hasExplicitTask) {
+                    return (ProtosTask) explicit;
                 }
+
                 Object caller = arguments[CALLER_INDEX];
                 return caller instanceof ProtosActivation activation
                         ? activation.taskForRuntime()

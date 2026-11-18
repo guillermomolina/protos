@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.164-SNAPSHOT
+
+- **I115.** Profile explicit Task presence in admitted compact headers and thread that profile through direct invocation paths. Update deferred-caller home-invocation calls and extend unary dispatch regressions.
+
 ## 0.4.163-SNAPSHOT
 
 - **I115.** Force-quicken cached global reads and use fallback specializations for generic numeric and rich-comparison paths. Add the factorial/Fibonacci graph-budget Makefile target and extend lexical, method-call and numeric regressions.

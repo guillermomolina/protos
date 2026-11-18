@@ -130,12 +130,13 @@ abstract class ProtosCallUnaryMethodNode extends Node {
             @Cached("classifyReturnHome(cachedCallable, cachedCallee)")
                     ProtosFunctionCallDispatchers.ReturnHomeMode cachedHomeMode,
             @Exclusive @Cached ProtosFunctionCallDispatchers.FunctionDirectInvokeNode invoke,
-            @Exclusive @Cached InlinedConditionProfile taskPresence) {
+            @Exclusive @Cached InlinedConditionProfile taskPresence,
+            @Exclusive @Cached InlinedConditionProfile explicitTaskPresence) {
         Object[] arguments = ProtosFrameArguments.dispatchedCall1(
                 null, ProtosFrameArguments.functionCallMarker(),
                 null, null, null, a0);
         Object outcome = ProtosFunctionCallDispatchers.invokeCachedClosure(
-                frame, inliningTarget, cachedHomeMode, taskPresence, invoke,
+                frame, inliningTarget, cachedHomeMode, taskPresence, explicitTaskPresence, invoke,
                 callNode, cachedCallee, callable, arguments, null);
         // The cached effective root's compilation-final proof: a proven body
         // never yields a suspended outcome, so no terminal classification.
@@ -206,12 +207,13 @@ abstract class ProtosCallUnaryMethodNode extends Node {
             @Cached("cachedCallee.callerNeedsStability()")
                     Assumption cachedCallerNeedsStable,
             @Exclusive @Cached ProtosFunctionCallDispatchers.FunctionDirectInvokeNode invoke,
-            @Exclusive @Cached InlinedConditionProfile taskPresence) {
+            @Exclusive @Cached InlinedConditionProfile taskPresence,
+            @Exclusive @Cached InlinedConditionProfile explicitTaskPresence) {
         Object[] arguments = ProtosFrameArguments.dispatchedCall1(
                 null, ProtosFrameArguments.functionCallMarker(),
                 null, null, null, a0);
         Object outcome = ProtosFunctionCallDispatchers.invokeSharedTarget(
-                frame, inliningTarget, taskPresence, invoke, callNode,
+                frame, inliningTarget, taskPresence, explicitTaskPresence, invoke, callNode,
                 cachedCallee, callable, arguments, null);
         // Compilation-final proof of the shared effective root.
         if (cachedCallee.provablyNonSuspendingBody()) {

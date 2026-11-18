@@ -666,9 +666,10 @@ final class ProtosFunctionCallDispatchers {
                 @Cached("classifyReturnHome(cachedClosure, cachedCallee)")
                         ReturnHomeMode cachedHomeMode,
                 @Exclusive @Cached FunctionDirectInvokeNode invoke,
-                @Exclusive @Cached InlinedConditionProfile taskPresence) {
+                @Exclusive @Cached InlinedConditionProfile taskPresence,
+                @Exclusive @Cached InlinedConditionProfile explicitTaskPresence) {
             return invokeCachedClosure(
-                    frame, inliningTarget, cachedHomeMode, taskPresence, invoke,
+                    frame, inliningTarget, cachedHomeMode, taskPresence, explicitTaskPresence, invoke,
                     callNode, cachedCallee, closure, arguments, callerReference);
         }
 
@@ -723,9 +724,10 @@ final class ProtosFunctionCallDispatchers {
                 @Cached("cachedCallee.callerNeedsStability()")
                         Assumption cachedCallerNeedsStable,
                 @Exclusive @Cached FunctionDirectInvokeNode invoke,
-                @Exclusive @Cached InlinedConditionProfile taskPresence) {
+                @Exclusive @Cached InlinedConditionProfile taskPresence,
+                @Exclusive @Cached InlinedConditionProfile explicitTaskPresence) {
             return invokeSharedTarget(
-                    frame, inliningTarget, taskPresence, invoke, callNode,
+                    frame, inliningTarget, taskPresence, explicitTaskPresence, invoke, callNode,
                     cachedCallee, closure, arguments, callerReference);
         }
 
@@ -1036,6 +1038,7 @@ final class ProtosFunctionCallDispatchers {
             Node inliningTarget,
             ReturnHomeMode homeMode,
             InlinedConditionProfile taskPresence,
+            InlinedConditionProfile explicitTaskPresence,
             FunctionDirectInvokeNode invoke,
             DirectCallNode callNode,
             ProtosBytecodeRootNode callee,
@@ -1044,12 +1047,12 @@ final class ProtosFunctionCallDispatchers {
             Object explicitCaller) {
         if (homeMode == ReturnHomeMode.UNOBSERVABLE) {
             return invokeUnobservableHome(
-                    frame, inliningTarget, taskPresence,
+                    frame, inliningTarget, taskPresence, explicitTaskPresence,
                     callNode, callee, closure, arguments, explicitCaller);
         }
         if (homeMode == ReturnHomeMode.CAPTURED) {
             return invokeCapturedHome(
-                    frame, inliningTarget, taskPresence,
+                    frame, inliningTarget, taskPresence, explicitTaskPresence,
                     callNode, callee, closure, arguments, explicitCaller);
         }
         return invoke.execute(
@@ -1102,6 +1105,7 @@ final class ProtosFunctionCallDispatchers {
             VirtualFrame frame,
             Node inliningTarget,
             InlinedConditionProfile taskPresence,
+            InlinedConditionProfile explicitTaskPresence,
             DirectCallNode callNode,
             ProtosBytecodeRootNode callee,
             ProtosClosureValue closure,
@@ -1112,7 +1116,7 @@ final class ProtosFunctionCallDispatchers {
                 arguments, closure, caller, ProtosReturnHome.unobservable());
         if (!omitsTaskTransport(frame, callee, explicitCaller)) {
             prepareInvocationTask(
-                    frame, arguments, explicitCaller, inliningTarget, taskPresence);
+                    frame, arguments, explicitCaller, inliningTarget, taskPresence, explicitTaskPresence);
         }
         Object outcome = callNode.call(arguments);
         if (callee != null && callee.provablyNonSuspendingBody()) {
@@ -1131,6 +1135,7 @@ final class ProtosFunctionCallDispatchers {
             VirtualFrame frame,
             Node inliningTarget,
             InlinedConditionProfile taskPresence,
+            InlinedConditionProfile explicitTaskPresence,
             DirectCallNode callNode,
             ProtosBytecodeRootNode callee,
             ProtosClosureValue closure,
@@ -1141,7 +1146,7 @@ final class ProtosFunctionCallDispatchers {
                 arguments, closure, caller,
                 closure.capturedReturnHomeOrNullForRuntime());
         prepareInvocationTask(
-                frame, arguments, explicitCaller, inliningTarget, taskPresence);
+                frame, arguments, explicitCaller, inliningTarget, taskPresence, explicitTaskPresence);
         Object outcome = callNode.call(arguments);
         if (callee != null && callee.provablyNonSuspendingBody()) {
             return outcome;
@@ -1161,6 +1166,7 @@ final class ProtosFunctionCallDispatchers {
             VirtualFrame frame,
             Node inliningTarget,
             InlinedConditionProfile taskPresence,
+            InlinedConditionProfile explicitTaskPresence,
             FunctionDirectInvokeNode invoke,
             DirectCallNode callNode,
             ProtosBytecodeRootNode callee,
@@ -1169,7 +1175,7 @@ final class ProtosFunctionCallDispatchers {
             Object explicitCaller) {
         if (closure.capturedReturnHomeOrNullForRuntime() != null) {
             return invokeCapturedHome(
-                    frame, inliningTarget, taskPresence,
+                    frame, inliningTarget, taskPresence, explicitTaskPresence,
                     callNode, callee, closure, arguments, explicitCaller);
         }
         if (!closure.hasNativeBody()
@@ -1177,7 +1183,7 @@ final class ProtosFunctionCallDispatchers {
                 && callee != null
                 && callee.returnHomeProvenUnobservable()) {
             return invokeUnobservableHome(
-                    frame, inliningTarget, taskPresence,
+                    frame, inliningTarget, taskPresence, explicitTaskPresence,
                     callNode, callee, closure, arguments, explicitCaller);
         }
         return invoke.execute(
@@ -1207,12 +1213,15 @@ final class ProtosFunctionCallDispatchers {
     /** Preserve Task reachability even when the callee needs no caller state. */
     private static ProtosTask prepareInvocationTask(
             VirtualFrame frame, Object[] arguments, Object explicitCaller,
-            Node inliningTarget, InlinedConditionProfile taskPresence) {
+            Node inliningTarget,
+            InlinedConditionProfile taskPresence,
+            InlinedConditionProfile explicitTaskPresence) {
         ProtosTask inherited =
                 explicitCaller instanceof ProtosActivation activation
                         ? activation.taskForRuntime()
                         : frame != null
-                                ? ProtosFrameArguments.admittedCompactTask(frame.getArguments())
+                                ? ProtosFrameArguments.admittedCompactTask(
+                                        frame.getArguments(), inliningTarget, explicitTaskPresence)
                                 : null;
         ProtosTask task = ProtosFrameArguments.inheritInvocationTask(arguments, inherited);
         if (taskPresence.profile(inliningTarget, task != null)
@@ -1310,12 +1319,13 @@ final class ProtosFunctionCallDispatchers {
                 ProtosClosureValue closure,
                 Object[] arguments,
                 Object explicitCaller,
-                @Cached InlinedConditionProfile taskPresence) {
+                @Cached InlinedConditionProfile taskPresence,
+                @Cached InlinedConditionProfile explicitTaskPresence) {
             Object caller = prepareCallerForCallee(frame, callee, explicitCaller);
             ProtosReturnHome home = invocationHome(closure, callee);
             ProtosFrameArguments.completeDispatchedHeader(arguments, closure, caller, home);
             ProtosTask task = prepareInvocationTask(
-                    frame, arguments, explicitCaller, inliningTarget, taskPresence);
+                    frame, arguments, explicitCaller, inliningTarget, taskPresence, explicitTaskPresence);
             ProtosFrameArguments.bindOwnedReturnHome(closure, home, task);
 
             Object outcome;
@@ -1360,12 +1370,13 @@ final class ProtosFunctionCallDispatchers {
                 Object[] arguments,
                 Object explicitCaller,
                 @Cached(inline = false) IndirectCallNode callNode,
-                @Cached InlinedConditionProfile taskPresence) {
+                @Cached InlinedConditionProfile taskPresence,
+                @Cached InlinedConditionProfile explicitTaskPresence) {
             Object caller = prepareCallerForCallee(frame, callee, explicitCaller);
             ProtosReturnHome home = invocationHome(closure, calleeRootOrNull(target));
             ProtosFrameArguments.completeDispatchedHeader(arguments, closure, caller, home);
             ProtosTask task = prepareInvocationTask(
-                    frame, arguments, explicitCaller, inliningTarget, taskPresence);
+                    frame, arguments, explicitCaller, inliningTarget, taskPresence, explicitTaskPresence);
             ProtosFrameArguments.bindOwnedReturnHome(closure, home, task);
 
             Object outcome;
