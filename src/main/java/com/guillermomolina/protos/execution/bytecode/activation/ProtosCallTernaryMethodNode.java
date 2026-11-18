@@ -40,6 +40,7 @@ import com.oracle.truffle.api.nodes.DirectCallNode;
 import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.object.PropertyGetter;
 import com.oracle.truffle.api.object.Shape;
+import com.oracle.truffle.api.profiles.InlinedConditionProfile;
 
 /**
  * Protos Bytecode DSL: the {@code CallTernaryMethod} operation, a call
@@ -118,12 +119,12 @@ abstract class ProtosCallTernaryMethodNode extends Node {
             @Cached("classifyReturnHome(cachedCallable, cachedCallee)")
                     ProtosFunctionCallDispatchers.ReturnHomeMode cachedHomeMode,
             @Exclusive @Cached ProtosFunctionCallDispatchers.FunctionDirectInvokeNode invoke,
-            @Exclusive @Cached ProtosFunctionCallDispatchers.CallContext callContext) {
+            @Exclusive @Cached InlinedConditionProfile taskPresence) {
         Object[] arguments = ProtosFrameArguments.dispatchedCall3(
                 null, ProtosFrameArguments.functionCallMarker(),
                 null, null, null, a0, a1, a2);
         Object outcome = ProtosFunctionCallDispatchers.invokeCachedClosure(
-                frame, inliningTarget, cachedHomeMode, callContext, invoke,
+                frame, inliningTarget, cachedHomeMode, taskPresence, invoke,
                 callNode, cachedCallee, callable, arguments, null);
         // The cached effective root's compilation-final proof: a proven body
         // never yields a suspended outcome, so no terminal classification.

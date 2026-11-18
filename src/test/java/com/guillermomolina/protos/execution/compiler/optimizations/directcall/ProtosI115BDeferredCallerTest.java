@@ -2244,8 +2244,7 @@ final class ProtosI115BDeferredCallerTest {
             Object[] unobservable =
                     ProtosFrameArguments.functionCallArguments(new Object[] {SUPPLIED});
             Object identityOutcome = ProtosFunctionCallDispatchers.invokeUnobservableHome(
-                    frame,
-                    ProtosFunctionCallDispatchersFactory.CallContextNodeGen.getUncached(),
+                    frame, null, com.oracle.truffle.api.profiles.InlinedConditionProfile.getUncached(),
                     com.oracle.truffle.api.nodes.DirectCallNode.create(identityTarget),
                     identityRoot, identity, unobservable, null);
             assertSame(SUPPLIED, identityOutcome, "exact result");
@@ -2270,8 +2269,7 @@ final class ProtosI115BDeferredCallerTest {
                         Object[] arguments = ProtosFrameArguments.functionCallArguments(
                                 new Object[] {supplied.get(1)});
                         Object outcome = ProtosFunctionCallDispatchers.invokeCapturedHome(
-                                null,
-                                ProtosFunctionCallDispatchersFactory.CallContextNodeGen.getUncached(),
+                                null, null, com.oracle.truffle.api.profiles.InlinedConditionProfile.getUncached(),
                                 com.oracle.truffle.api.nodes.DirectCallNode.create(target),
                                 root, callee, arguments, activation);
                         assertFalse(ProtosTailCallContinuation.isSuspended(outcome));
@@ -2683,8 +2681,7 @@ final class ProtosI115BDeferredCallerTest {
                 Object[] structured =
                         ProtosFrameArguments.functionCallArguments(new Object[] {SUPPLIED});
                 ProtosFunctionCallDispatchers.invokeUnobservableHome(
-                        frame,
-                        ProtosFunctionCallDispatchersFactory.CallContextNodeGen.getUncached(),
+                        frame, null, com.oracle.truffle.api.profiles.InlinedConditionProfile.getUncached(),
                         com.oracle.truffle.api.nodes.DirectCallNode.create(otherTarget),
                         otherRoot, other, structured, publishedCaller);
                 assertSame(inherited, structured[2]);
@@ -2775,11 +2772,12 @@ final class ProtosI115BDeferredCallerTest {
     /**
      * I115 A: the shared call preparation keeps an explicit function Task,
      * inherits the caller's Task otherwise, never overwrites a method's
-     * methodHome, and prepares nothing when Task transport is not requested.
+     * methodHome, and prepares nothing when the callee admits omitting Task
+     * transport.
      * Entries with and without a caller Task are covered.
      */
     @Test
-    void callContextKeepsExplicitTaskInheritedTaskAndMethodHome() throws Exception {
+    void callPreparationKeepsExplicitTaskInheritedTaskAndMethodHome() throws Exception {
         withCore(module -> {
             ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
             ProtosTask inherited = domain.createTask(null, current -> {});
@@ -2790,7 +2788,11 @@ final class ProtosI115BDeferredCallerTest {
             ProtosClosureValue callee = closure("(value) => { value }\n", module);
             ProtosBytecodeRootNode root =
                     (ProtosBytecodeRootNode) directTarget(callee).getRootNode();
-            var prepare = ProtosFunctionCallDispatchersFactory.CallContextNodeGen.getUncached();
+            root.requestCallerNeed(ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION);
+            assertFalse(root.admitsTaskTransportOmission(), "transport is required");
+            ProtosClosureValue freeCallee = closure("(item) => { item }\n", module);
+            ProtosBytecodeRootNode freeRoot =
+                    (ProtosBytecodeRootNode) directTarget(freeCallee).getRootNode();
 
             for (ProtosActivation entry : new ProtosActivation[] {owner, module}) {
                 ProtosTask callerTask = entry == owner ? inherited : null;
@@ -2803,23 +2805,20 @@ final class ProtosI115BDeferredCallerTest {
 
                 Object[] withExplicit =
                         ProtosFrameArguments.taskFunctionCallArguments(explicit, new Object[] {SUPPLIED});
-                assertSame(explicit, prepare.execute(frame, root, callee, withExplicit, null,
-                        ProtosReturnHome.unobservable(), true), "the explicit Task wins");
+                assertSame(explicit, prepare(frame, root, callee, withExplicit, null), "the explicit Task wins");
                 assertSame(explicit, withExplicit[2]);
                 assertSame(callee, withExplicit[0]);
                 assertSame(ProtosReturnHome.unobservable(), withExplicit[4]);
 
                 Object[] plain = ProtosFrameArguments.functionCallArguments(new Object[] {SUPPLIED});
-                assertSame(callerTask, prepare.execute(frame, root, callee, plain, null,
-                        ProtosReturnHome.unobservable(), true), "the caller's Task is inherited");
+                assertSame(callerTask, prepare(frame, root, callee, plain, null), "the caller's Task is inherited");
                 assertSame(callerTask, plain[2]);
 
                 ProtosObjectValue receiver = new ProtosObjectValue(ProtosObjectValue.rootObject());
                 ProtosObjectValue methodHome = new ProtosObjectValue(ProtosObjectValue.rootObject());
                 Object[] method = ProtosFrameArguments.methodCallArguments(
                         receiver, methodHome, new Object[] {SUPPLIED});
-                assertSame(callerTask, prepare.execute(frame, root, callee, method, null,
-                        ProtosReturnHome.unobservable(), true));
+                assertSame(callerTask, prepare(frame, root, callee, method, null));
                 assertSame(methodHome, method[2], "methodHome is never overwritten");
                 assertSame(receiver, method[1]);
                 if (callerTask != null) {
@@ -2831,11 +2830,12 @@ final class ProtosI115BDeferredCallerTest {
                 Object[] untransported =
                         ProtosFrameArguments.functionCallArguments(new Object[] {SUPPLIED});
                 untransported[2] = explicit;
-                assertSame(null, prepare.execute(frame, root, callee, untransported, null,
-                        ProtosReturnHome.unobservable(), false), "no Task is prepared");
-                assertSame(explicit, untransported[2], "B5[2] keeps what the site supplied");
-                assertSame(callee, untransported[0]);
-                assertSame(ProtosReturnHome.unobservable(), untransported[4]);
+                if (freeRoot.admitsTaskTransportOmission()) {
+                    unobservableFrom(frame, freeRoot, freeCallee, untransported, null);
+                    assertSame(explicit, untransported[2], "B5[2] keeps what the site supplied");
+                    assertSame(freeCallee, untransported[0]);
+                    assertSame(ProtosReturnHome.unobservable(), untransported[4]);
+                }
             }
         });
     }
@@ -2846,14 +2846,13 @@ final class ProtosI115BDeferredCallerTest {
      * same Activation; an already published caller keeps its identity.
      */
     @Test
-    void callContextPublishesDeferredCallerOnceAndKeepsPublishedIdentity() throws Exception {
+    void callPreparationPublishesDeferredCallerOnceAndKeepsPublishedIdentity() throws Exception {
         withCore(module -> {
             ProtosClosureValue callerClosure = closure("() => 0", module);
             ProtosClosureValue callee = closure("(value) => { value }\n", module);
             ProtosBytecodeRootNode root =
                     (ProtosBytecodeRootNode) directTarget(callee).getRootNode();
             root.requestCallerNeed(ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION);
-            var prepare = ProtosFunctionCallDispatchersFactory.CallContextNodeGen.getUncached();
 
             Object[] deferred = ProtosFrameArguments.compactDirectClosureCallOne(
                     callerClosure, module, null, SUPPLIED);
@@ -2861,10 +2860,9 @@ final class ProtosI115BDeferredCallerTest {
             var deferredFrame = com.oracle.truffle.api.Truffle.getRuntime().createVirtualFrame(
                     deferred, com.oracle.truffle.api.frame.FrameDescriptor.newBuilder().build());
             ProtosActivation first = null;
-            for (boolean transportTask : new boolean[] {true, false, true}) {
+            for (int round = 0; round < 3; round++) {
                 Object[] arguments = ProtosFrameArguments.functionCallArguments(new Object[] {SUPPLIED});
-                prepare.execute(deferredFrame, root, callee, arguments, null,
-                        ProtosReturnHome.unobservable(), transportTask);
+                prepare(deferredFrame, root, callee, arguments, null);
                 ProtosActivation transported =
                         assertInstanceOf(ProtosActivation.class, arguments[3]);
                 if (first == null) {
@@ -2882,8 +2880,7 @@ final class ProtosI115BDeferredCallerTest {
                     com.oracle.truffle.api.frame.FrameDescriptor.newBuilder().build());
             for (int round = 0; round < 2; round++) {
                 Object[] arguments = ProtosFrameArguments.functionCallArguments(new Object[] {SUPPLIED});
-                prepare.execute(publishedFrame, root, callee, arguments, null,
-                        ProtosReturnHome.unobservable(), true);
+                prepare(publishedFrame, root, callee, arguments, null);
                 assertSame(caller, arguments[3], "the published caller keeps its identity");
             }
         });
@@ -3000,7 +2997,6 @@ final class ProtosI115BDeferredCallerTest {
             ProtosClosureValue callee = closure("(value) => { value }\n", module);
             ProtosBytecodeRootNode root =
                     (ProtosBytecodeRootNode) directTarget(callee).getRootNode();
-            var prepare = ProtosFunctionCallDispatchersFactory.CallContextNodeGen.getUncached();
 
             Object[] callerHeader = ProtosFrameArguments.compactDirectClosureCallOne(
                     callerClosure, module, null, SUPPLIED);
@@ -3011,23 +3007,20 @@ final class ProtosI115BDeferredCallerTest {
                     root.requestCallerNeed(ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION);
                 }
                 Object[] host = ProtosFrameArguments.functionCallArguments(new Object[] {SUPPLIED});
-                assertSame(task, prepare.execute(null, root, callee, host, requested,
-                        ProtosReturnHome.unobservable(), true));
+                assertSame(task, prepare(null, root, callee, host, requested));
                 assertSame(requested, host[3], "the host entry transports its explicit caller");
                 assertSame(task, host[2]);
 
                 Object[] structured =
                         ProtosFrameArguments.functionCallArguments(new Object[] {SUPPLIED});
-                assertSame(task, prepare.execute(frame, root, callee, structured, requested,
-                        ProtosReturnHome.unobservable(), true));
+                assertSame(task, prepare(frame, root, callee, structured, requested));
                 assertSame(requested, structured[3], "the structured caller wins (need=" + exactNeed + ")");
                 assertUnpublished(callerHeader);
             }
 
             // A Task-less frame Activation yields to the explicit caller's Task.
             Object[] taskless = ProtosFrameArguments.functionCallArguments(new Object[] {SUPPLIED});
-            assertSame(task, prepare.execute(frame, root, callee, taskless, requested,
-                    ProtosReturnHome.unobservable(), true));
+            assertSame(task, prepare(frame, root, callee, taskless, requested));
             assertSame(task, taskless[2], "the explicit caller's Task is inherited");
 
             ProtosTask frameTask = domain.createTask(null, current -> {});
@@ -3042,16 +3035,14 @@ final class ProtosI115BDeferredCallerTest {
 
             // Frame Task A, explicit caller Task B: exactly B is inherited.
             Object[] overridden = ProtosFrameArguments.functionCallArguments(new Object[] {SUPPLIED});
-            assertSame(task, prepare.execute(taskedFrame, root, callee, overridden, requested,
-                    ProtosReturnHome.unobservable(), true));
+            assertSame(task, prepare(taskedFrame, root, callee, overridden, requested));
             assertSame(task, overridden[2]);
             assertSame(requested, overridden[3]);
 
             // Frame Task A, explicit caller without a Task: A is not inherited.
             ProtosActivation unowned = domainModule(module, domain);
             Object[] notInherited = ProtosFrameArguments.functionCallArguments(new Object[] {SUPPLIED});
-            assertNull(prepare.execute(taskedFrame, root, callee, notInherited, unowned,
-                    ProtosReturnHome.unobservable(), true));
+            assertNull(prepare(taskedFrame, root, callee, notInherited, unowned));
             assertNotSame(frameTask, notInherited[2], "the frame's Task must not leak");
             assertNull(notInherited[2]);
 
@@ -3059,8 +3050,8 @@ final class ProtosI115BDeferredCallerTest {
             ProtosTask explicitTask = domain.createTask(null, current -> {});
             Object[] explicitEntry =
                     ProtosFrameArguments.taskFunctionCallArguments(explicitTask, new Object[] {SUPPLIED});
-            assertSame(explicitTask, prepare.execute(taskedFrame, root, callee, explicitEntry,
-                    requested, ProtosReturnHome.unobservable(), true));
+            assertSame(explicitTask, prepare(taskedFrame, root, callee, explicitEntry,
+                    requested));
             assertSame(explicitTask, explicitEntry[2]);
 
             // A Task-owned method keeps methodHome and transports the explicit caller.
@@ -3068,8 +3059,7 @@ final class ProtosI115BDeferredCallerTest {
             ProtosObjectValue methodHome = new ProtosObjectValue(ProtosObjectValue.rootObject());
             Object[] method = ProtosFrameArguments.methodCallArguments(
                     receiver, methodHome, new Object[] {SUPPLIED});
-            assertSame(task, prepare.execute(taskedFrame, root, callee, method, requested,
-                    ProtosReturnHome.unobservable(), true));
+            assertSame(task, prepare(taskedFrame, root, callee, method, requested));
             assertSame(methodHome, method[2], "methodHome is preserved");
             assertSame(requested, method[3], "the explicit Task owner is transported");
             assertUnpublished(taskedHeader);
@@ -3120,6 +3110,39 @@ final class ProtosI115BDeferredCallerTest {
         });
     }
 
+    /**
+     * Prepares one header through the real UNOBSERVABLE invocation route and
+     * returns the Task it transported: B5[2] of a function header, or the
+     * Task of the exact caller a Task-owned method retains in B5[3].
+     */
+    private static ProtosTask prepare(
+            com.oracle.truffle.api.frame.VirtualFrame frame,
+            ProtosBytecodeRootNode root,
+            ProtosClosureValue callee,
+            Object[] arguments,
+            Object explicitCaller) {
+        unobservableFrom(frame, root, callee, arguments, explicitCaller);
+        if (arguments[2] instanceof ProtosTask task) {
+            return task;
+        }
+        if (arguments[2] == null) {
+            return null;
+        }
+        return arguments[3] instanceof ProtosActivation caller ? caller.taskForRuntime() : null;
+    }
+
+    private static Object unobservableFrom(
+            com.oracle.truffle.api.frame.VirtualFrame frame,
+            ProtosBytecodeRootNode root,
+            ProtosClosureValue callee,
+            Object[] arguments,
+            Object explicitCaller) {
+        return ProtosFunctionCallDispatchers.invokeUnobservableHome(
+                frame, null, com.oracle.truffle.api.profiles.InlinedConditionProfile.getUncached(),
+                com.oracle.truffle.api.nodes.DirectCallNode.create(directTarget(callee)),
+                root, callee, arguments, explicitCaller);
+    }
+
     private static Object unobservable(
             com.oracle.truffle.api.frame.VirtualFrame frame,
             ProtosBytecodeRootNode root,
@@ -3127,8 +3150,7 @@ final class ProtosI115BDeferredCallerTest {
             ProtosClosureValue callee,
             Object[] arguments) {
         return ProtosFunctionCallDispatchers.invokeUnobservableHome(
-                frame,
-                ProtosFunctionCallDispatchersFactory.CallContextNodeGen.getUncached(),
+                frame, null, com.oracle.truffle.api.profiles.InlinedConditionProfile.getUncached(),
                 com.oracle.truffle.api.nodes.DirectCallNode.create(target),
                 root, callee, arguments, null);
     }
