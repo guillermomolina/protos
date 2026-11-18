@@ -47,6 +47,22 @@ final class ProtosI115FactorialControlInliningTest {
             run()
             """;
 
+    private static final String FIBONACCI = """
+            fibonacci: (n) => {
+                result: n
+                if(n >= 2) {
+                    result = fibonacci(n - 1) + fibonacci(n - 2)
+                }
+                result
+            }
+
+            run: () => {
+                fibonacci(10)
+            }
+
+            run()
+            """;
+
     @Test
     void factorialControlCallbackHasNoPhysicalRoot() throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
@@ -83,6 +99,38 @@ final class ProtosI115FactorialControlInliningTest {
                         + "A fourth root indicates the ifTrue callback still "
                         + "has a physical Closure activation.");
                 System.out.println("I115_FACTORIAL_IFTRUE_PHYSICAL_INLINE=PASS");
+            } finally {
+                context.leave();
+            }
+        }
+    }
+
+    @Test
+    void fibonacciConditionalControlHasNoPhysicalRoot() throws Exception {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                CanonicalSequence sequence = (CanonicalSequence) new Canonicalizer()
+                        .canonicalize(new ProtosParser(FIBONACCI).parseProgram());
+                Source source = Source.newBuilder(
+                        ProtosLanguage.ID, FIBONACCI, "i115-fibonacci-inline.protos").build();
+                ProtosBytecodeRootNode module =
+                        new CanonicalToBytecodeLowerer(LANGUAGE_REF.get(null), source)
+                                .lowerRoot(sequence);
+                module.getRootNodes().ensureComplete();
+                List<ProtosBytecodeRootNode> roots = module.getRootNodes().getNodes()
+                        .stream().map(ProtosBytecodeRootNode.class::cast).toList();
+
+                Object result = module.getCallTarget().call(
+                        new ProtosCoreBootstrap().bootstrap(CORE).newModuleActivation());
+                assertEquals("55",
+                        ProtosNumericValueSupport.integerDecimalText(result),
+                        "fibonacci(10) must still compute correctly");
+                assertEquals(3, roots.size(),
+                        "Expected only module, fibonacci and run roots. "
+                        + "A fourth root indicates the conditional body still "
+                        + "has a physical Closure activation.");
             } finally {
                 context.leave();
             }

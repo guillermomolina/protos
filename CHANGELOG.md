@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.160-SNAPSHOT
+
+- **I115.** Remove redundant storage and getter checks from shape-specialized call selection. Add Closure call-dispatch regressions for selection changes, direct calls and factorial control inlining.
+
 ## 0.4.159-SNAPSHOT
 
 - **I115.** Resolve call-slot getters through node-local static helpers instead of ImportStatic in call dispatch nodes. Retain ordinary call selection and add dispatch admission and unary-cache regressions; update the generated-bytecode baseline.

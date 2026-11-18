@@ -122,13 +122,19 @@ final class ProtosFunctionCallDispatchers {
      * The canonical selection test specialized on a call-site cached
      * {@link Shape} and its cached {@link PropertyGetter} for {@code call}
      * ({@code null} when that Shape has no local {@code call} property).
-     * The property location is resolved only at specialization time. A
-     * present {@code call} may be reassigned without a Shape change, so its
-     * current value is read on every execution and compared against the
-     * standard implementation. A Closure whose slots are not its own
-     * {@code DynamicObject} properties is answered by the authoritative
-     * {@link #hasCanonicalCallSelection} test: its Shape does not own its
-     * bindings.
+     *
+     * <p>A Closure always stores its slots as properties of its own object,
+     * so its exact Shape proves which local slots exist: a cached Shape
+     * without {@code call} proves the absence of a local {@code call}, and
+     * selection is then the inherited root selection, admitted only while it
+     * remains valid. A cached Shape with {@code call} obliges reading the
+     * slot's current value on every execution, because assignment may change
+     * it without a Shape change; only the standard implementation is
+     * admitted. A different Shape rejects the cached entry, and the getter,
+     * made from the exact cached Shape, is used only after
+     * {@link Shape#check} succeeds. Every rejection falls back to ordinary
+     * selection. Execution-context values are not Closures and are never
+     * admitted here.
      */
     static boolean hasCanonicalCallSelectionForShape(
             ProtosClosureValue closure,
@@ -141,14 +147,8 @@ final class ProtosFunctionCallDispatchers {
         if (!cachedShape.check(closure)) {
             return false;
         }
-        if (!closure.usesObjectStorageForRuntime()) {
-            return hasCanonicalCallSelection(closure, selection);
-        }
         if (cachedLocalCallGetter == null) {
             return true;
-        }
-        if (!cachedLocalCallGetter.accepts(closure)) {
-            return false;
         }
         Object localCall = cachedLocalCallGetter.get(closure);
         return localCall instanceof ProtosClosureValue selected

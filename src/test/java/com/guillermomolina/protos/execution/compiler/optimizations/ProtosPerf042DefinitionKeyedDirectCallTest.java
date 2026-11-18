@@ -252,6 +252,86 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
     }
 
     /*
+     * The nilary/unary selection transitions at the two-, three-, four- and
+     * five-argument (varargs) call sites: inherited, local standard, custom,
+     * same-Shape standard restoration, a second same-Shape custom and
+     * removal, on one Closure of a warmed definition. Argument order is
+     * encoded positionally in the result.
+     */
+    @Test
+    void otherAritiesFollowCallSelectionTransitionsOnOneClosure() throws Exception {
+        withCore(module -> {
+            evaluate("""
+                    make2: () => { (a, b) => { a + 10 * b } }
+                    make3: () => { (a, b, c) => { a + 10 * b + 100 * c } }
+                    make4: () => { (a, b, c, d) => { a + 10 * b + 100 * c + 1000 * d } }
+                    make5: () => { (a, b, c, d, e) => { a + 10 * b + 100 * c + 1000 * d + 10000 * e } }
+                    custom2: (a, b) => { 100000 + a + 10 * b }
+                    custom3: (a, b, c) => { 100000 + a + 10 * b + 100 * c }
+                    custom4: (a, b, c, d) => { 100000 + a + 10 * b + 100 * c + 1000 * d }
+                    custom5: (a, b, c, d, e) => { 100000 + a + 10 * b + 100 * c + 1000 * d + 10000 * e }
+                    other2: (a, b) => { 200000 + a + 10 * b }
+                    other3: (a, b, c) => { 200000 + a + 10 * b + 100 * c }
+                    other4: (a, b, c, d) => { 200000 + a + 10 * b + 100 * c + 1000 * d }
+                    other5: (a, b, c, d, e) => { 200000 + a + 10 * b + 100 * c + 1000 * d + 10000 * e }
+                    call2: (f) => { f(1, 2) }
+                    call3: (f) => { f(1, 2, 3) }
+                    call4: (f) => { f(1, 2, 3, 4) }
+                    call5: (f) => { f(1, 2, 3, 4, 5) }
+                    t2: make2()
+                    t3: make3()
+                    t4: make4()
+                    t5: make5()
+                    """, "perf042-arity-define.protos", module);
+            Object standardCall =
+                    ProtosObjectValue.rootObject().readLocalSlot("call").orElseThrow();
+            int[] arities = {2, 3, 4, 5};
+            long[] expected = {21, 321, 4321, 54321};
+            for (int k = 0; k < arities.length; k++) {
+                int n = arities[k];
+                long base = expected[k];
+                String site = "call" + n + "(t" + n + ")\n";
+                String name = "perf042-arity" + n;
+                for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                    assertInteger(base, evaluate("call" + n + "(make" + n + "())\n",
+                            name + "-warm.protos", module));
+                }
+                ProtosClosureValue target = closure("t" + n + "\n", module);
+                Object custom = module.context().readLocalSlot("custom" + n).orElseThrow();
+                Object other = module.context().readLocalSlot("other" + n).orElseThrow();
+                for (int round = 0; round < 2; round++) {
+                    // 1. Inherited standard selection.
+                    assertFalse(target.hasLocalCallSlotForRuntime());
+                    assertInteger(base, evaluate(site, name + "-inherited.protos", module));
+                    // 2. Local standard `call`.
+                    target.createLocalSlot("call", standardCall);
+                    var withCall = target.getShape();
+                    assertInteger(base, evaluate(site, name + "-local-standard.protos", module));
+                    // 3. Custom `call`.
+                    target.assignLocalSlot("call", custom);
+                    assertSame(withCall, target.getShape());
+                    assertInteger(100000 + base, evaluate(site, name + "-custom.protos", module));
+                    // 4. Standard restored without a Shape change.
+                    target.assignLocalSlot("call", standardCall);
+                    assertSame(withCall, target.getShape());
+                    assertInteger(base, evaluate(site, name + "-restored.protos", module));
+                    // 5. A second custom `call` with the same Shape.
+                    target.assignLocalSlot("call", other);
+                    assertSame(withCall, target.getShape());
+                    assertInteger(200000 + base, evaluate(site, name + "-other.protos", module));
+                    // 6. Removal returns to the inherited selection.
+                    target.removeLocalSlot("call");
+                    assertFalse(target.hasLocalCallSlotForRuntime());
+                    assertInteger(base, evaluate(site, name + "-removed.protos", module));
+                    assertSame(target, closure("t" + n + "\n", module), name + ": identity is kept");
+                }
+                assertInteger(base, evaluate("call" + n + "(make" + n + "())\n",
+                        name + "-fresh.protos", module));
+            }
+        });
+    }
+
+    /*
      * Closures of one definition share the executable target but never one
      * another's `call` behavior. The Shape-specialized selection must keep
      * identities and captures per instance, restore the canonical selection

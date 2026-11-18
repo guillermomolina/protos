@@ -1128,6 +1128,21 @@ final class ProtosI115ARuntimeAdmissionTest {
                     ProtosObjectValue.rootObject().readLocalSlot("call").orElseThrow();
             ProtosClosureValue custom = closure("make()\n", module);
 
+            // Fresh source and native Closures store slots in their own object.
+            ProtosClosureValue nativeClosure =
+                    assertInstanceOf(ProtosClosureValue.class, standardCall);
+            assertTrue(custom.usesObjectStorageForRuntime());
+            assertTrue(nativeClosure.usesObjectStorageForRuntime());
+
+            // An ordinary slot other than `call` keeps the storage invariant
+            // and the inherited canonical selection.
+            Shape fresh = source.getShape();
+            source.createLocalSlot("tag", 1L);
+            assertTrue(source.usesObjectStorageForRuntime());
+            assertNotSame(fresh, source.getShape());
+            assertFalse(selectedForShape(source, selection, fresh));
+            assertShapeSelectionAgreesWithGeneric(source, selection);
+
             // Canonical selection and a current Shape without `call`.
             Shape plain = source.getShape();
             assertNull(plain.getProperty("call"));
@@ -1149,6 +1164,7 @@ final class ProtosI115ARuntimeAdmissionTest {
 
             // A custom local `call` changes the Shape and is not canonical.
             source.createLocalSlot("call", custom);
+            assertTrue(source.usesObjectStorageForRuntime());
             Shape withCall = source.getShape();
             assertNotSame(plain, withCall);
             assertNotNull(withCall.getProperty("call"));
@@ -1185,6 +1201,26 @@ final class ProtosI115ARuntimeAdmissionTest {
             assertFalse(selectedForShape(
                     source, selection, withCall));
             assertShapeSelectionAgreesWithGeneric(source, selection);
+
+            // Removal restores the inherited canonical selection.
+            assertFalse(source.hasLocalCallSlotForRuntime());
+            assertTrue(source.usesObjectStorageForRuntime());
+            assertTrue(selectedForShape(source, selection, source.getShape()));
+
+            // An invalidated selection is rejected for every Shape state.
+            assertFalse(selectedForShape(source, stale, source.getShape()));
+            custom.createLocalSlot("call", standardCall);
+            assertFalse(selectedForShape(custom, stale, custom.getShape()));
+
+            // Shape-specialized and generic classification agree for all
+            // representative Closures.
+            for (ProtosClosureValue each : List.of(source, custom, nativeClosure)) {
+                assertTrue(each.usesObjectStorageForRuntime());
+                assertShapeSelectionAgreesWithGeneric(each, selection);
+            }
+            custom.assignLocalSlot("call", source);
+            assertFalse(selectedForShape(custom, selection, custom.getShape()));
+            assertShapeSelectionAgreesWithGeneric(custom, selection);
         });
     }
 
@@ -1259,6 +1295,9 @@ final class ProtosI115ARuntimeAdmissionTest {
             assertNull(context.getShape().getProperty("call"));
             assertNull(ProtosValueLookup.propertyGetterWithFinalAssumption(
                     context.getShape(), "call"));
+            // Its ordinary slot behavior is preserved.
+            assertSame(custom, context.readLocalSlot("call").orElseThrow());
+            assertFalse(context.usesObjectStorageForRuntime());
         });
     }
 

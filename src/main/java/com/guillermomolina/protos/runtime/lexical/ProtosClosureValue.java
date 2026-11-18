@@ -235,6 +235,12 @@ public final class ProtosClosureValue extends ProtosObjectValue {
             ProtosNativeClosureBody nativeBody,
             java.util.function.Supplier<ProtosClosureExecutionPlan> executionPlanRematerializer,
             ProtosModuleKey definingModuleKey) {
+        // Storage invariant: every Closure is built with the ordinary object
+        // authority, so slots created later are properties of this same
+        // object and its Shape describes them. No Closure construction path
+        // installs an external lexical authority. A different representation
+        // must use a separate admission path for shape-specialized call
+        // selection instead of silently changing this contract.
         super(ProtosObjectValue.rootObject());
         this.definition = definition;
         this.capturedEnvironment = capturedEnvironment;
