@@ -32,7 +32,7 @@ final class ProtosLogicalCaseCallerCompletion {
     static void enqueue(
             ProtosActivation caller,
             ProtosFutureValue future,
-            Exception hostFailure,
+            Throwable hostFailure,
             Supplier<ProtosObjectValue> rematerializer,
             Runnable completionBegin,
             Consumer<Boolean> futureTerminal) {

@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.157-SNAPSHOT
+
+- **BUG037.** Admit inline callbacks that reach an outer Closure binding the physical parent already transports as a free cell, and keep those cells as cells when the custom-selection branch of the same site creates the callback as a genuine Closure. Complete a logical Case's Future when its host worker fails with a stack overflow instead of stranding the Test Tool. Extend boolean inline-callback regressions (carried cells, non-local return home on boolean and custom paths) and logical-case facility regressions.
+
 ## 0.4.156-SNAPSHOT
 
 - **I115.** Remove the migration-only semantic performance gate (Makefile targets `semantic-performance-gate`, `i115-performance-baseline`, `i115-performance-probe` and `test-semantic-performance-gate`, `tools/i115_semantic_performance_gate.py`, `tools/i115_gate_java/`, `tools/baselines/` and their `tools/tests` suites) and the I115 compiler-graph diagnostics (`tools/i115_q_graph_capture.py`, `tools/i115_tier1_run_graph.sh`, `tools/i115_tier2_run_graph.sh` and their opt-in tests). Remove the temporary `I115_NATIVE_TERM_DIAG` Process termination diagnostic. Drop issue identifiers from product-code names: Bytecode lowering constant-folding and direct-unary helpers, free-cell and inline-callback local-name prefixes, and the experimental trace property (now `protos.experimental.trace`).

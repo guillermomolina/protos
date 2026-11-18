@@ -22,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
@@ -106,6 +107,426 @@ final class ProtosPerf026B1BooleanInlineCallbackTest {
         }
         System.out.println("PERF026_B1_IFTRUE_LITERAL_CALLBACK_ROOT_REMOVED=YES");
         System.out.println("PERF026_B1_IFTRUE_INLINE_ROOTTAG=YES");
+    }
+
+
+    @Test
+    void recursiveContextualIfDoesNotAddPhysicalCallbackRoot()
+            throws Exception {
+        try (Context context =
+                     Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                Probe probe = new Probe();
+
+                ProtosBytecodeRootNode moduleRoot =
+                        lowerRoot(
+                                """
+                                drive: () => {
+                                    repeat: (count, operation) => {
+                                        if(count > 0) {
+                                            operation()
+                                            probe()
+                                            repeat(count - 1, operation)
+                                        }
+                                    }
+                                    repeat(3, () => { 1 })
+                                }
+                                drive()
+                                """);
+
+                moduleRoot.getCallTarget().call(probe.module());
+
+                assertEquals(3, probe.calls.get());
+
+                List<RootNode> stack = probe.stack;
+                assertEquals(
+                        6,
+                        stack.size(),
+                        () -> "contextual-if callback added a physical root: "
+                                + stack);
+                assertEquals(
+                        "ProtosBuiltinCallRootNode",
+                        stack.get(0).getClass().getSimpleName());
+
+                for (int index = 1; index <= 3; index++) {
+                    assertInstanceOf(
+                            ProtosBytecodeRootNode.class,
+                            stack.get(index));
+                }
+
+                assertInstanceOf(
+                        ProtosBytecodeRootNode.class,
+                        stack.get(4));
+                assertSame(moduleRoot, stack.get(5));
+            } finally {
+                context.leave();
+            }
+        }
+    }
+
+
+    @Test
+    void contextualIfPreservesCarriedOuterCellOnBooleanAndCustomPaths()
+            throws Exception {
+        ProtosExecutionOutcome outcome =
+                executeProgram(
+                        "bug036-carried-outer-cell.protos",
+                        """
+                        drive: () => {
+                            shared: 0
+                            custom: {
+                                ifTrue: (callback) => {
+                                    callback()
+                                }
+                            }
+                            nested: (condition) => {
+                                if(condition) {
+                                    shared = shared + 1
+                                }
+                            }
+                            nested(true)
+                            nested(custom)
+                            shared
+                        }
+                        drive()
+                        """);
+
+        assertCompletedWith(2, outcome);
+    }
+
+    @Test
+    void customSelectedCallbackSharesCarriedCellByReference() throws Exception {
+        // The callback outlives nested; later writes on either side meet in one cell.
+        assertCompletedWith(
+                12,
+                executeProgram(
+                        "carried-cell-by-reference.protos",
+                        """
+                        drive: () => {
+                            shared: 0
+                            saved: 0
+                            custom: {
+                                ifTrue: (callback) => {
+                                    saved = callback
+                                    callback()
+                                }
+                            }
+                            nested: (condition) => {
+                                if(condition) {
+                                    shared = shared + 1
+                                }
+                            }
+                            nested(custom)
+                            shared = shared + 10
+                            saved()
+                            shared
+                        }
+                        drive()
+                        """));
+    }
+
+    @Test
+    void customSelectedCallbackWriteIsVisibleToOwner() throws Exception {
+        assertCompletedWith(
+                5,
+                executeProgram(
+                        "carried-cell-owner-write.protos",
+                        """
+                        drive: () => {
+                            shared: 0
+                            custom: {
+                                ifTrue: (callback) => {
+                                    callback()
+                                }
+                            }
+                            nested: (condition) => {
+                                if(condition) {
+                                    shared = 5
+                                }
+                            }
+                            nested(custom)
+                            shared
+                        }
+                        drive()
+                        """));
+    }
+
+    @Test
+    void carriedCellKeepsIdentityAcrossTwoOuterScopes() throws Exception {
+        assertCompletedWith(
+                10,
+                executeProgram(
+                        "carried-cell-two-scopes.protos",
+                        """
+                        outer: () => {
+                            total: 0
+                            custom: {
+                                ifTrue: (callback) => {
+                                    callback()
+                                }
+                            }
+                            middle: () => {
+                                inner: (condition) => {
+                                    if(condition) {
+                                        total = total + 5
+                                    }
+                                }
+                                inner(true)
+                                inner(custom)
+                            }
+                            middle()
+                            total
+                        }
+                        outer()
+                        """));
+    }
+
+    @Test
+    void customSelectedCallbackOwnBindingsDoNotLeakIntoCreator() throws Exception {
+        ProtosExecutionOutcome outcome =
+                executeProgram(
+                        "carried-cell-own-binding.protos",
+                        """
+                        drive: () => {
+                            shared: 0
+                            custom: {
+                                ifTrue: (callback) => {
+                                    callback()
+                                }
+                            }
+                            nested: (condition) => {
+                                if(condition) {
+                                    local: 1
+                                    shared = shared + local
+                                }
+                                local
+                            }
+                            nested(custom)
+                        }
+                        drive()
+                        """);
+
+        assertEquals(
+                ProtosExecutionOutcome.State.FAILED,
+                outcome.state(),
+                () -> "callback binding leaked into its creator: " + outcome.value());
+        String chain = describeError(outcome.error());
+        assertTrue(chain.contains("=SlotNotFound"), chain);
+    }
+
+    @Test
+    void shadowingAndNonLocalReturnKeepTheirRulesOnBothPaths() throws Exception {
+        assertCompletedWith(
+                0,
+                executeProgram(
+                        "carried-cell-shadowing.protos",
+                        """
+                        drive: () => {
+                            shared: 0
+                            custom: {
+                                ifTrue: (callback) => {
+                                    callback()
+                                }
+                            }
+                            nested: (condition) => {
+                                if(condition) {
+                                    shared: 100
+                                    shared = shared + 1
+                                }
+                            }
+                            nested(true)
+                            nested(custom)
+                            shared
+                        }
+                        drive()
+                        """));
+
+        // run captures the return home of drive, so ^7 terminates drive
+        // before the remaining calls and the sum are evaluated.
+        assertCompletedWith(
+                7,
+                executeProgram(
+                        "carried-cell-non-local-return.protos",
+                        """
+                        drive: () => {
+                            hits: 0
+                            custom: {
+                                ifTrue: (callback) => {
+                                    callback()
+                                    99
+                                }
+                            }
+                            run: (condition) => {
+                                if(condition) {
+                                    hits = hits + 1
+                                    ^7
+                                }
+                                9
+                            }
+                            run(true) + run(custom) + run(false) + hits
+                        }
+                        drive()
+                        """));
+    }
+
+    @Test
+    void nonLocalReturnUsesCreatingHomeOnBooleanAndCustomPaths()
+            throws Exception {
+        assertCompletedWith(
+                26,
+                executeProgram(
+                        "non-local-return-home-on-selected-paths.protos",
+                        """
+                        hits: 0
+                        custom: {
+                            ifTrue: (callback) => {
+                                callback()
+                                99
+                            }
+                        }
+                        drive: (choice) => {
+                            run: (condition) => {
+                                if(condition) {
+                                    hits = hits + 1
+                                    ^7
+                                }
+                                9
+                            }
+                            run(choice) + 1
+                        }
+                        drive(true) + drive(custom) + drive(false) + hits
+                        """));
+    }
+
+    @Test
+    void canonicalBooleanReceiverRunsCarriedCellCallbackInline() throws Exception {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                Probe probe = new Probe();
+                ProtosBytecodeRootNode moduleRoot =
+                        lowerRoot(
+                                """
+                                drive: () => {
+                                    shared: 0
+                                    custom: {
+                                        ifTrue: (callback) => {
+                                            callback()
+                                        }
+                                    }
+                                    nested: (condition) => {
+                                        if(condition) {
+                                            shared = shared + 1
+                                            probe()
+                                        }
+                                    }
+                                    nested(custom)
+                                    nested(true)
+                                    shared
+                                }
+                                drive()
+                                """);
+
+                assertInteger(2, moduleRoot.getCallTarget().call(probe.module()));
+                assertEquals(2, probe.calls.get());
+
+                // Last probe: builtin, nested, drive, module; no callback root.
+                List<RootNode> stack = probe.stack;
+                assertEquals(4, stack.size(), () -> "Boolean path added a callback root: " + stack);
+                assertEquals(
+                        "ProtosBuiltinCallRootNode",
+                        stack.get(0).getClass().getSimpleName());
+                assertInstanceOf(ProtosBytecodeRootNode.class, stack.get(1));
+                assertInstanceOf(ProtosBytecodeRootNode.class, stack.get(2));
+                assertSame(moduleRoot, stack.get(3));
+            } finally {
+                context.leave();
+            }
+        }
+    }
+
+    @Test
+    void customReceiverRunsGenuineCarriedCellClosure() throws Exception {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                Probe probe = new Probe();
+                ProtosBytecodeRootNode moduleRoot =
+                        lowerRoot(
+                                """
+                                drive: () => {
+                                    shared: 0
+                                    custom: {
+                                        ifTrue: (callback) => {
+                                            callback()
+                                        }
+                                    }
+                                    nested: (condition) => {
+                                        if(condition) {
+                                            shared = shared + 1
+                                            probe()
+                                        }
+                                    }
+                                    nested(true)
+                                    nested(custom)
+                                    shared
+                                }
+                                drive()
+                                """);
+
+                assertInteger(2, moduleRoot.getCallTarget().call(probe.module()));
+                assertEquals(2, probe.calls.get());
+
+                // Last probe: builtin, callback, ifTrue, nested, drive, module.
+                List<RootNode> stack = probe.stack;
+                assertEquals(6, stack.size(), () -> "custom path lost its genuine callback: " + stack);
+                assertEquals(
+                        "ProtosBuiltinCallRootNode",
+                        stack.get(0).getClass().getSimpleName());
+                for (int index = 1; index <= 4; index++) {
+                    assertInstanceOf(ProtosBytecodeRootNode.class, stack.get(index));
+                }
+                assertNotSame(stack.get(1), stack.get(3));
+                assertSame(moduleRoot, stack.get(5));
+            } finally {
+                context.leave();
+            }
+        }
+    }
+
+    @Test
+    void receiverTransitionsKeepCarriedCellIdentity() throws Exception {
+        // Each drive activation owns a fresh cell; transitions never split it.
+        assertCompletedWith(
+                8,
+                executeProgram(
+                        "carried-cell-transitions.protos",
+                        """
+                        drive: () => {
+                            shared: 0
+                            custom: {
+                                ifTrue: (callback) => {
+                                    callback()
+                                }
+                            }
+                            nested: (condition) => {
+                                if(condition) {
+                                    shared = shared + 1
+                                }
+                            }
+                            nested(true)
+                            nested(custom)
+                            nested(false)
+                            nested(custom)
+                            nested(true)
+                            shared
+                        }
+                        drive() + drive()
+                        """));
     }
 
     @Test
@@ -630,8 +1051,36 @@ final class ProtosPerf026B1BooleanInlineCallbackTest {
         assertEquals(
                 ProtosExecutionOutcome.State.COMPLETED,
                 outcome.state(),
-                () -> "outcome=" + outcome.state() + ", error=" + outcome.error());
+                () -> "outcome=" + outcome.state() + ", error=" + describeError(outcome.error()));
         assertInteger(expected, outcome.value());
+    }
+
+    private static java.util.Map<String, Object> diagnosticPrelude = java.util.Map.of();
+
+    /* Executes in a fresh module whose prelude names the prototypes of a reported error. */
+    private static ProtosExecutionOutcome executeProgram(String name, String source)
+            throws Exception {
+        ProtosActivation module =
+                new ProtosCoreBootstrap().bootstrap(CORE).newModuleActivation();
+        diagnosticPrelude = module.prelude().orElseThrow().bindings().localSlotsSnapshot();
+        return ProtosTestExecutionSupport.execute(name, source, module);
+    }
+
+    private static String describeError(Object error) {
+        StringBuilder text = new StringBuilder();
+        Object current = error;
+        while (current instanceof com.guillermomolina.protos.runtime.ProtosObjectValue object
+                && !object.isRootObject()) {
+            text.append(object.localSlotsSnapshot());
+            for (java.util.Map.Entry<String, Object> binding : diagnosticPrelude.entrySet()) {
+                if (binding.getValue() == object) {
+                    text.append('=').append(binding.getKey());
+                }
+            }
+            text.append(" <- ");
+            current = object.parent().orElse(null);
+        }
+        return text.toString();
     }
 
     private static void assertInteger(long expected, Object value) {

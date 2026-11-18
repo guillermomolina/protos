@@ -296,6 +296,20 @@ final class CanonicalToBytecodeLowerer {
                             && nativeBooleanControl(send.message(), send.arguments()) != null
                             && admitsSelectedCallbacks(send.arguments());
                 }
+
+                @Override
+                public boolean materializesInlineCallback(CanonicalSend send, int position) {
+                    if (!inlineCallbackPosition(send, position)) {
+                        return false;
+                    }
+                    if (ControlSelector.of(send.message(), send.arguments()) != null
+                            && (send.receiver() instanceof CanonicalClosure
+                                    || canonicalBooleanLiteral(send.receiver()) != null)) {
+                        // No custom-selection branch exists for this receiver.
+                        return false;
+                    }
+                    return transportsSelectedCallbackCells(send.arguments());
+                }
             };
     }
 
@@ -7163,12 +7177,79 @@ final class CanonicalToBytecodeLowerer {
 
     /*
      * Whether a conditional site can pass genuine callbacks to a method that
-     * ordinary dispatch selects: every literal callback must reach its free
-     * names by name from this root (its own bindings through the frame-backed
-     * view, or module and unresolved names). Otherwise the site keeps only the
-     * standard Boolean selection.
+     * ordinary dispatch selects, by either proven route. Otherwise the site
+     * keeps only the standard Boolean selection.
      */
     private boolean admitsSelectedCallbacks(java.util.List<CanonicalExpression> arguments) {
+        return admitsSelectedCallbacksByName(arguments)
+                || admitsSelectedCallbacksWithCells(arguments);
+    }
+
+    /*
+     * Whether the custom-selection branch creates its literal callbacks as
+     * ordinary nested Closures that transport their cells, rather than by
+     * name selection. The storage plan and the emission site both use this
+     * one decision.
+     */
+    private boolean transportsSelectedCallbackCells(
+            java.util.List<CanonicalExpression> arguments) {
+        return !admitsSelectedCallbacksByName(arguments)
+                && admitsSelectedCallbacksWithCells(arguments);
+    }
+
+    /*
+     * The cell-transport route: under the root's full analysis, every free
+     * cell of each literal callback is a CELL owned by this root or a free
+     * cell this root itself transports, so the ordinary creation installs the
+     * same ProtosLexicalCell references, in the callback scope's constant
+     * order. Every other free name must remain selectable by name.
+     */
+    private boolean admitsSelectedCallbacksWithCells(
+            java.util.List<CanonicalExpression> arguments) {
+        if (currentRootTopScope == null || currentRootAnalysis == null) {
+            return false;
+        }
+        for (CanonicalExpression argument : arguments) {
+            if (!(argument instanceof CanonicalClosure closure)) {
+                continue;
+            }
+            CanonicalLexicalScope scope =
+                    currentRootAnalysis.scopeOf(closure).orElse(null);
+            if (scope == null) {
+                return false;
+            }
+            java.util.List<CanonicalBindingIdentity> cells =
+                    CanonicalBindingAnalysis.freeCellsOf(scope);
+            for (CanonicalBindingIdentity cell : cells) {
+                if (!transportableFromCurrentRoot(cell)) {
+                    return false;
+                }
+            }
+            if (!compilationFacts.isolatedClosureAnalysis(closure)
+                    .freeNamesReachableWithTransportedCells(
+                            currentRootAnalysis, currentRootTopScope, cells)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean transportableFromCurrentRoot(CanonicalBindingIdentity cell) {
+        if (cell.owner() == currentRootTopScope) {
+            return CanonicalBindingAnalysis.storageOf(cell)
+                    == CanonicalLexicalScope.Storage.CELL;
+        }
+        return currentRootTopScope.kind() == CanonicalLexicalScope.Kind.CLOSURE
+                && currentRootTopScope.freeCellIndex(cell) >= 0;
+    }
+
+    /*
+     * The name-selection route: every literal callback reaches its free names
+     * by name from this root (its own bindings through the frame-backed view,
+     * or module and unresolved names).
+     */
+    private boolean admitsSelectedCallbacksByName(
+            java.util.List<CanonicalExpression> arguments) {
         if (currentRootTopScope == null || currentRootAnalysis == null) {
             return false;
         }
@@ -7231,7 +7312,18 @@ final class CanonicalToBytecodeLowerer {
             }
             BytecodeLocal value = builder.createLocal("conditionalArgument", null);
             if (argument instanceof CanonicalClosure closure
-                    && admitsSelectedCallbacks(arguments)) {
+                    && transportsSelectedCallbackCells(arguments)) {
+                /*
+                 * An ordinary nested Closure: CaptureClosureCells installs
+                 * the creator's ProtosLexicalCell references, which the
+                 * storage plan kept as cells for this site.
+                 */
+                ProtosClosureExecutionPlanCell plan = bytecodeClosurePlan(builder, closure);
+                builder.beginStoreLocal(value);
+                emitClosureCapture(builder, closure, plan);
+                builder.endStoreLocal();
+            } else if (argument instanceof CanonicalClosure closure
+                    && admitsSelectedCallbacksByName(arguments)) {
                 builder.beginStoreLocal(value);
                 builder.beginMaterializeSelectedCallback();
                 emitCurrentActivation(builder);

@@ -1111,7 +1111,10 @@ final class CanonicalCompilationFacts {
                 && inline.inlineCallbackPosition(send, position)
                 && inline.admitsInline(closure)) {
             return demandsPersistentFrame(
-                    closure.body(), analysis, scope, ownBindingsOnly, promotable, inline);
+                    closure.body(), analysis, scope, ownBindingsOnly, promotable, inline)
+                    || (inline.materializesInlineCallback(send, position)
+                            && demandsPersistentFrame(
+                                    closure, analysis, scope, ownBindingsOnly, promotable, inline));
         }
         return demandsPersistentFrame(
                 operand, analysis, scope, ownBindingsOnly, promotable, inline);

@@ -222,14 +222,14 @@ final class CanonicalBindingAnalysis {
                 return false;
             }
 
-            if (admittedInlineGlobalAccess(captured, parentScope)) {
+            if (admittedInlineGlobalAccess(captured, parentScope)
+                    || admittedInlineCarriedCell(captured, parentScope)) {
                 // The callback is removed physically: the enclosing root's
                 // global read uses the same lexical owner at depth minus one.
                 continue;
             }
-            if (captured.identity().owner() != parentScope
-                    || !parentFrameNames.contains(
-                            captured.identity().name())) {
+            if (!directParentCapture(
+                    resolution, parentScope, parentFrameNames)) {
                 return false;
             }
         }
@@ -249,6 +249,7 @@ final class CanonicalBindingAnalysis {
             }
 
             if (!admittedInlineGlobalAccess(captured, parentScope)
+                    && !admittedInlineCarriedCell(captured, parentScope)
                     && !directParentCapture(
                             resolution, parentScope, parentFrameNames)) {
                 return false;
@@ -304,6 +305,7 @@ final class CanonicalBindingAnalysis {
             }
             if (!(parent instanceof CanonicalBindingResolution.CapturedResolved captured)
                     || (!admittedInlineGlobalAccess(captured, parentScope)
+                            && !admittedInlineCarriedCell(captured, parentScope)
                             && !directParentCapture(
                                     parent, parentScope, parentFrameNames))) {
                 return false;
@@ -320,6 +322,7 @@ final class CanonicalBindingAnalysis {
                     enclosing.resolutionOf(entry.getKey()).orElse(null);
             if (!(parent instanceof CanonicalBindingResolution.CapturedResolved captured)
                     || (!admittedInlineGlobalAccess(captured, parentScope)
+                            && !admittedInlineCarriedCell(captured, parentScope)
                             && !directParentCapture(
                                     parent, parentScope, parentFrameNames))) {
                 return false;
@@ -404,6 +407,7 @@ final class CanonicalBindingAnalysis {
             }
             if (!(parent instanceof CanonicalBindingResolution.CapturedResolved captured)
                     || (!admittedInlineGlobalAccess(captured, parentScope)
+                            && !admittedInlineCarriedCell(captured, parentScope)
                             && !directParentCapture(
                                     parent, parentScope, parentFrameNames))) {
                 return false;
@@ -418,10 +422,13 @@ final class CanonicalBindingAnalysis {
                     && resolved.identity().owner() == ownScope) {
                 continue;
             }
+            CanonicalBindingResolution parent =
+                    enclosing.resolutionOf(entry.getKey()).orElse(null);
             if (!parentProvable
-                    || !directParentCapture(
-                            enclosing.resolutionOf(entry.getKey()).orElse(null),
-                            parentScope, parentFrameNames)) {
+                    || !(parent instanceof CanonicalBindingResolution.CapturedResolved captured)
+                    || (!admittedInlineCarriedCell(captured, parentScope)
+                            && !directParentCapture(
+                                    parent, parentScope, parentFrameNames))) {
                 return false;
             }
         }
@@ -449,6 +456,37 @@ final class CanonicalBindingAnalysis {
                 return captured.lexicalDepth() == depth;
             }
         }
+        return false;
+    }
+
+    /**
+     * A callback eliminated into its physical parent may reach a binding
+     * owned by an outer Closure when the parent already transports that
+     * exact binding as a free cell. The captured identity, CELL storage
+     * and original lexical depth must all agree.
+     */
+    private static boolean admittedInlineCarriedCell(
+            CanonicalBindingResolution.CapturedResolved captured,
+            CanonicalLexicalScope parentScope) {
+        CanonicalBindingIdentity identity = captured.identity();
+
+        if (parentScope == null
+                || parentScope.kind() != CanonicalLexicalScope.Kind.CLOSURE
+                || storageOf(identity) != CanonicalLexicalScope.Storage.CELL
+                || parentScope.freeCellIndex(identity) < 0) {
+            return false;
+        }
+
+        long depth = 1L;
+
+        for (CanonicalLexicalScope current = parentScope;
+                current != null;
+                current = current.outwardScope(), depth++) {
+            if (current == identity.owner()) {
+                return captured.lexicalDepth() == depth;
+            }
+        }
+
         return false;
     }
 
@@ -509,6 +547,53 @@ final class CanonicalBindingAnalysis {
             }
         }
         return true;
+    }
+
+    /**
+     * Whether this isolated Closure analysis, lowered as an ordinary nested
+     * Closure of {@code rootScope}, reaches every name it does not resolve
+     * itself. Each such name is either selectable by name as in {@link
+     * #freeNamesSelectableFrom}, or is one of the exact CELL identities in
+     * {@code transportedCells} that the creation installs explicitly in the
+     * new Closure. This is not a claim that a transported cell is
+     * selectable by name.
+     */
+    boolean freeNamesReachableWithTransportedCells(
+            CanonicalBindingAnalysis enclosing,
+            CanonicalLexicalScope rootScope,
+            List<CanonicalBindingIdentity> transportedCells) {
+        if (enclosing == null || rootScope == null) {
+            return false;
+        }
+        for (var entry : lookupResolutions.entrySet()) {
+            if (entry.getValue() instanceof CanonicalBindingResolution.Dynamic
+                    && !reachableWithTransportedCells(
+                            enclosing.resolutionOf(entry.getKey()).orElse(null),
+                            rootScope, transportedCells)) {
+                return false;
+            }
+        }
+        for (var entry : assignResolutions.entrySet()) {
+            if (entry.getValue() instanceof CanonicalBindingResolution.Dynamic
+                    && !reachableWithTransportedCells(
+                            enclosing.resolutionOf(entry.getKey()).orElse(null),
+                            rootScope, transportedCells)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean reachableWithTransportedCells(
+            CanonicalBindingResolution resolution,
+            CanonicalLexicalScope rootScope,
+            List<CanonicalBindingIdentity> transportedCells) {
+        if (selectableFrom(resolution, rootScope)) {
+            return true;
+        }
+        CanonicalBindingIdentity identity = resolution.staticIdentityOrNull();
+        return storageOf(identity) == CanonicalLexicalScope.Storage.CELL
+                && transportedCells.contains(identity);
     }
 
     private static boolean selectableFrom(

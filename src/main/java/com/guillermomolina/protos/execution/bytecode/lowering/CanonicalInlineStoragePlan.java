@@ -59,6 +59,8 @@ import java.util.Set;
  * <p>A capture by any Closure that is materialized (stored, returned,
  * passed as a value, not admitted inline, or nested in a materialized
  * Closure, a parameter default or an inline object body) keeps the cell.
+ * So does a capture by an inline callback that the custom-selection branch
+ * of the same site also creates as a genuine Closure.
  * The decision is keyed by {@link CanonicalBindingIdentity}, never by name,
  * and is derived deterministically from the canonical tree, so it is the
  * same on every Bytecode DSL reparse.
@@ -72,6 +74,13 @@ final class CanonicalInlineStoragePlan {
 
         /** Whether operand {@code position} (0: receiver) of a send is an inline callback site. */
         boolean inlineCallbackPosition(CanonicalSend send, int position);
+
+        /**
+         * Whether the inline callback at operand {@code position} is also
+         * created as a genuine Closure transporting its cells when ordinary
+         * dispatch selects a custom method for the receiver.
+         */
+        boolean materializesInlineCallback(CanonicalSend send, int position);
     }
 
     private final CanonicalBindingAnalysis analysis;
@@ -205,6 +214,11 @@ final class CanonicalInlineStoragePlan {
                 && operand instanceof CanonicalClosure closure
                 && policy.inlineCallbackPosition(send, position)
                 && policy.admitsInline(closure)) {
+            if (policy.materializesInlineCallback(send, position)) {
+                // The custom-selection branch creates this callback as a
+                // genuine Closure: every cell it transports stays a cell.
+                blockTransportedCells(closure);
+            }
             walkInline(closure);
         } else {
             walk(operand, materialized);
@@ -216,12 +230,16 @@ final class CanonicalInlineStoragePlan {
         walk(closure.body(), false);
     }
 
+    private void blockTransportedCells(CanonicalClosure closure) {
+        analysis.scopeOf(closure).ifPresent(scope -> blocked.addAll(scope.freeCells()));
+    }
+
     /*
      * A genuine Closure transports every cell it or a nested Closure
      * references (its free cells are transitive), so none is promoted.
      */
     private void materialize(CanonicalClosure closure) {
-        analysis.scopeOf(closure).ifPresent(scope -> blocked.addAll(scope.freeCells()));
+        blockTransportedCells(closure);
         for (CanonicalParameter parameter : closure.parameters()) {
             parameter.defaultValue().ifPresent(value -> walk(value, true));
         }

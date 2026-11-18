@@ -19,6 +19,7 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
@@ -46,6 +47,111 @@ final class ProtosTestLogicalCaseExecutionFacilityTest {
             Path.of("protos", "tools", "test");
     private static final Path SHARED_ROOT =
             Path.of("protos", "tools", "shared");
+
+
+    @Test
+    void stackOverflowCompletesLogicalCaseFutureInsteadOfStrandingWorker(
+            @TempDir Path root) throws Exception {
+        String source =
+                """
+                TestValue: import("std:test/test")
+
+                tests: Array(
+                    TestValue("recursive", () => {
+                        recurse: (remaining) => {
+                            if(remaining > 0) {
+                                recurse(remaining - 1)
+                            }
+                        }
+                        recurse(10000)
+                    })
+                )
+                """;
+
+        Files.writeString(
+                root.resolve("suite.protos"),
+                source,
+                StandardCharsets.UTF_8);
+
+        ManualSubmission submission = new ManualSubmission();
+        ProtosBundledToolModuleResolver resolver = resolver();
+        ProtosPrelude prelude =
+                new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+        ProtosActivation activation =
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport
+                        .toolHarnessActivation(prelude, "test");
+
+        try (ProtosPolyglotRuntimeHost runtimeHost =
+                     ProtosPolyglotRuntimeHost.open()) {
+            ProtosTestLogicalCaseExecutionFacility facility =
+                    ProtosTestLogicalCaseExecutionFacility.install(
+                            activation,
+                            CORE,
+                            resolver,
+                            List.of(
+                                    new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
+                                            "test-corpus", root)),
+                            runtimeHost,
+                            submission);
+            try {
+                ProtosFutureValue future =
+                        invoke(
+                                prelude,
+                                activation,
+                                source,
+                                List.of("recursive"),
+                                "recursive");
+
+                assertEquals(
+                        ProtosFutureValue.State.PENDING,
+                        future.state());
+
+                boolean[] ran = {false};
+                Throwable[] unexpected = {null};
+
+                Thread carrier =
+                        Thread.ofPlatform()
+                                .name("logical-case-stack-overflow-regression")
+                                .stackSize(1024L * 1024L)
+                                .unstarted(
+                                        () -> {
+                                            try {
+                                                ran[0] = submission.runNext();
+                                            } catch (Throwable failure) {
+                                                unexpected[0] = failure;
+                                            }
+                                        });
+
+                carrier.setDaemon(true);
+                carrier.start();
+                carrier.join(10_000L);
+
+                assertFalse(
+                        carrier.isAlive(),
+                        "the stack-overflow worker did not terminate");
+                assertNull(
+                        unexpected[0],
+                        "host StackOverflowError escaped the completion boundary");
+                assertTrue(ran[0], "the accepted Case was not executed");
+
+                assertEquals(
+                        ProtosFutureValue.State.PENDING,
+                        future.state());
+                assertEquals(
+                        1,
+                        activation.executionDomain().runnableCount());
+
+                assertTrue(
+                        activation.executionDomain().dispatchOne());
+
+                assertEquals(
+                        ProtosFutureValue.State.FAILED,
+                        future.state());
+            } finally {
+                closeWithinSafetyBound(facility);
+            }
+        }
+    }
 
     @SuppressWarnings("try")
     @Test

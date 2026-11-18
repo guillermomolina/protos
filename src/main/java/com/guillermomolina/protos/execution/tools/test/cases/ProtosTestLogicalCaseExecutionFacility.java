@@ -515,11 +515,13 @@ public final class ProtosTestLogicalCaseExecutionFacility implements AutoCloseab
             }
 
             ProtosTestLogicalCaseAttemptBridge.Result result = null;
-            Exception hostFailure = null;
+            Throwable hostFailure = null;
 
             try {
                 result = bridge.execute(request);
-            } catch (Exception failure) {
+            } catch (Exception | StackOverflowError failure) {
+                // A stack overflow must complete the Case's Future rather than
+                // strand the Test Tool waiting for an abandoned host worker.
                 hostFailure = failure;
             }
 
@@ -532,7 +534,7 @@ public final class ProtosTestLogicalCaseExecutionFacility implements AutoCloseab
 
         private void enqueueCallerCompletion(
                 ProtosTestLogicalCaseAttemptBridge.Result result,
-                Exception hostFailure) {
+                Throwable hostFailure) {
             ProtosLogicalCaseCallerCompletion.enqueue(
                     caller,
                     future,
