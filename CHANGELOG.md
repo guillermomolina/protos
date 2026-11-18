@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.161-SNAPSHOT
+
+- **I115.** Prefer an explicitly supplied caller Activation over the current frame when preparing invocation Task transport and caller identity. Add deferred-caller and unary-cache regressions.
+
 ## 0.4.160-SNAPSHOT
 
 - **I115.** Remove redundant storage and getter checks from shape-specialized call selection. Add Closure call-dispatch regressions for selection changes, direct calls and factorial control inlining.

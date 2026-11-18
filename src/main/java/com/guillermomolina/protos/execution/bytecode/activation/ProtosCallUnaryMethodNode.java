@@ -40,7 +40,6 @@ import com.oracle.truffle.api.nodes.DirectCallNode;
 import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.object.PropertyGetter;
 import com.oracle.truffle.api.object.Shape;
-import com.oracle.truffle.api.profiles.InlinedConditionProfile;
 
 /**
  * Protos Bytecode DSL: the {@code CallUnaryMethod} operation, a call
@@ -130,12 +129,12 @@ abstract class ProtosCallUnaryMethodNode extends Node {
             @Cached("classifyReturnHome(cachedCallable, cachedCallee)")
                     ProtosFunctionCallDispatchers.ReturnHomeMode cachedHomeMode,
             @Exclusive @Cached ProtosFunctionCallDispatchers.FunctionDirectInvokeNode invoke,
-            @Exclusive @Cached InlinedConditionProfile taskPresence) {
+            @Exclusive @Cached ProtosFunctionCallDispatchers.CallContext callContext) {
         Object[] arguments = ProtosFrameArguments.dispatchedCall1(
                 null, ProtosFrameArguments.functionCallMarker(),
                 null, null, null, a0);
         Object outcome = ProtosFunctionCallDispatchers.invokeCachedClosure(
-                frame, inliningTarget, cachedHomeMode, taskPresence, invoke,
+                frame, inliningTarget, cachedHomeMode, callContext, invoke,
                 callNode, cachedCallee, callable, arguments, null);
         // The cached effective root's compilation-final proof: a proven body
         // never yields a suspended outcome, so no terminal classification.
@@ -206,12 +205,12 @@ abstract class ProtosCallUnaryMethodNode extends Node {
             @Cached("cachedCallee.callerNeedsStability()")
                     Assumption cachedCallerNeedsStable,
             @Exclusive @Cached ProtosFunctionCallDispatchers.FunctionDirectInvokeNode invoke,
-            @Exclusive @Cached InlinedConditionProfile taskPresence) {
+            @Exclusive @Cached ProtosFunctionCallDispatchers.CallContext callContext) {
         Object[] arguments = ProtosFrameArguments.dispatchedCall1(
                 null, ProtosFrameArguments.functionCallMarker(),
                 null, null, null, a0);
         Object outcome = ProtosFunctionCallDispatchers.invokeSharedTarget(
-                frame, inliningTarget, taskPresence, invoke, callNode,
+                frame, inliningTarget, callContext, invoke, callNode,
                 cachedCallee, callable, arguments, null);
         // Compilation-final proof of the shared effective root.
         if (cachedCallee.provablyNonSuspendingBody()) {

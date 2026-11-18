@@ -1192,6 +1192,123 @@ final class ProtosI115UnaryPICConvergenceTest {
     }
 
     /**
+     * I115: one unary site moves through Closure identity, a distinct Closure
+     * sharing the definition and target, megamorphic definitions, a
+     * Task-owned entry, an ordinary Task-free entry, a dynamic `call`
+     * replacement and the restored canonical selection. Every result is
+     * exact and the argument runs exactly once per call.
+     */
+    @Test
+    void oneSiteCrossesIdentitySharedMegamorphicTaskAndSelectionTransitions() throws Exception {
+        withCore(module -> {
+            int[] armed = new int[1];
+            module.context().createLocalSlot("armProbe", ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> {
+                        armed[0]++;
+                        return ProtosNullValue.INSTANCE;
+                    }));
+            evaluate("""
+                    makeOffset: (seed) => { (value) => { value + seed } }
+                    target: makeOffset(0)
+                    plain: () => {
+                        armProbe()
+                        7
+                    }
+                    callWith: (f, g) => { f(g()) }
+                    owned: () => { callWith(target, plain) }
+                    """, "i115-prepare-transitions-define.protos", module);
+            ProtosClosureValue target = closure("target\n", module);
+            ProtosClosureValue custom = closure("(value) => { 100 + value }\n", module);
+            rootOf("callWith\n", module).getBytecodeNode().setUncachedThreshold(0);
+            java.util.function.BiConsumer<String, Long> once = (call, expected) -> {
+                int before = armed[0];
+                assertInteger(expected, evaluate(call, "i115-prepare-transitions.protos", module));
+                assertEquals(before + 1, armed[0], "the argument ran exactly once: " + call);
+            };
+
+            // 1. Closure cached by identity.
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                once.accept("callWith(target, plain)\n", 7L);
+            }
+            // 2. Distinct Closures sharing the definition and target.
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                assertSame(target.definition(), closure("makeOffset(" + i + ")\n", module).definition());
+                once.accept("callWith(makeOffset(" + i + "), plain)\n", 7L + i);
+            }
+            // 3. Megamorphic definitions.
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                once.accept("callWith((value) => { value + " + (100 + i) + " }, plain)\n", 107L + i);
+            }
+            // 4. Task-owned entry.
+            ProtosClosureValue owned = closure("owned\n", module);
+            for (int round = 0; round < 2; round++) {
+                int before = armed[0];
+                ProtosTask task = module.executionDomain().createTask(null, current ->
+                        ProtosBytecodeTaskExecution.executeRequest(
+                                current,
+                                ProtosCallRequest.taskEntry(owned, current, new Object[0], module)));
+                assertTrue(module.executionDomain().dispatchOne());
+                assertEquals(ProtosTask.State.COMPLETED, task.state(),
+                        () -> "failure=" + task.failure());
+                assertInteger(7, task.result().orElseThrow());
+                assertEquals(before + 1, armed[0], "the argument ran exactly once in the Task");
+            }
+            // 5. Ordinary entry without a Task.
+            once.accept("callWith(target, plain)\n", 7L);
+            // 6. Dynamic change of the `call` slot.
+            target.createLocalSlot("call", custom);
+            once.accept("callWith(target, plain)\n", 107L);
+            // 7. Restored canonical selection.
+            target.removeLocalSlot("call");
+            assertFalse(target.hasLocalCallSlotForRuntime());
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                once.accept("callWith(target, plain)\n", 7L);
+            }
+            assertSame(target, closure("target\n", module), "the Closure keeps its identity");
+        });
+    }
+
+    /**
+     * I115: recursive Fibonacci returns the same result before and after a
+     * call site sees distinct Closures sharing one definition and target.
+     */
+    @Test
+    void recursiveFibonacciKeepsItsResultAcrossSameTargetClosureTransitions() throws Exception {
+        withCore(module -> {
+            evaluate("""
+                    fibonacci: (n) => {
+                        result: n
+
+                        (n >= 2).ifTrue() {
+                            result = fibonacci(n - 1) + fibonacci(n - 2)
+                        }
+
+                        result
+                    }
+                    makeFibonacci: () => { (n) => { fibonacci(n) } }
+                    makeOffset: (seed) => { (value) => { value + seed } }
+                    callOne: (f, value) => { f(value) }
+                    """, "i115-prepare-fibonacci.protos", module);
+            rootOf("callOne\n", module).getBytecodeNode().setUncachedThreshold(0);
+            assertInteger(610, evaluate("fibonacci(15)\n", "i115-prepare-fibonacci-before.protos", module));
+            assertInteger(610, evaluate("callOne(fibonacci, 15)\n",
+                    "i115-prepare-fibonacci-before.protos", module));
+            long[] expected = {0, 1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89};
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                assertInteger(expected[i], evaluate("callOne(makeFibonacci(), " + i + ")\n",
+                        "i115-prepare-fibonacci-shared.protos", module));
+                assertInteger(1L + i, evaluate("callOne(makeOffset(" + i + "), 1)\n",
+                        "i115-prepare-fibonacci-offset.protos", module));
+            }
+            assertInteger(610, evaluate("fibonacci(15)\n", "i115-prepare-fibonacci-after.protos", module));
+            assertInteger(610, evaluate("callOne(fibonacci, 15)\n",
+                    "i115-prepare-fibonacci-after.protos", module));
+            assertInteger(610, evaluate("callOne(makeFibonacci(), 15)\n",
+                    "i115-prepare-fibonacci-after.protos", module));
+        });
+    }
+
+    /**
      * A Closure from another Context is entered through the entered
      * Context's own projection; the projected root carries the proof its own
      * lowering established and never borrows the foreign root.
