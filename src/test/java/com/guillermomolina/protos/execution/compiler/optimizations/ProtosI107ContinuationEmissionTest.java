@@ -442,6 +442,99 @@ final class ProtosI107ContinuationEmissionTest {
     }
 
     /**
+     * I115: a composed Call1 consumes its result into a bound stack value and
+     * clears its childResult and resumeValue before the next invocation is
+     * emitted; the continuation protocol is unchanged.
+     */
+    @Test
+    void directUnaryScratchIsClearedBeforeNextInvocation() throws Exception {
+        try (Harness normal = new Harness(false)) {
+            normal.run(() -> {
+                ProtosBytecodeRootNode module =
+                        compile("(f) => {\n f(1)\n f(2)\n 9\n}", "unary-scratch-clear");
+
+                List<String> instructions =
+                        completeSignature(activationRoot(module));
+                List<String> names = instructions.stream()
+                        .map(entry -> entry.split(" ", 2)[0].split("\\$", 2)[0])
+                        .toList();
+
+                assertHasContinuation(instructions);
+                assertTrue(names.contains("yield"), () -> "Yield missing in " + names);
+                assertTrue(names.contains("c.ResumeDispatchedContinuation"),
+                        () -> "ResumeDispatchedContinuation missing in " + names);
+                assertFalse(names.contains("c.InvokeClosureOne"),
+                        () -> "legacy InvokeClosureOne in " + names);
+
+                List<Integer> calls = new ArrayList<>();
+                for (int index = 0; index < names.size(); index++) {
+                    if (names.get(index).equals("c.CallUnaryMethod")) {
+                        calls.add(index);
+                    }
+                }
+                assertEquals(2, calls.size(), () -> "CallUnaryMethod count in " + names);
+
+                long clears = names.subList(calls.get(0), calls.get(1)).stream()
+                        .filter(name -> name.startsWith("clear.local"))
+                        .count();
+                assertTrue(clears >= 2,
+                        () -> "first Call1 scratch not cleared before the second in "
+                                + names);
+
+                assertInteger(
+                        9,
+                        callClosureWith(
+                                normal,
+                                closureOf(normal, module),
+                                "(value) => { value + 1 }"));
+            });
+        }
+    }
+
+    /**
+     * I115: the first Call1 result stays available on the stack while the
+     * second runs, although its childResult is released once bound.
+     */
+    @Test
+    void nestedUnaryResultsRemainAvailableAfterScratchRelease() throws Exception {
+        try (Harness normal = new Harness(false)) {
+            normal.run(() -> {
+                ProtosBytecodeRootNode module = compile(
+                        "(f) => {\n total: f(1) + f(2)\n total\n}",
+                        "unary-nested-release");
+
+                List<String> instructions =
+                        completeSignature(activationRoot(module));
+                List<String> names = instructions.stream()
+                        .map(entry -> entry.split(" ", 2)[0].split("\\$", 2)[0])
+                        .toList();
+
+                assertHasContinuation(instructions);
+                assertEquals(2,
+                        names.stream().filter(name -> name.equals("c.CallUnaryMethod")).count(),
+                        () -> "CallUnaryMethod count in " + names);
+                assertTrue(
+                        names.stream().filter(name -> name.equals("c.ResumeDispatchedContinuation"))
+                                .count() >= 2,
+                        () -> "each Call1 must keep its continuation composition in " + names);
+
+                assertInteger(
+                        5,
+                        callClosureWith(
+                                normal,
+                                closureOf(normal, module),
+                                "(value) => { value + 1 }"));
+
+                List<String> again = completeSignature(activationRoot(module)).stream()
+                        .map(entry -> entry.split(" ", 2)[0].split("\\$", 2)[0])
+                        .toList();
+                assertEquals(names, again,
+                        "ensureComplete must keep the instruction signature");
+            });
+        }
+    }
+
+    /**
      * I112 / PLAT062-T: a terminal Closure invocation emits no Yield in its
      * root, because no guest work follows it, yet it is not a proof of
      * non-suspension: the invoked call may still suspend and the root then

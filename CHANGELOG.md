@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.169-SNAPSHOT
+
+- **I115.** Release lowering-created invocation temporaries (call outcome, resume value, staged callable, receiver, arguments, argument vector, conditional receiver and callback value) with `clear.local` once each invocation and its continuation composition complete, binding consumed results as stack values. Disable materialized local accesses in the Bytecode DSL configuration and refresh the generated-bytecode BCI partial-evaluation baseline. Add scratch-release continuation regressions and a suspending conditional-branch case to the saturated unary PIC Task test.
+
 ## 0.4.168-SNAPSHOT
 
 - **I115.** Profile published-Activation, Closure-header, caller-Activation and suspension presence with InlinedConditionProfiles in cached and shared call dispatch and invocation Task preparation. Update deferred-caller regressions for the new profile parameters. Remove the factorial/Fibonacci graph-budget Makefile target.

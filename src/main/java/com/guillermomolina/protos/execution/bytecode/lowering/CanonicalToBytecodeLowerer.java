@@ -3602,6 +3602,7 @@ final class CanonicalToBytecodeLowerer {
         emitDispatchedCall(
                 builder, callable, operands, null, childResult,
                 selectedResult, resumeValue, primitiveCarrierResult);
+        builder.emitClearLocal(callable);
         builder.endBlock();
         builder.endTag(StandardTags.CallTag.class);
 
@@ -3754,6 +3755,7 @@ final class CanonicalToBytecodeLowerer {
         emitDispatchedContinuationComposition(
                 builder, childResult, resumeValue);
 
+        builder.beginBindStackValue();
         if (primitiveCarrierResult) {
             builder.emitLoadLocal(childResult);
         } else {
@@ -3762,6 +3764,12 @@ final class CanonicalToBytecodeLowerer {
             builder.emitLoadConstant(true);
             builder.endMaterializePrimitiveNumericCarrier();
         }
+        StackValue completedValue = builder.endBindStackValue();
+
+        builder.emitClearLocal(childResult);
+        builder.emitClearLocal(resumeValue);
+
+        builder.emitLoadStackValue(completedValue);
 
         builder.endBlock();
     }
@@ -6293,6 +6301,17 @@ final class CanonicalToBytecodeLowerer {
                     primitiveCarrierResult);
         }
 
+        for (BytecodeLocal argumentValue : argumentValues) {
+            builder.emitClearLocal(argumentValue);
+        }
+        if (suppliedVector != null) {
+            builder.emitClearLocal(suppliedVector);
+        }
+        if (receiverValue != null) {
+            builder.emitClearLocal(receiverValue);
+        }
+        builder.emitClearLocal(callable);
+
         builder.endBlock();
         builder.endTag(StandardTags.CallTag.class);
     }
@@ -7108,6 +7127,7 @@ final class CanonicalToBytecodeLowerer {
                     valueUsed ? result : null,
                     scratch, childResult, resumeValue, stager, primitiveCarrierResult);
             builder.endIfThenElse();
+            builder.emitClearLocal(conditionalReceiver);
         }
 
         builder.endBlock();
@@ -7303,6 +7323,7 @@ final class CanonicalToBytecodeLowerer {
         builder.beginBlock();
         BytecodeLocal method = builder.createLocal("conditionalMethod", null);
         java.util.List<BytecodeLocal> argumentValues = new java.util.ArrayList<>(arguments.size());
+        java.util.List<BytecodeLocal> createdArguments = new java.util.ArrayList<>(arguments.size());
         for (int index = 0; index < arguments.size(); index++) {
             CanonicalExpression argument = arguments.get(index);
             BytecodeLocal known = evaluated == null ? null : evaluated.get(index);
@@ -7311,6 +7332,7 @@ final class CanonicalToBytecodeLowerer {
                 continue;
             }
             BytecodeLocal value = builder.createLocal("conditionalArgument", null);
+            createdArguments.add(value);
             if (argument instanceof CanonicalClosure closure
                     && transportsSelectedCallbackCells(arguments)) {
                 /*
@@ -7339,6 +7361,10 @@ final class CanonicalToBytecodeLowerer {
         emitGetMethod(builder, selector, receiver, method);
         emitDispatchedCall(builder, method, argumentValues, null,
                 childResult, result, resumeValue, primitiveCarrierResult);
+        for (BytecodeLocal argument : createdArguments) {
+            builder.emitClearLocal(argument);
+        }
+        builder.emitClearLocal(method);
         builder.endBlock();
     }
 
@@ -7523,7 +7549,12 @@ final class CanonicalToBytecodeLowerer {
         builder.beginBlock();
         emitDispatchedCall(builder, staging.staged().get(position), java.util.List.of(), null,
                 staging.childResult(), value, staging.resumeValue(), primitiveCarrierResult);
+        builder.beginBindStackValue();
         builder.emitLoadLocal(value);
+        StackValue completedCallback = builder.endBindStackValue();
+
+        builder.emitClearLocal(value);
+        builder.emitLoadStackValue(completedCallback);
         builder.endBlock();
     }
 
@@ -7873,20 +7904,21 @@ final class CanonicalToBytecodeLowerer {
         emitDispatchedContinuationComposition(
                 builder, outcome, resumeValue);
 
-        if (result == null) {
-            return;
+        if (result != null) {
+            builder.beginStoreLocal(result);
+            if (primitiveCarrierResult) {
+                builder.emitLoadLocal(outcome);
+            } else {
+                builder.beginMaterializePrimitiveNumericCarrier();
+                builder.emitLoadLocal(outcome);
+                builder.emitLoadConstant(true);
+                builder.endMaterializePrimitiveNumericCarrier();
+            }
+            builder.endStoreLocal();
         }
 
-        builder.beginStoreLocal(result);
-        if (primitiveCarrierResult) {
-            builder.emitLoadLocal(outcome);
-        } else {
-            builder.beginMaterializePrimitiveNumericCarrier();
-            builder.emitLoadLocal(outcome);
-            builder.emitLoadConstant(true);
-            builder.endMaterializePrimitiveNumericCarrier();
-        }
-        builder.endStoreLocal();
+        builder.emitClearLocal(outcome);
+        builder.emitClearLocal(resumeValue);
     }
 
     /**
@@ -7910,20 +7942,22 @@ final class CanonicalToBytecodeLowerer {
 
         emitDispatchedContinuationComposition(builder, outcome, resumeValue);
 
-        if (result == null) {
-            // a discarded invocation result is not copied anywhere.
-            return;
+        // a discarded invocation result is not copied anywhere.
+        if (result != null) {
+            builder.beginStoreLocal(result);
+            if (primitiveCarrierResult) {
+                builder.emitLoadLocal(outcome);
+            } else {
+                builder.beginMaterializePrimitiveNumericCarrier();
+                builder.emitLoadLocal(outcome);
+                builder.emitLoadConstant(true);
+                builder.endMaterializePrimitiveNumericCarrier();
+            }
+            builder.endStoreLocal();
         }
-        builder.beginStoreLocal(result);
-        if (primitiveCarrierResult) {
-            builder.emitLoadLocal(outcome);
-        } else {
-            builder.beginMaterializePrimitiveNumericCarrier();
-            builder.emitLoadLocal(outcome);
-            builder.emitLoadConstant(true);
-            builder.endMaterializePrimitiveNumericCarrier();
-        }
-        builder.endStoreLocal();
+
+        builder.emitClearLocal(outcome);
+        builder.emitClearLocal(resumeValue);
     }
 
     /** The arity-selected {@code Call*Method} operation over staged locals. */
@@ -7993,6 +8027,7 @@ final class CanonicalToBytecodeLowerer {
         emitGetMethod(builder, selector, receiver, callable);
         emitDispatchedCall(
                 builder, callable, argumentValues, null, childResult, result, resumeValue, false);
+        builder.emitClearLocal(callable);
     }
 
     /**
@@ -8020,6 +8055,8 @@ final class CanonicalToBytecodeLowerer {
         builder.emitLoadConstant(true);
         builder.endMaterializePrimitiveNumericCarrier();
         builder.endStoreLocal();
+        builder.emitClearLocal(childResult);
+        builder.emitClearLocal(resumeValue);
         builder.endBlock();
         builder.endTag(StandardTags.CallTag.class);
     }

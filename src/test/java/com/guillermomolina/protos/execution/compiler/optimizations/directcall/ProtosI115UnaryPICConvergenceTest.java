@@ -1162,6 +1162,13 @@ final class ProtosI115UnaryPICConvergenceTest {
                     outer: () => {
                         callOne(makeIdentity(), 1) + callOne(makeObserving(), 2) + callOne(waiting, 3)
                     }
+                    branchingOuter: (condition) => {
+                        result: 100
+                        condition.ifTrue() {
+                            result = callOne(makeIdentity(), 1) + callOne(makeObserving(), 2) + callOne(waiting, 3)
+                        }
+                        result
+                    }
                     """, "i115-task-pic-define.protos", module);
             ProtosBytecodeRootNode waitingRoot = rootOf("waiting\n", module);
             assertFalse(waitingRoot.provablyNonSuspendingBody());
@@ -1186,6 +1193,35 @@ final class ProtosI115UnaryPICConvergenceTest {
                 assertEquals(2, observed.size(), "round " + round);
                 for (ProtosTask seen : observed) {
                     assertSame(task, seen, "every observer sees the exact running Task");
+                }
+            }
+
+            // A suspension inside a dynamic conditional branch summing three calls.
+            observed.clear();
+            assertInteger(100, evaluate("branchingOuter(false)\n",
+                    "i115-task-pic-branching-false.protos", module));
+            assertTrue(observed.isEmpty(), "the unselected branch never reaches waiting");
+            ProtosClosureValue branchingOuter = closure("branchingOuter\n", module);
+            for (int round = 0; round < PAST_CACHE_LIMITS; round++) {
+                ProtosFutureValue wait =
+                        new ProtosFutureValue(prelude.futurePrototype(), module.executionDomain());
+                currentWait.set(wait);
+                observed.clear();
+                ProtosTask task = module.executionDomain().createTask(null, current ->
+                        ProtosBytecodeTaskExecution.executeRequest(
+                                current,
+                                ProtosCallRequest.taskEntry(
+                                        branchingOuter, current, new Object[] {Boolean.TRUE}, module)));
+                assertTrue(module.executionDomain().dispatchOne());
+                assertEquals(ProtosTask.State.SUSPENDED, task.state(), "branching round " + round);
+                assertTrue(wait.resolve(ProtosNullValue.INSTANCE, module));
+                assertTrue(module.executionDomain().dispatchOne());
+                assertEquals(ProtosTask.State.COMPLETED, task.state(),
+                        () -> "branching failure=" + task.failure());
+                assertInteger(6, task.result().orElseThrow());
+                assertEquals(2, observed.size(), "branching round " + round);
+                for (ProtosTask seen : observed) {
+                    assertSame(task, seen, "every branching observer sees the exact running Task");
                 }
             }
         });

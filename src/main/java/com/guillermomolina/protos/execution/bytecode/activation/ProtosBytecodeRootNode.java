@@ -151,7 +151,6 @@ import com.oracle.truffle.api.source.Source;
         languageClass = ProtosLanguage.class,
         enableYield = true,
         enableTagInstrumentation = true,
-        enableMaterializedLocalAccesses = true,
         enableBlockScoping = false,
         enableSerialization = true,
         storeBytecodeIndexInFrame = true,
