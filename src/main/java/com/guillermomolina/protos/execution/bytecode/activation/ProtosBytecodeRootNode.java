@@ -2427,7 +2427,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 long value,
                 @Bind VirtualFrame frame,
                 @Shared("selection") @Cached StandardIndexedSelectionNode selection) {
-            array.indexedLongPutNormalized(
+            array.indexedLongStoragePutNormalized(
                     writableArrayIndex(array, index, frame), value);
             return value;
         }
@@ -2440,7 +2440,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 double value,
                 @Bind VirtualFrame frame,
                 @Shared("selection") @Cached StandardIndexedSelectionNode selection) {
-            array.indexedDoublePutNormalized(
+            array.indexedDoubleStoragePutNormalized(
                     writableArrayIndex(array, index, frame), value);
             return value;
         }
@@ -2453,7 +2453,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 boolean value,
                 @Bind VirtualFrame frame,
                 @Shared("selection") @Cached StandardIndexedSelectionNode selection) {
-            array.indexedBooleanPutNormalized(
+            array.indexedBooleanStoragePutNormalized(
                     writableArrayIndex(array, index, frame), value);
             return value;
         }

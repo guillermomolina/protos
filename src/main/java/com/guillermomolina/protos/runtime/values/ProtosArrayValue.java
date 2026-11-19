@@ -46,6 +46,7 @@ public final class ProtosArrayValue extends ProtosObjectValue {
          * (signed-64 Integer, Float as Double, canonical Boolean); any other
          * value promotes the generation to Object[] storage.
          */
+        private final int length;
         private Object[] elements;
         private long[] longElements;
         private double[] doubleElements;
@@ -56,6 +57,7 @@ public final class ProtosArrayValue extends ProtosObjectValue {
 
         private IndexedGeneration(Object[] values) {
             Objects.requireNonNull(values, "values");
+            length = values.length;
 
             if (values.length == 0) {
                 elements = values;
@@ -93,27 +95,21 @@ public final class ProtosArrayValue extends ProtosObjectValue {
 
         private IndexedGeneration(long[] values) {
             longElements = Objects.requireNonNull(values, "values");
+            length = values.length;
         }
 
         private IndexedGeneration(double[] values) {
             doubleElements = Objects.requireNonNull(values, "values");
+            length = values.length;
         }
 
         private IndexedGeneration(boolean[] values) {
             booleanElements = Objects.requireNonNull(values, "values");
+            length = values.length;
         }
 
         private int size() {
-            if (longElements != null) {
-                return longElements.length;
-            }
-            if (doubleElements != null) {
-                return doubleElements.length;
-            }
-            if (booleanElements != null) {
-                return booleanElements.length;
-            }
-            return elements.length;
+            return length;
         }
 
         private Object get(int index) {
@@ -419,6 +415,26 @@ public final class ProtosArrayValue extends ProtosObjectValue {
 
     public boolean indexedBooleanPutNormalized(int index, boolean value) {
         writableIndexedGeneration().putBoolean(index, value);
+        return value;
+    }
+
+    /*
+     * Requires the corresponding primitive storage as well as the normalized
+     * index and writable-state checks above. Detachment preserves that storage
+     * family, so the admitted write needs no further representation dispatch.
+     */
+    public long indexedLongStoragePutNormalized(int index, long value) {
+        writableIndexedGeneration().longElements[index] = value;
+        return value;
+    }
+
+    public double indexedDoubleStoragePutNormalized(int index, double value) {
+        writableIndexedGeneration().doubleElements[index] = value;
+        return value;
+    }
+
+    public boolean indexedBooleanStoragePutNormalized(int index, boolean value) {
+        writableIndexedGeneration().booleanElements[index] = value;
         return value;
     }
 

@@ -21,11 +21,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosArrayValue;
+import com.guillermomolina.protos.runtime.ProtosIndexedSnapshot;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
@@ -368,6 +371,108 @@ final class ProtosArrayEachNativeIterationTest {
                 })
                 (seen.value == 123) && (a[0] == 9) && (a[1] == 2)
                 """));
+    }
+
+    @Test
+    void specializedPrimitiveWritesDetachAndKeepPublishedSnapshotIdentity() {
+        ProtosObjectValue parent = ProtosObjectValue.rootObject();
+        ProtosArrayValue longs = new ProtosArrayValue(
+                parent, new long[] {1L, 2L, 3L});
+        ProtosIndexedSnapshot longsBefore = longs.indexedGenerationSnapshot();
+        List<Object> longsList = longs.indexedSnapshot();
+        ProtosBytecodeRootNode.ArrayEachSnapshot longsEach =
+                ProtosBytecodeRootNode.GetArrayEachSnapshot.snapshot(longs);
+        assertSame(longsBefore, longs.indexedGenerationSnapshot());
+        assertEquals(10L, longs.indexedLongStoragePutNormalized(0, 10L));
+        longs.indexedLongStoragePutNormalized(1, 20L);
+        longs.indexedLongStoragePutNormalized(2, 30L);
+        assertTrue(longs.hasLongStorageForRuntime());
+        assertEquals(3, longs.indexedSize());
+        assertEquals(3, longsBefore.length());
+        assertEquals(List.of(10L, 20L, 30L), longs.indexedSnapshot());
+        assertEquals(List.of(1L, 2L, 3L), longsList);
+        for (int index = 0; index < longsBefore.length(); index++) {
+            assertTrue(longsEach.hasNext());
+            assertEquals(longsList.get(index), longsBefore.at(index));
+            assertEquals(longsBefore.at(index), longsEach.advance());
+        }
+        assertFalse(longsEach.hasNext());
+        ProtosIndexedSnapshot longsAfter = longs.indexedGenerationSnapshot();
+        assertNotSame(longsBefore, longsAfter);
+        assertSame(longsAfter, longs.indexedGenerationSnapshot());
+        ProtosArrayValue doubles = new ProtosArrayValue(
+                parent, new double[] {1.5d, 2.5d, 3.5d});
+        ProtosIndexedSnapshot doublesBefore = doubles.indexedGenerationSnapshot();
+        List<Object> doublesList = doubles.indexedSnapshot();
+        ProtosBytecodeRootNode.ArrayEachSnapshot doublesEach =
+                ProtosBytecodeRootNode.GetArrayEachSnapshot.snapshot(doubles);
+        assertSame(doublesBefore, doubles.indexedGenerationSnapshot());
+        assertEquals(10.5d, doubles.indexedDoubleStoragePutNormalized(0, 10.5d));
+        doubles.indexedDoubleStoragePutNormalized(1, 20.5d);
+        doubles.indexedDoubleStoragePutNormalized(2, 30.5d);
+        assertTrue(doubles.hasDoubleStorageForRuntime());
+        assertEquals(3, doubles.indexedSize());
+        assertEquals(3, doublesBefore.length());
+        assertEquals(List.of(10.5d, 20.5d, 30.5d), doubles.indexedSnapshot());
+        assertEquals(List.of(1.5d, 2.5d, 3.5d), doublesList);
+        for (int index = 0; index < doublesBefore.length(); index++) {
+            assertTrue(doublesEach.hasNext());
+            assertEquals(doublesList.get(index), doublesBefore.at(index));
+            assertEquals(doublesBefore.at(index), doublesEach.advance());
+        }
+        assertFalse(doublesEach.hasNext());
+        ProtosIndexedSnapshot doublesAfter = doubles.indexedGenerationSnapshot();
+        assertNotSame(doublesBefore, doublesAfter);
+        assertSame(doublesAfter, doubles.indexedGenerationSnapshot());
+        ProtosArrayValue flags = new ProtosArrayValue(
+                parent, new boolean[] {true, false, true});
+        ProtosIndexedSnapshot flagsBefore = flags.indexedGenerationSnapshot();
+        List<Object> flagsList = flags.indexedSnapshot();
+        ProtosBytecodeRootNode.ArrayEachSnapshot flagsEach =
+                ProtosBytecodeRootNode.GetArrayEachSnapshot.snapshot(flags);
+        assertSame(flagsBefore, flags.indexedGenerationSnapshot());
+        assertEquals(false, flags.indexedBooleanStoragePutNormalized(0, false));
+        flags.indexedBooleanStoragePutNormalized(1, true);
+        flags.indexedBooleanStoragePutNormalized(2, false);
+        assertTrue(flags.hasBooleanStorageForRuntime());
+        assertEquals(3, flags.indexedSize());
+        assertEquals(3, flagsBefore.length());
+        assertEquals(List.of(false, true, false), flags.indexedSnapshot());
+        assertEquals(List.of(true, false, true), flagsList);
+        for (int index = 0; index < flagsBefore.length(); index++) {
+            assertTrue(flagsEach.hasNext());
+            assertEquals(flagsList.get(index), flagsBefore.at(index));
+            assertEquals(flagsBefore.at(index), flagsEach.advance());
+        }
+        assertFalse(flagsEach.hasNext());
+        ProtosIndexedSnapshot flagsAfter = flags.indexedGenerationSnapshot();
+        assertNotSame(flagsBefore, flagsAfter);
+        assertSame(flagsAfter, flags.indexedGenerationSnapshot());
+    }
+
+    @Test
+    void promotionAfterPrimitivePublicationKeepsBothSnapshotViews() {
+        ProtosObjectValue parent = ProtosObjectValue.rootObject();
+        ProtosArrayValue array = new ProtosArrayValue(parent, new long[] {1L, 2L});
+        ProtosIndexedSnapshot before = array.indexedGenerationSnapshot();
+        List<Object> beforeList = array.indexedSnapshot();
+        ProtosBytecodeRootNode.ArrayEachSnapshot each =
+                ProtosBytecodeRootNode.GetArrayEachSnapshot.snapshot(array);
+        Object replacement = new ProtosObjectValue(parent);
+        assertSame(replacement, array.indexedPutNormalized(0, replacement));
+        array.indexedLongPutNormalized(1, 20L);
+        assertFalse(array.hasLongStorageForRuntime());
+        assertEquals(2, array.indexedSize());
+        assertEquals(2, before.length());
+        assertEquals(List.of(1L, 2L), beforeList);
+        assertEquals(1L, before.at(0));
+        assertEquals(2L, before.at(1));
+        assertEquals(1L, each.advance());
+        assertEquals(2L, each.advance());
+        assertFalse(each.hasNext());
+        assertSame(replacement, array.indexedAt(0));
+        assertEquals(20L, array.indexedAt(1));
+        assertNotSame(before, array.indexedGenerationSnapshot());
     }
 
     private static boolean evalBooleanInProtos(String source) {

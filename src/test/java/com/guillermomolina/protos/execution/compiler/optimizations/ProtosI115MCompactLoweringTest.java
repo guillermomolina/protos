@@ -558,6 +558,49 @@ final class ProtosI115MCompactLoweringTest {
         }
     }
 
+    @Test
+    void longIndexedLoopKeepsInternalOperationsAndDynamicSelections() throws Exception {
+        try (ProtosStandaloneHostedSession session = openSession(
+                "long-indexed-loop", """
+                values: [1, 2, 3]
+                run: () => {
+                    i: 0
+                    (() => i < values.size()).whileTrue() {
+                        values[i] = values[i] + 1
+                        i = i + 1
+                    }
+                    values[0] * 10 + i
+                }
+                redefine: () => {
+                    values.atPut: (index, value) => { 77 }
+                    values.size: () => 1
+                    0
+                }
+                """)) {
+            ProtosStandaloneHostedSession.PreparedTopLevel prepared =
+                    session.prepareTopLevel("run");
+            ProtosBytecodeRootNode root = selectedRoot(prepared);
+            root.getRootNodes().ensureSourceInformation();
+            List<String> names = root.getBytecodeNode().getInstructionsAsList()
+                    .stream().map(ProtosInstructionNames::of).toList();
+            for (String required : List.of("c.GetLen", "c.BinarySubscript",
+                    "c.SetItem", "c.NumberAdd", "c.NumberMultiply", "c.RichCompareLt")) {
+                assertTrue(names.stream().anyMatch(name -> name.startsWith(required)),
+                        required + ": " + names);
+            }
+            for (String forbidden : List.of("c.CallBinaryMethod", "c.CallUnaryMethod",
+                    "c.GetMethod", "c.PrepareSendOne", "c.EnterNestedStructuredDispatch")) {
+                assertTrue(names.stream().noneMatch(name -> name.startsWith(forbidden)),
+                        forbidden + ": " + names);
+            }
+            assertEquals(23L, prepared.executable().execute().asLong());
+            assertEquals(33L, prepared.executable().execute().asLong());
+            session.prepareTopLevel("redefine").executable().execute();
+            assertEquals(31L, prepared.executable().execute().asLong(),
+                    "atPut preserves the element and the redefined size limits the loop");
+        }
+    }
+
     /* Every numeric guest literal is a Long; metadata is separate. */
     private static void assertLongConstants(
             String name, ProtosBytecodeRootNode root, int minimum) {

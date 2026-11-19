@@ -230,6 +230,121 @@ class ProtosStandardArrayFactoryTest {
         assertEquals("kept", string(array.indexedAt(0)));
     }
 
+    @Test
+    void factoryLengthsAndValuesAreIndependentOfStorage() throws IOException {
+        ProtosArrayValue arrays = (ProtosArrayValue) ProtosTestExecutionSupport.evaluate(
+                """
+                make: () => Array(1, 2)
+                Array(Array(), Array(1, 2), Array(1.5, 2.5), Array(true, false),
+                      Array(1, true, null), make(), make())
+                """, corePrelude().newModuleActivation());
+        List<List<Object>> expected = List.of(
+                List.of(), List.of(1L, 2L), List.of(1.5d, 2.5d),
+                List.of(true, false), List.of(1L, true, ProtosNullValue.INSTANCE),
+                List.of(1L, 2L), List.of(1L, 2L));
+        for (int position = 0; position < expected.size(); position++) {
+            ProtosArrayValue array = (ProtosArrayValue) arrays.indexedAt(position);
+            assertEquals(expected.get(position).size(), array.indexedSize());
+            assertEquals(expected.get(position), array.indexedSnapshot());
+        }
+        ProtosArrayValue first = (ProtosArrayValue) arrays.indexedAt(5);
+        ProtosArrayValue second = (ProtosArrayValue) arrays.indexedAt(6);
+        assertNotSame(first, second);
+        List<Object> published = first.indexedSnapshot();
+        first.indexedLongStoragePutNormalized(0, 9L);
+        assertEquals(2, first.indexedSize());
+        assertEquals(List.of(1L, 2L), published);
+        assertEquals(List.of(9L, 2L), first.indexedSnapshot());
+        assertEquals(List.of(1L, 2L), second.indexedSnapshot());
+        first.indexedPutNormalized(1, Boolean.TRUE);
+        assertFalse(first.hasLongStorageForRuntime());
+        assertEquals(2, first.indexedSize());
+        assertEquals(List.of(9L, true), first.indexedSnapshot());
+    }
+
+    @Test
+    void indexedGuestWritesPreservePrimitiveFamiliesAndGeneralizeWhenNeeded()
+            throws IOException {
+        ProtosArrayValue arrays = (ProtosArrayValue) ProtosTestExecutionSupport.evaluate(
+                """
+                longs: Array(1, 2)
+                doubles: Array(1.5, 2.5)
+                flags: Array(true, false)
+                writeLong: (value) => { longs[0] = value }
+                writeDouble: (value) => { doubles[0] = value }
+                writeBoolean: (value) => { flags[0] = value }
+                results: Array(writeLong(9), writeDouble(9.5), writeBoolean(false))
+                widened: Array(3, 4)
+                widened[1] = true
+                Array(longs, doubles, flags, widened, results)
+                """, corePrelude().newModuleActivation());
+        ProtosArrayValue longs = (ProtosArrayValue) arrays.indexedAt(0);
+        ProtosArrayValue doubles = (ProtosArrayValue) arrays.indexedAt(1);
+        ProtosArrayValue flags = (ProtosArrayValue) arrays.indexedAt(2);
+        ProtosArrayValue widened = (ProtosArrayValue) arrays.indexedAt(3);
+        assertTrue(longs.hasLongStorageForRuntime());
+        assertTrue(doubles.hasDoubleStorageForRuntime());
+        assertTrue(flags.hasBooleanStorageForRuntime());
+        assertFalse(widened.hasLongStorageForRuntime());
+        assertEquals(List.of(9L, 2L), longs.indexedSnapshot());
+        assertEquals(List.of(9.5d, 2.5d), doubles.indexedSnapshot());
+        assertEquals(List.of(false, false), flags.indexedSnapshot());
+        assertEquals(List.of(3L, true), widened.indexedSnapshot());
+        assertEquals(List.of(9L, 9.5d, false),
+                ((ProtosArrayValue) arrays.indexedAt(4)).indexedSnapshot());
+        for (Object value : arrays.indexedSnapshot().subList(0, 4)) {
+            assertEquals(2, ((ProtosArrayValue) value).indexedSize());
+        }
+    }
+
+    @Test
+    void primitiveGuestWritesSignalGenericErrorsWithoutChangingElements()
+            throws IOException {
+        ProtosPrelude prelude = corePrelude();
+        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosArrayValue array = prelude.newArray(List.of(1L, 2L));
+        activation.context().createLocalSlot("values", array);
+        Object errorPrototype = prelude.bindings().readLocalSlot("Error").orElseThrow();
+        for (String source : List.of("values[-1] = 9", "values[2] = 9")) {
+            ProtosSignalException failure = assertThrows(ProtosSignalException.class,
+                    () -> ProtosTestExecutionSupport.evaluate(source, activation));
+            assertSame(errorPrototype, failure.error().parent().orElseThrow());
+        }
+        array.freeze();
+        for (String source : List.of("values[0] = 9", "values[-1] = 9")) {
+            ProtosSignalException failure = assertThrows(ProtosSignalException.class,
+                    () -> ProtosTestExecutionSupport.evaluate(source, activation));
+            assertSame(errorPrototype, failure.error().parent().orElseThrow());
+        }
+        assertTrue(array.hasLongStorageForRuntime());
+        assertEquals(2, array.indexedSize());
+        assertEquals(List.of(1L, 2L), array.indexedSnapshot());
+    }
+
+    @Test
+    void hotIndexedOperationsObserveAtPutAndSizeRedefinitions() throws IOException {
+        ProtosArrayValue results = (ProtosArrayValue) ProtosTestExecutionSupport.evaluate(
+                """
+                values: Array(1, 2)
+                write: (value) => { values[0] = value }
+                length: () => values.size()
+                write(3)
+                before: length()
+                values.atPut: (index, value) => { 41 }
+                values.size: () => 99
+                assigned: write(7)
+                selected: values.atPut(0, 8)
+                Array(values, before, length(), assigned, selected)
+                """, corePrelude().newModuleActivation());
+        ProtosArrayValue values = (ProtosArrayValue) results.indexedAt(0);
+        assertEquals(List.of(3L, 2L), values.indexedSnapshot());
+        assertEquals(2, values.indexedSize());
+        assertEquals(2L, results.indexedAt(1));
+        assertEquals(99L, results.indexedAt(2));
+        assertEquals(7L, results.indexedAt(3));
+        assertEquals(41L, results.indexedAt(4));
+    }
+
     private static Object index(long value) {
         return Long.valueOf(value);
     }

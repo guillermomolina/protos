@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.184-SNAPSHOT
+
+- **I115.** Store Array generation length independently of its physical backing and write directly to admitted primitive storage after copy-on-write detachment. Preserve generic storage generalization, indexed protocol selection and published snapshots. Extend Array factory, primitive indexed-write, snapshot and bytecode-lowering regressions.
+
 ## 0.4.183-SNAPSHOT
 
 - **I115.** Resolve eligible dynamic lexical reads and write targets directly from compact invocation state using the existing selector and physical frame layout. Preserve live binding membership, receiver lookup, later Context publication and write destinations selected before the right-hand side. Prepare lexical frame authority before value-consuming bytecode operations and extend compact invocation, lexical selection, lowering and Array factory regressions.
