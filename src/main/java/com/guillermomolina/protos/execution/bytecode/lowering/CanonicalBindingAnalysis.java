@@ -126,12 +126,12 @@ final class CanonicalBindingAnalysis {
         this.assignSites = copyOfIdentity(assignSites);
     }
 
-    /* I115-S1c-L: the scope of each bare read site (rematerialization validation only). */
+    /* I115-S1c-L: the scope of each bare read site (rematerialization). */
     Map<CanonicalLookup, CanonicalLexicalScope> lookupSiteScopes() {
         return lookupSites;
     }
 
-    /* I115-S1c-L: the scope of each bare assignment site (rematerialization validation only). */
+    /* I115-S1c-L: the scope of each bare assignment site (rematerialization). */
     Map<CanonicalAssign, CanonicalLexicalScope> assignSiteScopes() {
         return assignSites;
     }

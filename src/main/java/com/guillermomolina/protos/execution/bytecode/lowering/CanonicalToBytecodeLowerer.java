@@ -5367,7 +5367,10 @@ final class CanonicalToBytecodeLowerer {
                     currentRootAnalysis.resolutionOf(assign).orElse(null);
             if (isStaticModuleBinding(resolution, identity)) {
                 BytecodeLocal destination = emitSelectModuleWriteTarget(
-                        builder, identity, physicalModuleDepth(resolution));
+                        builder, identity,
+                        physicalModuleDepth(
+                                resolution,
+                                currentRootAnalysis.assignSiteScopes().get(assign)));
                 emitBodyExpressionToLocal(
                         builder, assign.value(), value, preparedCall, childResult, resumeValue);
                 emitModuleAssign(builder, destination, value, result);
@@ -6018,7 +6021,10 @@ final class CanonicalToBytecodeLowerer {
                     currentRootAnalysis.resolutionOf(assign).orElse(null);
             if (isStaticModuleBinding(resolution, identity)) {
                 BytecodeLocal destination = emitSelectModuleWriteTarget(
-                        builder, identity, physicalModuleDepth(resolution));
+                        builder, identity,
+                        physicalModuleDepth(
+                                resolution,
+                                currentRootAnalysis.assignSiteScopes().get(assign)));
                 emitDefaultExpressionToLocal(
                         builder, assign.value(), value, preparedCall, childResult, resumeValue);
                 emitModuleAssign(builder, destination, value, result);
@@ -8962,7 +8968,9 @@ final class CanonicalToBytecodeLowerer {
                     builder.emitReadGlobal(
                             TruffleString.fromJavaStringUncached(
                                     identity.name(), TruffleString.Encoding.UTF_16),
-                            physicalModuleDepth(resolution),
+                            physicalModuleDepth(
+                                    resolution,
+                                    currentRootAnalysis.lookupSiteScopes().get(lookup)),
                             resolution instanceof CanonicalBindingResolution.Candidate);
                     return;
                 }
@@ -9013,8 +9021,18 @@ final class CanonicalToBytecodeLowerer {
      * outward chain is a genuine activation, so that depth is the number of
      * outward hops from the root's scope to the owner; inline regions
      * between the site and the root add lexical depth but no physical hop.
+     *
+     * <p>A rematerialized (reparsed) Closure analysis restores an owner
+     * outside its own tree as a detached portable layout, which is on no
+     * outward chain. The hops inside the tree are then counted from the
+     * running root to the tree's outermost scope, and the hops beyond it are
+     * the original lexical distance from that outermost scope to the owner:
+     * every scope there was on the original Closure root's outward chain,
+     * hence a genuine activation.
      */
-    private int physicalModuleDepth(CanonicalBindingResolution resolution) {
+    private int physicalModuleDepth(
+            CanonicalBindingResolution resolution,
+            CanonicalLexicalScope siteScope) {
         CanonicalBindingIdentity identity = staticIdentityOrNull(resolution);
         if (identity == null) {
             throw new AssertionError("module binding without a static identity");
@@ -9025,6 +9043,21 @@ final class CanonicalToBytecodeLowerer {
                 current = current.outwardScope(), depth++) {
             if (current == identity.owner()) {
                 return depth;
+            }
+        }
+        if (identity.owner().outwardScope() == null
+                && resolution instanceof CanonicalBindingResolution.CapturedResolved captured
+                && siteScope != null) {
+            int siteHopsToOutermost = 0;
+            for (CanonicalLexicalScope current = siteScope;
+                    current.outwardScope() != null;
+                    current = current.outwardScope()) {
+                siteHopsToOutermost++;
+            }
+            int beyondTree = captured.lexicalDepth() - siteHopsToOutermost;
+            if (beyondTree >= 1) {
+                // depth - 1 = physical hops from the running root to the outermost scope.
+                return depth - 1 + beyondTree;
             }
         }
         throw new AssertionError("module binding outside the running root's chain");
