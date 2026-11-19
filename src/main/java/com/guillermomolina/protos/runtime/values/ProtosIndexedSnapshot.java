@@ -23,8 +23,8 @@ import java.util.Objects;
  * operations without a Java collection interface.
  *
  * <p>The storage is a plain array whose observable prefix has a known length:
- * either one {@code Object} per position, the specialized {@code long[]} of a
- * primitive Array generation, or interleaved key/value pairs for association
+ * either one {@code Object} per position, the specialized {@code long[]},
+ * {@code double[]} or {@code boolean[]} of a primitive Array generation, or interleaved key/value pairs for association
  * snapshots. The publisher guarantees the shared range is never written
  * again, so a snapshot is independent of later mutation of its source and
  * reading a position never copies.
@@ -32,19 +32,28 @@ import java.util.Objects;
 public final class ProtosIndexedSnapshot {
     private static final Object[] NO_OBJECTS = new Object[0];
     private static final ProtosIndexedSnapshot EMPTY_ELEMENTS =
-            new ProtosIndexedSnapshot(NO_OBJECTS, null, 0, false);
+            new ProtosIndexedSnapshot(NO_OBJECTS, null, null, null, 0, false);
     private static final ProtosIndexedSnapshot EMPTY_ASSOCIATIONS =
-            new ProtosIndexedSnapshot(NO_OBJECTS, null, 0, true);
+            new ProtosIndexedSnapshot(NO_OBJECTS, null, null, null, 0, true);
 
     private final Object[] objects;
     private final long[] longs;
+    private final double[] doubles;
+    private final boolean[] booleans;
     private final int length;
     private final boolean associations;
 
     private ProtosIndexedSnapshot(
-            Object[] objects, long[] longs, int length, boolean associations) {
+            Object[] objects,
+            long[] longs,
+            double[] doubles,
+            boolean[] booleans,
+            int length,
+            boolean associations) {
         this.objects = objects;
         this.longs = longs;
+        this.doubles = doubles;
+        this.booleans = booleans;
         this.length = length;
         this.associations = associations;
     }
@@ -57,7 +66,7 @@ public final class ProtosIndexedSnapshot {
         }
         return length == 0
                 ? EMPTY_ELEMENTS
-                : new ProtosIndexedSnapshot(values, null, length, false);
+                : new ProtosIndexedSnapshot(values, null, null, null, length, false);
     }
 
     /** An element snapshot adopting a primitive generation never written again. */
@@ -65,7 +74,23 @@ public final class ProtosIndexedSnapshot {
         Objects.requireNonNull(values, "values");
         return values.length == 0
                 ? EMPTY_ELEMENTS
-                : new ProtosIndexedSnapshot(null, values, values.length, false);
+                : new ProtosIndexedSnapshot(null, values, null, null, values.length, false);
+    }
+
+    /** An element snapshot adopting a primitive Float generation never written again. */
+    public static ProtosIndexedSnapshot doubleElements(double[] values) {
+        Objects.requireNonNull(values, "values");
+        return values.length == 0
+                ? EMPTY_ELEMENTS
+                : new ProtosIndexedSnapshot(null, null, values, null, values.length, false);
+    }
+
+    /** An element snapshot adopting a primitive Boolean generation never written again. */
+    public static ProtosIndexedSnapshot booleanElements(boolean[] values) {
+        Objects.requireNonNull(values, "values");
+        return values.length == 0
+                ? EMPTY_ELEMENTS
+                : new ProtosIndexedSnapshot(null, null, null, values, values.length, false);
     }
 
     /**
@@ -80,7 +105,7 @@ public final class ProtosIndexedSnapshot {
         }
         return length == 0
                 ? EMPTY_ASSOCIATIONS
-                : new ProtosIndexedSnapshot(keysAndValues, null, length, true);
+                : new ProtosIndexedSnapshot(keysAndValues, null, null, null, length, true);
     }
 
     /** The number of positions of this generation. */
@@ -97,8 +122,16 @@ public final class ProtosIndexedSnapshot {
             throw new IndexOutOfBoundsException(
                     "snapshot index out of bounds");
         }
-        long[] primitive = longs;
-        return primitive != null ? Long.valueOf(primitive[index]) : objects[index];
+        if (longs != null) {
+            return Long.valueOf(longs[index]);
+        }
+        if (doubles != null) {
+            return Double.valueOf(doubles[index]);
+        }
+        if (booleans != null) {
+            return Boolean.valueOf(booleans[index]);
+        }
+        return objects[index];
     }
 
     /** The key of association {@code index}. */

@@ -595,6 +595,70 @@ final class ProtosI115IndexedOperationTest {
                 """));
     }
 
+    @Test
+    void floatAndBooleanStorageReadsAndSameFamilyWrites() {
+        assertTrue(evalBoolean("a: [1.5, 2.5, 3.5]\n(a[0] == 1.5) && (a[2] == 3.5)"));
+        assertTrue(evalBoolean("a: [true, false]\n(a[0] === true) && (a[1] === false)"));
+        assertTrue(evalBoolean("a: [1.5, 2.5]\na[1] = 0.25\n(a[1] == 0.25) && (a[0] == 1.5)"));
+        assertTrue(evalBoolean("a: [true, false]\na[1] = true\n(a[1] === true) && (a.size() == 2)"));
+    }
+
+    @Test
+    void incompatibleWritesPromoteStorageAndKeepExactPriorElements() {
+        assertTrue(evalBoolean("a: [1.5, 2.5]\na[0] = 7\n"
+                + "(a[0] == 7) && (a[1] == 2.5) && (a.size() == 2)"));
+        assertTrue(evalBoolean("a: [1, 9223372036854775807]\na[0] = 0.5\n"
+                + "(a[0] == 0.5) && (a[1] == 9223372036854775807)"));
+        assertTrue(evalBoolean("item: { value: 1 }\na: [true, false]\na[1] = item\n"
+                + "(a[1] === item) && (a[0] === true)"));
+        assertTrue(evalBoolean("a: [true, false]\na[0] = 1\na[0] = true\n"
+                + "(a[0] === true) && (a[1] === false)"));
+    }
+
+    @Test
+    void snapshotsAroundPrimitiveWritesStayIndependent() {
+        String collect = "seen: [null, null]\nposition: { value: 0 }\n";
+        // Snapshot before mutation: each observes the original elements.
+        assertTrue(evalBoolean(collect + "a: [1.5, 2.5]\n"
+                + "a.each((e) => { a[1] = 9.5\nseen[position.value] = e\nposition.value = position.value + 1 })\n"
+                + "(seen[1] == 2.5) && (a[1] == 9.5)"));
+        // Snapshot after mutation: each observes the written element.
+        assertTrue(evalBoolean(collect + "a: [true, true]\na[1] = false\n"
+                + "a.each((e) => { seen[position.value] = e\nposition.value = position.value + 1 })\n(seen[1] === false)"));
+        // Publication followed by a same-family write.
+        assertTrue(evalBoolean(collect + "a: [true, false]\n"
+                + "a.each((e) => { a[0] = false\nseen[position.value] = e\nposition.value = position.value + 1 })\n"
+                + "(seen[0] === true) && (a[0] === false) && (a[1] === false)"));
+        // Publication followed by an incompatible write.
+        assertTrue(evalBoolean(collect + "a: [1.5, 2.5]\n"
+                + "a.each((e) => { a[1] = \"x\"\nseen[position.value] = e\nposition.value = position.value + 1 })\n"
+                + "(seen[1] == 2.5) && (a[1] == \"x\") && (a[0] == 1.5)"));
+    }
+
+    @Test
+    void primitiveStorageFrozenBoundsAndCustomSelections() {
+        assertTrue(evalBoolean("a: [1.5, 2.5]\na.freeze()\na[1] == 2.5"));
+        assertTrue(evalBoolean("a: [true]\na.freeze()\na[0] === true"));
+        assertTrue(signals("a: [1.5, 2.5]\na.freeze()\na[0] = 3.5"));
+        assertTrue(signals("a: [true]\na.freeze()\na[0] = false"));
+        assertTrue(signals("a: [1.5]\na[9223372036854775807]"));
+        assertTrue(signals("a: [true]\na[9223372036854775807] = false"));
+        assertEquals(77L, evalLong("a: [1.5, 2.5]\na.at: (index) => { 77 }\na[0]"));
+        assertEquals(88L, evalLong("a: [true]\na.atPut: (index, value) => { 88 }\na.atPut(0, false)"));
+        assertTrue(evalBoolean("a: [true]\na.atPut: (index, value) => { 88 }\na[0] = false\na[0] === true"));
+    }
+
+    @Test
+    void standardCustomStandardSameSiteOverPrimitiveStorage() {
+        assertTrue(evalBoolean("""
+                read: (receiver) => { receiver[0] }
+                doubles: [1.5]
+                booleans: [true]
+                custom: { at: (index) => { 5 } }
+                (read(doubles) == 1.5) && (read(booleans) === true) && (read(custom) == 5) && (read(doubles) == 1.5) && (read(booleans) === true)
+                """));
+    }
+
     private static List<String> names(ProtosBytecodeRootNode root) {
         return root.getBytecodeNode().getInstructionsAsList().stream()
                 .map(ProtosInstructionNames::of).toList();

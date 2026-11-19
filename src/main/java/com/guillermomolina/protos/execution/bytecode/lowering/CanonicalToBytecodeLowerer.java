@@ -7996,26 +7996,85 @@ final class CanonicalToBytecodeLowerer {
                 && !hasNamedArgument(arguments);
     }
 
+    /* Primitive storage family of a constant Array argument list. */
+    private enum CollectionType {
+        LONG,
+        DOUBLE,
+        BOOLEAN
+    }
+
     /*
-     * The compile-time long[] of a non-empty argument list made only of
-     * signed-64 Integer literals, in source order, or null. Large Integer
-     * and Float literals, spreads and every other expression disqualify it.
+     * Compile-time metadata of a constant Array argument list: its storage
+     * family and the typed primitive array (long[], double[] or boolean[])
+     * holding the elements in source order.
      */
-    private long[] constantLongArrayOrNull(
+    private record ConstantCollection(CollectionType type, Object values) {
+    }
+
+    /*
+     * The constant collection of a non-empty argument list made only of
+     * literals of one primitive family, in source order, or null:
+     * signed-64 Integer literals (long[]), Float literals (double[]) or
+     * true/false literals (boolean[]). Mixed families, large Integer
+     * literals, spreads and every other expression disqualify it, so those
+     * lists keep MakeArray and their exact guest values.
+     */
+    private ConstantCollection constantCollectionOrNull(
             java.util.List<CanonicalExpression> arguments) {
         if (arguments.isEmpty()) {
             return null;
         }
-        long[] values = new long[arguments.size()];
-        for (int index = 0; index < values.length; index++) {
-            if (!(arguments.get(index) instanceof CanonicalLiteral literal)
-                    || literal.kind() != CanonicalLiteral.Kind.NUMBER
-                    || !(numberLiteralDescriptor(literal) instanceof Long small)) {
+        CollectionType type = null;
+        for (CanonicalExpression argument : arguments) {
+            if (!(argument instanceof CanonicalLiteral literal)) {
                 return null;
             }
-            values[index] = small;
+            CollectionType elementType = constantElementTypeOrNull(literal);
+            if (elementType == null || (type != null && type != elementType)) {
+                return null;
+            }
+            type = elementType;
         }
-        return values;
+        int size = arguments.size();
+        return switch (type) {
+            case LONG -> {
+                long[] values = new long[size];
+                for (int index = 0; index < size; index++) {
+                    values[index] = (Long) numberLiteralDescriptor(
+                            (CanonicalLiteral) arguments.get(index));
+                }
+                yield new ConstantCollection(type, values);
+            }
+            case DOUBLE -> {
+                double[] values = new double[size];
+                for (int index = 0; index < size; index++) {
+                    values[index] = (Double) numberLiteralDescriptor(
+                            (CanonicalLiteral) arguments.get(index));
+                }
+                yield new ConstantCollection(type, values);
+            }
+            case BOOLEAN -> {
+                boolean[] values = new boolean[size];
+                for (int index = 0; index < size; index++) {
+                    values[index] = ((CanonicalLiteral) arguments.get(index)).kind()
+                            == CanonicalLiteral.Kind.TRUE;
+                }
+                yield new ConstantCollection(type, values);
+            }
+        };
+    }
+
+    private CollectionType constantElementTypeOrNull(CanonicalLiteral literal) {
+        return switch (literal.kind()) {
+            case NUMBER -> {
+                Object descriptor = numberLiteralDescriptor(literal);
+                yield descriptor instanceof Long
+                        ? CollectionType.LONG
+                        : descriptor instanceof Double ? CollectionType.DOUBLE : null;
+            }
+            case TRUE, FALSE -> CollectionType.BOOLEAN;
+            default -> null;
+        };
     }
 
     /*
@@ -8024,11 +8083,12 @@ final class CanonicalToBytecodeLowerer {
      * <ol>
      *   <li>Evaluate and stage the factory receiver once.
      *   <li>Evaluate the arguments once, left to right, into the ordinary
-     *       positional locals or spread vector. A constant signed-64 list has
+     *       positional locals or spread vector. A constant primitive list has
      *       no evaluation effects and is staged only on the ordinary path.
      *   <li>After the packet is formed, IsStandardArrayConstructionSelection
      *       observes the factory's call and construct selections.
-     *   <li>Standard: MakeConstantLongArray or MakeArray, without any send,
+     *   <li>Standard: MakeConstant{Long,Double,Boolean}Array or MakeArray,
+     *       without any send,
      *       call packet or continuation composition (it cannot suspend).
      *   <li>Otherwise: the existing Call*Method with the same receiver and
      *       arguments, composed with Yield/ResumeDispatchedContinuation.
@@ -8052,7 +8112,8 @@ final class CanonicalToBytecodeLowerer {
         BytecodeLocal factory = builder.createLocal("arrayFactory", null);
         stageOperand(builder, receiver, factory, scratch, childResult, resumeValue, stager);
 
-        long[] constant = hasSpreadArgument(arguments) ? null : constantLongArrayOrNull(arguments);
+        ConstantCollection constant =
+                hasSpreadArgument(arguments) ? null : constantCollectionOrNull(arguments);
         BytecodeLocal suppliedVector = null;
         java.util.List<BytecodeLocal> argumentValues = new java.util.ArrayList<>(arguments.size());
         if (constant == null) {
@@ -8131,7 +8192,7 @@ final class CanonicalToBytecodeLowerer {
         emitTerminalCallOperand(builder, call.receiver());
         builder.endStoreLocal();
 
-        long[] constant = constantLongArrayOrNull(arguments);
+        ConstantCollection constant = constantCollectionOrNull(arguments);
         java.util.List<BytecodeLocal> argumentValues = new java.util.ArrayList<>(arguments.size());
         for (CanonicalExpression argument : arguments) {
             BytecodeLocal argumentValue = builder.createLocal("terminalArgument", null);
@@ -8176,13 +8237,27 @@ final class CanonicalToBytecodeLowerer {
     private static void emitStandardArrayValue(
             ProtosBytecodeRootNodeGen.Builder builder,
             BytecodeLocal factory,
-            long[] constant,
+            ConstantCollection constant,
             java.util.List<BytecodeLocal> argumentValues,
             BytecodeLocal suppliedVector) {
         if (constant != null) {
-            builder.beginMakeConstantLongArray(constant);
-            builder.emitLoadLocal(factory);
-            builder.endMakeConstantLongArray();
+            switch (constant.type()) {
+                case LONG -> {
+                    builder.beginMakeConstantLongArray((long[]) constant.values());
+                    builder.emitLoadLocal(factory);
+                    builder.endMakeConstantLongArray();
+                }
+                case DOUBLE -> {
+                    builder.beginMakeConstantDoubleArray((double[]) constant.values());
+                    builder.emitLoadLocal(factory);
+                    builder.endMakeConstantDoubleArray();
+                }
+                case BOOLEAN -> {
+                    builder.beginMakeConstantBooleanArray((boolean[]) constant.values());
+                    builder.emitLoadLocal(factory);
+                    builder.endMakeConstantBooleanArray();
+                }
+            }
             return;
         }
         builder.beginMakeArray();

@@ -414,6 +414,107 @@ final class ProtosArrayEachNativeIterationTest {
     }
 
     /**
+     * Float and Boolean Arrays keep the same snapshot contract as the
+     * Object and signed-64 representations: ascending exact elements,
+     * independent of writes after the snapshot was taken.
+     */
+    @Test
+    void floatAndBooleanSnapshotsAreIndependentOfLaterWrites() {
+        ProtosObjectValue parent = ProtosObjectValue.rootObject();
+        com.guillermomolina.protos.runtime.ProtosArrayValue doubles =
+                new com.guillermomolina.protos.runtime.ProtosArrayValue(
+                        parent, new double[] {1.5, -0.0});
+        com.guillermomolina.protos.runtime.ProtosArrayValue booleans =
+                new com.guillermomolina.protos.runtime.ProtosArrayValue(
+                        parent, new boolean[] {true, false});
+
+        ProtosBytecodeRootNode.ArrayEachSnapshot doubleSnapshot =
+                ProtosBytecodeRootNode.GetArrayEachSnapshot.snapshot(doubles);
+        ProtosBytecodeRootNode.ArrayEachSnapshot booleanSnapshot =
+                ProtosBytecodeRootNode.GetArrayEachSnapshot.snapshot(booleans);
+        doubles.indexedDoublePut(0, 9.0);
+        booleans.indexedPut(1, new ProtosObjectValue(parent));
+        assertTrue(doubles.hasDoubleStorageForRuntime());
+        assertFalse(booleans.hasBooleanStorageForRuntime(),
+                "an incompatible write promotes the current generation only");
+
+        assertFalse(doubleSnapshot.nextIsLong());
+        assertEquals(1.5, doubleSnapshot.advance());
+        assertEquals(Double.valueOf(-0.0), doubleSnapshot.advance());
+        assertFalse(doubleSnapshot.hasNext());
+        assertEquals(9.0, doubles.indexedDoubleAt(0));
+
+        assertEquals(Boolean.TRUE, booleanSnapshot.advance());
+        assertEquals(Boolean.FALSE, booleanSnapshot.advance());
+        assertFalse(booleanSnapshot.hasNext());
+        assertEquals(Boolean.TRUE, booleans.indexedAt(0));
+    }
+
+    @Test
+    void floatElementsReplacedDuringIterationKeepTheSnapshot() throws Exception {
+        inContext(() -> {
+            Module module = new Module(null);
+            module.run(
+                    """
+                    run: () => {
+                        values: [1.5, 2.5, 3.5]
+                        values.each((element) => {
+                            values.atPut(1, 100.5)
+                            hook(element)
+                        })
+                        values
+                    }
+                    run()
+                    """);
+            assertEquals(List.of(1.5, 2.5, 3.5), module.visits);
+            assertNativeLoop(module);
+        });
+    }
+
+    @Test
+    void booleanElementsReplacedDuringIterationKeepTheSnapshot() throws Exception {
+        inContext(() -> {
+            Module module = new Module(null);
+            module.run(
+                    """
+                    run: () => {
+                        values: [true, false, true]
+                        values.each((element) => {
+                            values.atPut(1, 7)
+                            hook(element)
+                        })
+                        values
+                    }
+                    run()
+                    """);
+            assertEquals(List.of(true, false, true), module.visits);
+            assertNativeLoop(module);
+        });
+    }
+
+    @Test
+    void earlyReturnFromFloatAndBooleanIterationStopsLaterCallbacks() {
+        assertTrue(evalBooleanInProtos("""
+                count: { value: 0 }
+                firstFloat: () => {
+                    [1.5, 2.5].each((element) => {
+                        count.value = count.value + 1
+                        ^element
+                    })
+                    0
+                }
+                firstBoolean: () => {
+                    [false, true].each((element) => {
+                        count.value = count.value + 1
+                        ^element
+                    })
+                    true
+                }
+                (firstFloat() == 1.5) && (firstBoolean() == false) && (count.value == 2)
+                """));
+    }
+
+    /**
      * Each prepared callback carries exactly its snapshot position as the
      * single B5 positional argument; preparation reads the generation by
      * index and never re-snapshots.

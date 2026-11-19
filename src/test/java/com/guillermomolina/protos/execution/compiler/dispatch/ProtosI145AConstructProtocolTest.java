@@ -737,6 +737,130 @@ class ProtosI145AConstructProtocolTest {
                 """);
     }
 
+    @Test
+    void homogeneousPrimitiveLiteralArraysKeepExactElements() throws IOException {
+        assertAllTrue("""
+                longs: [1, 2, 3]
+                floats: [1.5, 2.5, 0.25]
+                flags: [true, false, true]
+                [longs.size() == 3, longs[0] == 1, longs[2] == 3,
+                    floats.size() == 3, floats[0] == 1.5, floats[2] == 0.25,
+                    flags.size() == 3, flags[0] === true, flags[1] === false,
+                    longs.parent() === Array, floats.parent() === Array,
+                    flags.parent() === Array]
+                """);
+    }
+
+    @Test
+    void explicitPrimitiveArrayConstructionMatchesBrackets() throws IOException {
+        assertAllTrue("""
+                longs: Array(4, 5)
+                floats: Array(4.5, 5.5)
+                flags: Array(false, true)
+                [longs[0] == 4, longs[1] == 5, longs.parent() === Array,
+                    floats[0] == 4.5, floats[1] == 5.5, floats.parent() === Array,
+                    flags[0] === false, flags[1] === true, flags.parent() === Array]
+                """);
+    }
+
+    @Test
+    void repeatedPrimitiveConstructionIsFreshWithIndependentBacking()
+            throws IOException {
+        assertAllTrue("""
+                makeFloats: () => [1.5, 2.5]
+                makeFlags: () => Array(true, false)
+                f1: makeFloats()
+                f2: makeFloats()
+                f1[0] = 9.5
+                b1: makeFlags()
+                b2: makeFlags()
+                b1[1] = true
+                [f1 !== f2, f1[0] == 9.5, f2[0] == 1.5, makeFloats()[0] == 1.5,
+                    b1 !== b2, b1[1] === true, b2[1] === false,
+                    makeFlags()[1] === false]
+                """);
+    }
+
+    @Test
+    void mixedPrimitiveFamiliesKeepExactGuestValues() throws IOException {
+        assertAllTrue("""
+                numbers: [1, 2.5, 3]
+                flags: [true, 1, false]
+                big: [9223372036854775808, 1.5]
+                numbers[0] = 4
+                [numbers[0] == 4, numbers[1] == 2.5, numbers[2] == 3,
+                    flags[0] === true, flags[1] == 1, flags[2] === false,
+                    big[0] - 1 == 9223372036854775807, big[1] == 1.5]
+                """);
+    }
+
+    @Test
+    void customFactoriesAreSelectedForPrimitiveConstantLists() throws IOException {
+        Object result = evaluate("""
+                Base: Array
+                shadowed: () => {
+                    Array: { construct: (...args) => 7 }
+                    [1.5, 2.5] + Array(true)
+                }
+                customCall: () => {
+                    Array: Base { call: (...args) => 5 }
+                    [true, false] + Array(0.5)
+                }
+                customConstruct: () => {
+                    Array: Base { construct: (...args) => args.size() }
+                    [1.5, 2.5, 3.5] + Array(false)
+                }
+                Derived: Array {}
+                build: (Array) => [0.5, 1.5]
+                derived: build(Derived)
+                shadowed() + customCall() + customConstruct() + derived.size() + (derived.parent() === Derived).ifTrueIfFalse(() => { 0 }, () => { 1000 })
+                """);
+        assertEquals("30", ProtosNumericValueSupport.integerDecimalText(result));
+    }
+
+    @Test
+    void primitiveConstantArgumentsAreEvaluatedOnceInOrderForCustomFactories()
+            throws IOException {
+        assertAllTrue("""
+                log: {
+                    count: 0
+                    first: null
+                }
+                Base: Array
+                Recording: Base {
+                    construct: (...args) => {
+                        log.count = log.count + 1
+                        log.first = args[0]
+                        args
+                    }
+                }
+                build: (Array) => [true, false]
+                buildFloats: (Array) => Array(1.5, 2.5)
+                flags: build(Recording)
+                floats: buildFloats(Recording)
+                [log.count == 2, log.first == 1.5, flags[0] === true,
+                    flags[1] === false, floats[1] == 2.5]
+                """);
+    }
+
+    @Test
+    void customPrimitiveConstructionErrorPrecedesLaterWork() throws IOException {
+        assertAllTrue("""
+                log: { after: false }
+                Base: Array
+                Failing: Base { construct: (...args) => Error().signal() }
+                build: (Array) => {
+                    values: [1.5, 2.5]
+                    log.after = true
+                    values
+                }
+                caught: Error.handle(() => { build(Failing); false }, (error) => true)
+                skipped: log.after === false
+                standard: build(Base)
+                [caught, skipped, log.after === true, standard[1] == 2.5]
+                """);
+    }
+
     private static Object evaluate(String source) throws IOException {
         return ProtosTestExecutionSupport.evaluate(
                 source, corePrelude().newModuleActivation());

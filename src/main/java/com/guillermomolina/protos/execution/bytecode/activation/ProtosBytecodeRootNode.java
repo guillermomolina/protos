@@ -2269,7 +2269,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     /*
      * BinarySubscript / SetItem model.
      *
-     * The built-in Array path specializes primitive long storage. These
+     * The built-in Array path specializes primitive long, double and
+     * boolean storage. These
      * operations are emitted only behind IsStandardIndexedSelection, so the
      * receiver's selected at/atPut is the standard Array/Bytes behavior;
      * their fallbacks therefore signal exactly the Error that standard
@@ -2289,7 +2290,26 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     existingArrayIndex(array, index, frame));
         }
 
-        @Specialization(replaces = "doLongStorage")
+        @Specialization(guards = "array.hasDoubleStorageForRuntime()")
+        public static double doDoubleStorage(
+                ProtosArrayValue array,
+                long index,
+                @Bind VirtualFrame frame) {
+            return array.indexedDoubleAtNormalized(
+                    existingArrayIndex(array, index, frame));
+        }
+
+        @Specialization(guards = "array.hasBooleanStorageForRuntime()")
+        public static boolean doBooleanStorage(
+                ProtosArrayValue array,
+                long index,
+                @Bind VirtualFrame frame) {
+            return array.indexedBooleanAtNormalized(
+                    existingArrayIndex(array, index, frame));
+        }
+
+        /* Every storage representation, read as its exact guest value. */
+        @Specialization(replaces = {"doLongStorage", "doDoubleStorage", "doBooleanStorage"})
         public static Object doArray(
                 ProtosArrayValue array,
                 long index,
@@ -2341,7 +2361,28 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     writableArrayIndex(array, index, frame), value);
         }
 
-        @Specialization(replaces = "doLongStorage")
+        @Specialization(guards = "array.hasDoubleStorageForRuntime()")
+        public static void doDoubleStorage(
+                double value,
+                ProtosArrayValue array,
+                long index,
+                @Bind VirtualFrame frame) {
+            array.indexedDoublePutNormalized(
+                    writableArrayIndex(array, index, frame), value);
+        }
+
+        @Specialization(guards = "array.hasBooleanStorageForRuntime()")
+        public static void doBooleanStorage(
+                boolean value,
+                ProtosArrayValue array,
+                long index,
+                @Bind VirtualFrame frame) {
+            array.indexedBooleanPutNormalized(
+                    writableArrayIndex(array, index, frame), value);
+        }
+
+        /* Every storage; an incompatible value promotes primitive storage. */
+        @Specialization(replaces = {"doLongStorage", "doDoubleStorage", "doBooleanStorage"})
         public static void doArray(
                 Object value,
                 ProtosArrayValue array,
@@ -2399,6 +2440,40 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         @Specialization
         public static ProtosArrayValue perform(
                 long[] values,
+                Object factory) {
+            return new ProtosArrayValue(factory, values);
+        }
+    }
+
+    /*
+     * Constant Float Array construction, under the same admission as
+     * MakeConstantLongArray. The double[] constant is copied on every
+     * evaluation.
+     */
+    @Operation(storeBytecodeIndex = false)
+    @ConstantOperand(type = double[].class, dimensions = 0)
+    public static final class MakeConstantDoubleArray {
+
+        @Specialization
+        public static ProtosArrayValue perform(
+                double[] values,
+                Object factory) {
+            return new ProtosArrayValue(factory, values);
+        }
+    }
+
+    /*
+     * Constant Boolean Array construction, under the same admission as
+     * MakeConstantLongArray. The boolean[] constant is copied on every
+     * evaluation.
+     */
+    @Operation(storeBytecodeIndex = false)
+    @ConstantOperand(type = boolean[].class, dimensions = 0)
+    public static final class MakeConstantBooleanArray {
+
+        @Specialization
+        public static ProtosArrayValue perform(
+                boolean[] values,
                 Object factory) {
             return new ProtosArrayValue(factory, values);
         }
@@ -2583,10 +2658,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
 
     /*
-     * PBytecodeDSLRootNode.GetLen.
-     * Direct Array/Bytes length, without method dispatch. Emitted only
-     * behind IsStandardIndexedSelection("size"); every other receiver's
-     * size is dispatched through GetMethod and CallNilaryMethod.
+     * Reads the length of an admitted standard Array or Bytes directly.
+     * Non-standard selected behavior uses the existing bytecode call path.
      */
     @Operation(storeBytecodeIndex = true)
     public static final class GetLen {
@@ -2934,7 +3007,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * structural selection of {@link ReadMember}; other representations and
      * absent members use {@link #doGeneric}.
      */
-    @Operation(storeBytecodeIndex = true)
+    @Operation(storeBytecodeIndex = false)
     @ConstantOperand(type = String.class, name = "name")
     public static final class GetAttribute {
         @Specialization(
@@ -3001,6 +3074,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
 
         @Specialization(replaces = {"doLong", "doObjectCached", "doInherited"})
+        @StoreBytecodeIndex
+        @InliningCutoff
         public static Object doGeneric(
                 String name,
                 Object receiver,

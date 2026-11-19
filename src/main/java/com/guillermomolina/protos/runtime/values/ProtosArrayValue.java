@@ -40,9 +40,16 @@ public final class ProtosArrayValue extends ProtosObjectValue {
      * exactly as long as their shallow snapshots do.
      */
     private static final class IndexedGeneration {
-        /* Exactly one of the two backings is non-null; both have the Array's size. */
+        /*
+         * Exactly one of the four backings is non-null; it has the Array's
+         * size. A primitive backing holds only values of its guest family
+         * (signed-64 Integer, Float as Double, canonical Boolean); any other
+         * value promotes the generation to Object[] storage.
+         */
         private Object[] elements;
         private long[] longElements;
+        private double[] doubleElements;
+        private boolean[] booleanElements;
         private List<Object> snapshotView;
         private ProtosIndexedSnapshot indexedView;
         private boolean published;
@@ -50,18 +57,34 @@ public final class ProtosArrayValue extends ProtosObjectValue {
         private IndexedGeneration(Object[] values) {
             Objects.requireNonNull(values, "values");
 
-            boolean allLong = values.length != 0;
-            for (Object value : values) {
-                if (!(value instanceof Long)) {
-                    allLong = false;
-                    break;
+            if (values.length == 0) {
+                elements = values;
+                return;
+            }
+
+            Object first = values[0];
+            Class<?> family = first instanceof Long || first instanceof Double
+                    || first instanceof Boolean ? first.getClass() : null;
+            for (int index = 1; family != null && index < values.length; index++) {
+                if (values[index] == null || values[index].getClass() != family) {
+                    family = null;
                 }
             }
 
-            if (allLong) {
+            if (family == Long.class) {
                 longElements = new long[values.length];
                 for (int index = 0; index < values.length; index++) {
                     longElements[index] = ((Long) values[index]).longValue();
+                }
+            } else if (family == Double.class) {
+                doubleElements = new double[values.length];
+                for (int index = 0; index < values.length; index++) {
+                    doubleElements[index] = ((Double) values[index]).doubleValue();
+                }
+            } else if (family == Boolean.class) {
+                booleanElements = new boolean[values.length];
+                for (int index = 0; index < values.length; index++) {
+                    booleanElements[index] = ((Boolean) values[index]).booleanValue();
                 }
             } else {
                 elements = values;
@@ -72,20 +95,50 @@ public final class ProtosArrayValue extends ProtosObjectValue {
             longElements = Objects.requireNonNull(values, "values");
         }
 
+        private IndexedGeneration(double[] values) {
+            doubleElements = Objects.requireNonNull(values, "values");
+        }
+
+        private IndexedGeneration(boolean[] values) {
+            booleanElements = Objects.requireNonNull(values, "values");
+        }
+
         private int size() {
-            return longElements != null
-                    ? longElements.length
-                    : elements.length;
+            if (longElements != null) {
+                return longElements.length;
+            }
+            if (doubleElements != null) {
+                return doubleElements.length;
+            }
+            if (booleanElements != null) {
+                return booleanElements.length;
+            }
+            return elements.length;
         }
 
         private Object get(int index) {
-            return longElements != null
-                    ? Long.valueOf(longElements[index])
-                    : elements[index];
+            if (longElements != null) {
+                return Long.valueOf(longElements[index]);
+            }
+            if (doubleElements != null) {
+                return Double.valueOf(doubleElements[index]);
+            }
+            if (booleanElements != null) {
+                return Boolean.valueOf(booleanElements[index]);
+            }
+            return elements[index];
         }
 
         private long getLong(int index) {
             return longElements[index];
+        }
+
+        private double getDouble(int index) {
+            return doubleElements[index];
+        }
+
+        private boolean getBoolean(int index) {
+            return booleanElements[index];
         }
 
         private void put(int index, Object value) {
@@ -94,16 +147,20 @@ public final class ProtosArrayValue extends ProtosObjectValue {
                     longElements[index] = number.longValue();
                     return;
                 }
-
-                Object[] widened = new Object[longElements.length];
-                for (int position = 0; position < longElements.length; position++) {
-                    widened[position] = Long.valueOf(longElements[position]);
+            } else if (doubleElements != null) {
+                if (value instanceof Double number) {
+                    doubleElements[index] = number.doubleValue();
+                    return;
                 }
-
-                elements = widened;
-                longElements = null;
+            } else if (booleanElements != null) {
+                if (value instanceof Boolean flag) {
+                    booleanElements[index] = flag.booleanValue();
+                    return;
+                }
             }
-
+            if (elements == null) {
+                promoteToObjects();
+            }
             elements[index] = value;
         }
 
@@ -111,8 +168,42 @@ public final class ProtosArrayValue extends ProtosObjectValue {
             if (longElements != null) {
                 longElements[index] = value;
             } else {
-                elements[index] = Long.valueOf(value);
+                put(index, Long.valueOf(value));
             }
+        }
+
+        private void putDouble(int index, double value) {
+            if (doubleElements != null) {
+                doubleElements[index] = value;
+            } else {
+                put(index, Double.valueOf(value));
+            }
+        }
+
+        private void putBoolean(int index, boolean value) {
+            if (booleanElements != null) {
+                booleanElements[index] = value;
+            } else {
+                put(index, Boolean.valueOf(value));
+            }
+        }
+
+        /*
+         * Replaces the primitive backing with Object[] storage holding the
+         * exact guest value of every existing element. Runs only when a
+         * primitive generation receives a value outside its family.
+         */
+        @TruffleBoundary
+        private void promoteToObjects() {
+            int size = size();
+            Object[] widened = new Object[size];
+            for (int position = 0; position < size; position++) {
+                widened[position] = get(position);
+            }
+            elements = widened;
+            longElements = null;
+            doubleElements = null;
+            booleanElements = null;
         }
 
         @TruffleBoundary
@@ -144,9 +235,15 @@ public final class ProtosArrayValue extends ProtosObjectValue {
 
             ProtosIndexedSnapshot view = indexedView;
             if (view == null) {
-                view = longElements != null
-                        ? ProtosIndexedSnapshot.longElements(longElements)
-                        : ProtosIndexedSnapshot.elements(elements, elements.length);
+                if (longElements != null) {
+                    view = ProtosIndexedSnapshot.longElements(longElements);
+                } else if (doubleElements != null) {
+                    view = ProtosIndexedSnapshot.doubleElements(doubleElements);
+                } else if (booleanElements != null) {
+                    view = ProtosIndexedSnapshot.booleanElements(booleanElements);
+                } else {
+                    view = ProtosIndexedSnapshot.elements(elements, elements.length);
+                }
                 indexedView = view;
             }
             return view;
@@ -158,9 +255,16 @@ public final class ProtosArrayValue extends ProtosObjectValue {
          */
         @TruffleBoundary
         private IndexedGeneration detachedCopy() {
-            return longElements != null
-                    ? new IndexedGeneration(longElements.clone())
-                    : new IndexedGeneration(elements.clone());
+            if (longElements != null) {
+                return new IndexedGeneration(longElements.clone());
+            }
+            if (doubleElements != null) {
+                return new IndexedGeneration(doubleElements.clone());
+            }
+            if (booleanElements != null) {
+                return new IndexedGeneration(booleanElements.clone());
+            }
+            return new IndexedGeneration(elements.clone());
         }
     }
 
@@ -190,6 +294,22 @@ public final class ProtosArrayValue extends ProtosObjectValue {
                         Objects.requireNonNull(elements, "elements").clone());
     }
 
+    /* Specialized Float-storage construction with its own primitive backing. */
+    public ProtosArrayValue(Object parent, double[] elements) {
+        super(parent);
+        this.indexedGeneration =
+                new IndexedGeneration(
+                        Objects.requireNonNull(elements, "elements").clone());
+    }
+
+    /* Specialized Boolean-storage construction with its own primitive backing. */
+    public ProtosArrayValue(Object parent, boolean[] elements) {
+        super(parent);
+        this.indexedGeneration =
+                new IndexedGeneration(
+                        Objects.requireNonNull(elements, "elements").clone());
+    }
+
     public int indexedSize() {
         return indexedGeneration.size();
     }
@@ -198,12 +318,28 @@ public final class ProtosArrayValue extends ProtosObjectValue {
         return indexedGeneration.longElements != null;
     }
 
+    public boolean hasDoubleStorageForRuntime() {
+        return indexedGeneration.doubleElements != null;
+    }
+
+    public boolean hasBooleanStorageForRuntime() {
+        return indexedGeneration.booleanElements != null;
+    }
+
     public Object indexedAt(int index) {
         return indexedAtNormalized(requireExistingIndex(index));
     }
 
     public long indexedLongAt(int index) {
         return indexedLongAtNormalized(requireExistingIndex(index));
+    }
+
+    public double indexedDoubleAt(int index) {
+        return indexedDoubleAtNormalized(requireExistingIndex(index));
+    }
+
+    public boolean indexedBooleanAt(int index) {
+        return indexedBooleanAtNormalized(requireExistingIndex(index));
     }
 
     public Object indexedPut(int index, Object value) {
@@ -223,6 +359,22 @@ public final class ProtosArrayValue extends ProtosObjectValue {
         return indexedLongPutNormalized(requireExistingIndex(index), value);
     }
 
+    public double indexedDoublePut(int index, double value) {
+        if (isFrozen()) {
+            throw new IllegalStateException("array is frozen");
+        }
+
+        return indexedDoublePutNormalized(requireExistingIndex(index), value);
+    }
+
+    public boolean indexedBooleanPut(int index, boolean value) {
+        if (isFrozen()) {
+            throw new IllegalStateException("array is frozen");
+        }
+
+        return indexedBooleanPutNormalized(requireExistingIndex(index), value);
+    }
+
     /*
      * Normalized storage access. The caller has already validated the
      * complete guest index against the current size (and, for writes, the
@@ -239,6 +391,16 @@ public final class ProtosArrayValue extends ProtosObjectValue {
         return indexedGeneration.getLong(index);
     }
 
+    /* Requires primitive Float storage. */
+    public double indexedDoubleAtNormalized(int index) {
+        return indexedGeneration.getDouble(index);
+    }
+
+    /* Requires primitive Boolean storage. */
+    public boolean indexedBooleanAtNormalized(int index) {
+        return indexedGeneration.getBoolean(index);
+    }
+
     public Object indexedPutNormalized(int index, Object value) {
         Objects.requireNonNull(value, "value");
         writableIndexedGeneration().put(index, value);
@@ -247,6 +409,16 @@ public final class ProtosArrayValue extends ProtosObjectValue {
 
     public long indexedLongPutNormalized(int index, long value) {
         writableIndexedGeneration().putLong(index, value);
+        return value;
+    }
+
+    public double indexedDoublePutNormalized(int index, double value) {
+        writableIndexedGeneration().putDouble(index, value);
+        return value;
+    }
+
+    public boolean indexedBooleanPutNormalized(int index, boolean value) {
+        writableIndexedGeneration().putBoolean(index, value);
         return value;
     }
 
