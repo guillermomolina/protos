@@ -21,6 +21,7 @@
 //! Statement.clearBindings() sets every binding to SQL NULL. Copied output
 //! columns are Integer/Float/String/Bytes/null. Calls are synchronous.
 Resources: import("./internal/Resources.protos")
+ABI: null
 terminal: _terminalFutureFacility
 context.removeSlot("_terminalFutureFacility")
 
@@ -31,6 +32,8 @@ SQLiteError: this.SQLiteError
 /// Opens a private :memory: connection using the host-authorized ffi:sqlite3 provider.
 /// Importing this module grants no authority and loads no native library.
 this.openMemory: () => {
-    ABI: import("./abi.protos")
+    if(ABI === null) {
+        ABI = import("./abi.protos")
+    }
     Resources.openMemory(ABI, terminal, SQLiteError)
 }

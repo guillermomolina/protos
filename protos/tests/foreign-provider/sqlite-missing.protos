@@ -16,9 +16,10 @@
 // Run with no provider. Import is authority-free; acquisition is denied.
 Assertions: import("std:test/assertions")
 SQLite: import("std:sqlite")
+Assertions.require(import("std:sqlite") === SQLite)
 Assertions.require(!SQLite.hasSlot("_terminalFutureFacility"))
 Assertions.signals(SlotNotFound, () => { _terminalFutureFacility })
-for(attempt in Array(1, 2)) {
+for(attempt in Array(1, 2, 3)) {
     missing: Assertions.signals(Error, () => SQLite.openMemory())
     Assertions.require(missing.parent() === Error)
 }

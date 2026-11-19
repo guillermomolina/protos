@@ -1235,6 +1235,24 @@ executed by the agent.
 
 ## 14. PLAT074-B3 — Restricted-thread close-request feasibility
 
+### Latest owner-confirmed B3 execution — 19 November 2026
+
+The owner reports `mvn -DskipTests test-compile`: **BUILD SUCCESS**, followed
+by `mvn '-Dtest=ProtosI144FfmFixtureAbiTest#b3T*' test`: **BUILD SUCCESS**,
+**6 tests, 0 failures, 0 errors, 0 skipped**, focal duration **3.361 seconds**.
+B3 is therefore **6/6 PASS observed** for that run. No exact tested revision or
+new TIDs were supplied. This supersedes the corrected-candidate NOT RUN labels
+in the historical account below, without deleting the failed runs or their
+corrections. Those labels describe the evidence available at those earlier steps.
+
+B3-T5 remains a **successful negative test**: it reproduces the absence of
+automatic affinity for an exterior close. Its PASS is not positive confinement
+evidence. B1 remains **13/13 PASS observed**; B2's T5 noncompliance remains
+preserved. **PLAT074 OPEN; D256 pending final durable-authority decision;
+LIB031 BLOCKED.** No alternative is selected and no issue is closed.
+
+### Historical B3 execution and corrections (preserved)
+
 **B3-T1: earlier isolated PASS, owner-reported on 19 November 2026.** The owner
 reported clean `git diff --check` and `git diff --cached --check`,
 `mvn -DskipTests test-compile`: BUILD SUCCESS, and
@@ -1528,3 +1546,544 @@ to §14. Existing source APL notices are retained and `LICENSE.TXT` remains
 present; no new source class or packaging change is introduced. No Git, Maven,
 compiler, test, benchmark or validation command was executed for this batch.
 No temporary audit file, commit, push, index operation or publication was made.
+
+
+## 15. PLAT074-B4 — Real SQLite through the FFM provider, Protos-first
+
+**Latest focal execution: T7 FAIL at openMemory; required compatibility NOT IMPLEMENTED under the current constraints.**
+The owner reports a T7-only run finishing on 19 November 2026 at 19:40:09 UTC:
+**1 test, 1 failure, 0 errors, 0 skipped**, class duration **2.707 seconds**,
+case duration **1.554 seconds**, Maven total **34.041 seconds**, BUILD FAILURE.
+The terminal-error preparation now exposes the guest diagnostic:
+`Error { phase="openMemory" original=ProtosObjectValue }`. No new class-loading
+failure is reported in this output. T7 remains FAIL; the last complete B4 run
+remains seven successes and one failure, not a complete B4 PASS.
+
+Targeted source inspection establishes an incompatible dependency in this
+specific standard-resolver harness:
+
+- sqlite/module.protos executes import("./abi.protos") on each openMemory call.
+- ProtosStandardImportProtocol's resolve bridge calls resolveModuleKey before
+  its separate lookup bridge reads the Actor module cache.
+- ProtosModuleRuntime.resolveModuleKey calls the standard resolver again and
+  converts its host resolution exceptions into an ordinary slotless Error.
+- ProtosStandardLibraryModuleResolver.resolve calls sourceFile for a relative
+  SOURCE import. sourceFile calls requireExactChild, which enumerates the
+  distribution directories with Files.newDirectoryStream, and confined also
+  performs real-path resolution. Warming a module instance does not remove
+  these filesystem operations on the next import.
+- T7 installs a Landlock rule granting only its new temporary directory. Its
+  ruleset handles READ_DIR and READ_FILE; protos/lib is outside that directory.
+  The standard resolver therefore cannot enumerate the library directories
+  required by the repeated ABI import in the restricted thread.
+
+This source-derived explanation matches the observed openMemory phase and
+ordinary Error. The output does not independently expose the original nested
+Error's slots or supply a syscall trace; no native SQLite failure code or failed
+memory allocation is inferred. More Java class preparation cannot remove this
+required resolver I/O.
+
+T7's required successful public-memory compatibility is therefore classified
+**NOT IMPLEMENTED with the existing standard resolver and unchanged grant**,
+as permitted by the original B4 task's limitation-reporting rule. The executable
+test remains active and retains its successful-operation assertions: it is not
+disabled, converted into an expected-denial success or counted as PASS. Fixing
+this compatibility would require a separately scoped change to source/import
+preparation or library/runtime behavior, or additional filesystem authority.
+No resolver replacement/cache, ABI injection, library modification, expanded
+Landlock grant or execution bypass is introduced in B4. The other seven
+reported successes retain their bounded meanings; PLAT074 stays OPEN, D256
+pending and LIB031 BLOCKED.
+
+**Previous focal execution: T7 FAIL during terminal diagnostic projection.**
+The owner reports a T7-only run finishing on 19 November 2026 at 19:37:43 UTC:
+**1 test, 1 failure, 0 errors, 0 skipped**, class duration **2.927 seconds**,
+case duration **1.488 seconds**, Maven total **36.219 seconds**, BUILD FAILURE.
+The primary NoClassDefFoundError names ProtosDiagnosticTraceCapture$Collector
+inside project/capture reached from ProtosBytecodeTaskExecution.runSegment;
+Context-closed cleanup remains suppressed. Earlier exceptional-path preparation
+was insufficient: a caught guest Error exercises interception and unwind but
+never reaches terminal root-task diagnostic projection.
+
+A second preparation-only Protos closure now deliberately lets a labelled Error
+cross the ordinary root-task failure boundary outside Landlock. sqliteProbe
+asserts that outcome is FAILED with an ordinary Error, then executes the same
+successful public-memory warmup as before. This exercises the existing terminal
+trace projection instead of loading only its next missing nested class. It
+acquires no native resource, adds no grant and does not catch or waive T7's
+restricted failure. The production failure boundary and diagnostic implementation
+are unchanged. The original T7 guest failure remains unresolved; revised
+preparation is NOT RUN and needs a fresh human-run JVM.
+
+**Previous focal execution: T7 FAIL.**
+The next owner-reported T7-only run finished on 19 November 2026 at
+19:34:40 UTC: **1 test, 1 failure, 0 errors, 0 skipped**, class duration
+**2.782 seconds**, case duration **1.409 seconds**, Maven total **33.418
+seconds**, BUILD FAILURE. The primary NoClassDefFoundError now names
+ProtosBytecodeRootNode$EpilogForException, caused by ClassNotFoundException.
+Context-closed cleanup remains suppressed. The earlier preparation therefore
+was insufficient; neither this run nor the previous one identifies the guest
+Error that began the unwind.
+
+The existing class-preparation hook now also initializes that exact exceptional
+epilogue class. A test-only Protos warmPublicErrorPath closure exercises the
+same publicAt diagnostic wrapper with a deliberately signalled Error crossing
+ensure, wrapping/re-signalling and an outer handler before any restriction.
+The host asserts the error was caught, then continues the unchanged successful
+memory warmup. No native acquisition or persistent open is added by this error
+warmup. Successful memory operations alone had not covered exceptional roots;
+this targeted preparation exercises them rather than assuming class
+initialization alone completes their lazy dependencies. The underlying T7 guest
+failure remains unresolved and the revised candidate remains NOT RUN.
+
+**Previous focal execution: T7 FAIL.**
+The owner reports a fresh T7-only run finishing on 19 November 2026 at
+19:31:51 UTC: **1 test, 1 failure, 0 errors, 0 skipped**, class duration
+**7.299 seconds**, case duration **6.382 seconds**, Maven total **32.297
+seconds**, BUILD FAILURE. Preserving the primary exception exposed
+NoClassDefFoundError for ProtosDiagnosticTraceCapture at bytecode exception
+interception, caused by ClassNotFoundException. Suppressed termination also
+failed to load ProtosActorTerminationObservation. Guest cleanup then encountered
+a terminated Actor, and Process Context cleanup did not finish within its gate;
+host close was withheld. These are retained failures, not a T7 PASS.
+
+The existing prepareRestrictedErrorClasses hook now initializes exactly these
+two additional classes with the test class loader before restricting any
+thread, following B3's established class-preparation mechanism. No production
+code, guest SQLite behavior, grant, lifecycle assertion or destructor policy is
+changed. The observed loading failures are consistent with first class loading
+under Landlock; this run supplies no syscall trace. Interception of an earlier
+guest error triggered the diagnostic path, so the underlying guest failure is
+still unresolved. Retest in a fresh Surefire JVM: previously failed symbolic
+resolution must not be reused as evidence for this correction.
+
+**Previous complete B4 execution: 7 PASS, 1 FAIL.**
+The second run finished on 19 November 2026 at 19:29:04 UTC: **8 tests,
+1 failure, 0 errors, 0 skipped**, class duration **8.927 seconds**, Maven total
+**33.423 seconds**, BUILD FAILURE. Only T7 failed; T6 now passes in that
+reported candidate. No exact tested revision or reporter TIDs were supplied.
+The T7 failure visible in this output is an IllegalStateException from
+closeForSession entering an already closed Polyglot execution Context. The
+B4 helper's unguarded finally could replace the original experiment failure
+with this cleanup failure, so the output cannot identify the original cause.
+
+The bounded follow-up mirrors B3's existing primary/suppressed exception rule
+inside startB4Owner: attempt exactly the same owner-thread cleanup, append its
+failure to an existing primary exception, and propagate cleanup alone only
+when the experiment had not already failed. It does not reopen the Context,
+skip failed cleanup, retry a destructor or move close to JUnit. T7 remains
+unresolved; this change is to retain its original diagnostic evidence.
+
+**Previous execution: 6 PASS, 2 FAIL.** The first run finished on 19 November 2026 at 19:24:06 UTC: **8 tests, 2 failures,
+0 errors, 0 skipped**, class duration **12.38 seconds**, Maven total
+**43.625 seconds**, BUILD FAILURE. T6 and T7 failed; T1–T5 and T8 completed
+without reported failures. This supersedes the initial eight-case NOT RUN state
+for that executed candidate only. No exact tested revision, reporter TIDs or
+separate static-check result was supplied.
+
+This remains test-only work, with no production Java, public durable method,
+specification, version or changelog change.
+PLAT074 remains **OPEN**, D256 remains **pending final durable-authority and
+execution/cancellation decisions**, and LIB031 remains **BLOCKED**. B1's
+**13/13 PASS observed**, B2's reproduced T5 noncompliance and B3's **6/6 PASS
+observed** retain their separate meanings. B4 does not select alternative B.
+
+### Independent hypotheses and test methods
+
+All methods belong to `ProtosI144FfmFixtureAbiTest`. SQLite entry, statement
+state, native status handling, binding, copying and lifetime composition reside
+in `protos/tests/foreign-provider/sqlite-landlock-provider.protos`; T7 uses the
+existing `std:sqlite` implementation through a closure in that source.
+
+| Case and exact method | Individual hypothesis and required observations | Status |
+|---|---|---|
+| B4-T1 `b4T1RealSqlitePersistsThroughConfinedFfmSession` | A database first opened after thread restriction supports exact i64 insertion/copy, explicit ROLLBACK and COMMIT, confined close and reopen with persisted rows; exterior RO/RW open returns native CANTOPEN while an unrestricted observer can read/write there. | PASS in reported run; current candidate NOT RUN |
+| B4-T2 `b4T2RealSqliteWalAndShmRemainInsideGrant` | Independent Actor sessions on two physical restricted threads can use the same granted directory; query-confirmed WAL creates live WAL/SHM sidecars, a peer sees COMMIT, and confined reopen retains rows. | PASS in reported run; current candidate NOT RUN |
+| B4-T3 `b4T3RealSqliteAttachAndVacuumCannotEscapeLandlock` | ATTACH and VACUUM INTO fail with SQLite CANTOPEN outside the grant, no exterior attachment is registered, ordinary granted operations still work, and final exterior bytes/names remain unchanged; unrestricted positive controls exercise both SQL routes first. | PASS in reported run; current candidate NOT RUN |
+| B4-T4 `b4T4RealSqliteBusyAndTransactionRecoveryUnderConfinement` | A held BEGIN IMMEDIATE causes the other independent confined writer to receive native SQLITE_BUSY with 100 ms busy timeout and autocommit=1; after the first COMMIT, the second sees its row and can write. | PASS in reported run; current candidate NOT RUN |
+| B4-T5 `b4T5RealSqliteIndependentGrantsRejectCrossAccess` | Two live restricted physical threads with independent Actor sessions can modify their own existing databases, reject cross-grant RO/RW acquisition and close in their owner domains; unrestricted observation confirms own data. | PASS in reported run; current candidate NOT RUN |
+| B4-T6 `b4T6RealSqliteCloseRequestPreservesInFlightNativeCall` | While a real contended SQLite step is observed in FFM native entry, an exterior request precedes its normal BUSY completion; the owner finalizes the statement, observes autocommit, and closes session custody inside its restriction without interruption or exterior close. | PASS in second reported run; current candidate NOT RUN |
+| B4-T7 `b4T7PublicStdSqliteMemoryOperationsRemainCompatibleWithLandlock` | Existing public std:sqlite openMemory, prepare, bind, step, copied integer columns, statement reset and terminal-Future close execute inside Landlock after dependency preparation. | FAIL observed at openMemory; required compatibility NOT IMPLEMENTED under current constraints |
+| B4-T8 `b4T8AuthorizedSqliteNativeAccessIsNotImplicitlyConfined` | Imports alone succeed without a provider but native acquisition/open fails; with explicit authorization the restricted Actor is denied exterior access while an unrestricted independent Actor can open and modify the same exterior database. This is a negative control against implicit provider confinement. | PASS in reported run; current candidate NOT RUN |
+
+T7's required successful compatibility is classified NOT IMPLEMENTED for the
+current resolver/grant combination; its active test records failure rather than
+relaxing the requirement. The remaining changed candidate is not fully validated. T6 must observe the provider at its downcall callsite while the
+request is recorded; inability to observe it fails the test rather than allowing
+a synthetic overlap claim.
+
+### First B4 failures and bounded follow-up
+
+T6 timed out after failing to observe the required native stack. Its owner then
+reported that the request had not arrived before the native return. The original
+observer required both FfmBinding.invoke and an isNativeMethod frame under
+jdk.internal.foreign. That additional JDK-frame visibility assumption was not
+established by the B3 precedent. The supplied output does not show stack samples,
+so it cannot prove which part of that predicate was absent. It proves neither
+request overlap nor positive close-during-call behavior.
+
+The correction keeps the actual prepared SQLite step, held conflicting
+transaction, finite native timeout, native BUSY assertion, request/return order
+and owner-thread cleanup. Before restriction, it locates the unique spread
+invokeExact callsite in the same FfmBinding.java source dynamically compiled by
+buildFixture. It requires FfmBinding.invoke to appear at that exact source line
+both before and after recording the request, without depending on hidden JDK
+stub frames. Source/line visibility and an unambiguous callsite are mandatory;
+a missing callsite or missed overlap still fails. The request reporter includes
+the callsite, request time and an additional stack snapshot. This is an
+observation correction, not proof that a new run will pass.
+
+T7 returned only an ordinary Error with no local diagnostic slots from
+publicMemory on the restricted thread. The unrestricted warmup had invoked the
+source-exported closure, whereas T7 invoked an additional forwarding closure on
+the operation object. The supplied output does not identify a failing SQLite
+operation, native status, loader denial or resource-lifecycle cause; none is
+inferred. The operation object now exports the same closure directly and warmup
+invokes that exact exported entry. Test-only Protos diagnostic wrappers label
+each prepare/bind/step/reset/column and terminal-Future cleanup phase, retaining
+the original Error in the diagnostic payload. All public API operations,
+expected copied values and explicit resource closes remain required. This is
+entry-path alignment and diagnosis; T7's underlying failure remains unresolved
+until a human rerun provides evidence. No production workaround is introduced.
+
+### Six separate obligations
+
+1. **Real SQLite and authorized provider.** A second experimental JAR is
+   packaged under the JUnit temporary `work/sqlite-provider` directory using
+   the already compiled generic backend and service descriptor
+   `com.guillermomolina.protos.ffm.FfmForeignProvider`. The earlier fixture JAR
+   and policy remain intact. The host authorizes both plugins, supplies only
+   `ffi_test.path` for the fixture, and uses the distributable `ffi:sqlite3`
+   policy's `libsqlite3.so.0` loader name with the standard resolver. No guest
+   library path or expanded native policy is introduced.
+2. **Protos library semantics.** The experimental operations are ordinary
+   closures capturing private connection and statement state by reference.
+   ABI i32/i64 domains, owned outputs and null VFS/tail pointers use existing
+   std:ffi descriptors. Known single test statements deliberately ignore
+   pzTail by passing NULL: this is not the complete single-statement admission
+   of public std:sqlite. T7 independently runs that existing public API,
+   including its terminal close Futures. No public openFile is added.
+3. **Physical thread enforcement.** Existing B3 platform-thread and Landlock
+   helpers install restrictions before persistent acquisition. Distinct TIDs
+   and actual installation are checked where two domains are required. This
+   does not arrange automatic Actor carrier affinity, filesystem capability
+   propagation, or production worker dispatch.
+4. **Resource custody and shutdown.** Statement retirement precedes one native
+   finalize; copied integers are read while the row is current. Failed opens
+   release a non-null owned result once. Ordinary close retires guest state,
+   finalizes dependents and then releases the connection. closeForSession
+   deliberately leaves only connection custody to the existing FfmSession
+   shutdown on the owner thread. Existing read-only diagnostic counters check
+   zero residual custody and zero uncertain destructions after shutdown.
+   These counters do not independently trace native destructor syscalls or
+   prove physical deallocation; statement ordering and the native close
+   contract remain relevant. An active owner/open session prevents exterior
+   fixture teardown. No new custody registry, destructor retry or Java SQLite
+   downcall is introduced.
+5. **Whole native-profile confinement.** B4 covers selected trusted SQLite
+   Unix VFS operations only. T8 explicitly demonstrates that authorization
+   does not itself apply a Filesystem grant or Landlock to another Actor.
+   Independent handles and denied paths do not establish isolation against
+   malicious C already executing arbitrary code in the same process, a safe
+   extension-loading policy, or confinement of every native-profile effect.
+6. **Crash and power-loss durability.** Reopen after orderly close and peer
+   COMMIT visibility do not prove SIGKILL recovery, interruption at every
+   journal/WAL phase, device-cache flushing or power-loss durability. These
+   remain separate acceptance work; no NFS support is claimed.
+
+### Preparation, coordination and observer limits
+
+Before restriction, each Actor resolves modules, creates descriptors/bindings,
+preloads backend classes through the existing B3 mechanism, reports SQLite
+version/threadsafe configuration, exercises an in-memory database and releases
+its resources. The public std:sqlite memory path is also warmed and closed.
+The persistent target of T1/T2/T4/T6 does not open during this warmup. Exterior
+fixtures and T5's existing databases are prepared explicitly as positive controls.
+Opening and using a persistent experimental connection then occurs inside its
+restricted thread, except the explicitly labelled unrestricted controls.
+
+JUnit supplies bounded latches and joins, filesystem snapshots, TIDs, stack and
+custody observations and assertions. No SQL ABI or connection handle is
+returned to Java. Only copied scalar/Array results cross the operation boundary;
+Java retains the ordinary operation object and runtime session binding for
+coordination. TestReporter records preparation, TIDs, native failures, WAL,
+transaction observations and owner/session closure. All B1/B2/B3 test methods
+are retained; backend class preloading is extracted unchanged for reuse.
+
+T6 compiles its known INSERT before the readiness latch, then the next native
+operation is sqlite3_step. It uses SQLite's finite 2000 ms busy timeout and a
+blocking transaction held by another confined owner. The observer requires
+FfmBinding.invoke at the actual spread.invokeExact source callsite, records
+the request and requires that callsite again before native completion. This
+checks the admitted invocation position rather than the presence of hidden JDK
+stub frames. A missing line number or missed window is a test failure, not a
+PASS or a synthetic substitute. No sleep establishes overlap, no Java
+interrupt is sent, and JUnit never invokes the SQLite session close. After the
+normal return, the statement is explicitly retired once, autocommit and custody
+are observed, then the owner retires guest state and closes the session. A busy
+timeout counts native busy-handler waiting; it is not a bound on total SQLite
+operation duration, CPU work, disk I/O or shutdown.
+
+T2 checks sidecars while both connections remain alive; their removal after the
+last close is permitted. T3 escapes apostrophes in harness-created paths and
+checks exterior file bytes and sorted directory names after all confined work.
+That final-state comparison is not a complete syscall trace and cannot exclude
+transient operations, attempted effects or observations absent from the final
+snapshot. The external observer has its own authority and contributes no grant
+to the restricted threads. This experiment tests controlled SQL only, with no
+security guarantee for an arbitrary public SQL executor.
+
+### Primary sources and partial Truffle precedents
+
+The exact GraalPy baseline is `5c8486970dead373d888f25210788cca5d79c374`:
+[PythonContext.createSystemThread and finalizeContext (@TruffleBoundary)](https://github.com/oracle/graalpython/blob/5c8486970dead373d888f25210788cca5d79c374/graalpython/com.oracle.graal.python/src/com/oracle/graal/python/runtime/PythonContext.java),
+[PythonLanguage.initializeThread and disposeThread](https://github.com/oracle/graalpython/blob/5c8486970dead373d888f25210788cca5d79c374/graalpython/com.oracle.graal.python/src/com/oracle/graal/python/PythonLanguage.java),
+and [PythonSystemThreadTask.run](https://github.com/oracle/graalpython/blob/5c8486970dead373d888f25210788cca5d79c374/graalpython/com.oracle.graal.python/src/com/oracle/graal/python/util/PythonSystemThreadTask.java).
+The exact Espresso baseline is `bd884eb3effea2b31f3fbdd7250267ba8e9eca8e`:
+[EspressoReferenceDrainer.initReferenceDrain, startReferenceDrain, shutdownAndWaitReferenceDrain and ReferenceDrain.run](https://github.com/oracle/graal/blob/bd884eb3effea2b31f3fbdd7250267ba8e9eca8e/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/runtime/EspressoReferenceDrainer.java)
+and [EspressoLanguage.finalizeContext](https://github.com/oracle/graal/blob/bd884eb3effea2b31f3fbdd7250267ba8e9eca8e/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/EspressoLanguage.java).
+These are the supplied, previously verified partial precedents for controlled
+thread lifecycle and ordered cleanup described in §14. They supply no existing
+SQLite/Landlock solution, automatic native destructor affinity or arbitrary C
+interruption. No production Java is authorized by these analogies.
+
+SQLite's [open](https://www.sqlite.org/c3ref/open.html) and
+[close](https://www.sqlite.org/c3ref/close.html) contracts govern failed-open
+handle cleanup and the close_v2 zombie/dependent-resource distinction.
+[prepare](https://www.sqlite.org/c3ref/prepare.html) and
+[step](https://www.sqlite.org/c3ref/step.html) govern statement lifetime and
+native statuses. [busy_timeout](https://www.sqlite.org/c3ref/busy_timeout.html)
+specifies accumulated busy-handler waiting, not a total-operation deadline.
+[WAL](https://www.sqlite.org/wal.html) and
+[temporary files](https://www.sqlite.org/tempfiles.html) describe sidecars and
+other native file effects; B4 exercises only the recorded subset.
+[ATTACH](https://www.sqlite.org/lang_attach.html) and
+[VACUUM INTO](https://www.sqlite.org/lang_vacuum.html) motivate the exterior SQL
+probes. [Landlock](https://docs.kernel.org/userspace-api/landlock.html) provides
+the host enforcement context; [Java 25 memory segments and arenas](https://docs.oracle.com/en/java/javase/25/core/memory-segments-and-arenas.html)
+explains lifetime/thread accessibility, which is separate from OS authority.
+
+### Inspection and human validation handoff
+
+Material inspection for this slice covered the supplied root instructions;
+AGENTS.work/DESIGN.md, IMPLEMENTATION.md and REFERENCE.md; src/AGENTS.md and
+protos/AGENTS.md; normative FFI.md, CALLABLES.md capture, MODULES.md's FFI and
+Actor-local facade boundary, ACTORS.md §24J and FILESYSTEM.md §20, and
+EXECUTION_AND_CONTROL.md's ensure contract. These require explicit host native
+authorization, synchronous calls, identity-preserving private capture,
+Actor-local resources, exactly-once retirement and a separate enforced native
+filesystem boundary. No normative text is edited.
+
+Implementation inspection covered the existing JUnit B3 lifecycle/Probe/thread
+helpers and ProtosExternalForeignProviderTest Fixture/JAR/resolver setup;
+ffm-confinement-probe.protos; sqlite/abi.protos, sqlite/module.protos and
+sqlite/internal/Resources.protos; FfmForeignProvider.java, FfmLibraries.java,
+FfmSession.java, FfmBinding.java and FfmHandles.java; and
+ProtosForeignProviderSessionBinding.java. These constrain reuse to the current
+provider/policy, existing owned diagnostics, entered guest execution, permanent
+session closure and statement-before-connection release. This guide's existing
+B1–B3 account and the current D256-C1 decision and handoff were consulted. The
+durable IMPLEMENTATION_BLOCKERS.md registry has no SQLite-specific unblock
+condition; the D256 authority/cancellation gates remain open. LICENSE.TXT Part 5
+and REFERENCE.md impose the preserved Java and new Protos APL notice. No
+third-party source or packaging configuration is edited.
+
+Only the three requested files are edited. No Java class, audit directory,
+temporary manifest, publication, commit, version or changelog is created. One
+read-only git status was inadvertently executed before the attachment's Git
+prohibition was read; it reported an empty changed-path set and changed no
+repository state. No subsequent Git operation, build, compiler, test, script
+validation or benchmark was executed. All static checks and B4 cases remain
+**NOT RUN** for the revised candidate. The earlier human-run failures and six
+successful cases are recorded above; no success of this correction is inferred.
+
+For the human, the next cheap gate is:
+
+```sh
+git diff --check
+```
+
+After reporting that result and reviewing the three-file delta, compile without
+tests, then run the complete B4 focal set in a fresh Surefire JVM:
+
+```sh
+mvn -DskipTests test-compile
+mvn '-Dtest=ProtosI144FfmFixtureAbiTest#b4T*' test
+```
+
+Allow a few minutes for Maven startup and the existing dynamic Java/C fixture
+compilation; the normal T6 native wait adds about two seconds, while failure
+paths retain bounded latch/join waits. Compilation/focal execution, any
+applicable formatter/legacy-entry guard and broader regression validation remain
+human-executed and unreported. The full B1/B2/B3 regression must preserve B2's
+known negative/noncompliant outcome rather than relabel it. Integrated closure
+validation remains with the still-open parent; B4 does not close it.
+
+The failure follow-up additionally inspected the supplied Surefire output and
+local Surefire XML, the current T6/T7 helpers and Protos source, unqualified
+lookup in EXECUTION_AND_CONTROL.md, Resources.protos's failure/close paths and
+ProtosHttpAsyncFacility.java's existing terminal-facility admission. These
+support targeted diagnosis only: ordinary lexical closure entry and public
+terminal-Future semantics are preserved, and no native stub visibility or T7
+root cause is assumed. Java and Protos source APL notices remain intact;
+LICENSE.TXT remains present. Only the same three authorized files are edited.
+
+After the human whitespace/diff review and compile gate, the next affected
+focal run is:
+
+```sh
+mvn '-Dtest=ProtosI144FfmFixtureAbiTest#b4T6*+b4T7*' test
+```
+
+Allow up to a few minutes including existing fixture compilation. On failure,
+retain the phase-labelled T7 Error and T6 stack/request/native-status entries.
+The complete B4 set remains the later regression gate after these failures are
+resolved. No build, test, validation command or Git operation was executed by
+the agent during this follow-up.
+
+The second failure follow-up materially inspected the supplied 7/8 run, local
+Surefire XML, startB4Owner and startB3Owner, the phase-labelled Protos operation
+source and this guide's execution record. The established B3 exception handling
+is reused to preserve original failures while leaving owner-domain custody and
+cleanup ordering unchanged. Only the existing JUnit file and this guide change;
+source APL notices are retained, with no production or specification changes.
+No commands for Git, compilation, tests or validation were executed by the agent.
+The next human focal run after whitespace review and compilation is T7 alone:
+
+```sh
+mvn '-Dtest=ProtosI144FfmFixtureAbiTest#b4T7*' test
+```
+
+Preserve the primary cause and all suppressed exceptions. The revised helper
+remains NOT RUN; seven successful cases in the earlier candidate do not prove
+this diagnostic change or establish a complete B4 PASS.
+
+The class-preparation follow-up inspected the supplied primary/suppressed stack,
+prepareRestrictedErrorClasses, ProtosDiagnosticTraceCapture.java's static
+initialization and recordOrigin, ProtosActorTerminationObservation.java and
+this guide's failure history. These require diagnostic and termination classes
+to be available before thread restriction; they do not authorize production
+changes or establish the original guest-error cause. Only the existing test
+class and this guide are modified; the Java APL notice remains intact. No Git,
+compiler, test or validation command was executed by the agent. The correction
+remains NOT RUN; repeat the T7-only human focal command after whitespace review
+and compilation, preserving the next primary and suppressed causes.
+
+The exceptional-path follow-up inspected the latest supplied stack, the current
+class-preparation hook and sqliteProbe, the Protos publicAt/publicMemory helpers,
+and ProtosBytecodeRootNode.java's interceptTruffleException and
+EpilogForException.perform. The exceptional epilogue preserves published lexical
+state and propagates the original guest exception; this test must prepare that
+existing path without altering it. Only the three authorized files change;
+Java and Protos APL notices remain intact, with no production or specification
+change and no agent-executed validation. After the human whitespace and compile
+gates, repeat the existing T7-only command in a fresh JVM and preserve primary
+and suppressed causes. No T7 PASS is inferred from this diagnostic preparation.
+
+The terminal-projection follow-up inspected the supplied run, sqliteProbe,
+warmPublicErrorPath/publicAt, ProtosBytecodeTaskExecution.runSegment's
+ProtosSignalException catch and ProtosDiagnosticTraceCapture.capture/project.
+The evidence distinguishes locally handled errors from terminal task failures;
+only the latter invokes trace projection. Only the three authorized files were
+edited, with APL notices preserved and no production/specification change.
+No Git, build, test or validation command was executed by the agent. Retest the
+same T7-only focal command after the human whitespace and compile gates; retain
+the next primary and suppressed causes. No corrected-candidate PASS is claimed.
+
+The openMemory dependency investigation materially inspected the latest owner
+output; sqlite/module.protos and Resources.protos acquisition;
+ProtosStandardImportProtocol's resolve/lookup bridges;
+ProtosModuleRuntime.resolveModuleKey;
+ProtosStandardLibraryModuleResolver.resolve/sourceFile/requireExactChild/confined;
+ProtosLinuxConfinedFilesystemLandlock's handled read rights and single-root rule;
+and the test's current error description. Resolution precedes module-cache
+lookup and still requires library directory access. These facts constrain the
+conclusion to the current standard-resolver experiment; they do not establish a
+new language or durable-authority decision. Only this guide is edited in this
+follow-up; existing source APL notices and LICENSE.TXT are unchanged. No Git,
+compile, test or validation command was executed by the agent. Further identical
+T7 reruns are not requested as a remedy for this source-established dependency.
+The documentation delta still needs human whitespace review. No code change is
+authorized or made to bypass the limitation.
+
+
+### B4-R1 — Actor-local deferred ABI retention
+
+**Candidate status: NOT RUN.** The earlier B4 result remains **7 PASS / 1 FAIL**;
+its T7 failure chronology and conclusion above apply to the old module, whose
+repeated ABI import required access to standard-library directories. Inspection
+identifies resolution before cache lookup and real directory enumeration as a
+cause consistent with the observed `openMemory` Error. No syscall trace proves
+that this was the only cause. Success of this correction is not inferred.
+
+`protos/lib/sqlite/module.protos` now creates private `ABI: null` state alongside
+its existing dependencies. `openMemory` imports `./abi.protos` only while that
+binding is null, assigning it only after the import returns successfully. The
+first acquisition still uses ordinary authorized import and resolution. Module
+import itself loads no ABI or native library. No public slot, alternate FFM
+acquisition route, resolver bypass or second general module cache is added.
+
+The semantic module cache still maps resolved canonical identities to Actor-local
+instances. Private retention instead keeps an already acquired dependency through
+ordinary lexical capture and assignment in one module initializer. It avoids a
+new import expression on subsequent calls; it does not change what an import
+means. Each Actor prepares its own module and ABI. Retention grants no authority,
+shares no session or connection, and cannot reopen a revoked FFM session. A cold
+Actor still needs initial dependency-resolution authority. There are no Java
+production changes and no normative changes.
+
+The expanded T7 first proves that the canonical physical `protos/lib/sqlite`
+directory is accessible outside restriction, then requires an actual
+`Files.newDirectoryStream` access denial inside the unchanged Landlock grant.
+It runs the prepared public memory closure three times there, requiring copied
+values `9223372036854775806`, `41`, `9223372036854775806`, all existing statement
+and connection terminal closes, zero owned/uncertain custody and confined session
+close. Directory denial plus successful prepared operations would demonstrate
+that this path needs no successful standard-directory read; it is not a syscall
+trace proving that no filesystem operation was attempted.
+
+| B4-R1 case | Required evidence | Status |
+|---|---|---|
+| T7 expanded | Three public memory operations under restriction with directory access denied and owner-thread close | NOT RUN |
+| T9 `b4T9PublicSqliteAbiPreparationRemainsActorLocal` | Stable public module identity within each Actor, distinct modules and sessions across Actors; separate restricted physical threads and grants; copied values, no residual custody and owner-thread close | NOT RUN |
+| T10 `b4T10CachedSqliteAbiCannotReviveClosedProviderSession` | Prepared public closure refuses after explicit session close; original binding remains closed, session lookup refuses replacement, zero owned/uncertain custody; idempotent cleanup | NOT RUN |
+| Public lifecycle regression | Three successive acquisitions, distinct identities and schemas, independent survival after peer close, repeated terminal Future observations and ordinary resource release | NOT RUN |
+| Missing-provider regression | Import succeeds and retains public module identity; three acquisitions signal ordinary Errors without yielding a SQLite resource or native authority | NOT RUN |
+
+The lifecycle regression observes public behavior, not resolver I/O or native
+destructor counters. Repeated Future reads and closes observe one recorded
+terminal result; native custody in the real-provider experiments supplies separate
+release evidence. Host-side identity observations in T9 do not transfer guest
+modules or substitute for guest transfer semantics.
+
+Materially inspected for this patch: `AGENTS.work/DESIGN.md`,
+`AGENTS.work/IMPLEMENTATION.md`, `AGENTS.work/REFERENCE.md`, `protos/AGENTS.md`,
+`src/AGENTS.md`, `spec/semantics/MODULES.md` (private initialization, lexical
+capture, Actor-local identity, cache and failure), and
+`spec/runtime/ABSTRACT_RUNTIME.md` (ordinary deferred dependency closures).
+Implementation evidence includes the seven changed files, `protos/lib/core/import.protos`,
+`protos/lib/sqlite/abi.protos`, `protos/lib/sqlite/internal/Resources.protos`,
+`protos/lib/ffi/module.protos`, `ProtosForeignProviderSessionBinding.java`,
+`ProtosForeignProviderProcessLifecycle.java`, `ProtosPolyglotProcessContext.java`,
+`ProtosLanguageContext.java`, `Makefile` and `LICENSE.TXT`. These constrain the
+patch to ordinary lexical retention, existing importer authorization, existing
+resource/Future cleanup and permanent session revocation. The earlier ledger
+assessment recorded in this section remains unchanged; no blocker is discharged.
+All modified source files preserve their existing APL Part 5 notices; no new
+source, third-party change or packaging change is introduced.
+
+B1 remains **13/13 PASS observed**; B2 retains **T5 noncompliance reproduced**;
+B3 remains **6/6 PASS observed**; previous B4 remains **7 PASS / 1 FAIL**.
+**PLAT074 OPEN; D256 pending; LIB031 BLOCKED.** B4-R1 does not establish SQLite
+confinement, authorize a durable API, claim 10/10 PASS or unblock a dependency.
+
+No Git, build, compiler, test or validation command was executed for B4-R1.
+The owner should first inspect the changed paths, run `git diff --check` and
+review the exact seven-file diff. Then run `mvn -DskipTests test-compile`,
+`mvn '-Dtest=ProtosI144FfmFixtureAbiTest#b4T*' test` and the affected public
+foreign-provider regressions with `make test-protos-foreign` after packaging the
+current candidate. Maven and the dynamic Java/C fixtures may take several
+minutes; the external provider lane takes additional build/integration time.
+Run each gate only after its predecessor succeeds. Integrated `make test`
+validation remains required for final shared-library closure, after cheaper
+gates, and is not claimed here. All B4-R1 checks remain **NOT RUN**.

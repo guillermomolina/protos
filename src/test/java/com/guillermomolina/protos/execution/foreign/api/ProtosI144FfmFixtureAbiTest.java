@@ -60,7 +60,7 @@ import org.junit.jupiter.api.parallel.Execution;
 import org.junit.jupiter.api.parallel.ExecutionMode;
 
 /**
- * I144 Java test host of the SQLite-independent ABI fixture.
+ * I144 ABI fixture host and PLAT074 real-provider confinement experiments.
  *
  * <p>The CLI has no provider-option channel, so this host builds the test-only registration
  * {@code ffi-test:} ({@code plugins/ffm-fixture}, the generic FFM backend under a fixture-only
@@ -78,6 +78,7 @@ class ProtosI144FfmFixtureAbiTest {
     @TempDir static Path work;
     static Path jar;
     static Path library;
+    static Path sqliteJar;
 
     @BeforeAll
     static void buildFixture() throws Exception {
@@ -129,6 +130,10 @@ class ProtosI144FfmFixtureAbiTest {
                         classes,
                         "com.guillermomolina.protos.ffm",
                         "com.guillermomolina.protos.ffm.FfmFixtureProvider");
+        sqliteJar = ProtosExternalForeignProviderTest.jar(
+                Files.createDirectories(work.resolve("sqlite-provider")), classes,
+                "com.guillermomolina.protos.ffm",
+                "com.guillermomolina.protos.ffm.FfmForeignProvider");
     }
 
     @BeforeAll
@@ -137,6 +142,10 @@ class ProtosI144FfmFixtureAbiTest {
         ClassLoader loader = ProtosI144FfmFixtureAbiTest.class.getClassLoader();
         Class.forName("com.guillermomolina.protos.runtime.ProtosCoreErrors$StandardError", true, loader);
         Class.forName("com.guillermomolina.protos.runtime.ProtosIoOperation", true, loader);
+        Class.forName("com.guillermomolina.protos.execution.ProtosDiagnosticTraceCapture", true, loader);
+        Class.forName("com.guillermomolina.protos.execution.ProtosBytecodeRootNode$EpilogForException",
+                true, loader);
+        Class.forName("com.guillermomolina.protos.runtime.ProtosActorTerminationObservation", true, loader);
     }
 
     @Test
@@ -1205,17 +1214,7 @@ class ProtosI144FfmFixtureAbiTest {
 
     // Shared only by B3-T2..T6; all signatures and native operations remain in Protos.
     private static void prepareB3(Probe owner) throws Exception {
-        ProtosForeignPluginProvider.Session bridge =
-                (ProtosForeignPluginProvider.Session) owner.session.sessionForRuntime();
-        ClassLoader loader = bridge.plugin.getClass().getClassLoader();
-        try (java.util.jar.JarFile prepared = new java.util.jar.JarFile(jar.toFile())) {
-            for (java.util.jar.JarEntry entry : java.util.Collections.list(prepared.entries())) {
-                if (entry.getName().endsWith(".class")) {
-                    Class.forName(entry.getName().replace('/', '.').replaceFirst("\\.class$", ""),
-                            true, loader);
-                }
-            }
-        }
+        preloadProviderClasses(owner);
         owner.call("threadId");
         // Exercise the ordinary Error path before restricting the carrier. No owned acquisition.
         owner.refuses("incrementOwned", "invalid");
@@ -1336,6 +1335,675 @@ class ProtosI144FfmFixtureAbiTest {
                 "Process Context did not complete terminal cleanup; host close withheld");
         // Host.close also exposes any recorded Context-close failure. No retry after failure.
         fixture.close();
+    }
+
+    // ---- PLAT074-B4: Java coordinates; every SQLite operation is guest Protos.
+
+    @Test
+    void b4T1RealSqlitePersistsThroughConfinedFfmSession(TestReporter reporter) throws Exception {
+        Path root = Files.createTempDirectory(work, "b4-persist-").toRealPath();
+        Path outside = Files.createTempDirectory(work, "b4-outside-").toRealPath();
+        Path db = root.resolve("persistent.db");
+        Path exterior = outside.resolve("exterior.db");
+        var fixture = sqliteFixture();
+        Probe[] owners = new Probe[1];
+        PlatformCall[] calls = new PlatformCall[1];
+        Throwable primary = null;
+        try {
+            Probe observer = sqliteProbe(fixture, fixture.root, reporter);
+            seedSqlite(observer, exterior, 7);
+            Probe owner = owners[0] = sqliteProbe(fixture, fixture.newActorActivation(), reporter);
+            assertFalse(Files.exists(db), "persistent database must not be opened during warmup");
+            calls[0] = startB4Owner(root, owner, reporter, () -> {
+                assertTrue(kernelTid() > 0);
+                assertEquals(0, number(owner.call("openFile", db.toString())));
+                owner.call("execute", "CREATE TABLE t(value INTEGER)");
+                owner.call("insertInteger", ProtosNumericValueSupport.integer(9223372036854775806L));
+                assertEquals(9223372036854775806L,
+                        number(owner.call("queryInteger", "SELECT value FROM t")));
+                owner.call("beginImmediate");
+                owner.call("insertInteger", 42);
+                owner.call("rollback");
+                assertEquals(1, number(owner.call("queryInteger", "SELECT count(*) FROM t")));
+                owner.call("beginImmediate");
+                owner.call("insertInteger", 43);
+                owner.call("commit");
+                assertEquals(1, number(owner.call("autocommit")));
+                assertEquals(0, number(owner.call("close")));
+                assertEquals(0, number(owner.call("openFile", db.toString())));
+                assertEquals(2, number(owner.call("queryInteger", "SELECT count(*) FROM t")));
+                assertEquals(43, number(owner.call("queryInteger", "SELECT min(value) FROM t")));
+                owner.call("close");
+                rejectSqliteOpen(owner, exterior, reporter);
+                reporter.publishEntry("B4-T1 transactions", "i64 copied; ROLLBACK absent; COMMIT persisted after reopen");
+            });
+            calls[0].finish();
+            assertEquals(0, number(observer.call("openReadOnly", exterior.toString())));
+            assertEquals(7, number(observer.call("queryInteger", "SELECT value FROM t")));
+            observer.call("close");
+        } catch (Exception | Error problem) { primary = problem; throw problem; }
+        finally { finishB3(primary, reporter, "B4-T1", fixture, owners, calls); }
+    }
+
+    @Test
+    void b4T2RealSqliteWalAndShmRemainInsideGrant(TestReporter reporter) throws Exception {
+        Path root = Files.createTempDirectory(work, "b4-wal-").toRealPath();
+        Path db = root.resolve("wal.db");
+        var fixture = sqliteFixture();
+        Probe[] owners = new Probe[2];
+        PlatformCall[] calls = new PlatformCall[2];
+        CountDownLatch created = new CountDownLatch(1), readers = new CountDownLatch(1);
+        CountDownLatch committed = new CountDownLatch(1), observed = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        Throwable primary = null;
+        try {
+            Probe first = owners[0] = sqliteProbe(fixture, fixture.root, reporter);
+            Probe second = owners[1] = sqliteProbe(fixture, fixture.newActorActivation(), reporter);
+            assertNotSame(first.session, second.session);
+            calls[0] = startB4Owner(root, first, reporter, () -> {
+                assertEquals(0, number(first.call("openFile", db.toString())));
+                first.call("execute", "PRAGMA journal_mode=WAL");
+                assertWal(first, reporter);
+                first.call("execute", "CREATE TABLE t(value INTEGER)");
+                first.call("insertInteger", 1);
+                created.countDown();
+                awaitB3(readers, "second WAL connection");
+                first.call("beginImmediate");
+                first.call("insertInteger", 2);
+                first.call("commit");
+                committed.countDown();
+                awaitB3(release, "WAL observation completed");
+                first.call("close");
+            });
+            calls[1] = startB4Owner(root, second, reporter, () -> {
+                awaitB3(created, "WAL schema");
+                assertEquals(0, number(second.call("openFile", db.toString())));
+                assertWal(second, reporter);
+                assertEquals(1, number(second.call("queryInteger", "SELECT count(*) FROM t")));
+                readers.countDown();
+                awaitB3(committed, "WAL COMMIT");
+                assertEquals(2, number(second.call("queryInteger", "SELECT count(*) FROM t")));
+                observed.countDown();
+                awaitB3(release, "live WAL sidecars observed");
+                second.call("close");
+            });
+            awaitB3(observed, "WAL visibility");
+            assertTrue(Files.exists(Path.of(db + "-wal")));
+            assertTrue(Files.exists(Path.of(db + "-shm")));
+            assertNotEquals(calls[0].tid, calls[1].tid);
+            reporter.publishEntry("B4-T2", "WAL and SHM present with two live connections; COMMIT visible");
+            release.countDown();
+            calls[0].finish();
+            calls[1].finish();
+            Probe reopened = sqliteProbe(fixture, fixture.newActorActivation(), reporter);
+            PlatformCall verification = startB4Owner(root, reopened, reporter, () -> {
+                assertEquals(0, number(reopened.call("openFile", db.toString())));
+                assertEquals(2, number(reopened.call("queryInteger", "SELECT count(*) FROM t")));
+                reopened.call("close");
+            });
+            // Keep this owner in the same teardown accounting, including a failed join.
+            owners[0] = reopened;
+            calls[0] = verification;
+            verification.finish();
+        } catch (Exception | Error problem) { primary = problem; throw problem; }
+        finally {
+            release.countDown();
+            finishB3(primary, reporter, "B4-T2", fixture, owners, calls);
+        }
+    }
+
+    @Test
+    void b4T3RealSqliteAttachAndVacuumCannotEscapeLandlock(TestReporter reporter) throws Exception {
+        Path root = Files.createTempDirectory(work, "b4-attach-").toRealPath();
+        Path outside = Files.createTempDirectory(work, "b4-attach-outside-'").toRealPath();
+        Path exterior = outside.resolve("source's.db"), output = outside.resolve("vacuum's.db");
+        var fixture = sqliteFixture();
+        Probe[] owners = new Probe[1];
+        PlatformCall[] calls = new PlatformCall[1];
+        Throwable primary = null;
+        try {
+            Probe observer = sqliteProbe(fixture, fixture.root, reporter);
+            seedSqlite(observer, exterior, 71);
+            // Positive controls exercise exactly these SQL routes without Landlock.
+            assertEquals(0, number(observer.call("openMemory")));
+            observer.call("execute", "ATTACH DATABASE " + sqlPath(exterior) + " AS outside_db");
+            observer.call("execute", "INSERT INTO outside_db.t VALUES (72)");
+            observer.call("execute", "DETACH DATABASE outside_db");
+            observer.call("execute", "VACUUM INTO " + sqlPath(output));
+            observer.call("close");
+            assertTrue(Files.size(output) > 0);
+            Files.delete(output);
+            byte[] before = Files.readAllBytes(exterior);
+            List<String> names = directoryNames(outside);
+            Probe owner = owners[0] = sqliteProbe(fixture, fixture.newActorActivation(), reporter);
+            calls[0] = startB4Owner(root, owner, reporter, () -> {
+                assertEquals(0, number(owner.call("openFile", root.resolve("inside.db").toString())));
+                owner.call("execute", "CREATE TABLE t(value INTEGER)");
+                long attach = number(owner.call("executeStatus",
+                        "ATTACH DATABASE " + sqlPath(exterior) + " AS outside_db"));
+                assertEquals(14, attach, "SQLITE_CANTOPEN");
+                assertEquals(0, number(owner.call("queryInteger",
+                        "SELECT count(*) FROM pragma_database_list WHERE name='outside_db'")));
+                long vacuum = number(owner.call("executeStatus", "VACUUM INTO " + sqlPath(output)));
+                assertEquals(14, vacuum, "SQLITE_CANTOPEN");
+                owner.call("insertInteger", 73);
+                assertEquals(73, number(owner.call("queryInteger", "SELECT value FROM t")));
+                owner.call("close");
+                reporter.publishEntry("B4-T3 native codes", "ATTACH=" + attach + ", VACUUM INTO=" + vacuum);
+            });
+            calls[0].finish();
+            assertFalse(Files.exists(output));
+            assertTrue(java.util.Arrays.equals(before, Files.readAllBytes(exterior)));
+            assertEquals(names, directoryNames(outside));
+            reporter.publishEntry("B4-T3 observation", "exterior final bytes/names unchanged; no syscall trace or transient-effect exclusion");
+        } catch (Exception | Error problem) { primary = problem; throw problem; }
+        finally { finishB3(primary, reporter, "B4-T3", fixture, owners, calls); }
+    }
+
+    @Test
+    void b4T4RealSqliteBusyAndTransactionRecoveryUnderConfinement(TestReporter reporter) throws Exception {
+        Path root = Files.createTempDirectory(work, "b4-busy-").toRealPath();
+        Path db = root.resolve("busy.db");
+        var fixture = sqliteFixture();
+        Probe[] owners = new Probe[2];
+        PlatformCall[] calls = new PlatformCall[2];
+        CountDownLatch locked = new CountDownLatch(1), busy = new CountDownLatch(1);
+        CountDownLatch committed = new CountDownLatch(1);
+        Throwable primary = null;
+        try {
+            Probe first = owners[0] = sqliteProbe(fixture, fixture.root, reporter);
+            Probe second = owners[1] = sqliteProbe(fixture, fixture.newActorActivation(), reporter);
+            calls[0] = startB4Owner(root, first, reporter, () -> {
+                assertEquals(0, number(first.call("openFile", db.toString())));
+                first.call("execute", "CREATE TABLE t(value INTEGER)");
+                first.call("beginImmediate");
+                first.call("insertInteger", 1);
+                assertEquals(0, number(first.call("autocommit")));
+                locked.countDown();
+                awaitB3(busy, "second writer SQLITE_BUSY");
+                first.call("commit");
+                committed.countDown();
+                first.call("close");
+            });
+            calls[1] = startB4Owner(root, second, reporter, () -> {
+                awaitB3(locked, "first writer transaction");
+                assertEquals(0, number(second.call("openFile", db.toString())));
+                assertEquals(0, number(second.call("setBusyTimeout", 100)));
+                long status = number(second.call("executeStatus", "INSERT INTO t VALUES (2)"));
+                assertEquals(5, status, "SQLITE_BUSY must remain native data");
+                assertEquals(1, number(second.call("autocommit")));
+                reporter.publishEntry("B4-T4 native result", "SQLITE_BUSY=" + status + ", autocommit=1, busy_timeout=100ms");
+                busy.countDown();
+                awaitB3(committed, "first COMMIT");
+                assertEquals(1, number(second.call("queryInteger", "SELECT value FROM t")));
+                second.call("insertInteger", 2);
+                assertEquals(2, number(second.call("queryInteger", "SELECT count(*) FROM t")));
+                second.call("close");
+            });
+            calls[0].finish();
+            calls[1].finish();
+            assertNotSame(first.session, second.session);
+            assertNotEquals(calls[0].tid, calls[1].tid);
+        } catch (Exception | Error problem) { primary = problem; throw problem; }
+        finally { finishB3(primary, reporter, "B4-T4", fixture, owners, calls); }
+    }
+
+    @Test
+    void b4T5RealSqliteIndependentGrantsRejectCrossAccess(TestReporter reporter) throws Exception {
+        Path[] roots = {Files.createTempDirectory(work, "b4-grant-a-").toRealPath(),
+                Files.createTempDirectory(work, "b4-grant-b-").toRealPath()};
+        Path[] db = {roots[0].resolve("a.db"), roots[1].resolve("b.db")};
+        var fixture = sqliteFixture();
+        Probe[] owners = new Probe[2];
+        PlatformCall[] calls = new PlatformCall[2];
+        CountDownLatch ready = new CountDownLatch(2), release = new CountDownLatch(1);
+        Throwable primary = null;
+        try {
+            Probe observer = sqliteProbe(fixture, fixture.root, reporter);
+            seedSqlite(observer, db[0], 10);
+            seedSqlite(observer, db[1], 20);
+            for (int i = 0; i < 2; i++) {
+                int index = i;
+                Probe owner = owners[i] = sqliteProbe(fixture, fixture.newActorActivation(), reporter);
+                calls[i] = startB4Owner(roots[i], owner, reporter, () -> {
+                    assertEquals(0, number(owner.call("openFile", db[index].toString())));
+                    owner.call("insertInteger", index + 30);
+                    assertEquals(2, number(owner.call("queryInteger", "SELECT count(*) FROM t")));
+                    owner.call("close");
+                    rejectSqliteOpen(owner, db[1 - index], reporter);
+                    ready.countDown();
+                    awaitB3(release, "simultaneous independent grants");
+                });
+            }
+            awaitB3(ready, "both grants exercised");
+            assertNotEquals(calls[0].tid, calls[1].tid);
+            assertNotSame(owners[0].session, owners[1].session);
+            assertNotSame(owners[0].declarations, owners[1].declarations);
+            release.countDown();
+            calls[0].finish();
+            calls[1].finish();
+            for (int i = 0; i < 2; i++) {
+                assertEquals(0, number(observer.call("openFile", db[i].toString())));
+                assertEquals(40 + 11 * i,
+                        number(observer.call("queryInteger", "SELECT sum(value) FROM t")));
+                observer.call("close");
+            }
+            reporter.publishEntry("B4-T5", "distinct Actor sessions/TIDs; no native handle export; cross RO/RW=SQLITE_CANTOPEN");
+        } catch (Exception | Error problem) { primary = problem; throw problem; }
+        finally {
+            release.countDown();
+            finishB3(primary, reporter, "B4-T5", fixture, owners, calls);
+        }
+    }
+
+    @Test
+    void b4T6RealSqliteCloseRequestPreservesInFlightNativeCall(TestReporter reporter) throws Exception {
+        Path root = Files.createTempDirectory(work, "b4-close-active-").toRealPath();
+        Path db = root.resolve("active.db");
+        int downcallLine = sqliteDowncallLine();
+        var fixture = sqliteFixture();
+        Probe[] owners = new Probe[2];
+        PlatformCall[] calls = new PlatformCall[2];
+        CountDownLatch locked = new CountDownLatch(1), stepping = new CountDownLatch(1);
+        CountDownLatch request = new CountDownLatch(1), completed = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicLong requestedAt = new java.util.concurrent.atomic.AtomicLong();
+        java.util.concurrent.atomic.AtomicLong returnedAt = new java.util.concurrent.atomic.AtomicLong();
+        Throwable primary = null;
+        try {
+            Probe blocker = owners[0] = sqliteProbe(fixture, fixture.root, reporter);
+            Probe owner = owners[1] = sqliteProbe(fixture, fixture.newActorActivation(), reporter);
+            calls[0] = startB4Owner(root, blocker, reporter, () -> {
+                assertEquals(0, number(blocker.call("openFile", db.toString())));
+                blocker.call("execute", "CREATE TABLE t(value INTEGER)");
+                blocker.call("beginImmediate");
+                blocker.call("insertInteger", 1);
+                locked.countDown();
+                awaitB3(release, "busy call returned and owner closed");
+                blocker.call("commit");
+                blocker.call("close");
+                assertEquals(0, number(blocker.call("openFile", db.toString())));
+                assertEquals(1, number(blocker.call("queryInteger", "SELECT count(*) FROM t")));
+                blocker.call("close");
+            });
+            calls[1] = startB4Owner(root, owner, reporter, () -> {
+                awaitB3(locked, "SQLite blocking transaction");
+                assertEquals(0, number(owner.call("openFile", db.toString())));
+                assertEquals(0, number(owner.call("setBusyTimeout", 2000)));
+                owner.call("prepareContendedInsert");
+                stepping.countDown();
+                long status = number(owner.call("stepPreparedStatus"));
+                returnedAt.set(System.nanoTime());
+                assertEquals(5, status, "real finite native busy timeout must return SQLITE_BUSY");
+                assertEquals(0, request.getCount(), "request must arrive before downcall returns");
+                assertTrue(requestedAt.get() > 0 && requestedAt.get() < returnedAt.get());
+                assertEquals(2, sqliteCustody(owner, "ownedCountForDiagnostics"),
+                        "connection and completed statement are still owned");
+                owner.call("finalizePending"); // BUSY may also be the finalize result: never retry.
+                assertEquals(1, number(owner.call("autocommit")));
+                assertEquals(1, sqliteCustody(owner, "ownedCountForDiagnostics"),
+                        "only connection may remain after finalization");
+                reporter.publishEntry("B4-T6 native completion", "SQLITE_BUSY=" + status
+                        + ", request=" + requestedAt.get() + ", return=" + returnedAt.get()
+                        + ", autocommit=1; statement finalized before owner session close");
+                // startB4Owner retires guest state and closes custody on this thread.
+                completed.countDown();
+            });
+            awaitB3(stepping, "SQLite step about to enter");
+            awaitCondition(() -> sqliteDowncallActive(calls[1].thread, downcallLine),
+                    "no active SQLite downcall observed; request overlap NOT demonstrated");
+            assertOnStack(calls[1].thread, "FfmBinding", "invoke");
+            requestedAt.set(System.nanoTime());
+            request.countDown();
+            // Reobserve native entry after recording the request: a prior frame alone is insufficient.
+            assertTrue(sqliteDowncallActive(calls[1].thread, downcallLine),
+                    "request overlap with native SQLite step was not demonstrated");
+            assertEquals(0, returnedAt.get(), "request must precede completed native call");
+            assertTrue(owner.session.isOpenForRuntime());
+            reporter.publishEntry("B4-T6 request", "recorded at FfmBinding.invoke downcall line "
+                    + downcallLine + "; request=" + requestedAt.get()
+                    + "; stack=" + java.util.Arrays.toString(calls[1].thread.getStackTrace())
+                    + "; no exterior close or interrupt");
+            awaitB3(completed, "SQLite normal return");
+            calls[1].finish();
+            assertFalse(owner.session.isOpenForRuntime());
+            release.countDown();
+            calls[0].finish();
+            assertNotEquals(calls[0].tid, calls[1].tid);
+        } catch (Exception | Error problem) { primary = problem; throw problem; }
+        finally {
+            release.countDown();
+            finishB3(primary, reporter, "B4-T6", fixture, owners, calls);
+        }
+    }
+
+    @Test
+    void b4T7PublicStdSqliteMemoryOperationsRemainCompatibleWithLandlock(TestReporter reporter)
+            throws Exception {
+        Path root = Files.createTempDirectory(work, "b4-public-memory-").toRealPath();
+        Path standardDirectory = Path.of("protos", "lib", "sqlite").toRealPath();
+        assertTrue(Files.isDirectory(standardDirectory));
+        try (var entries = Files.newDirectoryStream(standardDirectory)) {
+            assertTrue(entries.iterator().hasNext(), "standard directory accessible before restriction");
+        }
+        var fixture = sqliteFixture();
+        Probe[] owners = new Probe[1];
+        PlatformCall[] calls = new PlatformCall[1];
+        Throwable primary = null;
+        try {
+            Probe owner = owners[0] = sqliteProbe(fixture, fixture.root, reporter);
+            calls[0] = startB4Owner(root, owner, reporter, () -> {
+                assertThrows(java.nio.file.AccessDeniedException.class, () -> {
+                    try (var entries = Files.newDirectoryStream(standardDirectory)) {
+                        entries.iterator().hasNext();
+                    }
+                });
+                for (int attempt = 0; attempt < 3; attempt++) {
+                    long[] copied = numbers(owner.call("publicMemory"), 3);
+                    assertEquals(9223372036854775806L, copied[0]);
+                    assertEquals(41, copied[1]);
+                    assertEquals(9223372036854775806L, copied[2]);
+                    assertEquals(0, sqliteCustody(owner, "ownedCountForDiagnostics"));
+                    assertEquals(0, sqliteCustody(owner, "uncertainCountForDiagnostics"));
+                }
+                reporter.publishEntry("B4-T7", "std:sqlite openMemory/create/bind/step/copy/reset/terminal Future close completed");
+            });
+            calls[0].finish();
+            assertEquals(List.of(), directoryNames(root));
+        } catch (Exception | Error problem) { primary = problem; throw problem; }
+        finally { finishB3(primary, reporter, "B4-T7", fixture, owners, calls); }
+    }
+
+    @Test
+    void b4T8AuthorizedSqliteNativeAccessIsNotImplicitlyConfined(TestReporter reporter) throws Exception {
+        var unauthorized = new ProtosExternalForeignProviderTest.Fixture(ProtosPolyglotRuntimeHost.open(), true);
+        try {
+            unauthorized.eval("import(\"std:ffi\")\nimport(\"std:sqlite\")");
+            assertSame(null, unauthorized.host.foreignProviderLoaderForTesting());
+            assertEquals(ProtosExecutionOutcome.State.FAILED,
+                    unauthorized.run("import(\"ffi:sqlite3\")").state());
+            assertEquals(ProtosExecutionOutcome.State.FAILED,
+                    unauthorized.run("import(\"std:sqlite\").openMemory()").state());
+        } finally { closeB3Fixture(unauthorized); }
+        Path root = Files.createTempDirectory(work, "b4-authority-").toRealPath();
+        Path outside = Files.createTempDirectory(work, "b4-authority-outside-").toRealPath();
+        Path db = outside.resolve("exterior.db");
+        var fixture = sqliteFixture();
+        Probe[] owners = new Probe[2];
+        PlatformCall[] calls = new PlatformCall[2];
+        CountDownLatch denied = new CountDownLatch(1);
+        Throwable primary = null;
+        try {
+            Probe seed = sqliteProbe(fixture, fixture.root, reporter);
+            seedSqlite(seed, db, 81);
+            Probe restricted = owners[0] = sqliteProbe(fixture, fixture.newActorActivation(), reporter);
+            Probe unrestricted = owners[1] = sqliteProbe(fixture, fixture.newActorActivation(), reporter);
+            calls[0] = startB4Owner(root, restricted, reporter, () -> {
+                rejectSqliteOpen(restricted, db, reporter);
+                denied.countDown();
+            });
+            calls[1] = startB4Owner(null, unrestricted, reporter, () -> {
+                awaitB3(denied, "restricted SQLite denial");
+                assertEquals(0, number(unrestricted.call("openFile", db.toString())));
+                unrestricted.call("insertInteger", 82);
+                assertEquals(163, number(unrestricted.call("queryInteger", "SELECT sum(value) FROM t")));
+                unrestricted.call("close");
+            });
+            calls[0].finish();
+            calls[1].finish();
+            assertNotEquals(calls[0].tid, calls[1].tid);
+            reporter.publishEntry("B4-T8 NEGATIVE CONTROL", "authorized unrestricted Actor accessed exterior DB; provider does NOT impose Filesystem confinement");
+        } catch (Exception | Error problem) { primary = problem; throw problem; }
+        finally { finishB3(primary, reporter, "B4-T8", fixture, owners, calls); }
+    }
+
+    private static ProtosExternalForeignProviderTest.Fixture sqliteFixture() throws Exception {
+        return new ProtosExternalForeignProviderTest.Fixture(
+                ProtosPolyglotRuntimeHost.openWithForeignProviders(
+                        ProtosForeignProviderConfiguration.trustedInProcess(List.of(jar, sqliteJar))
+                                .withProviderOptions(PROVIDER_ID, authorized())), true);
+    }
+
+    @Test
+    void b4T9PublicSqliteAbiPreparationRemainsActorLocal(TestReporter reporter) throws Exception {
+        Path firstRoot = Files.createTempDirectory(work, "b4-public-first-").toRealPath();
+        Path secondRoot = Files.createTempDirectory(work, "b4-public-second-").toRealPath();
+        Path standardDirectory = Path.of("protos", "lib", "sqlite").toRealPath();
+        try (var entries = Files.newDirectoryStream(standardDirectory)) {
+            assertTrue(entries.iterator().hasNext());
+        }
+        var fixture = sqliteFixture();
+        Probe[] owners = new Probe[2];
+        PlatformCall[] calls = new PlatformCall[2];
+        Throwable primary = null;
+        try {
+            Probe first = owners[0] = sqliteProbe(fixture, fixture.root, reporter);
+            Probe second = owners[1] = sqliteProbe(fixture, fixture.newActorActivation(), reporter);
+            Object firstModule = first.call("publicModule");
+            Object secondModule = second.call("publicModule");
+            assertSame(firstModule, first.call("publicModule"));
+            assertSame(secondModule, second.call("publicModule"));
+            assertNotSame(firstModule, secondModule);
+            assertNotSame(first.session, second.session);
+            assertNotSame(first.session.sessionForRuntime(), second.session.sessionForRuntime());
+            Path[] roots = {firstRoot, secondRoot};
+            for (int i = 0; i < owners.length; i++) {
+                Probe owner = owners[i];
+                calls[i] = startB4Owner(roots[i], owner, reporter, () -> {
+                    assertThrows(java.nio.file.AccessDeniedException.class, () -> {
+                        try (var entries = Files.newDirectoryStream(standardDirectory)) {
+                            entries.iterator().hasNext();
+                        }
+                    });
+                    long[] copied = numbers(owner.call("publicMemory"), 3);
+                    assertEquals(9223372036854775806L, copied[0]);
+                    assertEquals(41, copied[1]);
+                    assertEquals(9223372036854775806L, copied[2]);
+                    assertEquals(0, sqliteCustody(owner, "ownedCountForDiagnostics"));
+                    assertEquals(0, sqliteCustody(owner, "uncertainCountForDiagnostics"));
+                });
+            }
+            for (PlatformCall call : calls) call.finish();
+            assertTrue(calls[0].installed);
+            assertTrue(calls[1].installed);
+            assertNotEquals(calls[0].tid, calls[1].tid);
+            assertEquals(List.of(), directoryNames(firstRoot));
+            assertEquals(List.of(), directoryNames(secondRoot));
+        } catch (Exception | Error problem) { primary = problem; throw problem; }
+        finally { finishB3(primary, reporter, "B4-T9", fixture, owners, calls); }
+    }
+
+    @Test
+    void b4T10CachedSqliteAbiCannotReviveClosedProviderSession(TestReporter reporter) throws Exception {
+        var fixture = sqliteFixture();
+        Probe[] owners = new Probe[1];
+        PlatformCall[] calls = new PlatformCall[1];
+        Throwable primary = null;
+        try {
+            Probe owner = owners[0] = sqliteProbe(fixture, fixture.root, reporter);
+            // sqliteProbe has already completed publicMemory, including every terminal close.
+            Object backend = ((ProtosForeignPluginProvider.Session)
+                    owner.session.sessionForRuntime()).plugin;
+            int sessionCount = fixture.context.foreignProviderSessionCountForTesting();
+            int compartmentCount = fixture.context.foreignProviderCompartmentCountForTesting();
+            calls[0] = startB3Owner(null, owner, () -> {
+                assertEquals(0, sqliteCustody(backend, "ownedCountForDiagnostics"));
+                assertEquals(0, sqliteCustody(backend, "uncertainCountForDiagnostics"));
+                owner.session.closeForRuntime();
+                assertFalse(owner.session.isOpenForRuntime());
+                owner.refuses("publicMemory");
+                assertFalse(owner.session.isOpenForRuntime());
+                assertThrows(IllegalStateException.class, () -> fixture.context.foreignSessionForRuntime(
+                        fixture.actorOf(owner.actor), new ProtosForeignProviderId("protos-ffm")));
+                assertEquals(sessionCount, fixture.context.foreignProviderSessionCountForTesting());
+                assertEquals(compartmentCount, fixture.context.foreignProviderCompartmentCountForTesting());
+                assertEquals(0, sqliteCustody(backend, "ownedCountForDiagnostics"));
+                assertEquals(0, sqliteCustody(backend, "uncertainCountForDiagnostics"));
+                owner.session.closeForRuntime();
+            });
+            calls[0].finish();
+        } catch (Exception | Error problem) { primary = problem; throw problem; }
+        finally { finishB3(primary, reporter, "B4-T10", fixture, owners, calls); }
+    }
+
+    private static Probe sqliteProbe(ProtosExternalForeignProviderTest.Fixture fixture,
+            ProtosActivation actor, TestReporter reporter) throws Exception {
+        ProtosObjectValue module = (ProtosObjectValue) fixture.eval(actor,
+                Files.readString(CASES.resolve("sqlite-landlock-provider.protos")));
+        Probe preparation = new Probe(fixture, actor, module, null);
+        ProtosObjectValue operations = (ProtosObjectValue) preparation.call("prepare");
+        ProtosForeignProviderSessionBinding session = fixture.context.foreignSessionForRuntime(
+                fixture.actorOf(actor), new ProtosForeignProviderId("protos-ffm"));
+        assertEquals("protos-ffm", session.providerId().value());
+        Probe owner = new Probe(fixture, actor, operations, session);
+        preloadProviderClasses(owner);
+        long version = number(owner.call("version")), threadsafe = number(owner.call("threadsafe"));
+        assertTrue(version >= 3016000, "WAL/table-valued PRAGMA require a modern SQLite");
+        assertTrue(threadsafe > 0, "two Actor sessions require thread-safe SQLite build");
+        reporter.publishEntry("B4 SQLite preparation", "version=" + version + ", threadsafe=" + threadsafe);
+        assertEquals(0, number(owner.call("openMemory")));
+        owner.call("execute", "CREATE TABLE t(value INTEGER)");
+        owner.call("insertInteger", 41);
+        assertEquals(41, number(owner.call("queryInteger", "SELECT value FROM t")));
+        owner.call("beginImmediate");
+        owner.call("rollback");
+        owner.call("beginImmediate");
+        owner.call("commit");
+        owner.call("setBusyTimeout", 0);
+        owner.call("autocommit");
+        owner.call("errorCode");
+        owner.call("close");
+        // A successful memory run never exercises exception interception/epilogues.
+        // Exercise the diagnostic wrapper and exceptional ensure before restriction too.
+        assertSame(true, preparation.call("warmPublicErrorPath"));
+        // Cross the real root-task failure boundary too: caught guest errors do
+        // not invoke terminal diagnostic trace projection (Collector/Origin).
+        ProtosExecutionOutcome terminalError = preparation.outcome("warmPublicTerminalError");
+        assertEquals(ProtosExecutionOutcome.State.FAILED, terminalError.state());
+        assertOrdinary(fixture, terminalError.error());
+        owner.call("publicMemory"); // Warm the exact exported closure used by T7.
+        assertEquals(0, sqliteCustody(owner, "ownedCountForDiagnostics"));
+        assertEquals(0, sqliteCustody(owner, "uncertainCountForDiagnostics"));
+        return owner;
+    }
+
+    private static PlatformCall startB4Owner(Path root, Probe owner, TestReporter reporter,
+            Experiment experiment) throws Exception {
+        return startB3Owner(root, owner, () -> {
+            Throwable primary = null;
+            try {
+                reporter.publishEntry("B4 owner", "physical Linux TID=" + kernelTid()
+                        + ", restricted=" + (root != null));
+                experiment.run();
+            } catch (Exception | Error problem) {
+                primary = problem;
+                throw problem;
+            } finally {
+                try {
+                    owner.call("closeForSession");
+                    assertSame(false, owner.call("isOpen"));
+                    Object backend = ((ProtosForeignPluginProvider.Session)
+                            owner.session.sessionForRuntime()).plugin;
+                    owner.session.closeForRuntime();
+                    assertFalse(owner.session.isOpenForRuntime());
+                    assertEquals(0, sqliteCustody(backend, "ownedCountForDiagnostics"));
+                    assertEquals(0, sqliteCustody(backend, "uncertainCountForDiagnostics"));
+                    reporter.publishEntry("B4 owner close", "TID=" + kernelTid()
+                            + ", session closed; owned=0, uncertain=0");
+                } catch (Exception | Error cleanup) {
+                    // Match B3: cleanup must not replace the original experiment failure,
+                    // including a fatal guest entry that already closed its Context.
+                    if (primary != null) primary.addSuppressed(cleanup);
+                    else throw cleanup;
+                }
+            }
+        });
+    }
+
+    /** Read-only observation of the backend's existing diagnostic counters. */
+    private static int sqliteCustody(Probe owner, String name) throws Exception {
+        ProtosForeignPluginProvider.Session bridge =
+                (ProtosForeignPluginProvider.Session) owner.session.sessionForRuntime();
+        return sqliteCustody(bridge.plugin, name);
+    }
+
+    private static int sqliteCustody(Object backend, String name) throws Exception {
+        var method = backend.getClass().getDeclaredMethod(name);
+        method.setAccessible(true);
+        return (int) method.invoke(backend);
+    }
+
+    private static int sqliteDowncallLine() throws Exception {
+        // buildFixture compiles this very source. Observe its actual downcall site,
+        // without requiring hidden JDK stub frames to appear in Thread.getStackTrace.
+        List<String> lines = Files.readAllLines(Path.of("providers", "ffm", "src", "main",
+                "java", "com", "guillermomolina", "protos", "ffm", "FfmBinding.java"));
+        String marker = "Object raw = (Object) spread.invokeExact(carriers);";
+        int line = -1;
+        for (int i = 0; i < lines.size(); i++) {
+            if (lines.get(i).strip().equals(marker)) {
+                assertEquals(-1, line, "ambiguous provider downcall site");
+                line = i + 1;
+            }
+        }
+        assertTrue(line > 0, "provider downcall site not found; overlap cannot be witnessed");
+        return line;
+    }
+
+    private static boolean sqliteDowncallActive(Thread thread, int downcallLine) {
+        for (StackTraceElement frame : thread.getStackTrace()) {
+            if (frame.getClassName().equals("com.guillermomolina.protos.ffm.FfmBinding")
+                    && frame.getMethodName().equals("invoke")
+                    && frame.getLineNumber() == downcallLine) return true;
+        }
+        return false;
+    }
+
+    private static void seedSqlite(Probe observer, Path db, int value) {
+        assertEquals(0, number(observer.call("openFile", db.toString())));
+        observer.call("execute", "CREATE TABLE t(value INTEGER)");
+        observer.call("insertInteger", value);
+        observer.call("close");
+    }
+
+    private static void rejectSqliteOpen(Probe owner, Path exterior, TestReporter reporter) {
+        for (String mode : List.of("openReadOnly", "openFile")) {
+            long status = number(owner.call(mode, exterior.toString()));
+            assertEquals(14, status, "SQLITE_CANTOPEN expected for " + mode);
+            assertSame(false, owner.call("isOpen"));
+            reporter.publishEntry("B4 exterior denial", mode + " native status=" + status);
+        }
+    }
+
+    private static void assertWal(Probe owner, TestReporter reporter) {
+        assertEquals(1, number(owner.call("queryInteger",
+                "SELECT count(*) FROM pragma_journal_mode WHERE journal_mode='wal'")));
+        reporter.publishEntry("B4 journal mode", "wal (queried, not inferred from PRAGMA success)");
+    }
+
+    private static String sqlPath(Path path) {
+        // Only harness-created paths reach SQL; this is not a public SQL executor.
+        return "'" + path.toString().replace("'", "''") + "'";
+    }
+
+    private static List<String> directoryNames(Path directory) throws Exception {
+        try (Stream<Path> paths = Files.list(directory)) {
+            return paths.map(path -> path.getFileName().toString()).sorted().toList();
+        }
+    }
+
+    private static void preloadProviderClasses(Probe owner) throws Exception {
+        ProtosForeignPluginProvider.Session bridge =
+                (ProtosForeignPluginProvider.Session) owner.session.sessionForRuntime();
+        ClassLoader loader = bridge.plugin.getClass().getClassLoader();
+        try (java.util.jar.JarFile prepared = new java.util.jar.JarFile(jar.toFile())) {
+            for (java.util.jar.JarEntry entry : java.util.Collections.list(prepared.entries())) {
+                if (entry.getName().endsWith(".class")) {
+                    Class.forName(entry.getName().replace('/', '.').replaceFirst("\\.class$", ""),
+                            true, loader);
+                }
+            }
+        }
     }
 
     // ---- B2 test-only host observations; all fixture ABI declarations stay in Protos.

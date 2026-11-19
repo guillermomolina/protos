@@ -62,6 +62,63 @@ other: SQLite.openMemory()
     Assertions.require(other !== db)
     Assertions.signals(SQLite.SQLiteError, () => other.prepare("SELECT * FROM private_marker"))
 }).ensure(() => other.close().value())
+// Repeated public acquisition preserves independent databases and ordinary close.
+// This behavioral regression does not observe resolver filesystem I/O.
+one: SQLite.openMemory()
+(() => {
+    two: SQLite.openMemory()
+    (() => {
+        three: SQLite.openMemory()
+        (() => {
+            Assertions.require(one !== two)
+            Assertions.require(one !== three)
+            Assertions.require(two !== three)
+            table: one.prepare("CREATE TABLE retained_abi_marker (n INTEGER)")
+            (() => {
+                Assertions.require(table.step() === false)
+            }).ensure(() => {
+                done: table.close()
+                Assertions.require(done.value() === table)
+                Assertions.require(done.value() === table)
+            })
+            Assertions.signals(SQLite.SQLiteError,
+                () => two.prepare("SELECT * FROM retained_abi_marker"))
+            Assertions.signals(SQLite.SQLiteError,
+                () => three.prepare("SELECT * FROM retained_abi_marker"))
+            // A table created in two is absent from three as well.
+            secondTable: two.prepare("CREATE TABLE second_marker (n INTEGER)")
+            (() => {
+                Assertions.require(secondTable.step() === false)
+            }).ensure(() => secondTable.close().value())
+            Assertions.signals(SQLite.SQLiteError,
+                () => three.prepare("SELECT * FROM second_marker"))
+            for(connection in Array(one, two, three)) {
+                terminalClose: connection.close()
+                terminalClose.cancel()
+                Assertions.require(terminalClose.value() === connection)
+                Assertions.require(terminalClose.value() === connection)
+                repeatedClose: connection.close()
+                Assertions.require(repeatedClose !== terminalClose)
+                Assertions.require(repeatedClose.value() === connection)
+                Assertions.signals(IOLifecycleError, () => connection.prepare("SELECT 1"))
+                if(connection === one) {
+                    liveTwo: two.prepare("SELECT 2")
+                    (() => {
+                        Assertions.require(liveTwo.step())
+                        Assertions.require(liveTwo.column(0) == 2)
+                    }).ensure(() => liveTwo.close().value())
+                }
+                if(connection === two) {
+                    liveThree: three.prepare("SELECT 3")
+                    (() => {
+                        Assertions.require(liveThree.step())
+                        Assertions.require(liveThree.column(0) == 3)
+                    }).ensure(() => liveThree.close().value())
+                }
+            }
+        }).ensure(() => three.close().value())
+    }).ensure(() => two.close().value())
+}).ensure(() => one.close().value())
 end: db.close()
 end.cancel()
 Assertions.require(end.value() === db)

@@ -206,6 +206,16 @@ library or authority. `openMemory()` imports the existing explicitly authorized
 belongs to its originating Actor. Live resources cannot cross Actor or P
 boundaries; ordinary copied rows follow ordinary value-transfer rules.
 
+`std:sqlite` remains a library written in Protos. Its `./abi.protos`
+dependency is resolved lazily on the first `openMemory()` through the ordinary
+importer, including authorization and resolution. Only a successful import is
+retained in the private initializer context of that Actor's module instance;
+a failed import leaves acquisition retryable. Later calls reuse that dependency,
+without sharing connections or FFM sessions between Actors. Retention cannot
+reactivate a closed FFM session. An Actor that has not prepared the module still
+needs authority to resolve its initial dependencies. This is dependency reuse,
+not SQLite confinement or authorization of a durable API.
+
 The supported execution profile is Linux x86-64 LP64, the portable JVM, JDK 25
 and the supported GraalVM 25.5 toolchain, with `libsqlite3.so.0` installed and
 the optional FFM provider built and explicitly supplied by the host:
