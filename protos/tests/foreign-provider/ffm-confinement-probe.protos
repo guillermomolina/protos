@@ -28,11 +28,14 @@ prepare: () => {
     destroyTid: declare("ffi_test_last_destroy_thread_id", FFI.i64, Array())
     live: declare("ffi_test_live_count", FFI.i32, Array())
     destroyed: declare("ffi_test_destroyed_count", FFI.i32, Array())
+    crossThreadDestroyed: declare("ffi_test_cross_thread_destroy_count", FFI.i32, Array())
     counterType: FFI.opaque(native, "ffi_test_counter")
     owned: FFI.owned(counterType, "ffi_test_counter_free", FFI.i32)
     make: declare("ffi_test_counter_new", owned, Array(FFI.i64))
     increment: declare("ffi_test_counter_increment", FFI.i64, Array(counterType))
     kept: null
+    keptSecond: null
+    keptThird: null
 
     // Only native integral values and Arrays leave the restricted thread normally.
     // The handle export is used solely for negative admission/transfer tests.
@@ -43,6 +46,7 @@ prepare: () => {
         lastDestroyThreadId: () => destroyTid()
         liveCount: () => live()
         destroyedCount: () => destroyed()
+        crossThreadDestroyCount: () => crossThreadDestroyed()
         ordinarySegment: () => 41
         createOwned: () => make(40)
         incrementOwned: (handle) => increment(handle)
@@ -57,7 +61,17 @@ prepare: () => {
             kept = make(40)
             increment(kept)
         }
+        keepManyForClose: () => {
+            kept = make(40)
+            keptSecond = make(50)
+            keptThird = make(60)
+            firstValue: increment(kept)
+            thirdValue: increment(keptThird)
+            status: FFI.release(keptSecond)
+            Array(firstValue, thirdValue, status)
+        }
         retained: () => kept
+        retainedThird: () => keptThird
     }
 }
 

@@ -131,6 +131,14 @@ class ProtosI144FfmFixtureAbiTest {
                         "com.guillermomolina.protos.ffm.FfmFixtureProvider");
     }
 
+    @BeforeAll
+    static void prepareRestrictedErrorClasses() throws Exception {
+        // A first load under Landlock can fail and poison symbolic resolution for this JVM.
+        ClassLoader loader = ProtosI144FfmFixtureAbiTest.class.getClassLoader();
+        Class.forName("com.guillermomolina.protos.runtime.ProtosCoreErrors$StandardError", true, loader);
+        Class.forName("com.guillermomolina.protos.runtime.ProtosIoOperation", true, loader);
+    }
+
     @Test
     void abiProgramRunsUnderTheTestHost() throws Exception {
         // The CLI success marker is not part of the checks: this embedded host has no print.
@@ -713,6 +721,621 @@ class ProtosI144FfmFixtureAbiTest {
         abiProgramRunsUnderTheTestHost();
         publicFfiProgramKeepsCustodyAndReleasesPendingResultsExactlyOnce();
         sessionCloseRevokesEverythingAndReleasesOwnedResourcesOnce();
+    }
+
+    @Test
+    void b3T1ExternallyRequestedCloseMustDestroyOnRestrictedOwnerThread(TestReporter reporter)
+            throws Exception {
+        Path root = Files.createTempDirectory(work, "b3-close-grant-").toRealPath();
+        Path outside = Files.writeString(work.resolve("b3-close-outside"), "outside").toRealPath();
+        ProtosExternalForeignProviderTest.Fixture fixture = fixture(authorized());
+        PlatformCall restricted = null;
+        Throwable primary = null;
+        Probe probe = null;
+        CountDownLatch created = new CountDownLatch(1);
+        CountDownLatch closeRequested = new CountDownLatch(1);
+        CountDownLatch closeFinished = new CountDownLatch(1);
+        AtomicReference<Object> retained = new AtomicReference<>();
+        AtomicReference<Long> physicalTid = new AtomicReference<>();
+        AtomicReference<Long> nativeTid = new AtomicReference<>();
+        AtomicReference<String> requestResult = new AtomicReference<>("NOT REQUESTED");
+        long live = -1;
+        long destroyed = -1;
+        long finalLive = -1;
+        long finalDestroyed = -1;
+        long destructor = -1;
+        try (ProtosExternalForeignProviderTest.Fixture watching = fixture(authorized())) {
+            probe = probe(fixture, fixture.root);
+            Probe owner = probe;
+            Probe observer = probe(watching, watching.newActorActivation());
+            // Resolve provider classes without creating/releasing an owned resource on JUnit.
+            ProtosForeignPluginProvider.Session bridge =
+                    (ProtosForeignPluginProvider.Session) owner.session.sessionForRuntime();
+            ClassLoader loader = bridge.plugin.getClass().getClassLoader();
+            try (java.util.jar.JarFile prepared = new java.util.jar.JarFile(jar.toFile())) {
+                for (java.util.jar.JarEntry entry : java.util.Collections.list(prepared.entries())) {
+                    if (entry.getName().endsWith(".class")) {
+                        Class.forName(entry.getName().replace('/', '.')
+                                .replaceFirst("\\.class$", ""), true, loader);
+                    }
+                }
+            }
+            owner.call("threadId");
+            observer.call("lastDestroyThreadId");
+            live = number(observer.call("liveCount"));
+            destroyed = number(observer.call("destroyedCount"));
+            assertOpen(owner.open(outside, 0), 0, 0);
+            assertOpen(observer.open(outside, 0), 0, 0);
+            restricted = startPlatform(root, () -> {
+                Throwable failure = null;
+                try {
+                    physicalTid.set(kernelTid());
+                    nativeTid.set(number(owner.call("threadId")));
+                    assertEquals(physicalTid.get(), nativeTid.get());
+                    long[] denied = owner.open(outside, 0);
+                    assertOpen(denied, -1, 13);
+                    assertEquals(physicalTid.get().longValue(), denied[2]);
+                    assertEquals(41, number(owner.call("keepForClose")));
+                    retained.set(owner.call("retained"));
+                    created.countDown();
+                    assertTrue(closeRequested.await(20, TimeUnit.SECONDS),
+                            "external close request timed out");
+                    assertEquals("REQUESTED", requestResult.get(),
+                            "emergency barrier release is not a successful request");
+                    owner.session.closeForRuntime();
+                    assertFalse(owner.session.isOpenForRuntime());
+                    // The idempotence check also stays on the restricted owner thread.
+                    owner.session.closeForRuntime();
+                    requestResult.set("CLOSE COMPLETED");
+                } catch (Throwable problem) {
+                    failure = problem;
+                    requestResult.set("FAILED: " + problem);
+                } finally {
+                    // Never retry a failed close/destructor. An early failure can only drain
+                    // custody here, before this same restricted thread is allowed to exit.
+                    if (owner.session.isOpenForRuntime()) {
+                        try { owner.session.closeForRuntime(); }
+                        catch (Throwable cleanup) {
+                            if (failure == null) failure = cleanup;
+                            else failure.addSuppressed(cleanup);
+                        }
+                    }
+                    created.countDown();
+                    closeFinished.countDown();
+                }
+                if (failure != null) throw new AssertionError("restricted close failed", failure);
+            });
+            assertTrue(created.await(20, TimeUnit.SECONDS), "owned creation timed out");
+            assertTrue(restricted.thread.isAlive(), "owner exited before the close request");
+            assertTrue(restricted.installed, "Landlock was not installed");
+            assertTrue(probe.session.isOpenForRuntime());
+            assertEquals(1, closeFinished.getCount(), "close completed before its request");
+            assertEquals(live + 1, number(observer.call("liveCount")));
+            assertEquals(destroyed, number(observer.call("destroyedCount")));
+            assertOpen(observer.open(outside, 0), 0, 0);
+            requestResult.set("REQUESTED");
+            closeRequested.countDown(); // JUnit only signals; it never closes the session.
+            assertTrue(closeFinished.await(20, TimeUnit.SECONDS), "restricted close timed out");
+            finalLive = number(observer.call("liveCount"));
+            finalDestroyed = number(observer.call("destroyedCount"));
+            destructor = number(observer.call("lastDestroyThreadId"));
+            restricted.finish();
+            assertEquals("CLOSE COMPLETED", requestResult.get());
+            assertFalse(probe.session.isOpenForRuntime());
+            assertEquals(live, finalLive);
+            assertEquals(destroyed + 1, finalDestroyed);
+            assertEquals(restricted.tid, physicalTid.get().longValue());
+            assertEquals(restricted.tid, destructor, "session-close destructor escaped Landlock");
+            probe.refuses("incrementOwned", retained.get());
+            probe.refuses("releaseOwned", retained.get());
+            assertEquals(destroyed + 1, number(observer.call("destroyedCount")));
+            assertOpen(observer.open(outside, 0), 0, 0);
+        } catch (Exception | Error problem) {
+            primary = problem;
+            throw problem;
+        } finally {
+            closeRequested.countDown();
+            Throwable cleanupFailure = null;
+            if (restricted != null) {
+                try { restricted.finish(); }
+                catch (Throwable cleanup) { cleanupFailure = cleanup; }
+            }
+            // A pending owner must never race Fixture.close on an unrestricted thread.
+            if (restricted == null || (!restricted.thread.isAlive()
+                    && probe != null && !probe.session.isOpenForRuntime())) {
+                try { fixture.close(); }
+                catch (Throwable cleanup) {
+                    if (cleanupFailure == null) cleanupFailure = cleanup;
+                    else cleanupFailure.addSuppressed(cleanup);
+                }
+            } else {
+                AssertionError pending = new AssertionError(
+                        "owner/session still pending; unrestricted Fixture.close deliberately withheld");
+                if (cleanupFailure == null) cleanupFailure = pending;
+                else cleanupFailure.addSuppressed(pending);
+            }
+            reporter.publishEntry("B3-T1", "restricted TID=" + physicalTid.get()
+                    + ", C TID=" + nativeTid.get() + ", destructor TID=" + destructor
+                    + ", Landlock=" + (restricted != null && restricted.installed)
+                    + ", live=" + live + " -> " + finalLive
+                    + ", destroyed=" + destroyed + " -> " + finalDestroyed
+                    + ", request=" + requestResult.get()
+                    + ", owner alive=" + (restricted != null && restricted.thread.isAlive())
+                    + ", owner failure=" + (restricted == null ? null : restricted.failure)
+                    + ", cleanup failure=" + cleanupFailure);
+            if (cleanupFailure != null) {
+                if (primary != null) primary.addSuppressed(cleanupFailure);
+                else throw new AssertionError("B3-T1 cleanup failed", cleanupFailure);
+            }
+        }
+    }
+
+    @Test
+    void b3T2MultipleOwnedResourcesReleaseAndCloseOnRestrictedThread(TestReporter reporter)
+            throws Exception {
+        Path root = Files.createTempDirectory(work, "b3-many-").toRealPath();
+        ProtosExternalForeignProviderTest.Fixture fixture = fixture(authorized());
+        Probe[] owners = new Probe[1];
+        PlatformCall[] calls = new PlatformCall[1];
+        CountDownLatch ready = new CountDownLatch(1);
+        CountDownLatch request = new CountDownLatch(1);
+        Object[] retained = new Object[2];
+        Throwable primary = null;
+        ProtosExternalForeignProviderTest.Fixture watching = null;
+        try {
+            watching = fixture(authorized());
+            Probe owner = owners[0] = probe(fixture, fixture.root);
+            Probe observer = probe(watching, watching.newActorActivation());
+            prepareB3(owner);
+            long[] before = b3Counts(observer);
+            reportB3Counts(reporter, "B3-T2 initial", before, observer);
+            calls[0] = startB3Owner(root, owner, () -> {
+                assertEquals(kernelTid(), number(owner.call("threadId")));
+                long[] values = numbers(owner.call("keepManyForClose"), 3);
+                assertEquals(41, values[0]);
+                assertEquals(61, values[1]);
+                assertEquals(0, values[2]);
+                assertEquals(before[1] + 1, number(owner.call("destroyedCount")));
+                retained[0] = owner.call("retained");
+                retained[1] = owner.call("retainedThird");
+                ready.countDown();
+                awaitB3(request, "multiple-resource close request");
+                closeB3Owner(owner);
+            });
+            awaitB3(ready, "multiple-resource creation");
+            assertTrue(calls[0].thread.isAlive());
+            assertTrue(calls[0].installed);
+            assertB3Counts(observer, before[0] + 2, before[1] + 1, before[2]);
+            request.countDown();
+            calls[0].finish();
+            reportB3Counts(reporter, "B3-T2", before, observer);
+            assertB3Counts(observer, before[0], before[1] + 3, before[2]);
+            assertEquals(calls[0].tid, number(observer.call("lastDestroyThreadId")));
+            assertFalse(owner.session.isOpenForRuntime());
+            for (Object handle : retained) {
+                owner.refuses("incrementOwned", handle);
+                owner.refuses("releaseOwned", handle);
+            }
+            assertB3Counts(observer, before[0], before[1] + 3, before[2]);
+        } catch (Exception | Error problem) {
+            primary = problem;
+            throw problem;
+        } finally {
+            request.countDown();
+            finishB3(primary, reporter, "B3-T2", fixture, owners, calls, watching);
+        }
+    }
+
+    @Test
+    void b3T3CloseRequestDuringNativeCallWaitsUntilOwnerCanClose(TestReporter reporter)
+            throws Exception {
+        Path root = Files.createTempDirectory(work, "b3-active-").toRealPath();
+        Path file = Files.writeString(root.resolve("allowed"), "allowed").toRealPath();
+        ProtosExternalForeignProviderTest.Fixture fixture = fixture(authorized());
+        Probe[] owners = new Probe[1];
+        PlatformCall[] calls = new PlatformCall[1];
+        CountDownLatch request = new CountDownLatch(1);
+        AtomicReference<long[]> result = new AtomicReference<>();
+        Throwable primary = null;
+        // Keep the observer alive until the native barrier has been released and joined.
+        ProtosExternalForeignProviderTest.Fixture watching = null;
+        Probe observer = null;
+        try {
+            watching = fixture(authorized());
+            Probe owner = owners[0] = probe(fixture, fixture.root);
+            observer = probe(watching, watching.newActorActivation());
+            prepareB3(owner);
+            assertOpen(owner.open(file, 0), 0, 0);
+            long[] before = b3Counts(observer);
+            reportB3Counts(reporter, "B3-T3 initial", before, observer);
+            assertOpen(observer.open(file, 5), 0, 0);
+            calls[0] = startB3Owner(root, owner, () -> {
+                assertEquals(kernelTid(), number(owner.call("threadId")));
+                assertEquals(41, number(owner.call("keepForClose")));
+                long[] completed = owner.open(file, 2);
+                result.set(completed);
+                assertOpen(completed, 0, 0);
+                assertEquals(kernelTid(), completed[2]);
+                awaitB3(request, "active-downcall close request");
+                closeB3Owner(owner);
+            });
+            awaitGate(observer, file, calls[0]);
+            assertOnStack(calls[0].thread, "FfmBinding", "invoke");
+            assertTrue(calls[0].installed);
+            assertOpen(observer.open(file, 3), 1, 0);
+            request.countDown();
+            assertEquals(0, request.getCount(), "request must precede native barrier release");
+            assertTrue(owner.session.isOpenForRuntime());
+            assertB3Counts(observer, before[0] + 1, before[1], before[2]);
+            reporter.publishEntry("B3-T3 request", "recorded while real C barrier is active;"
+                    + " owner TID=" + calls[0].tid + "; no session close on JUnit");
+            assertOpen(observer.open(file, 4), 0, 0);
+            calls[0].finish();
+            reporter.publishEntry("B3-T3 native result", "[status, errno, Linux TID]="
+                    + java.util.Arrays.toString(result.get()));
+            assertOpen(result.get(), 0, 0);
+            assertEquals(calls[0].tid, result.get()[2]);
+            assertEquals(calls[0].tid, number(observer.call("lastDestroyThreadId")));
+            assertFalse(owner.session.isOpenForRuntime());
+            reportB3Counts(reporter, "B3-T3", before, observer);
+            assertB3Counts(observer, before[0], before[1] + 1, before[2]);
+        } catch (Exception | Error problem) {
+            primary = problem;
+            throw problem;
+        } finally {
+            request.countDown();
+            Throwable cleanupFailure = null;
+            if (observer != null) {
+                try { assertOpen(observer.open(file, 4), 0, 0); }
+                catch (Throwable cleanup) { cleanupFailure = cleanup; }
+            }
+            try { finishB3(primary, reporter, "B3-T3", fixture, owners, calls); }
+            catch (Throwable cleanup) {
+                if (cleanupFailure == null) cleanupFailure = cleanup;
+                else cleanupFailure.addSuppressed(cleanup);
+            }
+            if (watching != null) {
+                try { closeB3Fixture(watching); }
+                catch (Throwable cleanup) {
+                    if (cleanupFailure == null) cleanupFailure = cleanup;
+                    else cleanupFailure.addSuppressed(cleanup);
+                }
+            }
+            if (cleanupFailure != null) {
+                if (primary != null) primary.addSuppressed(cleanupFailure);
+                else throw new AssertionError("B3-T3 cleanup failed", cleanupFailure);
+            }
+        }
+    }
+
+    @Test
+    void b3T4IndependentActorsAndGrantsCloseOnTheirOwnRestrictedThreads(TestReporter reporter)
+            throws Exception {
+        Path[] roots = {Files.createTempDirectory(work, "b3-first-").toRealPath(),
+                Files.createTempDirectory(work, "b3-second-").toRealPath()};
+        Path[] files = {Files.writeString(roots[0].resolve("first"), "first").toRealPath(),
+                Files.writeString(roots[1].resolve("second"), "second").toRealPath()};
+        ProtosExternalForeignProviderTest.Fixture fixture = fixture(authorized());
+        Probe[] owners = new Probe[2];
+        PlatformCall[] calls = new PlatformCall[2];
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch membershipChecked = new CountDownLatch(2);
+        CountDownLatch[] requests = {new CountDownLatch(1), new CountDownLatch(1)};
+        Object[] handles = new Object[2];
+        Throwable primary = null;
+        ProtosExternalForeignProviderTest.Fixture watching = null;
+        try {
+            watching = fixture(authorized());
+            owners[0] = probe(fixture, fixture.newActorActivation());
+            owners[1] = probe(fixture, fixture.newActorActivation());
+            assertNotSame(owners[0].session, owners[1].session);
+            assertNotSame(owners[0].session.sessionForRuntime(), owners[1].session.sessionForRuntime());
+            Probe observer = probe(watching, watching.newActorActivation());
+            long[] before = b3Counts(observer);
+            reportB3Counts(reporter, "B3-T4 initial", before, observer);
+            for (int i = 0; i < 2; i++) {
+                prepareB3(owners[i]);
+                assertOpen(owners[i].open(files[i], 0), 0, 0);
+                assertOpen(owners[i].open(files[1 - i], 0), 0, 0);
+                final int index = i;
+                Probe owner = owners[i];
+                calls[i] = startB3Owner(roots[i], owner, () -> {
+                    long tid = kernelTid();
+                    assertEquals(tid, number(owner.call("threadId")));
+                    long[] admitted = owner.open(files[index], 0);
+                    assertOpen(admitted, 0, 0);
+                    assertEquals(tid, admitted[2]);
+                    long[] denied = owner.open(files[1 - index], 0);
+                    assertOpen(denied, -1, 13);
+                    assertEquals(tid, denied[2]);
+                    assertEquals(41, number(owner.call("keepForClose")));
+                    handles[index] = owner.call("retained");
+                    ready.countDown();
+                    awaitB3(requests[index], "independent Actor close request");
+                    // Check actual session membership on each owning carrier, not thread identity.
+                    owner.refuses("incrementOwned", handles[1 - index]);
+                    owner.refuses("releaseOwned", handles[1 - index]);
+                    assertEquals(42, number(owner.call("incrementOwned", handles[index])));
+                    membershipChecked.countDown();
+                    awaitB3(membershipChecked, "both live-session membership checks");
+                    closeB3Owner(owner);
+                });
+            }
+            awaitB3(ready, "both restricted Actors");
+            assertNotEquals(calls[0].tid, calls[1].tid);
+            for (int i = 0; i < 2; i++) {
+                assertTrue(calls[i].thread.isAlive());
+                assertTrue(calls[i].installed);
+                final int index = i;
+                ProtosSignalException transfer = assertThrows(ProtosSignalException.class,
+                        () -> ProtosActorValueTransfer.snapshotValue(handles[index], owners[index].actor));
+                assertSame(fixture.standardError("NonTransferableValue"),
+                        transfer.error().parent().orElseThrow());
+                assertOpen(observer.open(files[i], 0), 0, 0);
+            }
+            assertB3Counts(observer, before[0] + 2, before[1], before[2]);
+            for (CountDownLatch request : requests) request.countDown();
+            for (PlatformCall call : calls) call.finish();
+            reportB3Counts(reporter, "B3-T4", before, observer);
+            assertB3Counts(observer, before[0], before[1] + 2, before[2]);
+            for (int i = 0; i < 2; i++) {
+                assertFalse(owners[i].session.isOpenForRuntime());
+                owners[i].refuses("incrementOwned", handles[i]);
+                owners[i].refuses("releaseOwned", handles[i]);
+                assertOpen(observer.open(files[i], 0), 0, 0);
+            }
+            assertB3Counts(observer, before[0], before[1] + 2, before[2]);
+        } catch (Exception | Error problem) {
+            primary = problem;
+            throw problem;
+        } finally {
+            for (CountDownLatch request : requests) request.countDown();
+            while (membershipChecked.getCount() > 0) membershipChecked.countDown();
+            finishB3(primary, reporter, "B3-T4", fixture, owners, calls, watching);
+        }
+    }
+
+    @Test
+    void b3T5AliveRestrictedOwnerDoesNotConstrainExternalCloser(TestReporter reporter)
+            throws Exception {
+        Path root = Files.createTempDirectory(work, "b3-negative-").toRealPath();
+        ProtosExternalForeignProviderTest.Fixture fixture = fixture(authorized());
+        Probe[] owners = new Probe[1];
+        PlatformCall[] calls = new PlatformCall[2];
+        CountDownLatch ready = new CountDownLatch(1);
+        CountDownLatch exit = new CountDownLatch(1);
+        Throwable primary = null;
+        ProtosExternalForeignProviderTest.Fixture watching = null;
+        try {
+            watching = fixture(authorized());
+            Probe owner = owners[0] = probe(fixture, fixture.root);
+            Probe observer = probe(watching, watching.newActorActivation());
+            prepareB3(owner);
+            long[] before = b3Counts(observer);
+            reportB3Counts(reporter, "B3-T5 initial", before, observer);
+            calls[0] = startB3Owner(root, owner, () -> {
+                assertEquals(kernelTid(), number(owner.call("threadId")));
+                assertEquals(41, number(owner.call("keepForClose")));
+                ready.countDown();
+                awaitB3(exit, "negative-control owner exit");
+                assertFalse(owner.session.isOpenForRuntime());
+                // The external closer already finished; do not perform another close here.
+            });
+            awaitB3(ready, "negative-control creation");
+            assertTrue(calls[0].thread.isAlive());
+            assertTrue(calls[0].installed);
+            assertB3Counts(observer, before[0] + 1, before[1], before[2]);
+            calls[1] = startPlatform(null, owner.session::closeForRuntime);
+            calls[1].finish();
+            assertTrue(calls[0].thread.isAlive(), "restricted owner must still be alive");
+            assertFalse(owner.session.isOpenForRuntime());
+            long destructor = number(observer.call("lastDestroyThreadId"));
+            assertEquals(calls[1].tid, destructor);
+            assertNotEquals(calls[0].tid, destructor);
+            reportB3Counts(reporter, "B3-T5", before, observer);
+            assertB3Counts(observer, before[0], before[1] + 1, before[2] + 1);
+            reporter.publishEntry("B3-T5 negative control", "PASS observation of FAIL B property:"
+                    + " existing session does not automatically dispatch to its still-alive owner;"
+                    + " owner TID=" + calls[0].tid + ", external/destructor TID=" + destructor);
+            exit.countDown();
+            calls[0].finish();
+            assertB3Counts(observer, before[0], before[1] + 1, before[2] + 1);
+        } catch (Exception | Error problem) {
+            primary = problem;
+            throw problem;
+        } finally {
+            exit.countDown();
+            finishB3(primary, reporter, "B3-T5", fixture, owners, calls, watching);
+        }
+    }
+
+    @Test
+    void b3T6RejectedGuestCallsDoNotPreventRestrictedSessionCleanup(TestReporter reporter)
+            throws Exception {
+        Path root = Files.createTempDirectory(work, "b3-rejected-").toRealPath();
+        ProtosExternalForeignProviderTest.Fixture fixture = fixture(authorized());
+        Probe[] owners = new Probe[1];
+        PlatformCall[] calls = new PlatformCall[1];
+        CountDownLatch ready = new CountDownLatch(1);
+        CountDownLatch request = new CountDownLatch(1);
+        AtomicReference<Object> handle = new AtomicReference<>();
+        Throwable primary = null;
+        ProtosExternalForeignProviderTest.Fixture watching = null;
+        try {
+            watching = fixture(authorized());
+            Probe owner = owners[0] = probe(fixture, fixture.root);
+            Probe observer = probe(watching, watching.newActorActivation());
+            prepareB3(owner);
+            long[] before = b3Counts(observer);
+            reportB3Counts(reporter, "B3-T6 initial", before, observer);
+            calls[0] = startB3Owner(root, owner, () -> {
+                assertEquals(kernelTid(), number(owner.call("threadId")));
+                handle.set(owner.call("createOwned"));
+                owner.refuses("incrementOwned", "invalid");
+                owner.refuses("releaseOwned", "invalid");
+                assertEquals(before[0] + 1, number(owner.call("liveCount")));
+                assertEquals(before[1], number(owner.call("destroyedCount")));
+                assertTrue(owner.session.isOpenForRuntime());
+                assertEquals(41, number(owner.call("incrementOwned", handle.get())));
+                ready.countDown();
+                awaitB3(request, "post-rejection close request");
+                closeB3Owner(owner);
+            });
+            awaitB3(ready, "rejected calls and retained custody");
+            assertTrue(calls[0].thread.isAlive());
+            assertTrue(calls[0].installed);
+            assertB3Counts(observer, before[0] + 1, before[1], before[2]);
+            request.countDown();
+            calls[0].finish();
+            reportB3Counts(reporter, "B3-T6", before, observer);
+            assertB3Counts(observer, before[0], before[1] + 1, before[2]);
+            assertEquals(calls[0].tid, number(observer.call("lastDestroyThreadId")));
+            assertFalse(owner.session.isOpenForRuntime());
+            owner.refuses("incrementOwned", handle.get());
+            owner.refuses("releaseOwned", handle.get());
+            assertB3Counts(observer, before[0], before[1] + 1, before[2]);
+        } catch (Exception | Error problem) {
+            primary = problem;
+            throw problem;
+        } finally {
+            request.countDown();
+            finishB3(primary, reporter, "B3-T6", fixture, owners, calls, watching);
+        }
+    }
+
+    // Shared only by B3-T2..T6; all signatures and native operations remain in Protos.
+    private static void prepareB3(Probe owner) throws Exception {
+        ProtosForeignPluginProvider.Session bridge =
+                (ProtosForeignPluginProvider.Session) owner.session.sessionForRuntime();
+        ClassLoader loader = bridge.plugin.getClass().getClassLoader();
+        try (java.util.jar.JarFile prepared = new java.util.jar.JarFile(jar.toFile())) {
+            for (java.util.jar.JarEntry entry : java.util.Collections.list(prepared.entries())) {
+                if (entry.getName().endsWith(".class")) {
+                    Class.forName(entry.getName().replace('/', '.').replaceFirst("\\.class$", ""),
+                            true, loader);
+                }
+            }
+        }
+        owner.call("threadId");
+        // Exercise the ordinary Error path before restricting the carrier. No owned acquisition.
+        owner.refuses("incrementOwned", "invalid");
+        owner.refuses("releaseOwned", "invalid");
+    }
+
+    private static void awaitB3(CountDownLatch latch, String message) throws Exception {
+        assertTrue(latch.await(20, TimeUnit.SECONDS), message + " timed out");
+    }
+
+    private static void closeB3Owner(Probe owner) {
+        owner.session.closeForRuntime();
+        assertFalse(owner.session.isOpenForRuntime());
+        owner.session.closeForRuntime();
+    }
+
+    private static PlatformCall startB3Owner(Path root, Probe owner, Experiment experiment)
+            throws Exception {
+        return startPlatform(root, () -> {
+            Throwable primary = null;
+            try { experiment.run(); }
+            catch (Exception | Error problem) {
+                primary = problem;
+                throw problem;
+            } finally {
+                if (owner.session.isOpenForRuntime()) {
+                    try { owner.session.closeForRuntime(); }
+                    catch (Exception | Error cleanup) {
+                        if (primary != null) primary.addSuppressed(cleanup);
+                        else throw cleanup;
+                    }
+                }
+            }
+        });
+    }
+
+    /** [live, destroyed, cross-thread destroyed, last destructor Linux TID]. */
+    private static long[] b3Counts(Probe observer) {
+        return new long[] {number(observer.call("liveCount")),
+                number(observer.call("destroyedCount")),
+                number(observer.call("crossThreadDestroyCount")),
+                number(observer.call("lastDestroyThreadId"))};
+    }
+
+    private static void assertB3Counts(Probe observer, long live, long destroyed, long crossThread) {
+        long[] counts = b3Counts(observer);
+        assertEquals(live, counts[0], "live resources");
+        assertEquals(destroyed, counts[1], "exactly-once destruction");
+        assertEquals(crossThread, counts[2], "creator/destructor thread mismatches");
+    }
+
+    private static void reportB3Counts(TestReporter reporter, String name, long[] before, Probe observer) {
+        reporter.publishEntry(name, "[live, destroyed, cross-thread destroyed, last destructor TID]: "
+                + java.util.Arrays.toString(before) + " -> " + java.util.Arrays.toString(b3Counts(observer)));
+    }
+
+    private static void finishB3(Throwable primary, TestReporter reporter, String name,
+            ProtosExternalForeignProviderTest.Fixture fixture, Probe[] owners, PlatformCall[] calls,
+            ProtosExternalForeignProviderTest.Fixture... observers) {
+        Throwable failure = null;
+        boolean stopped = true;
+        boolean started = false;
+        for (PlatformCall call : calls) {
+            if (call == null) continue;
+            started = true;
+            try { call.finish(); }
+            catch (Throwable cleanup) {
+                if (failure == null) failure = cleanup;
+                else failure.addSuppressed(cleanup);
+            }
+            stopped &= !call.thread.isAlive();
+            reporter.publishEntry(name + " lifecycle TID " + call.tid,
+                    "Landlock=" + call.installed + ", alive=" + call.thread.isAlive()
+                            + ", failure=" + call.failure);
+        }
+        boolean closed = true;
+        for (int i = 0; i < owners.length; i++) {
+            Probe owner = owners[i];
+            if (owner != null) {
+                boolean open = owner.session.isOpenForRuntime();
+                closed &= !open;
+                reporter.publishEntry(name + " session " + i, "open=" + open);
+            }
+        }
+        if (!started || (stopped && closed)) {
+            try { closeB3Fixture(fixture); }
+            catch (Throwable cleanup) {
+                if (failure == null) failure = cleanup;
+                else failure.addSuppressed(cleanup);
+            }
+        } else {
+            AssertionError pending = new AssertionError(
+                    "pending owner/session: unrestricted fixture teardown withheld");
+            if (failure == null) failure = pending;
+            else failure.addSuppressed(pending);
+        }
+        for (ProtosExternalForeignProviderTest.Fixture observer : observers) {
+            if (observer == null) continue;
+            try { closeB3Fixture(observer); }
+            catch (Throwable cleanup) {
+                if (failure == null) failure = cleanup;
+                else failure.addSuppressed(cleanup);
+            }
+        }
+        if (failure != null) {
+            if (primary != null) primary.addSuppressed(failure);
+            else throw new AssertionError(name + " cleanup failed", failure);
+        }
+    }
+
+    private static void closeB3Fixture(ProtosExternalForeignProviderTest.Fixture fixture)
+            throws Exception {
+        // Called only after restricted custody has been retired (or for an authority-only observer).
+        PlatformCall termination = startPlatform(null,
+                () -> fixture.bootstrap.process().requestTerminationForRuntime());
+        termination.finish();
+        awaitCondition(() -> fixture.host.activeProcessContextCountForTesting() == 0,
+                "Process Context did not complete terminal cleanup; host close withheld");
+        // Host.close also exposes any recorded Context-close failure. No retry after failure.
+        fixture.close();
     }
 
     // ---- B2 test-only host observations; all fixture ABI declarations stay in Protos.

@@ -947,6 +947,19 @@ remains human-executed under the session's Git ban.
 
 ## 13. Real-provider confinement experiment — PLAT074-B2
 
+### Latest owner-reported B2 execution
+
+**17 tests: 15 PASS, 1 FAIL, 1 SKIPPED.** T5's confinement failure was
+reproduced with restricted Linux TID **111351** and destructor TID **111352**.
+Corrected T6: **PASS**, limited to admitted-call waiting, no premature
+destruction and exactly-once cleanup; it proves no Actor non-reentrancy or
+destructor confinement. This latest owner-supplied evidence supersedes the
+aggregate status and TIDs in the historical runs retained below. No exact
+revision or new timing was supplied. B1 remains **13/13 PASS observed**;
+**PLAT074 OPEN, D256 pending final reconciliation, LIB031 BLOCKED**.
+
+### Earlier B2 execution history
+
 **B2 owner-reported execution: 17 tests, 14 passed, 2 failed, 0 errors,
 1 skipped**, on 19 November 2026, before the T6 correction below. The corrected
 T6 subsequently **PASS observed** in a separate focal run on the same date:
@@ -1218,3 +1231,300 @@ the new Protos source; `LICENSE.TXT` remains present. No third-party material or
 license/packaging configuration was changed. The owner's staged B1 test and B1
 results are preserved. No Git, compiler, build, test, script, commit or push was
 executed by the agent.
+
+
+## 14. PLAT074-B3 — Restricted-thread close-request feasibility
+
+**B3-T1: earlier isolated PASS, owner-reported on 19 November 2026.** The owner
+reported clean `git diff --check` and `git diff --cached --check`,
+`mvn -DskipTests test-compile`: BUILD SUCCESS, and
+`mvn -Dtest=ProtosI144FfmFixtureAbiTest#b3T1ExternallyRequestedCloseMustDestroyOnRestrictedOwnerThread test`:
+BUILD SUCCESS, 1 test, 0 failures, 0 errors, 0 skipped, focal duration
+**2.300 seconds**. No exact tested revision or TIDs were supplied. This proves
+owner-thread close in one controlled experimental path, not automatic dispatch
+or a repair of `FfmSession.close()`.
+
+**B3-T2 through B3-T6: owner-reported execution failed; corrected candidate NOT RUN.** This second batch changes only fixture C,
+the Protos confinement probe, the existing JUnit class and this section. No
+production Java, new Java class, public `std:ffi`/`std:sqlite` API, specification,
+B1, B2-T5, B2-T6 or B3-T1 test is changed. It selects no worker/dispatch
+architecture. **PLAT074 OPEN, D256 pending final reconciliation,
+LIB031 BLOCKED**; B1 remains **13/13 PASS observed**. The latest B2 observation
+in §13 remains 17 tests / 15 PASS / 1 FAIL / 1 SKIPPED, including T5's reproduced
+111351/111352 mismatch and corrected T6's bounded PASS.
+
+### Owner-reported batch failure and bounded harness correction
+
+On 19 November 2026 the owner supplied a complete B3 focal-run failure:
+**6 tests, 3 failures, 3 errors, 0 skipped**, class duration **23.32 seconds**,
+Maven total **48.507 seconds**, BUILD FAILURE. T3/T4/T6 were failures;
+T1/T2/T5 were errors. No B3 confinement PASS follows from this batch. T1's
+earlier isolated PASS remains historical evidence, not a PASS of this candidate.
+
+The first listed case, T6, failed to resolve
+`ProtosCoreErrors$StandardError` while producing the expected ordinary admission
+Error on the restricted thread. Fatal-unwind handling also failed to resolve
+`ProtosIoOperation`. Subsequent cases, including unrestricted post-close
+negative assertions in T1/T2, observed the same failed symbolic resolution.
+This is consistent with first class loading being denied under Landlock and
+poisoning that JVM's later resolution; no filesystem syscall trace was supplied.
+T6's twenty-second readiness timeout is secondary; its suppressed worker cause
+is retained. A fresh Maven/Surefire JVM is required for retesting the correction.
+
+A separate cleanup error was explicit in T5/T3 as well as suppressed elsewhere:
+`Polyglot runtime host cannot close while Process Contexts are active`.
+`Fixture.close()` requests semantic termination then immediately closes the
+host; a termination request alone does not establish completed Context cleanup.
+The existing `ProtosForeignValueFixture.close()` provides a comparable explicit
+terminal-disposition boundary. No shared Fixture or production code is changed.
+
+The correction adds class-level `@BeforeAll` preparation of exactly the two
+reported host classes before any Landlock installation. The new cases also
+exercise ordinary invalid-argument rejections during unrestricted preparation,
+without acquiring or releasing owned resources. B3-T1's method and all B1/B2
+methods remain unchanged. Shared T2–T6 teardown now requests semantic termination
+through an existing platform-thread helper, joins with its existing bound,
+checks host active-Context count reaches zero with the existing five-second
+bounded condition helper, and only then calls fixture teardown/host close.
+Observers use the same gate; their teardown no longer runs before the restricted
+owner's join. An active owner/session still prohibits exterior fixture cleanup.
+All cleanup failures remain visible; no destructor is retried or moved outside
+its domain to manufacture success. T1 retains its existing fixture teardown;
+this bounded correction does not claim to repair the shared Fixture generally.
+
+**Correction validation: NOT RUN.** This is a host preparation/teardown fix,
+not a confinement result, native interruption mechanism or architecture change.
+
+### Hypothesis and upstream precedents
+
+B2-T5 closes directly on another host thread after the restricted owner exits.
+B3-T1 instead keeps that owner alive, sends an external request and has the
+owner itself call `probe.session.closeForRuntime()` inside Landlock. A PASS
+would establish feasibility of this particular custody/close path only. It
+would neither repair T5 nor show that the provider automatically dispatches
+shutdown to a resource's authorized domain.
+
+The following source was inspected at the exact oracle/graalpython revision
+`5c8486970dead373d888f25210788cca5d79c374`. These are bounded precedents, not
+implementations of the proposed Protos confinement boundary:
+
+| Exact method and annotations | Verified behavior and relevance |
+|---|---|
+| [`PythonContext.createSystemThread(PythonSystemThreadTask)`](https://github.com/oracle/graalpython/blob/5c8486970dead373d888f25210788cca5d79c374/graalpython/com.oracle.graal.python/src/com/oracle/graal/python/runtime/PythonContext.java) (no method annotation) | Builds through `env.newTruffleThreadBuilder(task).threadGroup(getThreadGroup()).build()`, sets daemon/name and registers a weak thread reference; returns the unstarted thread. This is managed thread creation, not `Env.createSystemThread` and not proof that arbitrary raw Java workers are equivalent. |
+| [`PythonSystemThreadTask.run()`](https://github.com/oracle/graalpython/blob/5c8486970dead373d888f25210788cca5d79c374/graalpython/com.oracle.graal.python/src/com/oracle/graal/python/util/PythonSystemThreadTask.java), `@Override`, `public final` | Calls `doRun()`, logs normal completion, handles `PythonThreadKillException`, logs/rethrows other failures. Its class contract requires GIL acquisition for Python execution and safepoint polling. It supports explicit thread lifecycle handling, not native teardown affinity. |
+| [`AsyncHandler.AsyncRunnable.run()`](https://github.com/oracle/graalpython/blob/5c8486970dead373d888f25210788cca5d79c374/graalpython/com.oracle.graal.python/src/com/oracle/graal/python/runtime/AsyncHandler.java), `@Override` | Obtains an action, targets `ctx.getMainThread()` through `Env.submitThreadLocal(new Thread[]{mainThread}, new ThreadLocalAction(true, false) {...})`. The action's `perform` has `@Override` and `@SuppressWarnings("try")`; it enters the async-handler guard, acquires/releases GIL and drains rescheduled actions. This supports targeted cooperative dispatch, not arbitrary C interruption. |
+| [`PythonLanguage.initializeThread(PythonContext, Thread)` / `disposeThread(PythonContext, Thread)`](https://github.com/oracle/graalpython/blob/5c8486970dead373d888f25210788cca5d79c374/graalpython/com.oracle.graal.python/src/com/oracle/graal/python/PythonLanguage.java), both `@Override` | Delegate respectively to `context.attachThread(thread, threadState)` and `context.disposeThread(thread, false)`. These are Truffle lifecycle hooks, not an owned-resource destructor policy. |
+| [`PythonContext.finalizeContext()`](https://github.com/oracle/graalpython/blob/5c8486970dead373d888f25210788cca5d79c374/graalpython/com.oracle.graal.python/src/com/oracle/graal/python/runtime/PythonContext.java), `@TruffleBoundary`, `@SuppressWarnings("try")` | Under GIL: normal shutdown threads/hooks unless cancelling, stop async handler, set finalizing, flush streams before C API finalization, join Python threads, free context memory, dispose thread states, then close NativeContext last in that protected native cleanup sequence because it can unload libraries. Afterwards join system threads and clear main-thread reference. This backs explicit cleanup ordering, not affinity of arbitrary native destructors. |
+
+GraalPy is not claimed to implement Landlock. `ThreadLocalAction` delivery
+requires the target to service safepoints; it cannot force interruption of a
+blocked C call. B3-T1 uses bounded Java latches after completed synchronous
+Protos calls, with no `ThreadLocalAction`, Java interrupt or forced termination.
+The raw platform thread remains the existing experimental harness; these
+precedents do not ratify it as production Truffle infrastructure.
+
+The following additional Espresso precedents are supplied as already-verified
+input to this batch; no new upstream investigation is claimed:
+
+- [`EspressoReferenceDrainer.initReferenceDrain`, `startReferenceDrain`,
+  `shutdownAndWaitReferenceDrain`, and `ReferenceDrain.run`](https://github.com/oracle/graal/blob/bd884eb3effea2b31f3fbdd7250267ba8e9eca8e/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/runtime/EspressoReferenceDrainer.java),
+  revision `bd884eb3effea2b31f3fbdd7250267ba8e9eca8e`.
+- [`EspressoLanguage.finalizeContext`](https://github.com/oracle/graal/blob/bd884eb3effea2b31f3fbdd7250267ba8e9eca8e/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/EspressoLanguage.java),
+  at that same revision.
+
+Together with the pinned GraalPy `PythonContext.createSystemThread`,
+`finalizeContext` and `PythonLanguage.disposeThread` above, these precedents
+support controlled Truffle threads, cooperative termination and ordered native
+cleanup. They neither establish a complete SQLite Landlock worker nor authorize
+introducing one automatically. They supply no arbitrary blocked-C interruption
+or automatic native destructor affinity guarantee.
+
+### B3-T1 test and observations
+
+[`b3T1ExternallyRequestedCloseMustDestroyOnRestrictedOwnerThread`](../../../src/test/java/com/guillermomolina/protos/execution/foreign/api/ProtosI144FfmFixtureAbiTest.java)
+reuses `Fixture`, `Probe`, `startPlatform`, all existing fixture bindings and
+the existing `keepForClose`, `retained`, `threadId`, `liveCount` and
+`destroyedCount` closures. Both directories/files and the dynamic provider
+artifacts use JUnit's temporary directory outside the checkout. Preparation
+binds the ABI and resolves provider JAR classes without creating an owned
+resource or running a destructor on JUnit's thread. Both sessions establish
+positive exterior-open controls before restriction.
+
+The single restricted platform thread records physical Linux `gettid`, matches
+it against real-provider `ffi_test_thread_id`, requires an exterior-open
+`EACCES` (13), creates/retains one owned counter and signals creation. While it
+waits, JUnit requires installed Landlock, a live owner, an open session, exactly
+one extra live resource, no destruction and the independent observer's
+continued exterior access. The retained handle remains metadata in the owner;
+it is never supplied to the observing Actor.
+
+JUnit signals the close request. The owner calls `closeForRuntime` directly,
+checks closure and calls it a second time for idempotence before signaling
+completion and exiting. After completion, the observer requires baseline live
+count, exactly one destructor and a destructor TID matching the restricted
+physical TID. Retained-handle increment/release must then fail ordinarily.
+JUnit never invokes session close or a native destructor. Diagnostic reporter
+entries include TIDs, Landlock state, initial/final counts, request status,
+owner liveness and failures; unavailable final observations remain `-1`.
+
+All latch waits and joins are bounded at twenty seconds each. The worker's
+`finally` drains any early-failure custody only on that same restricted thread,
+without retrying an attempted close. The host's `finally` releases the request
+barrier, joins and preserves primary failures with cleanup failures suppressed.
+`Fixture.close()` is permitted only before worker creation or after the owner
+has exited with its session already closed; it cannot manufacture PASS by
+performing out-of-domain destruction. If the owner remains pending, fixture
+teardown is deliberately withheld and reported as failure rather than racing
+or forcibly terminating native work. Such a timeout is not a successful cleanup.
+
+`FfmSession.close` currently records uncertain destructor failures privately
+and suppresses their throwable. The test preserves all exposed Java failures
+and checks native TID/count effects; it cannot recover a suppressed native
+cause from this unchanged provider. Missing destruction therefore fails the
+experiment rather than triggering a destructor retry or a success claim.
+There is no new native barrier or outstanding asynchronous native operation in
+this case; a successful join follows completed synchronous calls and cleanup.
+
+The owner-reported T1 PASS establishes external signaling, owner survival through cleanup,
+same-thread destructor execution, custody and idempotence in this one real-FFM
+path. It proves no automatic dispatch, blocked-C cancellation, Actor
+non-reentrancy, general destructor syscall confinement, durable SQLite API,
+Native Image support or production solution. No permanent worker, queue,
+scheduler or policy is introduced.
+
+### Second batch: full experimental resource lifecycle
+
+All five new methods belong to `ProtosI144FfmFixtureAbiTest` and use real
+Protos closures through `Probe`. Java orchestrates platform threads, barriers
+and assertions; it declares no native signature and fabricates no handle.
+
+| Case / exact JUnit method | Required confinement and custody observations | Result |
+|---|---|---|
+| B3-T2 `b3T2MultipleOwnedResourcesReleaseAndCloseOnRestrictedThread` | Three acquisitions; `[41, 61, 0]`; one explicit destructor while two resources remain live; externally requested owner-thread close drains both; total destruction delta three, live count restored, cross-thread delta zero, retained first/third handles rejected and no duplicate destruction. | Previous batch ERROR; correction NOT RUN |
+| B3-T3 `b3T3CloseRequestDuringNativeCallWaitsUntilOwnerCanClose` | Real admitted `FfmBinding.invoke` and active C barrier; request recorded before barrier release; no premature destruction or session close; successful native status/errno and owner TID; owner closes only after native return; destruction delta one and cross-thread delta zero; bounded join. | Previous batch FAIL; correction NOT RUN |
+| B3-T4 `b3T4IndependentActorsAndGrantsCloseOnTheirOwnRestrictedThreads` | Two different Actor sessions and simultaneous physical Landlock domains; own-file success and other-grant EACCES with native TIDs; both ready before requests; actual alien-handle admission and transfer rejection, owner use retained; two total destructions, no remaining added live resource or cross-thread delta; unrestricted observer keeps access. | Previous batch FAIL; correction NOT RUN |
+| B3-T5 `b3T5AliveRestrictedOwnerDoesNotConstrainExternalCloser` | Owner remains alive while another unrestricted platform thread closes directly; destructor matches exterior closer and differs from creator; cross-thread and destruction deltas both one, session closed and no repeat when owner exits. PASS would be a negative-control observation of FAIL B confinement, not confinement PASS. | Previous batch ERROR; correction NOT RUN |
+| B3-T6 `b3T6RejectedGuestCallsDoNotPreventRestrictedSessionCleanup` | Invalid `incrementOwned`/`releaseOwned` inputs are ordinary admission Errors; no destruction, original handle remains usable by owner; external request leads to owner-thread close; one destruction, zero cross-thread delta and closed-handle refusal. | Previous batch FAIL; correction NOT RUN |
+
+The fixture adds private `ffi_test_counter.creator_tid`, initialized by the
+existing Linux `ffi_test_thread_id` at creation. Destruction compares its
+physical TID with that field before normal free/accounting. The sole new C
+symbol is `int32_t ffi_test_cross_thread_destroy_count(void)`, backed by an
+independent C11 `_Atomic int32_t`. Observation never prevents, delays or repeats
+a destructor, and existing ABI signatures and status semantics are preserved.
+All mismatch assertions compare against the initial counter, including after
+previous counterexamples; they never assume process-global zero.
+
+The Protos probe binds that symbol as `FFI.i32` with `Array()` parameters and
+exposes `crossThreadDestroyCount`. New lexical `keptSecond`/`keptThird` slots
+begin at `null`. `keepManyForClose` creates values 40/50/60, increments the first
+and third, explicitly releases the second, and returns ordinary
+`Array(firstValue, thirdValue, status)`. `retained` stays compatible and
+`retainedThird` permits the additional closed-handle checks. All declarations,
+resource acquisition, release composition and native calls remain in Protos.
+
+These cases deliberately separate three paths: an external request executed
+by the owner (T1/T2/T4/T6); a request made while C is active and handled only
+after return (T3); and direct exterior execution of close while the owner is
+still alive (T5). Keeping an owner alive alone does not enforce close affinity.
+Multi-resource custody and two independent Actors add no automatic Landlock
+policy. Exactly-once retirement/session revocation are FFM custody properties;
+Landlock restricts the physical executing thread's filesystem authority.
+The native mismatch counter observes destructor affinity, not every syscall
+inside arbitrary destructors. The observer's successful exterior access is a
+control, never process-wide confinement evidence. B2-T5 remains unchanged as
+the strict failing hypothesis.
+
+Shared helpers are confined to these five tests: preparation, bounded latch
+waiting, idempotent owner close, an owner-thread `finally`, counter observations
+and failure-preserving host teardown. Existing `Probe`, `probe`, `startPlatform`,
+`PlatformCall`, `kernelTid`, `awaitGate` and `assertOnStack` are reused. No new
+Java class or production dispatch infrastructure is added. Every latch wait and
+join is bounded; T3 releases the existing native barrier in `finally` before
+joining. Failed owners have no exterior-close fallback. Cleanup exceptions
+remain failures or suppressed exceptions of the primary failure, and fixture
+teardown is withheld if a started owner/session remains pending. No uncertain
+destructor is retried, no custody order is assumed, and no thread-state check
+is used to infer Actor non-reentrancy. Reporter entries record counter snapshots,
+physical TIDs, Landlock/liveness and worker failures; T3/T5 also state request
+and negative-control status explicitly.
+
+### Manual validation handoff and inspection scope
+
+The T1 evidence above belongs to the owner's earlier candidate. For this
+corrected candidate, whitespace/static checks, compilation, focal execution and
+the integrated suite are all **NOT RUN**; the failed prior batch is recorded above. Run manually in order, stopping at an
+unexpected failure. Start with the four-file diff and whitespace gates:
+
+```sh
+git diff --check
+git diff --cached --check
+```
+
+The narrow C static check has no test execution or output artifact:
+
+```sh
+cc -std=c11 -Wall -Werror -fsyntax-only protos/tests/foreign-provider/native/ffi_test.c
+```
+
+Compile Java tests without executing them, then run only the six B3 methods,
+including preserved T1 as a regression:
+
+```sh
+mvn -DskipTests test-compile
+mvn '-Dtest=ProtosI144FfmFixtureAbiTest#b3T*' test
+```
+
+To select only the five new methods:
+
+```sh
+mvn '-Dtest=ProtosI144FfmFixtureAbiTest#b3T2*+b3T3*+b3T4*+b3T5*+b3T6*' test
+```
+
+Allow up to a few minutes for Maven startup and the existing dynamic Java/C
+fixture compilation. Preserve Surefire results and all B3 reporter entries.
+These focal commands do not execute the deliberately failing B2-T5. No success
+is inferred for any new case. Full executable closure and its integrated
+validation obligation remain deferred; no formatter result is claimed.
+
+Material inspection for B3 covered root instructions; `AGENTS.work/DESIGN.md`,
+`IMPLEMENTATION.md`, `REFERENCE.md` and `src/AGENTS.md`; `FFI.md` (complete),
+`MODULES.md`'s FFI boundary and `ACTORS.md` §24J/native-resource boundary;
+this guide's B1/B2 records; `ProtosI144FfmFixtureAbiTest`,
+`ProtosExternalForeignProviderTest.Fixture`, `ffm-confinement-probe.protos`;
+`ProtosForeignProviderSessionBinding`, `FfmSession` close/destroy,
+`FfmBinding` owned conversion/destructor paths, `FfmHandles` resource/custody,
+`FfmValueOperations`, and `ProtosLinuxConfinedFilesystemLandlock`;
+`pom.xml` compiler/Surefire settings and `LICENSE.TXT` Part 5. These impose
+unchanged synchronous entry, Actor-local custody, no transfer or ambient
+confinement guarantee, irreversible closure, exactly-once destruction and APL
+notice preservation. The remote blocker ledger, D256-C1 decision and handoff
+were also read: no SQLite-specific ledger unblock condition was found, and the
+explicit authority/cancellation gates remain open. The five pinned GraalPy
+methods above were inspected as upstream evidence, without copying upstream
+source into the repository.
+
+The failure correction additionally inspected the supplied run's primary and
+suppressed causes; `ProtosForeignOperation` ordinary-error admission,
+`ProtosCoreErrors.StandardError`, `ProtosActorExecutionDomain` fatal cleanup,
+`ProtosProcessRuntime` termination, `ProtosPolyglotRuntimeHost.close`,
+`ProtosPolyglotProcessContext.processTerminatedForRuntime`,
+`ProtosPolyglotExecutionContext` close disposition, and
+`ProtosForeignValueFixture.close`. These distinguish host class preparation,
+semantic termination and completed platform cleanup. Only this guide section
+and the existing JUnit file are edited for the correction.
+
+The second batch also materially inspected `protos/AGENTS.md`, the current C
+resource/destructor/barrier paths, existing Protos binding/custody composition,
+the existing B2-T7 session-membership and transfer assertions and B3-T1's
+preparation/cleanup. These require valid line-separated Protos slots, continued
+use of the generic fixture registration and unchanged pre-entry ordinary Error
+semantics. The fixture registration remains generic and needs no new symbol
+allowlist. The approved batch is experimental evidence, with no new semantic
+choice or design ratification.
+
+Only the four authorized files were edited using Python; guide edits are limited
+to §14. Existing source APL notices are retained and `LICENSE.TXT` remains
+present; no new source class or packaging change is introduced. No Git, Maven,
+compiler, test, benchmark or validation command was executed for this batch.
+No temporary audit file, commit, push, index operation or publication was made.

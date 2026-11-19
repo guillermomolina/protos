@@ -157,16 +157,19 @@ int32_t ffi_test_out_was_zero(int64_t *slot) {
 
 typedef struct ffi_test_counter {
     int64_t value;
+    int64_t creator_tid;
 } ffi_test_counter;
 
 static _Atomic int32_t ffi_test_live;
 static _Atomic int32_t ffi_test_destroyed;
 static _Atomic int64_t ffi_test_destroy_tid;
+static _Atomic int32_t ffi_test_cross_thread_destroyed;
 
 ffi_test_counter *ffi_test_counter_new(int64_t initial) {
     ffi_test_counter *counter = malloc(sizeof *counter);
     if (counter != NULL) {
         counter->value = initial;
+        counter->creator_tid = ffi_test_thread_id();
         ffi_test_live++;
     }
     return counter;
@@ -202,7 +205,11 @@ int32_t ffi_test_counter_free(ffi_test_counter *counter) {
     if (counter == NULL) {
         return -1;
     }
-    atomic_store(&ffi_test_destroy_tid, ffi_test_thread_id());
+    int64_t destroy_tid = ffi_test_thread_id();
+    atomic_store(&ffi_test_destroy_tid, destroy_tid);
+    if (destroy_tid != counter->creator_tid) {
+        atomic_fetch_add(&ffi_test_cross_thread_destroyed, 1);
+    }
     free(counter);
     ffi_test_live--;
     ffi_test_destroyed++;
@@ -214,6 +221,10 @@ int32_t ffi_test_live_count(void) { return ffi_test_live; }
 int32_t ffi_test_destroyed_count(void) { return ffi_test_destroyed; }
 
 int64_t ffi_test_last_destroy_thread_id(void) { return atomic_load(&ffi_test_destroy_tid); }
+
+int32_t ffi_test_cross_thread_destroy_count(void) {
+    return atomic_load(&ffi_test_cross_thread_destroyed);
+}
 
 /* Accepts NULL; answers 1 for a NULL pointer and 0 otherwise. */
 int32_t ffi_test_is_null(const ffi_test_counter *counter) { return counter == NULL; }
