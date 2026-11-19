@@ -643,9 +643,8 @@ public final class ProtosIoReleaseCPrimeExecution {
         b.endWhile();
 
         b.beginStoreLocal(l.targetResult);
-        b.beginMaterializePrimitiveNumericCarrier();
+        b.beginMaterializePrimitiveNumericCarrier(true);
         b.emitLoadLocal(l.child);
-        b.emitLoadConstant(true);
         b.endMaterializePrimitiveNumericCarrier();
         b.endStoreLocal();
 

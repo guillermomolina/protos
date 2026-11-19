@@ -5021,9 +5021,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
     /** I091-C2: an internal Long must never be observed as a guest Number. */
     @Operation
+    @ConstantOperand(type = boolean.class, name = "carrierPermitted")
     public static final class MaterializePrimitiveNumericCarrier {
         @Specialization
-        public static Object perform(Object value, boolean carrierPermitted) {
+        public static Object perform(boolean carrierPermitted, Object value) {
             return carrierPermitted
                     ? ProtosNumericValueSupport.guestValue(value)
                     : value;

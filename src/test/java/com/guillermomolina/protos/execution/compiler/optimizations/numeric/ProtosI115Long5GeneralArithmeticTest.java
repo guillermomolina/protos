@@ -52,6 +52,34 @@ final class ProtosI115Long5GeneralArithmeticTest {
             runOverflow: () => {
                 BigInteger.recognizes(add(9223372036854775807, 1)) && BigInteger.recognizes(sub(0 - 9223372036854775807, 2)) && BigInteger.recognizes(mul(9223372036854775807, 2))
             }
+            nested: (a, b, c, d) => { (a + b) * (c - d) }
+            mixed: (x, y) => { x * 2 + y }
+            control: (x, y) => { (x < y).ifTrueIfFalse(() => { 1 }, () => { 2 }) }
+            counter: { value: 0 }
+            tick: (v) => {
+                counter.value = counter.value + 1
+                v
+            }
+            runGuests: () => {
+                counter.value = 0
+                ok: nested(tick(2), tick(3), tick(10), tick(4)) == 30
+                ok = ok && (counter.value == 4)
+                ok = ok && (mixed(1.5, 2) == 5.0) && Float.recognizes(mixed(1.5, 2))
+                ok = ok && (mixed(2, 0.5) == 4.5) && (mixed(2, 3) == 7)
+                ok = ok && (control(3, 4) == 1) && (control(4, 3) == 2)
+                ok = ok && (discard(9, 4) == 0)
+                ok = ok && BigInteger.recognizes(chain(9223372036854775807, 1, 0))
+                ok = ok && (chain(9223372036854775807, 1, 1) == 9223372036854775807)
+                ok && SmallInteger.recognizes(chain(9223372036854775807, 1, 1))
+            }
+            runRedefinedNested: () => {
+                behavior: { plus: (other) => { 77 } }
+                weird: { ...behavior.alias("plus", "+") }
+                counter.value = 0
+                ok: chain(tick(weird), tick(1), tick(0)) == 77
+                ok = ok && (counter.value == 3)
+                ok && (nested(weird, 1, 3, 1) == 154) && (chain(9, 4, 3) == 10)
+            }
             """;
 
     @Test
@@ -133,8 +161,27 @@ final class ProtosI115Long5GeneralArithmeticTest {
                     assertNoRedundantResultClear("chain", chain, instructions, position);
                 }
             }
-            assertTrue(count(instructions, "c.LoadAndClearTempLocal") <= compositions,
-                    "more resumption-local clears than compositions: " + instructions);
+            // Result locals and resumption locals are released by different
+            // owners: each result local at its own last use (checked above),
+            // each resumption local once per composition.
+            java.util.Set<Integer> resultLocals = new java.util.HashSet<>();
+            for (String producer : List.of("c.NumberAdd", "c.NumberSubtract")) {
+                for (int position : positions(instructions, producer)) {
+                    Integer local = resultLocal(chain, instructions, position);
+                    if (local != null) {
+                        resultLocals.add(local);
+                    }
+                }
+            }
+            long resumptionReleases = 0;
+            for (int i = 0; i < instructions.size(); i++) {
+                if (instructions.get(i).startsWith("c.LoadAndClearTempLocal")
+                        && localOffsets(chain.get(i)).stream().noneMatch(resultLocals::contains)) {
+                    resumptionReleases++;
+                }
+            }
+            assertTrue(resumptionReleases <= compositions,
+                    "more resumption-local releases than compositions: " + instructions);
             assertNoCleanupInsideComposition(instructions);
             assertEquals(11L, session.prepareTopLevel("runChain")
                     .executable().execute().asLong());
@@ -211,6 +258,67 @@ final class ProtosI115Long5GeneralArithmeticTest {
         }
     }
 
+    /*
+     * Three distinct properties. (1) A fused Bytecode DSL operation: each
+     * root keeps its own c.Number* / c.RichCompare* instruction, with no
+     * external selection, dispatch or redundant transport. (2) Primitive
+     * specializations declared on the node (doLL, doLLOvf, doDD, ...):
+     * checked reflectively in the numeric reconciliation test. (3) Quickening
+     * observable in the opcode name: not required here, because a fused
+     * operation existing does not prove which Java specialization ran, and
+     * no generated variant name is verified. This test requires (1) after
+     * repeated guest execution, with exact guest results.
+     */
+    @Test
+    void standardLongArithmeticRemainsFusedAfterRepeatedExecution() throws Exception {
+        try (ProtosStandaloneHostedSession session = open()) {
+            for (int i = 0; i < 100; i++) {
+                assertEquals(54L, session.prepareTopLevel("run")
+                        .executable().execute().asLong());
+            }
+            for (int i = 0; i < 100; i++) {
+                assertEquals(11L, session.prepareTopLevel("runChain")
+                        .executable().execute().asLong());
+            }
+            for (int i = 0; i < 100; i++) {
+                assertTrue(session.prepareTopLevel("runBudgets")
+                        .executable().execute().asBoolean());
+            }
+            record Expected(String function, String operation, long operations) {
+            }
+            for (Expected expected : List.of(
+                    new Expected("add", "c.NumberAdd", 1L),
+                    new Expected("sub", "c.NumberSubtract", 1L),
+                    new Expected("mul", "c.NumberMultiply", 1L),
+                    new Expected("sum", "c.NumberAdd", 1L),
+                    new Expected("chain", "c.NumberAdd", 2L),
+                    new Expected("compare", "c.RichCompareLt", 1L))) {
+                List<Instruction> instructions =
+                        rootOf(session, expected.function()).getBytecodeNode()
+                                .getInstructionsAsList();
+                List<String> names = names(instructions);
+                assertEquals(1L, count(names, expected.operation()),
+                        expected.function() + ": " + names);
+                if (expected.function().equals("chain")) {
+                    assertEquals(1L, count(names, "c.NumberSubtract"), "chain: " + names);
+                }
+                for (String absent : List.of(
+                        "c.IsStandardNumericSelection",
+                        "c.TryPrimitiveNumeric",
+                        "c.IsPrimitiveNumericSendMiss",
+                        "c.GetMethod",
+                        "c.CallBinaryMethod")) {
+                    assertEquals(0L, count(names, absent),
+                            expected.function() + " keeps " + absent + ": " + names);
+                }
+                // Budget includes assertNoResultTransport per producer and,
+                // for single-result roots, TRANSPORT_PER_OPERATION.
+                assertComputationBudget(expected.function(), instructions,
+                        expected.operations());
+            }
+        }
+    }
+
     private static final List<String> EXTERNAL_SELECTION = List.of(
             "c.IsStandardNumericSelection",
             "c.TryPrimitiveNumeric",
@@ -223,11 +331,14 @@ final class ProtosI115Long5GeneralArithmeticTest {
             "c.CallRequest");
 
     /*
-     * Transport currently emitted around each fused numeric operation (a dup
-     * and a store.stackvalue). It is an admitted existing cost, not an optimal
-     * shape: the budget is an upper bound and zero is accepted.
+     * Stack transport attributed to each fused numeric operation. A result
+     * consumed once is read from its local by its last use, so no dup,
+     * store.stackvalue or stack-value load is admitted for it. The root-wide
+     * count is charged to the computation only in roots with a single fused
+     * operation, where every transport is unambiguously that result's; in
+     * nested roots each result's own transport is checked through its local.
      */
-    private static final long TRANSPORT_PER_OPERATION = 2L;
+    private static final long TRANSPORT_PER_OPERATION = 0L;
 
     /*
      * Independent upper bounds for a root whose computation is made of
@@ -261,12 +372,15 @@ final class ProtosI115Long5GeneralArithmeticTest {
         assertEquals(operations, producers.size(),
                 function + " computation is not " + operations + " fused operations: " + names);
 
-        long transport = names.stream()
-                .filter(ProtosI115Long5GeneralArithmeticTest::isTransport).count();
-        long transportBudget = TRANSPORT_PER_OPERATION * operations;
-        assertTrue(transport <= transportBudget,
-                function + " carries " + transport + " transport instructions, budget "
-                        + transportBudget + ": " + names);
+        boolean singleResult = producers.size() == 1;
+        if (singleResult) {
+            long transport = names.stream()
+                    .filter(ProtosI115Long5GeneralArithmeticTest::isTransport).count();
+            long transportBudget = TRANSPORT_PER_OPERATION * operations;
+            assertTrue(transport <= transportBudget,
+                    function + " carries " + transport + " transport instructions, budget "
+                            + transportBudget + ": " + names);
+        }
 
         long compositions = count(names, "c.IsContinuation");
         assertTrue(compositions <= operations,
@@ -280,6 +394,7 @@ final class ProtosI115Long5GeneralArithmeticTest {
         // other locals of the root are not attributed to the computation.
         for (int producer : producers) {
             assertNoRedundantResultClear(function, instructions, names, producer);
+            assertNoResultTransport(function, instructions, names, producer, singleResult);
         }
         assertNoCleanupInsideComposition(names);
     }
@@ -306,9 +421,11 @@ final class ProtosI115Long5GeneralArithmeticTest {
     }
 
     /*
-     * The producer's result local, when it exists, is not cleared twice by
-     * explicit clear.local without a new write in between. A
-     * LoadAndClearTempLocal is a last use, not a separate clear.
+     * The producer's result local, when it exists, is released once per
+     * write: a clear.local or a LoadAndClearTempLocal (a last use that
+     * clears) is never followed, without a new write, by another release or
+     * by a read. Its last reference is a release, or the load feeding the
+     * root's return, so the result does not stay live past its last use.
      */
     private static void assertNoRedundantResultClear(
             String function, List<Instruction> instructions, List<String> names, int producer) {
@@ -317,17 +434,76 @@ final class ProtosI115Long5GeneralArithmeticTest {
             return;
         }
         boolean cleared = false;
+        int last = -1;
         for (int i = producer + 2; i < names.size(); i++) {
             if (!localOffsets(instructions.get(i)).contains(local)) {
                 continue;
             }
+            last = i;
             String name = names.get(i);
             if (name.startsWith("store.local")) {
-                cleared = false;
-            } else if (name.startsWith("clear.local")) {
-                assertTrue(!cleared, function + " clears the result local " + local + " of "
+                if (cleared) {
+                    // The released slot is reused by another local.
+                    break;
+                }
+            } else if (name.startsWith("clear.local")
+                    || name.startsWith("c.LoadAndClearTempLocal")) {
+                assertTrue(!cleared, function + " releases the result local " + local + " of "
                         + names.get(producer) + " twice without a new write: " + names);
                 cleared = true;
+            } else if (name.startsWith("load.local")) {
+                assertTrue(!cleared, function + " reads the released result local " + local
+                        + " of " + names.get(producer) + " without a new write: " + names);
+            }
+        }
+        boolean returned = last >= 0 && last + 1 < names.size()
+                && names.get(last).startsWith("load.local")
+                && names.get(last + 1).startsWith("return");
+        assertTrue(cleared || returned, function + " keeps the result local " + local + " of "
+                + names.get(producer) + " live past its last use: " + names);
+    }
+
+    /*
+     * A result consumed once is not transported through the operand stack.
+     * Its own transport is identified through its producer, its result local
+     * and the uses of that local: the producer's value is not duplicated or
+     * stashed as a stack value right after the producer, and no read of its
+     * result local (load.local, or the LoadAndClearTempLocal of its last use)
+     * is followed by one. Only when the root has a single fused result
+     * (unambiguous) is every transport between the producer and the release
+     * of its local also charged to it; in nested roots such an instruction
+     * may belong to an independent expression and is not attributed here.
+     * Composition instructions are not transport.
+     */
+    private static void assertNoResultTransport(String function, List<Instruction> instructions,
+            List<String> names, int producer, boolean unambiguous) {
+        String result = names.get(producer);
+        assertTrue(producer + 1 >= names.size() || !isTransport(names.get(producer + 1)),
+                function + " transports the result of " + result + " right after it: " + names);
+        Integer local = resultLocal(instructions, names, producer);
+        if (local == null) {
+            return;
+        }
+        for (int i = producer + 2; i < names.size(); i++) {
+            String name = names.get(i);
+            if (unambiguous) {
+                assertTrue(!isTransport(name), function + " transports the result of "
+                        + result + " through the stack: " + names);
+            }
+            if (!localOffsets(instructions.get(i)).contains(local)) {
+                continue;
+            }
+            if (name.startsWith("store.local")) {
+                // A new write: later uses of the slot belong to another value.
+                return;
+            }
+            if (name.startsWith("load.local") || name.startsWith("c.LoadAndClearTempLocal")) {
+                assertTrue(i + 1 >= names.size() || !isTransport(names.get(i + 1)),
+                        function + " transports the result of " + result
+                                + " read from its local: " + names);
+            }
+            if (name.startsWith("c.LoadAndClearTempLocal") || name.startsWith("clear.local")) {
+                return;
             }
         }
     }
@@ -379,11 +555,29 @@ final class ProtosI115Long5GeneralArithmeticTest {
         assertTrue(released, "discarded result kept live in local " + local + ": " + names);
     }
 
+    /*
+     * Local offsets an instruction accesses: LOCAL_OFFSET arguments, and the
+     * constant LocalAccessor of an operation such as LoadAndClearTempLocal.
+     */
     private static List<Integer> localOffsets(Instruction instruction) {
-        return instruction.getArguments().stream()
-                .filter(argument -> argument.getKind() == Instruction.Argument.Kind.LOCAL_OFFSET)
-                .map(Instruction.Argument::asLocalOffset)
-                .toList();
+        List<Integer> offsets = new ArrayList<>();
+        for (Instruction.Argument argument : instruction.getArguments()) {
+            if (argument.getKind() == Instruction.Argument.Kind.LOCAL_OFFSET) {
+                offsets.add(argument.asLocalOffset());
+            } else if (argument.getKind() == Instruction.Argument.Kind.CONSTANT
+                    && argument.asConstant() instanceof com.oracle.truffle.api.bytecode.LocalAccessor accessor) {
+                offsets.add(accessorOffset(accessor));
+            }
+        }
+        return offsets;
+    }
+
+    /* LocalAccessor publishes its offset only through toString. */
+    static int accessorOffset(com.oracle.truffle.api.bytecode.LocalAccessor accessor) {
+        java.util.regex.Matcher matcher = java.util.regex.Pattern
+                .compile("localOffset=(-?\\d+)").matcher(accessor.toString());
+        assertTrue(matcher.find(), "unexpected LocalAccessor form: " + accessor);
+        return Integer.parseInt(matcher.group(1));
     }
 
     private static List<Integer> positions(List<String> instructions, String prefix) {
@@ -398,6 +592,73 @@ final class ProtosI115Long5GeneralArithmeticTest {
 
     private static long count(List<String> instructions, String prefix) {
         return instructions.stream().filter(name -> name.startsWith(prefix)).count();
+    }
+
+    /*
+     * Guest behavior around the released results: nested Long arithmetic,
+     * Long/Float combinations, a comparison consumed by a control, a
+     * discarded result, exact promotion of an intermediate overflow and a
+     * redefined operator (the suspending case runs through Context.eval in
+     * its own test). Each operand is evaluated exactly once (counted by tick), and the
+     * nested roots keep their fused operations within their budgets.
+     */
+    @Test
+    void releasedResultsKeepExactGuestResultsAndSingleOperandEvaluation() throws Exception {
+        try (ProtosStandaloneHostedSession session = open()) {
+            assertTrue(session.prepareTopLevel("runGuests")
+                    .executable().execute().asBoolean());
+            assertTrue(session.prepareTopLevel("runRedefinedNested")
+                    .executable().execute().asBoolean());
+
+            List<Instruction> nested = instructionsOf(session, "nested");
+            List<String> nestedNames = names(nested);
+            assertEquals(1L, count(nestedNames, "c.NumberAdd"), nestedNames.toString());
+            assertEquals(1L, count(nestedNames, "c.NumberSubtract"), nestedNames.toString());
+            assertEquals(1L, count(nestedNames, "c.NumberMultiply"), nestedNames.toString());
+            assertComputationBudget("nested", nested, 3L);
+
+            List<Instruction> mixed = instructionsOf(session, "mixed");
+            assertComputationBudget("mixed", mixed, 2L);
+
+            List<String> control = names(instructionsOf(session, "control"));
+            assertEquals(1L, count(control, "c.RichCompareLt"), control.toString());
+            for (String absent : EXTERNAL_SELECTION) {
+                assertEquals(0L, count(control, absent),
+                        "control keeps external selection " + absent + ": " + control);
+            }
+        }
+    }
+
+    /*
+     * A redefined operator that suspends inside a Task, consumed by the
+     * enclosing subtraction: evaluated through Context.eval so the Task can
+     * run while the RootActor waits on its Future.
+     */
+    @Test
+    void suspendingRedefinedOperatorResumesWithoutRepeatingOperands() {
+        String program = """
+                chain: (x, y, z) => { x + y - z }
+                counter: { value: 0 }
+                tick: (v) => {
+                    counter.value = counter.value + 1
+                    v
+                }
+                behavior: {
+                    plus: (other) => {
+                        counter.value = counter.value + 100
+                        (() => { 40 + other }).future().value()
+                    }
+                }
+                lazy: { ...behavior.alias("plus", "+") }
+                r: (() => { chain(tick(lazy), tick(2), tick(1)) }).future().value()
+                (r == 41) && (counter.value == 103) && (chain(9, 4, 3) == 10)
+                """;
+        try (org.graalvm.polyglot.Context context = org.graalvm.polyglot.Context
+                .newBuilder(ProtosLanguage.ID)
+                .option("protos.CoreRoot", CORE.toAbsolutePath().toString())
+                .build()) {
+            assertTrue(context.eval(ProtosLanguage.ID, program).asBoolean());
+        }
     }
 
     @Test

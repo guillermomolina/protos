@@ -278,9 +278,8 @@ public final class ProtosTextReaderCPrimeExecution {
                             builder.endWhile();
 
                             builder.beginStoreLocal(sourceResult);
-                            builder.beginMaterializePrimitiveNumericCarrier();
+                            builder.beginMaterializePrimitiveNumericCarrier(true);
                             builder.emitLoadLocal(child);
-                            builder.emitLoadConstant(true);
                             builder.endMaterializePrimitiveNumericCarrier();
                             builder.endStoreLocal();
 

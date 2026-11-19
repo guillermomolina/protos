@@ -3607,7 +3607,7 @@ final class CanonicalToBytecodeLowerer {
             operands.add(operand);
         }
         emitIndexedOperation(builder, send.message(),
-                () -> emitStagedIndexedOperands(builder, receiver, operands),
+                () -> emitStagedIndexedOperands(builder, receiver, operands, null),
                 result, childResult, resumeValue, primitiveCarrierResult);
         noteIndexedOutcomeReleased(send, childResult);
         builder.endBlock();
@@ -3616,16 +3616,23 @@ final class CanonicalToBytecodeLowerer {
 
     /*
      * Operands staged in locals because their evaluation composes an
-     * invocation. The receiver local is read at its last use and cleared in
-     * the same operation; the argument locals keep their typed load.
+     * invocation. Each local is read at its last use and cleared in the same
+     * operation, except retained (null when none), an operand whose value is
+     * used again after the indexed operation: it is only read here, and its
+     * later use owns its release.
      */
     private static void emitStagedIndexedOperands(
             ProtosBytecodeRootNodeGen.Builder builder,
             BytecodeLocal receiver,
-            java.util.List<BytecodeLocal> operands) {
+            java.util.List<BytecodeLocal> operands,
+            BytecodeLocal retained) {
         builder.emitLoadAndClearTempLocal(receiver);
         for (BytecodeLocal operand : operands) {
-            builder.emitLoadLocal(operand);
+            if (operand == retained) {
+                builder.emitLoadLocal(operand);
+            } else {
+                builder.emitLoadAndClearTempLocal(operand);
+            }
         }
     }
 
@@ -3724,14 +3731,12 @@ final class CanonicalToBytecodeLowerer {
             builder.emitClearLocal(outcome);
         } else if (primitiveCarrierResult) {
             builder.beginStoreLocal(result);
-            builder.emitLoadLocal(outcome);
+            builder.emitLoadAndClearTempLocal(outcome);
             builder.endStoreLocal();
-            builder.emitClearLocal(outcome);
         } else {
             builder.beginStoreLocal(result);
-            builder.beginMaterializePrimitiveNumericCarrier();
+            builder.beginMaterializePrimitiveNumericCarrier(true);
             builder.emitLoadAndClearTempLocal(outcome);
-            builder.emitLoadConstant(true);
             builder.endMaterializePrimitiveNumericCarrier();
             builder.endStoreLocal();
         }
@@ -3797,7 +3802,7 @@ final class CanonicalToBytecodeLowerer {
             boolean terminal) {
         noteDynamicInvocation();
         if (!primitiveCarrierResult) {
-            builder.beginMaterializePrimitiveNumericCarrier();
+            builder.beginMaterializePrimitiveNumericCarrier(true);
         }
 
         builder.beginTag(StandardTags.CallTag.class);
@@ -3849,7 +3854,6 @@ final class CanonicalToBytecodeLowerer {
         builder.endTag(StandardTags.CallTag.class);
 
         if (!primitiveCarrierResult) {
-            builder.emitLoadConstant(true);
             builder.endMaterializePrimitiveNumericCarrier();
         }
     }
@@ -3883,21 +3887,16 @@ final class CanonicalToBytecodeLowerer {
         emitDispatchedContinuationComposition(
                 builder, childResult, resumeValue);
 
-        builder.beginBindStackValue();
+        // The completed result is read and cleared at its only use, the
+        // Block's value; the composition already cleared the resumption
+        // value at its last use.
         if (primitiveCarrierResult) {
-            builder.emitLoadLocal(childResult);
+            builder.emitLoadAndClearTempLocal(childResult);
         } else {
-            builder.beginMaterializePrimitiveNumericCarrier();
-            builder.emitLoadLocal(childResult);
-            builder.emitLoadConstant(true);
+            builder.beginMaterializePrimitiveNumericCarrier(true);
+            builder.emitLoadAndClearTempLocal(childResult);
             builder.endMaterializePrimitiveNumericCarrier();
         }
-        StackValue completedValue = builder.endBindStackValue();
-
-        builder.emitClearLocal(childResult);
-        builder.emitClearLocal(resumeValue);
-
-        builder.emitLoadStackValue(completedValue);
 
         builder.endBlock();
     }
@@ -6000,15 +5999,18 @@ final class CanonicalToBytecodeLowerer {
                 builder, assign.value(), value,
                 preparedCall, childResult, resumeValue, stager);
 
+        // A consumed assignment publishes the RHS after the operation, so the
+        // RHS local survives the operation and is released when published.
         emitIndexedOperation(builder, "atPut",
                 () -> emitStagedIndexedOperands(
-                        builder, receiver, java.util.List.of(index, value)),
+                        builder, receiver, java.util.List.of(index, value),
+                        result != null ? value : null),
                 null, childResult, resumeValue, false);
         noteIndexedOutcomeReleased(assign, childResult);
 
         if (result != null) {
             builder.beginStoreLocal(result);
-            builder.emitLoadLocal(value);
+            builder.emitLoadAndClearTempLocal(value);
             builder.endStoreLocal();
         }
 
@@ -8164,9 +8166,8 @@ final class CanonicalToBytecodeLowerer {
             if (primitiveCarrierResult) {
                 builder.emitLoadLocal(outcome);
             } else {
-                builder.beginMaterializePrimitiveNumericCarrier();
+                builder.beginMaterializePrimitiveNumericCarrier(true);
                 builder.emitLoadLocal(outcome);
-                builder.emitLoadConstant(true);
                 builder.endMaterializePrimitiveNumericCarrier();
             }
             builder.endStoreLocal();
@@ -8226,22 +8227,22 @@ final class CanonicalToBytecodeLowerer {
 
         emitDispatchedContinuationComposition(builder, outcome, resumeValue);
 
-        // a discarded invocation result is not copied anywhere.
+        // The outcome is read and cleared at its only use; a discarded
+        // invocation result is not copied anywhere and is cleared here. The
+        // composition already cleared the resumption value at its last use.
         if (result != null) {
             builder.beginStoreLocal(result);
             if (primitiveCarrierResult) {
-                builder.emitLoadLocal(outcome);
+                builder.emitLoadAndClearTempLocal(outcome);
             } else {
-                builder.beginMaterializePrimitiveNumericCarrier();
-                builder.emitLoadLocal(outcome);
-                builder.emitLoadConstant(true);
+                builder.beginMaterializePrimitiveNumericCarrier(true);
+                builder.emitLoadAndClearTempLocal(outcome);
                 builder.endMaterializePrimitiveNumericCarrier();
             }
             builder.endStoreLocal();
+        } else {
+            builder.emitClearLocal(outcome);
         }
-
-        builder.emitClearLocal(outcome);
-        builder.emitClearLocal(resumeValue);
     }
 
     /*
@@ -8630,9 +8631,8 @@ final class CanonicalToBytecodeLowerer {
         builder.endStoreLocal();
         emitDispatchedContinuationComposition(builder, childResult, resumeValue);
         builder.beginStoreLocal(result);
-        builder.beginMaterializePrimitiveNumericCarrier();
+        builder.beginMaterializePrimitiveNumericCarrier(true);
         builder.emitLoadLocal(childResult);
-        builder.emitLoadConstant(true);
         builder.endMaterializePrimitiveNumericCarrier();
         builder.endStoreLocal();
         builder.emitClearLocal(childResult);
@@ -9389,11 +9389,7 @@ final class CanonicalToBytecodeLowerer {
         builder.beginBlock();
         emitComposedNumericOperandToLocal(
                 builder, expression, operand, preparedCall, childResult, resumeValue);
-        builder.beginBindStackValue();
-        builder.emitLoadLocal(operand);
-        StackValue operandValue = builder.endBindStackValue();
-        builder.emitClearLocal(operand);
-        builder.emitLoadStackValue(operandValue);
+        builder.emitLoadAndClearTempLocal(operand);
         builder.endBlock();
     }
 
@@ -9452,9 +9448,9 @@ final class CanonicalToBytecodeLowerer {
      * representations never meet in one frame slot. The resumption local is
      * cleared by the composition at its only use, so a site that never
      * suspends executes no clear for it. The completed (and, for an
-     * ordering, validated) result is bound as a stack value, the result local
-     * is cleared, and the bound value becomes the Block's value, so the
-     * result does not stay live in the frame after it is consumed.
+     * ordering, validated) result is read from its local and cleared in the
+     * same operation as the Block's value, so the result does not stay live
+     * in the frame after it is consumed.
      */
     private void emitDirectNumericOperation(
             ProtosBytecodeRootNodeGen.Builder builder,
@@ -9479,18 +9475,14 @@ final class CanonicalToBytecodeLowerer {
 
         emitDispatchedContinuationComposition(builder, numericResult, numericResume);
 
-        builder.beginBindStackValue();
+        // The result local is read and cleared at its only use, the Block's value.
         if (isOrderingSelector(send.message())) {
             builder.beginRequireCanonicalBooleanResult();
-            builder.emitLoadLocal(numericResult);
+            builder.emitLoadAndClearTempLocal(numericResult);
             builder.endRequireCanonicalBooleanResult();
         } else {
-            builder.emitLoadLocal(numericResult);
+            builder.emitLoadAndClearTempLocal(numericResult);
         }
-        StackValue completedValue = builder.endBindStackValue();
-
-        builder.emitClearLocal(numericResult);
-        builder.emitLoadStackValue(completedValue);
 
         builder.endBlock();
     }

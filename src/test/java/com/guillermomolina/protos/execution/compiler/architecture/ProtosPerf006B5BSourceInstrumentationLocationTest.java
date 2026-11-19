@@ -194,6 +194,195 @@ final class ProtosPerf006B5BSourceInstrumentationLocationTest {
     }
 
     /**
+     * One statement combining an indexed read, nested arithmetic and an
+     * indexed write whose value is consumed by another operation, next to a
+     * real call: the Statement/Expression regions and the source section of
+     * every operation stay exact, only the real call carries a CallTag, and
+     * each operand is emitted once, before the operation consuming it.
+     */
+    @Test
+    void combinedIndexedAndNumericExpressionKeepsSectionsAndTags() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            String characters = "a[k] = a[k + 1] * k + 2\n(a[k - 1] = k * 3) + target()";
+            Source source =
+                    Source.newBuilder(
+                                    ProtosLanguage.ID,
+                                    characters,
+                                    "perf006-b5b-combined.protos")
+                            .build();
+            ProtosBytecodeRootNode root =
+                    new CanonicalToBytecodeLowerer(scope.language(), source)
+                            .lowerRoot(canonicalize(characters));
+            root.getRootNodes().ensureComplete();
+
+            TagTree tree = root.getBytecodeNode().getTagTree();
+            List<TagTree> statements =
+                    collectTags(tree, StandardTags.StatementTag.class);
+            List<String> statementSources = sourceCharacters(statements);
+            assertEquals(2, statements.size(), statementSources.toString());
+            assertEquals("a[k] = a[k + 1] * k + 2", statementSources.get(0));
+            assertTrue(statementSources.get(1).contains("a[k - 1] = k * 3")
+                            && statementSources.get(1).endsWith("+ target()"),
+                    statementSources.toString());
+            assertEquals(statements, collectTags(tree, StandardTags.ExpressionTag.class));
+            assertEquals(
+                    List.of("target()"),
+                    sourceCharacters(collectTags(tree, StandardTags.CallTag.class)),
+                    "only the real call carries a CallTag");
+
+            List<com.oracle.truffle.api.bytecode.Instruction> instructions =
+                    root.getBytecodeNode().getInstructionsAsList();
+            int readIndex = instructionWithSection(instructions, "c.NumberAdd", "k + 1");
+            int read = instructionWithSection(instructions, "c.BinarySubscript", "a[k + 1]");
+            int product = instructionWithSection(instructions, "c.NumberMultiply",
+                    "a[k + 1] * k");
+            int rhs = instructionWithSection(instructions, "c.NumberAdd",
+                    "a[k + 1] * k + 2");
+            int write = instructionWithSection(instructions, "c.SetItem",
+                    "a[k] = a[k + 1] * k + 2");
+            int consumedRhs = instructionWithSection(instructions, "c.NumberMultiply", "k * 3");
+            int consumedWrite = instructionWithSection(instructions, "c.SetItem",
+                    "a[k - 1] = k * 3");
+            assertTrue(readIndex < read && read < product
+                            && product < rhs && rhs < write
+                            && write < consumedRhs && consumedRhs < consumedWrite,
+                    instructions.toString());
+            assertEquals(2, instructions.stream()
+                            .filter(instruction -> ProtosInstructionNames.of(instruction)
+                                    .startsWith("c.SetItem"))
+                            .count(),
+                    instructions.toString());
+
+            // Staged operands released by LoadAndClearTempLocal neither remove
+            // nor displace the source sections of the operations consuming
+            // them: every BinarySubscript, SetItem, NumberAdd and
+            // NumberMultiply keeps a section, and those located above are
+            // their only instances apart from the addition consuming target().
+            for (String operation : List.of(
+                    "c.BinarySubscript", "c.SetItem", "c.NumberAdd", "c.NumberMultiply")) {
+                for (com.oracle.truffle.api.bytecode.Instruction instruction : instructions) {
+                    if (ProtosInstructionNames.of(instruction).startsWith(operation)) {
+                        assertTrue(instruction.getSourceSection() != null
+                                        && instruction.getSourceSection().isAvailable(),
+                                operation + " lost its source section: " + instructions);
+                    }
+                }
+            }
+            assertEquals(1, instructions.stream()
+                            .filter(instruction -> ProtosInstructionNames.of(instruction)
+                                    .startsWith("c.BinarySubscript"))
+                            .count(),
+                    instructions.toString());
+            assertEquals(2, instructions.stream()
+                            .filter(instruction -> ProtosInstructionNames.of(instruction)
+                                    .startsWith("c.NumberMultiply"))
+                            .count(),
+                    instructions.toString());
+            // The released loads stay inside the statements they belong to.
+            for (com.oracle.truffle.api.bytecode.Instruction instruction : instructions) {
+                SourceSection released = instruction.getSourceSection();
+                if (!ProtosInstructionNames.of(instruction).startsWith("c.LoadAndClearTempLocal")
+                        || released == null) {
+                    continue;
+                }
+                assertTrue(statements.stream().anyMatch(statement -> {
+                            SourceSection owner = statement.getSourceSection();
+                            return owner.getCharIndex() <= released.getCharIndex()
+                                    && released.getCharEndIndex() <= owner.getCharEndIndex();
+                        }),
+                        "LoadAndClearTempLocal displaced to " + released + ": " + instructions);
+            }
+        }
+    }
+
+    /*
+     * The combined expression executed with a debugger attached, through a
+     * selected at that suspends inside a Task: every operand runs once, in
+     * order, and the resumed operation completes the write and the consuming
+     * addition.
+     */
+    @Test
+    void instrumentedCombinedExpressionEvaluatesEachOperandOnceAcrossResumption() {
+        String trace = "trace: { value: 0 }\n"
+                + "step: (digit, value) => {\n"
+                + "    trace.value = trace.value * 10 + digit\n"
+                + "    value\n"
+                + "}\n";
+        String program = trace + """
+                Lazy: Array {
+                    at: (index) => {
+                        trace.value = trace.value * 10 + 9
+                        (() => { 40 + index }).future().value()
+                    }
+                }
+                l: Lazy(1, 2, 3)
+                compute: () => {
+                    (step(1, l)[step(2, 0)] = step(3, l)[step(4, 1)] * (step(5, 2) + 1) + 1) + step(6, 1)
+                }
+                r: (() => { compute() }).future().value()
+                trace.value * 10000 + r
+                """;
+        try (Context context = Context.newBuilder(ProtosLanguage.ID)
+                        .option("protos.CoreRoot",
+                                Path.of("protos", "lib", "core").toAbsolutePath().toString())
+                        .build();
+                DebuggerSession session =
+                        Debugger.find(context.getEngine()).startSession(event -> {})) {
+            // 41 * 3 + 1 = 124 is written and answered; 124 + 1 = 125.
+            assertEquals(12349560125L, context.eval(ProtosLanguage.ID, program).asLong());
+        }
+    }
+
+    private static final String COMBINED_FAILING_NAME =
+            "perf006-b5b-combined-failing.protos";
+    private static final String COMBINED_FAILING = """
+            Late: Array {
+                at: (index) => {
+                    (() => { 7 }).future().value()
+                    Error().signal()
+                }
+            }
+            l: Late(1, 2, 3)
+            k: 0
+            read: () => {
+                (l[k] = l[k + 1] * (k + 2) + 1) + 1
+            }
+            read()
+            """;
+
+    /*
+     * After the selected at of the combined expression suspends and resumes,
+     * the terminal trace still names the indexed read (caller) and the
+     * signal inside the selected body (callee).
+     */
+    @Test
+    void resumedCombinedExpressionErrorLocatesTheAccessAndTheSignal() throws Exception {
+        ProtosExecutionOutcome outcome = ProtosTestExecutionSupport.execute(
+                COMBINED_FAILING_NAME, COMBINED_FAILING, core().newModuleActivation());
+        assertAccessAndSignalLocations(
+                failedTrace(outcome), COMBINED_FAILING_NAME, COMBINED_FAILING, "l[k + 1]");
+    }
+
+    private static int instructionWithSection(
+            List<com.oracle.truffle.api.bytecode.Instruction> instructions,
+            String prefix,
+            String section) {
+        int found = -1;
+        for (int i = 0; i < instructions.size(); i++) {
+            com.oracle.truffle.api.bytecode.Instruction instruction = instructions.get(i);
+            SourceSection owned = instruction.getSourceSection();
+            if (ProtosInstructionNames.of(instruction).startsWith(prefix)
+                    && owned != null
+                    && section.equals(owned.getCharacters().toString())) {
+                assertEquals(-1, found, "more than one " + prefix + " at " + section);
+                found = i;
+            }
+        }
+        assertTrue(found >= 0, "missing " + prefix + " at " + section + ": " + instructions);
+        return found;
+    }
+
+    /**
      * With a debugger session attached, the instrumented indexed sites keep the
      * guest result, evaluate receiver, index and RHS exactly once in order, and
      * a redefined selection is still invoked inside the operation; an Error

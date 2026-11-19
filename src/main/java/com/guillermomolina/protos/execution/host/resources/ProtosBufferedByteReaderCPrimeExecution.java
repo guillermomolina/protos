@@ -221,9 +221,8 @@ public final class ProtosBufferedByteReaderCPrimeExecution {
                             builder.endWhile();
 
                             builder.beginStoreLocal(targetResult);
-                            builder.beginMaterializePrimitiveNumericCarrier();
+                            builder.beginMaterializePrimitiveNumericCarrier(true);
                             builder.emitLoadLocal(child);
-                            builder.emitLoadConstant(true);
                             builder.endMaterializePrimitiveNumericCarrier();
                             builder.endStoreLocal();
 

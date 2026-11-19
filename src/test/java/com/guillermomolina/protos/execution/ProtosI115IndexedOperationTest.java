@@ -603,6 +603,27 @@ final class ProtosI115IndexedOperationTest {
      * other producer storing into that local in between. A composition that
      * matches neither condition is owned by nobody.
      */
+    /*
+     * A frame local's identity in a listing: its offset, and its local index
+     * when the instruction publishes one. Two locals of different scopes may
+     * reuse one offset; when both sides publish an index, the index separates
+     * them, and a side without one cannot be distinguished by offset alone.
+     */
+    private record LocalRef(int offset, int index) {
+        static final int UNKNOWN_INDEX = -1;
+
+        boolean sameAs(LocalRef other) {
+            return offset == other.offset
+                    && (index == UNKNOWN_INDEX || other.index == UNKNOWN_INDEX
+                            || index == other.index);
+        }
+
+        /* This local, taking the index other publishes when this one has none. */
+        LocalRef refinedBy(LocalRef other) {
+            return index == UNKNOWN_INDEX ? new LocalRef(offset, other.index) : this;
+        }
+    }
+
     private static final class IndexedCensus {
         final List<com.oracle.truffle.api.bytecode.Instruction> instructions;
         final List<String> names;
@@ -649,21 +670,104 @@ final class ProtosI115IndexedOperationTest {
             return found;
         }
 
+        /*
+         * Local offsets accessed: LOCAL_OFFSET arguments, and the constant
+         * LocalAccessor of LoadAndClearTempLocal, which publishes its offset
+         * only through toString.
+         */
         private List<Integer> locals(int position) {
-            return instructions.get(position).getArguments().stream()
-                    .filter(argument -> argument.getKind()
-                            == com.oracle.truffle.api.bytecode.Instruction.Argument.Kind.LOCAL_OFFSET)
-                    .map(com.oracle.truffle.api.bytecode.Instruction.Argument::asLocalOffset)
-                    .toList();
+            return localRefs(position).stream().map(LocalRef::offset).toList();
+        }
+
+        /*
+         * Locals accessed, with their identity: the offset, plus the local
+         * index when the instruction publishes it (a LocalAccessor does, as
+         * "LocalAccessor[localOffset=N, localIndex=M]"; LOCAL_OFFSET
+         * arguments do not, and answer UNKNOWN_INDEX).
+         */
+        private List<LocalRef> localRefs(int position) {
+            List<LocalRef> refs = new java.util.ArrayList<>();
+            for (com.oracle.truffle.api.bytecode.Instruction.Argument argument
+                    : instructions.get(position).getArguments()) {
+                switch (argument.getKind()) {
+                    case LOCAL_OFFSET -> refs.add(
+                            new LocalRef(argument.asLocalOffset(), LocalRef.UNKNOWN_INDEX));
+                    case CONSTANT -> {
+                        if (argument.asConstant()
+                                instanceof com.oracle.truffle.api.bytecode.LocalAccessor accessor) {
+                            String form = accessor.toString();
+                            java.util.regex.Matcher offset = java.util.regex.Pattern
+                                    .compile("localOffset=(-?\\d+)").matcher(form);
+                            assertTrue(offset.find(), "unexpected LocalAccessor form: " + form);
+                            java.util.regex.Matcher index = java.util.regex.Pattern
+                                    .compile("localIndex=(-?\\d+)").matcher(form);
+                            refs.add(new LocalRef(Integer.parseInt(offset.group(1)),
+                                    index.find() ? Integer.parseInt(index.group(1))
+                                            : LocalRef.UNKNOWN_INDEX));
+                        }
+                    }
+                    default -> { }
+                }
+            }
+            return refs;
+        }
+
+        /* The first local at position that may be local, or null. */
+        private LocalRef matching(int position, LocalRef local) {
+            for (LocalRef candidate : localRefs(position)) {
+                if (candidate.sameAs(local)) {
+                    return candidate;
+                }
+            }
+            return null;
         }
 
         /* The local the producer's result is stored into, or null. */
         private Integer resultLocal(int producer) {
+            LocalRef ref = resultLocalRef(producer);
+            return ref == null ? null : ref.offset();
+        }
+
+        private LocalRef resultLocalRef(int producer) {
             if (producer + 1 < names.size() && names.get(producer + 1).startsWith("store.local")) {
-                List<Integer> stored = locals(producer + 1);
+                List<LocalRef> stored = localRefs(producer + 1);
                 return stored.isEmpty() ? null : stored.get(0);
             }
             return null;
+        }
+
+        /*
+         * Whether position ends a linear run: past it, bytecode order is not
+         * execution order (synthetic continuation branches, loops, returns).
+         */
+        private boolean endsLinearRun(int position) {
+            String name = names.get(position);
+            return name.startsWith("branch") || name.startsWith("return")
+                    || name.startsWith("yield") || name.startsWith("throw")
+                    || name.startsWith("c.IsContinuation") || name.startsWith("c.Resume");
+        }
+
+        /*
+         * From the release of local at release, along the linear run that
+         * follows it and until a new write of the local, the local is neither
+         * read nor released again. Every execution reaching the release
+         * executes that run in order, so a hit is a real use after release.
+         */
+        private void assertNotUsedInLinearRunAfter(int release, LocalRef local, String label) {
+            for (int i = release + 1; i < names.size() && !endsLinearRun(i - 1); i++) {
+                LocalRef hit = matching(i, local);
+                if (hit == null) {
+                    continue;
+                }
+                String name = names.get(i);
+                if (name.startsWith("store.local")) {
+                    return;
+                }
+                assertTrue(!name.startsWith("c.LoadAndClearTempLocal"), label + " releases local "
+                        + local + " twice without a new write: " + names);
+                assertTrue(!name.startsWith("load.local"), label + " reads local " + local
+                        + " after its release without a new write: " + names);
+            }
         }
 
         List<Integer> ownedCompositions(int producer) {
@@ -750,7 +854,7 @@ final class ProtosI115IndexedOperationTest {
          * so parameter and other-local clears are never charged here.
          */
         void assertResultLocalReleased(int producer, String label) {
-            Integer local = resultLocal(producer);
+            LocalRef local = resultLocalRef(producer);
             if (local == null) {
                 return;
             }
@@ -763,9 +867,11 @@ final class ProtosI115IndexedOperationTest {
             boolean released = false;
             boolean cleared = false;
             for (int i = producer + 2; i < names.size(); i++) {
-                if (!locals(i).contains(local)) {
+                LocalRef hit = matching(i, local);
+                if (hit == null) {
                     continue;
                 }
+                local = local.refinedBy(hit);
                 String name = names.get(i);
                 if (name.startsWith("store.local")) {
                     cleared = false;
@@ -787,6 +893,99 @@ final class ProtosI115IndexedOperationTest {
                     + " neither consumed nor cleared before the return: " + names);
         }
 
+        /*
+         * Release checks limited to intervals the indexed operations identify
+         * themselves; the listing as a whole is not one execution path, since
+         * continuation compositions add synthetic branches and loops.
+         *
+         * Staged operands: the operand reads immediately before an indexed
+         * operation are its own operands. Each one released there is released
+         * once within that group, and is neither read nor released again in
+         * the linear run after the operation.
+         *
+         * Results: an indexed result stored into a local and released by a
+         * LoadAndClearTempLocal within the linear run after the operation is
+         * neither read nor released again in the linear run after that
+         * release. A release reached only across a branch is not checked
+         * here. A clear.local by the owner of shared scratch is not charged.
+         */
+        void assertNoUseAfterRelease(String label) {
+            for (int operation : positions(ProtosI115IndexedOperationTest::isIndexedOperation)) {
+                List<LocalRef> releasedOperands = new java.util.ArrayList<>();
+                for (int i = operation - 1; i >= 0 && isOperandRead(names.get(i)); i--) {
+                    if (!names.get(i).startsWith("c.LoadAndClearTempLocal")) {
+                        continue;
+                    }
+                    for (LocalRef local : localRefs(i)) {
+                        assertTrue(releasedOperands.stream().noneMatch(local::sameAs),
+                                label + " releases operand local " + local
+                                        + " twice for one operation: " + names);
+                        releasedOperands.add(local);
+                    }
+                }
+                for (LocalRef local : releasedOperands) {
+                    assertNotUsedInLinearRunAfter(operation, local, label);
+                }
+
+                LocalRef result = resultLocalRef(operation);
+                if (result == null) {
+                    continue;
+                }
+                for (int i = operation + 2; i < names.size() && !endsLinearRun(i - 1); i++) {
+                    LocalRef hit = matching(i, result);
+                    if (hit == null) {
+                        continue;
+                    }
+                    if (names.get(i).startsWith("c.LoadAndClearTempLocal")) {
+                        assertNotUsedInLinearRunAfter(i, result.refinedBy(hit), label);
+                    }
+                    if (!names.get(i).startsWith("load.local")) {
+                        break;
+                    }
+                }
+            }
+        }
+
+        private static boolean isOperandRead(String name) {
+            return name.startsWith("load.") || name.startsWith("c.LoadAndClearTempLocal");
+        }
+
+        /*
+         * The operand emitted immediately before the indexed operation: its
+         * staged local and whether it is released (LoadAndClearTempLocal) or
+         * only read (load.local) there. Null when it is not a staged local.
+         */
+        LocalRef stagedLastOperand(int operation, boolean released) {
+            String operand = names.get(operation - 1);
+            String expected = released ? "c.LoadAndClearTempLocal" : "load.local";
+            if (!operand.startsWith(expected)) {
+                return null;
+            }
+            List<LocalRef> refs = localRefs(operation - 1);
+            return refs.isEmpty() ? null : refs.get(0);
+        }
+
+        /*
+         * Whether local is released by a LoadAndClearTempLocal after position,
+         * before any new write of the same local: a release following a new
+         * write belongs to that later value, not to the one read at position.
+         */
+        boolean releasedAfter(int position, LocalRef local) {
+            for (int i = position + 1; i < names.size(); i++) {
+                LocalRef hit = matching(i, local);
+                if (hit == null) {
+                    continue;
+                }
+                if (names.get(i).startsWith("store.local")) {
+                    return false;
+                }
+                if (names.get(i).startsWith("c.LoadAndClearTempLocal")) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         long cleanupInsideComposition() {
             boolean[] inside = compositionMask();
             long cleanup = 0;
@@ -797,6 +996,164 @@ final class ProtosI115IndexedOperationTest {
             }
             return cleanup;
         }
+    }
+
+    /*
+     * Operands composed by calls are staged in locals and released at their
+     * last use: once each, never read again, and never before a reused RHS
+     * is published as the assignment's value. The indexed operations keep
+     * their own selection (no external selector), a redefined selection runs
+     * once, a suspending one resumes without repeating any operand, and
+     * results stay exact when several operations reuse the same scratch.
+     */
+    @Test
+    void stagedOperandsAreReleasedAtTheirLastUse() throws Exception {
+        String source = TRACE + """
+                values: [1, 2, 3]
+                box: {
+                    at: (index) => {
+                        trace.value = trace.value * 10 + 9
+                        index + 100
+                    }
+                    atPut: (index, value) => {
+                        trace.value = trace.value * 10 + 8
+                        value * 2
+                    }
+                }
+                reset: () => { trace.value = 0 }
+                traced: () => { trace.value }
+                readComposed: () => { step(1, values)[step(2, 1)] }
+                writeConsumed: () => { (step(1, values)[step(2, 0)] = step(3, 7)) }
+                writeDiscarded: () => {
+                    step(1, values)[step(2, 1)] = step(3, 9)
+                    0
+                }
+                putDistinct: () => { step(1, box).atPut(step(2, 0), step(3, 5)) }
+                assignDistinct: () => { (step(1, box)[step(2, 0)] = step(3, 5)) }
+                readSelected: () => { step(1, box)[step(2, 3)] }
+                consumedByAnother: () => { (values[step(1, 0)] = step(2, 4)) + 1 }
+                scratchReuse: () => {
+                    values[step(1, 0)] = step(2, 10)
+                    values[step(3, 1)] = step(4, 20)
+                    values[step(5, 0)] + values[step(6, 1)]
+                }
+                fixed: [1, 2, 3]
+                readViaCall: () => { fixed[step(1, 1)] }
+                readTyped: () => { fixed[1] }
+                """;
+        try (ProtosStandaloneHostedSession session = open(source)) {
+            assertTraced(session, "readComposed", 2L, 12L);
+            assertTraced(session, "writeConsumed", 7L, 123L);
+            assertTraced(session, "writeDiscarded", 0L, 123L);
+            assertTraced(session, "putDistinct", 10L, 1238L);
+            assertTraced(session, "assignDistinct", 5L, 1238L);
+            assertTraced(session, "readSelected", 103L, 129L);
+            assertTraced(session, "consumedByAnother", 5L, 12L);
+            assertTraced(session, "scratchReuse", 30L, 123456L);
+
+            for (String function : List.of(
+                    "readComposed", "writeConsumed", "writeDiscarded", "putDistinct",
+                    "assignDistinct", "readSelected", "consumedByAnother", "scratchReuse")) {
+                IndexedCensus census = IndexedCensus.of(root(session, function));
+                assertEquals(0L, census.count(name -> name.startsWith("c.IsStandardIndexedSelection")),
+                        function + " keeps the external selector: " + census.names);
+                census.assertNoUseAfterRelease(function);
+                assertTrue(census.cleanupInsideComposition() == 0,
+                        function + " clears a local inside a composition: " + census.names);
+            }
+
+            IndexedCensus consumed = IndexedCensus.of(root(session, "writeConsumed"));
+            int consumedWrite = onlyOperation(consumed, "c.SetItem");
+            LocalRef retained = consumed.stagedLastOperand(consumedWrite, false);
+            assertTrue(retained != null,
+                    "the reused RHS is released before the write publishes it: " + consumed.names);
+            assertTrue(consumed.releasedAfter(consumedWrite, retained),
+                    "the reused RHS is not released when published: " + consumed.names);
+
+            IndexedCensus discarded = IndexedCensus.of(root(session, "writeDiscarded"));
+            int discardedWrite = onlyOperation(discarded, "c.SetItem");
+            assertTrue(discarded.stagedLastOperand(discardedWrite, true) != null,
+                    "a discarded write keeps its RHS beyond the write: " + discarded.names);
+
+            IndexedCensus put = IndexedCensus.of(root(session, "putDistinct"));
+            int putOperation = onlyOperation(put, "c.SetItem");
+            assertTrue(put.stagedLastOperand(putOperation, true) != null,
+                    "an explicit atPut keeps its argument beyond the operation: " + put.names);
+
+            for (int i = 0; i < 10; i++) {
+                session.prepareTopLevel("reset").executable().execute();
+                assertEquals(2L, session.prepareTopLevel("readViaCall")
+                        .executable().execute().asLong());
+            }
+            // The index call (step) is a real invocation; the subscript itself
+            // stays the fused operation, without external selection or a
+            // permanent fallback.
+            var guest = session.prepareTopLevel("readViaCall").executable().execute();
+            assertTrue(guest.isNumber() && guest.fitsInLong() && guest.asLong() == 2L,
+                    "readViaCall no longer answers the long 2: " + guest);
+            List<String> viaCall = names(root(session, "readViaCall"));
+            List<String> subscripts = viaCall.stream()
+                    .filter(name -> name.startsWith("c.BinarySubscript")).toList();
+            assertEquals(1, subscripts.size(), viaCall.toString());
+            assertTrue(!subscripts.get(0).contains("Selected")
+                            && !subscripts.get(0).contains("Fallback"),
+                    "readViaCall degraded to the fallback: " + viaCall);
+            assertEquals(0L, viaCall.stream()
+                            .filter(name -> name.startsWith("c.IsStandardIndexedSelection")).count(),
+                    "readViaCall keeps the external selector: " + viaCall);
+            assertEquals(1L, viaCall.stream().filter(IndexedCensus::isExternalDispatch).count(),
+                    "readViaCall dispatches beyond its index call: " + viaCall);
+
+            // The subscript name test above also accepts the generic
+            // c.BinarySubscript. Specialization is shown separately on a
+            // standard read of a long-storage Array with a long index and no
+            // call between the operands: the same site, executed repeatedly,
+            // must reach its c.BinarySubscript$LongStorage variant. The
+            // executions before warm-up may run the generic instruction.
+            for (int i = 0; i < 20; i++) {
+                assertEquals(2L, session.prepareTopLevel("readTyped")
+                        .executable().execute().asLong());
+            }
+            List<String> typed = names(root(session, "readTyped"));
+            List<String> typedSubscripts = typed.stream()
+                    .filter(name -> name.startsWith("c.BinarySubscript")).toList();
+            assertEquals(1, typedSubscripts.size(), typed.toString());
+            assertTrue(typedSubscripts.get(0).startsWith("c.BinarySubscript$LongStorage"),
+                    "readTyped did not quicken to its long-storage variant: " + typed);
+            assertTrue(typed.stream().noneMatch(name -> name.startsWith("c.IsStandardIndexedSelection")),
+                    "readTyped keeps the external selector: " + typed);
+            assertTrue(typed.stream().noneMatch(IndexedCensus::isExternalDispatch),
+                    "readTyped dispatches a message: " + typed);
+        }
+        // A suspending selected at with composed operands: 1, 2, then 9 once.
+        assertEquals(12942L, evalLong(TRACE + """
+                Lazy: Array {
+                    at: (index) => {
+                        trace.value = trace.value * 10 + 9
+                        (() => { 40 + index }).future().value()
+                    }
+                }
+                lazy: Lazy(1, 2, 3)
+                readLazy: () => { step(1, lazy)[step(2, 2)] }
+                r: (() => { readLazy() }).future().value()
+                trace.value * 100 + r
+                """));
+    }
+
+    private static void assertTraced(
+            ProtosStandaloneHostedSession session, String function, long result, long trace)
+            throws Exception {
+        session.prepareTopLevel("reset").executable().execute();
+        assertEquals(result, session.prepareTopLevel(function).executable().execute().asLong(),
+                function + " result");
+        assertEquals(trace, session.prepareTopLevel("traced").executable().execute().asLong(),
+                function + " evaluation order and count");
+    }
+
+    private static int onlyOperation(IndexedCensus census, String prefix) {
+        List<Integer> found = census.positions(name -> name.startsWith(prefix));
+        assertEquals(1, found.size(), census.names.toString());
+        return found.get(0);
     }
 
     private static ProtosBytecodeRootNode root(

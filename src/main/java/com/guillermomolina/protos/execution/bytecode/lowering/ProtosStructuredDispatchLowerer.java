@@ -1348,9 +1348,8 @@ final class ProtosStructuredDispatchLowerer {
         builder.endWhile();
 
         builder.beginStoreLocal(result);
-        builder.beginMaterializePrimitiveNumericCarrier();
+        builder.beginMaterializePrimitiveNumericCarrier(true);
         builder.emitLoadLocal(childResult);
-        builder.emitLoadConstant(true);
         builder.endMaterializePrimitiveNumericCarrier();
         builder.endStoreLocal();
     }

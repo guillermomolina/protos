@@ -477,6 +477,138 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
         System.out.println("PERF040_E1_SUSPENDING_SELECTED_ADDITION=PASS");
     }
 
+    /**
+     * One site consumes an arithmetic result and a comparison result after
+     * their operations, through the standard selection, a redefined
+     * selection, a redefined selection that suspends inside a Task, and the
+     * restored standard selection. Each operand is evaluated once per
+     * execution (also across a resumption), each selected method runs once,
+     * the comparison result is validated as a canonical Boolean after its
+     * resumption, and the restored site answers exact standard results.
+     */
+    @Test
+    void numericResultsConsumedAfterARealContinuationKeepTheSelectedValue() throws Exception {
+        withCanonicalPrelude(canonical -> {
+            int[] operands = new int[1];
+            int[] selected = new int[1];
+            ProtosClosureValue next = ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> {
+                        operands[0]++;
+                        return Long.valueOf(operands[0] % 2 == 1 ? 1L : 2L);
+                    });
+            ProtosClosureValue mark = ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> {
+                        selected[0]++;
+                        return Long.valueOf(selected[0]);
+                    });
+            ProtosEmbeddedProcess embedding =
+                    ProtosLanguageContext.current().embeddedProcessForHostEntry();
+            ProtosActorExecutionDomain rootDomain = embedding.rootExecutionDomain();
+            ProtosActivation canonicalModule = canonical.newModuleActivation(
+                    new ProtosActorModuleState(), null,
+                    canonical.newExecutionContext(), rootDomain);
+            Object standardPlus =
+                    canonical.integerPrototype().readLocalSlot("+").orElseThrow();
+            Object suspendingPlus = call(
+                    closure("(mark) => (other) => {\n    mark()\n"
+                            + "    (() => { 42 }).future().value()\n}", canonicalModule),
+                    canonicalModule,
+                    mark);
+            Object suspendingLess = call(
+                    closure("(mark) => (other) => {\n    mark()\n"
+                            + "    (() => { false }).future().value()\n}", canonicalModule),
+                    canonicalModule,
+                    mark);
+            Object suspendingNonBoolean = call(
+                    closure("(mark) => (other) => {\n    mark()\n"
+                            + "    (() => { 1 }).future().value()\n}", canonicalModule),
+                    canonicalModule,
+                    mark);
+            AlternativeIntegers alternative =
+                    alternativeIntegers(canonical, standardPlus, false);
+            ProtosActivation module = alternative.prelude().newModuleActivation(
+                    new ProtosActorModuleState(), null,
+                    alternative.prelude().newExecutionContext(), rootDomain);
+            // next() answers 1, 2, 1, 2: sum is 1 + 2 and ordered is 1 < 2.
+            ProtosClosureValue site = closure(
+                    "(next) => {\n"
+                            + "    (() => {\n"
+                            + "        sum: next() + next()\n"
+                            + "        ordered: next() < next()\n"
+                            + "        ordered.ifTrueIfFalse(() => { sum }, () => { sum + 1000 })\n"
+                            + "    }).future().value()\n"
+                            + "}",
+                    module);
+            ProtosHostExecutableClosure hostEntry =
+                    ProtosHostExecutableClosure.prepareForEmbeddingRuntime(
+                            site, module, embedding);
+            java.util.function.Supplier<Object> run = () -> {
+                try {
+                    return InteropLibrary.getUncached().execute(hostEntry, next);
+                } catch (com.oracle.truffle.api.interop.InteropException e) {
+                    throw new AssertionError(e);
+                }
+            };
+            java.util.concurrent.atomic.AtomicInteger hostSuspensions =
+                    new java.util.concurrent.atomic.AtomicInteger();
+            java.util.function.Consumer<com.guillermomolina.protos.runtime.ProtosFutureValue>
+                    previous = ProtosHostEntrySuspension.suspendedForTesting;
+            ProtosHostEntrySuspension.suspendedForTesting =
+                    future -> hostSuspensions.incrementAndGet();
+            try {
+                for (int round = 0; round < 3; round++) {
+                    operands[0] = 0;
+                    selected[0] = 0;
+                    assertEquals(3L, normalized(run.get()), "standard");
+                    assertEquals(4, operands[0], "standard operands");
+
+                    alternative.integer().assignLocalSlot("+", answering(5L));
+                    assertEquals(5L, normalized(run.get()), "redefined +");
+                    assertEquals(8, operands[0], "redefined + operands");
+
+                    alternative.integer().assignLocalSlot("+", suspendingPlus);
+                    assertEquals(42L, normalized(run.get()), "suspending +");
+                    assertEquals(12, operands[0], "suspending + operands");
+                    assertEquals(1, selected[0], "the suspending + runs once");
+
+                    alternative.integer().assignLocalSlot("+", standardPlus);
+                    alternative.integer().createLocalSlot("<", suspendingLess);
+                    assertEquals(1003L, normalized(run.get()), "suspending <");
+                    assertEquals(16, operands[0], "suspending < operands");
+                    assertEquals(2, selected[0], "the suspending < runs once");
+
+                    alternative.integer().removeLocalSlot("<");
+                    assertEquals(3L, normalized(run.get()), "restored");
+                    assertEquals(20, operands[0], "restored operands");
+                    assertEquals(2, selected[0], "no selected method after restore");
+                }
+                assertTrue(hostSuspensions.get() >= 1,
+                        "the host entry really suspended at least once");
+                ProtosClosureValue add = closure("(x, y) => x + y", module);
+                for (long i = 0; i < 20; i++) {
+                    assertEquals(i + 1, normalized(call(add, module, i, 1L)));
+                }
+                assertTrue(ProtosNumericValueSupport.isLargeInteger(
+                        call(add, module, Long.MAX_VALUE, 1L)),
+                        "the restored standard + still promotes exactly");
+
+                // Last: an escaping guest Error terminates the embedded Process.
+                operands[0] = 0;
+                selected[0] = 0;
+                alternative.integer().createLocalSlot("<", suspendingNonBoolean);
+                assertThrows(ProtosSignalException.class, run::get,
+                        "a resumed non-Boolean ordering result signals");
+                assertEquals(4, operands[0], "non-Boolean < operands");
+                assertEquals(1, selected[0], "the non-Boolean < runs once");
+                assertFalse(embedding.isLive(),
+                        "an Error escaping the outermost entry terminates its Process");
+            } finally {
+                ProtosHostEntrySuspension.suspendedForTesting = previous;
+            }
+        });
+        System.out.println("PERF040_E1_RESULT_AFTER_CONTINUATION=PASS");
+    }
+
     /** Regression for the original I115-LONG-5 overflow in a standalone module root. */
     @Test
     void i115StandaloneModuleOverflowUsesContextNumericFactory() {
@@ -1554,6 +1686,22 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
             for (Method method : specializations) {
                 assertOverflowGeneralizationOnly(node, method, specializations);
             }
+            if (overflowGeneralizes(node)) {
+                assertTrue(specializations.stream().anyMatch(m -> m.getName().equals("doLLOvf")
+                                && m.getDeclaringClass() == node),
+                        node.getSimpleName() + " declares no doLLOvf of its own");
+                for (String name : List.of("doLL", "doLLOvf", "doDD", "doDL", "doLD")) {
+                    Method method = specializations.stream()
+                            .filter(m -> m.getName().equals(name))
+                            .findFirst()
+                            .orElseThrow(() -> new AssertionError(
+                                    node.getSimpleName() + " has no " + name));
+                    assertStandardSelectionGuard(node, method);
+                }
+                assertOperands(node, specializations, "doDD", double.class, double.class);
+                assertOperands(node, specializations, "doDL", double.class, long.class);
+                assertOperands(node, specializations, "doLD", long.class, double.class);
+            }
             assertTrue(Class.forName(node.getName() + "Gen").getSuperclass() == node,
                     node.getSimpleName());
         }
@@ -1577,6 +1725,7 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
                     Arrays.asList(specialization.rewriteOn()), where);
             assertEquals(0, specialization.replaces().length, where);
             assertSame(long.class, method.getReturnType(), where + " must return long");
+            assertGuestLongOperands(method, where);
             return;
         }
         assertEquals(0, specialization.rewriteOn().length, where);
@@ -1597,6 +1746,35 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
         assertTrue(signature.remove(com.oracle.truffle.api.nodes.Node.class), where);
         assertEquals(replaced, signature, where);
         assertSame(Object.class, method.getReturnType(), where);
+        assertGuestLongOperands(method, where);
+    }
+
+    /* Operand layout shared by every fast path: (frame, terminal, left, right, ...). */
+    private static final int LEFT_OPERAND = 2;
+
+    private static void assertGuestLongOperands(Method method, String where) {
+        Class<?>[] parameters = method.getParameterTypes();
+        assertTrue(parameters.length > LEFT_OPERAND + 1, where);
+        assertSame(long.class, parameters[LEFT_OPERAND], where + " left operand");
+        assertSame(long.class, parameters[LEFT_OPERAND + 1], where + " right operand");
+    }
+
+    private static void assertOperands(Class<?> node, List<Method> specializations,
+            String name, Class<?> left, Class<?> right) {
+        Method method = specializations.stream()
+                .filter(m -> m.getName().equals(name)).findFirst().orElseThrow();
+        String where = node.getSimpleName() + "." + name;
+        Class<?>[] parameters = method.getParameterTypes();
+        assertTrue(parameters.length > LEFT_OPERAND + 1, where);
+        assertSame(left, parameters[LEFT_OPERAND], where + " left operand");
+        assertSame(right, parameters[LEFT_OPERAND + 1], where + " right operand");
+    }
+
+    /* Every primitive fast path stays behind the standard numeric selection guard. */
+    private static void assertStandardSelectionGuard(Class<?> node, Method method) {
+        assertEquals(List.of("selection.execute(frame, SELECTOR, left)"),
+                Arrays.asList(method.getAnnotation(Specialization.class).guards()),
+                node.getSimpleName() + "." + method.getName() + " guard");
     }
 
     /*
