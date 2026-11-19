@@ -12,11 +12,11 @@ The dispatch code is
 
 | Command | What it does | Guide |
 |---|---|---|
-| `protos [--inspect] [--allow-network] [--allow-entropy] [--allow-clock] [--allow-filesystem=<dir>] [--service=<binding>] <file> [args...]` | Runs one source file | below |
-| `protos [--inspect] [--allow-network] [--allow-entropy] [--allow-clock] [--allow-filesystem=<dir>] -e <source> [args...]` | Runs one source String | below |
-| `protos [--inspect] [--allow-network] [--allow-entropy] [--allow-clock] [--allow-filesystem=<dir>]` | Starts the interactive REPL | below |
-| `protos run [--allow-network] [--allow-entropy] [--allow-clock] [--allow-filesystem=<dir>] [--service=<binding>] <entry> [args...]` | Runs a root-package logical entry of the project in the current directory | below |
-| `protos debug [--allow-network] [--allow-entropy] [--allow-clock] [--allow-filesystem=<dir>] <file> [args...]` | Runs one file under the Debug Adapter Protocol | below |
+| `protos [--inspect] [--allow-network] [--allow-resolver] [--allow-entropy] [--allow-clock] [--allow-filesystem=<dir>] [--service=<binding>] <file> [args...]` | Runs one source file | below |
+| `protos [--inspect] [--allow-network] [--allow-resolver] [--allow-entropy] [--allow-clock] [--allow-filesystem=<dir>] -e <source> [args...]` | Runs one source String | below |
+| `protos [--inspect] [--allow-network] [--allow-resolver] [--allow-entropy] [--allow-clock] [--allow-filesystem=<dir>]` | Starts the interactive REPL | below |
+| `protos run [--allow-network] [--allow-resolver] [--allow-entropy] [--allow-clock] [--allow-filesystem=<dir>] [--service=<binding>] <entry> [args...]` | Runs a root-package logical entry of the project in the current directory | below |
+| `protos debug [--allow-network] [--allow-resolver] [--allow-entropy] [--allow-clock] [--allow-filesystem=<dir>] <file> [args...]` | Runs one file under the Debug Adapter Protocol | below |
 | `protos format [<file>]` | Prints the canonical formatting of one document | below |
 | `protos lint [--output text\|json] [--fail-on-warning] [<file>]` | Reports parser errors and lint warnings without running code | below |
 | `protos language-server` | Starts the Language Server Protocol service on stdin/stdout | [Language server](language-server.md) |
@@ -49,6 +49,46 @@ protos -e 'print(process.args().size())' a b c
 The interactive REPL supports line editing, history and TAB completion.
 `:help` lists the REPL commands; `:quit`, `:exit` or Ctrl-D exits.
 Ctrl-C cancels the current input.
+
+### Explicit Resolver authority (`--allow-resolver`)
+
+`--allow-resolver` is a boolean flag, disabled by default. It grants only the
+initial application RootActor module's private `resolver` slot. Without the
+flag the slot is absent, never `null`. It grants name resolution, not TCP;
+`--allow-network` grants TCP, not Resolver. Both may be selected independently
+of Filesystem, Entropy, Clock, inspection, foreign access and service mode.
+
+It is available for direct SOURCE, `-e`, REPL, `run`, `debug`, direct SOURCE
+services and package MODULE services, on the JVM and Native CLI:
+
+```sh
+bin/protos --allow-resolver protos/examples/io/resolver-only.protos
+protos --allow-resolver -e 'print(context.hasSlot("resolver"))'
+protos --allow-resolver
+protos debug --allow-resolver entry.protos
+protos run --allow-resolver Main
+protos --allow-resolver --service=service server.protos
+protos run --allow-resolver --service=service Server
+bin/protos --allow-network --allow-resolver protos/examples/io/hostname-resolution.protos
+```
+
+Give the flag exactly once before the file, expression or logical package
+entry. For `run` and `debug`, it may precede the subcommand or follow it before
+the entry; duplicates across those regions are errors. Forms with `=`, missing
+required entries, and uses with help, version, `test`, `lint`, `package`,
+`format` or `language-server` fail with status `2`. After an entry,
+`--allow-resolver` is an ordinary application argument and grants nothing.
+Launcher flags before the entry do not appear in `process.args()`.
+
+Package preflight, planning and materialization receive no Resolver grant.
+Imports, other Actors, isolated P operations and child Processes do not inherit
+it. A service keeps its capability after READY until explicit close, Process
+termination or provisioning-host close. Importing `std:network/resolvers`
+provides only authority-free protocol objects. Real hostname queries depend on
+the host environment and remain manual examples, outside deterministic tests.
+
+See [networking](../library/networking.md) and the
+[authority guide](../11-process-io-filesystems-and-authority.md#name-resolution-is-a-separate-capability).
 
 ### Explicit secure Entropy (`--allow-entropy`, D243-C / I157)
 
@@ -175,8 +215,7 @@ protos debug --allow-filesystem=./data app.protos
   nothing. Pass the capability explicitly where Protos permits it. The
   launcher's own authority to read source files and resolve packages is
   separate and never becomes guest authority.
-- It is independent of `--inspect`, `--allow-network` and the (unselectable)
-  Resolver: none of them implies another.
+- It is independent of `--inspect`, `--allow-network` and `--allow-resolver`: none of them implies another.
 
 The option may be given once, before the direct file, `-e` or the REPL, or
 after `run`/`debug` but before their entry. After the entry it is an ordinary
@@ -339,15 +378,16 @@ the actual package root rather than the repository root; see the
 [package-exports tutorial](../../../protos/tutorials/08-language-interactions/06-package-exports/package.toml)
 and [Package Tool](package-tool.md).
 Neither `run` nor `<entry>` appears in `process.args()`. The default grants
-no Network, Entropy or Filesystem authority. Explicit `--allow-network` grants
-initial RootActor TCP access; independent `--allow-entropy` grants secure-byte
+no Network, Resolver, Entropy or Filesystem authority. Explicit `--allow-network` grants
+initial RootActor TCP access; independent `--allow-resolver` grants name
+resolution; independent `--allow-entropy` grants secure-byte
 generation; independent `--allow-filesystem=<dir>` confines Filesystem access
 to the selected pre-existing directory. None affects Package Tool preflight.
 `--service=<binding>` selects the long-lived RootActor service entry.
 
 ### `protos debug`
 
-`protos debug [--allow-network] [--allow-entropy] [--allow-clock] [--allow-filesystem=<dir>] <file>` runs one file through the standard Debug Adapter Protocol
+`protos debug [--allow-network] [--allow-resolver] [--allow-entropy] [--allow-clock] [--allow-filesystem=<dir>] <file>` runs one file through the standard Debug Adapter Protocol
 debugger. Before guest execution it writes exactly one `PROTOS_DEBUG_READY`
 JSON record to standard output; afterwards guest output travels over DAP. It is
 intended to be launched by an editor integration rather than by hand.
@@ -459,7 +499,7 @@ protos lint --fail-on-warning src/main.protos
 | Commands on this page | All available | All available |
 | `--foreign-provider-path` | Not available: no dynamic plugin loading | Available |
 | `--inspect` | Available | Available |
-| `--allow-network`, `--allow-entropy`, `--allow-clock`, `--allow-filesystem=<dir>`, `--service` | Available | Available |
+| `--allow-network`, `--allow-resolver`, `--allow-entropy`, `--allow-clock`, `--allow-filesystem=<dir>`, `--service` | Available | Available |
 | Java embedding | Not available | Available through the standard Polyglot API ([guide](../embedding/java.md)) |
 
 Download and installation are described in [Try Protos](../00-try-protos.md).

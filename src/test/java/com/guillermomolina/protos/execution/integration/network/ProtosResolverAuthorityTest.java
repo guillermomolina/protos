@@ -520,6 +520,38 @@ final class ProtosResolverAuthorityTest {
         }
     }
 
+    @Test
+    void resolverCannotEnterParallelTransferAndFreshProcessHasNoImplicitGrant() throws Exception {
+        ProtosPrelude prelude = prelude();
+        FakeBackend backend = new FakeBackend();
+        ProtosResolverCapabilityValue resolver = new ProtosResolverCapabilityValue(prelude, backend);
+        ProtosStandaloneProcessBootstrap.Result owner = bootstrap(prelude, null, resolver);
+        try {
+            Class<?> transfer = Class.forName(
+                    "com.guillermomolina.protos.execution.ProtosParallelRuntime$Transfer");
+            java.lang.reflect.Method copy = transfer.getDeclaredMethod(
+                    "copy", Object.class, com.guillermomolina.protos.runtime.ProtosActivation.class,
+                    java.util.IdentityHashMap.class);
+            copy.setAccessible(true);
+            java.lang.reflect.InvocationTargetException rejected = assertThrows(
+                    java.lang.reflect.InvocationTargetException.class,
+                    () -> copy.invoke(null, resolver, owner.activation(), new java.util.IdentityHashMap<>()));
+            assertEquals("NonParallel", rejected.getCause().getClass().getSimpleName());
+            try (ProtosPolyglotRuntimeHost host = ProtosPolyglotRuntimeHost.open()) {
+                ProtosExecutionOutcome child = run(host, prelude, null, null,
+                        "!context.hasSlot(\"resolver\") && !context.hasSlot(\"network\")");
+                assertEquals(ProtosExecutionOutcome.State.COMPLETED, child.state());
+                assertSame(Boolean.TRUE, child.value());
+                assertFalse(resolver.retiredForRuntime());
+            }
+            assertTrue(backend.names.isEmpty());
+        } finally {
+            owner.process().requestTerminationForRuntime();
+        }
+        assertTrue(resolver.retiredForRuntime());
+        assertEquals(1, backend.closes);
+    }
+
     // ------------------------------------------------------------ helpers
 
     private static ProtosPrelude prelude() throws Exception {

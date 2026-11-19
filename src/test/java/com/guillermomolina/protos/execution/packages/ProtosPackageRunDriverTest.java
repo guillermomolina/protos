@@ -84,4 +84,20 @@ final class ProtosPackageRunDriverTest extends ProtosPackageRunDriverTestSupport
         assertNetworkOfThisApplication(outcome);
         assertEquals(List.of(), provider.calls);
     }
+
+    @Test
+    void resolverOnlySelectionPreservesWorkspacePlanningAndNeverConsultsProvider() throws Exception {
+        Path project = workspaceProject("workspace-resolver", "resolver.close().value()\ntrue\n");
+        RecordingProvider provider = new RecordingProvider(Map.of());
+        ProtosExecutionOutcome outcome = ProtosPackageRunDriver.execute(
+                request(project, null), provider,
+                ProtosWorkspacePackageApplicationExecution.NetworkGrant.NONE,
+                ProtosStandaloneHostedExecution.ResolverGrant.HOST_RESOLVER,
+                ProtosStandaloneHostedExecution.EntropyGrant.NONE,
+                ProtosStandaloneHostedExecution.ClockGrant.NONE,
+                generationOneOnlyStages());
+        assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
+        assertEquals(Boolean.TRUE, outcome.value());
+        assertEquals(List.of(), provider.calls);
+    }
 }

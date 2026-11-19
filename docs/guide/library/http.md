@@ -58,16 +58,16 @@ tutorials do this.
 Real TCP needs the bootstrap-local `network` capability. The standalone CLI
 supports an explicit `--allow-network` flag for the initial RootActor, including
 `protos run` and the REPL, while the default still grants nothing. A Java
-Polyglot host may separately grant socket access. Neither mode grants Resolver
-implicitly. See
+Polyglot host may separately grant socket access. Neither socket authorization
+grants Resolver implicitly. See
 [What each launcher grants](../11-process-io-filesystems-and-authority.md#what-each-launcher-grants)
 and [Embedding Protos in a Java application](../embedding/java.md#authority-and-thread-policy).
 
 `network.connectTcp` takes only numeric endpoints. Name resolution exists as a
 separate, explicitly granted `Resolver` capability (D223,
-[`NETWORK.md`](../../../spec/io/NETWORK.md) §14), which, like `network`, the
-standalone CLI does not bind. The low-level `Client` never resolves names or
-parses URLs; `UrlClient` (below) composes both for you when you pass them.
+[`NETWORK.md`](../../../spec/io/NETWORK.md) §14), which the CLI grants only with
+the independent `--allow-resolver` flag. The low-level `Client` never resolves
+names or parses URLs; `UrlClient` (below) composes both for you when you pass them.
 [Explicit networking and name resolution](networking.md) shows the resolve,
 select and connect steps, and the [TLS client guide](tls.md) shows how to
 authenticate the connection yourself:
@@ -667,8 +667,8 @@ hostile Internet traffic.
 | [`examples/io/http-loopback-hosting.protos`](../../../protos/examples/io/http-loopback-hosting.protos) | Bounded hosting with limits, concurrent clients, drain | Java embedding with `network` |
 | [`examples/io/http-router.protos`](../../../protos/examples/io/http-router.protos) | A compiled Router handler with literal and capture routes, params, and query | standalone CLI |
 | [`tutorials/13-http/04-router-dispatch.protos`](../../../protos/tutorials/13-http/04-router-dispatch.protos) | A two-route Router: literal and captured paths, the raw query, a 404 | standalone CLI |
-| [`examples/io/http-url-client.protos`](../../../protos/examples/io/http-url-client.protos) | An HTTPS `UrlClient` request with explicit `network`, `resolver`, and trust | Java embedding with `network` and `resolver` (manual) |
-| [`examples/io/tls-client-over-tcp.protos`](../../../protos/examples/io/tls-client-over-tcp.protos) | Direct composition: resolve, connect, `Client.handshake`, then `Client.exchangeOne` over the secure duplex | Java embedding with `network` and `resolver` (manual) |
+| [`examples/io/http-url-client.protos`](../../../protos/examples/io/http-url-client.protos) | An HTTPS `UrlClient` request with explicit `network`, `resolver`, and trust | CLI `--allow-network --allow-resolver` or an explicit host grant (manual) |
+| [`examples/io/tls-client-over-tcp.protos`](../../../protos/examples/io/tls-client-over-tcp.protos) | Direct composition: resolve, connect, `Client.handshake`, then `Client.exchangeOne` over the secure duplex | CLI `--allow-network --allow-resolver` or an explicit host grant (manual) |
 | [`examples/http/root-service-host.protos`](../../../protos/examples/http/root-service-host.protos) with [`root-service-handler.protos`](../../../protos/examples/http/root-service-handler.protos) | The RootActor as the application service of factory-built Workers, through a GroupRef | `ProtosRootActorServiceSession` with `network` and the handler as `app:root-service-handler` (the same composition is tested in `ProtosHttpHostFactoryIntegrationTest`) |
 
 The CLI sources run with `bin/protos <file>` from the repository root. The

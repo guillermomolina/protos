@@ -113,6 +113,92 @@ final class ProtosWorkspaceRunCliTest {
             null
             """;
 
+
+    @Test
+    void resolverAndNetworkMatrixReachesOnlyWorkspaceApplication() throws Exception {
+        Path project = materializeProject();
+        assumeSecureConfinement(project);
+        Files.writeString(project.resolve("Main/module.protos"), """
+                writer: TextWriter(process.stdout(), process.stdoutEncoding())
+                if(context.hasSlot("resolver")) {
+                    if(resolver == null) { Error().signal() }
+                    resolver.close().value()
+                    writer.writeLine("resolver").value()
+                }
+                if(context.hasSlot("network")) { writer.writeLine("network").value() }
+                writer.writeLine(process.args().at(0)).value()
+                null
+                """);
+        for (boolean resolver : new boolean[] {false, true}) {
+            for (boolean network : new boolean[] {false, true}) {
+                ProtosCli cli = new ProtosCli();
+                selectApplicationGrant(cli, "resolverAuthorized", resolver);
+                selectApplicationGrant(cli, "networkAuthorized", network);
+                Result result = runWorkspace(cli, project, "Main", "--allow-resolver");
+                assertEquals(0, result.code(), result.stderr());
+                assertEquals((resolver ? "resolver\n" : "") + (network ? "network\n" : "")
+                        + "--allow-resolver\n", result.stdout());
+            }
+        }
+        assertEquals(2, runPublic("--allow-resolver", "run", "--allow-resolver", "Main").code());
+    }
+
+    @Test
+    void workspaceAndExternalPackageServiceKeepResolverAfterReady() throws Exception {
+        String service = """
+                this.service: () => {
+                    Actor.current().send("finish")
+                    {
+                        finish: () => {
+                            if(resolver == null) { Error().signal() }
+                            resolver.close().value()
+                            writer: TextWriter(process.stdout(), process.stdoutEncoding())
+                            writer.writeLine("resolver-alive-after-ready").value()
+                            Actor.current().stop()
+                            null
+                        }
+                    }
+                }
+                """;
+        Path project = materializeProject();
+        assumeSecureConfinement(project);
+        Files.writeString(project.resolve("Main/module.protos"), service);
+        ProtosCli cli = new ProtosCli();
+        selectApplicationGrant(cli, "resolverAuthorized", true);
+        Result workspace = runWorkspaceService(cli, project, "Main", "service");
+        assertEquals(0, workspace.code(), workspace.stderr());
+        assertEquals("resolver-alive-after-ready\n", workspace.stdout());
+
+        MixedProject mixed = materializeMixedProject("mixed-resolver");
+        ProtosLocalExactPackageMaterializationProvider provider =
+                new ProtosLocalExactPackageMaterializationProvider(temp.resolve("resolver-store"));
+        Path selectedRoot = provider.locationFor(mixed.identity());
+        copyTree(mixed.externalSource(), selectedRoot);
+        assumeSecureConfinement(selectedRoot);
+        Files.writeString(mixed.project().resolve("Main/module.protos"),
+                "Api: import(\"dep:reg/Api\")\n" + service);
+        ProtosCli packageCli = new ProtosCli(ignored -> provider);
+        selectApplicationGrant(packageCli, "resolverAuthorized", true);
+        Result packaged = runWorkspaceService(packageCli, mixed.project(), "Main", "service");
+        assertEquals(0, packaged.code(), packaged.stderr());
+        assertEquals("resolver-alive-after-ready\n", packaged.stdout());
+        Files.writeString(mixed.project().resolve("Main/module.protos"), """
+                Api: import("dep:reg/Api")
+                resolver.close().value()
+                null
+                """);
+        Result ordinary = runWorkspace(packageCli, mixed.project(), "Main");
+        assertEquals(0, ordinary.code(), ordinary.stderr());
+    }
+
+    /** Selects authority for internal propagation tests; this bypasses the public CLI parser. */
+    private static void selectApplicationGrant(ProtosCli cli, String name, boolean granted)
+            throws Exception {
+        java.lang.reflect.Field field = ProtosCli.class.getDeclaredField(name);
+        field.setAccessible(true);
+        field.setBoolean(cli, granted);
+    }
+
     @Test
     void workspaceAndPackageRunForwardOnlyExplicitClockSelection() throws Exception {
         Path project = materializeProject();
@@ -198,7 +284,7 @@ final class ProtosWorkspaceRunCliTest {
         Result help = runPublic("--help");
         assertEquals(0, help.code());
         assertTrue(help.stdout().contains(
-                "protos run [--allow-network] [--allow-entropy] [--allow-clock] [--service=<binding>] <entry> [args...]"));
+                "protos run [--allow-network] [--allow-resolver] [--allow-entropy] [--allow-clock] [--service=<binding>] <entry> [args...]"));
         assertTrue(help.stdout().contains("current directory"));
         assertTrue(help.stdout().contains("neither 'run' nor <entry>"));
     }

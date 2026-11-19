@@ -16,11 +16,10 @@
 // Resolve a hostname explicitly, then connect to a chosen numeric address
 // (D223-A1, NETWORK.md §14.10).
 //
-// Requires TWO independent host grants, neither of which the standalone CLI
-// provides: the bootstrap-local `resolver` capability (for example from
-// ProtosPolyglotRuntimeHost.provisionHostResolver) and the bootstrap-local
-// `network` capability. Neither implies the other. It also needs whatever
-// external name service and connectivity the host grants; CI never runs it.
+// Run manually with both independent grants:
+// bin/protos --allow-network --allow-resolver protos/examples/io/hostname-resolution.protos
+// Resolver grants name resolution; Network grants TCP. Neither implies the other.
+// External name service and connectivity depend on the host; CI never runs it.
 // A self-contained, controlled-fixture version of the same composition runs in
 // ProtosResolverAuthorityTest.
 

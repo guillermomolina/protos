@@ -16,10 +16,10 @@
 // Direct HTTPS, one explicit step at a time: resolve, connect, authenticate
 // TLS, then run one HTTP/1.1 exchange over the secure duplex (TLS.md §12).
 //
-// HOST-DEPENDENT, MANUAL EXAMPLE. It requires a Java Polyglot embedding that
-// grants BOTH bootstrap-local capabilities, `resolver` and `network`, plus
-// outbound connectivity and accessible Java cacerts. The standalone CLI grants
-// neither, and CI never runs this file: it reaches a real external origin.
+// HOST-DEPENDENT, MANUAL EXAMPLE. Run with independent grants:
+// bin/protos --allow-network --allow-resolver protos/examples/io/tls-client-over-tcp.protos
+// Requires outbound connectivity, host name service and accessible Java cacerts.
+// CI never runs this file: it reaches a real external origin.
 // Controlled-fixture coverage of the same facilities is in
 // ProtosTlsClientIntegrationTest and ProtosResolverAuthorityTest.
 // For a one-call version of this composition, see http-url-client.protos.

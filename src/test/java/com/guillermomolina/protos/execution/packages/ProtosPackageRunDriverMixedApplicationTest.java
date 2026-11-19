@@ -66,12 +66,18 @@ final class ProtosPackageRunDriverMixedApplicationTest extends ProtosPackageRunD
                                 ProtosProcessRuntime.LifecycleState.RUNNING,
                                 process.lifecycleState());
                         assertTrue(scope.contains(a1));
+                        assertTrue(process.rootResolverForRuntime().isPresent());
+                        assertTrue(process.rootNetworkForRuntime().isEmpty());
                         super.applicationProcessHosted(process);
                     }
                 };
 
         ProtosExecutionOutcome outcome =
-                ProtosPackageRunDriver.execute(request(project, stdout), provider, stages);
+                ProtosPackageRunDriver.execute(request(project, stdout), provider,
+                        ProtosWorkspacePackageApplicationExecution.NetworkGrant.NONE,
+                        ProtosStandaloneHostedExecution.ResolverGrant.HOST_RESOLVER,
+                        ProtosStandaloneHostedExecution.EntropyGrant.NONE,
+                        ProtosStandaloneHostedExecution.ClockGrant.NONE, stages);
 
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
         assertEquals(String.valueOf("1026"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(outcome.value()));
@@ -92,6 +98,7 @@ final class ProtosPackageRunDriverMixedApplicationTest extends ProtosPackageRunD
                 ProtosProcessRuntime.LifecycleState.TERMINATED,
                 stages.hosted.get(0).lifecycleState());
         assertTrue(stages.hosted.get(0).rootFilesystemForRuntime().isEmpty());
+        assertTrue(stages.hosted.get(0).rootResolverForRuntime().orElseThrow().retiredForRuntime());
         assertThrows(IllegalStateException.class, () -> stages.scope.contains(a1));
         assertAllClosed(stages.verified, 4);
     }

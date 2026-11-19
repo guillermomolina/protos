@@ -139,6 +139,13 @@ required. Core resolution order is:
 
 Loading Core grants the guest no Filesystem or Network authority.
 
+The standalone CLI separately accepts `--allow-resolver` for its application
+entries. This does not add a Resolver option to the standard Polyglot `Context`
+API or make socket access imply name-resolution authority. The reusable
+`ProtosStandaloneHostedSession.open` overload can independently select
+`NetworkGrant`, `ResolverGrant`, `EntropyGrant` and `ClockGrant`; legacy
+overloads continue selecting `ResolverGrant.NONE`.
+
 ## Authority and thread policy
 
 The Context's own Polyglot permissions bound what Protos may do:

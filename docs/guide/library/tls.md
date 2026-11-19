@@ -209,8 +209,9 @@ The complete, host-dependent program is
 [`examples/io/tls-client-over-tcp.protos`](../../../protos/examples/io/tls-client-over-tcp.protos).
 When you only need one URL-based request,
 [`examples/io/http-url-client.protos`](../../../protos/examples/io/http-url-client.protos)
-lets `std:http/url_client` perform the same composition. Both need a Java host
-that grants `network` and `resolver`; the standalone CLI grants neither.
+lets `std:http/url_client` perform the same composition. Both require explicit `network` and `resolver` grants. Run them with
+`bin/protos --allow-network --allow-resolver <example>`; real DNS, connectivity
+and trust-store availability remain host dependent.
 
 ## Portability and limitations
 

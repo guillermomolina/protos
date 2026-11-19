@@ -1378,8 +1378,8 @@ Process. For the D247-C CLI interface (older releases do not provide these optio
 
 | Launcher | `process` | `filesystem` | `network` | `resolver` | `entropy` | `clock` |
 |---|---|---|---|---|---|---|
-| `protos file.protos`, `protos -e`, REPL | Bound | Only with `--allow-filesystem=<dir>` | Only with `--allow-network` | Not bound | Only with `--allow-entropy` | Only with `--allow-clock` |
-| `protos run <entry>` | Bound | Only with `--allow-filesystem=<dir>` | Only with `--allow-network` | Not bound | Only with `--allow-entropy` | Only with `--allow-clock` |
+| `protos file.protos`, `protos -e`, REPL, `protos debug file.protos` | Bound | Only with `--allow-filesystem=<dir>` | Only with `--allow-network` | Only with `--allow-resolver` | Only with `--allow-entropy` | Only with `--allow-clock` |
+| `protos run <entry>` (including MODULE service), SOURCE service | Bound | Only with `--allow-filesystem=<dir>` | Only with `--allow-network` | Only with `--allow-resolver` | Only with `--allow-entropy` | Only with `--allow-clock` |
 | Java Polyglot embedding (portable JVM only) | Bound | Only when the Context allows file access | Only when the Context allows socket access | Not bound | Only with `protos.AllowEntropy=true` | Only with `protos.AllowClock=true` |
 | Bundled Tools | Bound | Only confined capabilities that the Tool's launcher contract grants | Not bound | Not bound | Not bound | Not bound |
 | Java host with explicitly selected capabilities | Bound | As selected | As selected | Only if explicitly granted | Only if explicitly granted | Only if explicitly granted |
@@ -1389,7 +1389,8 @@ The Native and portable JVM command lines use the same explicit CLI authority
 contract. `--allow-network` grants only initial TCP authority,
 `--allow-filesystem=<dir>` grants only one confined Filesystem, and
 `--allow-entropy` grants only the independent secure-byte capability. None of
-these flags grants Resolver authority or implies either of the others. Bundled
+these flags implies another. `--allow-resolver` independently grants only name
+resolution to the initial RootActor module. Bundled
 Tools receive none of these application grants.
 
 When a slot is not bound, the name is simply absent from the initial module;
@@ -1524,6 +1525,12 @@ grants it explicitly. A `network` grant does not imply it, socket permission
 does not imply it, and a `resolver` grant does not imply `network`. Importing
 the module yields only the authority-free `Resolver` protocol and
 `ResolutionError`; it starts no name service.
+
+The CLI explicitly grants this capability with `--allow-resolver` for SOURCE,
+`-e`, REPL, `run`, `debug` and SOURCE/MODULE services. For resolution without
+TCP, run `bin/protos --allow-resolver protos/examples/io/resolver-only.protos`.
+For a connection, select `--allow-network --allow-resolver` independently.
+Real queries depend on host name services and are manual examples.
 
 ```protos
 originalHostname: "api.github.com"

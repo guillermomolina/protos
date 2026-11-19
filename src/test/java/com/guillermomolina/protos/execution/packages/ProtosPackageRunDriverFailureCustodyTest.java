@@ -45,7 +45,11 @@ final class ProtosPackageRunDriverFailureCustodyTest extends ProtosPackageRunDri
 
         assertThrows(
                 IOException.class,
-                () -> ProtosPackageRunDriver.execute(request(project, null), provider, stages));
+                () -> ProtosPackageRunDriver.execute(request(project, null), provider,
+                        ProtosWorkspacePackageApplicationExecution.NetworkGrant.NONE,
+                        ProtosStandaloneHostedExecution.ResolverGrant.HOST_RESOLVER,
+                        ProtosStandaloneHostedExecution.EntropyGrant.NONE,
+                        ProtosStandaloneHostedExecution.ClockGrant.NONE, stages));
 
         assertEquals(List.of(a1, a2), provider.calls);
         assertEquals(1, stages.verifyAttempts);
@@ -66,7 +70,11 @@ final class ProtosPackageRunDriverFailureCustodyTest extends ProtosPackageRunDri
 
         assertThrows(
                 IOException.class,
-                () -> ProtosPackageRunDriver.execute(request(project, null), provider, stages));
+                () -> ProtosPackageRunDriver.execute(request(project, null), provider,
+                        ProtosWorkspacePackageApplicationExecution.NetworkGrant.NONE,
+                        ProtosStandaloneHostedExecution.ResolverGrant.HOST_RESOLVER,
+                        ProtosStandaloneHostedExecution.EntropyGrant.NONE,
+                        ProtosStandaloneHostedExecution.ClockGrant.NONE, stages));
 
         assertEquals(List.of(a1, a2), provider.calls);
         assertEquals(2, stages.verifyAttempts);

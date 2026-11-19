@@ -321,6 +321,62 @@ run_inspect_case FILE_AUTHORIZED 0 --inspect "${inspect_source}"
 run_inspect_case EVAL_DENIED 1 -e "${inspect_eval_source}"
 run_inspect_case EVAL_AUTHORIZED 0 --inspect -e "${inspect_eval_source}"
 
+# Independent Resolver CLI authority. No case performs a host DNS query.
+resolver_failures=0
+resolver_cases=0
+resolver_source="${tmp_dir}/resolver.protos"
+resolver_probe='print(context.hasSlot("resolver"))
+print(context.hasSlot("network"))
+if(context.hasSlot("resolver")) { print(resolver != null); resolver.close().value() }'
+printf '%s\n' "${resolver_probe}" >"${resolver_source}"
+
+run_resolver_case() {
+    local name="$1"
+    local expected_status="$2"
+    local expected_output="$3"
+    shift 3
+    local case_out="${tmp_dir}/resolver-${name}.out"
+    local case_err="${tmp_dir}/resolver-${name}.err"
+    PROTOS_HOME="${root}" "${native_bin}" "$@" >"${case_out}" 2>"${case_err}"
+    local case_status=$?
+    resolver_cases=$((resolver_cases + 1))
+    echo "NATIVE_RESOLVER_${name}_STATUS=${case_status}"
+    if [[ "${case_status}" -ne "${expected_status}" ]] ||
+       [[ "$(cat "${case_out}")" != "${expected_output}" ]] ||
+       grep -Fq 'Internal error' "${case_err}"; then
+        cat "${case_out}" "${case_err}" >&2
+        echo "NATIVE_RESOLVER_CASE_FAILURE=${name}" >&2
+        resolver_failures=$((resolver_failures + 1))
+    fi
+}
+
+run_resolver_case FILE_ABSENT 0 $'false\nfalse' "${resolver_source}"
+run_resolver_case FILE_ONLY 0 $'true\nfalse\ntrue' --allow-resolver "${resolver_source}"
+run_resolver_case EVAL_ABSENT 0 $'false\nfalse' -e "${resolver_probe}"
+run_resolver_case EVAL_ONLY 0 $'true\nfalse\ntrue' --allow-resolver -e "${resolver_probe}"
+run_resolver_case NETWORK_ONLY 0 $'false\ntrue' --allow-network -e "${resolver_probe}"
+run_resolver_case BOTH 0 $'true\ntrue\ntrue' --allow-network --allow-resolver -e "${resolver_probe}"
+run_resolver_case DUPLICATE 2 '' --allow-resolver --allow-resolver -e null
+run_resolver_case RUN_DUPLICATE 2 '' --allow-resolver run --allow-resolver Main
+run_resolver_case DEBUG_DUPLICATE 2 '' --allow-resolver debug --allow-resolver entry.protos
+for resolver_bad in --allow-resolver= --allow-resolver=true --allow-resolver=false; do
+    run_resolver_case "MALFORMED-${resolver_bad}" 2 '' "${resolver_bad}" -e null
+done
+for resolver_tool in test lint package format language-server; do
+    run_resolver_case "TOOL-PREFIX-${resolver_tool}" 2 '' --allow-resolver "${resolver_tool}"
+    run_resolver_case "TOOL-SUFFIX-${resolver_tool}" 2 '' "${resolver_tool}" --allow-resolver
+    run_resolver_case "TOOL-MALFORMED-${resolver_tool}" 2 '' "${resolver_tool}" --allow-resolver=true
+done
+run_resolver_case HELP 2 '' --allow-resolver --help
+run_resolver_case VERSION 2 '' --allow-resolver --version
+resolver_args='print(context.hasSlot("resolver"))
+print(process.args().size())
+print(process.args().at(0))'
+run_resolver_case EVAL_ARGUMENT 0 $'false\n1\n--allow-resolver' -e "${resolver_args}" --allow-resolver
+printf '%s\n' "${resolver_args}" >"${resolver_source}"
+run_resolver_case FILE_ARGUMENT 0 $'false\n1\n--allow-resolver' "${resolver_source}" --allow-resolver
+run_resolver_case CLEAN_ARGS 0 $'true\n1\n--allow-resolver' --allow-resolver "${resolver_source}" --allow-resolver
+
 # I155 / D248-B: the explicit --allow-filesystem=<directory> grant on the real
 # Native executable. Every case asserts its exit status; success cases also
 # assert guest output and host-side effects, failure cases assert that no guest
@@ -593,6 +649,8 @@ echo "NATIVE_DAP_STACKTRACE_STATUS=${dap_status}"
 echo "NATIVE_LSP_WORKSPACE_SYMBOLS_STATUS=${lsp_status}"
 echo "NATIVE_REGEX_STATUS=${regex_status}"
 echo "NATIVE_INSPECT_FAILURES=${inspect_failures}"
+echo "NATIVE_RESOLVER_CASES=${resolver_cases}"
+echo "NATIVE_RESOLVER_FAILURES=${resolver_failures}"
 echo "NATIVE_I155_FILESYSTEM_PLATFORM=${fs_platform}"
 echo "NATIVE_I155_FILESYSTEM_FAILURES=${fs_failures}"
 echo "NATIVE_I156_OUTSIDE_VIA_SYMLINK_STATUS=${fs_symlink_status}"
@@ -749,7 +807,10 @@ echo "NATIVE_GUEST_JIT=PASS"
 echo "FRAME_WITHOUT_BOXING_REGRESSION=PASS"
 cat "${lsp_log}"
 
-if [[ "${lsp_status}" -ne 0 ]]; then
+if [[ "${resolver_failures}" -ne 0 ]]; then
+    echo "NATIVE_RESOLVER=FAIL" >&2
+    false
+elif [[ "${lsp_status}" -ne 0 ]]; then
     echo "NATIVE_LSP_WORKSPACE_SYMBOLS=FAIL" >&2
     false
 elif [[ "${regex_status}" -ne 0 ]] || \
@@ -768,5 +829,6 @@ else
     echo "NATIVE_REGEX=PASS"
     echo "NATIVE_HMAC_SHA256=PASS"
     echo "NATIVE_I115_CALLER_RECOVERY=PASS"
+    echo "NATIVE_RESOLVER=PASS"
     echo "NATIVE_REGRESSION_SUITE=PASS"
 fi

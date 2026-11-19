@@ -585,6 +585,18 @@ bound to `null`. The grant is separately optional: each of `filesystem`,
 existing `process`, `filesystem`, `network` and `resources` slots are
 unchanged.
 
+The standalone CLI recognizes the boolean `--allow-resolver` flag, disabled
+by default and independent of Network and every other grant. It grants only
+the private `resolver` slot of the initial application RootActor module for
+direct SOURCE, `-e`, REPL, `run`, `debug`, SOURCE services and package MODULE
+services. It is unavailable to bundled Tools, help and version invocations.
+It may appear once before the application entry (including before or after
+`run` or `debug`); duplicates and forms with `=` are CLI errors with status 2.
+After the file, expression or package entry it is an application argument.
+This selection creates no global Process permission and no automatic grant to
+imports, other Actors, isolated P operations or child Processes. It changes no
+standard Polyglot embedding authorization contract.
+
 No existing authority implies a Resolver grant. Process authority, Filesystem
 authority, a `Network` capability, host socket permissions, thread-creation
 permissions, and source/package import authority each confer no `resolver`

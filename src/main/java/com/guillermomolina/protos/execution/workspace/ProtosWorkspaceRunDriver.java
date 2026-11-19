@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.ResolverGrant;
 import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.EntropyGrant;
 import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.ClockGrant;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
@@ -131,13 +132,24 @@ public final class ProtosWorkspaceRunDriver {
             ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
             EntropyGrant entropyGrant, ClockGrant clockGrant)
             throws IOException {
+        return execute(
+                request, networkGrant, ResolverGrant.NONE, entropyGrant, clockGrant);
+    }
+
+    public static ProtosExecutionOutcome execute(
+            Request request,
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
+            ResolverGrant resolverGrant,
+            EntropyGrant entropyGrant, ClockGrant clockGrant)
+            throws IOException {
+        Objects.requireNonNull(resolverGrant, "resolverGrant");
         Objects.requireNonNull(entropyGrant, "entropyGrant");
         Objects.requireNonNull(clockGrant, "clockGrant");
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(networkGrant, "networkGrant");
 
         try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open()) {
-            return execute(request, networkGrant, entropyGrant, clockGrant, runtimeHost);
+            return execute(request, networkGrant, resolverGrant, entropyGrant, clockGrant, runtimeHost);
         }
     }
 
@@ -167,6 +179,19 @@ public final class ProtosWorkspaceRunDriver {
             ClockGrant clockGrant,
             String serviceBinding)
             throws IOException {
+        return executeService(
+                request, networkGrant, ResolverGrant.NONE, entropyGrant, clockGrant, serviceBinding);
+    }
+
+    public static boolean executeService(
+            Request request,
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
+            ResolverGrant resolverGrant,
+            EntropyGrant entropyGrant,
+            ClockGrant clockGrant,
+            String serviceBinding)
+            throws IOException {
+        Objects.requireNonNull(resolverGrant, "resolverGrant");
         Objects.requireNonNull(entropyGrant, "entropyGrant");
         Objects.requireNonNull(clockGrant, "clockGrant");
         Objects.requireNonNull(request, "request");
@@ -201,7 +226,7 @@ public final class ProtosWorkspaceRunDriver {
                             request.filesystemGrant());
 
             return ProtosWorkspacePackageApplicationExecution.executeService(
-                    application, networkGrant, entropyGrant, clockGrant,
+                    application, networkGrant, resolverGrant, entropyGrant, clockGrant,
                     serviceBinding, runtimeHost);
         }
     }
@@ -231,6 +256,19 @@ public final class ProtosWorkspaceRunDriver {
             ClockGrant clockGrant,
             ProtosPolyglotRuntimeHost runtimeHost)
             throws IOException {
+        return execute(
+                request, networkGrant, ResolverGrant.NONE, entropyGrant, clockGrant, runtimeHost);
+    }
+
+    static ProtosExecutionOutcome execute(
+            Request request,
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
+            ResolverGrant resolverGrant,
+            EntropyGrant entropyGrant,
+            ClockGrant clockGrant,
+            ProtosPolyglotRuntimeHost runtimeHost)
+            throws IOException {
+        Objects.requireNonNull(resolverGrant, "resolverGrant");
         Objects.requireNonNull(entropyGrant, "entropyGrant");
         Objects.requireNonNull(clockGrant, "clockGrant");
         Objects.requireNonNull(request, "request");
@@ -264,6 +302,7 @@ public final class ProtosWorkspaceRunDriver {
                         request.filesystemGrant()),
                 ignored -> {},
                 networkGrant,
+                resolverGrant,
                 entropyGrant, clockGrant,
                 runtimeHost);
     }

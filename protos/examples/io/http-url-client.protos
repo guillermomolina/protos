@@ -15,9 +15,8 @@
 
 // One-shot HTTPS request with explicitly granted Network and Resolver.
 //
-// Requires a Java Polyglot embedding that grants both bootstrap-local
-// capabilities, outbound connectivity, and accessible Java cacerts.
-// The standalone CLI does not provide these grants.
+// Run: bin/protos --allow-network --allow-resolver protos/examples/io/http-url-client.protos
+// Requires outbound connectivity, host name service and accessible Java cacerts.
 // This is a manual example; automated tests must use local fixtures.
 
 UrlClient: import("std:http/url_client").UrlClient
@@ -47,6 +46,5 @@ response: UrlClient.requestOne(
     trust: trust
 ).value()
 
-// An embedding can observe this result; the standalone CLI has no
-// Network or Resolver authority to execute this example.
+// The final value records the result; this manual program does not print it.
 (response.status == 200) && (response.body.size() > 0)

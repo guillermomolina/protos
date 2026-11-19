@@ -71,6 +71,18 @@ do. Keep
 value after you connect to a numeric address. The complete program is
 [`examples/io/hostname-resolution.protos`](../../../protos/examples/io/hostname-resolution.protos).
 
+Manual commands (real DNS and connectivity depend on the host):
+
+```sh
+bin/protos --allow-resolver protos/examples/io/resolver-only.protos
+bin/protos --allow-network --allow-resolver protos/examples/io/hostname-resolution.protos
+bin/protos --allow-network --allow-resolver protos/examples/io/http-url-client.protos
+bin/protos --allow-network --allow-resolver protos/examples/io/tls-client-over-tcp.protos
+```
+
+These examples are outside mandatory deterministic tests. Importing a module
+never grants either capability.
+
 ## Name restrictions and failures
 
 `lookupAddresses` accepts a String of ASCII NR-LDH labels or strict IDNA2008
@@ -99,7 +111,8 @@ Network, connection, HTTP or TLS resource.
 - The standalone CLI grants neither `network` nor `resolver` by default.
   `--allow-network` grants only initial RootActor host TCP authority for
   direct-file, `-e`, REPL, `run` and `debug` application execution. There is
-  no CLI Resolver grant: DNS remains a separately granted host capability.
+  an independent `--allow-resolver` flag for name resolution in those same
+  application modes and SOURCE/MODULE services.
   See [CLI network and service options](../tools/cli.md#network-authority-and-rootactor-service-mode-d247-c--i154)
   and [Embedding Protos in Java](../embedding/java.md).
 - Imported modules do not inherit those bootstrap-local slots. Pass the

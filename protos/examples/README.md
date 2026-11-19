@@ -86,6 +86,7 @@ instead.
 | Verify a compact JWT and reject a tampered token without HTTP/network authority | `http/jwt-token-verification.protos` |
 | Dispatch requests by method and path with captured parameters (`std:http/router`) | `io/http-router.protos` |
 | Make one HTTPS request to a URL (`std:http/url_client`, requires `network` and `resolver`, manual) | `io/http-url-client.protos` |
+| Resolve a hostname without TCP (`--allow-resolver`, manual) | `io/resolver-only.protos` |
 | Resolve a hostname and connect to a chosen address (`std:network/resolvers`, requires `network` and `resolver`, manual) | `io/hostname-resolution.protos` |
 | Authenticate TLS over a TCP connection and send one HTTP request (`std:tls/client`, requires `network` and `resolver`, manual) | `io/tls-client-over-tcp.protos` |
 | Write, append to and list application data under an explicit directory grant (requires `--allow-filesystem`) | `filesystem/cli-confined-data.protos` |
@@ -184,7 +185,17 @@ Execution modes at a glance:
   `io/tls-client-over-tcp.protos` and `io/http-url-client.protos` (`network`
   and `resolver`), and the TCP Host/Client examples above (`network`).
 
-The three examples marked "manual" reach a real external host. They are not
+Run the DNS examples explicitly:
+
+```sh
+bin/protos --allow-resolver protos/examples/io/resolver-only.protos
+bin/protos --allow-network --allow-resolver protos/examples/io/hostname-resolution.protos
+bin/protos --allow-network --allow-resolver protos/examples/io/http-url-client.protos
+bin/protos --allow-network --allow-resolver protos/examples/io/tls-client-over-tcp.protos
+```
+
+The four DNS examples marked "manual" use real host name services; three also
+connect to an external host. They are not
 CI tests and no automated test runs them unchanged. Verified behavior of the
 same facilities lives in controlled-fixture Java integration tests:
 `ProtosResolverAuthorityTest`, `ProtosTlsClientIntegrationTest` and

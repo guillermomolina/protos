@@ -41,6 +41,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 final class ProtosLm009DPublicDebugCliTest {
     private static final Duration TIMEOUT = Duration.ofSeconds(10);
@@ -53,8 +55,9 @@ final class ProtosLm009DPublicDebugCliTest {
                             + "\\\"host\\\":\\\"([^\\\"]+)\\\","
                             + "\\\"port\\\":([0-9]+)\\}$");
 
-    @Test
-    void publicDebugCommandPublishesReadinessAndRoutesGuestStreamsThroughRealDap()
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void publicDebugCommandPublishesReadinessAndRoutesGuestStreamsThroughRealDap(boolean allowResolver)
             throws Exception {
         Path root = Files.createTempDirectory("protos-lm009-d2-");
         Path source = root.resolve("main.protos");
@@ -69,7 +72,10 @@ final class ProtosLm009DPublicDebugCliTest {
                 StandardCharsets.UTF_8);
         Files.writeString(
                 source,
-                "Helper: import(\"./helper.protos\")\n"
+                "if(context.hasSlot(\"resolver\") != " + allowResolver + ") { Error().signal() }\n"
+                        + "if(context.hasSlot(\"network\")) { Error().signal() }\n"
+                        + (allowResolver ? "resolver.close().value()\n" : "")
+                        + "Helper: import(\"./helper.protos\")\n"
                         + "errorWriter: TextWriter(process.stderr(), process.stderrEncoding())\n"
                         + "print(Helper.value)\n"
                         + "errorWriter.writeLine(process.args().at(1)).value()",
@@ -83,12 +89,16 @@ final class ProtosLm009DPublicDebugCliTest {
                                         exitCode.set(
                                                 new ProtosCli()
                                                         .run(
-                                                                new String[] {
-                                                                    "debug",
-                                                                    source.toString(),
-                                                                    "application-out",
-                                                                    "application-err"
-                                                                },
+                                                                allowResolver
+                                                                        ? new String[] {
+                                                                            "debug", "--allow-resolver",
+                                                                            source.toString(),
+                                                                            "application-out", "application-err"
+                                                                        }
+                                                                        : new String[] {
+                                                                            "debug", source.toString(),
+                                                                            "application-out", "application-err"
+                                                                        },
                                                                 InputStream.nullInputStream(),
                                                                 new PrintStream(
                                                                         controlOut,
@@ -265,6 +275,7 @@ final class ProtosLm009DPublicDebugCliTest {
                             diagnostics,
                             exitCode,
                             "debug",
+                            "--allow-resolver",
                             "--allow-filesystem=" + root.resolve("missing"),
                             source.toString());
             cliThread.join(TIMEOUT.toMillis());

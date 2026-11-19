@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.177-SNAPSHOT
+
+- **I164.** Add default-off `--allow-resolver` authority for standalone SOURCE, expression, REPL, debug, workspace/package and SOURCE/MODULE service entries, independently of Network and other grants. Preserve Tool isolation, post-entry application arguments and existing overload defaults; retire undelivered Resolver capabilities on provisioning failure. Add deterministic CLI, lifecycle, isolation, package, DAP and Native regressions, update the authority guides and provide a manual Resolver-only example.
+
 ## 0.4.176-SNAPSHOT
 
 - **I115.** Resolve rematerialized Closure module bindings beyond the reparsed tree and refresh the generated-bytecode BCI partial-evaluation baseline.

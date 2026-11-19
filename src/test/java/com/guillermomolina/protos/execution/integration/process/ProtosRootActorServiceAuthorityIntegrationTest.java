@@ -17,6 +17,7 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -205,6 +206,32 @@ final class ProtosRootActorServiceAuthorityIntegrationTest {
         assertEquals(0, session.runtimeHostForTesting().activeProcessContextCountForTesting());
     }
 
+    @Test
+    void cliServiceKeepsIndependentGrantsAndImportWorkerIsolationAfterReady() throws Exception {
+        Path entry = writeSources();
+        for (boolean resolver : new boolean[] {false, true}) {
+            for (boolean network : new boolean[] {false, true}) {
+                java.util.ArrayList<String> args = new java.util.ArrayList<>();
+                if (resolver) args.add("--allow-resolver");
+                if (network) args.add("--allow-network");
+                args.add("--service=service");
+                args.add(entry.toString());
+                args.add("fail-after-report");
+                java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+                java.io.ByteArrayOutputStream err = new java.io.ByteArrayOutputStream();
+                int code = new com.guillermomolina.protos.cli.ProtosCli().run(
+                        args.toArray(String[]::new), InputStream.nullInputStream(),
+                        new java.io.PrintStream(out), new java.io.PrintStream(err));
+                assertEquals(1, code, err.toString(StandardCharsets.UTF_8));
+                assertEquals("authority network=" + (network ? "1" : "0")
+                        + " resolver=" + (resolver ? "1" : "0")
+                        + " import=0 sendNetwork=" + (network ? "refused" : "absent")
+                        + " sendResolver=" + (resolver ? "refused" : "absent")
+                        + " childIsolated=1\n", out.toString(StandardCharsets.UTF_8));
+            }
+        }
+    }
+
     private void assertGrants(NetworkGrant network, ResolverGrant resolver) throws Exception {
         Path entry = writeSources();
         ServiceOutput out = new ServiceOutput();
@@ -233,6 +260,9 @@ final class ProtosRootActorServiceAuthorityIntegrationTest {
                             + (resolverGranted ? "refused" : "absent")
                             + " childIsolated=1",
                     out.awaitLine("authority "));
+            if (resolverCapability != null) {
+                assertFalse(resolverCapability.retiredForRuntime());
+            }
         } finally {
             session.close();
         }

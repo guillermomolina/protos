@@ -73,11 +73,11 @@ final class ProtosCliTest {
         assertTrue(help.o.contains("process.args()"));
         assertTrue(help.o.contains("protos package"));
         assertTrue(help.o.contains("protos test"));
-        assertTrue(help.o.contains("protos debug [--allow-network] [--allow-entropy] [--allow-clock] <file> [args...]"));
+        assertTrue(help.o.contains("protos debug [--allow-network] [--allow-resolver] [--allow-entropy] [--allow-clock] <file> [args...]"));
         assertTrue(help.o.contains("PROTOS_DEBUG_READY"));
         assertTrue(help.o.contains("explicit program output"));
         assertTrue(help.o.contains("protos format [<file>]"));
-        // I155 / D248-B: the explicit Filesystem grant forms, without changing earlier lines.
+        // I155 / D248-B: the explicit Filesystem grant forms remain available.
         assertTrue(help.o.contains("protos --allow-filesystem=<dir> <file> [args...]"));
         assertTrue(help.o.contains("protos --allow-filesystem=<dir> -e <source> [args...]"));
         assertTrue(help.o.contains("protos --allow-filesystem=<dir>\n"));

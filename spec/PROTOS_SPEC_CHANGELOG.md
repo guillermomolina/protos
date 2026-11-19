@@ -23,6 +23,14 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.503] - 2026-11-19
+
+### D249-A1 / I164 — Explicit standalone CLI Resolver selection
+- `io/PROCESS_IO.md`: document default-off `--allow-resolver` for application
+  SOURCE, expression, REPL, debug, package and service entries; independent
+  authority, entry-bound option admission, Tool exclusion and bootstrap-local
+  ownership. Standard Polyglot embedding and `NETWORK.md` §14 are unchanged.
+
 ## [0.1.502] - 2026-11-10
 
 ### D238-B1-SQL-R1 / LIB028-S1 — Protos-first Standard Library FFI R1

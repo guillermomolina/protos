@@ -235,10 +235,11 @@ final class ProtosCli010InspectTest {
     void helpDocumentsInspectOptionScopeAndModule() {
         R help = run("--help");
         assertEquals(0, help.c);
-        assertTrue(help.o.contains("protos [--inspect] [--allow-network] [--allow-entropy] [--allow-clock] [--service=<binding>] <file> [args...]"), help.o);
-        assertTrue(help.o.contains("protos [--inspect] [--allow-network] [--allow-entropy] [--allow-clock] -e <source> [args...]"), help.o);
-        assertTrue(help.o.contains("protos [--inspect]\n"), help.o);
+        assertTrue(help.o.contains("protos [--inspect] [--allow-network] [--allow-resolver] [--allow-entropy] [--allow-clock] [--service=<binding>] <file> [args...]"), help.o);
+        assertTrue(help.o.contains("protos [--inspect] [--allow-network] [--allow-resolver] [--allow-entropy] [--allow-clock] -e <source> [args...]"), help.o);
+        assertTrue(help.o.contains("protos [--inspect] [--allow-network] [--allow-resolver] [--allow-entropy] [--allow-clock]\n"), help.o);
         assertTrue(help.o.contains("--inspect (before <file>, -e, or REPL)"), help.o);
+        assertTrue(help.o.contains("--allow-resolver (initial application RootActor module only; name resolution, no TCP)"), help.o);
         assertTrue(help.o.contains("std:inspect"), help.o);
         assertTrue(help.o.contains("--foreign-provider-path"), help.o);
     }

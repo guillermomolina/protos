@@ -91,6 +91,7 @@ public final class ProtosCli {
 
     /** Explicit D247 host Network grant for this application invocation only. */
     private boolean networkAuthorized = false;
+    private boolean resolverAuthorized = false;
 
     /** Explicit D243-C host Entropy grant for this application invocation only. */
     private boolean entropyAuthorized = false;
@@ -138,6 +139,8 @@ public final class ProtosCli {
         if (args.length > 0 && args[0].equals("lint")) {
             if (Arrays.stream(args).anyMatch(
                     value -> value.equals("--allow-network")
+                            || value.equals("--allow-resolver")
+                            || value.startsWith("--allow-resolver=")
                             || value.equals("--allow-entropy")
                             || value.equals("--allow-clock")
                             || isFilesystemGrantOption(value)
@@ -184,6 +187,7 @@ public final class ProtosCli {
         foreignProviderPaths = List.of();
         inspectionAuthorized = false;
         networkAuthorized = false;
+        resolverAuthorized = false;
         entropyAuthorized = false;
         clockAuthorized = false;
         filesystemGrant = FilesystemGrant.NONE;
@@ -194,6 +198,7 @@ public final class ProtosCli {
             boolean providerPathsRequested = false;
             boolean inspect = false;
             boolean allowNetwork = false;
+            boolean allowResolver = false;
             boolean allowEntropy = false;
             boolean allowClock = false;
             Path grantedFilesystemRoot = null;
@@ -203,6 +208,8 @@ public final class ProtosCli {
                     && (args[first].equals("--foreign-provider-path")
                             || args[first].equals("--inspect")
                             || args[first].equals("--allow-network")
+                            || args[first].equals("--allow-resolver")
+                            || args[first].startsWith("--allow-resolver=")
                             || args[first].equals("--allow-entropy")
                             || args[first].equals("--allow-clock")
                             || isFilesystemGrantOption(args[first])
@@ -234,6 +241,17 @@ public final class ProtosCli {
                     if (!validServiceBinding(requestedService)) {
                         return usage(err, "invalid --service binding");
                     }
+                    first++;
+                    continue;
+                }
+                if (args[first].startsWith("--allow-resolver=")) {
+                    return usage(err, "--allow-resolver accepts no value");
+                }
+                if (args[first].equals("--allow-resolver")) {
+                    if (allowResolver) {
+                        return usage(err, "--allow-resolver may be given only once");
+                    }
+                    allowResolver = true;
                     first++;
                     continue;
                 }
@@ -306,6 +324,7 @@ public final class ProtosCli {
             foreignProviderPaths = List.copyOf(providerPaths);
             inspectionAuthorized = inspect;
             networkAuthorized = allowNetwork;
+            resolverAuthorized = allowResolver;
             entropyAuthorized = allowEntropy;
             clockAuthorized = allowClock;
             filesystemGrant = filesystemGrant(grantedFilesystemRoot);
@@ -314,12 +333,14 @@ public final class ProtosCli {
                     && SUBCOMMANDS.contains(args[0])
                     && !args[0].equals("debug")
                     && !args[0].equals("run")
-                    && (allowNetwork
+                    && (allowResolver || allowNetwork
                             || allowEntropy || allowClock
                             || grantedFilesystemRoot != null
                             || requestedService != null
                             || Arrays.stream(args).anyMatch(
                                     value -> value.equals("--allow-network")
+                                            || value.equals("--allow-resolver")
+                                            || value.startsWith("--allow-resolver=")
                                             || value.equals("--allow-entropy")
                                             || value.equals("--allow-clock")
                                             || isFilesystemGrantOption(value)
@@ -330,7 +351,7 @@ public final class ProtosCli {
                         "application permissions and service mode are not available to bundled Tools");
             }
 
-            if ((allowNetwork || allowEntropy || allowClock || grantedFilesystemRoot != null
+            if ((allowResolver || allowNetwork || allowEntropy || allowClock || grantedFilesystemRoot != null
                     || requestedService != null)
                     && args.length > 0
                     && (args[0].equals("--help")
@@ -369,6 +390,8 @@ public final class ProtosCli {
                 int entry = 1;
                 while (entry < args.length
                         && (args[entry].equals("--allow-network")
+                                || args[entry].equals("--allow-resolver")
+                                || args[entry].startsWith("--allow-resolver=")
                                 || args[entry].equals("--allow-entropy")
                                 || args[entry].equals("--allow-clock")
                                 || isFilesystemGrantOption(args[entry])
@@ -384,6 +407,13 @@ public final class ProtosCli {
                         } catch (IllegalArgumentException invalid) {
                             return usage(err, invalid.getMessage());
                         }
+                    } else if (args[entry].startsWith("--allow-resolver=")) {
+                        return usage(err, "--allow-resolver accepts no value");
+                    } else if (args[entry].equals("--allow-resolver")) {
+                        if (allowResolver) {
+                            return usage(err, "--allow-resolver may be given only once");
+                        }
+                        allowResolver = true;
                     } else if (args[entry].equals("--allow-network")) {
                         if (allowNetwork) {
                             return usage(err, "--allow-network may be given only once");
@@ -427,6 +457,7 @@ public final class ProtosCli {
                 }
 
                 networkAuthorized = allowNetwork;
+                resolverAuthorized = allowResolver;
                 entropyAuthorized = allowEntropy;
                 clockAuthorized = allowClock;
                 filesystemGrant = filesystemGrant(grantedFilesystemRoot);
@@ -577,7 +608,7 @@ public final class ProtosCli {
                         out,
                         err,
                         applicationNetworkGrant(),
-                        ResolverGrant.NONE,
+                        applicationResolverGrant(),
                         applicationEntropyGrant(),
                         applicationClockGrant(),
                         filesystemGrant,
@@ -747,6 +778,7 @@ public final class ProtosCli {
                         out,
                         err,
                         applicationNetworkGrant(),
+                        applicationResolverGrant(),
                         applicationEntropyGrant(),
                         applicationClockGrant(),
                         filesystemGrant);
@@ -829,6 +861,7 @@ public final class ProtosCli {
                                 request,
                                 provider,
                                 applicationNetworkGrant(),
+                                applicationResolverGrant(),
                                 applicationEntropyGrant(),
                                 applicationClockGrant(),
                                 serviceBinding);
@@ -844,6 +877,7 @@ public final class ProtosCli {
             ProtosExecutionOutcome outcome =
                     ProtosPackageRunDriver.execute(
                             request, provider, applicationNetworkGrant(),
+                            applicationResolverGrant(),
                             applicationEntropyGrant(), applicationClockGrant());
 
             return workspaceOutcomeExitCode(outcome, err);
@@ -1626,6 +1660,7 @@ public final class ProtosCli {
                                 out,
                                 err,
                                 applicationNetworkGrant(),
+                                applicationResolverGrant(),
                                 applicationEntropyGrant(),
                                 applicationClockGrant(),
                                 filesystemGrant)) {
@@ -1793,6 +1828,10 @@ public final class ProtosCli {
         return line.equals(REPL_QUIT_COMMAND) || line.equals(REPL_EXIT_COMMAND);
     }
 
+    private ResolverGrant applicationResolverGrant() {
+        return resolverAuthorized ? ResolverGrant.HOST_RESOLVER : ResolverGrant.NONE;
+    }
+
     private ProtosWorkspacePackageApplicationExecution.NetworkGrant applicationNetworkGrant() {
         return networkAuthorized
                 ? ProtosWorkspacePackageApplicationExecution.NetworkGrant.HOST_NETWORK
@@ -1839,6 +1878,7 @@ public final class ProtosCli {
                         out,
                         err,
                         applicationNetworkGrant(),
+                        applicationResolverGrant(),
                         applicationEntropyGrant(),
                         applicationClockGrant(),
                         filesystemGrant);
@@ -1920,6 +1960,33 @@ public final class ProtosCli {
             ClockGrant clockGrant,
             FilesystemGrant filesystemGrant)
             throws IOException {
+        return createSession(
+                core,
+                moduleResolver,
+                applicationArguments,
+                in,
+                out,
+                err,
+                networkGrant,
+                ResolverGrant.NONE,
+                entropyGrant,
+                clockGrant,
+                filesystemGrant);
+    }
+
+    private Session createSession(
+            Path core,
+            ProtosModuleResolver moduleResolver,
+            List<String> applicationArguments,
+            InputStream in,
+            PrintStream out,
+            PrintStream err,
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
+            ResolverGrant resolverGrant,
+            EntropyGrant entropyGrant,
+            ClockGrant clockGrant,
+            FilesystemGrant filesystemGrant)
+            throws IOException {
         ProtosPolyglotRuntimeHost runtimeHost = openApplicationRuntimeHost();
         ProtosStandaloneProcessBootstrap.Result bootstrap;
         boolean bootstrapped = false;
@@ -1933,7 +2000,7 @@ public final class ProtosCli {
                             ProtosStandaloneHostedExecution.writableBackend(out),
                             ProtosStandaloneHostedExecution.writableBackend(err),
                             networkGrant,
-                            ResolverGrant.NONE,
+                            resolverGrant,
                             entropyGrant, clockGrant,
                             filesystemGrant,
                             runtimeHost);
@@ -2059,6 +2126,33 @@ public final class ProtosCli {
             ClockGrant clockGrant,
             FilesystemGrant filesystemGrant)
             throws IOException {
+        return createDebugSession(
+                core,
+                moduleResolver,
+                applicationArguments,
+                in,
+                controlOut,
+                diagnostics,
+                networkGrant,
+                ResolverGrant.NONE,
+                entropyGrant,
+                clockGrant,
+                filesystemGrant);
+    }
+
+    private Session createDebugSession(
+            Path core,
+            ProtosModuleResolver moduleResolver,
+            List<String> applicationArguments,
+            InputStream in,
+            PrintStream controlOut,
+            PrintStream diagnostics,
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
+            ResolverGrant resolverGrant,
+            EntropyGrant entropyGrant,
+            ClockGrant clockGrant,
+            FilesystemGrant filesystemGrant)
+            throws IOException {
         ProtosPolyglotRuntimeHost runtimeHost =
                 ProtosPolyglotRuntimeHost.openDebug(diagnostics);
         ProtosStandaloneProcessBootstrap.Result bootstrap = null;
@@ -2073,7 +2167,7 @@ public final class ProtosCli {
                             ProtosPolyglotStandardStreamRouting.stdoutBackend(),
                             ProtosPolyglotStandardStreamRouting.stderrBackend(),
                             networkGrant,
-                            ResolverGrant.NONE,
+                            resolverGrant,
                             entropyGrant, clockGrant,
                             filesystemGrant,
                             runtimeHost);
@@ -2257,16 +2351,16 @@ public final class ProtosCli {
     private static void help(PrintStream out) {
         out.println(
                 "Usage:\n"
-                        + "  protos [--inspect] [--allow-network] [--allow-entropy] [--allow-clock] [--service=<binding>] <file> [args...]\n"
-                        + "  protos [--inspect] [--allow-network] [--allow-entropy] [--allow-clock] -e <source> [args...]\n"
-                        + "  protos debug [--allow-network] [--allow-entropy] [--allow-clock] <file> [args...]\n"
+                        + "  protos [--inspect] [--allow-network] [--allow-resolver] [--allow-entropy] [--allow-clock] [--service=<binding>] <file> [args...]\n"
+                        + "  protos [--inspect] [--allow-network] [--allow-resolver] [--allow-entropy] [--allow-clock] -e <source> [args...]\n"
+                        + "  protos debug [--allow-network] [--allow-resolver] [--allow-entropy] [--allow-clock] <file> [args...]\n"
                         + "  protos language-server\n"
-                        + "  protos run [--allow-network] [--allow-entropy] [--allow-clock] [--service=<binding>] <entry> [args...]\n"
+                        + "  protos run [--allow-network] [--allow-resolver] [--allow-entropy] [--allow-clock] [--service=<binding>] <entry> [args...]\n"
                         + "  protos package [args...]\n"
                         + "  protos test [--jobs N] [args...]\n"
                         + "  protos format [<file>]\n"
                         + "  protos lint [--output text|json] [--fail-on-warning] [<file>]\n"
-                        + "  protos [--inspect]\n"
+                        + "  protos [--inspect] [--allow-network] [--allow-resolver] [--allow-entropy] [--allow-clock]\n"
                         + "  protos --allow-filesystem=<dir> <file> [args...]\n"
                         + "  protos --allow-filesystem=<dir> -e <source> [args...]\n"
                         + "  protos --allow-filesystem=<dir>\n"
@@ -2276,6 +2370,7 @@ public final class ProtosCli {
                         + "  -e <source> [args...]\n"
                         + "  --foreign-provider-path <paths> (before <file>, -e, or REPL)\n"
                         + "  --inspect (before <file>, -e, or REPL)\n"
+                        + "  --allow-resolver (initial application RootActor module only; name resolution, no TCP)\n"
                         + "  --allow-network (application RootActor only; no DNS or filesystem)\n"
                         + "  --allow-entropy (application RootActor only; no other authority)\n"
                         + "  --allow-clock (initial application RootActor only; synchronous epoch nanoseconds)\n"
@@ -2326,6 +2421,11 @@ public final class ProtosCli {
                         + "input; the same spelling after the input is an ordinary "
                         + "process.args() element. It is not available to bundled Tools and "
                         + "implies no Network, Resolver or inspection authority.\n"
+                        + "--allow-resolver is default-off, independent of --allow-network and "
+                        + "all other grants, and grants no TCP. Give it once before a SOURCE, "
+                        + "-e, REPL, run or debug application entry, including SOURCE and MODULE "
+                        + "services. It is unavailable to Tools, help and version. After the "
+                        + "entry it is an ordinary process.args() element.\n"
                         + "Interactive REPL: arrow-key editing/history; Ctrl-D exits.");
     }
 

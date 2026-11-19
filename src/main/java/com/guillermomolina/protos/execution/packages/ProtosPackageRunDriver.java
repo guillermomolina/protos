@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.ResolverGrant;
 import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.EntropyGrant;
 import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.ClockGrant;
 import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
@@ -91,7 +92,18 @@ public final class ProtosPackageRunDriver {
             EntropyGrant entropyGrant, ClockGrant clockGrant)
             throws IOException {
         return execute(
-                request, provider, networkGrant, entropyGrant, clockGrant,
+                request, provider, networkGrant, ResolverGrant.NONE, entropyGrant, clockGrant);
+    }
+
+    public static ProtosExecutionOutcome execute(
+            ProtosWorkspaceRunDriver.Request request,
+            ProtosExactPackageMaterializationProvider provider,
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
+            ResolverGrant resolverGrant,
+            EntropyGrant entropyGrant, ClockGrant clockGrant)
+            throws IOException {
+        return execute(
+                request, provider, networkGrant, resolverGrant, entropyGrant, clockGrant,
                 PRODUCTION_STAGES);
     }
 
@@ -135,6 +147,20 @@ public final class ProtosPackageRunDriver {
             ClockGrant clockGrant,
             Stages stages)
             throws IOException {
+        return execute(
+                request, provider, networkGrant, ResolverGrant.NONE, entropyGrant, clockGrant, stages);
+    }
+
+    static ProtosExecutionOutcome execute(
+            ProtosWorkspaceRunDriver.Request request,
+            ProtosExactPackageMaterializationProvider provider,
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
+            ResolverGrant resolverGrant,
+            EntropyGrant entropyGrant,
+            ClockGrant clockGrant,
+            Stages stages)
+            throws IOException {
+        Objects.requireNonNull(resolverGrant, "resolverGrant");
         Objects.requireNonNull(entropyGrant, "entropyGrant");
         Objects.requireNonNull(clockGrant, "clockGrant");
         Objects.requireNonNull(request, "request");
@@ -150,7 +176,7 @@ public final class ProtosPackageRunDriver {
                         request.standardLibraryResolver());
         if (requirements.isEmpty()) {
             return ProtosWorkspaceRunDriver.execute(
-                    request, networkGrant, entropyGrant, clockGrant);
+                    request, networkGrant, resolverGrant, entropyGrant, clockGrant);
         }
 
         ProtosPackageExecutionPlanV2 plan;
@@ -183,7 +209,7 @@ public final class ProtosPackageRunDriver {
 
         try (scope) {
             return executeApplication(
-                    request, plan, scope, networkGrant, entropyGrant, clockGrant, stages);
+                    request, plan, scope, networkGrant, resolverGrant, entropyGrant, clockGrant, stages);
         }
     }
 
@@ -221,6 +247,26 @@ public final class ProtosPackageRunDriver {
             ClockGrant clockGrant,
             String serviceBinding)
             throws IOException {
+        return executeService(
+                request,
+                provider,
+                networkGrant,
+                ResolverGrant.NONE,
+                entropyGrant,
+                clockGrant,
+                serviceBinding);
+    }
+
+    public static boolean executeService(
+            ProtosWorkspaceRunDriver.Request request,
+            ProtosExactPackageMaterializationProvider provider,
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
+            ResolverGrant resolverGrant,
+            EntropyGrant entropyGrant,
+            ClockGrant clockGrant,
+            String serviceBinding)
+            throws IOException {
+        Objects.requireNonNull(resolverGrant, "resolverGrant");
         Objects.requireNonNull(entropyGrant, "entropyGrant");
         Objects.requireNonNull(clockGrant, "clockGrant");
         Objects.requireNonNull(request, "request");
@@ -237,7 +283,7 @@ public final class ProtosPackageRunDriver {
 
         if (requirements.isEmpty()) {
             return ProtosWorkspaceRunDriver.executeService(
-                    request, networkGrant, entropyGrant, clockGrant, serviceBinding);
+                    request, networkGrant, resolverGrant, entropyGrant, clockGrant, serviceBinding);
         }
 
         Stages stages = PRODUCTION_STAGES;
@@ -302,6 +348,7 @@ public final class ProtosPackageRunDriver {
                                 request.stderrEncodingBinding(),
                                 request.filesystemGrant()),
                         networkGrant,
+                        resolverGrant,
                         entropyGrant, clockGrant,
                         serviceBinding,
                         stages::applicationProcessHosted,
@@ -330,6 +377,20 @@ public final class ProtosPackageRunDriver {
             ClockGrant clockGrant,
             Stages stages)
             throws IOException {
+        return executeApplication(
+                request, plan, scope, networkGrant, ResolverGrant.NONE, entropyGrant, clockGrant, stages);
+    }
+
+    private static ProtosExecutionOutcome executeApplication(
+            ProtosWorkspaceRunDriver.Request request,
+            ProtosPackageExecutionPlanV2 plan,
+            ProtosExternalPackageResourceScope scope,
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
+            ResolverGrant resolverGrant,
+            EntropyGrant entropyGrant,
+            ClockGrant clockGrant,
+            Stages stages)
+            throws IOException {
         ProtosPackageExecutionPlanV2ModuleResolver resolver =
                 new ProtosPackageExecutionPlanV2ModuleResolver(
                         request.projectRoot(), plan, scope, request.standardLibraryResolver());
@@ -354,6 +415,7 @@ public final class ProtosPackageRunDriver {
                             request.stderrEncodingBinding(),
                             request.filesystemGrant()),
                     networkGrant,
+                    resolverGrant,
                     entropyGrant, clockGrant,
                     true,
                     "package application Process failed",

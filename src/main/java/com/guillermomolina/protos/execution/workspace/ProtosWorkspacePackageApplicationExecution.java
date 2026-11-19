@@ -20,8 +20,10 @@ import com.guillermomolina.protos.runtime.ProtosEncodingValue;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
+import com.guillermomolina.protos.runtime.ProtosResolverCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosEntropyCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosClockCapabilityValue;
+import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.ResolverGrant;
 import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.EntropyGrant;
 import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.ClockGrant;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -193,6 +195,25 @@ public final class ProtosWorkspacePackageApplicationExecution {
             EntropyGrant entropyGrant,
             ClockGrant clockGrant,
             ProtosPolyglotRuntimeHost runtimeHost) throws IOException {
+        return execute(
+                request,
+                processObserver,
+                networkGrant,
+                ResolverGrant.NONE,
+                entropyGrant,
+                clockGrant,
+                runtimeHost);
+    }
+
+    static ProtosExecutionOutcome execute(
+            Request request,
+            Consumer<ProtosProcessRuntime> processObserver,
+            NetworkGrant networkGrant,
+            ResolverGrant resolverGrant,
+            EntropyGrant entropyGrant,
+            ClockGrant clockGrant,
+            ProtosPolyglotRuntimeHost runtimeHost) throws IOException {
+        Objects.requireNonNull(resolverGrant, "resolverGrant");
         Objects.requireNonNull(entropyGrant, "entropyGrant");
         Objects.requireNonNull(clockGrant, "clockGrant");
         Objects.requireNonNull(request, "request");
@@ -212,6 +233,7 @@ public final class ProtosWorkspacePackageApplicationExecution {
                 entryKey,
                 request.authority(),
                 networkGrant,
+                resolverGrant,
                 entropyGrant, clockGrant,
                 false,
                 "workspace package application Process failed",
@@ -335,6 +357,35 @@ public final class ProtosWorkspacePackageApplicationExecution {
             String failureMessage,
             Consumer<ProtosProcessRuntime> processObserver,
             ProtosPolyglotRuntimeHost runtimeHost) throws IOException {
+        return executeEntry(
+                coreRoot,
+                resolver,
+                entryKey,
+                authority,
+                networkGrant,
+                ResolverGrant.NONE,
+                entropyGrant,
+                clockGrant,
+                awaitTermination,
+                failureMessage,
+                processObserver,
+                runtimeHost);
+    }
+
+    static ProtosExecutionOutcome executeEntry(
+            Path coreRoot,
+            ProtosModuleResolver resolver,
+            ProtosModuleKey entryKey,
+            ApplicationAuthority authority,
+            NetworkGrant networkGrant,
+            ResolverGrant resolverGrant,
+            EntropyGrant entropyGrant,
+            ClockGrant clockGrant,
+            boolean awaitTermination,
+            String failureMessage,
+            Consumer<ProtosProcessRuntime> processObserver,
+            ProtosPolyglotRuntimeHost runtimeHost) throws IOException {
+        Objects.requireNonNull(resolverGrant, "resolverGrant");
         Objects.requireNonNull(entropyGrant, "entropyGrant");
         Objects.requireNonNull(clockGrant, "clockGrant");
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(coreRoot, resolver);
@@ -351,32 +402,45 @@ public final class ProtosWorkspacePackageApplicationExecution {
                     case HOST_NETWORK -> runtimeHost.provisionHostNetwork(prelude);
                 };
 
-        try (ProtosStandaloneHostedExecution.FilesystemProvisioning filesystem =
-                ProtosStandaloneHostedExecution.FilesystemProvisioning.provision(
-                        authority.filesystemGrant())) {
-            ProtosEntropyCapabilityValue entropy =
-                    switch (entropyGrant) {
-                        case NONE -> null;
-                        case HOST_ENTROPY -> runtimeHost.provisionHostEntropy(prelude);
-                    };
-            ProtosClockCapabilityValue clock = null;
-            ProtosStandaloneProcessBootstrap.Result bootstrap;
-            try {
-                clock = clockGrant == ClockGrant.HOST_CLOCK
-                        ? runtimeHost.provisionHostClock(prelude) : null;
-                bootstrap = createApplicationProcess(
-                        prelude, authority, stdinEncoding, stdoutEncoding, stderrEncoding,
-                        filesystem, network, entropy, clock);
-            } catch (RuntimeException | Error failure) {
-                if (clock != null) clock.retireForRuntime();
-                if (entropy != null) {
-                    entropy.retireForRuntime();
+        ProtosResolverCapabilityValue resolverCapability =
+                switch (resolverGrant) {
+                    case NONE -> null;
+                    case HOST_RESOLVER -> runtimeHost.provisionHostResolver(prelude);
+                };
+        boolean resolverHandedToProcess = false;
+        try {
+            try (ProtosStandaloneHostedExecution.FilesystemProvisioning filesystem =
+                    ProtosStandaloneHostedExecution.FilesystemProvisioning.provision(
+                            authority.filesystemGrant())) {
+                ProtosEntropyCapabilityValue entropy =
+                        switch (entropyGrant) {
+                            case NONE -> null;
+                            case HOST_ENTROPY -> runtimeHost.provisionHostEntropy(prelude);
+                        };
+                ProtosClockCapabilityValue clock = null;
+                ProtosStandaloneProcessBootstrap.Result bootstrap;
+                try {
+                    clock = clockGrant == ClockGrant.HOST_CLOCK
+                            ? runtimeHost.provisionHostClock(prelude) : null;
+                    bootstrap = createApplicationProcess(
+                            prelude, authority, stdinEncoding, stdoutEncoding, stderrEncoding,
+                            filesystem, network, resolverCapability, entropy, clock);
+                    resolverHandedToProcess = true;
+                } catch (RuntimeException | Error failure) {
+                    if (clock != null) clock.retireForRuntime();
+                    if (entropy != null) {
+                        entropy.retireForRuntime();
+                    }
+                    throw failure;
                 }
-                throw failure;
+                return executeBootstrappedEntry(
+                        prelude, resolver, entryKey, bootstrap, filesystem,
+                        awaitTermination, failureMessage, processObserver, runtimeHost);
             }
-            return executeBootstrappedEntry(
-                    prelude, resolver, entryKey, bootstrap, filesystem,
-                    awaitTermination, failureMessage, processObserver, runtimeHost);
+        } finally {
+            if (!resolverHandedToProcess && resolverCapability != null) {
+                resolverCapability.retireForRuntime();
+            }
         }
     }
 
@@ -388,6 +452,7 @@ public final class ProtosWorkspacePackageApplicationExecution {
             ProtosEncodingValue stderrEncoding,
             ProtosStandaloneHostedExecution.FilesystemProvisioning filesystem,
             ProtosNetworkCapabilityValue network,
+            ProtosResolverCapabilityValue resolverCapability,
             ProtosEntropyCapabilityValue entropy, ProtosClockCapabilityValue clock) {
         return ProtosStandaloneProcessBootstrap.create(
                 prelude,
@@ -402,7 +467,7 @@ public final class ProtosWorkspacePackageApplicationExecution {
                 stderrEncoding,
                 filesystem.marker(),
                 network,
-                null,
+                resolverCapability,
                 entropy, clock);
     }
 
@@ -510,6 +575,34 @@ public final class ProtosWorkspacePackageApplicationExecution {
             Consumer<ProtosProcessRuntime> processObserver,
             ProtosPolyglotRuntimeHost runtimeHost)
             throws IOException {
+        return executeServiceEntry(
+                coreRoot,
+                resolver,
+                entryKey,
+                authority,
+                networkGrant,
+                ResolverGrant.NONE,
+                entropyGrant,
+                clockGrant,
+                serviceBinding,
+                processObserver,
+                runtimeHost);
+    }
+
+    static boolean executeServiceEntry(
+            Path coreRoot,
+            ProtosModuleResolver resolver,
+            ProtosModuleKey entryKey,
+            ApplicationAuthority authority,
+            NetworkGrant networkGrant,
+            ResolverGrant resolverGrant,
+            EntropyGrant entropyGrant,
+            ClockGrant clockGrant,
+            String serviceBinding,
+            Consumer<ProtosProcessRuntime> processObserver,
+            ProtosPolyglotRuntimeHost runtimeHost)
+            throws IOException {
+        Objects.requireNonNull(resolverGrant, "resolverGrant");
         Objects.requireNonNull(entropyGrant, "entropyGrant");
         Objects.requireNonNull(clockGrant, "clockGrant");
         Objects.requireNonNull(resolver, "resolver");
@@ -538,32 +631,45 @@ public final class ProtosWorkspacePackageApplicationExecution {
                     case HOST_NETWORK -> runtimeHost.provisionHostNetwork(prelude);
                 };
 
-        try (ProtosStandaloneHostedExecution.FilesystemProvisioning filesystem =
-                ProtosStandaloneHostedExecution.FilesystemProvisioning.provision(
-                        authority.filesystemGrant())) {
-            ProtosEntropyCapabilityValue entropy =
-                    switch (entropyGrant) {
-                        case NONE -> null;
-                        case HOST_ENTROPY -> runtimeHost.provisionHostEntropy(prelude);
-                    };
-            ProtosClockCapabilityValue clock = null;
-            ProtosStandaloneProcessBootstrap.Result bootstrap;
-            try {
-                clock = clockGrant == ClockGrant.HOST_CLOCK
-                        ? runtimeHost.provisionHostClock(prelude) : null;
-                bootstrap = createApplicationProcess(
-                        prelude, authority, stdinEncoding, stdoutEncoding, stderrEncoding,
-                        filesystem, network, entropy, clock);
-            } catch (RuntimeException | Error failure) {
-                if (clock != null) clock.retireForRuntime();
-                if (entropy != null) {
-                    entropy.retireForRuntime();
+        ProtosResolverCapabilityValue resolverCapability =
+                switch (resolverGrant) {
+                    case NONE -> null;
+                    case HOST_RESOLVER -> runtimeHost.provisionHostResolver(prelude);
+                };
+        boolean resolverHandedToProcess = false;
+        try {
+            try (ProtosStandaloneHostedExecution.FilesystemProvisioning filesystem =
+                    ProtosStandaloneHostedExecution.FilesystemProvisioning.provision(
+                            authority.filesystemGrant())) {
+                ProtosEntropyCapabilityValue entropy =
+                        switch (entropyGrant) {
+                            case NONE -> null;
+                            case HOST_ENTROPY -> runtimeHost.provisionHostEntropy(prelude);
+                        };
+                ProtosClockCapabilityValue clock = null;
+                ProtosStandaloneProcessBootstrap.Result bootstrap;
+                try {
+                    clock = clockGrant == ClockGrant.HOST_CLOCK
+                            ? runtimeHost.provisionHostClock(prelude) : null;
+                    bootstrap = createApplicationProcess(
+                            prelude, authority, stdinEncoding, stdoutEncoding, stderrEncoding,
+                            filesystem, network, resolverCapability, entropy, clock);
+                    resolverHandedToProcess = true;
+                } catch (RuntimeException | Error failure) {
+                    if (clock != null) clock.retireForRuntime();
+                    if (entropy != null) {
+                        entropy.retireForRuntime();
+                    }
+                    throw failure;
                 }
-                throw failure;
+                return executeBootstrappedService(
+                        prelude, entryKey, bootstrap, filesystem, serviceBinding,
+                        processObserver, runtimeHost);
             }
-            return executeBootstrappedService(
-                    prelude, entryKey, bootstrap, filesystem, serviceBinding,
-                    processObserver, runtimeHost);
+        } finally {
+            if (!resolverHandedToProcess && resolverCapability != null) {
+                resolverCapability.retireForRuntime();
+            }
         }
     }
 
@@ -646,6 +752,26 @@ public final class ProtosWorkspacePackageApplicationExecution {
             String serviceBinding,
             ProtosPolyglotRuntimeHost runtimeHost)
             throws IOException {
+        return executeService(
+                request,
+                networkGrant,
+                ResolverGrant.NONE,
+                entropyGrant,
+                clockGrant,
+                serviceBinding,
+                runtimeHost);
+    }
+
+    static boolean executeService(
+            Request request,
+            NetworkGrant networkGrant,
+            ResolverGrant resolverGrant,
+            EntropyGrant entropyGrant,
+            ClockGrant clockGrant,
+            String serviceBinding,
+            ProtosPolyglotRuntimeHost runtimeHost)
+            throws IOException {
+        Objects.requireNonNull(resolverGrant, "resolverGrant");
         Objects.requireNonNull(entropyGrant, "entropyGrant");
         Objects.requireNonNull(clockGrant, "clockGrant");
         ProtosWorkspacePackageModuleResolver resolver =
@@ -659,6 +785,7 @@ public final class ProtosWorkspacePackageApplicationExecution {
                 resolver.entryModule(request.entryLogicalModule()),
                 request.authority(),
                 networkGrant,
+                resolverGrant,
                 entropyGrant, clockGrant,
                 serviceBinding,
                 ignored -> {},

@@ -23,8 +23,14 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.ResolverGrant;
+import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.EntropyGrant;
+import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.ClockGrant;
+import com.guillermomolina.protos.execution.ProtosWorkspacePackageApplicationExecution.NetworkGrant;
+import com.guillermomolina.protos.runtime.ProtosResolverCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
@@ -166,6 +172,154 @@ final class ProtosWorkspacePackageAuthorityIsolationIntegrationTest {
                             ProtosNetworkCapabilityValue.class, result.indexedAt(0));
             assertSame(result.indexedAt(1), network.representedDelegationParent(null));
             assertTrue(runtimeHost.networkHostInitializedForTesting());
+        }
+    }
+
+    @Test
+    void resolverSelectionSkipsPreflightAndUsesApplicationPreludeAndHost() throws Exception {
+        Path project = materializeProject();
+        assumeSecureConfinement(project);
+        Files.writeString(project.resolve("NetworkGrant/module.protos"), """
+                Resolvers: import("std:network/resolvers")
+                [resolver, Resolvers.Resolver, context.hasSlot("network")]
+                """);
+        ProtosStandardLibraryModuleResolver standard = new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
+        ProtosResolverCapabilityValue previous = null;
+        try (ProtosPolyglotRuntimeHost host = ProtosPolyglotRuntimeHost.open()) {
+            AtomicReference<ProtosProcessRuntime> tool = new AtomicReference<>();
+            ProtosWorkspacePackagePreflight.build(CORE, TOOL_ROOT, project, standard, tool::set, host);
+            assertTrue(tool.get().rootResolverForRuntime().isEmpty());
+            assertEquals(0, host.provisionedResolverCountForTesting());
+            for (int run = 0; run < 2; run++) {
+                ProtosExecutionOutcome outcome = ProtosWorkspaceRunDriver.execute(
+                        driverRequest(project, standard), NetworkGrant.NONE, ResolverGrant.HOST_RESOLVER,
+                        EntropyGrant.NONE, ClockGrant.NONE, host);
+                assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
+                ProtosArrayValue values = assertInstanceOf(ProtosArrayValue.class, outcome.value());
+                ProtosResolverCapabilityValue capability = assertInstanceOf(
+                        ProtosResolverCapabilityValue.class, values.indexedAt(0));
+                assertSame(values.indexedAt(1), capability.representedDelegationParent(null));
+                assertSame(Boolean.FALSE, values.indexedAt(2));
+                assertNotSame(previous, capability);
+                assertTrue(capability.retiredForRuntime());
+                assertFalse(host.networkHostInitializedForTesting());
+                assertEquals(1, host.provisionedResolverCountForTesting());
+                previous = capability;
+            }
+            ProtosExecutionOutcome denied = ProtosWorkspaceRunDriver.execute(
+                    driverRequest(project, standard), NetworkGrant.NONE, host);
+            assertEquals(ProtosExecutionOutcome.State.FAILED, denied.state());
+            assertFalse(host.networkHostInitializedForTesting());
+        }
+    }
+
+    @Test
+    void resolverIsRetiredWhenFilesystemProvisioningFailsBeforeProcessCreation() throws Exception {
+        Path project = materializeProject();
+        assumeSecureConfinement(project);
+        ProtosStandardLibraryModuleResolver standard = new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
+        ProtosPackageExecutionPlan plan = ProtosWorkspacePackagePreflight.build(CORE, TOOL_ROOT, project, standard);
+        ProtosWorkspacePackageModuleResolver modules = new ProtosWorkspacePackageModuleResolver(project, plan, standard);
+        ProtosWorkspacePackageApplicationExecution.ApplicationAuthority authority =
+                new ProtosWorkspacePackageApplicationExecution.ApplicationAuthority(
+                        List.of(), exactEnvironmentDomain(), List.of(), null, null, null,
+                        null, null, null,
+                        ProtosStandaloneHostedExecution.FilesystemGrant.directory(temp.resolve("missing")));
+        try (ProtosPolyglotRuntimeHost host = ProtosPolyglotRuntimeHost.open()) {
+            for (boolean service : new boolean[] {false, true}) {
+                AtomicReference<ProtosProcessRuntime> process = new AtomicReference<>();
+                assertThrows(java.io.IOException.class, () -> {
+                    if (service) {
+                        ProtosWorkspacePackageApplicationExecution.executeServiceEntry(
+                                CORE, modules, modules.entryModule("Main"), authority,
+                                NetworkGrant.NONE, ResolverGrant.HOST_RESOLVER, EntropyGrant.NONE,
+                                ClockGrant.NONE, "service", process::set, host);
+                    } else {
+                        ProtosWorkspacePackageApplicationExecution.executeEntry(
+                                CORE, modules, modules.entryModule("Main"), authority,
+                                NetworkGrant.NONE, ResolverGrant.HOST_RESOLVER, EntropyGrant.NONE,
+                                ClockGrant.NONE, false, "bootstrap failed", process::set, host);
+                    }
+                });
+                assertEquals(null, process.get());
+                // Provisioning prunes retired grants: only the new probe remains in host custody.
+                com.guillermomolina.protos.runtime.ProtosPrelude prelude =
+                        new ProtosCoreBootstrap().bootstrap(CORE, modules);
+                ProtosResolverCapabilityValue probe = host.provisionHostResolver(prelude);
+                assertEquals(1, host.provisionedResolverCountForTesting());
+                probe.retireForRuntime();
+                assertFalse(host.networkHostInitializedForTesting());
+                assertEquals(0, host.activeProcessContextCountForTesting());
+            }
+        }
+    }
+
+    @Test
+    void laterEntropyAndClockProvisioningFailuresRetireUndeliveredResolver() throws Exception {
+        Path project = materializeProject();
+        assumeSecureConfinement(project);
+        ProtosStandardLibraryModuleResolver standard = new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
+        ProtosPackageExecutionPlan plan = ProtosWorkspacePackagePreflight.build(CORE, TOOL_ROOT, project, standard);
+        for (String failedPlane : List.of("entropyRetired", "clockRetired")) {
+            try (ProtosPolyglotRuntimeHost host = ProtosPolyglotRuntimeHost.open()) {
+                // Force the existing host's provisioning guard without adding a production seam.
+                java.lang.reflect.Field retired = ProtosPolyglotRuntimeHost.class.getDeclaredField(failedPlane);
+                retired.setAccessible(true);
+                retired.setBoolean(host, true);
+                AtomicReference<ProtosProcessRuntime> process = new AtomicReference<>();
+                assertThrows(IllegalStateException.class, () ->
+                        ProtosWorkspacePackageApplicationExecution.execute(
+                                request(project, plan, standard, "Main"), process::set,
+                                NetworkGrant.NONE, ResolverGrant.HOST_RESOLVER,
+                                EntropyGrant.HOST_ENTROPY, ClockGrant.HOST_CLOCK, host));
+                assertEquals(null, process.get());
+                com.guillermomolina.protos.runtime.ProtosPrelude prelude =
+                        new ProtosCoreBootstrap().bootstrap(CORE, standard);
+                ProtosResolverCapabilityValue probe = host.provisionHostResolver(prelude);
+                assertEquals(1, host.provisionedResolverCountForTesting());
+                probe.retireForRuntime();
+                assertEquals(0, host.activeProcessContextCountForTesting());
+                assertFalse(host.networkHostInitializedForTesting());
+            }
+        }
+    }
+
+    @Test
+    void failureAfterProcessCreationRevokesResolverThroughProcessTermination() throws Exception {
+        Path project = materializeProject();
+        assumeSecureConfinement(project);
+        ProtosStandardLibraryModuleResolver standard = new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
+        ProtosPackageExecutionPlan plan = ProtosWorkspacePackagePreflight.build(CORE, TOOL_ROOT, project, standard);
+        ProtosWorkspacePackageModuleResolver modules = new ProtosWorkspacePackageModuleResolver(project, plan, standard);
+        for (boolean service : new boolean[] {false, true}) {
+            try (ProtosPolyglotRuntimeHost host = ProtosPolyglotRuntimeHost.open()) {
+                AtomicReference<ProtosProcessRuntime> process = new AtomicReference<>();
+                AtomicReference<ProtosResolverCapabilityValue> resolver = new AtomicReference<>();
+                java.util.function.Consumer<ProtosProcessRuntime> failAfterBinding = owner -> {
+                    process.set(owner);
+                    resolver.set(owner.rootResolverForRuntime().orElseThrow());
+                    assertFalse(resolver.get().retiredForRuntime());
+                    throw new IllegalStateException("injected post-bootstrap failure");
+                };
+                assertThrows(java.io.IOException.class, () -> {
+                    if (service) {
+                        ProtosWorkspacePackageApplicationExecution.executeServiceEntry(
+                                CORE, modules, modules.entryModule("Main"),
+                                request(project, plan, standard, "Main").authority(),
+                                NetworkGrant.NONE, ResolverGrant.HOST_RESOLVER, EntropyGrant.NONE,
+                                ClockGrant.NONE, "service", failAfterBinding, host);
+                    } else {
+                        ProtosWorkspacePackageApplicationExecution.executeEntry(
+                                CORE, modules, modules.entryModule("Main"),
+                                request(project, plan, standard, "Main").authority(),
+                                NetworkGrant.NONE, ResolverGrant.HOST_RESOLVER, EntropyGrant.NONE,
+                                ClockGrant.NONE, true, "bootstrap failed", failAfterBinding, host);
+                    }
+                });
+                assertEquals(ProtosProcessRuntime.LifecycleState.TERMINATED, process.get().lifecycleState());
+                assertTrue(resolver.get().retiredForRuntime());
+                assertEquals(0, host.activeProcessContextCountForTesting());
+            }
         }
     }
 

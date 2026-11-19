@@ -125,4 +125,33 @@ final class ProtosStandaloneHostedSessionLifecycleTest {
         // The session's RuntimeHost, which owns the provisioned Network plane, is closed too.
         assertThrows(IllegalStateException.class, runtimeHost::actorSchedulerForRuntime);
     }
+    @Test
+    void explicitResolverSessionKeepsIdentityUntilCloseAndNeverInitializesNetwork() throws Exception {
+        Path file = directory.resolve("resolver.protos");
+        Files.writeString(file, "probe: () => { resolver }\nresolver\n");
+        ProtosStandaloneHostedSession session = ProtosStandaloneHostedSession.open(
+                CORE, file, List.of(), InputStream.nullInputStream(),
+                OutputStream.nullOutputStream(), OutputStream.nullOutputStream(),
+                NetworkGrant.NONE,
+                ProtosStandaloneHostedExecution.ResolverGrant.HOST_RESOLVER,
+                ProtosStandaloneHostedExecution.EntropyGrant.NONE,
+                ProtosStandaloneHostedExecution.ClockGrant.NONE);
+        com.guillermomolina.protos.runtime.ProtosResolverCapabilityValue resolver;
+        try {
+            assertEquals(ProtosExecutionOutcome.State.COMPLETED, session.initialOutcome().state());
+            resolver = assertInstanceOf(
+                    com.guillermomolina.protos.runtime.ProtosResolverCapabilityValue.class,
+                    session.initialOutcome().value());
+            assertSame(resolver, session.invokeTopLevel("probe").value());
+            assertSame(resolver, session.processForTesting().rootResolverForRuntime().orElseThrow());
+            assertFalse(resolver.retiredForRuntime());
+            assertFalse(session.runtimeHostForTesting().networkHostInitializedForTesting());
+            assertEquals(1, session.runtimeHostForTesting().provisionedResolverCountForTesting());
+        } finally {
+            session.close();
+        }
+        assertTrue(resolver.retiredForRuntime());
+        assertEquals(0, session.runtimeHostForTesting().activeProcessContextCountForTesting());
+    }
+
 }
