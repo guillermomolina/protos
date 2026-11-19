@@ -206,6 +206,12 @@ Run the file without changing to the installation directory:
 The same Native distribution also bundles the supported REPL, Package /
 Workspace execution, Test Tool, language server, and debug adapter surfaces.
 
+The standalone CLI supplies `print` in the initial entry context. Closures
+defined there can capture that binding, but importing another SOURCE or MODULE
+does not install it in that source's initializer. It is not a Core or standard
+Prelude binding. Pass an output callable explicitly to imported code, as shown
+in [Modules and Imports](06-modules-and-imports.md#passing-cli-output-to-an-imported-source).
+
 ### Manual Native archive alternative
 
 You can still install without the script: select a compatible published release

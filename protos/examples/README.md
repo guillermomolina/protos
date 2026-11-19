@@ -90,14 +90,18 @@ instead.
 | Resolve a hostname and connect to a chosen address (`std:network/resolvers`, requires `network` and `resolver`, manual) | `io/hostname-resolution.protos` |
 | Authenticate TLS over a TCP connection and send one HTTP request (`std:tls/client`, requires `network` and `resolver`, manual) | `io/tls-client-over-tcp.protos` |
 | Write, append to and list application data under an explicit directory grant (requires `--allow-filesystem`) | `filesystem/cli-confined-data.protos` |
-| Import an entire neighboring SOURCE context | `modules/direct-file-import/main.protos` |
+| Import a neighboring SOURCE context and pass output behavior explicitly | `modules/direct-file-import/main.protos` |
 | Publish a pricing MODULE with an encapsulated discount helper | `modules/public-module-pricing/` (`protos run Main`) |
 | Compose a real invoice across root and dependency MODULE exports | `modules/package-invoice/` (`protos run Main`) |
 
 The [`direct-file-import`](modules/direct-file-import/main.protos) example uses
 `bin/protos protos/examples/modules/direct-file-import/main.protos` from the
 product root. Its imported helper is a SOURCE: every top-level binding is
-visible. By contrast, the [pricing package](modules/public-module-pricing/package.toml)
+visible. The entry passes its CLI-local `print` callable to `Helper.greet`;
+the helper has no implicit `print` binding. Expected output is `Hello`,
+`Hello from a local module`, and `Main, Protos!`, on separate lines. See
+[the output-injection explanation](../../docs/guide/06-modules-and-imports.md#passing-cli-output-to-an-imported-source).
+By contrast, the [pricing package](modules/public-module-pricing/package.toml)
 exports a distinct public MODULE object, and the
 [invoice workspace](modules/package-invoice/package.toml) uses a declared
 `dep:rates/Rates` module export. Both package projects ship matching

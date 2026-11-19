@@ -2341,8 +2341,8 @@ For example:
 ```js
 version: "0.1"
 
-printVersion: () => {
-    print(version)
+printVersion: (output) => {
+    output(version)
 }
 ```
 
@@ -2375,10 +2375,15 @@ Universal language facilities such as core prototypes and standard behavior may 
 The standard prelude is a shared **frozen** context. Lookup may read its slots normally, but assignment may not modify them. Consequently, an unqualified assignment whose only matching slot is in the prelude fails with the ordinary non-writable/frozen assignment error. Shadowing is explicit slot creation in the module context.
 
 ```text
-print("hello")     -> read prelude.print
-print = myPrint     -> ERROR
-print: myPrint      -> create moduleContext.print
+Object             -> read prelude.Object
+Object = myObject   -> ERROR
+Object: myObject    -> create moduleContext.Object
 ```
+
+The standalone CLI's `print` convenience is instead installed in its initial
+entry context. Imported SOURCEs and MODULE initializers do not inherit that
+local binding. The `printVersion` example above accepts an output callable
+explicitly, rather than assuming that the Prelude supplies one.
 
 Runtime initialization MUST freeze the prelude before executing user modules. `assignName` MUST respect that frozen state and MUST NOT special-case the prelude by mutating it.
 

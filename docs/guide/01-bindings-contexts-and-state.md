@@ -38,6 +38,12 @@ activation context
 Both are represented by the same language-level idea: a slot on an execution
 context object.
 
+In this standalone-CLI example, `print` is a host-provided slot of the initial
+entry context, captured by `greet` through ordinary lexical lookup. It is not
+in the standard Prelude. An imported source has its own context and does not
+inherit that CLI-local binding; see
+[passing output explicitly](06-modules-and-imports.md#passing-cli-output-to-an-imported-source).
+
 Execution contexts are themselves ordinary Protos objects. The language does
 not need a separate hidden "local variable" universe.
 

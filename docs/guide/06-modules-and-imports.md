@@ -40,6 +40,54 @@ ordinary lexical rules. The actual runnable fixture is
 [`04-source-full-context.protos`](../../protos/tutorials/08-language-interactions/04-source-full-context.protos)
 with its [neighboring source](../../protos/tutorials/08-language-interactions/04-source-full-context/pricing.protos).
 
+## Passing CLI output to an imported SOURCE
+
+The standalone CLI installs `print` only in the initial entry context. It is
+a host-provided convenience, not a Core or standard Prelude binding. A SOURCE
+import creates its own lexical context; it does not inherit the caller's local
+bindings. MODULE initializers likewise do not automatically receive `print`.
+Closures created in the CLI entry can capture its binding normally; importing
+a different source does not extend that lexical chain into the new source.
+
+Pass output behavior explicitly when imported code needs it. The existing
+[direct-file example](../../protos/examples/modules/direct-file-import/main.protos)
+uses these two neighboring files:
+
+```protos
+// helper.protos
+greeting: "Hello from a local module"
+greet: (output) => { output("Hello") }
+```
+
+```protos
+// main.protos
+Helper: import("./helper.protos")
+Helper.greet(print)
+print(Helper.greeting)
+print("Main, Protos!")
+```
+
+Run it from the repository root:
+
+```sh
+bin/protos protos/examples/modules/direct-file-import/main.protos
+```
+
+Expected output:
+
+```text
+Hello
+Hello from a local module
+Main, Protos!
+```
+
+`Helper.greeting` alone reads a slot; it does not print the value. A bare
+`print("Hello")` at the top of `helper.protos`, without a locally supplied
+binding, fails during SOURCE initialization at that name lookup. The relative
+import can be valid even though executing its target fails. Any Truffle
+fallback-runtime warning from the Native launcher is separate from this guest
+lookup failure.
+
 ## MODULE: an explicit public object and private context
 
 A logical MODULE is a directory with a **mandatory** `module.protos` initializer.

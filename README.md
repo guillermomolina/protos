@@ -445,8 +445,13 @@ A module can explicitly shadow a prelude binding by creating a local
 slot:
 
 ``` js
-print: myPrint
+Object: myObject
 ```
+
+The standalone CLI installs `print` only in its initial entry context. It is
+not a standard prelude binding and is not automatically available in imported
+SOURCEs or MODULE initializers. Pass an output callable explicitly when another
+source needs it; see [Modules and Imports](docs/guide/06-modules-and-imports.md#passing-cli-output-to-an-imported-source).
 
 ## What is intentionally not in the core
 

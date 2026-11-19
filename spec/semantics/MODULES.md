@@ -21,8 +21,8 @@ D242 distinguishes exactly two source-backed import target kinds, **MODULE** and
 // SOURCE geometry.protos
 version: "0.1"
 
-printVersion: () => {
-    print(version)
+printVersion: (output) => {
+    output(version)
 }
 ```
 

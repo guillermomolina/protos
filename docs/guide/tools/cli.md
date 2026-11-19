@@ -46,6 +46,14 @@ protos -e 'print(process.args().size())' a b c
   file, inside the entry file's directory tree. There is no current-directory
   fallback and no implicit `.protos` extension.
 
+`print(value)` is a host-provided convenience installed only in the initial
+CLI entry context. It writes a line to Process stdout and is not a Core or
+standard Prelude binding. Closures defined in that context can capture it
+through ordinary lexical lookup. Imported SOURCEs and MODULE initializers have
+their own contexts and do not automatically receive the caller's local
+`print`. Pass an output callable explicitly when they need it; see
+[the two-file SOURCE example](../06-modules-and-imports.md#passing-cli-output-to-an-imported-source).
+
 The interactive REPL supports line editing, history and TAB completion.
 `:help` lists the REPL commands; `:quit`, `:exit` or Ctrl-D exits.
 Ctrl-C cancels the current input.
