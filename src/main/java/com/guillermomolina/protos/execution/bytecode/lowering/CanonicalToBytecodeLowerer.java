@@ -409,6 +409,15 @@ final class CanonicalToBytecodeLowerer {
      */
     private BytecodeLocal currentActivationLocal;
 
+    /**
+     * The expression most recently lowered as an indexed operation and the
+     * outcome local that operation cleared at its last use. Its owner omits
+     * its own clear of that local only when the expression it just emitted is
+     * this one, so the operation's release was the final write of the local.
+     */
+    private CanonicalExpression lastIndexedOutcomeReleaser;
+    private BytecodeLocal lastIndexedReleasedOutcome;
+
 
 
     /**
@@ -1390,6 +1399,7 @@ final class CanonicalToBytecodeLowerer {
                         builder.createLocal("sequenceResult", null);
 
                 beginStatement(builder, last);
+                lastIndexedOutcomeReleaser = null;
 
                 boolean carrierTerminal =
                         (last instanceof CanonicalSend terminalSend
@@ -1432,7 +1442,12 @@ final class CanonicalToBytecodeLowerer {
 
                 endStatement(builder);
 
-                emitClearComposedSequenceScratch(builder, sharedScratch);
+                emitClearComposedSequenceScratch(
+                        builder,
+                        sharedScratch,
+                        sharedScratch != null
+                                && releasedChildResult(
+                                        last, sharedScratch.childResult()));
 
                 builder.beginReturn();
                 builder.emitLoadLocal(result);
@@ -2874,23 +2889,62 @@ final class CanonicalToBytecodeLowerer {
             java.util.List<CanonicalExpression> expressions) {
         ComposedSequenceScratch scratch =
                 createComposedSequenceScratch(builder, expressions);
-        emitDiscardedPrefix(builder, expressions, scratch);
-        emitClearComposedSequenceScratch(builder, scratch);
+        boolean childResultReleased =
+                emitDiscardedPrefix(builder, expressions, scratch);
+        emitClearComposedSequenceScratch(builder, scratch, childResultReleased);
     }
 
     /* Clears scratch locals owned by the caller after their last use. */
     private static void emitClearComposedSequenceScratch(
             ProtosBytecodeRootNodeGen.Builder builder,
             ComposedSequenceScratch scratch) {
+        emitClearComposedSequenceScratch(builder, scratch, false);
+    }
+
+    /*
+     * childResultReleased: the last producer of childResult already cleared
+     * it at its last use, so the owner does not clear it again.
+     */
+    private static void emitClearComposedSequenceScratch(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            ComposedSequenceScratch scratch,
+            boolean childResultReleased) {
         if (scratch == null) {
             return;
         }
         builder.emitClearLocal(scratch.preparedCall());
-        builder.emitClearLocal(scratch.childResult());
+        if (!childResultReleased) {
+            builder.emitClearLocal(scratch.childResult());
+        }
         builder.emitClearLocal(scratch.resumeValue());
     }
 
-    private void emitDiscardedPrefix(
+    /*
+     * Whether expression, just emitted, ended with an indexed operation
+     * that cleared childResult at its last use.
+     */
+    private boolean releasedChildResult(
+            CanonicalExpression expression, BytecodeLocal childResult) {
+        boolean indexed = expression instanceof CanonicalIndexedAssign
+                || (expression instanceof CanonicalSend send
+                        && (indexedProtocolSend(send) || isIndexedSizeSend(send)));
+        return indexed
+                && childResult != null
+                && lastIndexedOutcomeReleaser == expression
+                && lastIndexedReleasedOutcome == childResult;
+    }
+
+    private void noteIndexedOutcomeReleased(
+            CanonicalExpression expression, BytecodeLocal outcome) {
+        lastIndexedOutcomeReleaser = expression;
+        lastIndexedReleasedOutcome = outcome;
+    }
+
+    /*
+     * Returns whether the last emitted expression released childResult at
+     * its last use (see releasedChildResult).
+     */
+    private boolean emitDiscardedPrefix(
             ProtosBytecodeRootNodeGen.Builder builder,
             java.util.List<CanonicalExpression> expressions,
             ComposedSequenceScratch scratch) {
@@ -2901,11 +2955,14 @@ final class CanonicalToBytecodeLowerer {
         BytecodeLocal resumeValue =
                 scratch == null ? null : scratch.resumeValue();
         DiscardSink sink = null;
+        CanonicalExpression lastEmitted = null;
 
         for (CanonicalExpression expression : expressions) {
             if (isEliminableControl(expression)) {
                 continue;
             }
+            lastIndexedOutcomeReleaser = null;
+            lastEmitted = expression;
 
             // A discarded module binding whose RHS is a Closure has
             // one source-visible effect: create the named binding.
@@ -2979,6 +3036,7 @@ final class CanonicalToBytecodeLowerer {
         if (sink != null) {
             sink.emitClear(builder);
         }
+        return lastEmitted != null && releasedChildResult(lastEmitted, childResult);
     }
 
     private void emitDiscardedScalarLocalRead(
@@ -3498,8 +3556,9 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * Stage the receiver and arguments exactly once in source order, then
-     * select either the standard indexed operation or its dynamic fallback.
+     * Evaluate the receiver and arguments exactly once in source order as
+     * operands of the indexed operation, which owns the selection. Operands
+     * whose evaluation composes an invocation are staged in locals first.
      */
     private void emitIndexedSend(
             ProtosBytecodeRootNodeGen.Builder builder,
@@ -3518,17 +3577,16 @@ final class CanonicalToBytecodeLowerer {
                 send.span().startOffset(), send.span().length());
         builder.beginBlock();
         if (stackStagedIndexedOperands(send.receiver(), send.arguments())) {
-            StackValue receiverValue = bindIndexedOperand(
-                    builder, send.receiver(), scratch, childResult, resumeValue);
-            java.util.List<StackValue> operandValues =
-                    new java.util.ArrayList<>(send.arguments().size());
-            for (CanonicalExpression argument : send.arguments()) {
-                operandValues.add(bindIndexedOperand(
-                        builder, argument, scratch, childResult, resumeValue));
-            }
-            emitIndexedProtocolOfStackValues(
-                    builder, send.message(), receiverValue, operandValues, result,
-                    childResult, resumeValue, primitiveCarrierResult);
+            // Each operand is emitted once, in Protos order, as an operand of the operation.
+            emitIndexedOperation(builder, send.message(), () -> {
+                emitExpressionValue(
+                        builder, send.receiver(), scratch, childResult, resumeValue, false);
+                for (CanonicalExpression argument : send.arguments()) {
+                    emitExpressionValue(
+                            builder, argument, scratch, childResult, resumeValue, false);
+                }
+            }, result, childResult, resumeValue, primitiveCarrierResult);
+            noteIndexedOutcomeReleased(send, childResult);
             builder.endBlock();
             builder.endSourceSection();
             return;
@@ -3548,11 +3606,27 @@ final class CanonicalToBytecodeLowerer {
                     scratch, childResult, resumeValue, stager);
             operands.add(operand);
         }
-        emitIndexedProtocolOfLocals(
-                builder, send.message(), receiver, operands, result,
-                childResult, resumeValue, primitiveCarrierResult);
+        emitIndexedOperation(builder, send.message(),
+                () -> emitStagedIndexedOperands(builder, receiver, operands),
+                result, childResult, resumeValue, primitiveCarrierResult);
+        noteIndexedOutcomeReleased(send, childResult);
         builder.endBlock();
         builder.endSourceSection();
+    }
+
+    /*
+     * Operands staged in locals because their evaluation composes an
+     * invocation. The receiver local is read at its last use and cleared in
+     * the same operation; the argument locals keep their typed load.
+     */
+    private static void emitStagedIndexedOperands(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            BytecodeLocal receiver,
+            java.util.List<BytecodeLocal> operands) {
+        builder.emitLoadAndClearTempLocal(receiver);
+        for (BytecodeLocal operand : operands) {
+            builder.emitLoadLocal(operand);
+        }
     }
 
     /**
@@ -3595,181 +3669,72 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * The indexed protocol over operands already evaluated once, in source
-     * order, onto the operand stack. {@code IsStandardIndexedSelection}
-     * observes the behavior actually selected for {@code selector} on the
-     * receiver. The standard Array/Bytes behavior executes the direct
-     * {@code BinarySubscript}, {@code SetItem} or {@code GetLen} over the
-     * stack values. Any other selection first materializes the operands into
-     * the locals its dispatcher needs, inside that branch alone, then keeps
-     * {@code GetMethod}, the arity-selected {@code Call*Method} and the
-     * suspendable composition, under its {@link StandardTags.CallTag}. An
-     * explicit {@code atPut} send retains the selected method's result;
-     * indexed assignment passes no result local.
+     * One indexed protocol send: {@code at} as {@code BinarySubscript},
+     * {@code atPut} as {@code SetItem}, {@code size} as {@code GetLen}. The
+     * operation consumes the operands that {@code operands} emits once, in
+     * Protos order (receiver, then arguments), and owns the selection: its
+     * standard specializations execute the standard Array/Bytes behavior
+     * internally, and its fallback invokes any other selected behavior
+     * through the shared dispatcher. Only that invocation can suspend, so
+     * the result passes through the shared continuation composition before
+     * it is consumed; a resumption continues the selected invocation and
+     * never re-evaluates the operands or the selection. Like the fused
+     * numeric operations, the indexed operation carries no
+     * {@link StandardTags.CallTag} of its own: it is located by the source
+     * section of its send, and a selected invocation is located through the
+     * operation's stored bytecode index. {@code result} receives the
+     * selected result (for an explicit {@code atPut}, the selected method's
+     * result); a null {@code result} discards it.
      */
-    private void emitIndexedProtocolOfStackValues(
+    private void emitIndexedOperation(
             ProtosBytecodeRootNodeGen.Builder builder,
             String selector,
-            StackValue receiver,
-            java.util.List<StackValue> operands,
+            Runnable operands,
             BytecodeLocal result,
-            BytecodeLocal childResult,
+            BytecodeLocal outcome,
             BytecodeLocal resumeValue,
             boolean primitiveCarrierResult) {
-        builder.beginIfThenElse();
+        noteDynamicInvocation();
 
-        builder.beginIsStandardIndexedSelection(selector);
-        builder.emitLoadStackValue(receiver);
-        builder.endIsStandardIndexedSelection();
-
-        builder.beginBlock();
+        builder.beginStoreLocal(outcome);
         switch (selector) {
+            case "at" -> {
+                builder.beginBinarySubscript();
+                operands.run();
+                builder.endBinarySubscript();
+            }
             case "atPut" -> {
                 builder.beginSetItem();
-                builder.emitLoadStackValue(operands.get(1));
-                builder.emitLoadStackValue(receiver);
-                builder.emitLoadStackValue(operands.get(0));
+                operands.run();
                 builder.endSetItem();
-                if (result != null) {
-                    builder.beginStoreLocal(result);
-                    builder.emitLoadStackValue(operands.get(1));
-                    builder.endStoreLocal();
-                }
-            }
-            case "at" -> {
-                beginMutationResult(builder, result);
-                builder.beginBinarySubscript();
-                builder.emitLoadStackValue(receiver);
-                builder.emitLoadStackValue(operands.get(0));
-                builder.endBinarySubscript();
-                endMutationResult(builder, result);
             }
             case "size" -> {
-                beginMutationResult(builder, result);
                 builder.beginGetLen();
-                builder.emitLoadStackValue(receiver);
+                operands.run();
                 builder.endGetLen();
-                endMutationResult(builder, result);
             }
             default -> throw new AssertionError(
                     "Not an indexed selector: " + selector);
         }
-        builder.endBlock();
-
-        builder.beginTag(StandardTags.CallTag.class);
-        builder.beginBlock();
-        BytecodeLocal receiverLocal =
-                builder.createLocal("indexedReceiver", null);
-        builder.beginStoreLocal(receiverLocal);
-        builder.emitLoadStackValue(receiver);
         builder.endStoreLocal();
-        java.util.List<BytecodeLocal> operandLocals =
-                new java.util.ArrayList<>(operands.size());
-        for (StackValue operand : operands) {
-            BytecodeLocal local = builder.createLocal("indexedOperand", null);
-            builder.beginStoreLocal(local);
-            builder.emitLoadStackValue(operand);
+
+        emitDispatchedContinuationComposition(builder, outcome, resumeValue);
+
+        if (result == null) {
+            builder.emitClearLocal(outcome);
+        } else if (primitiveCarrierResult) {
+            builder.beginStoreLocal(result);
+            builder.emitLoadLocal(outcome);
             builder.endStoreLocal();
-            operandLocals.add(local);
+            builder.emitClearLocal(outcome);
+        } else {
+            builder.beginStoreLocal(result);
+            builder.beginMaterializePrimitiveNumericCarrier();
+            builder.emitLoadAndClearTempLocal(outcome);
+            builder.emitLoadConstant(true);
+            builder.endMaterializePrimitiveNumericCarrier();
+            builder.endStoreLocal();
         }
-        BytecodeLocal callable =
-                builder.createLocal("indexedMethod", null);
-        emitGetMethod(builder, selector, receiverLocal, callable);
-        emitDispatchedCall(
-                builder, callable, operandLocals, null, childResult,
-                result, resumeValue, primitiveCarrierResult);
-        builder.emitClearLocal(callable);
-        builder.emitClearLocal(receiverLocal);
-        for (BytecodeLocal local : operandLocals) {
-            builder.emitClearLocal(local);
-        }
-        builder.endBlock();
-        builder.endTag(StandardTags.CallTag.class);
-
-        builder.endIfThenElse();
-    }
-
-    /**
-     * (BinarySubscript / SetItem / GetLen over staged
-     * operands). {@code IsStandardIndexedSelection} observes the behavior
-     * actually selected for {@code selector} on the receiver:
-     * <ul>
-     *   <li>the standard Array/Bytes behavior: the direct
-     *       {@code BinarySubscript}, {@code SetItem} or {@code GetLen},
-     *       with no method invocation;
-     *   <li>anything else (Map, IdentityMap, program-defined or overriding
-     *       behavior, or a missing selector): {@code GetMethod} on the
-     *       staged receiver and the arity-selected {@code Call*Method},
-     *       composed with {@code Yield}/{@code ResumeDispatchedContinuation},
-     *       under its {@link StandardTags.CallTag}.
-     * </ul>
-     * An explicit {@code atPut} send retains the selected method's result.
-     * Indexed assignment passes no result local and yields its own RHS.
-     */
-    private void emitIndexedProtocolOfLocals(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            String selector,
-            BytecodeLocal receiver,
-            java.util.List<BytecodeLocal> operands,
-            BytecodeLocal result,
-            BytecodeLocal childResult,
-            BytecodeLocal resumeValue,
-            boolean primitiveCarrierResult) {
-        BytecodeLocal selectedResult = result;
-
-        builder.beginIfThenElse();
-
-        builder.beginIsStandardIndexedSelection(selector);
-        builder.emitLoadLocal(receiver);
-        builder.endIsStandardIndexedSelection();
-
-        builder.beginBlock();
-        switch (selector) {
-            case "atPut" -> {
-                builder.beginSetItem();
-                builder.emitLoadLocal(operands.get(1));
-                builder.emitLoadLocal(receiver);
-                builder.emitLoadLocal(operands.get(0));
-                builder.endSetItem();
-                if (selectedResult != null) {
-                    builder.beginStoreLocal(selectedResult);
-                    builder.emitLoadLocal(operands.get(1));
-                    builder.endStoreLocal();
-                }
-            }
-            case "at" -> {
-                beginMutationResult(builder, selectedResult);
-                builder.beginBinarySubscript();
-                builder.emitLoadLocal(receiver);
-                builder.emitLoadLocal(operands.get(0));
-                builder.endBinarySubscript();
-                endMutationResult(builder, selectedResult);
-            }
-            case "size" -> {
-                beginMutationResult(builder, selectedResult);
-                builder.beginGetLen();
-                builder.emitLoadLocal(receiver);
-                builder.endGetLen();
-                endMutationResult(builder, selectedResult);
-            }
-            default -> throw new AssertionError(
-                    "Not an indexed selector: " + selector);
-        }
-        builder.endBlock();
-
-        builder.beginTag(StandardTags.CallTag.class);
-        builder.beginBlock();
-        BytecodeLocal callable =
-                builder.createLocal("indexedMethod", null);
-        emitGetMethod(builder, selector, receiver, callable);
-        emitDispatchedCall(
-                builder, callable, operands, null, childResult,
-                selectedResult, resumeValue, primitiveCarrierResult);
-        builder.emitClearLocal(callable);
-        builder.endBlock();
-        builder.endTag(StandardTags.CallTag.class);
-
-        builder.endIfThenElse();
     }
 
     private boolean isDirectUnaryCall(CanonicalExpression expression) {
@@ -5983,21 +5948,36 @@ final class CanonicalToBytecodeLowerer {
         if (stackStagedIndexedOperands(
                 assign.receiver(), java.util.List.of(assign.index(), assign.value()))) {
             // Receiver, index, then value, each exactly once; then atPut selection.
+            if (result == null) {
+                emitIndexedOperation(builder, "atPut", () -> {
+                    emitExpressionValue(builder, assign.receiver(),
+                            preparedCall, childResult, resumeValue, false);
+                    emitExpressionValue(builder, assign.index(),
+                            preparedCall, childResult, resumeValue, false);
+                    emitExpressionValue(builder, assign.value(),
+                            preparedCall, childResult, resumeValue, false);
+                }, null, childResult, resumeValue, false);
+                noteIndexedOutcomeReleased(assign, childResult);
+                builder.endBlock();
+                builder.endSourceSection();
+                return;
+            }
+            // The RHS is reused as the assignment's result, so the operands are bound.
             StackValue receiverValue = bindIndexedOperand(
                     builder, assign.receiver(), preparedCall, childResult, resumeValue);
             StackValue indexValue = bindIndexedOperand(
                     builder, assign.index(), preparedCall, childResult, resumeValue);
             StackValue rhsValue = bindIndexedOperand(
                     builder, assign.value(), preparedCall, childResult, resumeValue);
-            emitIndexedProtocolOfStackValues(
-                    builder, "atPut", receiverValue,
-                    java.util.List.of(indexValue, rhsValue),
-                    null, childResult, resumeValue, false);
-            if (result != null) {
-                builder.beginStoreLocal(result);
+            emitIndexedOperation(builder, "atPut", () -> {
+                builder.emitLoadStackValue(receiverValue);
+                builder.emitLoadStackValue(indexValue);
                 builder.emitLoadStackValue(rhsValue);
-                builder.endStoreLocal();
-            }
+            }, null, childResult, resumeValue, false);
+            noteIndexedOutcomeReleased(assign, childResult);
+            builder.beginStoreLocal(result);
+            builder.emitLoadStackValue(rhsValue);
+            builder.endStoreLocal();
             builder.endBlock();
             builder.endSourceSection();
             return;
@@ -6020,9 +6000,11 @@ final class CanonicalToBytecodeLowerer {
                 builder, assign.value(), value,
                 preparedCall, childResult, resumeValue, stager);
 
-        emitIndexedProtocolOfLocals(
-                builder, "atPut", receiver, java.util.List.of(index, value),
+        emitIndexedOperation(builder, "atPut",
+                () -> emitStagedIndexedOperands(
+                        builder, receiver, java.util.List.of(index, value)),
                 null, childResult, resumeValue, false);
+        noteIndexedOutcomeReleased(assign, childResult);
 
         if (result != null) {
             builder.beginStoreLocal(result);
@@ -8684,10 +8666,11 @@ final class CanonicalToBytecodeLowerer {
         builder.endYield();
         builder.endStoreLocal();
 
+        // The resumption value is consumed here and is cleared at this last use.
         builder.beginStoreLocal(childResult);
         builder.beginResumeDispatchedContinuation();
         builder.emitLoadLocal(childResult);
-        builder.emitLoadLocal(resumeValue);
+        builder.emitLoadAndClearTempLocal(resumeValue);
         builder.endResumeDispatchedContinuation();
         builder.endStoreLocal();
 
@@ -9467,7 +9450,8 @@ final class CanonicalToBytecodeLowerer {
      * <p>Every site owns its result and resumption locals. They are never
      * shared with the caller's continuation locals, so results of different
      * representations never meet in one frame slot. The resumption local is
-     * cleared once the composition completes. The completed (and, for an
+     * cleared by the composition at its only use, so a site that never
+     * suspends executes no clear for it. The completed (and, for an
      * ordering, validated) result is bound as a stack value, the result local
      * is cleared, and the bound value becomes the Block's value, so the
      * result does not stay live in the frame after it is consumed.
@@ -9494,7 +9478,6 @@ final class CanonicalToBytecodeLowerer {
         builder.endStoreLocal();
 
         emitDispatchedContinuationComposition(builder, numericResult, numericResume);
-        builder.emitClearLocal(numericResume);
 
         builder.beginBindStackValue();
         if (isOrderingSelector(send.message())) {

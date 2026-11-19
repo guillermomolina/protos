@@ -32,6 +32,7 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.diagnostics.ProtosDiagnosticTrace;
 import com.guillermomolina.protos.semantic.Canonicalizer;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
@@ -133,6 +134,292 @@ final class ProtosPerf006B5BSourceInstrumentationLocationTest {
         System.out.println("PERF006_B5B_CALL_TAG_SOURCE_EXACT=PASS");
         System.out.println("PERF006_B5B_PLAT034_EXPRESSION_EQUALS_STATEMENT=PASS");
         System.out.println("PERF006_B5B_PLAT034_ALWAYS_HALT_LOCATIONS=ZERO");
+    }
+
+    /**
+     * The fused indexed operations keep the Statement/Expression regions and the
+     * exact source sections of their sends, receiver, index and RHS; like the
+     * fused numeric operations they carry no CallTag, so a standard access is
+     * never presented as a dynamic invocation. Each operand is evaluated once,
+     * before its operation.
+     */
+    @Test
+    void fusedIndexedOperationsKeepSourceSectionsWithoutAnInvocationTag()
+            throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            String characters = "a[k + 1] = k * 2\na[k - 1]\na.size()";
+            Source source =
+                    Source.newBuilder(
+                                    ProtosLanguage.ID,
+                                    characters,
+                                    "perf006-b5b-indexed.protos")
+                            .build();
+            ProtosBytecodeRootNode root =
+                    new CanonicalToBytecodeLowerer(scope.language(), source)
+                            .lowerRoot(canonicalize(characters));
+            root.getRootNodes().ensureComplete();
+
+            TagTree tree = root.getBytecodeNode().getTagTree();
+            List<TagTree> statements =
+                    collectTags(tree, StandardTags.StatementTag.class);
+            assertEquals(
+                    List.of("a[k + 1] = k * 2", "a[k - 1]", "a.size()"),
+                    sourceCharacters(statements));
+            assertEquals(statements, collectTags(tree, StandardTags.ExpressionTag.class));
+            assertEquals(
+                    List.of(),
+                    sourceCharacters(collectTags(tree, StandardTags.CallTag.class)),
+                    "a fused indexed operation emits no separate CallTag");
+
+            List<com.oracle.truffle.api.bytecode.Instruction> instructions =
+                    root.getBytecodeNode().getInstructionsAsList();
+            int setItem = onlyInstruction(instructions, "c.SetItem");
+            int subscript = onlyInstruction(instructions, "c.BinarySubscript");
+            int length = onlyInstruction(instructions, "c.GetLen");
+            int index = onlyInstruction(instructions, "c.NumberAdd");
+            int rhs = onlyInstruction(instructions, "c.NumberMultiply");
+            int readIndex = onlyInstruction(instructions, "c.NumberSubtract");
+
+            assertEquals("a[k + 1] = k * 2", sectionOf(instructions, setItem));
+            assertEquals("a[k - 1]", sectionOf(instructions, subscript));
+            assertEquals("a.size()", sectionOf(instructions, length));
+            assertEquals("k + 1", sectionOf(instructions, index));
+            assertEquals("k * 2", sectionOf(instructions, rhs));
+            assertEquals("k - 1", sectionOf(instructions, readIndex));
+            // Index, then RHS, then the write: each evaluated once, before its operation.
+            assertTrue(index < rhs && rhs < setItem && setItem < readIndex
+                            && readIndex < subscript && subscript < length,
+                    instructions.toString());
+        }
+    }
+
+    /**
+     * With a debugger session attached, the instrumented indexed sites keep the
+     * guest result, evaluate receiver, index and RHS exactly once in order, and
+     * a redefined selection is still invoked inside the operation; an Error
+     * signaled by the redefined method still reaches the host as a guest
+     * Error. The terminal provenance of that Error is checked separately, in
+     * an execution without a debugger, by
+     * {@link #redefinedSelectionErrorLocatesTheAccessAndTheSignal()}.
+     */
+    @Test
+    void instrumentedIndexedSitesKeepResultsOrderAndRedefinedErrors() {
+        String trace = "trace: { value: 0 }\n"
+                + "step: (digit, value) => {\n"
+                + "    trace.value = trace.value * 10 + digit\n"
+                + "    value\n"
+                + "}\n";
+        String program = trace + """
+                Box: Array { at: (index) => { 100 + index } }
+                a: [1, 2, 3]
+                b: Box(1, 2)
+                step(1, a)[step(2, 0)] = step(3, 9)
+                r: step(4, a)[step(5, 0)] + step(6, b)[step(7, 1)]
+                s: step(8, a).size()
+                trace.value * 1000 + r + s
+                """;
+        try (Context context = Context.newBuilder(ProtosLanguage.ID)
+                        .option("protos.CoreRoot",
+                                Path.of("protos", "lib", "core").toAbsolutePath().toString())
+                        .build();
+                DebuggerSession session =
+                        Debugger.find(context.getEngine()).startSession(event -> {})) {
+            assertEquals(12345678113L, context.eval(ProtosLanguage.ID, program).asLong());
+
+            org.graalvm.polyglot.PolyglotException error = null;
+            try {
+                context.eval(ProtosLanguage.ID, REDEFINED_FAILING);
+            } catch (org.graalvm.polyglot.PolyglotException caught) {
+                error = caught;
+            }
+            assertNotNull(error, "the redefined at must signal its Error");
+            assertTrue(error.isGuestException(), error.toString());
+        }
+    }
+
+    private static final String REDEFINED_FAILING_NAME =
+            "perf006-b5b-redefined-failing.protos";
+    private static final String REDEFINED_FAILING = """
+            Failing: Array { at: (index) => { Error().signal() } }
+            f: Failing(1)
+            read: () => {
+                f[0]
+            }
+            read()
+            """;
+
+    private static final String RESUMED_FAILING_NAME =
+            "perf006-b5b-resumed-failing.protos";
+    private static final String RESUMED_FAILING = """
+            Late: Array {
+                at: (index) => {
+                    (() => { 7 }).future().value()
+                    Error().signal()
+                }
+            }
+            l: Late(1)
+            read: () => {
+                l[0]
+            }
+            read()
+            """;
+
+    private static final String SIGNAL = "Error().signal()";
+
+    /*
+     * The resumed scenario suspends and resumes the root task itself: an Error
+     * signaled inside a producer Task would reach the root only through a
+     * Future, and the terminal trace of a failed Future is consumer-local by
+     * contract, so it could not name the producer's access or signal.
+     *
+     * Terminal provenance, without a debugger: this is a separate execution
+     * through the terminal-outcome boundary, not the instrumented one above.
+     */
+    @Test
+    void redefinedSelectionErrorLocatesTheAccessAndTheSignal() throws Exception {
+        ProtosExecutionOutcome outcome = ProtosTestExecutionSupport.execute(
+                REDEFINED_FAILING_NAME, REDEFINED_FAILING, core().newModuleActivation());
+        assertAccessAndSignalLocations(
+                failedTrace(outcome), REDEFINED_FAILING_NAME, REDEFINED_FAILING, "f[0]");
+    }
+
+    @Test
+    void resumedSelectionErrorLocatesTheAccessAndTheSignal() throws Exception {
+        ProtosExecutionOutcome outcome = ProtosTestExecutionSupport.execute(
+                RESUMED_FAILING_NAME, RESUMED_FAILING, core().newModuleActivation());
+        assertAccessAndSignalLocations(
+                failedTrace(outcome), RESUMED_FAILING_NAME, RESUMED_FAILING, "l[0]");
+    }
+
+    private static ProtosDiagnosticTrace failedTrace(ProtosExecutionOutcome outcome) {
+        assertEquals(ProtosExecutionOutcome.State.FAILED, outcome.state(),
+                () -> "value=" + outcome.value());
+        return outcome.failureDiagnosticTrace().orElseThrow();
+    }
+
+    /*
+     * The terminal diagnostic trace of an Error signaled by a selected indexed
+     * behavior names two distinct positions of the scenario's own source,
+     * innermost first: the signal inside the selected method body and, in an
+     * outer frame, the indexed access that invoked the behavior. Positions are
+     * coordinates: each frame must be on the exact line holding its expression
+     * and at a column inside that expression; any other line or column of the
+     * source is rejected, and the signal position never stands in for the
+     * access position.
+     */
+    private static void assertAccessAndSignalLocations(
+            ProtosDiagnosticTrace trace, String sourceName, String source, String access) {
+        List<ProtosDiagnosticTrace.Frame> frames = trace.frames();
+        int accessFrame = -1;
+        for (int i = 0; i < frames.size() && accessFrame < 0; i++) {
+            if (locatedAt(frames.get(i), sourceName, source, access)) {
+                accessFrame = i;
+            }
+        }
+        assertTrue(accessFrame >= 0,
+                "no guest frame located at " + access + ": " + framesOf(frames));
+        boolean signalFrame = false;
+        for (int i = 0; i < accessFrame && !signalFrame; i++) {
+            signalFrame = locatedAt(frames.get(i), sourceName, source, SIGNAL);
+        }
+        assertTrue(signalFrame,
+                "no signal frame distinct from and inner to " + access + ": "
+                        + framesOf(frames));
+    }
+
+    /* The frame's line holds the only occurrence of the expression and its column lies inside it. */
+    private static boolean locatedAt(
+            ProtosDiagnosticTrace.Frame frame, String sourceName, String source, String expression) {
+        if (!sourceName.equals(frame.sourceName())) {
+            return false;
+        }
+        String[] lines = source.split("\n", -1);
+        int line = -1;
+        for (int i = 0; i < lines.length; i++) {
+            if (lines[i].contains(expression)) {
+                assertEquals(-1, line, expression + " occurs on more than one line");
+                line = i + 1;
+            }
+        }
+        assertTrue(line > 0, expression + " does not occur in " + sourceName);
+        int firstColumn = lines[line - 1].indexOf(expression) + 1;
+        int lastColumn = firstColumn + expression.length() - 1;
+        return frame.line() == line
+                && frame.column() >= firstColumn && frame.column() <= lastColumn;
+    }
+
+    private static List<String> framesOf(List<ProtosDiagnosticTrace.Frame> frames) {
+        return frames.stream()
+                .map(frame -> frame.sourceName() + ":" + frame.line() + ":" + frame.column()
+                        + frame.knownLabel().map(label -> " " + label).orElse(""))
+                .toList();
+    }
+
+    /**
+     * With a debugger session attached, a selected {@code at} that suspends
+     * inside a Task resumes without repeating the receiver or index
+     * operands, and an Error it signals after resuming still reaches the
+     * host as a guest Error. The terminal provenance of that Error is checked
+     * separately, in an execution without a debugger, by
+     * {@link #resumedSelectionErrorLocatesTheAccessAndTheSignal()}.
+     */
+    @Test
+    void instrumentedSuspendingIndexedSiteKeepsItsAccessSourceAcrossResumption() {
+        String trace = "trace: { value: 0 }\n"
+                + "step: (digit, value) => {\n"
+                + "    trace.value = trace.value * 10 + digit\n"
+                + "    value\n"
+                + "}\n";
+        String resuming = trace + """
+                Lazy: Array {
+                    at: (index) => {
+                        trace.value = trace.value * 10 + 9
+                        (() => { 40 + index }).future().value()
+                    }
+                }
+                l: Lazy(1, 2, 3)
+                read: () => { step(1, l)[step(2, 1)] }
+                r: (() => { read() }).future().value()
+                trace.value * 100 + r
+                """;
+        try (Context context = Context.newBuilder(ProtosLanguage.ID)
+                        .option("protos.CoreRoot",
+                                Path.of("protos", "lib", "core").toAbsolutePath().toString())
+                        .build();
+                DebuggerSession session =
+                        Debugger.find(context.getEngine()).startSession(event -> {})) {
+            // Receiver (1), index (2) and the selected body (9) each run once.
+            assertEquals(12941L, context.eval(ProtosLanguage.ID, resuming).asLong());
+
+            org.graalvm.polyglot.PolyglotException error = null;
+            try {
+                context.eval(ProtosLanguage.ID, RESUMED_FAILING);
+            } catch (org.graalvm.polyglot.PolyglotException caught) {
+                error = caught;
+            }
+            assertNotNull(error, "the resumed at must signal its Error");
+            assertTrue(error.isGuestException(), error.toString());
+        }
+    }
+
+    private static int onlyInstruction(
+            List<com.oracle.truffle.api.bytecode.Instruction> instructions, String prefix) {
+        int found = -1;
+        for (int i = 0; i < instructions.size(); i++) {
+            if (ProtosInstructionNames.of(instructions.get(i)).startsWith(prefix)) {
+                assertEquals(-1, found, "more than one " + prefix + ": " + instructions);
+                found = i;
+            }
+        }
+        assertTrue(found >= 0, "missing " + prefix + ": " + instructions);
+        return found;
+    }
+
+    private static String sectionOf(
+            List<com.oracle.truffle.api.bytecode.Instruction> instructions, int index) {
+        SourceSection section = instructions.get(index).getSourceSection();
+        assertNotNull(section, instructions.get(index).toString());
+        return section.getCharacters().toString();
     }
 
     /**

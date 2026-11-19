@@ -28,9 +28,10 @@ import org.junit.jupiter.api.Test;
 
 /**
  * I115: bracket reads, indexed assignment and size over the
- * Bytecode DSL operations. Standard Array/Bytes receivers whose selected
- * behavior is the standard one use BinarySubscript/SetItem/GetLen; every
- * other receiver uses GetMethod and Call*Method with composed continuations.
+ * Bytecode DSL operations. BinarySubscript/SetItem/GetLen own the selection:
+ * standard Array/Bytes behavior executes in their standard specializations,
+ * and every other selected behavior is invoked by their fallback, with the
+ * result composed as a possible continuation.
  */
 final class ProtosI115IndexedOperationTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
@@ -249,15 +250,24 @@ final class ProtosI115IndexedOperationTest {
     }
 
     @Test
-    void dynamicPathsUseGetMethodAndCallMethodBehindTheStandardGuard()
+    void indexedOperationsOwnTheirSelectionWithoutAnExternalGuard()
             throws Exception {
         String source = """
+                Box: {
+                    at: (index) => { index + 100 }
+                    atPut: (index, value) => { value * 2 }
+                    size: () => { 9 }
+                }
                 run: () => {
                     m: Map()
                     m["k"] = 1
+                    im: IdentityMap()
+                    im[m] = 2
                     a: [5, 6]
                     a[0] = 7
-                    m["k"] + m.size() + a[0] + a.size()
+                    b: Encoding.UTF8.encode("jobs")
+                    b[0] = 107
+                    m["k"] + m.size() + im[m] + im.size() + a[0] + a.size() + b[0] + b.size() + Box[1] + Box.atPut(0, 4) + Box.size()
                 }
                 """;
         try (ProtosStandaloneHostedSession session = open(source)) {
@@ -265,22 +275,720 @@ final class ProtosI115IndexedOperationTest {
                     session.prepareTopLevel("run").hostExecutableForTesting()
                             .target.getRootNode();
             List<String> names = names(run);
-            for (String operation : List.of(
-                    "c.IsStandardIndexedSelection",
-                    "c.SetItem",
-                    "c.BinarySubscript",
-                    "c.GetLen",
-                    "c.GetMethod",
-                    "c.CallNilaryMethod",
-                    "c.CallUnaryMethod",
-                    "c.CallBinaryMethod")) {
+            for (String operation : List.of("c.SetItem", "c.BinarySubscript", "c.GetLen")) {
                 assertTrue(names.stream().anyMatch(name -> name.startsWith(operation)),
                         "missing " + operation + " in " + names);
             }
-            assertTrue(names.contains("yield"), "dynamic path is not composed: " + names);
-            assertEquals(11L, session.prepareTopLevel("run")
-                    .executable().execute().asLong());
+            assertTrue(names.stream().noneMatch(name -> name.startsWith("c.IsStandardIndexedSelection")),
+                    "unexpected external selector in " + names);
+            for (int i = 0; i < 5; i++) {
+                assertEquals(1L + 1L + 2L + 1L + 7L + 2L + 107L + 4L + 101L + 8L + 9L,
+                        session.prepareTopLevel("run").executable().execute().asLong());
+            }
         }
+    }
+
+    @Test
+    void simpleIndexedAccessesEmitOperandsDirectlyIntoTheOperation()
+            throws Exception {
+        String source = """
+                read: (a, i) => { a[i] }
+                write: (a, i, v) => { a[i] = v; 0 }
+                length: (a) => { a.size() }
+                """;
+        try (ProtosStandaloneHostedSession session = open(source)) {
+            for (String function : List.of("read", "write", "length")) {
+                ProtosBytecodeRootNode root = (ProtosBytecodeRootNode)
+                        session.prepareTopLevel(function).hostExecutableForTesting()
+                                .target.getRootNode();
+                List<String> names = names(root);
+                assertTrue(names.stream().noneMatch(name -> name.startsWith("c.BindStackValue")
+                                || name.startsWith("load.stackvalue")
+                                || name.startsWith("store.stackvalue")),
+                        function + " stages operands only to transport them: " + names);
+                // No external selector and no standard/dynamic branch around the operation.
+                for (String absent : List.of(
+                        "c.IsStandardIndexedSelection",
+                        "c.GetMethod",
+                        "c.CallNilaryMethod",
+                        "c.CallUnaryMethod",
+                        "c.CallBinaryMethod")) {
+                    assertTrue(names.stream().noneMatch(name -> name.startsWith(absent)),
+                            function + " keeps external " + absent + ": " + names);
+                }
+            }
+        }
+    }
+
+    /*
+     * Independent budgets around each fused indexed operation of a simple
+     * root: fused operations, external selection, external dispatch,
+     * continuation checks, result stores, stack transport and the cleanup of
+     * the operation's own result local.
+     * Every class except the fused operation itself is an upper bound, so a
+     * correct reduction to zero (no result local, no composition, no
+     * cleanup) still passes. Ownership of a composition is structural (see
+     * IndexedCensus), never the nearest preceding producer.
+     */
+    @Test
+    void fusedIndexedOperationsCarryAtMostTheirOwnResultTransport()
+            throws Exception {
+        String source = """
+                g: () => { 0 }
+                read: (a, i) => { a[i] }
+                discardRead: (a, i) => { a[i]; 0 }
+                write: (a, i, v) => { a[i] = v }
+                discardWrite: (a, i, v) => { a[i] = v; 0 }
+                put: (a, i, v) => { a.atPut(i, v) }
+                length: (a) => { a.size() }
+                callThenRead: (a, i) => { g(); a[i] }
+                readThenConstant: (a, i) => {
+                    a[i]
+                    0
+                }
+                writeThenConstant: (a, i, v) => {
+                    a[i] = v
+                    0
+                }
+                discardPut: (a, i, v) => { a.atPut(i, v); 0 }
+                discardLength: (a) => { a.size(); 0 }
+                readThenCall: (a, i) => { a[i]; g() }
+                callThenWrite: (a, i, v) => { g(); a[i] = v }
+                callThenPut: (a, i, v) => { g(); a.atPut(i, v) }
+                callThenLength: (a) => { g(); a.size() }
+                """;
+        List<String> withCall = List.of(
+                "callThenRead", "readThenCall", "callThenWrite", "callThenPut",
+                "callThenLength");
+        List<String> answeredWrites = List.of("write", "callThenWrite");
+        try (ProtosStandaloneHostedSession session = open(source)) {
+            for (String function : List.of(
+                    "read", "discardRead", "write", "discardWrite", "put", "length",
+                    "callThenRead", "readThenConstant", "writeThenConstant",
+                    "discardPut", "discardLength", "readThenCall", "callThenWrite",
+                    "callThenPut", "callThenLength")) {
+                IndexedCensus census = IndexedCensus.of(root(session, function));
+                List<String> names = census.names;
+                List<Integer> operations = census.positions(
+                        ProtosI115IndexedOperationTest::isIndexedOperation);
+                assertEquals(1, operations.size(), function + ": " + names);
+                int operation = operations.get(0);
+                String operand = names.get(operation - 1);
+                assertTrue(!operand.startsWith("store.local") && !operand.startsWith("clear.local"),
+                        function + " stages an operand before the operation: " + names);
+
+                assertEquals(0L, census.count(name -> name.startsWith("c.IsStandardIndexedSelection")),
+                        function + " keeps the external selector: " + names);
+                long outerCalls = withCall.contains(function) ? 1L : 0L;
+                assertTrue(census.count(IndexedCensus::isExternalDispatch) <= outerCalls,
+                        function + " keeps external dispatch: " + names);
+
+                List<Integer> owned = census.ownedCompositions(operation);
+                assertTrue(owned.size() <= 1,
+                        function + " composes the operation more than once: " + names);
+                assertTrue(census.count(name -> name.startsWith("c.IsContinuation"))
+                                <= census.positions(ProtosI115IndexedOperationTest::isProducer).size(),
+                        function + " checks more continuations than producers: " + names);
+
+                assertTrue(census.resultStores(operation) <= 2,
+                        function + " stores its result more than into one temporary"
+                                + " and one result local: " + names);
+                assertTrue(census.compositionStores() <= 2L * census.compositionCount(),
+                        function + " stores more than resume and write-back per composition: "
+                                + names);
+
+                assertEquals(0L, census.count(name -> name.equals("dup")),
+                        function + " duplicates an operand: " + names);
+                long binds = census.count(name -> name.startsWith("c.BindStackValue"));
+                long stackLoads = census.count(name -> name.startsWith("load.stackvalue"));
+                if (answeredWrites.contains(function)) {
+                    // The answered RHS is reused: each operand is bound at most once
+                    // and loaded at most once, plus the single RHS answer.
+                    assertTrue(binds <= 3 && stackLoads <= 4,
+                            function + " transports beyond its reused RHS: " + names);
+                } else {
+                    assertEquals(0L, binds + stackLoads
+                                    + census.count(name -> name.contains("stackvalue")),
+                            function + " binds operands it consumes once: " + names);
+                }
+
+                // Cleanup is checked only on the local the indexed operation's
+                // own result is stored into; parameter and other-local clears
+                // are not charged to the operation.
+                census.assertResultLocalReleased(operation, function);
+                assertTrue(census.cleanupInsideComposition() == 0,
+                        function + " clears a local inside a composition: " + names);
+            }
+        }
+    }
+
+    /*
+     * One root reuses its continuation scratch for several indexed reads,
+     * writes, sizes and calls before its final value: releasing the indexed
+     * result at its last use never disturbs a later operand or result, both
+     * when the final value is an indexed read and when an indexed write ends
+     * a discarded prefix.
+     */
+    @Test
+    void reusedScratchKeepsLaterOperandsAndFinalValue() throws Exception {
+        String source = """
+                g: () => { 0 }
+                reuseThenRead: (a, i) => {
+                    a[i] = a[i] + 1
+                    g()
+                    a[i + 1] = a[i] * 2
+                    a.size()
+                    a[i + 1]
+                }
+                reuseThenConstant: (a, i) => {
+                    a[i] = a.size()
+                    a[i + 1]
+                    a[i + 1] = a[i] + 5
+                    0
+                }
+                run: () => {
+                    a: [1, 2, 3]
+                    r: reuseThenRead(a, 0)
+                    b: [5, 6, 7]
+                    c: reuseThenConstant(b, 1)
+                    first: (r == 4) && (a[0] == 2) && (a[1] == 4) && (a[2] == 3)
+                    first && (c == 0) && (b[0] == 5) && (b[1] == 3) && (b[2] == 8)
+                }
+                """;
+        try (ProtosStandaloneHostedSession session = open(source)) {
+            assertTrue(session.prepareTopLevel("run").executable().execute().asBoolean());
+        }
+    }
+
+    /*
+     * Nested indexed and numeric operations: the arithmetic computing an
+     * index or a RHS is distinguished from the arithmetic consuming an
+     * indexed result by bytecode order (an operand is emitted before the
+     * operation consuming it) and, where available, by source sections.
+     * Every semantic occurrence is emitted once, no external indexed
+     * selector returns, and each composition is owned by at most one
+     * producer, so a numeric continuation is never imputed to an indexed
+     * operation or vice versa.
+     */
+    @Test
+    void nestedIndexedAndNumericOperationsOwnTheirCostsSeparately()
+            throws Exception {
+        String source = """
+                read: (a, k) => { a[k + 1] }
+                write: (a, k, v) => { a[k + 1] = v * 2 }
+                chain: (a, k) => { a[k + 1] + a[k - 1] }
+                runNested: () => {
+                    a: [10, 20, 30]
+                    r: read(a, 0)
+                    w: write(a, 0, 4)
+                    c: chain(a, 1)
+                    (r == 20) && (w == 8) && (a[1] == 8) && (c == 40)
+                }
+                """;
+        try (ProtosStandaloneHostedSession session = open(source)) {
+            IndexedCensus read = IndexedCensus.of(root(session, "read"));
+            assertProducers(read, List.of("c.NumberAdd", "c.BinarySubscript"));
+            assertIndexOperandInside(read, 0, 1);
+
+            IndexedCensus write = IndexedCensus.of(root(session, "write"));
+            assertProducers(write, List.of("c.NumberAdd", "c.NumberMultiply", "c.SetItem"));
+            assertIndexOperandInside(write, 0, 2);
+            assertIndexOperandInside(write, 1, 2);
+
+            IndexedCensus chain = IndexedCensus.of(root(session, "chain"));
+            assertProducers(chain, List.of(
+                    "c.NumberAdd", "c.BinarySubscript",
+                    "c.NumberSubtract", "c.BinarySubscript",
+                    "c.NumberAdd"));
+            assertIndexOperandInside(chain, 0, 1);
+            assertIndexOperandInside(chain, 2, 3);
+            assertConsumerCovers(chain, 4, 1, 3);
+
+            for (IndexedCensus census : List.of(read, write, chain)) {
+                assertEquals(0L, census.count(name -> name.startsWith("c.IsStandardIndexedSelection")),
+                        "external indexed selector: " + census.names);
+                assertEquals(0L, census.count(IndexedCensus::isExternalDispatch),
+                        "external dispatch: " + census.names);
+                List<Integer> producers = census.positions(ProtosI115IndexedOperationTest::isProducer);
+                java.util.Set<Integer> claimed = new java.util.HashSet<>();
+                for (int producer : producers) {
+                    List<Integer> owned = census.ownedCompositions(producer);
+                    assertTrue(owned.size() <= 1,
+                            census.names.get(producer) + " composes more than once: " + census.names);
+                    for (int composition : owned) {
+                        assertTrue(claimed.add(composition),
+                                "composition imputed to two producers: " + census.names);
+                    }
+                }
+                assertTrue(census.compositionCount() <= producers.size(), census.names.toString());
+                assertTrue(census.cleanupInsideComposition() == 0, census.names.toString());
+            }
+            assertTrue(session.prepareTopLevel("runNested").executable().execute().asBoolean());
+        }
+    }
+
+    private static void assertProducers(IndexedCensus census, List<String> expected) {
+        List<String> producers = census.positions(ProtosI115IndexedOperationTest::isProducer)
+                .stream().map(census.names::get).toList();
+        assertEquals(expected.size(), producers.size(), census.names.toString());
+        for (int i = 0; i < expected.size(); i++) {
+            assertTrue(producers.get(i).startsWith(expected.get(i)),
+                    "producer " + i + " is " + producers.get(i) + ", expected "
+                            + expected.get(i) + ": " + census.names);
+        }
+    }
+
+    /*
+     * The operand producer (by producer ordinal) precedes the operation
+     * consuming it; when both carry distinct source sections, the operand's
+     * section lies within the operation's.
+     */
+    private static void assertIndexOperandInside(
+            IndexedCensus census, int operandOrdinal, int operationOrdinal) {
+        List<Integer> producers = census.positions(ProtosI115IndexedOperationTest::isProducer);
+        int operand = producers.get(operandOrdinal);
+        int operation = producers.get(operationOrdinal);
+        assertTrue(census.bci(operand) < census.bci(operation), census.names.toString());
+        com.oracle.truffle.api.source.SourceSection inner = census.section(operand);
+        com.oracle.truffle.api.source.SourceSection outer = census.section(operation);
+        if (inner != null && outer != null && !inner.equals(outer)) {
+            assertTrue(outer.getCharIndex() <= inner.getCharIndex()
+                            && inner.getCharEndIndex() <= outer.getCharEndIndex(),
+                    "operand section " + inner.getCharacters() + " outside "
+                            + outer.getCharacters() + ": " + census.names);
+        }
+    }
+
+    /*
+     * The consuming operation follows both indexed operands; when sections
+     * are available it covers both of them.
+     */
+    private static void assertConsumerCovers(
+            IndexedCensus census, int consumerOrdinal, int leftOrdinal, int rightOrdinal) {
+        List<Integer> producers = census.positions(ProtosI115IndexedOperationTest::isProducer);
+        int consumer = producers.get(consumerOrdinal);
+        for (int ordinal : List.of(leftOrdinal, rightOrdinal)) {
+            int operand = producers.get(ordinal);
+            assertTrue(census.bci(operand) < census.bci(consumer), census.names.toString());
+            com.oracle.truffle.api.source.SourceSection inner = census.section(operand);
+            com.oracle.truffle.api.source.SourceSection outer = census.section(consumer);
+            if (inner != null && outer != null && !inner.equals(outer)) {
+                assertTrue(outer.getCharIndex() <= inner.getCharIndex()
+                                && inner.getCharEndIndex() <= outer.getCharEndIndex(),
+                        "consumer " + outer.getCharacters() + " does not cover "
+                                + inner.getCharacters() + ": " + census.names);
+            }
+        }
+    }
+
+    private static boolean isIndexedOperation(String name) {
+        return name.startsWith("c.BinarySubscript")
+                || name.startsWith("c.SetItem")
+                || name.startsWith("c.GetLen");
+    }
+
+    private static boolean isProducer(String name) {
+        return isIndexedOperation(name)
+                || name.startsWith("c.Number")
+                || name.startsWith("c.Call");
+    }
+
+    /*
+     * Instructions of one root in bytecode-index order, with structural
+     * composition ownership. A composition (an IsContinuation and its loop up
+     * to the next branch.backward) is owned by a producer only when its
+     * checked value is that producer's result: either the IsContinuation
+     * consumes the producer's stack result directly, or it consumes a
+     * load.local of the local the producer's result was stored into, with no
+     * other producer storing into that local in between. A composition that
+     * matches neither condition is owned by nobody.
+     */
+    private static final class IndexedCensus {
+        final List<com.oracle.truffle.api.bytecode.Instruction> instructions;
+        final List<String> names;
+
+        private IndexedCensus(List<com.oracle.truffle.api.bytecode.Instruction> instructions) {
+            this.instructions = instructions;
+            this.names = instructions.stream().map(ProtosInstructionNames::of).toList();
+            for (int i = 1; i < instructions.size(); i++) {
+                assertTrue(bci(i - 1) < bci(i), "instructions out of bytecode order: " + names);
+            }
+        }
+
+        static IndexedCensus of(ProtosBytecodeRootNode root) {
+            return new IndexedCensus(root.getBytecodeNode().getInstructionsAsList());
+        }
+
+        static boolean isExternalDispatch(String name) {
+            return name.startsWith("c.GetMethod")
+                    || name.startsWith("c.CallNilaryMethod")
+                    || name.startsWith("c.CallUnaryMethod")
+                    || name.startsWith("c.CallBinaryMethod")
+                    || name.startsWith("c.CallRequest");
+        }
+
+        int bci(int position) {
+            return instructions.get(position).getBytecodeIndex();
+        }
+
+        com.oracle.truffle.api.source.SourceSection section(int position) {
+            return instructions.get(position).getSourceSection();
+        }
+
+        long count(java.util.function.Predicate<String> predicate) {
+            return names.stream().filter(predicate).count();
+        }
+
+        List<Integer> positions(java.util.function.Predicate<String> predicate) {
+            List<Integer> found = new java.util.ArrayList<>();
+            for (int i = 0; i < names.size(); i++) {
+                if (predicate.test(names.get(i))) {
+                    found.add(i);
+                }
+            }
+            return found;
+        }
+
+        private List<Integer> locals(int position) {
+            return instructions.get(position).getArguments().stream()
+                    .filter(argument -> argument.getKind()
+                            == com.oracle.truffle.api.bytecode.Instruction.Argument.Kind.LOCAL_OFFSET)
+                    .map(com.oracle.truffle.api.bytecode.Instruction.Argument::asLocalOffset)
+                    .toList();
+        }
+
+        /* The local the producer's result is stored into, or null. */
+        private Integer resultLocal(int producer) {
+            if (producer + 1 < names.size() && names.get(producer + 1).startsWith("store.local")) {
+                List<Integer> stored = locals(producer + 1);
+                return stored.isEmpty() ? null : stored.get(0);
+            }
+            return null;
+        }
+
+        List<Integer> ownedCompositions(int producer) {
+            List<Integer> owned = new java.util.ArrayList<>();
+            Integer local = resultLocal(producer);
+            for (int j = producer + 1; j < names.size(); j++) {
+                if (!names.get(j).startsWith("c.IsContinuation")) {
+                    continue;
+                }
+                if (j == producer + 1) {
+                    owned.add(j);
+                    continue;
+                }
+                if (local == null || !names.get(j - 1).startsWith("load.local")
+                        || !locals(j - 1).contains(local)) {
+                    continue;
+                }
+                boolean overwritten = false;
+                for (int k = producer + 2; k < j - 1 && !overwritten; k++) {
+                    overwritten = names.get(k).startsWith("store.local")
+                            && locals(k).contains(local)
+                            && isProducer(names.get(k - 1));
+                }
+                if (!overwritten) {
+                    owned.add(j);
+                }
+            }
+            return owned;
+        }
+
+        long compositionCount() {
+            return count(name -> name.startsWith("c.IsContinuation"));
+        }
+
+        private boolean[] compositionMask() {
+            boolean[] inside = new boolean[names.size()];
+            boolean in = false;
+            for (int i = 0; i < names.size(); i++) {
+                if (names.get(i).startsWith("c.IsContinuation")) {
+                    in = true;
+                }
+                inside[i] = in;
+                if (names.get(i).startsWith("branch.backward")) {
+                    in = false;
+                }
+            }
+            return inside;
+        }
+
+        /*
+         * Stores after the operation and outside any composition loop, up to
+         * the next producer: stores of later producers are not attributed to
+         * this operation.
+         */
+        long resultStores(int operation) {
+            boolean[] inside = compositionMask();
+            long stores = 0;
+            for (int i = operation + 1; i < names.size() && !isProducer(names.get(i)); i++) {
+                if (!inside[i] && names.get(i).startsWith("store.local")) {
+                    stores++;
+                }
+            }
+            return stores;
+        }
+
+        long compositionStores() {
+            boolean[] inside = compositionMask();
+            long stores = 0;
+            for (int i = 0; i < names.size(); i++) {
+                if (inside[i] && names.get(i).startsWith("store.local")) {
+                    stores++;
+                }
+            }
+            return stores;
+        }
+
+        /*
+         * The producer's result local need not exist. When it does, it is
+         * consumed (loaded, or loaded by its last use) or cleared before the
+         * root's final return, and it never receives two explicit clears
+         * without a new write in between. A load that clears the local is
+         * its last use, so no clear may follow it without a new write. Only
+         * instructions publishing the local's offset are attributed to it,
+         * so parameter and other-local clears are never charged here.
+         */
+        void assertResultLocalReleased(int producer, String label) {
+            Integer local = resultLocal(producer);
+            if (local == null) {
+                return;
+            }
+            int lastReturn = -1;
+            for (int i = 0; i < names.size(); i++) {
+                if (names.get(i).startsWith("return")) {
+                    lastReturn = i;
+                }
+            }
+            boolean released = false;
+            boolean cleared = false;
+            for (int i = producer + 2; i < names.size(); i++) {
+                if (!locals(i).contains(local)) {
+                    continue;
+                }
+                String name = names.get(i);
+                if (name.startsWith("store.local")) {
+                    cleared = false;
+                } else if (name.startsWith("clear.local")) {
+                    assertTrue(!cleared, label + " clears the result local " + local
+                            + " twice without a new write: " + names);
+                    cleared = true;
+                    released |= i < lastReturn;
+                } else if (name.startsWith("c.LoadAndClearTempLocal")) {
+                    assertTrue(!cleared, label + " loads the released result local "
+                            + local + " without a new write: " + names);
+                    cleared = true;
+                    released |= i < lastReturn;
+                } else if (name.startsWith("load.local")) {
+                    released |= i < lastReturn;
+                }
+            }
+            assertTrue(released, label + " leaves its result local " + local
+                    + " neither consumed nor cleared before the return: " + names);
+        }
+
+        long cleanupInsideComposition() {
+            boolean[] inside = compositionMask();
+            long cleanup = 0;
+            for (int i = 0; i < names.size(); i++) {
+                if (inside[i] && names.get(i).startsWith("clear.local")) {
+                    cleanup++;
+                }
+            }
+            return cleanup;
+        }
+    }
+
+    private static ProtosBytecodeRootNode root(
+            ProtosStandaloneHostedSession session, String function) throws Exception {
+        return (ProtosBytecodeRootNode) session.prepareTopLevel(function)
+                .hostExecutableForTesting().target.getRootNode();
+    }
+
+    @Test
+    void standardAccessesConsumedAndDiscarded() {
+        assertTrue(evalBoolean("""
+                a: [1, 2, 3]
+                k: 0
+                a[k]
+                a[1] = 20
+                a.size()
+                a.atPut(0, 10)
+                x: a[1]
+                y: (a[2] = 30)
+                z: a.atPut(0, 11)
+                (x == 20) && (y == 30) && (z == 11) && (a[0] == 11) && (a[2] == 30) && (a.size() == 3)
+                """));
+        assertTrue(signals("a: [1]\na[5]\nnull"));
+        assertTrue(signals("a: [1]\na[5] = 2\nnull"));
+        assertTrue(signals("a: [1]\na.freeze()\na.atPut(0, 2)\nnull"));
+    }
+
+    /**
+     * Redefined {@code atPut} and {@code size} that suspend inside a Task run
+     * once each: the resumption completes the selected invocation and never
+     * repeats it. Indexed assignment still answers its RHS, the explicit send
+     * answers the selected result.
+     */
+    @Test
+    void suspendingSelectedAtPutAndSizeRunOnceAndResume() {
+        assertEquals(12054207L, evalLong(TRACE + """
+                Lazy: Array {
+                    atPut: (index, value) => {
+                        trace.value = trace.value + 1
+                        (() => { 42 }).future().value()
+                    }
+                    size: () => {
+                        trace.value = trace.value + 10
+                        (() => { 7 }).future().value()
+                    }
+                }
+                l: Lazy(1, 2, 3)
+                write: () => { l[0] = 5 }
+                put: () => { l.atPut(0, 5) }
+                length: () => { l.size() }
+                w: (() => { write() }).future().value()
+                p: (() => { put() }).future().value()
+                n: (() => { length() }).future().value()
+                trace.value * 1000000 + w * 10000 + p * 100 + n
+                """));
+    }
+
+    @Test
+    void errorsSignaledByRedefinedAtPutAndSizeReachTheHandler() {
+        assertTrue(signals("Box: Array { atPut: (index, value) => { Error().signal() } }\n"
+                + "b: Box(1)\nb[0] = 2"));
+        assertTrue(signals("Box: Array { atPut: (index, value) => { Error().signal() } }\n"
+                + "b: Box(1)\nb.atPut(0, 2)"));
+        assertTrue(signals("Box: Array { size: () => { Error().signal() } }\n"
+                + "b: Box(1)\nb.size()"));
+        assertEquals(43L, evalLong("f: () => {\n"
+                + "    Box: Array { atPut: (index, value) => { ^43 } }\n"
+                + "    b: Box(1)\n    b[0] = 1\n    0\n}\nf()"));
+        assertEquals(44L, evalLong("f: () => {\n"
+                + "    Box: Array { size: () => { ^44 } }\n"
+                + "    b: Box(1)\n    b.size()\n    0\n}\nf()"));
+    }
+
+    @Test
+    void indexedAssignmentWhoseRhsIsReusedBindsItsOperands() throws Exception {
+        String source = """
+                reuse: (a, i, v) => { (a[i] = v) }
+                discard: (a, i, v) => { a[i] = v; 0 }
+                """;
+        try (ProtosStandaloneHostedSession session = open(source)) {
+            ProtosBytecodeRootNode reuse = (ProtosBytecodeRootNode)
+                    session.prepareTopLevel("reuse").hostExecutableForTesting()
+                            .target.getRootNode();
+            ProtosBytecodeRootNode discard = (ProtosBytecodeRootNode)
+                    session.prepareTopLevel("discard").hostExecutableForTesting()
+                            .target.getRootNode();
+            assertTrue(names(reuse).stream().anyMatch(name -> name.startsWith("c.SetItem")),
+                    names(reuse).toString());
+            long reuseBinds = names(reuse).stream()
+                    .filter(name -> name.contains("stackvalue") || name.startsWith("c.BindStackValue"))
+                    .count();
+            long discardBinds = names(discard).stream()
+                    .filter(name -> name.contains("stackvalue") || name.startsWith("c.BindStackValue"))
+                    .count();
+            assertTrue(reuseBinds > discardBinds,
+                    "reused RHS is not bound: " + names(reuse) + " / " + names(discard));
+        }
+        assertEquals(7L, evalLong("box: { atPut: (index, value) => { 999 } }\n(box[0] = 7)"));
+        assertEquals(999L, evalLong("box: { atPut: (index, value) => { 999 } }\nbox.atPut(0, 7)"));
+    }
+
+    @Test
+    void warmedIndexedSiteQuickensPrimitiveStorageReads() throws Exception {
+        String source = """
+                longs: [1, 2, 3]
+                doubles: [1.5, 2.5]
+                booleans: [true, false]
+                readLong: () => { longs[1] }
+                readDouble: () => { doubles[1] }
+                readBoolean: () => { booleans[1] }
+                """;
+        try (ProtosStandaloneHostedSession session = open(source)) {
+            for (int i = 0; i < 20; i++) {
+                assertEquals(2L, session.prepareTopLevel("readLong").executable().execute().asLong());
+                assertEquals(2.5, session.prepareTopLevel("readDouble").executable().execute().asDouble());
+                assertTrue(!session.prepareTopLevel("readBoolean").executable().execute().asBoolean());
+            }
+            assertQuickenedSubscript(session, "readLong", "LongStorage");
+            assertQuickenedSubscript(session, "readDouble", "DoubleStorage");
+            ProtosBytecodeRootNode booleans = (ProtosBytecodeRootNode)
+                    session.prepareTopLevel("readBoolean").hostExecutableForTesting()
+                            .target.getRootNode();
+            assertTrue(names(booleans).stream().anyMatch(name -> name.startsWith("c.BinarySubscript")),
+                    names(booleans).toString());
+        }
+    }
+
+    @Test
+    void sameSiteStandardRedefinedStandardKeepsTheStandardSpecialization()
+            throws Exception {
+        String source = """
+                values: [1, 2, 3]
+                read: () => { values[1] }
+                redefine: () => { values.at: (index) => { 50 } }
+                restore: () => { values.removeSlot("at") }
+                """;
+        try (ProtosStandaloneHostedSession session = open(source)) {
+            for (int i = 0; i < 10; i++) {
+                assertEquals(2L, session.prepareTopLevel("read").executable().execute().asLong());
+            }
+            session.prepareTopLevel("redefine").executable().execute();
+            for (int i = 0; i < 3; i++) {
+                assertEquals(50L, session.prepareTopLevel("read").executable().execute().asLong());
+            }
+            session.prepareTopLevel("restore").executable().execute();
+            for (int i = 0; i < 10; i++) {
+                assertEquals(2L, session.prepareTopLevel("read").executable().execute().asLong());
+            }
+            assertLongTypedSubscript(session, "read", 2L);
+        }
+    }
+
+    /*
+     * A site that alternated between the standard and a redefined selection
+     * (the caller checks the standard, redefined and restored results) still
+     * answers the exact long element through one fused operation, with no
+     * external selector and no external dispatch. The operation's instruction
+     * name is not read as evidence of an internal specialization, and typed
+     * transport locals are not evidence that a particular specialization ran;
+     * published quickened names are covered by
+     * warmedIndexedSiteQuickensPrimitiveStorageReads().
+     */
+    private static void assertLongTypedSubscript(
+            ProtosStandaloneHostedSession session, String function, long expected)
+            throws Exception {
+        var guest = session.prepareTopLevel(function).executable().execute();
+        assertTrue(guest.isNumber() && guest.fitsInLong(),
+                function + " no longer answers a long: " + guest);
+        assertEquals(expected, guest.asLong(), function + " standard result");
+        List<String> names = names(root(session, function));
+        List<String> subscripts = names.stream()
+                .filter(name -> name.startsWith("c.BinarySubscript")).toList();
+        assertEquals(1, subscripts.size(), names.toString());
+        String subscript = subscripts.get(0);
+        assertTrue(!subscript.contains("Selected") && !subscript.contains("Fallback"),
+                function + " degraded permanently to the fallback: " + names);
+        assertTrue(names.stream().noneMatch(name -> name.startsWith("c.IsStandardIndexedSelection")),
+                function + " keeps the external selector: " + names);
+        assertTrue(names.stream().noneMatch(IndexedCensus::isExternalDispatch),
+                function + " keeps external dispatch: " + names);
+    }
+
+    private static void assertQuickenedSubscript(
+            ProtosStandaloneHostedSession session, String function, String storage)
+            throws Exception {
+        ProtosBytecodeRootNode root = (ProtosBytecodeRootNode)
+                session.prepareTopLevel(function).hostExecutableForTesting()
+                        .target.getRootNode();
+        List<String> names = names(root);
+        assertTrue(names.stream().anyMatch(name -> name.startsWith("c.BinarySubscript$")
+                        && name.contains(storage)),
+                function + " did not quicken to " + storage + ": " + names);
     }
 
     @Test
@@ -504,17 +1212,12 @@ final class ProtosI115IndexedOperationTest {
                     session.prepareTopLevel("run").hostExecutableForTesting()
                             .target.getRootNode();
             List<String> names = names(run);
-            for (String operation : List.of(
-                    "c.IsStandardIndexedSelection",
-                    "c.SetItem",
-                    "c.BinarySubscript",
-                    "c.GetMethod")) {
+            for (String operation : List.of("c.SetItem", "c.BinarySubscript")) {
                 assertTrue(names.stream().anyMatch(name -> name.startsWith(operation)),
                         "missing " + operation + " in " + names);
             }
-            assertTrue(names.stream().anyMatch(name -> name.startsWith("c.Call")),
-                    "missing Call*Method in " + names);
-            assertTrue(names.contains("yield"), "dynamic path is not composed: " + names);
+            assertTrue(names.stream().noneMatch(name -> name.startsWith("c.IsStandardIndexedSelection")),
+                    "unexpected external selector in " + names);
             for (int i = 0; i < 5; i++) {
                 assertTrue(session.prepareTopLevel("run")
                         .executable().execute().asBoolean());

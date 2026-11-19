@@ -88,6 +88,8 @@ import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.Cached.Shared;
 import com.oracle.truffle.api.dsl.Fallback;
+import com.oracle.truffle.api.dsl.GenerateInline;
+import com.oracle.truffle.api.dsl.GenerateUncached;
 import com.oracle.truffle.api.dsl.Idempotent;
 import com.oracle.truffle.api.dsl.NonIdempotent;
 import com.oracle.truffle.api.dsl.Specialization;
@@ -100,6 +102,7 @@ import com.oracle.truffle.api.nodes.ControlFlowException;
 import com.oracle.truffle.api.nodes.DirectCallNode;
 import com.oracle.truffle.api.nodes.ExplodeLoop;
 import com.oracle.truffle.api.nodes.IndirectCallNode;
+import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.nodes.UnexpectedResultException;
 import com.oracle.truffle.api.object.DynamicObject;
 import com.oracle.truffle.api.object.PropertyGetter;
@@ -1652,28 +1655,30 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /*
-     * BinarySubscript / SetItem / GetLen admission.
+     * Selection of the standard Array/Bytes at, atPut and size.
      *
-     * executes its built-in subscript/length specializations only
-     * for receivers whose selected behavior is the built-in one, and calls
-     * the selected at/atPut/size otherwise. Protos is
-     * prototype-based, so a Java receiver type alone never proves that: an
-     * Array or Bytes receiver may own, or inherit, an overriding at/atPut/
-     * size. This operation answers whether the behavior actually selected
-     * for {@code selector} on the receiver is exactly the standard
-     * Array/Bytes behavior. The lowering takes the direct operation only
-     * then; every other receiver goes through GetMethod and Call*Method,
-     * composed with Yield/ResumeDispatchedContinuation. Nothing is invoked
-     * here.
+     * Protos is prototype-based, so a Java receiver type alone never proves
+     * that the standard behavior is selected: an Array or Bytes receiver may
+     * own, or inherit, an overriding at/atPut/size. This node answers whether
+     * the behavior actually selected for {@code selector} on the receiver is
+     * exactly the standard Array/Bytes behavior. It guards the standard
+     * specializations of BinarySubscript, SetItem and GetLen, whose generic
+     * path invokes any other selection. Nothing is invoked here.
      *
      * The cached path is the shared inherited structural selection used by
      * ReadMember: the receiver's Shape proves it owns no such slot, and the
      * selection guards every Shape along the delegation chain, so a later
-     * override, removal or reassignment misses the cache.
+     * override, removal or reassignment misses the cache. A chain whose
+     * owners are all FROZEN caches its classification; a mutable chain reads
+     * and classifies the selected slot on every execution, so a reassignment
+     * that keeps every Shape is observed.
      */
-    @Operation(storeBytecodeIndex = false)
-    @ConstantOperand(type = String.class, name = "selector")
-    public static final class IsStandardIndexedSelection {
+    @GenerateUncached
+    @GenerateInline(false)
+    abstract static class StandardIndexedSelectionNode extends Node {
+
+        abstract boolean execute(VirtualFrame frame, String selector, Object receiver);
+
         @Specialization(
                 guards = {
                     "isStandardIndexedValue(receiver)",
@@ -1684,7 +1689,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 },
                 limit = "3",
                 excludeForUncached = true)
-        public static boolean doCached(
+        static boolean doCached(
+                VirtualFrame frame,
                 String selector,
                 ProtosObjectValue receiver,
                 @Cached("receiver.getShape()") Shape receiverShape,
@@ -1706,20 +1712,16 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
          */
         @Specialization(guards = "isStandardIndexedValue(receiver)")
         @InliningCutoff
-        public static boolean doGeneric(
+        static boolean doGeneric(
+                VirtualFrame frame,
                 String selector,
-                ProtosObjectValue receiver,
-                @Bind VirtualFrame frame) {
-            return selectsStandard(
-                    selector,
-                    receiver,
-                    ProtosFrameArguments.admittedPreludeOrNull(
-                            frame.getArguments()));
+                ProtosObjectValue receiver) {
+            return selectsStandard(selector, receiver, frame.getArguments());
         }
 
         /* Receivers outside the Array/Bytes domain are never standard. */
         @Fallback
-        public static boolean doOther(String selector, Object receiver) {
+        static boolean doOther(VirtualFrame frame, String selector, Object receiver) {
             return false;
         }
 
@@ -1788,14 +1790,20 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         /*
          * The complete selection, observed without invoking anything. A
-         * missing or unsupported selection is not standard: the dispatched
-         * GetMethod then raises its own Error.
+         * receiver outside the Array/Bytes domain, or a missing or
+         * unsupported selection, is not standard: the selected invocation
+         * then raises its own Error.
          */
         @TruffleBoundary
         static boolean selectsStandard(
-                String selector, ProtosObjectValue receiver, ProtosPrelude prelude) {
+                String selector, Object receiver, Object[] frameArguments) {
+            if (!isStandardIndexedValue(receiver)) {
+                return false;
+            }
             try {
-                return ProtosValueLookup.lookup(receiver, selector, prelude)
+                return ProtosValueLookup.lookup(
+                                receiver, selector,
+                                ProtosFrameArguments.admittedPreludeOrNull(frameArguments))
                         .map(found -> isStandardIndexedBehavior(
                                 selector, receiver, found.value()))
                         .orElse(false);
@@ -1803,6 +1811,37 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 return false;
             }
         }
+    }
+
+    /*
+     * The generic path of BinarySubscript, SetItem and GetLen. When the
+     * selected behavior is the standard one, the operands lie outside its
+     * admitted lanes and the standard indexed Error is signaled. Otherwise
+     * the complete send selection chooses the behavior and the shared call
+     * dispatcher invokes it exactly as an ordinary send, over the operands
+     * already evaluated once in Protos order: receiver, methodHome, caller,
+     * Prelude, ReturnHome, guest Errors, non-local control transfers and
+     * suspensions are those of that selection and dispatcher. A suspended
+     * result is returned unchanged; the enclosing bytecode composes it.
+     */
+    @InliningCutoff
+    private static Object invokeSelectedIndexed(
+            VirtualFrame frame,
+            String selector,
+            Object receiver,
+            Object[] callArguments,
+            ProtosBytecodeRootNode root,
+            ProtosFunctionCallDispatchers.CallNode call) {
+        Object[] frameArguments = frame.getArguments();
+        if (StandardIndexedSelectionNode.selectsStandard(selector, receiver, frameArguments)) {
+            throw indexedErrorOf(frameArguments);
+        }
+        Object method = ProtosExperimentalGetMethodNode.select(
+                ProtosNumericValueSupport.guestValue(receiver),
+                selector,
+                root,
+                frameArguments);
+        return call.execute(frame, false, method, callArguments, null, root);
     }
 
     /**
@@ -1912,7 +1951,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * Nothing is invoked here.
      *
      * <p>The cached path uses the same inherited structural selection as
-     * {@link IsStandardIndexedSelection}: a later override, removal or
+     * {@link StandardIndexedSelectionNode}: a later override, removal or
      * reassignment of {@code each} along the delegation chain, or of the
      * root {@code call}, misses the cache.
      */
@@ -2267,53 +2306,67 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /*
-     * BinarySubscript / SetItem model.
+     * BinarySubscript / SetItem / GetLen model.
      *
-     * The built-in Array path specializes primitive long, double and
-     * boolean storage. These
-     * operations are emitted only behind IsStandardIndexedSelection, so the
-     * receiver's selected at/atPut is the standard Array/Bytes behavior;
-     * their fallbacks therefore signal exactly the Error that standard
-     * behavior signals for an operand outside its admitted lanes (a
-     * non-Integer or large Integer index). Other receivers are dispatched
-     * by the lowering through GetMethod and Call*Method.
+     * Each operation owns the complete selection of its at, atPut or size
+     * over operands already evaluated once, in Protos order (receiver,
+     * arguments). Its standard specializations execute only while the
+     * behavior selected on the receiver is the standard Array/Bytes one,
+     * proven by the shared StandardIndexedSelectionNode; the built-in Array
+     * path specializes primitive long, double and boolean storage. Every
+     * other case reaches the fallback, which signals the standard Error for
+     * an operand outside the standard lanes (a non-Integer or large Integer
+     * index) and otherwise invokes the selected behavior through the shared
+     * call dispatcher. The fallback replaces no standard specialization, so a
+     * site that alternates between standard and redefined selections keeps
+     * its standard entries. A suspended invocation is the operation's result
+     * and is composed by the enclosing bytecode.
      */
     @Operation(storeBytecodeIndex = true)
     public static final class BinarySubscript {
+        static final String SELECTOR = "at";
 
-        @Specialization(guards = "array.hasLongStorageForRuntime()")
+        @Specialization(guards = {"array.hasLongStorageForRuntime()",
+                "selection.execute(frame, SELECTOR, array)"})
         public static long doLongStorage(
                 ProtosArrayValue array,
                 long index,
-                @Bind VirtualFrame frame) {
+                @Bind VirtualFrame frame,
+                @Shared("selection") @Cached StandardIndexedSelectionNode selection) {
             return array.indexedLongAtNormalized(
                     existingArrayIndex(array, index, frame));
         }
 
-        @Specialization(guards = "array.hasDoubleStorageForRuntime()")
+        @Specialization(guards = {"array.hasDoubleStorageForRuntime()",
+                "selection.execute(frame, SELECTOR, array)"})
         public static double doDoubleStorage(
                 ProtosArrayValue array,
                 long index,
-                @Bind VirtualFrame frame) {
+                @Bind VirtualFrame frame,
+                @Shared("selection") @Cached StandardIndexedSelectionNode selection) {
             return array.indexedDoubleAtNormalized(
                     existingArrayIndex(array, index, frame));
         }
 
-        @Specialization(guards = "array.hasBooleanStorageForRuntime()")
+        @Specialization(guards = {"array.hasBooleanStorageForRuntime()",
+                "selection.execute(frame, SELECTOR, array)"})
         public static boolean doBooleanStorage(
                 ProtosArrayValue array,
                 long index,
-                @Bind VirtualFrame frame) {
+                @Bind VirtualFrame frame,
+                @Shared("selection") @Cached StandardIndexedSelectionNode selection) {
             return array.indexedBooleanAtNormalized(
                     existingArrayIndex(array, index, frame));
         }
 
         /* Every storage representation, read as its exact guest value. */
-        @Specialization(replaces = {"doLongStorage", "doDoubleStorage", "doBooleanStorage"})
+        @Specialization(guards = "selection.execute(frame, SELECTOR, array)",
+                replaces = {"doLongStorage", "doDoubleStorage", "doBooleanStorage"})
         public static Object doArray(
                 ProtosArrayValue array,
                 long index,
-                @Bind VirtualFrame frame) {
+                @Bind VirtualFrame frame,
+                @Shared("selection") @Cached StandardIndexedSelectionNode selection) {
             return array.indexedAtNormalized(
                     existingArrayIndex(array, index, frame));
         }
@@ -2323,27 +2376,42 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
          * the long index is validated against the current size before
          * it is narrowed to a host index.
          */
-        @Specialization
+        @Specialization(guards = "selection.execute(frame, SELECTOR, bytes)")
         public static Object doBytes(
                 ProtosBytesValue bytes,
                 long index,
-                @Bind VirtualFrame frame) {
+                @Bind VirtualFrame frame,
+                @Shared("selection") @Cached StandardIndexedSelectionNode selection) {
             return bytes.indexedAt(
                     existingBytesIndex(bytes, index, frame));
         }
 
         @Fallback
         @InliningCutoff
-        public static Object doOther(
+        public static Object doSelected(
                 Object receiver,
                 Object index,
-                @Bind VirtualFrame frame) {
-            throw indexedError(frame);
+                @Bind VirtualFrame frame,
+                @Bind ProtosBytecodeRootNode root,
+                @Cached ProtosFunctionCallDispatchers.CallNode call) {
+            return invokeSelectedIndexed(
+                    frame, SELECTOR, receiver,
+                    ProtosFrameArguments.dispatchedCall1(
+                            null, ProtosFrameArguments.functionCallMarker(),
+                            null, null, null,
+                            ProtosNumericValueSupport.guestValue(index)),
+                    root, call);
         }
     }
 
+    /*
+     * The standard atPut result is the inserted value; a redefined atPut
+     * answers the result of its invocation. Indexed assignment discards this
+     * result and answers its own RHS.
+     */
     @Operation(storeBytecodeIndex = true)
     public static final class SetItem {
+        static final String SELECTOR = "atPut";
 
         /*
          * Standard Array indexed write, mirroring the Array atPut
@@ -2351,58 +2419,71 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
          * against the current size before it is narrowed to a host index,
          * so no host exception escapes as an implementation error.
          */
-        @Specialization(guards = "array.hasLongStorageForRuntime()")
-        public static void doLongStorage(
-                long value,
+        @Specialization(guards = {"array.hasLongStorageForRuntime()",
+                "selection.execute(frame, SELECTOR, array)"})
+        public static long doLongStorage(
                 ProtosArrayValue array,
                 long index,
-                @Bind VirtualFrame frame) {
+                long value,
+                @Bind VirtualFrame frame,
+                @Shared("selection") @Cached StandardIndexedSelectionNode selection) {
             array.indexedLongPutNormalized(
                     writableArrayIndex(array, index, frame), value);
+            return value;
         }
 
-        @Specialization(guards = "array.hasDoubleStorageForRuntime()")
-        public static void doDoubleStorage(
-                double value,
+        @Specialization(guards = {"array.hasDoubleStorageForRuntime()",
+                "selection.execute(frame, SELECTOR, array)"})
+        public static double doDoubleStorage(
                 ProtosArrayValue array,
                 long index,
-                @Bind VirtualFrame frame) {
+                double value,
+                @Bind VirtualFrame frame,
+                @Shared("selection") @Cached StandardIndexedSelectionNode selection) {
             array.indexedDoublePutNormalized(
                     writableArrayIndex(array, index, frame), value);
+            return value;
         }
 
-        @Specialization(guards = "array.hasBooleanStorageForRuntime()")
-        public static void doBooleanStorage(
-                boolean value,
+        @Specialization(guards = {"array.hasBooleanStorageForRuntime()",
+                "selection.execute(frame, SELECTOR, array)"})
+        public static boolean doBooleanStorage(
                 ProtosArrayValue array,
                 long index,
-                @Bind VirtualFrame frame) {
+                boolean value,
+                @Bind VirtualFrame frame,
+                @Shared("selection") @Cached StandardIndexedSelectionNode selection) {
             array.indexedBooleanPutNormalized(
                     writableArrayIndex(array, index, frame), value);
+            return value;
         }
 
         /* Every storage; an incompatible value promotes primitive storage. */
-        @Specialization(replaces = {"doLongStorage", "doDoubleStorage", "doBooleanStorage"})
-        public static void doArray(
-                Object value,
+        @Specialization(guards = "selection.execute(frame, SELECTOR, array)",
+                replaces = {"doLongStorage", "doDoubleStorage", "doBooleanStorage"})
+        public static Object doArray(
                 ProtosArrayValue array,
                 long index,
-                @Bind VirtualFrame frame) {
+                Object value,
+                @Bind VirtualFrame frame,
+                @Shared("selection") @Cached StandardIndexedSelectionNode selection) {
             array.indexedPutNormalized(
                     writableArrayIndex(array, index, frame),
                     ProtosNumericValueSupport.guestValue(value));
+            return value;
         }
 
         /*
          * Standard Bytes indexed write, mirroring the Bytes atPut
          * protocol: FROZEN first, then index, then octet 0..255.
          */
-        @Specialization
-        public static void doBytes(
-                Object value,
+        @Specialization(guards = "selection.execute(frame, SELECTOR, bytes)")
+        public static Object doBytes(
                 ProtosBytesValue bytes,
                 long index,
-                @Bind VirtualFrame frame) {
+                Object value,
+                @Bind VirtualFrame frame,
+                @Shared("selection") @Cached StandardIndexedSelectionNode selection) {
             if (bytes.isFrozen()) {
                 throw indexedError(frame);
             }
@@ -2413,16 +2494,26 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 throw indexedError(frame);
             }
             bytes.indexedPut(hostIndex, octet);
+            return value;
         }
 
         @Fallback
         @InliningCutoff
-        public static void doOther(
-                Object value,
+        public static Object doSelected(
                 Object receiver,
                 Object index,
-                @Bind VirtualFrame frame) {
-            throw indexedError(frame);
+                Object value,
+                @Bind VirtualFrame frame,
+                @Bind ProtosBytecodeRootNode root,
+                @Cached ProtosFunctionCallDispatchers.CallNode call) {
+            return invokeSelectedIndexed(
+                    frame, SELECTOR, receiver,
+                    ProtosFrameArguments.dispatchedCall2(
+                            null, ProtosFrameArguments.functionCallMarker(),
+                            null, null, null,
+                            ProtosNumericValueSupport.guestValue(index),
+                            ProtosNumericValueSupport.guestValue(value)),
+                    root, call);
         }
     }
 
@@ -2658,28 +2749,62 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
 
     /*
-     * Reads the length of an admitted standard Array or Bytes directly.
-     * Non-standard selected behavior uses the existing bytecode call path.
+     * Reads the length of a standard Array or Bytes directly while the
+     * standard size is the selected behavior; any other receiver or
+     * selection invokes the selected size.
      */
     @Operation(storeBytecodeIndex = true)
     public static final class GetLen {
-        @Specialization
-        public static long doArray(ProtosArrayValue array) {
+        static final String SELECTOR = "size";
+
+        @Specialization(guards = "selection.execute(frame, SELECTOR, array)")
+        public static long doArray(
+                ProtosArrayValue array,
+                @Bind VirtualFrame frame,
+                @Shared("selection") @Cached StandardIndexedSelectionNode selection) {
             return array.indexedSize();
         }
 
         /* Direct standard Bytes length, as primitive long. */
-        @Specialization
-        public static long doBytes(ProtosBytesValue bytes) {
+        @Specialization(guards = "selection.execute(frame, SELECTOR, bytes)")
+        public static long doBytes(
+                ProtosBytesValue bytes,
+                @Bind VirtualFrame frame,
+                @Shared("selection") @Cached StandardIndexedSelectionNode selection) {
             return bytes.indexedSize();
         }
 
         @Fallback
         @InliningCutoff
-        public static Object doOther(
+        public static Object doSelected(
                 Object receiver,
-                @Bind VirtualFrame frame) {
-            throw indexedError(frame);
+                @Bind VirtualFrame frame,
+                @Bind ProtosBytecodeRootNode root,
+                @Cached ProtosFunctionCallDispatchers.CallNode call) {
+            return invokeSelectedIndexed(
+                    frame, SELECTOR, receiver,
+                    ProtosFrameArguments.dispatchedCall0(
+                            null, ProtosFrameArguments.functionCallMarker(),
+                            null, null, null),
+                    root, call);
+        }
+    }
+
+    /*
+     * Reads a temporary local at its last use and clears it in the same
+     * operation, so the value does not stay live in the frame.
+     */
+    @Operation(storeBytecodeIndex = false)
+    @ConstantOperand(type = LocalAccessor.class)
+    public static final class LoadAndClearTempLocal {
+        @Specialization
+        public static Object doObject(
+                LocalAccessor accessor,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode) {
+            Object value = accessor.getObject(bytecode, frame);
+            accessor.clear(bytecode, frame);
+            return value;
         }
     }
 

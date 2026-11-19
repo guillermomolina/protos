@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.180-SNAPSHOT
+
+- **I115.** Skip the outer childResult clear when a fused indexed operation has already released it at its last use. Extend indexed Array/Bytes operations, numeric temporary handling and source-instrumentation regressions.
+
 ## 0.4.179-SNAPSHOT
 
 - **I115.** Skip redundant canonical Boolean checks for validated comparisons in controls and stage direct indexed operands as Bytecode DSL stack values. Extend indexed-operation, Boolean-control and numeric-selection regressions.

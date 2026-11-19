@@ -81,6 +81,96 @@ final class ProtosI115BytesDirectOperationTest {
     }
 
     @Test
+    void validAndInvalidIndexesThroughTheSameSites() {
+        assertTrue(evalBoolean(SOURCE + """
+                read: (b, i) => { b[i] }
+                write: (b, i, v) => { b[i] = v }
+                ok: true
+                i: 0
+                while(i < 10) {
+                    ok = ok && (read(source, 0) == 106) && (write(source, 1, 120) == 120)
+                    ok = ok && Error.handle(() => { read(source, 4); false }, (caught) => true)
+                    ok = ok && Error.handle(() => { read(source, "x"); false }, (caught) => true)
+                    ok = ok && Error.handle(() => { write(source, 0, 256); false }, (caught) => true)
+                    ok = ok && Error.handle(() => { write(source, 9, 1); false }, (caught) => true)
+                    i = i + 1
+                }
+                ok && (source[1] == 120) && (source[0] == 106)
+                """));
+    }
+
+    @Test
+    void frozenBytesRejectWritesBeforeIndexAndOctetChecks() {
+        assertTrue(signals(SOURCE + "source.freeze()\nsource[9] = 1"));
+        assertTrue(signals(SOURCE + "source.freeze()\nsource[0] = 300"));
+        assertEquals(106L, evalLong(SOURCE + "source.freeze()\n"
+                + "Error.handle(() => { source[0] = 1 }, (caught) => null)\nsource[0]"));
+    }
+
+    @Test
+    void redefinedBytesProtocolIsSelectedAndRestored() {
+        assertTrue(evalBoolean(SOURCE + """
+                read: (b) => { b[0] }
+                write: (b) => { b.atPut(1, 111) }
+                length: (b) => { b.size() }
+                standard: () => {
+                    (read(source) == 106) && (write(source) == 111) && (length(source) == 4)
+                }
+                ok: standard()
+                source.at: (index) => { 70 }
+                source.atPut: (index, value) => { 71 }
+                source.size: () => { 72 }
+                ok = ok && (read(source) == 70) && (write(source) == 71) && (length(source) == 72)
+                ok = ok && ((source[0] = 5) == 5)
+                source.removeSlot("at")
+                source.removeSlot("atPut")
+                source.removeSlot("size")
+                ok && standard()
+                """));
+    }
+
+    /*
+     * Warmed Bytes sites observe a redefinition of at, atPut and size through
+     * the same selection as Array, and return to the standard behavior once
+     * the redefinitions are removed; a redefined atPut writes nothing.
+     *
+     * This is a guest-semantics test only. Re-running the same sites before
+     * and after the redefinition checks the observed results; it does not
+     * demonstrate any physical specialization, quickening or compilation
+     * tier. Those structural properties of BinarySubscript are checked by
+     * the instruction-level tests in ProtosI115IndexedOperationTest.
+     */
+    @Test
+    void warmedBytesSitesObserveRedefinitionAndRestoration() {
+        assertTrue(evalBoolean(SOURCE + """
+                read: (b, i) => { b[i] }
+                write: (b, i, v) => { b[i] = v }
+                put: (b, i, v) => { b.atPut(i, v) }
+                length: (b) => { b.size() }
+                ok: true
+                k: 0
+                while(k < 12) {
+                    ok = ok && (read(source, 0) == 106) && (write(source, 1, 111) == 111)
+                    ok = ok && (put(source, 2, 98) == 98) && (length(source) == 4)
+                    k = k + 1
+                }
+                source.at: (index) => { 1 }
+                source.atPut: (index, value) => { 2 }
+                source.size: () => { 3 }
+                k = 0
+                while(k < 3) {
+                    ok = ok && (read(source, 0) == 1) && (write(source, 1, 120) == 120)
+                    ok = ok && (put(source, 1, 120) == 2) && (length(source) == 3)
+                    k = k + 1
+                }
+                source.removeSlot("at")
+                source.removeSlot("atPut")
+                source.removeSlot("size")
+                ok && (read(source, 1) == 111) && (length(source) == 4) && (write(source, 3, 115) == 115) && (read(source, 3) == 115)
+                """));
+    }
+
+    @Test
     void bytesOctetsCombineWithBooleanOperators() {
         String isAlpha = "isAlpha: (octet) => {\n"
                 + "    ((octet >= 65) && (octet <= 90)) ||\n"
