@@ -22,10 +22,85 @@
  * none imitates SQLite.
  */
 
+#define _GNU_SOURCE
+#include <errno.h>
+#include <fcntl.h>
 #include <stddef.h>
+#include <stdatomic.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+#include <unistd.h>
+#ifdef __linux__
+#include <sys/syscall.h>
+#endif
+
+/* Linux kernel TID, never a pthread identifier or a JVM thread identifier. */
+int64_t ffi_test_thread_id(void) {
+#ifdef __linux__
+    return (int64_t)syscall(SYS_gettid);
+#else
+    return -1;
+#endif
+}
+
+/*
+ * Diagnostic ABI: status, saved errno, execution TID. Mode 0 reads an existing
+ * path; mode 1 creates a new regular file exclusively (0600), never truncating.
+ * Mode 2 reads, closes, then holds the admitted downcall at an atomic barrier.
+ * Modes 3/4/5 observe/release/reset that barrier without filesystem effects.
+ * The barrier is test-only, process-local, and has a twenty-second hard bound.
+ * EACCES alone is not Landlock evidence: compare unrestricted positive controls
+ * on the exact same paths and credentials, plus an in-grant ENOENT control.
+ */
+static _Atomic int32_t ffi_test_probe_gate;
+
+int32_t ffi_test_open_probe(const char *path, int32_t mode,
+                            int32_t *error, int64_t *tid) {
+    *error = 0;
+    *tid = ffi_test_thread_id();
+    if (mode == 3) return atomic_load(&ffi_test_probe_gate);
+    if (mode == 4 || mode == 5) {
+        atomic_store(&ffi_test_probe_gate, mode == 4 ? 2 : 0);
+        return 0;
+    }
+    if (path == NULL || mode < 0 || mode > 2) {
+        *error = EINVAL;
+        return -1;
+    }
+    int flags = mode == 1 ? O_WRONLY | O_CREAT | O_EXCL : O_RDONLY;
+    int fd = open(path, flags | O_CLOEXEC, 0600);
+    if (fd < 0) {
+        *error = errno;
+        return -1;
+    }
+    if (close(fd) != 0) {
+        *error = errno;
+        return -1;
+    }
+    if (mode == 2) {
+        struct timespec start, now;
+        const struct timespec pause = {0, 1000000};
+        if (clock_gettime(CLOCK_MONOTONIC, &start) != 0) {
+            *error = errno;
+            return -1;
+        }
+        atomic_store(&ffi_test_probe_gate, 1);
+        while (atomic_load(&ffi_test_probe_gate) != 2) {
+            if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) {
+                *error = errno;
+                return -1;
+            }
+            if (now.tv_sec - start.tv_sec >= 20) {
+                *error = ETIMEDOUT;
+                return -1;
+            }
+            nanosleep(&pause, NULL);
+        }
+    }
+    return 0;
+}
 
 /* ---- scalars */
 
@@ -84,8 +159,9 @@ typedef struct ffi_test_counter {
     int64_t value;
 } ffi_test_counter;
 
-static int32_t ffi_test_live;
-static int32_t ffi_test_destroyed;
+static _Atomic int32_t ffi_test_live;
+static _Atomic int32_t ffi_test_destroyed;
+static _Atomic int64_t ffi_test_destroy_tid;
 
 ffi_test_counter *ffi_test_counter_new(int64_t initial) {
     ffi_test_counter *counter = malloc(sizeof *counter);
@@ -126,6 +202,7 @@ int32_t ffi_test_counter_free(ffi_test_counter *counter) {
     if (counter == NULL) {
         return -1;
     }
+    atomic_store(&ffi_test_destroy_tid, ffi_test_thread_id());
     free(counter);
     ffi_test_live--;
     ffi_test_destroyed++;
@@ -135,6 +212,8 @@ int32_t ffi_test_counter_free(ffi_test_counter *counter) {
 int32_t ffi_test_live_count(void) { return ffi_test_live; }
 
 int32_t ffi_test_destroyed_count(void) { return ffi_test_destroyed; }
+
+int64_t ffi_test_last_destroy_thread_id(void) { return atomic_load(&ffi_test_destroy_tid); }
 
 /* Accepts NULL; answers 1 for a NULL pointer and 0 otherwise. */
 int32_t ffi_test_is_null(const ffi_test_counter *counter) { return counter == NULL; }
