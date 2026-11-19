@@ -723,6 +723,63 @@ array[0] = "x"
 
 the answer is the Array indexed-state protocol.
 
+## Collection capabilities are receiver-specific
+
+Common indexing and iteration syntax does not establish a common collection
+contract. Each receiver publishes its own operations, state restrictions,
+callback arguments and results. In this inventory, ordinary identity means
+that distinct containers do not become structurally equal merely because their
+contents agree; customizable `==` remains a separate protocol.
+
+| Family / role | Indexed access | Size / shape | Traversal | Structural mutation | Fresh results | State / mutability | Equality / membership |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Array — Core family | `at(i)`, `atPut(i,value)`; `array[i]`, `array[i] = value` replace existing positions | `size()`; fixed length | `each(block)` / `for`: one element per callback, shallow snapshot, ascending indices | No in-place growth or deletion | `std:collections/array`: `append`, `concat`, `slice`, `insertAt`, `removeAt`, `reverse` and other algorithms return fresh Arrays | Open and closed allow element replacement; frozen rejects it | Ordinary identity; no implicit structural equality |
+| Bytes — Core family | `at(i)`, `atPut(i,value)` and brackets read/replace octets at valid Integer indices | `size()`; resizable | `each(block)` / `for`: one Integer octet per callback, shallow snapshot, ascending indices | `add(value)` grows the same Bytes and returns the added Integer; `removeAt(index)` shrinks it and returns the removed Integer | No general `copy()` contract is published | Growth/deletion require open; closed allows existing-octet replacement; frozen rejects all these mutations | Identity-bearing; neither String nor implicitly structurally equal |
+| Map — Core family | `at(key)`, `atPut(key,value)`, `containsKey`, `remove`; brackets use the keyed protocol. `atPut` returns the assigned value; `remove` returns the removed value; missing `at`/`remove` signals Error | `size()` | `each(block)` supplies exactly `(key,value)`; shallow association snapshot in insertion order. A single `for` binder receives the key | Open allows insertion, replacement and removal | Library algorithms may create Maps; matching associations alone do not copy a Map | Closed allows only replacement of existing entries; frozen allows no mutation | Key selection uses `hash` and `==` with their coherence contracts; the Map itself has ordinary identity |
+| IdentityMap — Core family | Same collection operations and results as Map, including keyed brackets and missing-key Errors | `size()` | Exactly `(key,value)`; shallow association snapshot in insertion order; single `for` binder receives the key | Same as Map | Library algorithms may create IdentityMaps | Same open/closed/frozen rules as Map | Keys use `identityHashOf` and `===`, bypassing redefinable `hash`/`==`; the container has ordinary identity |
+| Set / IdentitySet — library roles | `std:collections/set` and `std:collections/identity_set` expose `contains`, `size`, `add`, `remove`, `each` and membership queries; their values retain the underlying keyed protocol | Module `size(set)` | Module `each(set,callback)` supplies one member and returns the set. Underlying Map `each` still supplies `(key,value)`; `for(item in set)` dispatches there and binds the key | `Sets.add(set,value)` / `IdentitySets.add(set,value)` mutate and return the underlying Map / IdentityMap; module removal mutates that container | `union`, `intersection`, `difference` return fresh Maps / IdentityMaps representing sets | `Set(...)` returns Map; `IdentitySet(...)` returns IdentityMap. No separate Set runtime family; mutation restrictions come from the backing Map state | Set membership uses `hash` plus `==`; IdentitySet membership uses semantic identity; containers retain ordinary identity |
+| Range / InvertedRange — Core families | No `at` or `atPut`; no stored indexed structure | No `size()` | `each(block)` / `eachStep(step,block)` compute one Integer per callback, preserving half-open bounds and direction; normal result `null` | None | `invert` and `reverse` create new frozen ranges | Frozen range values | Identity-bearing; no implicit structural equality |
+| Vector — library value | `at(i)`, `atPut(i,value)` and `vector[i]` / indexed assignment; genuine Numbers only | `size()`; fixed length | `each(block)` / `for`: one Number, shallow snapshot, ascending indices | No insertion or deletion; `add(other)` is mathematical elementwise addition | `add`, `scale`, `copy` return fresh Vectors; `dot` returns a Number | Open and closed allow element replacement; frozen rejects it | Ordinary identity; no implicit structural equality |
+| Matrix — library value | Explicit `at(row,column)`, `atPut(row,column,value)`; genuine Numbers only. Neither `matrix[row]` nor `matrix[row,column]` is supported | `rows()`, `columns()`; fixed shape; no `size()` | `each(block)` / `for`: one Number, shallow snapshot, row-major order | No shape mutation; `add(other)` adds matrices of exactly the same shape | `add`, `scale`, `copy` return fresh Matrices; `matvec` returns a Vector of `rows()` elements; `matmul` returns a Matrix of `rows()` × `other.columns()`; `transpose` swaps dimensions, leaving the receiver unchanged | Open and closed allow existing-cell replacement; frozen rejects it | Ordinary identity; no implicit structural equality |
+| String — Core value family | `at(i)` / `text[i]` read Unicode scalar positions, neither UTF-16 units nor graphemes; no `atPut` | `size()` counts Unicode scalars | `each(block)` / `for`: one single-scalar String in order; returns the receiver String | No mutating insertion, deletion or replacement | Concatenation produces a new String value | Intrinsically immutable | String value-identity law, rather than ordinary mutable-container identity |
+| Environment — external Process snapshot | Acquired through `process.environment()`; `get(name)`, `contains(name)`; no presumed `at` or `atPut`; not a Map | No published `size()` | `each(block)` supplies `(name,value)` Strings after required validation, sorted lexicographically by Unicode scalars of names; returns the Environment receiver | No insertion, removal, modification or refresh | Separate acquisitions carry no promised identity relationship | Read-only Process snapshot | Name matching follows the represented environment's native name-identity rules |
+| Foreign containers — external projections | Optional, provider-specific `at` / `atPut` projection | No generic `size()` or shape guarantee | `each` exists only when projected; standard projected traversal is pull-based, one element per callback, and returns the original Protos-facing receiver on normal completion; no Array snapshot | Provider/projection-specific | No generic copy guarantee | Capabilities and mutation depend on explicit projection and provider | No generic equality law or Array/Map classification |
+
+### Similar operations do not imply similar results
+
+- `array[i] = value` replaces an existing position.
+- `map[key] = value` inserts or replaces an association, subject to key matching
+  and the receiver's state.
+- `bytes.add(value)` grows the same Bytes and returns the added Integer.
+- `Arrays.append(array,value)` returns a fresh Array without changing `array`.
+- `Sets.add(set,value)` mutates and returns the Map representing the set.
+- `vector.add(other)` computes a mathematical sum and returns a fresh Vector.
+
+`closed` does not mean `frozen`: existing Array elements, Bytes octets, Map
+values and Vector/Matrix cells can still be replaced on closed receivers.
+String's intrinsic immutability is a value-family rule, distinct from freezing
+an ordinary object. Likewise, a frozen argument/rest Array rejects element
+replacement; fixed Array length alone does not make its elements immutable.
+
+### Collection-like values outside the common inventory
+
+`Path` represents paths, rather than a generic sequence of components.
+`StyledText` represents text with style structure, rather than an Array or Map.
+Being composite does not automatically grant collection protocols. There is no
+universal `Collection`, `Iterable`, `Iterator` or `Stream` institution.
+
+`[]` spells a message/protocol; it does not guarantee universal indexability.
+`for` selects the receiver's `each` through ordinary lookup and imposes no
+universal snapshot, callback arity or completion result.
+
+See the normative [indexed-access contract](../../spec/semantics/VALUES_AND_COLLECTIONS.md#indexed-access-syntax),
+[collection and value protocols](../../spec/semantics/VALUES_AND_COLLECTIONS.md),
+[Environment contract](../../spec/io/PROCESS_IO.md#24-environment), and
+[indexed syntax](../../spec/PROTOS_GRAMMAR.md#indexed-access).
+The [foreign interoperability chapter](interop/README.md) explains explicit
+provider projections; the normative [Foreign Values](../../spec/semantics/VALUES_AND_COLLECTIONS.md#foreign-values)
+section owns their boundary.
+
 ## String, Vector and Matrix traversal
 
 `String.each` visits Unicode scalars, the same positions as `String.at`, rather
@@ -1369,6 +1426,10 @@ performance.
     built on Core mechanisms rather than new Core runtime families.
 
 ## Run the executable lessons
+
+The [collection-capabilities tutorial](../../protos/tutorials/05-collections/05-collection-capabilities.protos)
+compares indexed replacement, in-place growth, fresh copies, sets and algebraic
+operations through the standard CLI without extra host authority.
 
 For arithmetic, [`exact-and-complex.protos`](../../protos/examples/numbers/exact-and-complex.protos)
 demonstrates exact division, mixed Float arithmetic, Complex components, and

@@ -1,0 +1,129 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
+
+// Collection capabilities are defined by the receiver, not by the syntax.
+
+Arrays: import("std:collections/array")
+Sets: import("std:collections/set")
+IdentitySets: import("std:collections/identity_set")
+LA: import("std:math/linear_algebra")
+Vector: LA.Vector
+Matrix: LA.Matrix
+
+// An Array has a fixed length. Assignment replaces an existing element.
+array: Array(10, 20)
+assigned: array[0] = 11
+appended: Arrays.append(array, 30)
+
+arrayOk: assigned == 11 &&
+    array.size() == 2 &&
+    array[0] == 11 &&
+    appended.size() == 3 &&
+    appended[2] == 30 &&
+    appended !== array
+
+// A Map can gain keys while open. Lookup is keyed, not positional.
+map: Map()
+stored: map["answer"] = 42
+keyCount: 0
+valueTotal: 0
+map.each((key, value) => {
+    keyCount = keyCount + 1
+    valueTotal = valueTotal + value
+})
+
+mapOk: stored == 42 &&
+    map.size() == 1 &&
+    map["answer"] == 42 &&
+    keyCount == 1 &&
+    valueTotal == 42
+
+// Bytes grows in place, unlike Arrays.append.
+bytes: Encoding.UTF8.encode("")
+addedByte: bytes.add(65)
+bytesOk: addedByte == 65 &&
+    bytes.size() == 1 &&
+    bytes[0] == 65
+
+// Set is a library role represented by a Map.
+set: Sets(1, 2)
+sameSet: Sets.add(set, 3)
+setVisits: 0
+sameTraversal: Sets.each(set, member => {
+    setVisits = setVisits + 1
+})
+
+setOk: sameSet === set &&
+    sameTraversal === set &&
+    Sets.size(set) == 3 &&
+    Sets.contains(set, 3) &&
+    setVisits == 3
+
+// IdentitySet keeps distinct identity-bearing members.
+first: { value: 1 }
+second: { value: 1 }
+identitySet: IdentitySets(first)
+IdentitySets.add(identitySet, second)
+
+identityOk: IdentitySets.size(identitySet) == 2 &&
+    IdentitySets.contains(identitySet, first) &&
+    IdentitySets.contains(identitySet, second)
+
+// Vector.add is mathematical addition, never insertion.
+vector: Vector(1, 2)
+vectorSum: vector.add(Vector(3, 4))
+
+vectorOk: vector.size() == 2 &&
+    vector[0] == 1 &&
+    vectorSum[0] == 4 &&
+    vectorSum[1] == 6 &&
+    vectorSum !== vector
+
+// Matrix uses explicit two-index messages and fixed dimensions.
+matrix: Matrix(1, 2, 4, 5)
+matrixSum: matrix.add(Matrix(1, 2, 1, 1))
+
+matrixOk: matrix.rows() == 1 &&
+    matrix.columns() == 2 &&
+    matrix.at(0, 1) == 5 &&
+    matrixSum.at(0, 0) == 5 &&
+    matrixSum.at(0, 1) == 6 &&
+    matrixSum !== matrix
+
+// String traversal visits Unicode scalars, not grapheme clusters.
+scalarCount: 0
+text: "A😀"
+returnedText: for(character in text) {
+    scalarCount = scalarCount + 1
+}
+stringOk: scalarCount == 2 && returnedText === text
+
+// Range traversal is computed and completes with null.
+rangeTotal: 0
+rangeResult: for(index in Range(0, 3)) {
+    rangeTotal = rangeTotal + index
+}
+rangeOk: rangeTotal == 3 && rangeResult === null
+
+verified: arrayOk && mapOk && bytesOk &&
+    setOk && identityOk && vectorOk &&
+    matrixOk && stringOk && rangeOk
+
+if(!verified) {
+    Error().signal()
+}
+print(verified)

@@ -597,6 +597,14 @@ the result `each` or `eachStep`.
 | `for(i, a, b) { body }` | `Range(a, b).each(i => { body })` |
 | `for(i, a, b, s) { body }` | `Range(a, b).eachStep(s, i => { body })` |
 
+The ordinary selector `each` resolves on the actual receiver; `for(item in
+receiver)` requires no universal collection class. Callback arity, order and
+result depend on that selected method. Map-backed sets remain Maps for ordinary
+dispatch; Environment supplies String pairs, Range computes Integers, and
+projected foreign iterators are pull-based. The snapshots of Array, Bytes, Map,
+Vector and Matrix are not a general property of `for`. See
+[receiver-specific collection capabilities](05-values-identity-equality-and-collections.md#collection-capabilities-are-receiver-specific).
+
 These are semantic equivalences, not different runtime implementations: the
 contextual spelling means exactly the ordinary send on the right. The explicit
 method forms remain useful when you want to select a different protocol message

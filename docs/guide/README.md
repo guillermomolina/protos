@@ -63,6 +63,11 @@ Together they demonstrate ordinary `each` dispatch, ascending and descending
 half-open ranges, signed steps, and a practical collection-processing task
 without introducing a separate iteration protocol.
 
+After learning `for`, continue with
+[receiver-specific collection capabilities](05-values-identity-equality-and-collections.md#collection-capabilities-are-receiver-specific)
+and the [collection-capabilities tutorial](../../protos/tutorials/05-collections/05-collection-capabilities.protos)
+to understand which operations and guarantees each receiver actually publishes.
+
 The
 [named-arguments section of chapter 03](03-closures-methods-and-receivers.md#named-arguments-and-name-aware-calls-d237)
 is paired with the

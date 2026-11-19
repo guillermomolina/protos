@@ -43,7 +43,12 @@ The collection progression continues after Map and IdentityMap with
 prefix/suffix copies), then
 [`05-collections/04-array-bulk-transformations.protos`](05-collections/04-array-bulk-transformations.protos)
 (`flatMap`, `zip`, `partition`, `distinct` and callback snapshot behavior).
-Both run unchanged with the standalone CLI and require no extra host authority.
+The fifth lesson,
+[`05-collections/05-collection-capabilities.protos`](05-collections/05-collection-capabilities.protos),
+compares element replacement with growth, fresh Arrays with receiver mutation,
+Map and Set with IdentitySet, mathematical Vector/Matrix addition, and String
+and Range traversal. Results and contracts depend on the receiver. All three
+run unchanged with the standard CLI and require no additional host permissions.
 
 The `07-call-arguments/` progression now has two lessons:
 [`01-defaults-args-and-rest.protos`](07-call-arguments/01-defaults-args-and-rest.protos)
