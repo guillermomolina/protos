@@ -166,7 +166,8 @@ final class CanonicalBindingAnalysis {
             CanonicalBindingAnalysis enclosing,
             CanonicalLexicalScope parentScope,
             java.util.Set<String> parentFrameNames,
-            boolean parentHasFrameLayout) {
+            boolean parentHasFrameLayout,
+            java.util.Set<CanonicalLexicalScope> inlineRegions) {
         if (!createIdentities.isEmpty()
                 || !multipleCreateIdentities.isEmpty()
                 || !parameterIdentities.isEmpty()) {
@@ -222,14 +223,15 @@ final class CanonicalBindingAnalysis {
                 return false;
             }
 
-            if (admittedInlineGlobalAccess(captured, parentScope)
-                    || admittedInlineCarriedCell(captured, parentScope)) {
+            if (admittedInlineGlobalAccess(captured, parentScope, inlineRegions.size())
+                    || admittedInlineCarriedCell(captured, parentScope, inlineRegions.size())) {
                 // The callback is removed physically: the enclosing root's
                 // global read uses the same lexical owner at depth minus one.
                 continue;
             }
             if (!directParentCapture(
-                    resolution, parentScope, parentFrameNames)) {
+                    resolution, parentScope, parentFrameNames)
+                    && !inlineRegionRead(enclosing, lookup, captured, inlineRegions)) {
                 return false;
             }
         }
@@ -248,10 +250,11 @@ final class CanonicalBindingAnalysis {
                 return false;
             }
 
-            if (!admittedInlineGlobalAccess(captured, parentScope)
-                    && !admittedInlineCarriedCell(captured, parentScope)
+            if (!admittedInlineGlobalAccess(captured, parentScope, inlineRegions.size())
+                    && !admittedInlineCarriedCell(captured, parentScope, inlineRegions.size())
                     && !directParentCapture(
-                            resolution, parentScope, parentFrameNames)) {
+                            resolution, parentScope, parentFrameNames)
+                    && !inlineRegionWrite(enclosing, assign, captured, inlineRegions)) {
                 return false;
             }
         }
@@ -271,7 +274,8 @@ final class CanonicalBindingAnalysis {
             CanonicalLexicalScope ownScope,
             CanonicalLexicalScope parentScope,
             java.util.Set<String> parentFrameNames,
-            boolean parentHasFrameLayout) {
+            boolean parentHasFrameLayout,
+            java.util.Set<CanonicalLexicalScope> inlineRegions) {
         if (enclosing == null
                 || ownScope == null
                 || parentScope == null
@@ -304,10 +308,11 @@ final class CanonicalBindingAnalysis {
                 continue;
             }
             if (!(parent instanceof CanonicalBindingResolution.CapturedResolved captured)
-                    || (!admittedInlineGlobalAccess(captured, parentScope)
-                            && !admittedInlineCarriedCell(captured, parentScope)
+                    || (!admittedInlineGlobalAccess(captured, parentScope, inlineRegions.size())
+                            && !admittedInlineCarriedCell(captured, parentScope, inlineRegions.size())
                             && !directParentCapture(
-                                    parent, parentScope, parentFrameNames))) {
+                                    parent, parentScope, parentFrameNames)
+                            && !inlineRegionRead(enclosing, entry.getKey(), captured, inlineRegions))) {
                 return false;
             }
         }
@@ -321,10 +326,11 @@ final class CanonicalBindingAnalysis {
             CanonicalBindingResolution parent =
                     enclosing.resolutionOf(entry.getKey()).orElse(null);
             if (!(parent instanceof CanonicalBindingResolution.CapturedResolved captured)
-                    || (!admittedInlineGlobalAccess(captured, parentScope)
-                            && !admittedInlineCarriedCell(captured, parentScope)
+                    || (!admittedInlineGlobalAccess(captured, parentScope, inlineRegions.size())
+                            && !admittedInlineCarriedCell(captured, parentScope, inlineRegions.size())
                             && !directParentCapture(
-                                    parent, parentScope, parentFrameNames))) {
+                                    parent, parentScope, parentFrameNames)
+                            && !inlineRegionWrite(enclosing, entry.getKey(), captured, inlineRegions))) {
                 return false;
             }
         }
@@ -361,7 +367,8 @@ final class CanonicalBindingAnalysis {
             CanonicalLexicalScope ownScope,
             CanonicalLexicalScope parentScope,
             java.util.Set<String> parentFrameNames,
-            boolean parentHasFrameLayout) {
+            boolean parentHasFrameLayout,
+            java.util.Set<CanonicalLexicalScope> inlineRegions) {
         if (ownScope == null
                 || parameterIdentities.isEmpty()
                 || !ownsInlineMultipleCreations(ownScope)) {
@@ -406,10 +413,11 @@ final class CanonicalBindingAnalysis {
                 continue;
             }
             if (!(parent instanceof CanonicalBindingResolution.CapturedResolved captured)
-                    || (!admittedInlineGlobalAccess(captured, parentScope)
-                            && !admittedInlineCarriedCell(captured, parentScope)
+                    || (!admittedInlineGlobalAccess(captured, parentScope, inlineRegions.size())
+                            && !admittedInlineCarriedCell(captured, parentScope, inlineRegions.size())
                             && !directParentCapture(
-                                    parent, parentScope, parentFrameNames))) {
+                                    parent, parentScope, parentFrameNames)
+                            && !inlineRegionRead(enclosing, entry.getKey(), captured, inlineRegions))) {
                 return false;
             }
         }
@@ -426,9 +434,11 @@ final class CanonicalBindingAnalysis {
                     enclosing.resolutionOf(entry.getKey()).orElse(null);
             if (!parentProvable
                     || !(parent instanceof CanonicalBindingResolution.CapturedResolved captured)
-                    || (!admittedInlineCarriedCell(captured, parentScope)
+                    || (!admittedInlineCarriedCell(captured, parentScope, inlineRegions.size())
                             && !directParentCapture(
-                                    parent, parentScope, parentFrameNames))) {
+                                    parent, parentScope, parentFrameNames)
+                            && !inlineRegionWrite(
+                                    enclosing, entry.getKey(), captured, inlineRegions))) {
                 return false;
             }
         }
@@ -436,13 +446,17 @@ final class CanonicalBindingAnalysis {
     }
 
     /**
-     * An inline callback may access a module binding only when the
-     * lexical owner and complete depth are statically proven.
-     * Reads and writes retain their existing global operations.
+     * An inline callback may access a module binding only when its exact
+     * lexical owner is proven on the physical parent's outward chain. The
+     * site may lie in {@code inlineRegionCount} enclosing inline regions of
+     * the physical root, each exactly one lexical hop that the root does not
+     * have, so its lexical depth must equal the parent's depth plus that
+     * count. Reads and writes retain their existing global operations.
      */
     static boolean admittedInlineGlobalAccess(
             CanonicalBindingResolution.CapturedResolved captured,
-            CanonicalLexicalScope parentScope) {
+            CanonicalLexicalScope parentScope,
+            int inlineRegionCount) {
         if (parentScope == null
                 || captured.identity().owner().kind() != CanonicalLexicalScope.Kind.ROOT
                 || captured.lexicalDepth() < 1) {
@@ -453,7 +467,7 @@ final class CanonicalBindingAnalysis {
                 current != null;
                 current = current.outwardScope(), depth++) {
             if (current == captured.identity().owner()) {
-                return captured.lexicalDepth() == depth;
+                return captured.lexicalDepth() == depth + inlineRegionCount;
             }
         }
         return false;
@@ -462,12 +476,15 @@ final class CanonicalBindingAnalysis {
     /**
      * A callback eliminated into its physical parent may reach a binding
      * owned by an outer Closure when the parent already transports that
-     * exact binding as a free cell. The captured identity, CELL storage
-     * and original lexical depth must all agree.
+     * exact binding as a free cell. The captured identity and CELL storage
+     * must agree, and the original lexical depth must equal the parent's
+     * depth plus the {@code inlineRegionCount} enclosing inline regions of
+     * the parent that lie between the site and the parent.
      */
     private static boolean admittedInlineCarriedCell(
             CanonicalBindingResolution.CapturedResolved captured,
-            CanonicalLexicalScope parentScope) {
+            CanonicalLexicalScope parentScope,
+            int inlineRegionCount) {
         CanonicalBindingIdentity identity = captured.identity();
 
         if (parentScope == null
@@ -483,7 +500,7 @@ final class CanonicalBindingAnalysis {
                 current != null;
                 current = current.outwardScope(), depth++) {
             if (current == identity.owner()) {
-                return captured.lexicalDepth() == depth;
+                return captured.lexicalDepth() == depth + inlineRegionCount;
             }
         }
 
@@ -603,6 +620,68 @@ final class CanonicalBindingAnalysis {
         return identity == null
                 || identity.owner() == rootScope
                 || identity.owner().kind() == CanonicalLexicalScope.Kind.ROOT;
+    }
+
+    /**
+     * Whether a read or bare assignment of this isolated analysis reaches,
+     * under {@code enclosing}, a binding owned by one of {@code owners}.
+     */
+    boolean reachesBindingOwnedByAnyOf(
+            CanonicalBindingAnalysis enclosing,
+            java.util.Set<CanonicalLexicalScope> owners) {
+        if (enclosing == null || owners.isEmpty()) {
+            return false;
+        }
+        for (CanonicalLookup lookup : lookupResolutions.keySet()) {
+            if (ownedByAnyOf(enclosing.resolutionOf(lookup).orElse(null), owners)) {
+                return true;
+            }
+        }
+        for (CanonicalAssign assign : assignResolutions.keySet()) {
+            if (ownedByAnyOf(enclosing.resolutionOf(assign).orElse(null), owners)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean ownedByAnyOf(
+            CanonicalBindingResolution resolution,
+            java.util.Set<CanonicalLexicalScope> owners) {
+        CanonicalBindingIdentity identity =
+                resolution == null ? null : resolution.staticIdentityOrNull();
+        return identity != null && owners.contains(identity.owner());
+    }
+
+    /*
+     * A read of a binding owned by an enclosing inline region of the same
+     * physical root: the region keeps its own bindings in BytecodeLocals of
+     * that root, which the nested region reaches by the exact lexical
+     * identity. The binding must be provably PRESENT: an absent region
+     * local would continue live selection from the physical root, and a
+     * site that needs live selection by name cannot see region locals.
+     */
+    private static boolean inlineRegionRead(
+            CanonicalBindingAnalysis enclosing,
+            CanonicalLookup lookup,
+            CanonicalBindingResolution.CapturedResolved captured,
+            java.util.Set<CanonicalLexicalScope> inlineRegions) {
+        return inlineRegions.contains(captured.identity().owner())
+                && enclosing.accessOf(lookup) == LexicalAccess.DIRECT;
+    }
+
+    /*
+     * A bare assignment to a binding owned by an enclosing inline region of
+     * the same physical root, whose destination is provably PRESENT.
+     */
+    private static boolean inlineRegionWrite(
+            CanonicalBindingAnalysis enclosing,
+            CanonicalAssign assign,
+            CanonicalBindingResolution.CapturedResolved captured,
+            java.util.Set<CanonicalLexicalScope> inlineRegions) {
+        return assign.target().isEmpty()
+                && inlineRegions.contains(captured.identity().owner())
+                && enclosing.accessOf(assign) == LexicalAccess.DIRECT;
     }
 
     /*

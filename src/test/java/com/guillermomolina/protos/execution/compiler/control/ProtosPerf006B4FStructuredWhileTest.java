@@ -696,6 +696,220 @@ final class ProtosPerf006B4FStructuredWhileTest {
         System.out.println("PLAT070_WHILE_DIRECT_UNWIND_NLR=PASS");
     }
 
+    /*
+     * The four standard loops activate the original condition and body
+     * Closures directly with zero arguments. A local call redefinition on
+     * either Closure is an ordinary slot that the loop never selects. Each
+     * redefinition returns the loop's exit value, so a wrong activation
+     * terminates and is counted instead of looping forever.
+     */
+    private record LoopCase(
+            String selector,
+            boolean postTest,
+            String continueTest,
+            String exitValue,
+            long conditionActivations) {
+        String receiver() {
+            return postTest ? "body" : "cond";
+        }
+
+        String argument() {
+            return postTest ? "cond" : "body";
+        }
+    }
+
+    private static final List<LoopCase> LOOP_CASES =
+            List.of(
+                    new LoopCase("whileTrue", false, "c < 4", "false", 4L),
+                    new LoopCase("whileFalse", false, "c >= 4", "true", 4L),
+                    new LoopCase("untilTrue", true, "c >= 3", "true", 3L),
+                    new LoopCase("untilFalse", true, "c < 3", "false", 3L));
+
+    private static String loopFixture(LoopCase loop, String bodyResult) {
+        return """
+                c: 0
+                b: 0
+                bad: 0
+                last: null
+                cond: () => {
+                    c = c + 1
+                    %s
+                }
+                cond.call: () => {
+                    bad = bad + 1
+                    %s
+                }
+                body: () => {
+                    b = b + 1
+                    %s
+                }
+                body.call: () => {
+                    bad = bad + 1
+                    "redefined"
+                }
+                null
+                """.formatted(loop.continueTest(), loop.exitValue(), bodyResult);
+    }
+
+    private static ProtosActivation loopModule(
+            ProtosLanguage language,
+            ProtosPrelude prelude,
+            LoopCase loop,
+            String bodyResult)
+            throws Exception {
+        ProtosActivation module = activation(prelude, new ProtosActorExecutionDomain());
+        lowerRoot(language, loopFixture(loop, bodyResult), "perf006-b4f-call-redefinition-setup.protos")
+                .getCallTarget()
+                .call(module);
+        return module;
+    }
+
+    private static Object slot(ProtosActivation module, String name) {
+        return module.context().readLocalSlot(name).orElseThrow();
+    }
+
+    private static String integer(ProtosActivation module, String name) {
+        return com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(
+                slot(module, name));
+    }
+
+    private static void assertOriginalClosuresRan(LoopCase loop, ProtosActivation module, Object result) {
+        String label = loop.selector();
+        assertEquals("0", integer(module, "bad"), label + ": a redefined call was selected");
+        assertEquals(Long.toString(loop.conditionActivations()), integer(module, "c"), label);
+        assertEquals("3", integer(module, "b"), label);
+        assertEquals("30", com.guillermomolina.protos.runtime.ProtosNumericValueSupport
+                .integerDecimalText(result), label + ": exact last body result");
+    }
+
+    @Test
+    void standardLoopsActivateOriginalClosuresIgnoringRedefinedCall() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            ProtosPrelude prelude = core();
+            for (LoopCase loop : LOOP_CASES) {
+                ProtosActivation module = loopModule(scope.language(), prelude, loop, "b * 10");
+                Object result =
+                        lowerRoot(
+                                        scope.language(),
+                                        loop.receiver() + "." + loop.selector() + "(" + loop.argument() + ")",
+                                        "perf006-b4f-call-redefinition.protos")
+                                .getCallTarget()
+                                .call(module);
+                assertOriginalClosuresRan(loop, module, result);
+            }
+        }
+
+        System.out.println("STANDARD_LOOPS_IGNORE_REDEFINED_CALL=PASS");
+    }
+
+    @Test
+    void extractedStandardLoopsActivateOriginalClosuresIgnoringRedefinedCall() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            ProtosPrelude prelude = core();
+            for (LoopCase loop : LOOP_CASES) {
+                ProtosActivation module = loopModule(scope.language(), prelude, loop, "b * 10");
+                ProtosClosureValue extracted =
+                        assertInstanceOf(
+                                ProtosClosureValue.class,
+                                ProtosValueLookup.readMember(
+                                                slot(module, loop.receiver()), loop.selector(), prelude)
+                                        .orElseThrow());
+                module.context().createLocalSlot("impl", extracted);
+                Object result =
+                        lowerRoot(
+                                        scope.language(),
+                                        "impl(" + loop.argument() + ")",
+                                        "perf006-b4f-call-redefinition-extracted.protos")
+                                .getCallTarget()
+                                .call(module);
+                assertOriginalClosuresRan(loop, module, result);
+            }
+        }
+
+        System.out.println("EXTRACTED_STANDARD_LOOPS_IGNORE_REDEFINED_CALL=PASS");
+    }
+
+    @Test
+    void standardLoopsReturnTheExactLastBodyObjectOrFuture() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            ProtosPrelude prelude = core();
+            for (LoopCase loop : LOOP_CASES) {
+                ProtosActivation module = loopModule(
+                        scope.language(), prelude, loop, "last = { step: b }\n    last");
+                Object result =
+                        lowerRoot(
+                                        scope.language(),
+                                        loop.receiver() + "." + loop.selector() + "(" + loop.argument() + ")",
+                                        "perf006-b4f-call-redefinition-object.protos")
+                                .getCallTarget()
+                                .call(module);
+                assertInstanceOf(ProtosObjectValue.class, result, loop.selector());
+                assertSame(slot(module, "last"), result, loop.selector());
+                assertEquals("0", integer(module, "bad"), loop.selector());
+                assertEquals("3", integer(module, "b"), loop.selector());
+
+                ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+                ProtosActivation futureModule = activation(prelude, domain);
+                ProtosFutureValue future = new ProtosFutureValue(prelude.futurePrototype(), domain);
+                futureModule.context().createLocalSlot("future", future);
+                lowerRoot(scope.language(), loopFixture(loop, "future"),
+                                "perf006-b4f-call-redefinition-future-setup.protos")
+                        .getCallTarget()
+                        .call(futureModule);
+                ProtosTask task =
+                        execute(
+                                domain,
+                                futureModule,
+                                lowerRoot(
+                                        scope.language(),
+                                        loop.receiver() + "." + loop.selector() + "(" + loop.argument() + ")",
+                                        "perf006-b4f-call-redefinition-future.protos"));
+                assertTrue(domain.dispatchOne());
+                assertEquals(ProtosTask.State.COMPLETED, task.state(), loop.selector());
+                // The body Future itself is the result: neither awaited nor adopted.
+                assertSame(future, task.result().orElseThrow(), loop.selector());
+                assertEquals(ProtosFutureValue.State.PENDING, future.state(), loop.selector());
+                assertEquals("0", integer(futureModule, "bad"), loop.selector());
+                assertEquals("3", integer(futureModule, "b"), loop.selector());
+            }
+        }
+
+        System.out.println("STANDARD_LOOPS_LAST_BODY_IDENTITY=PASS");
+    }
+
+    @Test
+    void standardLoopsValidateOperandsBeforeTheFirstActivation() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            ProtosPrelude prelude = core();
+            for (LoopCase loop : LOOP_CASES) {
+                List<String> invalidSites =
+                        List.of(
+                                // Non-Closure argument.
+                                loop.receiver() + "." + loop.selector() + "({ x: 1 })",
+                                // Non-Closure receiver selecting the standard loop.
+                                "({ x: 1 })." + loop.selector() + "(" + loop.argument() + ")",
+                                // Wrong argument count.
+                                loop.receiver() + "." + loop.selector() + "()",
+                                loop.receiver() + "." + loop.selector()
+                                        + "(" + loop.argument() + ", " + loop.argument() + ")");
+                for (String site : invalidSites) {
+                    ProtosActivation module = loopModule(scope.language(), prelude, loop, "b * 10");
+                    assertThrows(
+                            ProtosSignalException.class,
+                            () -> lowerRoot(scope.language(), site, "perf006-b4f-loop-validation.protos")
+                                    .getCallTarget()
+                                    .call(module),
+                            site);
+                    assertEquals("0", integer(module, "c"), site + ": condition activated");
+                    assertEquals("0", integer(module, "b"), site + ": body activated");
+                    assertEquals("0", integer(module, "bad"), site + ": redefined call selected");
+                }
+            }
+        }
+
+        System.out.println("STANDARD_LOOPS_VALIDATE_BEFORE_ACTIVATION=PASS");
+    }
+
     private static ProtosClosureValue nativeClosure(
             com.guillermomolina.protos.runtime.callables.ProtosNativeClosureBody body) {
         return ProtosClosureValue.suspensionCapableNativeClosure(body, body);

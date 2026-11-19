@@ -363,13 +363,6 @@ final class CanonicalToBytecodeLowerer {
     private java.util.Set<CanonicalClosure> closureRootsLoweredThisParse =
             java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
 
-    /*
-     * I095-B4: lowering-time marker for a physically inline
-     * zero-parameter callback whose reads were proven to belong
-     * to this root. It is saved/restored around the inline body.
-     */
-    private boolean currentNormalDirectParentCaptureReads;
-
 
     /*
      * I095-B6a: independent, lexically scoped Bytecode locals belonging to
@@ -395,6 +388,14 @@ final class CanonicalToBytecodeLowerer {
             java.util.Map.of();
     private CanonicalBindingAnalysis currentNormalCallbackScalarAnalysis;
     private CanonicalLexicalScope currentNormalCallbackScalarScope;
+
+    /*
+     * The binding locals of every inline region being emitted in the current
+     * root, keyed by the region's scope under the root's analysis. A nested
+     * region reaches a binding of an enclosing region by its exact identity.
+     */
+    private java.util.Map<CanonicalLexicalScope, java.util.Map<String, BytecodeLocal>>
+            enclosingInlineRegionLocals = java.util.Map.of();
 
     /**
      * PLAT041 C′ lowering-time source of the current {@link
@@ -3407,6 +3408,10 @@ final class CanonicalToBytecodeLowerer {
         if (identity == null) {
             return false;
         }
+        if (enclosingRegionLocalOrNull(identity) != null) {
+            return currentRootAnalysis.accessOf(lookup)
+                    == CanonicalBindingAnalysis.LexicalAccess.DIRECT;
+        }
 
         CanonicalLexicalScope.Storage storage = physicalStorageOf(identity);
         if (storage == CanonicalLexicalScope.Storage.LOCAL) {
@@ -5512,6 +5517,26 @@ final class CanonicalToBytecodeLowerer {
         }
     }
 
+    /*
+     * The local of a binding owned by an enclosing inline region of the
+     * current root, or {@code null} for every other owner.
+     */
+    private BytecodeLocal enclosingRegionLocalOrNull(CanonicalBindingIdentity identity) {
+        if (identity == null) {
+            return null;
+        }
+        java.util.Map<String, BytecodeLocal> locals =
+                enclosingInlineRegionLocals.get(identity.owner());
+        if (locals == null) {
+            return null;
+        }
+        BytecodeLocal local = locals.get(identity.name());
+        if (local == null) {
+            throw new AssertionError("missing inline region local: " + identity.name());
+        }
+        return local;
+    }
+
     /**
      * the single selection of the physical storage of {@code identity}
      * (through {@link #physicalStorageOf}, so a cell promoted by {@link
@@ -5525,6 +5550,10 @@ final class CanonicalToBytecodeLowerer {
                 throw new AssertionError("missing inline binding local: " + identity.name());
             }
             return BindingStorage.ofLocal(local);
+        }
+        BytecodeLocal region = enclosingRegionLocalOrNull(identity);
+        if (region != null) {
+            return BindingStorage.ofLocal(region);
         }
         BytecodeLocal cell = cellLocalOrNull(identity);
         if (cell != null) {
@@ -5610,6 +5639,7 @@ final class CanonicalToBytecodeLowerer {
         boolean carrier =
                 carrierPermitted
                         && storage.local() != null
+                        && enclosingRegionLocalOrNull(identity) == null
                         && primitiveNumericCarrierValue(value);
         emitBindingWrite(
                 builder, storage,
@@ -6818,7 +6848,6 @@ final class CanonicalToBytecodeLowerer {
                 currentNormalCallbackScalarAnalysis;
         CanonicalLexicalScope savedScope =
                 currentNormalCallbackScalarScope;
-        boolean savedDirectParent = currentNormalDirectParentCaptureReads;
         boolean savedInlineBody = currentInlineClosureCallBody;
         BytecodeLocal savedContextCache = currentInlineContextCache;
         ProtosBytecodeRootNode.LexicalFrameLayout savedContextLayout = currentInlineContextLayout;
@@ -6868,10 +6897,21 @@ final class CanonicalToBytecodeLowerer {
             currentInlineContextLayout = null;
             currentInlineContextCallback = null;
         }
+        java.util.Map<CanonicalLexicalScope, java.util.Map<String, BytecodeLocal>> savedRegions =
+                enclosingInlineRegionLocals;
+        CanonicalLexicalScope regionScope =
+                currentRootAnalysis == null
+                        ? null
+                        : currentRootAnalysis.scopeOf(closure).orElse(null);
+        if (regionScope != null) {
+            java.util.Map<CanonicalLexicalScope, java.util.Map<String, BytecodeLocal>> regions =
+                    new java.util.IdentityHashMap<>(savedRegions);
+            regions.put(regionScope, java.util.Map.copyOf(locals));
+            enclosingInlineRegionLocals = regions;
+        }
         currentNormalCallbackScalarLocals = java.util.Map.copyOf(locals);
         currentNormalCallbackScalarAnalysis = analysis;
         currentNormalCallbackScalarScope = scope;
-        currentNormalDirectParentCaptureReads = true;
         currentInlineClosureCallBody = true;
         try {
             java.util.List<CanonicalExpression> expressions =
@@ -6929,13 +6969,13 @@ final class CanonicalToBytecodeLowerer {
             }
         } finally {
             currentNormalCallbackScalarLocals = savedLocals;
+            enclosingInlineRegionLocals = savedRegions;
             currentNormalCallbackScalarAnalysis = savedAnalysis;
             currentNormalCallbackScalarScope = savedScope;
             currentInlineClosureCallBody = savedInlineBody;
             currentInlineContextCache = savedContextCache;
             currentInlineContextLayout = savedContextLayout;
             currentInlineContextCallback = savedContextCallback;
-            currentNormalDirectParentCaptureReads = savedDirectParent;
         }
     }
 
@@ -7055,7 +7095,7 @@ final class CanonicalToBytecodeLowerer {
                     builder, control,
                     new ControlOperands(
                             directOperands, noLocals, inline,
-                            scratch, childResult, resumeValue),
+                            scratch, childResult, resumeValue, false),
                     staticControl, valueUsed, result, primitiveCarrierResult);
             builder.endBlock();
             builder.endTag(StandardTags.CallTag.class);
@@ -7130,7 +7170,8 @@ final class CanonicalToBytecodeLowerer {
             }
         }
         ControlOperands staging = new ControlOperands(
-                operands, staged, inline, scratch, childResult, resumeValue);
+                operands, staged, inline, scratch, childResult, resumeValue,
+                control.loop());
         if (control.loop()) {
             emitValidatedLoop(builder, control, staging, arguments, valueUsed, result,
                     scratch, childResult, resumeValue, stager, primitiveCarrierResult);
@@ -7388,14 +7429,21 @@ final class CanonicalToBytecodeLowerer {
         builder.endBlock();
     }
 
-    /** the evaluated operands of one control site and the shared invocation scratch. */
+    /**
+     * the evaluated operands of one control site and the shared invocation
+     * scratch. {@code selectedLoopCallbacks} marks a standard loop whose
+     * operands were validated as semantic Closures: their bodies are
+     * activated directly, never through {@code call} selection. Conditional
+     * callbacks keep the ordinary polymorphic invocation.
+     */
     private record ControlOperands(
             java.util.List<CanonicalExpression> operands,
             java.util.List<BytecodeLocal> staged,
             java.util.List<Boolean> inline,
             BytecodeLocal scratch,
             BytecodeLocal childResult,
-            BytecodeLocal resumeValue) {}
+            BytecodeLocal resumeValue,
+            boolean selectedLoopCallbacks) {}
 
     /**
      * ifTrue, ifFalse, ifTrueIfFalse. Static admitted controls directly
@@ -7567,8 +7615,7 @@ final class CanonicalToBytecodeLowerer {
         }
         BytecodeLocal value = builder.createLocal("callbackValue", null);
         builder.beginBlock();
-        emitDispatchedCall(builder, staging.staged().get(position), java.util.List.of(), null,
-                staging.childResult(), value, staging.resumeValue(), primitiveCarrierResult);
+        emitControlDispatchedCall(builder, staging, position, value, primitiveCarrierResult);
         builder.beginBindStackValue();
         builder.emitLoadLocal(value);
         StackValue completedCallback = builder.endBindStackValue();
@@ -7590,8 +7637,7 @@ final class CanonicalToBytecodeLowerer {
                     InlineBodyResult.DISCARD, null,
                     staging.scratch(), staging.childResult(), staging.resumeValue(), false);
         } else {
-            emitDispatchedCall(builder, staging.staged().get(position), java.util.List.of(), null,
-                    staging.childResult(), null, staging.resumeValue(), false);
+            emitControlDispatchedCall(builder, staging, position, null, false);
         }
         builder.endBlock();
     }
@@ -7616,9 +7662,24 @@ final class CanonicalToBytecodeLowerer {
                     staging.scratch(), staging.childResult(), staging.resumeValue(),
                     primitiveCarrierResult);
         } else {
-            emitDispatchedCall(builder, staging.staged().get(position), java.util.List.of(), null,
-                    staging.childResult(), target, staging.resumeValue(), primitiveCarrierResult);
+            emitControlDispatchedCall(builder, staging, position, target, primitiveCarrierResult);
         }
+    }
+
+    /*
+     * the invocation of a non-inline control callback: a validated standard
+     * loop Closure activates its own body directly; a conditional callback
+     * keeps the ordinary polymorphic call.
+     */
+    private void emitControlDispatchedCall(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            ControlOperands staging,
+            int position,
+            BytecodeLocal result,
+            boolean primitiveCarrierResult) {
+        emitDispatchedCall(builder, staging.selectedLoopCallbacks(),
+                staging.staged().get(position), java.util.List.of(), null,
+                staging.childResult(), result, staging.resumeValue(), primitiveCarrierResult);
     }
 
     /**
@@ -7955,9 +8016,38 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal result,
             BytecodeLocal resumeValue,
             boolean primitiveCarrierResult) {
+        emitDispatchedCall(builder, false, callable, argumentValues, suppliedVector,
+                outcome, result, resumeValue, primitiveCarrierResult);
+    }
+
+    /*
+     * selectedClosureBody: the callable is a validated semantic Closure,
+     * invoked with no supplied arguments, whose own body is the selected
+     * behavior; it is activated directly without call selection.
+     */
+    private void emitDispatchedCall(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            boolean selectedClosureBody,
+            BytecodeLocal callable,
+            java.util.List<BytecodeLocal> argumentValues,
+            BytecodeLocal suppliedVector,
+            BytecodeLocal outcome,
+            BytecodeLocal result,
+            BytecodeLocal resumeValue,
+            boolean primitiveCarrierResult) {
         noteDynamicInvocation();
         builder.beginStoreLocal(outcome);
-        emitCallOperation(builder, false, callable, argumentValues, suppliedVector);
+        if (selectedClosureBody) {
+            if (suppliedVector != null || !argumentValues.isEmpty()) {
+                throw new IllegalStateException(
+                        "a selected Closure body is activated without supplied arguments");
+            }
+            builder.beginCallSelectedClosureBody();
+            builder.emitLoadLocal(callable);
+            builder.endCallSelectedClosureBody();
+        } else {
+            emitCallOperation(builder, false, callable, argumentValues, suppliedVector);
+        }
         builder.endStoreLocal();
 
         emitDispatchedContinuationComposition(builder, outcome, resumeValue);
@@ -8825,6 +8915,14 @@ final class CanonicalToBytecodeLowerer {
         CanonicalBindingIdentity identity = staticIdentityOrNull(resolution);
         if (identity != null) {
             CanonicalBindingAnalysis.LexicalAccess access = currentRootAnalysis.accessOf(lookup);
+            BytecodeLocal region = enclosingRegionLocalOrNull(identity);
+            if (region != null) {
+                if (access != CanonicalBindingAnalysis.LexicalAccess.DIRECT) {
+                    throw new AssertionError("unproven inline region lookup: " + lookup.name());
+                }
+                builder.emitLoadLocal(region);
+                return;
+            }
             BytecodeLocal cell = cellLocalOrNull(identity);
             if (cell != null) {
                 if (access == CanonicalBindingAnalysis.LexicalAccess.DIRECT) {
@@ -8911,24 +9009,25 @@ final class CanonicalToBytecodeLowerer {
      * the physical depth, from the running Bytecode root, of the module
      * context owning a site accepted by {@link #isStaticModuleBinding}:
      * {@code 0} when the running root is the module root itself, else the
-     * number of Closure roots crossed. Inside an inline callback the
-     * physical root is one scope nearer than the lexical one.
+     * number of Closure roots crossed. Every scope on the running root's
+     * outward chain is a genuine activation, so that depth is the number of
+     * outward hops from the root's scope to the owner; inline regions
+     * between the site and the root add lexical depth but no physical hop.
      */
     private int physicalModuleDepth(CanonicalBindingResolution resolution) {
-        int lexicalDepth;
-        if (resolution instanceof CanonicalBindingResolution.CapturedResolved captured) {
-            lexicalDepth = captured.lexicalDepth();
-        } else if (resolution instanceof CanonicalBindingResolution.Candidate candidate) {
-            lexicalDepth = candidate.lexicalDepth();
-        } else {
-            lexicalDepth = 0;
+        CanonicalBindingIdentity identity = staticIdentityOrNull(resolution);
+        if (identity == null) {
+            throw new AssertionError("module binding without a static identity");
         }
-        int physicalDepth =
-                currentNormalDirectParentCaptureReads ? lexicalDepth - 1 : lexicalDepth;
-        if (physicalDepth < 0) {
-            throw new AssertionError("I115 module binding above its physical root");
+        int depth = 0;
+        for (CanonicalLexicalScope current = currentRootTopScope;
+                current != null;
+                current = current.outwardScope(), depth++) {
+            if (current == identity.owner()) {
+                return depth;
+            }
         }
-        return physicalDepth;
+        throw new AssertionError("module binding outside the running root's chain");
     }
 
     /*
@@ -9489,6 +9588,62 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /*
+     * The scopes of the Closures strictly between {@code closure} and the
+     * physical root of {@code context}. A callback is only ever decided in
+     * that root when each of them is itself emitted there as an inline
+     * region, so their bindings are BytecodeLocals of the same frame. Any
+     * other enclosing scope kind, or a callback outside the root, yields no
+     * region.
+     */
+    private static java.util.Set<CanonicalLexicalScope> enclosingInlineRegions(
+            CanonicalClosure closure, ControlSiteContext context) {
+        if (context.analysis() == null || context.topScope() == null) {
+            return java.util.Set.of();
+        }
+        CanonicalLexicalScope own = context.analysis().scopeOf(closure).orElse(null);
+        if (own == null) {
+            return java.util.Set.of();
+        }
+        java.util.Set<CanonicalLexicalScope> regions = new java.util.LinkedHashSet<>();
+        for (CanonicalLexicalScope current = own.lexicalParent();
+                current != null;
+                current = current.lexicalParent()) {
+            if (current == context.topScope()) {
+                return java.util.Collections.unmodifiableSet(regions);
+            }
+            if (current.kind() != CanonicalLexicalScope.Kind.CLOSURE) {
+                return java.util.Set.of();
+            }
+            regions.add(current);
+        }
+        return java.util.Set.of();
+    }
+
+    /*
+     * Whether every cell binding of an inline callback can stay in its
+     * region locals: each Closure capturing it is emitted inline in the same
+     * root, exactly as the storage plan of a root promotes its own cells. A
+     * capture by any materialized Closure keeps the genuine activation and
+     * its cell.
+     */
+    private boolean ownCellsStayInRegionLocals(
+            CanonicalClosure closure,
+            CanonicalLexicalScope wholeTreeScope,
+            ControlSiteContext context) {
+        java.util.List<String> cells = wholeTreeScope.cellNamesInDeclarationOrder();
+        if (cells.isEmpty()) {
+            return true;
+        }
+        if (wholeTreeScope.observesContext()) {
+            return false;
+        }
+        return CanonicalInlineStoragePlan.promotedCells(
+                        closure.body(), closure, wholeTreeScope,
+                        context.analysis(), inlinePolicyUnder(context))
+                .size() == cells.size();
+    }
+
+    /*
      * I095-B1: admission belongs to the entire callback activation,
      * not to individual expression categories. A selected literal
      * Closure is admitted when its own lexical scope, return home and
@@ -9510,14 +9665,15 @@ final class CanonicalToBytecodeLowerer {
          * an inline callback keeps its own bindings in plain locals of
          * the physical root. A callback owning a cell binding (captured by a
          * Closure nested in it) stays a genuine Closure, whose root creates
-         * that cell.
+         * that cell, unless every Closure capturing it also runs inline in
+         * this root and reaches it through the same local.
          */
         CanonicalLexicalScope wholeTreeScope =
                 context.analysis() == null
                         ? null
                         : context.analysis().scopeOf(closure).orElse(null);
         if (wholeTreeScope != null
-                && !wholeTreeScope.cellNamesInDeclarationOrder().isEmpty()) {
+                && !ownCellsStayInRegionLocals(closure, wholeTreeScope, context)) {
             return false;
         }
 
@@ -9527,6 +9683,13 @@ final class CanonicalToBytecodeLowerer {
                 compilationFacts.isolatedClosureAnalysis(closure);
         CanonicalLexicalScope scope =
                 analysis.scopeOf(closure).orElseThrow();
+
+        java.util.Set<CanonicalLexicalScope> regions = enclosingInlineRegions(closure, context);
+        if (scope.observesContext()
+                && analysis.reachesBindingOwnedByAnyOf(context.analysis(), regions)) {
+            // Its context would not expose the enclosing region's bindings.
+            return false;
+        }
 
         java.util.Set<String> scalarNames = scalarLocalNamesForRoot(
                 closure.body(), closure, analysis, scope);
@@ -9539,7 +9702,8 @@ final class CanonicalToBytecodeLowerer {
                                 context.analysis(),
                                 context.topScope(),
                                 context.frameNames(),
-                                context.hasFrameLayout());
+                                context.hasFrameLayout(),
+                                regions);
 
         boolean mixedOwnBindingsAndParentCaptures =
                 !scope.declaredNames().isEmpty()
@@ -9550,7 +9714,8 @@ final class CanonicalToBytecodeLowerer {
                                 scope,
                                 context.topScope(),
                                 context.frameNames(),
-                                context.hasFrameLayout());
+                                context.hasFrameLayout(),
+                                regions);
 
         boolean requiresPersistentAuthority =
                 CanonicalCompilationFacts.inlineBodyRequiresPersistentFrameAuthority(
@@ -9929,7 +10094,8 @@ final class CanonicalToBytecodeLowerer {
                         scope,
                         context.topScope(),
                         context.frameNames(),
-                        context.hasFrameLayout())
+                        context.hasFrameLayout(),
+                        enclosingInlineRegions(closure, context))
                 && !CanonicalCompilationFacts.inlineBodyRequiresPersistentFrameAuthority(
                         closure, analysis, scope, inlinePolicyUnder(context));
     }

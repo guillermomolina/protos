@@ -47,7 +47,8 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * The physical storage plan of one CLOSURE root after inlining.
+ * The physical storage plan of one CLOSURE scope after inlining: a root,
+ * or an inline region whose own bindings live in locals of its root.
  *
  * <p>The lexical classification of {@link CanonicalBindingAnalyzer} is kept
  * unchanged: a captured binding is still {@code Storage.CELL} in the

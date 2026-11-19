@@ -399,6 +399,51 @@ final class ProtosI095BooleanControlInlineTest {
         System.out.println("I095_C_CALLABLE_AND_OVERRIDES=PASS");
     }
 
+    /**
+     * Non-inline Boolean control callbacks keep the ordinary polymorphic
+     * invocation: a redefined {@code call} on a Closure is selected, a
+     * non-Closure object with a {@code call} slot is accepted, and the
+     * direct Closure-body activation of the standard loops is never emitted.
+     */
+    @Test
+    void nonInlineBooleanCallbacksKeepPolymorphicCallSelection() throws Exception {
+        String source = """
+                run: (t, f) => {
+                    probe()
+                    one: () => { 1 }
+                    one.call: () => { 10 }
+                    two: () => { 2 }
+                    two.call: () => { 20 }
+                    no: () => { false }
+                    no.call: () => { true }
+                    yes: () => { true }
+                    yes.call: () => { false }
+                    callableTrue: { call: () => { true } }
+                    callableFalse: { call: () => { false } }
+                    a: t.ifTrue(one)
+                    b: f.ifFalse(two)
+                    c: t.ifTrueIfFalse(one, two)
+                    d: t.and(no)
+                    e: f.or(no)
+                    g: t.and(yes)
+                    h: f.or(yes)
+                    i: t.and(callableTrue)
+                    j: f.or(callableTrue)
+                    k: t.and(callableFalse)
+                    ok: (d === true) && (e === true) && (g === false) && (h === false) && (i === true) && (j === true) && (k === false)
+                    ok.ifTrueIfFalse(() => { a + b + c }, () => { 0 })
+                }
+                run(true, false)
+                """;
+        Execution normal = execute(false, source);
+        assertInteger(10 + 20 + 10, normal.value());
+        List<String> names = instructionNames(normal.rootOfFirstProbe());
+        assertEquals(-1, position(names, "CallSelectedClosureBody"),
+                () -> "Boolean control used direct Closure-body activation: " + names);
+        assertParity(source, 40);
+        System.out.println("I095_C_NON_INLINE_CALLBACKS_SELECT_CALL=PASS");
+    }
+
     /** D211 contextual if returns the selected branch's exact result. */
     @Test
     void contextualIfReturnsTheExactSelectedResult() throws Exception {

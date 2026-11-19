@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.175-SNAPSHOT
+
+- **I115.** Lower canonical Bubble Sort controls without auxiliary roots and activate standard loop Closures through a direct selected-body operation. Extend binding analysis, contextual-activation and control regressions, add the Bubble Sort benchmark, and refresh the generated-bytecode BCI partial-evaluation baseline.
+
 ## 0.4.174-SNAPSHOT
 
 - **I115.** Add primitive Float and Boolean Array storage, typed constant construction and indexed access. Store the bytecode index only on generic attribute reads and extend Array construction and iteration regressions.

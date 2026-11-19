@@ -5000,6 +5000,31 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
+     * Direct activation of a semantic Closure already selected by a
+     * standard protocol (the condition and body of a validated standard
+     * loop): its own body runs with no supplied arguments through the
+     * shared selected-body dispatcher, and {@code call} is never selected.
+     * As for every in-frame call, the caller is the current frame's own
+     * activation, resolved by the dispatcher rather than passed here.
+     * Suspension composition follows in the lowering, as for every
+     * non-terminal call.
+     */
+    @Operation(storeBytecodeIndex = true)
+    public static final class CallSelectedClosureBody {
+        @Specialization
+        public static Object perform(
+                ProtosClosureValue closure,
+                @Bind VirtualFrame frame,
+                @Bind ProtosBytecodeRootNode root,
+                @Cached ProtosFunctionCallDispatchers.SelectedBodyCallNode selectedBody) {
+            return selectedBody.execute(
+                    frame, false, closure,
+                    ProtosFrameArguments.functionCallArguments0(),
+                    null, root);
+        }
+    }
+
+    /**
      * Release calls use the shared dispatcher. Only a transfer escaping a mandatory
      * finalizer during transfer cleanup is held so the next finalizer can run.
      */

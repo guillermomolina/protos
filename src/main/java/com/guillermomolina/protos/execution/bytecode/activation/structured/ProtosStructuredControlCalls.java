@@ -363,7 +363,10 @@ final class ProtosStructuredControlCalls {
             if (done) {
                 throw new IllegalStateException("loop child requested after termination");
             }
-            return ProtosCallRequest.call(conditionNext ? condition : body, new Object[0], activation);
+            return ProtosCallRequest.selectedBody(
+                    conditionNext ? condition : body,
+                    new Object[0],
+                    activation);
         }
 
         void acceptCurrent(Object outcome) {

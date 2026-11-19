@@ -21,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -52,7 +53,9 @@ import org.junit.jupiter.api.Test;
  * prepared invocation adds exactly one untagged structured-dispatch CallTarget,
  * and that helper root carries no RootTag. PLAT043 (PERF025-C2B) narrows the
  * structured case: standard Boolean control is sequenced in the source root and
- * adds no helper CallTarget.
+ * adds no helper CallTarget. Canonical control whose callbacks are literal
+ * Closures (conditionals and lowered loop sites) runs as regions of its owning
+ * semantic root and registers no auxiliary physical root.
  */
 final class ProtosPerf025C1cSemanticSourceTopologyTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
@@ -276,6 +279,179 @@ final class ProtosPerf025C1cSemanticSourceTopologyTest {
         }
         System.out.println("PERF025_C1C_STRUCTURED_ONLY_HELPER_BOUNDARY=YES");
         System.out.println("PERF025_C1C_STRUCTURED_HELPER_ROOT_TAG=NO");
+    }
+
+    /**
+     * The canonical Bubble Sort shape: an outer {@code while}, an inner
+     * {@code while}, an inner {@code if}, indexed reads and writes, assignments
+     * to bindings of the {@code run} Closure and a checksum loop. Structurally,
+     * the root group holds exactly the module root and the {@code run} root: no
+     * condition or body of those controls is registered as a physical root. At
+     * run time, every control region executes with only {@code run} and the
+     * module on the stack.
+     */
+    @Test
+    void bubbleSortControlsRunAsRegionsOfTheirSemanticRoot() throws Exception {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                List<List<RootNode>> stacks = new ArrayList<>();
+                ProtosActivation module =
+                        new ProtosCoreBootstrap().bootstrap(CORE).newModuleActivation();
+                module.context().createLocalSlot(
+                        "probe",
+                        ProtosClosureValue.nativeClosure(
+                                (activation, supplied) -> {
+                                    stacks.add(currentStack());
+                                    return ProtosNullValue.INSTANCE;
+                                }));
+                ProtosBytecodeRootNode root = lowerRoot(BUBBLE_SORT);
+
+                root.getRootNodes().ensureComplete();
+                assertEquals(2, root.getRootNodes().count(),
+                        "module and run roots only: " + root.getRootNodes().getNodes());
+
+                Object checksum = root.getCallTarget().call(module);
+
+                assertEquals("89440",
+                        com.guillermomolina.protos.runtime.ProtosNumericValueSupport
+                                .integerDecimalText(checksum));
+                assertFalse(stacks.isEmpty());
+                for (List<RootNode> stack : stacks) {
+                    assertEquals(3, stack.size(), () -> "stack=" + stack);
+                    assertInstanceOf(ProtosBuiltinCallRootNode.class, stack.get(0));
+                    assertNoAuxiliaryRoot(stack);
+                    assertSame(root, stack.get(2));
+                }
+            } finally {
+                context.leave();
+            }
+        }
+        System.out.println("BUBBLE_SORT_INSTRUMENTED_CONTROL_STACK=SEMANTIC_ONLY");
+    }
+
+    /**
+     * The exact benchmark program, kept as an independent fixture: lowering
+     * registers only the module root and the {@code run} root, before and
+     * after a reparse that materializes every root, and before and after
+     * execution; no control Closure is registered ahead of time as a root of
+     * its own, and the program computes its checksum. The fixture only defines
+     * {@code run}; its harness invokes it, as the appended call does here.
+     */
+    @Test
+    void exactBubbleSortBenchmarkRegistersOnlyItsSemanticRoots() throws Exception {
+        String program;
+        try (java.io.InputStream input =
+                ProtosPerf025C1cSemanticSourceTopologyTest.class.getResourceAsStream(
+                        BUBBLE_SORT_FIXTURE)) {
+            assertNotNull(input, BUBBLE_SORT_FIXTURE);
+            program = new String(input.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        }
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                ProtosActivation module =
+                        new ProtosCoreBootstrap().bootstrap(CORE).newModuleActivation();
+                ProtosBytecodeRootNode root = lowerRoot(program + "\nrun()\n");
+
+                assertOnlySemanticRoots(root, 2);
+                root.getRootNodes().ensureComplete();
+                assertOnlySemanticRoots(root, 2);
+
+                Object checksum = root.getCallTarget().call(module);
+
+                assertEquals("89440",
+                        com.guillermomolina.protos.runtime.ProtosNumericValueSupport
+                                .integerDecimalText(checksum));
+                assertOnlySemanticRoots(root, 2);
+            } finally {
+                context.leave();
+            }
+        }
+        System.out.println("BUBBLE_SORT_AUXILIARY_CONTROL_ROOTS=NONE");
+    }
+
+    private static final String BUBBLE_SORT_FIXTURE =
+            "/benchmarks/bubble-sort/bubble-sort.protos";
+
+    /** The root group holds exactly {@code expected} roots, all semantic. */
+    private static void assertOnlySemanticRoots(ProtosBytecodeRootNode root, int expected) {
+        List<? extends RootNode> roots = root.getRootNodes().getNodes();
+        assertEquals(expected, roots.size(), () -> "roots=" + roots);
+        for (RootNode each : roots) {
+            assertTrue(
+                    assertInstanceOf(ProtosBytecodeRootNode.class, each)
+                            .isSemanticActivationRoot(),
+                    () -> "auxiliary root registered: " + roots);
+        }
+    }
+
+    private static final String BUBBLE_SORT =
+            """
+            run: () => {
+                values: [
+                    13, 18, 6, 42, 43, 1, 58, 4,
+                    7, 32, 8, 59, 9, 64, 38, 37,
+                    25, 61, 24, 21, 23, 63, 35, 31,
+                    34, 30, 17, 48, 51, 41, 27, 40,
+                    15, 33, 46, 2, 28, 44, 54, 56,
+                    62, 11, 22, 12, 19, 50, 26, 55,
+                    60, 53, 57, 36, 5, 45, 14, 16,
+                    20, 39, 47, 10, 3, 52, 29, 49
+                ]
+                n: values.size()
+                i: 0
+                j: 0
+                temp: 0
+                checksum: 0
+                k: 0
+
+                while(i < n - 1) {
+                    j = 0
+                    probe()
+                    while (j < n - i - 1) {
+                        if(values[j] > values[j + 1]) {
+                            probe()
+                            temp = values[j]
+                            values[j] = values[j + 1]
+                            values[j + 1] = temp
+                        }
+                        j = j + 1
+                    }
+                    i = i + 1
+                }
+
+                while(k < n) {
+                    checksum = checksum + values[k] * (k + 1)
+                    k = k + 1
+                }
+                probe()
+                checksum
+            }
+            run()
+            """;
+
+    /** Every Bytecode root on {@code stack} is a semantic activation root. */
+    private static void assertNoAuxiliaryRoot(List<RootNode> stack) {
+        for (RootNode frame : stack) {
+            if (frame instanceof ProtosBytecodeRootNode bytecode) {
+                assertTrue(bytecode.isSemanticActivationRoot(),
+                        () -> "auxiliary root on the stack: " + stack);
+            }
+        }
+    }
+
+    private static List<RootNode> currentStack() {
+        List<RootNode> stack = new ArrayList<>();
+        Truffle.getRuntime()
+                .iterateFrames(
+                        frame -> {
+                            stack.add(((RootCallTarget) frame.getCallTarget()).getRootNode());
+                            return null;
+                        });
+        return stack;
     }
 
     @Test

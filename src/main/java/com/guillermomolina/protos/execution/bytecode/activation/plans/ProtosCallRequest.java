@@ -80,10 +80,13 @@ final class ProtosCallRequest {
     }
 
     /**
-     * Execution of {@code closure}'s own body with {@code supplied}, made by
-     * {@code caller}: the terminal Closure branch of the standard
-     * {@code Object.call}. The body is the selected behavior, so
-     * {@code call} is never looked up again.
+     * Direct execution of {@code closure}'s own body with {@code supplied},
+     * made by {@code caller}, for any protocol whose semantics activate an
+     * already-selected Closure: the terminal Closure branch of the standard
+     * {@code Object.call} and the condition and body activations of the
+     * standard Closure loops. The body is the selected behavior, so a
+     * {@code call} slot defined on or inherited by the Closure is never
+     * selected.
      */
     static ProtosCallRequest selectedBody(
             ProtosClosureValue closure, Object[] supplied, ProtosActivation caller) {

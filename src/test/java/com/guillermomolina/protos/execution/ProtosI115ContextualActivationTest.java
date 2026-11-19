@@ -239,6 +239,240 @@ final class ProtosI115ContextualActivationTest {
                         instanceof org.graalvm.polyglot.PolyglotException);
     }
 
+    @Test
+    void innerWhileUpdatesBindingCreatedByOuterBody() {
+        assertEquals(6L, evalLong("""
+                outer: 0
+                total: 0
+                while(outer < 3) {
+                    partial: 0
+                    inner: 0
+                    while(inner <= outer) {
+                        partial = partial + 1
+                        inner = inner + 1
+                    }
+                    total = total + partial
+                    outer = outer + 1
+                }
+                total
+                """));
+    }
+
+    @Test
+    void innerConditionAndBodyRecreateTheirBindingsEachIteration() {
+        assertEquals(4L, evalLong("""
+                outer: 0
+                count: 0
+                while(outer < 2) {
+                    inner: 0
+                    (() => {
+                        limit: 2
+                        inner < limit
+                    }).whileTrue(() => {
+                        step: 1
+                        count = count + step
+                        inner = inner + step
+                    })
+                    outer = outer + 1
+                }
+                count
+                """));
+    }
+
+    @Test
+    void escapingReaderInInnerLoopKeepsItsOuterIterationBinding() {
+        assertEquals(1L, evalLong("""
+                readers: Array(null, null)
+                i: 0
+                while(i < 2) {
+                    own: i
+                    j: 0
+                    while(j < 1) {
+                        readers[i] = () => own
+                        j = j + 1
+                    }
+                    i = i + 1
+                }
+                readers[0]() * 10 + readers[1]()
+                """));
+    }
+
+    @Test
+    void escapingWriterSharesTheBindingOfItsIteration() {
+        assertEquals(22L, evalLong("""
+                total: 0
+                i: 0
+                while(i < 2) {
+                    own: 10
+                    bump: () => { own = own + 1 }
+                    k: 0
+                    while(k < 1) {
+                        bump()
+                        k = k + 1
+                    }
+                    total = total + own
+                    i = i + 1
+                }
+                total
+                """));
+    }
+
+    @Test
+    void inlineOnlyCaptureLeavesOwnerBindingsVisible() {
+        assertEquals(12L, evalLong("""
+                run: () => {
+                    a: 0
+                    b: 0
+                    while(a < 3) {
+                        while(b < (a + 1) * 2) {
+                            b = b + 2
+                        }
+                        a = a + 1
+                    }
+                    a * 2 + b
+                }
+                run()
+                """));
+    }
+
+    @Test
+    void innerConditionContextIsDistinctPerActivation() {
+        assertTrue(evalBoolean("""
+                contexts: Array(null, null)
+                i: 0
+                while(i < 2) {
+                    j: 0
+                    (() => {
+                        marker: i
+                        contexts[i] = context
+                        j < 0
+                    }).whileTrue(() => { j = j + 1 })
+                    i = i + 1
+                }
+                (contexts[0] !== contexts[1]) &&
+                    (contexts[0].marker == 0) &&
+                    (contexts[1].marker == 1)
+                """));
+    }
+
+    @Test
+    void nonLocalReturnLeavesNestedLoopsOfItsHome() {
+        assertEquals(21L, evalLong("""
+                find: () => {
+                    i: 0
+                    while(true) {
+                        j: 0
+                        while(j < 3) {
+                            if(i * 3 + j == 7) {
+                                ^(i * 10 + j)
+                            }
+                            j = j + 1
+                        }
+                        i = i + 1
+                    }
+                    0
+                }
+                find()
+                """));
+    }
+
+    @Test
+    void suspensionInNestedConditionResumesWithoutReplay() {
+        assertEquals(6L, evalLong("""
+                work: () => {
+                    evaluations: 0
+                    i: 0
+                    while(i < 2) {
+                        j: 0
+                        while((() => { j + 0 }).future().value() < 2) {
+                            evaluations = evaluations + 1
+                            j = j + 1
+                        }
+                        i = i + 1
+                    }
+                    evaluations + i
+                }
+                work.future().value()
+                """));
+    }
+
+    @Test
+    void cancellationInLoopBodyRunsEnsureOnceAndSkipsTheRest() {
+        assertEquals(142L, evalLong("""
+                run: () => {
+                    cleaned: 0
+                    afterAwait: 0
+                    cleanupError: Error()
+                    producer: (() => {
+                        dependency: Future.all().then((values) => { 7 })
+                        Error.handle(
+                            () => {
+                                i: 0
+                                while(i < 1) {
+                                    (() => {
+                                        producer.cancel()
+                                        dependency.value()
+                                        afterAwait = 1
+                                    }).ensure(() => {
+                                        cleaned = cleaned + 1
+                                        cleanupError.signal()
+                                    })
+                                    i = i + 1
+                                }
+                                41
+                            },
+                            (caught) => {
+                                (caught === cleanupError).ifTrueIfFalse(
+                                    () => { 42 },
+                                    () => { 90 })
+                            })
+                    }).future()
+                    value: producer.value()
+                    cleaned * 100 + value + afterAwait * 1000
+                }
+                run()
+                """));
+    }
+
+    @Test
+    void redefinedConditionalReceivesGenuineCallback() {
+        assertEquals(7L, evalLong("""
+                hits: 0
+                receiver: {
+                    ifTrue: (block) => { block() + block() }
+                }
+                result: if(receiver) {
+                    hits = hits + 1
+                    3
+                }
+                result + hits - 1
+                """));
+    }
+
+    @Test
+    void redefinedLoopSelectorIsAnOrdinaryMethod() {
+        assertEquals(5L, evalLong("""
+                receiver: {
+                    whileTrue: (block) => { block() + 4 }
+                }
+                receiver.whileTrue(() => 1)
+                """));
+    }
+
+    @Test
+    void firstClassStandardLoopKeepsTheStandardAlgorithm() {
+        assertEquals(30L, evalLong("""
+                i: 0
+                condition: () => i < 3
+                loop: condition.whileTrue
+                last: loop(() => {
+                    i = i + 1
+                    i * 10
+                })
+                last
+                """));
+    }
+
     private static long evalLong(String source) {
         try (Context context = context()) {
             return context.eval(ProtosLanguage.ID, source).asLong();

@@ -673,7 +673,8 @@ final class CanonicalCompilationFacts {
      * Whether the body of {@code definition}, executed inline in a physical
      * root, still requires a persistent frame authority. Its nested callbacks
      * that {@code inline} also runs in that root create no context and are
-     * analyzed as part of the same region; every other demand is as in
+     * analyzed as part of the same region, so their accesses to this
+     * region's bindings demand nothing; every other demand is as in
      * {@link #requiresPersistentFrameAuthority}.
      */
     static boolean inlineBodyRequiresPersistentFrameAuthority(
@@ -974,6 +975,7 @@ final class CanonicalCompilationFacts {
         if (expression instanceof CanonicalLookup lookup) {
             return (ownBindingsOnly || scope.declaresName(lookup.name()))
                     && !resolvedInScope(analysis.resolutionOf(lookup), scope)
+                    && !capturedFromInlineRegion(analysis.resolutionOf(lookup), scope, inline)
                     && !(ownBindingsOnly
                             && transportedFreeCell(analysis.resolutionOf(lookup), scope)
                             && analysis.accessOf(lookup)
@@ -986,6 +988,7 @@ final class CanonicalCompilationFacts {
             }
             return ((ownBindingsOnly || scope.declaresName(assign.name()))
                             && !resolvedInScope(analysis.resolutionOf(assign), scope)
+                            && !capturedFromInlineRegion(analysis.resolutionOf(assign), scope, inline)
                             && !(ownBindingsOnly
                                     && transportedFreeCell(analysis.resolutionOf(assign), scope)
                                     && analysis.accessOf(assign)
@@ -1143,6 +1146,22 @@ final class CanonicalCompilationFacts {
         }
         return CanonicalBindingAnalysis.storageOf(identity) == CanonicalLexicalScope.Storage.CELL
                 && CanonicalBindingAnalysis.freeCellsOf(scope).contains(identity);
+    }
+
+    /*
+     * Inside an inline region, a nested callback that the same policy runs
+     * inline reaches a binding of the region by its exact identity, through
+     * the region's own BytecodeLocal: no execution context is needed.
+     */
+    private static boolean capturedFromInlineRegion(
+            Optional<CanonicalBindingResolution> resolution,
+            CanonicalLexicalScope scope,
+            CanonicalInlineStoragePlan.InlinePolicy inline) {
+        return inline != null
+                && resolution.isPresent()
+                && resolution.orElseThrow()
+                        instanceof CanonicalBindingResolution.CapturedResolved captured
+                && captured.identity().owner() == scope;
     }
 
     private static boolean resolvedInScope(
