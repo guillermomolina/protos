@@ -288,6 +288,96 @@ final class ProtosArrayEachNativeIterationTest {
     }
 
     /** The physical root of {@code run} iterates natively, without per-element dispatch. */
+    /*
+     * The normalized storage writes used by the standard indexed operations
+     * keep long storage primitive, detach a published generation before
+     * writing, and leave every published snapshot unchanged.
+     */
+    @Test
+    void normalizedLongWritesKeepPrimitiveStorageAndSnapshots() {
+        ProtosObjectValue parent = ProtosObjectValue.rootObject();
+        com.guillermomolina.protos.runtime.ProtosArrayValue longs =
+                new com.guillermomolina.protos.runtime.ProtosArrayValue(
+                        parent, new long[] {1L, 2L, 3L});
+        ProtosBytecodeRootNode.ArrayEachSnapshot snapshot =
+                ProtosBytecodeRootNode.GetArrayEachSnapshot.snapshot(longs);
+
+        assertEquals(20L, longs.indexedLongPutNormalized(1, 20L));
+        assertTrue(longs.hasLongStorageForRuntime());
+        assertEquals(20L, longs.indexedLongAtNormalized(1));
+        assertEquals(List.of(1L, 20L, 3L), longs.indexedSnapshot());
+
+        assertTrue(snapshot.nextIsLong());
+        assertEquals(1L, snapshot.advance());
+        assertEquals(2L, snapshot.advance());
+        assertEquals(3L, snapshot.advance());
+        assertFalse(snapshot.hasNext());
+    }
+
+    @Test
+    void normalizedObjectWriteWidensWithoutChangingEarlierSnapshots() {
+        ProtosObjectValue parent = ProtosObjectValue.rootObject();
+        com.guillermomolina.protos.runtime.ProtosArrayValue array =
+                new com.guillermomolina.protos.runtime.ProtosArrayValue(
+                        parent, new long[] {1L, 2L, 3L});
+        List<Object> before = array.indexedSnapshot();
+        Object replacement = new ProtosObjectValue(parent);
+
+        assertTrue(array.indexedPutNormalized(1, replacement) == replacement);
+        assertFalse(array.hasLongStorageForRuntime());
+        assertEquals(1L, array.indexedAtNormalized(0));
+        assertTrue(array.indexedAtNormalized(1) == replacement);
+        assertEquals(3L, array.indexedAtNormalized(2));
+        assertEquals(List.of(1L, 2L, 3L), before);
+
+        array.indexedLongPutNormalized(2, 30L);
+        assertFalse(array.hasLongStorageForRuntime());
+        assertTrue(array.indexedAt(1) == replacement);
+        assertEquals(30L, array.indexedAt(2));
+    }
+
+    @Test
+    void frozenArrayKeepsReadsAndRejectsCheckedWritesWithoutCorruption() {
+        ProtosObjectValue parent = ProtosObjectValue.rootObject();
+        com.guillermomolina.protos.runtime.ProtosArrayValue array =
+                new com.guillermomolina.protos.runtime.ProtosArrayValue(
+                        parent, new long[] {4L, 5L});
+        List<Object> snapshot = array.indexedSnapshot();
+        array.freeze();
+
+        assertEquals(5L, array.indexedLongAt(1));
+        assertThrows(IllegalStateException.class, () -> array.indexedLongPut(0, 9L));
+        assertThrows(IllegalStateException.class,
+                () -> array.indexedPut(0, new ProtosObjectValue(parent)));
+        assertThrows(IndexOutOfBoundsException.class, () -> array.indexedAt(2));
+        assertTrue(array.hasLongStorageForRuntime());
+        assertEquals(List.of(4L, 5L), array.indexedSnapshot());
+        assertEquals(List.of(4L, 5L), snapshot);
+        assertTrue(evalBooleanInProtos("""
+                a: [4, 5]
+                a.freeze()
+                rejected: Error.handle(() => { a[0] = 9; false }, (caught) => true)
+                rejected && (a[0] == 4) && (a[1] == 5) && (a.size() == 2)
+                """));
+        assertTrue(evalBooleanInProtos("""
+                a: [1, 2, 3]
+                seen: { value: 0 }
+                a.each((x) => {
+                    seen.value = seen.value * 10 + x
+                    a[0] = 9
+                })
+                (seen.value == 123) && (a[0] == 9) && (a[1] == 2)
+                """));
+    }
+
+    private static boolean evalBooleanInProtos(String source) {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID)
+                .option("protos.CoreRoot", CORE.toAbsolutePath().toString())
+                .build()) {
+            return context.eval(ProtosLanguage.ID, source).asBoolean();
+        }
+    }
+
     /**
      * The native each snapshot is the published indexed generation: known
      * length, ascending indexed reads of the exact elements (primitive

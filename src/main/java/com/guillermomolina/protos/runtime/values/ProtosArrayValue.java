@@ -152,6 +152,11 @@ public final class ProtosArrayValue extends ProtosObjectValue {
             return view;
         }
 
+        /*
+         * Runs only on the first write after a publication, so the clone
+         * stays out of the ordinary indexed read/write path.
+         */
+        @TruffleBoundary
         private IndexedGeneration detachedCopy() {
             return longElements != null
                     ? new IndexedGeneration(longElements.clone())
@@ -194,11 +199,11 @@ public final class ProtosArrayValue extends ProtosObjectValue {
     }
 
     public Object indexedAt(int index) {
-        return indexedGeneration.get(requireExistingIndex(index));
+        return indexedAtNormalized(requireExistingIndex(index));
     }
 
     public long indexedLongAt(int index) {
-        return indexedGeneration.getLong(requireExistingIndex(index));
+        return indexedLongAtNormalized(requireExistingIndex(index));
     }
 
     public Object indexedPut(int index, Object value) {
@@ -207,9 +212,7 @@ public final class ProtosArrayValue extends ProtosObjectValue {
             throw new IllegalStateException("array is frozen");
         }
 
-        int existingIndex = requireExistingIndex(index);
-        writableIndexedGeneration().put(existingIndex, value);
-        return value;
+        return indexedPutNormalized(requireExistingIndex(index), value);
     }
 
     public long indexedLongPut(int index, long value) {
@@ -217,8 +220,33 @@ public final class ProtosArrayValue extends ProtosObjectValue {
             throw new IllegalStateException("array is frozen");
         }
 
-        int existingIndex = requireExistingIndex(index);
-        writableIndexedGeneration().putLong(existingIndex, value);
+        return indexedLongPutNormalized(requireExistingIndex(index), value);
+    }
+
+    /*
+     * Normalized storage access. The caller has already validated the
+     * complete guest index against the current size (and, for writes, the
+     * frozen state), so these read or write the current generation
+     * directly. Writes keep copy-on-write: a published generation is
+     * detached before it is modified, so earlier snapshots never change.
+     */
+    public Object indexedAtNormalized(int index) {
+        return indexedGeneration.get(index);
+    }
+
+    /* Requires primitive long storage. */
+    public long indexedLongAtNormalized(int index) {
+        return indexedGeneration.getLong(index);
+    }
+
+    public Object indexedPutNormalized(int index, Object value) {
+        Objects.requireNonNull(value, "value");
+        writableIndexedGeneration().put(index, value);
+        return value;
+    }
+
+    public long indexedLongPutNormalized(int index, long value) {
+        writableIndexedGeneration().putLong(index, value);
         return value;
     }
 

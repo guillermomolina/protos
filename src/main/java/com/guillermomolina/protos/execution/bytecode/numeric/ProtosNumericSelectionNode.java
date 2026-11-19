@@ -25,6 +25,7 @@ import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
 import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.GenerateInline;
@@ -404,6 +405,7 @@ abstract class ProtosNumericSelectionNode extends Node {
      * none of them: a site that reaches it keeps its typed entries eligible.
      */
     @Specialization
+    @InliningCutoff
     static boolean doUncached(VirtualFrame frame, String selector, Object receiver) {
         ProtosPrelude prelude = prelude(frame);
         if (prototype(receiver, prelude) == null) {

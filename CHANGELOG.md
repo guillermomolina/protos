@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.171-SNAPSHOT
+
+- **I115.** Keep standard Array and Bytes indexed selection caches eligible alongside generic receivers, move indexed Error signaling and Array snapshot detachment behind cold boundaries, and access normalized Array storage after admission. Add indexed-operation, iteration and numeric-continuation regressions.
+
 ## 0.4.170-SNAPSHOT
 
 - **I168.** Language-server Definition navigates bare-name reads and assignment targets inside Closures and callbacks, however they are invoked, to their lexical declarations, including slots created earlier in the body of an object under construction. Closures and nested objects created in an object body skip that object and continue from the genuine context of the construction. Lexical navigation is a target, not an exact-origin proof; Hover, Completion and References keep using exact proofs only. F12 also accepts the cursor at the end of a reference.

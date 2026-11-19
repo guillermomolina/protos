@@ -1595,7 +1595,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     private static int existingBytesIndex(
             ProtosBytesValue bytes, long index, VirtualFrame frame) {
         if (index < 0 || index >= bytes.indexedSize()) {
-            throw bytesIndexedError(frame);
+            throw indexedError(frame);
         }
         return (int) index;
     }
@@ -1607,7 +1607,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     private static int existingArrayIndex(
             ProtosArrayValue array, long index, VirtualFrame frame) {
         if (index < 0 || index >= array.indexedSize()) {
-            throw bytesIndexedError(frame);
+            throw indexedError(frame);
         }
         return (int) index;
     }
@@ -1620,12 +1620,17 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     private static int writableArrayIndex(
             ProtosArrayValue array, long index, VirtualFrame frame) {
         if (array.isFrozen()) {
-            throw bytesIndexedError(frame);
+            throw indexedError(frame);
         }
         return existingArrayIndex(array, index, frame);
     }
 
-    private static ProtosSignalException bytesIndexedError(
+    /*
+     * Standard indexed Error shared by the Array and Bytes operations; kept
+     * out of the ordinary indexed fast path.
+     */
+    @InliningCutoff
+    private static ProtosSignalException indexedError(
             VirtualFrame frame) {
         ProtosActivation activation =
                 ProtosFrameArguments.activation(frame.getArguments());
@@ -1666,19 +1671,30 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     "hasSelectionParent(receiver, selection)",
                     "selection.isValid()"
                 },
-                limit = "3")
+                limit = "3",
+                excludeForUncached = true)
         public static boolean doCached(
                 String selector,
                 ProtosObjectValue receiver,
                 @Cached("receiver.getShape()") Shape receiverShape,
                 @Cached("selectInherited(receiver, receiverShape, selector)")
-                        ProtosValueLookup.StructuralSelection selection) {
+                        ProtosValueLookup.StructuralSelection selection,
+                @Cached("allOwnersFrozen(selection)") boolean frozen,
+                @Cached("frozenStandard(frozen, selector, receiver, selection)")
+                        boolean frozenStandard) {
+            if (frozen) {
+                return frozenStandard;
+            }
             return isStandardIndexedBehavior(selector, receiver, selection.read());
         }
 
-        @Specialization(
-                guards = "isStandardIndexedValue(receiver)",
-                replaces = "doCached")
+        /*
+         * The generic selection. It replaces no cached entry, so a site
+         * that also sees an overriding or uncached receiver keeps its
+         * standard entries eligible.
+         */
+        @Specialization(guards = "isStandardIndexedValue(receiver)")
+        @InliningCutoff
         public static boolean doGeneric(
                 String selector,
                 ProtosObjectValue receiver,
@@ -1690,9 +1706,30 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                             frame.getArguments()));
         }
 
+        /* Receivers outside the Array/Bytes domain are never standard. */
         @Fallback
         public static boolean doOther(String selector, Object receiver) {
             return false;
+        }
+
+        static boolean allOwnersFrozen(
+                ProtosValueLookup.StructuralSelection selection) {
+            return selection != null && selection.allOwnersFrozen();
+        }
+
+        /*
+         * Specialization-time classification of a chain whose owners are
+         * all FROZEN: while the selection stays valid its selected behavior
+         * cannot change. A mutable chain is never classified here.
+         */
+        static boolean frozenStandard(
+                boolean frozen,
+                String selector,
+                ProtosObjectValue receiver,
+                ProtosValueLookup.StructuralSelection selection) {
+            return frozen
+                    && isStandardIndexedBehavior(
+                            selector, receiver, selection.read());
         }
 
         static boolean isStandardIndexedValue(Object receiver) {
@@ -2233,7 +2270,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosArrayValue array,
                 long index,
                 @Bind VirtualFrame frame) {
-            return array.indexedLongAt(
+            return array.indexedLongAtNormalized(
                     existingArrayIndex(array, index, frame));
         }
 
@@ -2242,7 +2279,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosArrayValue array,
                 long index,
                 @Bind VirtualFrame frame) {
-            return array.indexedAt(
+            return array.indexedAtNormalized(
                     existingArrayIndex(array, index, frame));
         }
 
@@ -2289,7 +2326,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosArrayValue array,
                 long index,
                 @Bind VirtualFrame frame) {
-            array.indexedLongPut(
+            array.indexedLongPutNormalized(
                     writableArrayIndex(array, index, frame), value);
         }
 
@@ -2299,7 +2336,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosArrayValue array,
                 long index,
                 @Bind VirtualFrame frame) {
-            array.indexedPut(
+            array.indexedPutNormalized(
                     writableArrayIndex(array, index, frame),
                     ProtosNumericValueSupport.guestValue(value));
         }
@@ -2315,13 +2352,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 long index,
                 @Bind VirtualFrame frame) {
             if (bytes.isFrozen()) {
-                throw bytesIndexedError(frame);
+                throw indexedError(frame);
             }
             int hostIndex = existingBytesIndex(bytes, index, frame);
             Object octet = ProtosNumericValueSupport.guestValue(value);
             if (!ProtosNumericValueSupport.isUnsignedIntegerWithin(
                     octet, Byte.SIZE)) {
-                throw bytesIndexedError(frame);
+                throw indexedError(frame);
             }
             bytes.indexedPut(hostIndex, octet);
         }

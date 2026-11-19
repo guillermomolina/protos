@@ -349,6 +349,40 @@ final class ProtosI115NumericOverloadContinuationTest {
         assertEquals(Boolean.TRUE, result);
     }
 
+    /*
+     * Standard long and double arithmetic alternating with several custom
+     * selections at one site. Custom receivers beyond the cached entries
+     * reach the generic selection, which must not stop the site from
+     * answering the standard results, including overflow promotion.
+     */
+    @Test
+    void standardArithmeticAlternatingWithManyCustomSelections() throws Exception {
+        Harness h = new Harness();
+        Object result = h.eval("""
+                site: (x, y) => { x + y }
+                a: { ...{ plus: (other) => { other + 100 } }.alias("plus", "+") }
+                b: { ...{ plus: (other) => { other + 200 } }.alias("plus", "+") }
+                c: { ...{ plus: (other) => { other + 300 } }.alias("plus", "+") }
+                d: { ...{ plus: (other) => { other + 400 } }.alias("plus", "+") }
+                ok: true
+                i: 0
+                while(i < 10) {
+                    ok = ok && (site(i, 2) == i + 2)
+                    ok = ok && (site(1.5, 2.0) == 3.5)
+                    ok = ok && (site(a, i) == i + 100)
+                    ok = ok && (site(b, i) == i + 200)
+                    ok = ok && (site(c, i) == i + 300)
+                    ok = ok && (site(d, i) == i + 400)
+                    ok = ok && (site(40, 2) == 42)
+                    ok = ok && (site(0.25, 0.5) == 0.75)
+                    i = i + 1
+                }
+                """
+                + "ok && BigInteger.recognizes(site(9223372036854775807, 1))"
+                + " && (site(9223372036854775806, 1) == 9223372036854775807)\n");
+        assertEquals(Boolean.TRUE, result);
+    }
+
     private static void assertResolved(ProtosFutureValue future, String decimal) {
         assertEquals(ProtosFutureValue.State.RESOLVED, future.state());
         assertEquals(decimal, ProtosNumericValueSupport.integerDecimalText(

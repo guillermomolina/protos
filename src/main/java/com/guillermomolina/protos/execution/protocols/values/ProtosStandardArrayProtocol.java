@@ -86,7 +86,7 @@ public final class ProtosStandardArrayProtocol {
                         activation,
                         supplied.get(0),
                         array.indexedSize());
-        return array.indexedAt(index);
+        return array.indexedAtNormalized(index);
     }
 
     private static Object atPut(ProtosActivation activation, List<?> supplied) {
@@ -102,7 +102,7 @@ public final class ProtosStandardArrayProtocol {
                         activation,
                         supplied.get(0),
                         array.indexedSize());
-        return array.indexedPut(index, supplied.get(1));
+        return array.indexedPutNormalized(index, supplied.get(1));
     }
 
     private static Object size(ProtosActivation activation, List<?> supplied) {

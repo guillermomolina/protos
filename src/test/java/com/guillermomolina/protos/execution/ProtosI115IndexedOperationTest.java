@@ -283,6 +283,147 @@ final class ProtosI115IndexedOperationTest {
         }
     }
 
+    @Test
+    void standardLongArrayReadsAndWritesAcrossALoop() {
+        assertTrue(evalBoolean("""
+                a: [1, 2, 3, 4, 5]
+                i: 0
+                last: 0
+                while(i < 5) {
+                    last = (a[i] = a[i] * 10 + i)
+                    i = i + 1
+                }
+                (a[0] == 10) && (a[1] == 21) &&
+                    (a[2] == 32) && (a[3] == 43) &&
+                    (a[4] == 54) && (a.size() == 5) &&
+                    (last == 54) && (a[4].parent() === SmallInteger)
+                """));
+    }
+
+    @Test
+    void overridingReceiversDoNotDisableTheStandardIndexedPath() {
+        assertTrue(evalBoolean("""
+                Special: Array {
+                    at: (index) => { 42 }
+                    atPut: (index, value) => { 0 }
+                    size: () => { 99 }
+                }
+                s: Special(1, 2, 3)
+                read: (r, index) => { r[index] }
+                write: (r, index, value) => { r[index] = value }
+                count: (r) => { r.size() }
+                ok: true
+                i: 0
+                while(i < 20) {
+                    plain: [1, 2, 3]
+                    other: [7, 8, 9]
+                    ok = ok && (read(plain, 1) == 2)
+                    ok = ok && (read(s, 1) == 42)
+                    ok = ok && (read(other, 2) == 9)
+                    ok = ok && (write(s, 0, 5) == 5) && (s[0] == 42)
+                    ok = ok && (write(other, 0, 70) == 70) && (other[0] == 70)
+                    ok = ok && (count(s) == 99)
+                    ok = ok && (count(other) == 3)
+                    i = i + 1
+                }
+                ok
+                """));
+    }
+
+    @Test
+    void reassignedSelectedBehaviorIsObservedWithoutShapeChange() {
+        assertTrue(evalBoolean("""
+                Box: Array { at: (index) => { 1 } }
+                b: Box(5, 6)
+                read: (r) => { r[0] }
+                first: 0
+                i: 0
+                while(i < 10) {
+                    first = read(b)
+                    i = i + 1
+                }
+                Box.at = (index) => { 2 }
+                (first == 1) && (read(b) == 2)
+                """));
+    }
+
+    @Test
+    void indexedErrorsAndFrozenPrecedence() {
+        assertTrue(signals("a: [1, 2, 3]\na[0 - 1]"));
+        assertTrue(signals("a: [1, 2, 3]\na[3]"));
+        assertTrue(signals("a: [1, 2, 3]\na[9223372036854775807]"));
+        assertTrue(signals("a: [1, 2, 3]\na[0 - 9223372036854775807 - 1]"));
+        assertTrue(signals("a: [1, 2, 3]\na[\"x\"]"));
+        assertTrue(signals("a: [1, 2, 3]\na.freeze()\na[1] = 1"));
+        assertTrue(signals("a: [1, 2, 3]\na.freeze()\na[0 - 1] = 1"));
+        assertEquals(1L, evalLong("a: [1, 2, 3]\na.freeze()\n"
+                + "Error.handle(() => { a[0 - 1] = 9 }, (caught) => null)\na[0]"));
+        // A closed Array still replaces an existing element.
+        assertEquals(9L, evalLong("a: [1, 2, 3]\na.close()\na[0] = 9\na[0]"));
+        assertTrue(signals("a: [1, 2, 3]\na.close()\na[3] = 9"));
+    }
+
+    @Test
+    void failingIndexedReadEvaluatesReceiverAndIndexOnceInOrder() {
+        assertEquals(12L, evalLong(TRACE
+                + "a: [1, 2]\n"
+                + "Error.handle(() => { step(1, a)[step(2, 5)] }, (caught) => null)\n"
+                + "trace.value"));
+        assertEquals(123L, evalLong(TRACE
+                + "a: [1, 2]\na.freeze()\n"
+                + "Error.handle(() => {\n"
+                + "    step(1, a)[step(2, 0 - 1)] = step(3, 7)\n"
+                + "}, (caught) => null)\ntrace.value"));
+    }
+
+    @Test
+    void customIndexedBehaviorKeepsReceiverBindingAndResultIdentity()
+            throws Exception {
+        String source = """
+                marker: {}
+                Box: Array {
+                    at: (index) => { (this.size() == 2) && (index == 1) }
+                    atPut: (index, value) => { marker }
+                }
+                run: () => {
+                    b: Box(5, 6)
+                    v: {}
+                    written: (b[0] = v)
+                    plain: [1, 2]
+                    plain[1] = 3
+                    b[1] && (written === v) &&
+                        (b.atPut(0, v) === marker) &&
+                        (plain[1] == 3)
+                }
+                """;
+        try (ProtosStandaloneHostedSession session = open(source)) {
+            ProtosBytecodeRootNode run = (ProtosBytecodeRootNode)
+                    session.prepareTopLevel("run").hostExecutableForTesting()
+                            .target.getRootNode();
+            List<String> names = names(run);
+            for (String operation : List.of(
+                    "c.IsStandardIndexedSelection",
+                    "c.SetItem",
+                    "c.BinarySubscript",
+                    "c.GetMethod")) {
+                assertTrue(names.stream().anyMatch(name -> name.startsWith(operation)),
+                        "missing " + operation + " in " + names);
+            }
+            assertTrue(names.stream().anyMatch(name -> name.startsWith("c.Call")),
+                    "missing Call*Method in " + names);
+            assertTrue(names.contains("yield"), "dynamic path is not composed: " + names);
+            for (int i = 0; i < 5; i++) {
+                assertTrue(session.prepareTopLevel("run")
+                        .executable().execute().asBoolean());
+            }
+        }
+        assertTrue(signals("Box: Array { at: (index) => { Error().signal() } }\n"
+                + "b: Box(1)\nb[0]"));
+        assertEquals(42L, evalLong("f: () => {\n"
+                + "    Box: Array { at: (index) => { ^42 } }\n"
+                + "    b: Box(1)\n    b[0]\n    0\n}\nf()"));
+    }
+
     private static List<String> names(ProtosBytecodeRootNode root) {
         return root.getBytecodeNode().getInstructionsAsList().stream()
                 .map(ProtosInstructionNames::of).toList();
