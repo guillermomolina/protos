@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.179-SNAPSHOT
+
+- **I115.** Skip redundant canonical Boolean checks for validated comparisons in controls and stage direct indexed operands as Bytecode DSL stack values. Extend indexed-operation, Boolean-control and numeric-selection regressions.
+
 ## 0.4.178-SNAPSHOT
 
 - **I162 / D252-C1.** Add ordinary standard `String.each`, `Vector.each` and `Matrix.each` through the existing resumable Bytecode DSL loop. Visit Unicode scalars with a forward String cursor and exact Numbers from one shallow Vector/Matrix snapshot, preserving row-major order, receiver identity, ordinary overrides and callback control flow. Cover synchronous Java entry, suspension, cancellation, Unicode sequences and traversal without guest access messages; update the specification, guides, tutorials and native-boundary inventory. Keep scalar materialization and snapshot preparation compatible with Native Image runtime-compilation analysis.

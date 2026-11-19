@@ -562,6 +562,102 @@ final class ProtosI115IndexedOperationTest {
                 """));
     }
 
+    /**
+     * Operands that stay on the operand stack (bindings and a direct numeric
+     * index): one read site and one write site alternate the standard Array
+     * behavior, a redefined {@code at}/{@code atPut} and the restored
+     * standard behavior; the explicit {@code atPut} keeps the selected
+     * result and the assignment syntax yields its RHS.
+     */
+    @Test
+    void stackOperandSitesAlternateStandardRedefinedAndRestoredSelection() {
+        String sites = """
+                Custom: Array {}
+                read: (r, k) => { r[k + 1] }
+                write: (r, k, v) => { r[k + 1] = v }
+                put: (r, k, v) => { r.atPut(k + 1, v) }
+                ok: true
+                c: Custom(1, 2, 3)
+                i: 0
+                while(i < 12) {
+                    c = Custom(1, 2, 3)
+                    ok = ok && (read(c, 0) == 2) && (write(c, 0, 5) == 5) && (c[1] == 5)
+                    ok = ok && (put(c, 1, 6) == 6) && (c[2] == 6)
+                    i = i + 1
+                }
+                """;
+        String redefine = """
+                Custom.at: (index) => { 100 }
+                Custom.atPut: (index, value) => { 0 }
+                """;
+        String redefinedChecks =
+                "ok = ok && (read(c, 0) == 100) && (write(c, 0, 7) == 7) && (put(c, 0, 7) == 0)\n";
+        String restore = """
+                Custom.removeSlot("at")
+                Custom.removeSlot("atPut")
+                """;
+        assertTrue(evalBoolean(sites + "ok"),
+                "standard phase: reads, writes and atPut over twelve iterations");
+        assertEquals(100L, evalLong(sites + redefine + "read(c, 0)"),
+                "redefined at is selected at the read site");
+        assertEquals(7L, evalLong(sites + redefine + "write(c, 0, 7)"),
+                "indexed assignment yields its RHS under a redefined atPut");
+        assertEquals(0L, evalLong(sites + redefine + "put(c, 0, 7)"),
+                "explicit atPut yields the redefined method's result");
+        assertTrue(evalBoolean(sites + redefine + redefinedChecks + "ok"),
+                "redefined phase");
+        assertEquals(5L, evalLong(sites + redefine + redefinedChecks + restore + "read(c, 0)"),
+                "restored at reads the standard element");
+        assertEquals(8L, evalLong(sites + redefine + redefinedChecks + restore
+                        + "write(c, 0, 8)\nc[1]"),
+                "restored atPut writes the standard element");
+        assertEquals(9L, evalLong(sites + redefine + redefinedChecks + restore + "put(c, 1, 9)"),
+                "restored explicit atPut yields the standard RHS");
+        assertTrue(evalBoolean(sites + redefine + redefinedChecks + restore
+                + "ok = ok && (read(c, 0) == 5) && (write(c, 0, 8) == 8) && (c[1] == 8)\n"
+                + "ok && (put(c, 1, 9) == 9) && (c[2] == 9)"),
+                "complete alternation over the same send sites");
+    }
+
+    /**
+     * A selected {@code at} reached with stack operands runs once per read,
+     * including when it suspends inside a Task; the read result is the
+     * selected method's result after its resumption.
+     */
+    @Test
+    void suspendingSelectedAtWithStackOperandsRunsOnce() {
+        assertEquals(1042L, evalLong(TRACE + """
+                Lazy: Array {
+                    at: (index) => {
+                        trace.value = trace.value + 1
+                        (() => { 42 }).future().value()
+                    }
+                }
+                l: Lazy(1, 2, 3)
+                k: 0
+                read: () => { l[k + 1] }
+                result: (() => { read() }).future().value()
+                trace.value * 1000 + result
+                """));
+    }
+
+    /**
+     * Primitive {@code long}, {@code double} and {@code boolean} storage
+     * through stack operands; errors for bounds, mutability and index type.
+     */
+    @Test
+    void primitiveStorageAndErrorsThroughStackOperands() {
+        assertEquals(30L, evalLong("a: [10, 20, 30]\nk: 1\na[k + 1]"));
+        assertEquals(9L, evalLong("a: [10, 20, 30]\nk: 0\na[k + 1] = 9\na[k + 1]"));
+        assertTrue(evalBoolean("a: [1.5, 2.5]\nk: 0\na[k + 1] = 3.5\na[k + 1] == 3.5"));
+        assertTrue(evalBoolean("a: [true, false]\nk: 0\na[k + 1] = true\na[k + 1] === true"));
+        assertTrue(signals("a: [1, 2]\nk: 1\na[k + 1]"));
+        assertTrue(signals("a: [1, 2]\nk: 0\na[k - 1] = 3"));
+        assertTrue(signals("a: [1, 2]\na.freeze()\nk: 0\na[k + 1] = 3"));
+        assertTrue(signals("a: [1, 2]\nk: \"x\"\na[k]"));
+        assertTrue(signals("a: [1, 2]\nk: 1.5\na[k] = 3"));
+    }
+
     @Test
     void frozenBytesRejectRepeatedWritesAndKeepTheirContent() {
         assertTrue(evalBoolean(BYTES + """

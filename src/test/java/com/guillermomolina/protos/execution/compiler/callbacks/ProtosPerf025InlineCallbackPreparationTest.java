@@ -261,7 +261,7 @@ final class ProtosPerf025InlineCallbackPreparationTest {
                 """,
                 "2",
                 "RichCompareLt",
-                "CanonicalControlCondition",
+                "RequireCanonicalBooleanResult",
                 "NumberAdd",
                 "branch.backward");
 

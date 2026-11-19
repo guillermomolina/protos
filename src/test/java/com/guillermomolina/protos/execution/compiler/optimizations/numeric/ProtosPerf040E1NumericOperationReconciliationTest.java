@@ -1267,6 +1267,182 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
         System.out.println("PERF040_E1_FALLBACK_KEEPS_PRIMITIVE_LANES=PASS");
     }
 
+    /**
+     * One site per selector ({@code +}, {@code -}, {@code *}, {@code <},
+     * {@code >}) alternates the standard behavior, a redefined behavior
+     * returning an ordinary result, the restored standard behavior and, for
+     * an ordering, a redefinition returning a non-Boolean: each call
+     * evaluates the receiver and the argument exactly once, observes the
+     * selection current at that call and, for an ordering, accepts only a
+     * canonical Boolean.
+     */
+    @Test
+    void everySelectorSiteAlternatesStandardRedefinedAndRestoredOperandsOnce()
+            throws Exception {
+        withCanonicalPrelude(canonical -> {
+            Object standardPlus =
+                    canonical.integerPrototype().readLocalSlot("+").orElseThrow();
+            AlternativeIntegers alternative =
+                    alternativeIntegers(canonical, standardPlus, false);
+            ProtosActivation module = alternative.prelude().newModuleActivation();
+            ProtosObjectValue integer = alternative.integer();
+            int[] counts = new int[2];
+            ProtosClosureValue left = ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> {
+                        counts[0]++;
+                        return Long.valueOf(6L);
+                    });
+            ProtosClosureValue right = ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> {
+                        counts[1]++;
+                        return Long.valueOf(3L);
+                    });
+            Map<String, Object> standardResults = Map.of(
+                    "+", 9L, "-", 3L, "*", 18L, "<", Boolean.FALSE, ">", Boolean.TRUE);
+            for (String selector : List.of("+", "-", "*", "<", ">")) {
+                boolean ordering = selector.equals("<") || selector.equals(">");
+                Object expected = standardResults.get(selector);
+                Object redefinedResult = ordering
+                        ? Boolean.valueOf(!((Boolean) expected))
+                        : Long.valueOf(1000L);
+                ProtosClosureValue redefined = ProtosClosureValue.nativeClosure(
+                        (activation, supplied) -> redefinedResult);
+                ProtosClosureValue site =
+                        closure("(l, r) => l() " + selector + " r()", module);
+                Object standard = integer.readLocalSlot(selector).orElse(null);
+                for (int round = 0; round < 10; round++) {
+                    String where = selector + " round " + round;
+                    counts[0] = 0;
+                    counts[1] = 0;
+                    assertEquals(normalized(expected),
+                            normalized(call(site, module, left, right)), where);
+                    setOrCreate(integer, selector, redefined);
+                    assertEquals(normalized(redefinedResult),
+                            normalized(call(site, module, left, right)), where + " redefined");
+                    restore(integer, selector, standard);
+                    assertEquals(normalized(expected),
+                            normalized(call(site, module, left, right)), where + " restored");
+                    int calls = 3;
+                    if (ordering) {
+                        setOrCreate(integer, selector, answering(1L));
+                        assertThrows(ProtosSignalException.class,
+                                () -> call(site, module, left, right), where + " non-Boolean");
+                        restore(integer, selector, standard);
+                        calls = 4;
+                    }
+                    assertEquals(calls, counts[0], where + ": receiver once per call");
+                    assertEquals(calls, counts[1], where + ": argument once per call");
+                }
+            }
+        });
+        System.out.println("PERF040_E1_EVERY_SELECTOR_OPERANDS_ONCE=PASS");
+    }
+
+    /**
+     * Chained operations whose intermediate result is reused stay exact
+     * through signed-64 overflow, follow a redefinition of {@code +} at
+     * every {@code +} of the chain and return to the standard results once
+     * it is restored.
+     */
+    @Test
+    void chainedOperationsReuseIntermediatesAcrossRedefinitionAndOverflow()
+            throws Exception {
+        withCanonicalPrelude(canonical -> {
+            Object standardPlus =
+                    canonical.integerPrototype().readLocalSlot("+").orElseThrow();
+            AlternativeIntegers alternative =
+                    alternativeIntegers(canonical, standardPlus, false);
+            ProtosActivation module = alternative.prelude().newModuleActivation();
+            ProtosClosureValue site = closure(
+                    "(x, y) => {\n    s: x + y\n    (s * s) - (s + y)\n}", module);
+            for (int round = 0; round < 10; round++) {
+                alternative.integer().assignLocalSlot("+", standardPlus);
+                assertEquals(17L, normalized(call(site, module, 2L, 3L)));
+                assertTrue(ProtosNumericValueSupport.isLargeInteger(
+                        call(site, module, Long.MAX_VALUE, 1L)));
+                alternative.integer().assignLocalSlot("+", answering(10L));
+                // s = 10; (10 * 10) - (10 + y) with the redefined + answering 10.
+                assertEquals(90L, normalized(call(site, module, 2L, 3L)));
+                assertEquals(90L, normalized(call(site, module, Long.MAX_VALUE, 1L)));
+            }
+            alternative.integer().assignLocalSlot("+", standardPlus);
+            assertEquals(17L, normalized(call(site, module, 2L, 3L)));
+        });
+        System.out.println("PERF040_E1_CHAINED_INTERMEDIATES=PASS");
+    }
+
+    /**
+     * An ordering used directly as an {@code if} condition and as the
+     * conditions of nested {@code while} loops, with and without a debugger:
+     * the standard comparison decides, a redefinition returning a canonical
+     * Boolean decides through its own result, and a redefinition returning
+     * any other value signals the standard Error.
+     */
+    @Test
+    void orderingConditionsOfIfAndNestedWhileFollowTheSelection() throws Exception {
+        String program = "(n) => {\n"
+                + "    hits: 0\n"
+                + "    i: 0\n"
+                + "    j: 0\n"
+                + "    while (i < n) {\n"
+                + "        j = 0\n"
+                + "        while (j < n) {\n"
+                + "            if (j > i) {\n"
+                + "                hits = hits + 1\n"
+                + "            }\n"
+                + "            j = j + 1\n"
+                + "        }\n"
+                + "        i = i + 1\n"
+                + "    }\n"
+                + "    hits\n"
+                + "}";
+        for (boolean debug : new boolean[] {false, true}) {
+            try (Context context = context(debug)) {
+                context.initialize(ProtosLanguage.ID);
+                context.enter();
+                try {
+                    ProtosPrelude canonical = new ProtosCoreBootstrap().bootstrap(CORE);
+                    Object standardPlus =
+                            canonical.integerPrototype().readLocalSlot("+").orElseThrow();
+                    AlternativeIntegers alternative =
+                            alternativeIntegers(canonical, standardPlus, false);
+                    ProtosActivation module = alternative.prelude().newModuleActivation();
+                    ProtosObjectValue integer = alternative.integer();
+                    ProtosClosureValue site = closure(program, module);
+                    Object standardGreater = integer.readLocalSlot(">").orElse(null);
+                    Object standardLess = integer.readLocalSlot("<").orElse(null);
+                    ProtosClosureValue answeringTrue = ProtosClosureValue.nativeClosure(
+                            (activation, supplied) -> Boolean.TRUE);
+                    for (int round = 0; round < 5; round++) {
+                        String where = mode(debug) + " round " + round;
+                        assertEquals(6L, normalized(call(site, module, 4L)), where);
+                        setOrCreate(integer, ">", answeringTrue);
+                        assertEquals(16L, normalized(call(site, module, 4L)),
+                                where + ": redefined > answering true");
+                        setOrCreate(integer, ">", answering(1L));
+                        assertThrows(ProtosSignalException.class,
+                                () -> call(site, module, 4L),
+                                where + ": redefined > answering a non-Boolean");
+                        restore(integer, ">", standardGreater);
+                        setOrCreate(integer, "<", answeringFalse());
+                        assertEquals(0L, normalized(call(site, module, 4L)),
+                                where + ": redefined < answering false");
+                        setOrCreate(integer, "<", answering(1L));
+                        assertThrows(ProtosSignalException.class,
+                                () -> call(site, module, 4L),
+                                where + ": redefined < answering a non-Boolean");
+                        restore(integer, "<", standardLess);
+                        assertEquals(6L, normalized(call(site, module, 4L)),
+                                where + ": restored");
+                    }
+                } finally {
+                    context.leave();
+                }
+            }
+        }
+        System.out.println("PERF040_E1_ORDERING_CONTROL_CONDITIONS=PASS");
+    }
+
     private static void setOrCreate(ProtosObjectValue owner, String selector, Object value) {
         if (owner.readLocalSlot(selector).isPresent()) {
             owner.assignLocalSlot(selector, value);

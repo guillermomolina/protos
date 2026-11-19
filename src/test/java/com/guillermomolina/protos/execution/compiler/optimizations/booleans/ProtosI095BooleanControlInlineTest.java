@@ -696,6 +696,34 @@ final class ProtosI095BooleanControlInlineTest {
                 """, 110010111L);
     }
 
+    /**
+     * A numeric comparison as the direct condition of an {@code if} and as
+     * the conditions of nested {@code while} loops decides with the
+     * canonical Boolean it produces, with and without a debugger.
+     */
+    @Test
+    void numericComparisonsDecideDirectIfAndNestedWhile() throws Exception {
+        assertParity("""
+                run: (n) => {
+                    hits: 0
+                    i: 0
+                    j: 0
+                    while (i < n) {
+                        j = 0
+                        while (j < n) {
+                            if (j > i) {
+                                hits = hits + 1
+                            }
+                            j = j + 1
+                        }
+                        i = i + 1
+                    }
+                    hits
+                }
+                run(4) * 100 + run(1) * 10 + run(0)
+                """, 600L);
+    }
+
     /** The same program produces the same result with and without a debugger attached. */
     private static void assertParity(String source, long expected) throws Exception {
         assertInteger(expected, execute(false, source).value());

@@ -3517,6 +3517,22 @@ final class CanonicalToBytecodeLowerer {
         builder.beginSourceSection(
                 send.span().startOffset(), send.span().length());
         builder.beginBlock();
+        if (stackStagedIndexedOperands(send.receiver(), send.arguments())) {
+            StackValue receiverValue = bindIndexedOperand(
+                    builder, send.receiver(), scratch, childResult, resumeValue);
+            java.util.List<StackValue> operandValues =
+                    new java.util.ArrayList<>(send.arguments().size());
+            for (CanonicalExpression argument : send.arguments()) {
+                operandValues.add(bindIndexedOperand(
+                        builder, argument, scratch, childResult, resumeValue));
+            }
+            emitIndexedProtocolOfStackValues(
+                    builder, send.message(), receiverValue, operandValues, result,
+                    childResult, resumeValue, primitiveCarrierResult);
+            builder.endBlock();
+            builder.endSourceSection();
+            return;
+        }
         BytecodeLocal receiver =
                 builder.createLocal("indexedReceiver", null);
         stageOperand(
@@ -3537,6 +3553,140 @@ final class CanonicalToBytecodeLowerer {
                 childResult, resumeValue, primitiveCarrierResult);
         builder.endBlock();
         builder.endSourceSection();
+    }
+
+    /**
+     * Whether every indexed operand can stay on the operand stack until the
+     * selection: an expression with no composed invocation, or a direct
+     * numeric send, whose own composition owns its suspension state and
+     * completes before the next operand is evaluated.
+     */
+    private static boolean stackStagedIndexedOperands(
+            CanonicalExpression receiver,
+            java.util.List<CanonicalExpression> arguments) {
+        if (!stackStagedIndexedOperand(receiver)) {
+            return false;
+        }
+        for (CanonicalExpression argument : arguments) {
+            if (!stackStagedIndexedOperand(argument)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean stackStagedIndexedOperand(CanonicalExpression expression) {
+        if (expression instanceof CanonicalSend send) {
+            return primitiveNumericSendCandidate(send);
+        }
+        return !requiresComposedInvocation(expression);
+    }
+
+    /** Evaluate one indexed operand exactly once and bind it as a stack value. */
+    private StackValue bindIndexedOperand(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalExpression expression,
+            BytecodeLocal scratch,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        builder.beginBindStackValue();
+        emitExpressionValue(builder, expression, scratch, childResult, resumeValue, false);
+        return builder.endBindStackValue();
+    }
+
+    /**
+     * The indexed protocol over operands already evaluated once, in source
+     * order, onto the operand stack. {@code IsStandardIndexedSelection}
+     * observes the behavior actually selected for {@code selector} on the
+     * receiver. The standard Array/Bytes behavior executes the direct
+     * {@code BinarySubscript}, {@code SetItem} or {@code GetLen} over the
+     * stack values. Any other selection first materializes the operands into
+     * the locals its dispatcher needs, inside that branch alone, then keeps
+     * {@code GetMethod}, the arity-selected {@code Call*Method} and the
+     * suspendable composition, under its {@link StandardTags.CallTag}. An
+     * explicit {@code atPut} send retains the selected method's result;
+     * indexed assignment passes no result local.
+     */
+    private void emitIndexedProtocolOfStackValues(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            String selector,
+            StackValue receiver,
+            java.util.List<StackValue> operands,
+            BytecodeLocal result,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue,
+            boolean primitiveCarrierResult) {
+        builder.beginIfThenElse();
+
+        builder.beginIsStandardIndexedSelection(selector);
+        builder.emitLoadStackValue(receiver);
+        builder.endIsStandardIndexedSelection();
+
+        builder.beginBlock();
+        switch (selector) {
+            case "atPut" -> {
+                builder.beginSetItem();
+                builder.emitLoadStackValue(operands.get(1));
+                builder.emitLoadStackValue(receiver);
+                builder.emitLoadStackValue(operands.get(0));
+                builder.endSetItem();
+                if (result != null) {
+                    builder.beginStoreLocal(result);
+                    builder.emitLoadStackValue(operands.get(1));
+                    builder.endStoreLocal();
+                }
+            }
+            case "at" -> {
+                beginMutationResult(builder, result);
+                builder.beginBinarySubscript();
+                builder.emitLoadStackValue(receiver);
+                builder.emitLoadStackValue(operands.get(0));
+                builder.endBinarySubscript();
+                endMutationResult(builder, result);
+            }
+            case "size" -> {
+                beginMutationResult(builder, result);
+                builder.beginGetLen();
+                builder.emitLoadStackValue(receiver);
+                builder.endGetLen();
+                endMutationResult(builder, result);
+            }
+            default -> throw new AssertionError(
+                    "Not an indexed selector: " + selector);
+        }
+        builder.endBlock();
+
+        builder.beginTag(StandardTags.CallTag.class);
+        builder.beginBlock();
+        BytecodeLocal receiverLocal =
+                builder.createLocal("indexedReceiver", null);
+        builder.beginStoreLocal(receiverLocal);
+        builder.emitLoadStackValue(receiver);
+        builder.endStoreLocal();
+        java.util.List<BytecodeLocal> operandLocals =
+                new java.util.ArrayList<>(operands.size());
+        for (StackValue operand : operands) {
+            BytecodeLocal local = builder.createLocal("indexedOperand", null);
+            builder.beginStoreLocal(local);
+            builder.emitLoadStackValue(operand);
+            builder.endStoreLocal();
+            operandLocals.add(local);
+        }
+        BytecodeLocal callable =
+                builder.createLocal("indexedMethod", null);
+        emitGetMethod(builder, selector, receiverLocal, callable);
+        emitDispatchedCall(
+                builder, callable, operandLocals, null, childResult,
+                result, resumeValue, primitiveCarrierResult);
+        builder.emitClearLocal(callable);
+        builder.emitClearLocal(receiverLocal);
+        for (BytecodeLocal local : operandLocals) {
+            builder.emitClearLocal(local);
+        }
+        builder.endBlock();
+        builder.endTag(StandardTags.CallTag.class);
+
+        builder.endIfThenElse();
     }
 
     /**
@@ -5830,6 +5980,29 @@ final class CanonicalToBytecodeLowerer {
                 assign.span().startOffset(), assign.span().length());
         builder.beginBlock();
 
+        if (stackStagedIndexedOperands(
+                assign.receiver(), java.util.List.of(assign.index(), assign.value()))) {
+            // Receiver, index, then value, each exactly once; then atPut selection.
+            StackValue receiverValue = bindIndexedOperand(
+                    builder, assign.receiver(), preparedCall, childResult, resumeValue);
+            StackValue indexValue = bindIndexedOperand(
+                    builder, assign.index(), preparedCall, childResult, resumeValue);
+            StackValue rhsValue = bindIndexedOperand(
+                    builder, assign.value(), preparedCall, childResult, resumeValue);
+            emitIndexedProtocolOfStackValues(
+                    builder, "atPut", receiverValue,
+                    java.util.List.of(indexValue, rhsValue),
+                    null, childResult, resumeValue, false);
+            if (result != null) {
+                builder.beginStoreLocal(result);
+                builder.emitLoadStackValue(rhsValue);
+                builder.endStoreLocal();
+            }
+            builder.endBlock();
+            builder.endSourceSection();
+            return;
+        }
+
         BytecodeLocal receiver =
                 builder.createLocal("indexedAssignReceiver", null);
         BytecodeLocal index =
@@ -7117,7 +7290,7 @@ final class CanonicalToBytecodeLowerer {
          */
         boolean selectsCustomBehavior =
                 !control.loop()
-                        && canonicalBooleanLiteral(receiver) == null;
+                        && !producesCanonicalBoolean(receiver);
 
         builder.beginTag(StandardTags.CallTag.class);
         builder.beginBlock();
@@ -7519,6 +7692,12 @@ final class CanonicalToBytecodeLowerer {
         Boolean literal = receiver == null ? canonicalBooleanLiteral(operand) : null;
         if (literal != null) {
             builder.emitLoadConstant(literal == control.polarity);
+        } else if (receiver == null
+                && control.polarity
+                && producesCanonicalBoolean(operand)) {
+            // Already a validated canonical Boolean: it is the decision.
+            emitExpressionValue(builder, operand, staging.scratch(),
+                    staging.childResult(), staging.resumeValue(), false);
         } else if (receiver == null) {
             builder.beginCanonicalControlCondition(control.polarity);
             emitExpressionValue(builder, operand, staging.scratch(),
@@ -7571,6 +7750,13 @@ final class CanonicalToBytecodeLowerer {
 
         if (knownCondition != null) {
             builder.emitLoadConstant(knownCondition == control.polarity);
+        } else if (control.polarity
+                && staging.inline().get(control.conditionPosition)
+                && closureProducesCanonicalBoolean(
+                        staging.operands().get(control.conditionPosition))) {
+            // The inline condition body ends in a validated canonical Boolean.
+            emitControlCallbackValue(
+                    builder, staging, control.conditionPosition, false);
         } else {
             builder.beginCanonicalControlCondition(control.polarity);
             emitControlCallbackValue(
@@ -9324,6 +9510,34 @@ final class CanonicalToBytecodeLowerer {
         builder.emitLoadStackValue(completedValue);
 
         builder.endBlock();
+    }
+
+    /**
+     * Whether every completion of {@code expression}, as lowered here, is
+     * exactly canonical {@code true} or {@code false}: a literal Boolean, or
+     * a non-contextual ordering send lowered as a direct numeric operation,
+     * whose standard selection produces the canonical Boolean and whose any
+     * other selection is validated by {@code RequireCanonicalBooleanResult}
+     * after its composition completes. A consumer of such a value needs no
+     * second validation.
+     */
+    private static boolean producesCanonicalBoolean(CanonicalExpression expression) {
+        if (canonicalBooleanLiteral(expression) != null) {
+            return true;
+        }
+        return expression instanceof CanonicalSend send
+                && !send.contextual()
+                && isOrderingSelector(send.message())
+                && primitiveNumericSendCandidate(send);
+    }
+
+    /** Whether an inline callback body ends in a proven canonical Boolean. */
+    private static boolean closureProducesCanonicalBoolean(CanonicalExpression expression) {
+        if (!(expression instanceof CanonicalClosure closure)) {
+            return false;
+        }
+        java.util.List<CanonicalExpression> body = closure.body().expressions();
+        return !body.isEmpty() && producesCanonicalBoolean(body.get(body.size() - 1));
     }
 
     /**
