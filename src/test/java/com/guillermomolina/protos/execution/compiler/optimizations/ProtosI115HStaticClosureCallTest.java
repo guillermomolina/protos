@@ -733,8 +733,8 @@ final class ProtosI115HStaticClosureCallTest {
     /*
      * I115: n is captured by the inline ifTrue body, so it is a CELL:
      * LoadSuppliedArgument(0) is stored straight into its cell. The
-     * condition is the per-selector comparison, materialized and validated
-     * by the unified Boolean control; '-' and '+' are NumberSubtract and
+     * condition is the per-selector comparison, validated as a canonical
+     * Boolean result before the native branch; '-' and '+' are NumberSubtract and
      * NumberAdd.
      */
     private static void assertRecursiveUnaryLowering(List<String> names, String comparison) {
@@ -752,7 +752,7 @@ final class ProtosI115HStaticClosureCallTest {
                         || (load >= 0 && plain.get(load + 1).equals("c.StoreCell")),
                 plain::toString);
         int compare = plain.indexOf(comparison);
-        int condition = plain.indexOf("c.IsCanonicalBooleanOperand");
+        int condition = plain.indexOf("c.RequireCanonicalBooleanResult");
         assertTrue(compare >= 0 && condition > compare,
                 () -> "comparison, then the canonical Boolean control: " + plain);
         assertTrue(plain.contains("c.NumberSubtract") && plain.contains("c.NumberAdd"),

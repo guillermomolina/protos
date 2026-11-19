@@ -1040,12 +1040,14 @@ final class ProtosI115PCompactBooleanWhileTest {
         assertEquals(1, names.stream().filter(name -> name.startsWith("c.RichCompareLt")).count(),
                 "The condition comparison is exactly one RichCompareLt: " + names);
         assertEquals(1, names.stream().filter(
-                        name -> name.startsWith("c.CanonicalControlCondition")).count(),
+                        name -> name.startsWith("c.RequireCanonicalBooleanResult")).count(),
                 "One canonical Boolean validation of the condition: " + names);
-        // The primitive Boolean carrier of the comparison feeds the
-        // validation directly; it is never materialized as a guest value.
+        // The validated comparison is the condition: no second control check.
+        assertEquals(0, names.stream().filter(
+                        name -> name.startsWith("c.CanonicalControlCondition")).count(),
+                "No second validation of the validated comparison: " + names);
         int compare = firstIndex(names, "c.RichCompareLt", 0);
-        int condition = firstIndex(names, "c.CanonicalControlCondition", compare + 1);
+        int condition = firstIndex(names, "c.RequireCanonicalBooleanResult", compare + 1);
         int branch = firstIndex(names, "branch.false", condition + 1);
         assertTrue(compare >= 0 && condition > compare && branch > condition,
                 "comparison, validation, branch: " + names);

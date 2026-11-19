@@ -251,17 +251,20 @@ final class ProtosI115QCompactLiteralReturnTest {
          * Both numeric sites are fused operations that classify their
          * standard selection internally. RichCompareLt produces
          * a canonical Boolean, and a custom comparison result is validated
-         * before CanonicalControlCondition feeds the branch.
+         * by RequireCanonicalBooleanResult, which feeds the branch directly
+         * without a second CanonicalControlCondition.
          */
         List<String> names = census.names();
         assertEquals(1, names.stream().filter(name -> name.startsWith("c.RichCompareLt")).count());
         int lt = names.indexOf(names.stream()
                 .filter(name -> name.startsWith("c.RichCompareLt")).findFirst().orElseThrow());
         int condition = java.util.stream.IntStream.range(lt + 1, names.size())
-                .filter(index -> names.get(index).startsWith("c." + BOOLEAN_CONDITION))
+                .filter(index -> names.get(index).startsWith("c.RequireCanonicalBooleanResult"))
                 .findFirst().orElseThrow();
         assertTrue(names.get(condition + 1).startsWith("branch.false"),
                 "the branch consumes the validated comparison: " + names);
+        assertFalse(census.has(BOOLEAN_CONDITION),
+                "the validated comparison needs no second control check: " + names);
         assertFalse(census.has("TryPrimitiveNumeric"));
         assertFalse(census.has("ExperimentalInteger"));
         assertEquals(1, names.stream().filter(name -> name.startsWith("c.NumberAdd")).count());
@@ -289,17 +292,21 @@ final class ProtosI115QCompactLiteralReturnTest {
         /*
          * I115: the prefix n = n + 1 is the single NumberAdd and stays inside
          * the While condition, before the test of the condition's value, so
-         * it runs exactly once although the body never runs (result 1).
+         * it runs exactly once although the body never runs (result 1). The
+         * condition body ends in the literal false, a canonical Boolean that
+         * the loop branch consumes directly without a control check.
          */
         List<String> names = census.names();
         assertEquals(1, names.stream()
                 .filter(name -> name.startsWith("c.NumberAdd")).count());
         int prefix = names.indexOf(names.stream()
                 .filter(name -> name.startsWith("c.NumberAdd")).findFirst().orElseThrow());
-        int test = names.indexOf(names.stream()
-                .filter(name -> name.startsWith("c." + BOOLEAN_CONDITION)).findFirst().orElseThrow());
+        int test = java.util.stream.IntStream.range(prefix + 1, names.size() - 1)
+                .filter(index -> names.get(index).startsWith("load.constant")
+                        && names.get(index + 1).startsWith("branch.false"))
+                .findFirst().orElse(-1);
         assertTrue(prefix < test, "the prefix is evaluated before the loop test: " + names);
-        assertTrue(names.get(test + 1).startsWith("branch.false"), names.toString());
+        assertFalse(census.has(BOOLEAN_CONDITION), names.toString());
         assertFalse(census.has("TryPrimitiveNumeric"));
         assertFalse(census.has("ExperimentalInteger"));
         assertNoGenericDispatch(census);

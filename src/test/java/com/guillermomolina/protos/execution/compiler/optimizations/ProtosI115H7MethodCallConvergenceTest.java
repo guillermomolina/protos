@@ -95,8 +95,8 @@ final class ProtosI115H7MethodCallConvergenceTest {
      * The run root of METHOD_CALL in the shared Bytecode DSL lowering. The
      * loop condition and body are inline callbacks of the native while, so i
      * and sink are frame-native locals of run (no cells); the condition is
-     * RichCompareLt whose primitive result flows into the canonical control
-     * condition and the native branch; the send is ReadGlobal, GetMethod, then
+     * RichCompareLt whose primitive result is validated as a canonical Boolean
+     * condition that feeds the native branch; the send is ReadGlobal, GetMethod, then
      * one CallBinaryMethod (receiver plus one argument); both
      * {@code x = x + e} are NumberAdd behind IsStandardNumericSelection, whose
      * message fallback is a guarded GetMethod; a backward branch closes the
@@ -117,7 +117,9 @@ final class ProtosI115H7MethodCallConvergenceTest {
         assertEquals(1, count(names, "c.GetMethod"),
                 "only the ordinary send selects a method: " + names);
         int compare = names.indexOf("c.RichCompareLt");
-        int condition = indexAfter(names, "c.CanonicalControlCondition", compare);
+        // The validated comparison is the condition: no second control check.
+        assertEquals(0, count(names, "c.CanonicalControlCondition"), names.toString());
+        int condition = indexAfter(names, "c.RequireCanonicalBooleanResult", compare);
         int branch = indexAfter(names, "branch.false", condition);
         assertTrue(compare >= 0 && condition > compare && branch > condition,
                 "comparison, canonical condition, branch: " + names);
@@ -368,7 +370,7 @@ final class ProtosI115H7MethodCallConvergenceTest {
             List<String> loop = unquickened(names(loopRoot));
             assertEquals(1, count(loop, "c.RichCompareLt"), "k < 3 is RichCompareLt: " + loop);
             int compare = loop.indexOf("c.RichCompareLt");
-            int condition = indexAfter(loop, "c.CanonicalControlCondition", compare);
+            int condition = indexAfter(loop, "c.RequireCanonicalBooleanResult", compare);
             assertTrue(condition > compare
                             && indexAfter(loop, "branch.false", condition) > condition,
                     "comparison, Boolean validation, then the native branch: " + loop);
@@ -883,8 +885,10 @@ final class ProtosI115H7MethodCallConvergenceTest {
 
             int comparison = names.indexOf("c.RichCompareLt");
             int validation = names.indexOf("c.RequireCanonicalBooleanResult");
-            int condition = names.indexOf("c.CanonicalControlCondition");
+            int condition = indexAfter(names, "branch.false", validation);
 
+            assertEquals(0, count(names, "c.CanonicalControlCondition"),
+                    "the validated comparison needs no second control check: " + names);
             assertTrue(comparison >= 0
                             && validation > comparison
                             && condition > validation,

@@ -475,7 +475,8 @@ final class ProtosI107ContinuationEmissionTest {
                 assertEquals(2, calls.size(), () -> "CallUnaryMethod count in " + names);
 
                 long clears = names.subList(calls.get(0), calls.get(1)).stream()
-                        .filter(name -> name.startsWith("clear.local"))
+                        .filter(name -> name.startsWith("clear.local")
+                                || name.equals("c.LoadAndClearTempLocal"))
                         .count();
                 assertTrue(clears >= 2,
                         () -> "first Call1 scratch not cleared before the second in "

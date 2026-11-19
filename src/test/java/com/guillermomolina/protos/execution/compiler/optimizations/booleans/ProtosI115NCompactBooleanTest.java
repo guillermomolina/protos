@@ -319,10 +319,13 @@ final class ProtosI115NCompactBooleanTest {
                     module);
             List<String> names = instructionNames(run);
             assertTrue(names.stream().anyMatch(n -> n.contains("RichCompareLt")));
-            assertTrue(names.stream().anyMatch(n -> n.contains("IsCanonicalBooleanOperand")));
-            assertTrue(names.stream().anyMatch(n -> n.contains("MaterializeSelectedCallback")),
-                    "the custom branch creates the callback over the live frame");
-            assertTrue(names.stream().anyMatch(n -> n.contains("CanonicalControlCondition")),
+            assertTrue(names.stream().anyMatch(n -> n.contains("RequireCanonicalBooleanResult")),
+                    "the comparison result is validated as a canonical Boolean");
+            // The validated comparison is canonical or signals, so no custom
+            // ifTrue branch (and no callback materialization) is emitted.
+            assertFalse(names.stream().anyMatch(n -> n.contains("MaterializeSelectedCallback")),
+                    "a validated comparison condition needs no custom branch: " + names);
+            assertTrue(names.stream().anyMatch(n -> isNativeBooleanControl(n)),
                     "the root selects the standard Boolean behavior natively");
 
             // HIT: canonical true, then canonical false, both inline.
@@ -596,7 +599,7 @@ final class ProtosI115NCompactBooleanTest {
         for (Instruction instruction
                 : run.getBytecodeNode().getInstructionsAsList()) {
             String instructionName = ProtosInstructionNames.of(instruction);
-            compact |= instructionName.contains("CanonicalControlCondition");
+            compact |= isNativeBooleanControl(instructionName);
             for (String forbidden : FORBIDDEN) {
                 assertFalse(instructionName.contains(forbidden),
                         name + " run root contains " + instructionName);
@@ -624,6 +627,16 @@ final class ProtosI115NCompactBooleanTest {
         }
         System.out.println("I115_N_RESULT_LOCAL=" + consumedLocal);
         return new Census(roots.size(), runCount, total, consumedLocal);
+    }
+
+    /*
+     * A native Boolean control decision: a CanonicalControlCondition, or a
+     * validated comparison (RequireCanonicalBooleanResult) that branches
+     * natively without a second control check.
+     */
+    private static boolean isNativeBooleanControl(String instructionName) {
+        return instructionName.contains("CanonicalControlCondition")
+                || instructionName.contains("RequireCanonicalBooleanResult");
     }
 
     /* Concrete structured preparations; admitted protocols, not misses. */

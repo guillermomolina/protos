@@ -441,21 +441,21 @@ final class ProtosI115RFactorialCaptureTest {
             /*
              * Unified Boolean control: the inline ifTrue body shares the
              * frame, so n and result are LOCALs (n bound by the grouped
-             * copy); '>' is RichCompareGt whose primitive result flows into
-             * the canonical control condition and the native branch; the
+             * copy); '>' is RichCompareGt whose result is validated by
+             * RequireCanonicalBooleanResult and feeds the native branch; the
              * inline body computes '*' and stores result into its local.
              */
             int bind = indexStartingWith(names, "c.CopySuppliedArguments");
             assertTrue(bind == 1, "Missing parameter binding: " + names);
             assertTrue(indexStartingWith(names, "c.CreateCell") < 0, names.toString());
             for (String required : List.of(
-                    "c.RichCompareGt", "c.CanonicalControlCondition", "c.NumberMultiply")) {
+                    "c.RichCompareGt", "c.RequireCanonicalBooleanResult", "c.NumberMultiply")) {
                 assertEquals(1, names.stream().filter(
                                 name -> name.startsWith(required)).count(),
                         "Missing unified operation " + required + ": " + names);
             }
             int compare = indexStartingWith(names, "c.RichCompareGt");
-            int condition = indexStartingWith(names, "c.CanonicalControlCondition");
+            int condition = indexStartingWith(names, "c.RequireCanonicalBooleanResult");
             int branch = -1;
             for (int index = condition + 1; index < names.size(); index++) {
                 if (names.get(index).startsWith("branch.false")) {
@@ -874,7 +874,7 @@ final class ProtosI115RFactorialCaptureTest {
             List<String> computeNames = compute.getBytecodeNode().getInstructionsAsList()
                     .stream().map(ProtosInstructionNames::of).toList();
             assertTrue(computeNames.stream().anyMatch(
-                            name -> name.startsWith("c.CanonicalControlCondition")),
+                            name -> name.startsWith("c.RequireCanonicalBooleanResult")),
                     "ifTrue is native control flow in compute: " + computeNames);
             assertTrue(computeNames.stream().noneMatch(
                             name -> name.startsWith("c.MaterializeCurrentClosure")),
@@ -1215,11 +1215,11 @@ final class ProtosI115RFactorialCaptureTest {
                 countStartingWith(names, "c.CallUnaryMethod"),
                 "one recursive CallUnaryMethod plus the guarded fallbacks: " + names);
         int compare = indexStartingWith(names, "c.RichCompareGt");
-        int condition = indexStartingWith(names, "c.CanonicalControlCondition");
+        int condition = indexStartingWith(names, "c.RequireCanonicalBooleanResult");
         assertTrue(condition > compare,
                 "the comparison result is the validated control condition: " + names);
-        // The primitive comparison result flows into the canonical control
-        // condition without materializing a Boolean carrier.
+        // The validated comparison result feeds the native branch without a
+        // second CanonicalControlCondition.
         int branch = -1;
         for (int index = condition + 1; index < names.size(); index++) {
             if (names.get(index).startsWith("branch.false")) {

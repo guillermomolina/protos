@@ -284,11 +284,26 @@ final class ProtosPerf039WhileOnceCensusTest {
                 }
             }
             java.util.Set<Integer> clearedOffsets = new java.util.HashSet<>();
-            instructions.stream()
-                    .filter(instruction -> ProtosInstructionNames.of(instruction).equals("clear.local"))
-                    .flatMap(instruction -> instruction.getArguments().stream())
-                    .filter(argument -> argument.getKind() == Instruction.Argument.Kind.LOCAL_OFFSET)
-                    .forEach(argument -> clearedOffsets.add(argument.asLocalOffset()));
+            // A temporary is released by clear.local or by the
+            // LoadAndClearTempLocal of its last use.
+            for (Instruction instruction : instructions) {
+                String instructionName = ProtosInstructionNames.of(instruction);
+                if (instructionName.equals("clear.local")) {
+                    instruction.getArguments().stream()
+                            .filter(argument -> argument.getKind()
+                                    == Instruction.Argument.Kind.LOCAL_OFFSET)
+                            .forEach(argument -> clearedOffsets.add(argument.asLocalOffset()));
+                } else if (instructionName.equals("c.LoadAndClearTempLocal")) {
+                    for (Instruction.Argument argument : instruction.getArguments()) {
+                        if (argument.getKind() == Instruction.Argument.Kind.CONSTANT
+                                && argument.asConstant()
+                                        instanceof com.oracle.truffle.api.bytecode.LocalAccessor accessor) {
+                            clearedOffsets.add(
+                                    ProtosI115Long5GeneralArithmeticTest.accessorOffset(accessor));
+                        }
+                    }
+                }
+            }
             assertTrue(numericOffsets.containsKey("numericResult"),
                     () -> caseName + " must own numericResult temporaries: " + numericOffsets);
             assertTrue(numericOffsets.containsKey("numericResume"),

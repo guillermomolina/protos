@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.182-SNAPSHOT
+
+- **I115.** Align the local-accessor partial-evaluation baseline and bytecode census expectations with validated-comparison control lowering, staged indexed operands and temporary release at last use.
+
 ## 0.4.181-SNAPSHOT
 
 - **I115.** Release numeric, call and staged indexed temporaries at their last use. Make the carrier materialization flag a constant operand, update composed I/O execution sites and refresh the generated-bytecode BCI partial-evaluation baseline. Extend temporary-lifetime and instrumentation regressions.
