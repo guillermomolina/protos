@@ -1,3 +1,20 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
+
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -18,7 +35,7 @@ import org.junit.jupiter.api.Test;
 final class ProtosI109ASharedLocalEachLoweringTest {
 
     private static final String[] FAMILIES = {
-        "Array", "Bytes", "Environment", "IdentityMap", "Map"
+        "Array", "Bytes", "String", "Vector", "Matrix", "Environment", "IdentityMap", "Map"
     };
 
     private static final String LOCAL_EACH_ADMISSION =
@@ -216,7 +233,7 @@ final class ProtosI109ASharedLocalEachLoweringTest {
         }
         assertEquals(FAMILIES.length,
                 occurrences(admission, "prepared.isStructured"),
-                "Admission must check exactly the five capabilities");
+                "Admission must check exactly the supported local each capabilities");
 
         assertTrue(admission.contains(
                 "StructuredNativeInvocation prepared"));
@@ -233,7 +250,7 @@ final class ProtosI109ASharedLocalEachLoweringTest {
     }
 
     @Test
-    void preparationDelegatesToTheFiveExistingAuthorities()
+    void preparationDelegatesToTheSupportedAuthorities()
             throws IOException {
         String preparation =
                 operationClass(activation(), "PrepareStructuredLocalEach");
@@ -253,6 +270,35 @@ final class ProtosI109ASharedLocalEachLoweringTest {
         }
 
         assertFalse(preparation.contains("\"each\""));
+    }
+
+    @Test
+    void publishedNativeEntryDispatchesStructuredCapabilitiesBeforeOrdinaryBody()
+            throws IOException {
+        String source = read(
+                "src/main/java/com/guillermomolina/protos/"
+                        + "execution/bytecode/activation/ProtosBuiltinCallRootNode.java");
+        int start = source.indexOf("private Object executeBody(");
+        assertTrue(start >= 0, "Missing native entry body");
+        int end = source.indexOf("\n    }", start);
+        assertTrue(end > start, "Missing native entry body boundary");
+        String body = source.substring(start, end).replaceAll("\\s+", " ").strip();
+
+        String classification = "StructuredNativeInvocation.forBodyOrNull(";
+        String dispatch = "structuredDispatchTargetForEnteredContext()";
+        String nativeCall = "executeNative(body, activation, supplied)";
+        assertEquals(1, occurrences(body, classification));
+        assertEquals(1, occurrences(body, dispatch));
+        assertEquals(1, occurrences(body, nativeCall));
+        assertTrue(body.indexOf(classification) < body.indexOf(dispatch));
+        assertTrue(body.indexOf(dispatch) < body.indexOf(nativeCall));
+
+        // The structured branch returns before either ordinary native execution path.
+        assertTrue(body.contains(
+                "if (structured != null) { return structuredCall.call( "
+                        + "ProtosTaskCPrimeEntryExecution.structuredDispatchTargetForEnteredContext(), "
+                        + "activation, structured); } List<?> supplied = "));
+        assertTrue(body.endsWith("return " + nativeCall + ";"));
     }
 
     @Test

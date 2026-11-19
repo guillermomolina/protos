@@ -4112,13 +4112,16 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
-    /** Whether {@code prepared} is one of the five local each families sharing one loop. */
+    /** Whether {@code prepared} is one of the local each families sharing one loop. */
     @Operation
     public static final class IsStructuredLocalEach {
         @Specialization
         public static boolean perform(StructuredNativeInvocation prepared) {
             return prepared.isStructuredArrayEach()
                     || prepared.isStructuredBytesEach()
+                    || prepared.isStructuredStringEach()
+                    || prepared.isStructuredVectorEach()
+                    || prepared.isStructuredMatrixEach()
                     || prepared.isStructuredEnvironmentEach()
                     || prepared.isStructuredIdentityMapEach()
                     || prepared.isStructuredMapEach();
@@ -4135,6 +4138,15 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             }
             if (prepared.isStructuredBytesEach()) {
                 return prepared.prepareStructuredBytesEach();
+            }
+            if (prepared.isStructuredStringEach()) {
+                return prepared.prepareStructuredStringEach();
+            }
+            if (prepared.isStructuredVectorEach()) {
+                return prepared.prepareStructuredVectorEach();
+            }
+            if (prepared.isStructuredMatrixEach()) {
+                return prepared.prepareStructuredMatrixEach();
             }
             if (prepared.isStructuredEnvironmentEach()) {
                 return prepared.prepareStructuredEnvironmentEach();

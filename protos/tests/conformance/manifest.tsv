@@ -31,6 +31,7 @@ collections/array-construction-syntax.protos	suite-native	-
 collections/array-indexed-read-and-size.protos	suite-native	-
 collections/array-indexed-update.protos	suite-native	-
 collections/array-iteration.protos	suite-native	-
+collections/string-iteration.protos	suite-native	-
 collections/identity-map-core.protos	suite-native	-
 collections/identity-map-iteration-and-lookup.protos	suite-native	-
 collections/identity-map-mutability-state.protos	suite-native	-

@@ -23,6 +23,15 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.504] - 2026-11-19
+
+### D252-C1 / I162 — Standard String, Vector and Matrix traversal
+
+- `semantics/VALUES_AND_COLLECTIONS.md` specifies ordinary `String.each`,
+  `Vector.each` and `Matrix.each`: Unicode-scalar or shallow numeric-snapshot
+  traversal, one argument per callback, exact receiver result, validation even
+  when empty, and ordinary invocation, suspension and control transfer.
+
 ## [0.1.503] - 2026-11-19
 
 ### D249-A1 / I164 — Explicit standalone CLI Resolver selection

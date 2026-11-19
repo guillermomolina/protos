@@ -36,7 +36,7 @@ final class ProtosTestToolRepositoryCorpusPlansTest {
         assertPlan("protos/corpus/library/csv", 5, "csv/parse.protos", "csv/integration-and-scale.protos");
         assertPlan("protos/corpus/library/cli", 5, "cli/specification-and-result.protos", "cli/closure.protos");
         assertPlan("protos/corpus/library/math/integer", 4, "math/integer/gcd-lcm.protos", "math/integer/integrated-closure.protos");
-        assertPlan("protos/corpus/library/math/linear-algebra", 3, "math/linear-algebra/construction-and-indexing.protos", "math/linear-algebra/identity-and-state.protos");
+        assertPlan("protos/corpus/library/math/linear-algebra", 4, "math/linear-algebra/construction-and-indexing.protos", "math/linear-algebra/traversal.protos");
         assertPlan("protos/corpus/library/crypto/sha256", 2, "crypto/sha256/vectors-and-boundaries.protos", "crypto/sha256/ownership-and-domain.protos");
         assertPlan("protos/corpus/library/crypto/hmac_sha256", 3, "crypto/hmac_sha256/vectors-and-boundaries.protos", "crypto/hmac_sha256/invalid-inputs-and-private-boundary.protos");
         assertPlan(
@@ -123,7 +123,8 @@ final class ProtosTestToolRepositoryCorpusPlansTest {
         String[] paths = {
             "math/linear-algebra/construction-and-indexing.protos",
             "math/linear-algebra/algebra-and-reductions.protos",
-            "math/linear-algebra/identity-and-state.protos"
+            "math/linear-algebra/identity-and-state.protos",
+            "math/linear-algebra/traversal.protos"
         };
         for (int index = 0; index < paths.length; index++) {
             assertEquals(paths[index], path(corpus, index));

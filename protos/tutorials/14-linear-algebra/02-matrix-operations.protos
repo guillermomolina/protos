@@ -44,7 +44,15 @@ print(second[1])
 // transpose answers a new 3 × 2 Matrix; m itself is unchanged.
 t: m.transpose()
 
-verified: (m.rows() == 2) && (m.columns() == 3) &&
+// Contextual for sends ordinary each, visiting a shallow snapshot in order.
+visitedTotal: 0
+traversed: for(n in m) {
+    visitedTotal = visitedTotal + n
+}
+print(visitedTotal)
+
+verified: (traversed === m) && (visitedTotal == 21) &&
+    (m.rows() == 2) && (m.columns() == 3) &&
     (image.size() == 2) && (image[0] == 4) && (image[1] == 10) &&
     (product.rows() == 2) && (product.columns() == 2) &&
     (first[0] == 58) && (second[0] == 64) &&

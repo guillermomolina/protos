@@ -1696,6 +1696,33 @@ of the value. The first failing check determines the failure, and a
 failed `atPut` leaves the receiver unchanged. A write replaces exactly one
 existing element and never changes a shape.
 
+### Standard Vector and Matrix traversal
+
+The standard prototypes publish ordinary `Vector.each(block)` and
+`Matrix.each(block)` behaviors (D252-C1). They follow the validation and control
+contract in **Standard String and numeric-container traversal** below.
+
+After validation, Vector establishes exactly one shallow logical snapshot in
+ascending index order. Matrix establishes exactly one shallow logical snapshot
+in row-major order: ascending row, then ascending column. Each callback receives
+exactly the genuine Number stored at that position, unchanged and without
+conversion or numeric computation. Internal storage representations, including
+R1 and R2-Float, cannot affect the observed logical Numbers or order.
+
+Later legal `atPut` mutations, including reentrant mutations while a callback is
+explicitly suspended, do not change pending snapshot values, count or order.
+The snapshot does not lock, close or freeze the receiver. Empty Vector and
+Matrix shapes still validate the callback; `Matrix(0, n)` and `Matrix(n, 0)`
+visit no elements even for arbitrarily large `n`, retain their dimensions and
+return their respective original receivers.
+
+Reading through `each` is permitted for open, closed and frozen containers.
+Existing `atPut` rules still govern mutation: closed containers may replace
+existing elements, frozen containers reject mutation. Length and shape remain
+fixed; `Vector.add` and `Matrix.add` remain mathematical addition. Successful
+traversal returns the exact original receiver with its original identity; it
+neither reconstructs nor copies the container.
+
 ### Algebraic API
 
 Vector publishes `add(other)`, `scale(number)`, `dot(other)`, and `copy()`.
@@ -1712,8 +1739,8 @@ Matrix publishes `add(other)`, `scale(number)`, `matvec(vector)`,
 - `transpose` answers a Matrix of shape `columns() × rows()`.
 
 Dimension compatibility is strict; there is no broadcasting, no implicit
-reshaping, and no public dtype. Every Vector or Matrix result is a fresh, open
-object with no observable aliasing of the indexed storage of any operand.
+reshaping, and no public dtype. Every algebraic Vector or Matrix result is a fresh,
+open object with no observable aliasing of the indexed storage of any operand.
 
 Each scalar operation is the canonical Number arithmetic of **Numeric Model**,
 including **Standard Complex arithmetic**. No kernel invokes callbacks or
@@ -2864,6 +2891,51 @@ text-editing protocols, or the final public API topology of the separate
 Standard Library grapheme capability.
 
 
+
+### Standard String and numeric-container traversal
+
+The standard String prototype publishes ordinary `String.each(block)`
+(D252-C1). It visits exactly one Unicode scalar per callback from left to right,
+with the same values as successive `String.at(i)` reads. Each argument is a
+semantic String containing that scalar, never a numeric code point or a host
+character. No normalization, grapheme segmentation, encoding or coercion occurs:
+`"A😀B"` has three visits, `"e\u{301}"` has two, and `"👨‍👩‍👧‍👦"` has seven visits,
+including its U+200D separators. String remains immutable; traversal may retain
+a forward cursor over its original text. Normal exhaustion returns the exact
+original String receiver.
+
+The following common contract governs only the standard String, Vector and
+Matrix `each` behaviors. Receiver and argument expressions use ordinary
+evaluation order and behavior is selected by ordinary lookup. The selected
+standard behavior then validates, in order: the receiver's actual semantic
+family, exactly one supplied argument, and that argument's ordinary polymorphic
+invokability. Delegating to a family prototype does not confer its private
+indexed state. Invalid receiver, arity or invokability signals ordinary `Error`
+and invokes no callback. Validation is complete even for an empty receiver.
+Only after successful validation is the Vector/Matrix snapshot established;
+only then may callbacks begin. A callable need not be a Closure: ordinary
+objects with invokable `call` behavior are accepted.
+
+Each visit invokes the validated callable through ordinary invocation with
+exactly one argument. Normal callback results are ignored, including Futures;
+there is no implicit await, adoption or flattening. After normal exhaustion,
+`each` returns its original receiver. Error and valid non-local return stop
+traversal immediately under the existing invocation/control rules, preserve
+completed effects, and run `ensure` cleanup under its ordinary unwind rules.
+Explicit suspension retains the cursor and snapshot; reentry follows ordinary
+Actor-local rules. Resumption continues the reached callback without replaying
+completed effects or visits. Cancellation and cleanup follow the existing task
+and control rules. Nested calls have independent traversal state.
+
+Traversal introduces no locks, Tasks, Actors, isolated P computations or
+mandatory parallelism. Its snapshot is not an Actor/P transfer snapshot.
+Ordinary selector redefinitions, extraction, copying and shadowing remain
+ordinary dispatch; a custom `each` does not acquire the standard contract by
+name. The contextual `for` lowering defined by `EXECUTION_AND_CONTROL.md`
+continues to send `receiver.each(item => { body })`, including its ordinary
+selection and result. Other families retain their own traversal contracts.
+No Iterator/Iterable hierarchy, row views, coordinate arguments or additional
+indexing syntax is introduced.
 
 ### Standard String concatenation with `+`
 

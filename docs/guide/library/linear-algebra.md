@@ -31,6 +31,7 @@ signals an Error under ordinary message-send rules.
 |---|---|
 | `Vector(x, ...)` | A Vector of exactly the supplied elements, in order; `Vector()` is empty, `Vector(...[1, 2, 3])` spreads an Array |
 | `size()` | The length |
+| `each(block)` | Ascending snapshot Numbers; returns the original Vector |
 | `at(i)` or `v[i]` | The element at `0 <= i < size()` |
 | `atPut(i, value)` | Replaces one element and answers `value` |
 | `add(other)` | The element-wise sum with a Vector of the same size |
@@ -49,6 +50,7 @@ selected element, and `atPut` the assigned value.
 |---|---|
 | `Matrix(rows, columns, ...values)` | A `rows × columns` Matrix from exactly `rows * columns` values in row-major order |
 | `rows()`, `columns()` | The dimensions |
+| `each(block)` | Row-major snapshot Numbers; returns the original Matrix |
 | `at(row, column)` | One element |
 | `atPut(row, column, value)` | Replaces one element and answers `value` |
 | `add(other)` | The element-wise sum with a Matrix of the same shape |
@@ -62,6 +64,28 @@ Constructor data is row-major: `Matrix(2, 2, 1, 2, 3, 4)` has first row
 `1, 2` and second row `3, 4`. Any other value count fails. `Matrix(0, n)` and
 `Matrix(n, 0)` are distinct empty shapes. There is no `m[row]` or
 `m[row, column]` indexing form; use `at(row, column)`.
+
+## Traversal
+
+`each(block)` validates the actual receiver, exactly one argument and ordinary
+polymorphic invokability, even when empty, before taking one shallow snapshot.
+It supplies one unchanged Number per callback in ascending Vector index or
+Matrix row-major order. Normal callback results are ignored; the exact original
+receiver is returned. Empty `Matrix(0, n)` and `Matrix(n, 0)` visit nothing and
+preserve their dimensions, including arbitrarily large `n`.
+
+Legal `atPut` changes do not affect pending visits. Open, closed and frozen
+containers can be read; existing mutation restrictions still apply. Errors,
+non-local return, `ensure`, explicit suspension and cancellation follow ordinary
+callback control rules. Resumption retains the snapshot and cursor; a normally
+returned Future is not implicitly awaited. Custom `each` overrides keep ordinary
+message dispatch.
+
+```protos
+m: Matrix(2, 2, 1, 2, 3, 4)
+result: for(n in m) { print(n) }     // 1, 2, 3, 4
+print(result === m)                 // true
+```
 
 ## Number semantics
 

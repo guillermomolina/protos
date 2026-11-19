@@ -25,13 +25,16 @@ import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.ProtosIdentityMapValue;
 import com.guillermomolina.protos.runtime.ProtosIndexedSnapshot;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
+import com.guillermomolina.protos.runtime.ProtosStringValue;
+import com.guillermomolina.protos.runtime.ProtosVectorValue;
+import com.guillermomolina.protos.runtime.ProtosMatrixValue;
 import java.util.ArrayList;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import java.util.List;
 
 /**
  * Prepared iteration state of the structured each/match invocations over
- * local collections (Array, Bytes, Environment, IdentityMap, Map) shared by the structured
+ * local collections and scalar/numeric values shared by the structured
  * dispatcher and inline literal callback regions.
  */
 final class ProtosStructuredEachCalls {
@@ -71,7 +74,7 @@ final class ProtosStructuredEachCalls {
      * one-argument callback invocation per snapshot element.
      */
     sealed interface PreparedIndexedEachCall extends PreparedLocalEachCall
-            permits PreparedArrayEachCall, PreparedBytesEachCall {}
+            permits PreparedArrayEachCall, PreparedBytesEachCall, PreparedValueEachCall {}
 
     /**
      * PLAT044 B′ (PERF026-D2) standard Map.each and IdentityMap.each loops,
@@ -151,6 +154,123 @@ final class ProtosStructuredEachCalls {
         }
     }
 
+
+    /**
+     * One retained cursor for immutable scalar text or a shallow numeric snapshot.
+     * Preparation validates completely before observing storage; advancing belongs
+     * to the structured loop after normal callback completion, including resumption.
+     */
+    static final class PreparedValueEachCall implements PreparedIndexedEachCall {
+        private final Object receiver;
+        private final Object block;
+        private final ProtosActivation activation;
+        private final String text;
+        private final List<Object> snapshot;
+        private int index;
+        private int scalarEnd;
+
+        private PreparedValueEachCall(
+                Object receiver, Object block, ProtosActivation activation,
+                String text, List<Object> snapshot) {
+            this.receiver = receiver;
+            this.block = block;
+            this.activation = activation;
+            this.text = text;
+            this.snapshot = snapshot;
+        }
+
+        static PreparedValueEachCall forString(
+                Object receiver, Object[] supplied, ProtosActivation activation) {
+            if (!(receiver instanceof ProtosStringValue value)) {
+                throw ProtosCoreErrors.signal(activation, ProtosCoreErrors.newError(activation));
+            }
+            Object block = validatedCallback(supplied, activation);
+            return new PreparedValueEachCall(receiver, block, activation, value.value(), null);
+        }
+
+        static PreparedValueEachCall forVector(
+                Object receiver, Object[] supplied, ProtosActivation activation) {
+            if (!(receiver instanceof ProtosVectorValue value)) {
+                throw ProtosCoreErrors.signal(activation, ProtosCoreErrors.newError(activation));
+            }
+            Object block = validatedCallback(supplied, activation);
+            return new PreparedValueEachCall(
+                    receiver, block, activation, null, numericSnapshot(value));
+        }
+
+        static PreparedValueEachCall forMatrix(
+                Object receiver, Object[] supplied, ProtosActivation activation) {
+            if (!(receiver instanceof ProtosMatrixValue value)) {
+                throw ProtosCoreErrors.signal(activation, ProtosCoreErrors.newError(activation));
+            }
+            Object block = validatedCallback(supplied, activation);
+            return new PreparedValueEachCall(
+                    receiver, block, activation, null, numericSnapshot(value));
+        }
+
+        /** Copies storage once at entry; per-element snapshot reads remain compilable. */
+        @TruffleBoundary
+        private static List<Object> numericSnapshot(Object receiver) {
+            return receiver instanceof ProtosVectorValue vector
+                    ? vector.indexedSnapshot()
+                    : ((ProtosMatrixValue) receiver).indexedSnapshot();
+        }
+
+        private static Object validatedCallback(Object[] supplied, ProtosActivation activation) {
+            if (supplied.length != 1) {
+                throw ProtosCoreErrors.signal(activation, ProtosCoreErrors.newError(activation));
+            }
+            Object block = supplied[0];
+            ProtosStandardArrayProtocol.requireInvokableForStructured(block, activation);
+            return block;
+        }
+
+        @Override
+        public boolean hasNext() {
+            return text != null ? index < text.length() : index < snapshot.size();
+        }
+
+        @Override
+        public ProtosCallRequest prepareCurrent() {
+            if (!hasNext()) {
+                throw new IllegalStateException("value each callback requested after exhaustion");
+            }
+            Object element;
+            if (text != null) {
+                scalarEnd = index + Character.charCount(text.codePointAt(index));
+                // Copy only this validated scalar's UTF-16 units, keeping general
+                // substring range-diagnostic formatting out of compiled traversal.
+                String scalar = scalarEnd == index + 1
+                        ? String.valueOf(text.charAt(index))
+                        : new String(new char[] {text.charAt(index), text.charAt(index + 1)});
+                element = new ProtosStringValue(scalar);
+            } else {
+                element = snapshot.get(index);
+            }
+            return ProtosCallRequest.call(block, new Object[] {element}, activation);
+        }
+
+        @Override
+        public void advance() {
+            if (!hasNext()) {
+                throw new IllegalStateException("value each cursor advanced after exhaustion");
+            }
+            index = text != null ? scalarEnd : index + 1;
+        }
+
+        @Override
+        public Object finish() {
+            if (hasNext()) {
+                throw new IllegalStateException("value each finished before exhaustion");
+            }
+            return receiver;
+        }
+
+        @Override
+        public Object callback() {
+            return block;
+        }
+    }
 
     static final class PreparedArrayMatchCall {
         private final ProtosActivation activation;

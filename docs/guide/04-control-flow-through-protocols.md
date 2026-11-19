@@ -602,6 +602,26 @@ contextual spelling means exactly the ordinary send on the right. The explicit
 method forms remain useful when you want to select a different protocol message
 or customize the receiver's behavior directly.
 
+### Strings, Vectors and Matrices
+
+String, Vector and Matrix publish standard `each` behaviors. String supplies
+one Unicode-scalar String at a time; Vector and Matrix supply one unchanged
+Number from a shallow snapshot, in ascending index and row-major order
+respectively. These three standard methods return their original receiver.
+
+```protos
+for(c in "A😀B") { print(c) }              // A, 😀, B
+LA: import("std:math/linear_algebra")
+Vector: LA.Vector
+Matrix: LA.Matrix
+for(n in Vector(10, 20, 30)) { print(n) }
+for(n in Matrix(2, 2, 1, 2, 3, 4)) { print(n) }
+```
+
+The contextual form remains an ordinary `each` message and respects shadowing
+and receiver-specific overrides. It does not impose these three methods'
+snapshot or result rules on Map, Range or a custom receiver.
+
 ### Maps and custom `each`
 
 ```protos

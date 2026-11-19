@@ -110,7 +110,8 @@ load: (corpusId) => {
             Array(
             Array("construction-and-indexing.protos", "suite-native", "-"),
             Array("algebra-and-reductions.protos", "suite-native", "-"),
-            Array("identity-and-state.protos", "suite-native", "-")
+            Array("identity-and-state.protos", "suite-native", "-"),
+            Array("traversal.protos", "suite-native", "-")
             )
         )
         matched = true

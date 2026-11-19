@@ -23,9 +23,29 @@ import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
+import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.callables.ProtosNativeClosureBody;
+import java.util.List;
 import java.util.Objects;
 
 public final class ProtosStandardStringProtocol {
+    private static final ProtosNativeClosureBody STANDARD_EACH_BODY =
+            ProtosStandardStringProtocol::each;
+    private static final ProtosClosureValue STANDARD_EACH =
+            ProtosClosureValue.nativeClosure(STANDARD_EACH_BODY);
+
+    static boolean isStandardEachImplementation(ProtosClosureValue closure) {
+        return closure.nativeBody().orElse(null) == STANDARD_EACH_BODY;
+    }
+
+    private static Object each(ProtosActivation activation, List<?> supplied) {
+        requireStringReceiver(activation);
+        requireArity(activation, supplied.size(), 1);
+        ProtosStandardArrayProtocol.requireInvokableForStructured(supplied.get(0), activation);
+        // Callback execution belongs to the resumable structured call path.
+        throw new IllegalStateException("standard String.each requires structured dispatch");
+    }
+
     /*
      * I115: the standard String '+' behavior is one shared constant, like
      * the standard Array indexed behaviors, so the Bytecode DSL addition
@@ -64,7 +84,8 @@ public final class ProtosStandardStringProtocol {
                 || stringPrototype.hasLocalSlot("size")
                 || stringPrototype.hasLocalSlot("at")
                 || stringPrototype.hasLocalSlot("+")
-                || stringPrototype.hasLocalSlot("concat")) {
+                || stringPrototype.hasLocalSlot("concat")
+                || stringPrototype.hasLocalSlot("each")) {
             throw new IllegalStateException("Core String already defines a standard protocol slot");
         }
 
@@ -108,6 +129,7 @@ public final class ProtosStandardStringProtocol {
                         }));
 
         stringPrototype.createLocalSlot("+", STANDARD_CONCATENATION);
+        stringPrototype.createLocalSlot("each", STANDARD_EACH);
 
         stringPrototype.createLocalSlot(
                 "concat",

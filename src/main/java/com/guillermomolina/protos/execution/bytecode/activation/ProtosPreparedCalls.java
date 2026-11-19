@@ -31,6 +31,7 @@ import com.guillermomolina.protos.execution.ProtosStructuredEachCalls.PreparedEn
 import com.guillermomolina.protos.execution.ProtosStructuredEachCalls.PreparedIdentityMapAtIfAbsentCall;
 import com.guillermomolina.protos.execution.ProtosStructuredEachCalls.PreparedIdentityMapEachCall;
 import com.guillermomolina.protos.execution.ProtosStructuredEachCalls.PreparedMapEachCall;
+import com.guillermomolina.protos.execution.ProtosStructuredEachCalls.PreparedValueEachCall;
 import com.guillermomolina.protos.execution.ProtosStructuredMapQueryCalls.PreparedMapMatchCall;
 import com.guillermomolina.protos.execution.ProtosStructuredMapQueryCalls.PreparedMapReadLookupCall;
 import com.guillermomolina.protos.execution.ProtosStructuredMapUpdateCalls.PreparedMapAtPutCall;
@@ -77,6 +78,9 @@ final class ProtosPreparedCalls {
         final ProtosStandardObjectProtocol.StandardLoop loop;
         final boolean arrayEach;
         final boolean bytesEach;
+        final boolean stringEach;
+        final boolean vectorEach;
+        final boolean matrixEach;
         final boolean environmentEach;
         final boolean identityMapEach;
         final boolean mapEach;
@@ -94,6 +98,9 @@ final class ProtosPreparedCalls {
                 ProtosStandardObjectProtocol.StandardLoop loop,
                 boolean arrayEach,
                 boolean bytesEach,
+                boolean stringEach,
+                boolean vectorEach,
+                boolean matrixEach,
                 boolean environmentEach,
                 boolean identityMapEach,
                 boolean mapEach,
@@ -109,6 +116,9 @@ final class ProtosPreparedCalls {
             this.loop = loop;
             this.arrayEach = arrayEach;
             this.bytesEach = bytesEach;
+            this.stringEach = stringEach;
+            this.vectorEach = vectorEach;
+            this.matrixEach = matrixEach;
             this.environmentEach = environmentEach;
             this.identityMapEach = identityMapEach;
             this.mapEach = mapEach;
@@ -125,6 +135,9 @@ final class ProtosPreparedCalls {
                             + (loop != null ? 1 : 0)
                             + (arrayEach ? 1 : 0)
                             + (bytesEach ? 1 : 0)
+                            + (stringEach ? 1 : 0)
+                            + (vectorEach ? 1 : 0)
+                            + (matrixEach ? 1 : 0)
                             + (environmentEach ? 1 : 0)
                             + (identityMapEach ? 1 : 0)
                             + (mapEach ? 1 : 0)
@@ -148,6 +161,9 @@ final class ProtosPreparedCalls {
                 ProtosStandardObjectProtocol.StandardLoop loop,
                 boolean arrayEach,
                 boolean bytesEach,
+                boolean stringEach,
+                boolean vectorEach,
+                boolean matrixEach,
                 boolean environmentEach,
                 boolean identityMapEach,
                 boolean mapEach,
@@ -164,6 +180,9 @@ final class ProtosPreparedCalls {
                             || loop != null
                             || arrayEach
                             || bytesEach
+                            || stringEach
+                            || vectorEach
+                            || matrixEach
                             || environmentEach
                             || identityMapEach
                             || mapEach
@@ -183,6 +202,9 @@ final class ProtosPreparedCalls {
                     loop,
                     arrayEach,
                     bytesEach,
+                    stringEach,
+                    vectorEach,
+                    matrixEach,
                     environmentEach,
                     identityMapEach,
                     mapEach,
@@ -267,6 +289,9 @@ final class ProtosPreparedCalls {
                     ProtosStandardObjectProtocol.standardLoopForImplementation(closure),
                     ProtosStandardArrayProtocol.isStandardEachImplementation(closure),
                     ProtosStandardBytesProtocol.isStandardEachImplementation(closure),
+                    ProtosStandardStringProtocol.isStandardEachImplementation(closure),
+                    ProtosStandardLinearAlgebraProtocol.isStandardVectorEachImplementation(closure),
+                    ProtosStandardLinearAlgebraProtocol.isStandardMatrixEachImplementation(closure),
                     ProtosStandardEnvironmentProtocol.isStandardEachImplementation(closure),
                     ProtosStandardIdentityMapProtocol.isStandardEachImplementation(closure),
                     ProtosStandardMapProtocol.isStandardEachImplementation(closure),
@@ -327,6 +352,42 @@ final class ProtosPreparedCalls {
 
         boolean isStructuredBytesEach() { return structured != null && structured.bytesEach; }
 
+        boolean isStructuredStringEach() {
+            return structured != null && structured.stringEach;
+        }
+
+        PreparedValueEachCall prepareStructuredStringEach() {
+            if (!isStructuredStringEach()) {
+                throw new IllegalStateException(
+                        "prepared Closure call has no structured String.each capability");
+            }
+            return PreparedValueEachCall.forString(activation.receiver(), supplied, activation);
+        }
+
+        boolean isStructuredVectorEach() {
+            return structured != null && structured.vectorEach;
+        }
+
+        PreparedValueEachCall prepareStructuredVectorEach() {
+            if (!isStructuredVectorEach()) {
+                throw new IllegalStateException(
+                        "prepared Closure call has no structured Vector.each capability");
+            }
+            return PreparedValueEachCall.forVector(activation.receiver(), supplied, activation);
+        }
+
+        boolean isStructuredMatrixEach() {
+            return structured != null && structured.matrixEach;
+        }
+
+        PreparedValueEachCall prepareStructuredMatrixEach() {
+            if (!isStructuredMatrixEach()) {
+                throw new IllegalStateException(
+                        "prepared Closure call has no structured Matrix.each capability");
+            }
+            return PreparedValueEachCall.forMatrix(activation.receiver(), supplied, activation);
+        }
+
         boolean isStructuredEnvironmentEach() {
             return structured != null && structured.environmentEach;
         }
@@ -373,6 +434,9 @@ final class ProtosPreparedCalls {
                             || structured.loop != null
                             || structured.arrayEach
                             || structured.bytesEach
+                            || structured.stringEach
+                            || structured.vectorEach
+                            || structured.matrixEach
                             || structured.environmentEach
                             || structured.identityMapEach
                             || structured.mapEach

@@ -36,6 +36,49 @@ sameValues: (actual, expected) => {
 }
 
 tests: [
+    Test("contextual for over String keeps order result and ordinary selection", () => {
+        values: "A😀B"
+        seen: ""
+        result: for(n in values) { seen = seen + n }
+        Assertions.require(seen === "A😀B")
+        Assertions.require(result === values)
+        custom: String {}
+        custom.each: callback => { callback(9); 42 }
+        selected: 0
+        customResult: for(n in custom) { selected = n }
+        Assertions.require(selected === 9)
+        Assertions.require(customResult === 42)
+    }),
+    Test("contextual for over Vector keeps order result and ordinary selection", () => {
+        LA: import("std:math/linear_algebra")
+        Vector: LA.Vector
+        values: Vector(10, 20, 30)
+        seen: 0
+        result: for(n in values) { seen = seen * 100 + n }
+        Assertions.require(seen === 102030)
+        Assertions.require(result === values)
+        custom: Vector(10, 20, 30)
+        custom.each: callback => { callback(9); 42 }
+        selected: 0
+        customResult: for(n in custom) { selected = n }
+        Assertions.require(selected === 9)
+        Assertions.require(customResult === 42)
+    }),
+    Test("contextual for over Matrix keeps order result and ordinary selection", () => {
+        LA: import("std:math/linear_algebra")
+        Matrix: LA.Matrix
+        values: Matrix(2, 2, 1, 2, 3, 4)
+        seen: 0
+        result: for(n in values) { seen = seen * 10 + n }
+        Assertions.require(seen === 1234)
+        Assertions.require(result === values)
+        custom: Matrix(2, 2, 1, 2, 3, 4)
+        custom.each: callback => { callback(9); 42 }
+        selected: 0
+        customResult: for(n in custom) { selected = n }
+        Assertions.require(selected === 9)
+        Assertions.require(customResult === 42)
+    }),
     Test("generic for visits an Array in order and returns the Array", () => {
         items: [3, 1, 4]
         visited: Array()

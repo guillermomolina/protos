@@ -43,12 +43,41 @@ import java.util.Objects;
  * with {@link ProtosComplexArithmetic#canonicalNumberBinary} and never send a message to an
  * element. Every contraction is reduced under D214-F1: ascending contraction index, the first
  * product as the initial accumulator, and the exact Integer {@code 0} for an empty contraction.
- * Every Vector or Matrix result is a fresh open object delegating directly to the standard
- * prototype of its kind, with storage of its own. An all-Float {@code matmul} computes in host
- * binary64 over packed Matrix storage and answers a packed result (PLAT068 R2-Float, I124).
+ * Algebraic Vector and Matrix results are fresh open objects delegating directly to the standard
+ * prototype of their kind, with storage of their own. Traversal returns its original receiver.
+ * An all-Float {@code matmul} computes in host binary64 over packed Matrix storage and answers
+ * a packed result (PLAT068 R2-Float, I124).
  */
 public final class ProtosStandardLinearAlgebraProtocol {
+    private static final ProtosNativeClosureBody STANDARD_VECTOR_EACH_BODY =
+            ProtosStandardLinearAlgebraProtocol::vectorEach;
+    private static final ProtosNativeClosureBody STANDARD_MATRIX_EACH_BODY =
+            ProtosStandardLinearAlgebraProtocol::matrixEach;
+
     private ProtosStandardLinearAlgebraProtocol() {}
+
+    static boolean isStandardVectorEachImplementation(ProtosClosureValue closure) {
+        return closure.nativeBody().orElse(null) == STANDARD_VECTOR_EACH_BODY;
+    }
+
+    static boolean isStandardMatrixEachImplementation(ProtosClosureValue closure) {
+        return closure.nativeBody().orElse(null) == STANDARD_MATRIX_EACH_BODY;
+    }
+
+    private static Object vectorEach(ProtosActivation activation, List<?> supplied) {
+        requireVector(activation, activation.receiver());
+        requireArity(activation, supplied, 1);
+        ProtosStandardArrayProtocol.requireInvokableForStructured(supplied.get(0), activation);
+        // Callback execution belongs to the resumable structured call path.
+        throw new IllegalStateException("standard Vector.each requires structured dispatch");
+    }
+
+    private static Object matrixEach(ProtosActivation activation, List<?> supplied) {
+        requireMatrix(activation, activation.receiver());
+        requireArity(activation, supplied, 1);
+        ProtosStandardArrayProtocol.requireInvokableForStructured(supplied.get(0), activation);
+        throw new IllegalStateException("standard Matrix.each requires structured dispatch");
+    }
 
     /**
      * Creates the standard {@code Vector} and {@code Matrix} prototypes, direct children of Object
@@ -72,6 +101,7 @@ public final class ProtosStandardLinearAlgebraProtocol {
     }
 
     private static void installVector(ProtosObjectValue vectorPrototype) {
+        define(vectorPrototype, "each", STANDARD_VECTOR_EACH_BODY);
         define(vectorPrototype, "construct", (activation, supplied) -> {
             ProtosObjectValue prototype = requireConstructionReceiver(activation, vectorPrototype);
             try {
@@ -159,6 +189,7 @@ public final class ProtosStandardLinearAlgebraProtocol {
 
     private static void installMatrix(
             ProtosObjectValue matrixPrototype, ProtosObjectValue vectorPrototype) {
+        define(matrixPrototype, "each", STANDARD_MATRIX_EACH_BODY);
         define(matrixPrototype, "construct", (activation, supplied) -> {
             ProtosObjectValue prototype = requireConstructionReceiver(activation, matrixPrototype);
             if (supplied.size() < 2) {

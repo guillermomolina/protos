@@ -723,6 +723,42 @@ array[0] = "x"
 
 the answer is the Array indexed-state protocol.
 
+## String, Vector and Matrix traversal
+
+`String.each` visits Unicode scalars, the same positions as `String.at`, rather
+than grapheme clusters. A combining mark is its own scalar; a displayed emoji
+can contain several scalars. Traversal neither normalizes nor segments text.
+
+```protos
+count: 0
+text: "e\u{301}"
+returned: text.each(c => { count = count + 1 })
+print(count)                         // 2
+print(returned === text)             // true
+```
+
+Vector and Matrix visit one shallow snapshot taken before callbacks. Vector
+uses ascending index order; Matrix uses row-major order. Each callback receives
+the exact stored Number. `atPut` may change the receiver during a callback
+without changing any pending visit:
+
+```protos
+LA: import("std:math/linear_algebra")
+Vector: LA.Vector
+v: Vector(1, 2)
+returnedVector: v.each(n => {
+    print(n)                        // 1, then 2
+    v.atPut(1, 99)
+})
+print(v.at(1))                      // 99
+print(returnedVector === v)         // true
+```
+
+The result preserves the original receiver identity, including empty inputs;
+Matrix also preserves its dimensions. Reading closed or frozen containers is
+allowed; their existing mutation rules still apply. `Vector.add` and
+`Matrix.add` continue to compute mathematical sums with matching shapes.
+
 ## `Array.each` iterates a shallow snapshot
 
 The standard `Array.each` callback traversal observes a shallow pre-callback

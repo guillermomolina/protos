@@ -47,6 +47,10 @@ class ProtosStandardStringProtocolTest {
                 ProtosObjectValue.rootObject(),
                 prelude.stringPrototype().parent().orElseThrow());
         assertTrue(prelude.bindings().isFrozen());
+        Object each = prelude.stringPrototype().readLocalSlot("each").orElseThrow();
+        assertTrue(ProtosStandardStringProtocol.isStandardEachImplementation(
+                (com.guillermomolina.protos.runtime.ProtosClosureValue) each));
+        assertTrue(prelude.stringPrototype().isFrozen());
         assertSame(
                 prelude.stringPrototype(),
                 prelude.bindings().readLocalSlot("String").orElseThrow());

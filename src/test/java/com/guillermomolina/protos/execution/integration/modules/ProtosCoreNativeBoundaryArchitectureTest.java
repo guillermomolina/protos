@@ -79,7 +79,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/protocols/values/ProtosStandardObjectProtocol.java", 17),
                     Map.entry("execution/protocols/actors/ProtosStandardActorProtocol.java", 9),
                     Map.entry("execution/protocols/values/ProtosStandardIdentityMapProtocol.java", 8),
-                    Map.entry("execution/protocols/values/ProtosStandardStringProtocol.java", 5),
+                    Map.entry("execution/protocols/values/ProtosStandardStringProtocol.java", 6),
                     Map.entry("execution/protocols/io/ProtosStandardBufferedByteIoProtocol.java", 4),
                     Map.entry("execution/protocols/actors/ProtosStandardErrorProtocol.java", 2),
                     // I167: private import bridge primitives (resolve, lookup, begin, execute)
@@ -225,7 +225,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
 
         assertEquals(EXPECTED_NATIVE_PROVIDERS, actualCore);
         assertEquals(39, actualCore.size());
-        assertEquals(150, actualCore.values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(151, actualCore.values().stream().mapToInt(Integer::intValue).sum());
         assertEquals(EXPECTED_NON_CORE_NATIVE_PROVIDERS, actualNonCore);
 
     }
@@ -392,7 +392,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         assertNativeSelectors(
                 "String",
                 prelude.stringPrototype(),
-                Set.of("size", "at", "+", "concat", "recognizes", "hash"));
+                Set.of("size", "at", "+", "concat", "recognizes", "hash", "each"));
         assertNativeSelectors(
                 "Encoding",
                 prelude.encodingPrototype(),

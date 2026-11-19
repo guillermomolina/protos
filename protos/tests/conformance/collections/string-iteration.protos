@@ -1,0 +1,118 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+
+tests: [
+    Test("empty String validates and returns its receiver", () => {
+        text: ""
+        visits: 0
+        result: text.each(c => { visits = visits + 1 })
+        Assertions.require(result === text)
+        Assertions.require(visits == 0)
+    }),
+    Test("ASCII and astral", () => {
+        text: "A😀B"
+        expected: ["A", "😀", "B"]
+        index: 0
+        result: text.each(c => {
+            Assertions.require(String.recognizes(c))
+            Assertions.require(c.size() == 1)
+            Assertions.require(c === expected[index])
+            index = index + 1
+            999
+        })
+        Assertions.require(index == expected.size())
+        Assertions.require(result === text)
+    }),
+    Test("combining scalars", () => {
+        text: "e\u{301}"
+        expected: ["e", "\u{301}"]
+        index: 0
+        result: text.each(c => {
+            Assertions.require(String.recognizes(c))
+            Assertions.require(c.size() == 1)
+            Assertions.require(c === expected[index])
+            index = index + 1
+            999
+        })
+        Assertions.require(index == expected.size())
+        Assertions.require(result === text)
+    }),
+    Test("family emoji scalars", () => {
+        text: "👨‍👩‍👧‍👦"
+        expected: ["👨", "\u{200D}", "👩", "\u{200D}", "👧", "\u{200D}", "👦"]
+        index: 0
+        result: text.each(c => {
+            Assertions.require(String.recognizes(c))
+            Assertions.require(c.size() == 1)
+            Assertions.require(c === expected[index])
+            index = index + 1
+            999
+        })
+        Assertions.require(index == expected.size())
+        Assertions.require(result === text)
+    }),
+    Test("String accepts a polymorphic callable", () => {
+        seen: ""
+        callback: c => { seen = seen + c }
+        callable: { call: callback }
+        Assertions.require("ab".each(callable) === "ab")
+        Assertions.require(seen === "ab")
+    }),
+    Test("String rejects noninvokable on empty", () => {
+        Assertions.signals(Error, () => {
+            "".each({ call: 1 })
+        })
+    }),
+    Test("String rejects zero arguments", () => {
+        Assertions.signals(Error, () => {
+            "a".each()
+        })
+    }),
+    Test("String rejects two arguments", () => {
+        Assertions.signals(Error, () => {
+            "a".each(c => c, c => c)
+        })
+    }),
+    Test("String rejects copied method incompatible receiver", () => {
+        Assertions.signals(Error, () => {
+            ordinary: { each: String.slotValue("each") }
+            ordinary.each(c => c)
+        })
+    }),
+    Test("String stops immediately on Error", () => {
+        visits: 0
+        expected: Error()
+        caught: Error.handle(() => {
+            "abc".each(c => { visits = visits + 1; expected.signal() })
+        }, error => error)
+        Assertions.require(caught === expected)
+        Assertions.require(visits == 1)
+    }),
+    Test("String ignores normal callback results", () => {
+        text: "ab"
+        Assertions.require(text.each(c => 42) === text)
+    }),
+    Test("String contextual for returns its receiver", () => {
+        text: "A😀B"
+        seen: ""
+        result: for(c in text) { seen = seen + c }
+        Assertions.require(seen === text)
+        Assertions.require(result === text)
+    })
+]
+tests.freeze()

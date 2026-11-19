@@ -1,0 +1,381 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+LA: import("std:math/linear_algebra")
+Vector: LA.Vector
+Matrix: LA.Matrix
+
+tests: [
+    Test("Vector each does not send guest access messages", () => {
+        v: Vector(1, 2, 3)
+        accessCalls: 0
+        v.size: () => { accessCalls = accessCalls + 1; Error().signal() }
+        v.at: index => { accessCalls = accessCalls + 1; Error().signal() }
+        expected: [1, 2, 3]
+        visits: 0
+        result: v.each(n => {
+            Assertions.require(n === expected[visits])
+            visits = visits + 1
+        })
+        Assertions.require(visits == 3)
+        Assertions.require(result === v)
+        Assertions.require(accessCalls == 0)
+    }),
+    Test("Matrix each does not send guest access messages", () => {
+        m: Matrix(2, 3, 1, 2, 3, 4, 5, 6)
+        accessCalls: 0
+        m.rows: () => { accessCalls = accessCalls + 1; Error().signal() }
+        m.columns: () => { accessCalls = accessCalls + 1; Error().signal() }
+        m.at: (row, column) => { accessCalls = accessCalls + 1; Error().signal() }
+        expected: [1, 2, 3, 4, 5, 6]
+        visits: 0
+        result: m.each(n => {
+            Assertions.require(n === expected[visits])
+            visits = visits + 1
+        })
+        Assertions.require(visits == 6)
+        Assertions.require(result === m)
+        Assertions.require(accessCalls == 0)
+    }),
+    Test("Matrix Float kernel each does not send guest access messages", () => {
+        m: Matrix(2, 2, 1.0, 2.0, 3.0, 4.0).matmul(Matrix(2, 2, 1.0, 0.0, 0.0, 1.0))
+        accessCalls: 0
+        m.rows: () => { accessCalls = accessCalls + 1; Error().signal() }
+        m.columns: () => { accessCalls = accessCalls + 1; Error().signal() }
+        m.at: (row, column) => { accessCalls = accessCalls + 1; Error().signal() }
+        expected: [1.0, 2.0, 3.0, 4.0]
+        visits: 0
+        result: m.each(n => {
+            Assertions.require(n === expected[visits])
+            visits = visits + 1
+        })
+        Assertions.require(visits == 4)
+        Assertions.require(result === m)
+        Assertions.require(accessCalls == 0)
+    }),
+    Test("Vector empty", () => {
+        v: Vector()
+        visits: 0
+        Assertions.require(v.each(n => { visits = visits + 1 }) === v)
+        Assertions.require(visits == 0)
+    }),
+    Test("Vector exact Number identities in order", () => {
+        expected: [1, 10000000000000000000000000000000000000000, 1 / 3, -0.0, Complex(2, 3)]
+        v: Vector(...expected)
+        i: 0
+        result: v.each(n => {
+            Assertions.require(n === expected[i])
+            i = i + 1
+        })
+        Assertions.require(i == expected.size())
+        Assertions.require(result === v)
+    }),
+    Test("Vector snapshot survives first callback mutation", () => {
+        v: Vector(1, 2, 3)
+        seen: 0
+        result: v.each(n => {
+            if(seen == 0) { v.atPut(1, 99) }
+            seen = seen * 10 + n
+            900
+        })
+        Assertions.require(seen == 123)
+        Assertions.require(result === v)
+    }),
+    Test("Vector polymorphic callable", () => {
+        v: Vector(1, 2, 3)
+        seen: 0
+        callback: n => { seen = seen * 10 + n }
+        callable: { call: callback }
+        Assertions.require(v.each(callable) === v)
+        Assertions.require(seen == 123)
+    }),
+    Test("Vector close allows traversal", () => {
+        v: Vector(1, 2, 3)
+        v.close()
+        seen: 0
+        Assertions.require(v.each(n => { seen = seen * 10 + n }) === v)
+        Assertions.require(seen == 123)
+    }),
+    Test("Vector freeze allows traversal", () => {
+        v: Vector(1, 2, 3)
+        v.freeze()
+        seen: 0
+        Assertions.require(v.each(n => { seen = seen * 10 + n }) === v)
+        Assertions.require(seen == 123)
+    }),
+    Test("Vector own each wins", () => {
+        v: Vector(1, 2, 3)
+        v.each: callback => { callback(8); 42 }
+        seen: 0
+        Assertions.require(v.each(n => { seen = n }) === 42)
+        Assertions.require(seen == 8)
+    }),
+    Test("Vector copied standard method rejects other family", () => {
+        ordinary: { each: Vector.slotValue("each") }
+        Assertions.signals(Error, () => { ordinary.each(n => n) })
+    }),
+    Test("Vector Vector(1, 2, 3) rejects zero arguments", () => {
+        v: Vector(1, 2, 3)
+        Assertions.signals(Error, () => { v.each() })
+    }),
+    Test("Vector Vector(1, 2, 3) rejects two arguments", () => {
+        v: Vector(1, 2, 3)
+        Assertions.signals(Error, () => { v.each(n => n, n => n) })
+    }),
+    Test("Vector Vector(1, 2, 3) rejects invalid callable", () => {
+        v: Vector(1, 2, 3)
+        Assertions.signals(Error, () => { v.each({ call: 1 }) })
+    }),
+    Test("Vector Vector() rejects zero arguments", () => {
+        v: Vector()
+        Assertions.signals(Error, () => { v.each() })
+    }),
+    Test("Vector Vector() rejects two arguments", () => {
+        v: Vector()
+        Assertions.signals(Error, () => { v.each(n => n, n => n) })
+    }),
+    Test("Vector Vector() rejects invalid callable", () => {
+        v: Vector()
+        Assertions.signals(Error, () => { v.each({ call: 1 }) })
+    }),
+    Test("Vector Error stops pending visits", () => {
+        v: Vector(1, 2, 3)
+        visits: 0
+        expected: Error()
+        caught: Error.handle(() => {
+            v.each(n => { visits = visits + 1; expected.signal() })
+        }, error => error)
+        Assertions.require(caught === expected)
+        Assertions.require(visits == 1)
+    }),
+    Test("Vector nonlocal return preserves prefix effects", () => {
+        v: Vector(1, 2, 3)
+        seen: 0
+        run: () => {
+            v.each(n => { seen = seen * 10 + n; if(n == 2) { ^n } })
+            999
+        }
+        Assertions.require(run() === 2)
+        Assertions.require(seen == 12)
+    }),
+    Test("Vector ensure runs on unwind", () => {
+        v: Vector(1, 2, 3)
+        cleaned: 0
+        Assertions.signals(Error, () => {
+            (() => v.each(n => { Error().signal() })).ensure(() => { cleaned = cleaned + 1 })
+        })
+        Assertions.require(cleaned == 1)
+    }),
+    Test("Matrix snapshot survives first callback mutation", () => {
+        v: Matrix(1, 3, 1, 2, 3)
+        seen: 0
+        result: v.each(n => {
+            if(seen == 0) { v.atPut(0, 1, 99) }
+            seen = seen * 10 + n
+            900
+        })
+        Assertions.require(seen == 123)
+        Assertions.require(result === v)
+    }),
+    Test("Matrix polymorphic callable", () => {
+        v: Matrix(1, 3, 1, 2, 3)
+        seen: 0
+        callback: n => { seen = seen * 10 + n }
+        callable: { call: callback }
+        Assertions.require(v.each(callable) === v)
+        Assertions.require(seen == 123)
+    }),
+    Test("Matrix close allows traversal", () => {
+        v: Matrix(1, 3, 1, 2, 3)
+        v.close()
+        seen: 0
+        Assertions.require(v.each(n => { seen = seen * 10 + n }) === v)
+        Assertions.require(seen == 123)
+    }),
+    Test("Matrix freeze allows traversal", () => {
+        v: Matrix(1, 3, 1, 2, 3)
+        v.freeze()
+        seen: 0
+        Assertions.require(v.each(n => { seen = seen * 10 + n }) === v)
+        Assertions.require(seen == 123)
+    }),
+    Test("Matrix own each wins", () => {
+        v: Matrix(1, 3, 1, 2, 3)
+        v.each: callback => { callback(8); 42 }
+        seen: 0
+        Assertions.require(v.each(n => { seen = n }) === 42)
+        Assertions.require(seen == 8)
+    }),
+    Test("Matrix copied standard method rejects other family", () => {
+        ordinary: { each: Matrix.slotValue("each") }
+        Assertions.signals(Error, () => { ordinary.each(n => n) })
+    }),
+    Test("Matrix Matrix(1, 3, 1, 2, 3) rejects zero arguments", () => {
+        v: Matrix(1, 3, 1, 2, 3)
+        Assertions.signals(Error, () => { v.each() })
+    }),
+    Test("Matrix Matrix(1, 3, 1, 2, 3) rejects two arguments", () => {
+        v: Matrix(1, 3, 1, 2, 3)
+        Assertions.signals(Error, () => { v.each(n => n, n => n) })
+    }),
+    Test("Matrix Matrix(1, 3, 1, 2, 3) rejects invalid callable", () => {
+        v: Matrix(1, 3, 1, 2, 3)
+        Assertions.signals(Error, () => { v.each({ call: 1 }) })
+    }),
+    Test("Matrix Matrix(0, 5) rejects zero arguments", () => {
+        v: Matrix(0, 5)
+        Assertions.signals(Error, () => { v.each() })
+    }),
+    Test("Matrix Matrix(0, 5) rejects two arguments", () => {
+        v: Matrix(0, 5)
+        Assertions.signals(Error, () => { v.each(n => n, n => n) })
+    }),
+    Test("Matrix Matrix(0, 5) rejects invalid callable", () => {
+        v: Matrix(0, 5)
+        Assertions.signals(Error, () => { v.each({ call: 1 }) })
+    }),
+    Test("Matrix Matrix(5, 0) rejects zero arguments", () => {
+        v: Matrix(5, 0)
+        Assertions.signals(Error, () => { v.each() })
+    }),
+    Test("Matrix Matrix(5, 0) rejects two arguments", () => {
+        v: Matrix(5, 0)
+        Assertions.signals(Error, () => { v.each(n => n, n => n) })
+    }),
+    Test("Matrix Matrix(5, 0) rejects invalid callable", () => {
+        v: Matrix(5, 0)
+        Assertions.signals(Error, () => { v.each({ call: 1 }) })
+    }),
+    Test("Matrix Matrix(0, 1000000000000000000000000000000) rejects zero arguments", () => {
+        v: Matrix(0, 1000000000000000000000000000000)
+        Assertions.signals(Error, () => { v.each() })
+    }),
+    Test("Matrix Matrix(0, 1000000000000000000000000000000) rejects two arguments", () => {
+        v: Matrix(0, 1000000000000000000000000000000)
+        Assertions.signals(Error, () => { v.each(n => n, n => n) })
+    }),
+    Test("Matrix Matrix(0, 1000000000000000000000000000000) rejects invalid callable", () => {
+        v: Matrix(0, 1000000000000000000000000000000)
+        Assertions.signals(Error, () => { v.each({ call: 1 }) })
+    }),
+    Test("Matrix Matrix(1000000000000000000000000000000, 0) rejects zero arguments", () => {
+        v: Matrix(1000000000000000000000000000000, 0)
+        Assertions.signals(Error, () => { v.each() })
+    }),
+    Test("Matrix Matrix(1000000000000000000000000000000, 0) rejects two arguments", () => {
+        v: Matrix(1000000000000000000000000000000, 0)
+        Assertions.signals(Error, () => { v.each(n => n, n => n) })
+    }),
+    Test("Matrix Matrix(1000000000000000000000000000000, 0) rejects invalid callable", () => {
+        v: Matrix(1000000000000000000000000000000, 0)
+        Assertions.signals(Error, () => { v.each({ call: 1 }) })
+    }),
+    Test("Matrix Error stops pending visits", () => {
+        v: Matrix(1, 3, 1, 2, 3)
+        visits: 0
+        expected: Error()
+        caught: Error.handle(() => {
+            v.each(n => { visits = visits + 1; expected.signal() })
+        }, error => error)
+        Assertions.require(caught === expected)
+        Assertions.require(visits == 1)
+    }),
+    Test("Matrix nonlocal return preserves prefix effects", () => {
+        v: Matrix(1, 3, 1, 2, 3)
+        seen: 0
+        run: () => {
+            v.each(n => { seen = seen * 10 + n; if(n == 2) { ^n } })
+            999
+        }
+        Assertions.require(run() === 2)
+        Assertions.require(seen == 12)
+    }),
+    Test("Matrix ensure runs on unwind", () => {
+        v: Matrix(1, 3, 1, 2, 3)
+        cleaned: 0
+        Assertions.signals(Error, () => {
+            (() => v.each(n => { Error().signal() })).ensure(() => { cleaned = cleaned + 1 })
+        })
+        Assertions.require(cleaned == 1)
+    }),
+    Test("Matrix row-major Matrix(2, 3, 1, 2, 3, 4, 5, 6)", () => {
+        m: Matrix(2, 3, 1, 2, 3, 4, 5, 6)
+        expected: [1, 2, 3, 4, 5, 6]
+        i: 0
+        Assertions.require(m.each(n => { Assertions.require(n === expected[i]); i = i + 1 }) === m)
+        Assertions.require(i == expected.size())
+    }),
+    Test("Matrix row-major Matrix(2, 2, 1, 2, 3, 4)", () => {
+        m: Matrix(2, 2, 1, 2, 3, 4)
+        expected: [1, 2, 3, 4]
+        i: 0
+        Assertions.require(m.each(n => { Assertions.require(n === expected[i]); i = i + 1 }) === m)
+        Assertions.require(i == expected.size())
+    }),
+    Test("Matrix row-major Matrix(1, 5, 1, 1000000000000000000000000000000, 1 / 3, -0.0, Complex(2, 3))", () => {
+        m: Matrix(1, 5, 1, 1000000000000000000000000000000, 1 / 3, -0.0, Complex(2, 3))
+        expected: [1, 1000000000000000000000000000000, 1 / 3, -0.0, Complex(2, 3)]
+        i: 0
+        Assertions.require(m.each(n => { Assertions.require(n === expected[i]); i = i + 1 }) === m)
+        Assertions.require(i == expected.size())
+    }),
+    Test("Matrix Float kernel snapshot survives representation change", () => {
+        m: Matrix(1, 2, 1.0, 2.0).matmul(Matrix(2, 2, 1.0, 0.0, 0.0, 1.0))
+        expected: [m.at(0, 0), m.at(0, 1)]
+        i: 0
+        Assertions.require(m.each(n => {
+            Assertions.require(n === expected[i])
+            if(i == 0) { m.atPut(0, 1, Complex(9, 2)) }
+            i = i + 1
+        }) === m)
+        Assertions.require(i == 2)
+        Assertions.require(m.at(0, 1) === Complex(9, 2))
+    }),
+    Test("Matrix empty shape 0 by 5", () => {
+        m: Matrix(0, 5)
+        visits: 0
+        Assertions.require(m.each(n => { visits = visits + 1 }) === m)
+        Assertions.require(visits == 0)
+        Assertions.require(m.rows() === 0)
+        Assertions.require(m.columns() === 5)
+    }),
+    Test("Matrix empty shape 5 by 0", () => {
+        m: Matrix(5, 0)
+        visits: 0
+        Assertions.require(m.each(n => { visits = visits + 1 }) === m)
+        Assertions.require(visits == 0)
+        Assertions.require(m.rows() === 5)
+        Assertions.require(m.columns() === 0)
+    }),
+    Test("Matrix empty shape 0 by 1000000000000000000000000000000", () => {
+        m: Matrix(0, 1000000000000000000000000000000)
+        visits: 0
+        Assertions.require(m.each(n => { visits = visits + 1 }) === m)
+        Assertions.require(visits == 0)
+        Assertions.require(m.rows() === 0)
+        Assertions.require(m.columns() === 1000000000000000000000000000000)
+    }),
+    Test("Matrix empty shape 1000000000000000000000000000000 by 0", () => {
+        m: Matrix(1000000000000000000000000000000, 0)
+        visits: 0
+        Assertions.require(m.each(n => { visits = visits + 1 }) === m)
+        Assertions.require(visits == 0)
+        Assertions.require(m.rows() === 1000000000000000000000000000000)
+        Assertions.require(m.columns() === 0)
+    })
+]
+tests.freeze()

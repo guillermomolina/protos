@@ -48,6 +48,10 @@
 //! - `Vector(x, ...)` answers a Vector of exactly the supplied elements, in
 //!   order: `Vector()` is empty and `Vector(3)` holds the single element `3`.
 //!   Explicit spread works: `Vector(...[1, 2, 3])`.
+//! - `each(block)` visits one unchanged Number per callback in ascending index
+//!   order from one shallow snapshot captured before callbacks, then answers
+//!   the original receiver. Polymorphic invokability is required even when
+//!   empty; errors and explicit suspension follow ordinary callback rules.
 //! - `size()` answers the length.
 //! - `at(i)` and `v[i]` answer the element at `0 <= i < size()`.
 //! - `atPut(i, value)` replaces one element and answers `value`.
@@ -64,6 +68,11 @@
 //! - `Matrix(rows, columns, ...values)` answers a `rows × columns` Matrix of
 //!   exactly `rows * columns` values in row-major order; any other count fails.
 //!   `Matrix(0, n)` and `Matrix(n, 0)` are distinct empty shapes.
+//! - `each(block)` visits one unchanged Number per callback in row-major order
+//!   from one shallow snapshot captured before callbacks, then answers the
+//!   original receiver. Empty shapes retain their dimensions. Polymorphic
+//!   invokability is required even when empty; errors and explicit suspension
+//!   follow ordinary callback rules.
 //! - `rows()` and `columns()` answer the dimensions as supplied.
 //! - `at(row, column)` answers the element at `0 <= row < rows()` and
 //!   `0 <= column < columns()`. There is no `m[row]` or `m[row, column]` form.
@@ -97,8 +106,9 @@
 //! value, and a failed write changes nothing. A closed Vector or Matrix still
 //! accepts `atPut` on existing elements; a frozen one rejects it.
 //!
-//! Every Vector or Matrix result is a fresh open object that shares no
-//! storage with its operands, and no operation mutates an operand.
+//! Algebraic Vector and Matrix results are fresh open objects that share no
+//! storage with their operands. `each` instead returns its original receiver;
+//! a callback may legally mutate it without changing pending snapshot visits.
 //!
 //! Each scalar operation is the standard Number arithmetic, including the
 //! coupled Complex multiplication. Every contraction (`dot`, each `matvec`

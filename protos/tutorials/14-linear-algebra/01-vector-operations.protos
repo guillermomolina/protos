@@ -41,7 +41,15 @@ print(v[0])
 product: snapshot.dot(w)
 print(product)
 
-verified: (v.size() == 3) &&
+// Contextual for sends ordinary each, visiting a shallow snapshot in order.
+visitedTotal: 0
+traversed: for(n in v) {
+    visitedTotal = visitedTotal + n
+}
+print(visitedTotal)
+
+verified: (traversed === v) && (visitedTotal == 15) &&
+    (v.size() == 3) &&
     (v[0] == 10) &&
     (snapshot[0] == 1) &&
     (sum[0] == 5) && (sum[2] == 9) &&
