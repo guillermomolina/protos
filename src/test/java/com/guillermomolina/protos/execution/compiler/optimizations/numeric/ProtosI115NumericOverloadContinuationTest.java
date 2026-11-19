@@ -80,6 +80,66 @@ final class ProtosI115NumericOverloadContinuationTest {
         assertEquals(Boolean.TRUE, result);
     }
 
+    /*
+     * 1b. Standard long and Float arithmetic, signed-64 overflow promotion
+     * and ordering at shared sites, alternating with a redefined operator
+     * and returning to the standard behavior, executed repeatedly.
+     */
+    @Test
+    void standardArithmeticAndOrderingAroundRedefinedOperator() throws Exception {
+        Harness h = new Harness();
+        Object result = h.eval("""
+                behavior: { plus: (other) => { other * 10 } }
+                box: { ...behavior.alias("plus", "+") }
+                add: (x, y) => { x + y }
+                sub: (x, y) => { x - y }
+                mul: (x, y) => { x * y }
+                lt: (x, y) => { x < y }
+                le: (x, y) => { x <= y }
+                gt: (x, y) => { x > y }
+                ge: (x, y) => { x >= y }
+                max: 9223372036854775807
+                ok: true
+                i: 0
+                while(i < 12) {
+                    ok = ok && (add(i, 2) == i + 2) && (add(box, i) == i * 10)
+                    ok = ok && (sub(i, 5) == i - 5) && (mul(i, 3) == i * 3)
+                    ok = ok && (add(i, 0.5) == i + 0.5) && (add(0.5, i) == 0.5 + i)
+                    ok = ok && lt(i, i + 1) && le(i, i) && gt(i + 1, i) && ge(i, i)
+                    ok = ok && !lt(2.5, 1) && ge(2.5, 2.5)
+                    ok = ok && (sub(add(max, 1), 1) == max) && gt(add(max, i + 1), max)
+                    i = i + 1
+                }
+                ok && (add(3, 4) == 7) && (mul(max, 2) > max)
+                """);
+        assertEquals(Boolean.TRUE, result);
+    }
+
+    /*
+     * 1c. A non-capturing Closure inherits the caller's Prelude for its
+     * standard operators, also across repeated executions of the same root.
+     */
+    @Test
+    void nonCapturingClosureUsesTheInheritedPreludeForStandardOperators()
+            throws Exception {
+        Harness h = new Harness();
+        Object result = h.eval("""
+                twice: (x) => { x + x }
+                run: (f, n) => {
+                    total: 0
+                    k: 0
+                    while(k < n) {
+                        total = total + f(k)
+                        k = k + 1
+                    }
+                    total
+                }
+                (run(twice, 10) == 90) && (run((x) => { x * x - 1 }, 4) == 10) &&
+                    (run(twice, 10) == 90)
+                """);
+        assertEquals(Boolean.TRUE, result);
+    }
+
     /* 2. A suspending redefined operator in a terminal sum. */
     @Test
     void suspendingOperatorInTerminalSum() throws Exception {

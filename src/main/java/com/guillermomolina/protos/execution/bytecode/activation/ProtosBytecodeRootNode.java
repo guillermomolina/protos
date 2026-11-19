@@ -1632,18 +1632,20 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @InliningCutoff
     private static ProtosSignalException indexedError(
             VirtualFrame frame) {
-        return indexedErrorOf(
-                ProtosFrameArguments.activation(frame.getArguments()));
+        return indexedErrorOf(frame.getArguments());
     }
 
     /*
-     * The cold Error construction and signaling of indexedError. The frame
-     * arguments are extracted before this boundary; handler selection only
-     * records the selected frame and invokes no guest behavior.
+     * The cold activation recovery, Error construction and signaling of
+     * indexedError. Only the frame arguments cross this boundary; handler
+     * selection only records the selected frame and invokes no guest
+     * behavior.
      */
     @TruffleBoundary
     private static ProtosSignalException indexedErrorOf(
-            ProtosActivation activation) {
+            Object[] arguments) {
+        ProtosActivation activation =
+                ProtosFrameArguments.activation(arguments);
         return ProtosCoreErrors.signal(
                 activation,
                 ProtosCoreErrors.newError(activation));
@@ -1675,7 +1677,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         @Specialization(
                 guards = {
                     "isStandardIndexedValue(receiver)",
-                    "receiver.usesObjectStorageForRuntime()",
                     "receiverShape.check(receiver)",
                     "selection != null",
                     "hasSelectionParent(receiver, selection)",
@@ -1753,12 +1754,16 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return ProtosValueLookup.hasSelectionParent(receiver, selection);
         }
 
-        /* Specialization-time only: null when the receiver owns the slot. */
+        /*
+         * Specialization-time only: null when the receiver owns the slot.
+         * The admitted receivers are the final Array and Bytes values, which
+         * never replace their lexical-binding authority, so their local
+         * slots always live in their own Shape.
+         */
         @TruffleBoundary
         static ProtosValueLookup.StructuralSelection selectInherited(
                 ProtosObjectValue receiver, Shape receiverShape, String selector) {
-            if (!receiver.usesObjectStorageForRuntime()
-                    || ProtosValueLookup.hasProperty(receiverShape, selector)) {
+            if (ProtosValueLookup.hasProperty(receiverShape, selector)) {
                 return null;
             }
             Object parent = receiver.parent().orElse(null);
@@ -2925,8 +2930,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * {@link PropertyGetter} of the cached {@code Shape}, shared by every exact
      * ordinary object with that {@code Shape}. The value always comes from
      * the current physical location; a Closure is extracted freshly.
-     * Inherited members, other representations and absent members use
-     * {@link #doGeneric}.
+     * Inherited members of exact ordinary receivers use the shared
+     * structural selection of {@link ReadMember}; other representations and
+     * absent members use {@link #doGeneric}.
      */
     @Operation(storeBytecodeIndex = true)
     @ConstantOperand(type = String.class, name = "name")
@@ -2968,7 +2974,33 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     receiver, receiver, getter.get(receiver));
         }
 
-        @Specialization(replaces = {"doLong", "doObjectCached"})
+        /*
+         * Inherited member of an exact ordinary receiver, through the same
+         * shared structural selection as ReadMember: the receiver's Shape
+         * proves it owns no such slot, the selection guards every Shape
+         * along the delegation chain, and the real owner's current value is
+         * read on every execution.
+         */
+        @Specialization(
+                guards = {
+                    "isOrdinaryObject(receiver)",
+                    "receiverShape.check(receiver)",
+                    "selection != null",
+                    "hasSelectionParent(receiver, selection)",
+                    "selection.isValid()"
+                },
+                limit = "3")
+        public static Object doInherited(
+                String name,
+                ProtosObjectValue receiver,
+                @Cached("receiver.getShape()") Shape receiverShape,
+                @Cached("selectInherited(receiver, name)")
+                        ProtosValueLookup.StructuralSelection selection) {
+            return ProtosValueLookup.extractMember(
+                    receiver, selection.home(), selection.read());
+        }
+
+        @Specialization(replaces = {"doLong", "doObjectCached", "doInherited"})
         public static Object doGeneric(
                 String name,
                 Object receiver,
@@ -2993,6 +3025,17 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         static PropertyGetter propertyGetter(Shape shape, String name) {
             return ProtosValueLookup.propertyGetterWithFinalAssumption(shape, name);
+        }
+
+        static ProtosValueLookup.StructuralSelection selectInherited(
+                Object receiver, String name) {
+            return ReadMember.selectInherited(receiver, name);
+        }
+
+        static boolean hasSelectionParent(
+                ProtosObjectValue receiver,
+                ProtosValueLookup.StructuralSelection selection) {
+            return ProtosValueLookup.hasSelectionParent(receiver, selection);
         }
     }
 

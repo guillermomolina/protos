@@ -527,6 +527,74 @@ final class ProtosI115IndexedOperationTest {
                 + "    b: Box(1)\n    b[0]\n    0\n}\nf()"));
     }
 
+    @Test
+    void repeatedIndexedErrorsInNestedClosuresReachTheEnclosingHandler() {
+        assertEquals(30L, evalLong("""
+                a: [1, 2, 3]
+                read: (r, index) => { r[index] }
+                write: (r, index, value) => { r[index] = value }
+                caught: 0
+                i: 0
+                while(i < 10) {
+                    Error.handle(() => { read(a, 3) }, (e) => { caught = caught + 1 })
+                    Error.handle(() => { read(a, "x") }, (e) => { caught = caught + 1 })
+                    Error.handle(() => { write(a, 0 - 1, 4) }, (e) => { caught = caught + 1 })
+                    i = i + 1
+                }
+                caught
+                """));
+    }
+
+    @Test
+    void inheritedOverrideTwoLevelsUpIsSelectedAndItsRemovalRestoresStandard() {
+        assertTrue(evalBoolean("""
+                Base: Array { at: (index) => { 77 } }
+                Derived: Base {}
+                read: (r) => { r[0] }
+                ok: true
+                i: 0
+                while(i < 12) {
+                    ok = ok && (read(Derived(1, 2)) == 77) && (read([5, 6]) == 5)
+                    i = i + 1
+                }
+                Base.removeSlot("at")
+                ok && (read(Derived(1, 2)) == 1)
+                """));
+    }
+
+    @Test
+    void frozenBytesRejectRepeatedWritesAndKeepTheirContent() {
+        assertTrue(evalBoolean(BYTES + """
+                source.freeze()
+                write: (r, index, value) => { r[index] = value }
+                caught: 0
+                i: 0
+                while(i < 10) {
+                    Error.handle(() => { write(source, 0, 1) }, (e) => { caught = caught + 1 })
+                    i = i + 1
+                }
+                (caught == 10) && (source[0] == 106)
+                """));
+    }
+
+    @Test
+    void longStorageArrayKeepsSmallIntegerElementsAfterRepeatedMutation() {
+        assertTrue(evalBoolean("""
+                a: [0, 0, 0, 0]
+                i: 0
+                while(i < 10) {
+                    j: 0
+                    while(j < 4) {
+                        a[j] = a[j] + i * 4 + j
+                        j = j + 1
+                    }
+                    i = i + 1
+                }
+                (a[0] == 180) && (a[1] == 190) && (a[2] == 200) &&
+                    (a[3] == 210) && (a[3].parent() === SmallInteger)
+                """));
+    }
+
     private static List<String> names(ProtosBytecodeRootNode root) {
         return root.getBytecodeNode().getInstructionsAsList().stream()
                 .map(ProtosInstructionNames::of).toList();

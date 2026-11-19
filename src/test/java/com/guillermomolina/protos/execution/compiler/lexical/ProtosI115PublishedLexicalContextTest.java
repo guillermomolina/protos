@@ -436,6 +436,23 @@ final class ProtosI115PublishedLexicalContextTest {
         });
     }
 
+    @Test
+    void publishedBindingsStayAuthoritativeAfterAdmittedOperations() throws Exception {
+        withFixture(f -> {
+            ProtosClosureValue closure = closure(f,
+                    "(() => { a: [3, 4]\n n: a[0] + a[1]\n saved: context\n"
+                            + " Base: { tag: 5 }\n o: Base {}\n t: 0\n i: 0\n"
+                            + " while(i < 3) {\n t = t + o.tag\n i = i + 1\n }\n"
+                            + " saved.n = n * t\n result: n\n Base.tag = 1\n"
+                            + " result + o.tag })");
+            ProtosActivation activation = invocation(f, closure);
+            Object result = closure.executionPlan().orElseThrow()
+                    .executeBytecodeActivationForTesting(activation);
+            assertEquals(106L, result);
+            assertEquals(105L, local(activation.context(), "n"));
+        });
+    }
+
     /* Instruction names without the custom-operation prefix and quickening suffix. */
     private static List<String> operations(BytecodeNode node) {
         return node.getInstructionsAsList().stream()

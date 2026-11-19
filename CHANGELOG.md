@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.173-SNAPSHOT
+
+- **I115.** Remove redundant Array and Bytes authority checks, recover indexed-operation Activations behind the cold boundary, and cache inherited attribute reads. Extend indexed-operation, lexical-context and numeric-continuation regressions.
+
 ## 0.4.172-SNAPSHOT
 
 - **I115.** Construct standard Arrays through admitted Bytecode DSL operations and keep indexed Error signaling cold. Extend Array construction, indexed-operation and numeric-continuation regressions.
