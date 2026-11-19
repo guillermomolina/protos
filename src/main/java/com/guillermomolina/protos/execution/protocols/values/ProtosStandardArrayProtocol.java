@@ -61,7 +61,58 @@ public final class ProtosStandardArrayProtocol {
     private static final ProtosClosureValue STANDARD_SIZE =
             ProtosClosureValue.nativeClosure(ProtosStandardArrayProtocol::size);
 
+    /*
+     * The standard Array construct body. Its identity, together with the
+     * canonical Array prototype it was installed on, lets the Bytecode DSL
+     * construction admission recognize exactly this installed behavior.
+     */
+    private static final class StandardConstructBody implements ProtosNativeClosureBody {
+        private final ProtosObjectValue arrayPrototype;
+
+        StandardConstructBody(ProtosObjectValue arrayPrototype) {
+            this.arrayPrototype = arrayPrototype;
+        }
+
+        @Override
+        public Object execute(ProtosActivation activation, List<?> supplied) {
+            Object receiver = activation.receiver();
+            if (!(receiver instanceof ProtosObjectValue prototype)
+                    || !delegatesTo(prototype, arrayPrototype)) {
+                throw invalid(activation);
+            }
+            return new ProtosArrayValue(prototype, supplied);
+        }
+    }
+
     private ProtosStandardArrayProtocol() {}
+
+    /**
+     * Whether {@code behavior}, selected for {@code construct} with the
+     * actual owner {@code home}, is the original standard Array construct
+     * installed on the canonical Array prototype of {@code prelude}. A
+     * copied, rebound or redefined construct is never canonical. Observes
+     * identity only; never invokes it.
+     */
+    static boolean isCanonicalStandardConstructSelection(
+            Object behavior,
+            ProtosObjectValue home,
+            com.guillermomolina.protos.runtime.ProtosPrelude prelude) {
+        return prelude != null
+                && isInstalledStandardConstruct(behavior, home)
+                && prelude.arrayPrototype() == home;
+    }
+
+    /**
+     * Prelude-independent part of {@link #isCanonicalStandardConstructSelection}:
+     * {@code behavior} is the standard construct installed on {@code home}.
+     */
+    static boolean isInstalledStandardConstruct(
+            Object behavior,
+            ProtosObjectValue home) {
+        return behavior instanceof ProtosClosureValue closure
+                && closure.nativeBody().orElse(null) instanceof StandardConstructBody body
+                && body.arrayPrototype == home;
+    }
 
     /**
      * I115: whether {@code behavior} is the standard Array behavior of the
@@ -179,14 +230,7 @@ public final class ProtosStandardArrayProtocol {
         arrayPrototype.createLocalSlot(
                 "construct",
                 ProtosClosureValue.nativeClosure(
-                        (activation, supplied) -> {
-                            Object receiver = activation.receiver();
-                            if (!(receiver instanceof ProtosObjectValue prototype)
-                                    || !delegatesTo(prototype, arrayPrototype)) {
-                                throw invalid(activation);
-                            }
-                            return new ProtosArrayValue(prototype, supplied);
-                        }));
+                        new StandardConstructBody(arrayPrototype)));
 
         arrayPrototype.createLocalSlot("at", STANDARD_AT);
         arrayPrototype.createLocalSlot("atPut", STANDARD_AT_PUT);

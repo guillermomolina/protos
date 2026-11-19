@@ -383,6 +383,34 @@ final class ProtosI115NumericOverloadContinuationTest {
         assertEquals(Boolean.TRUE, result);
     }
 
+    /*
+     * One site alternates standard long, mixed long/double and custom
+     * selections, then returns to standard results, including overflow
+     * promotion, without losing either the standard or the custom answer.
+     */
+    @Test
+    void sameSiteAlternatesMixedPrimitiveAndCustomSelections()
+            throws Exception {
+        Harness h = new Harness();
+        Object result = h.eval("""
+                site: (x, y) => { x + y }
+                box: { ...{ plus: (other) => { other + 100 } }.alias("plus", "+") }
+                ok: true
+                i: 0
+                while(i < 8) {
+                    ok = ok && (site(i, 1) == i + 1)
+                    ok = ok && (site(box, i) == i + 100)
+                    ok = ok && (site(2, 0.5) == 2.5)
+                    ok = ok && (site(0.5, 2) == 2.5)
+                    i = i + 1
+                }
+                ok = ok && (site(box, 1) == 101) && (site(3, 4) == 7)
+                """
+                + "ok && BigInteger.recognizes(site(9223372036854775807, 1))"
+                + " && (site(box, 2) == 102)\n");
+        assertEquals(Boolean.TRUE, result);
+    }
+
     private static void assertResolved(ProtosFutureValue future, String decimal) {
         assertEquals(ProtosFutureValue.State.RESOLVED, future.state());
         assertEquals(decimal, ProtosNumericValueSupport.integerDecimalText(

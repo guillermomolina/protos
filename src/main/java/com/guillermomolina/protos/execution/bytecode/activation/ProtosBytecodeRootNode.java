@@ -1632,8 +1632,18 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @InliningCutoff
     private static ProtosSignalException indexedError(
             VirtualFrame frame) {
-        ProtosActivation activation =
-                ProtosFrameArguments.activation(frame.getArguments());
+        return indexedErrorOf(
+                ProtosFrameArguments.activation(frame.getArguments()));
+    }
+
+    /*
+     * The cold Error construction and signaling of indexedError. The frame
+     * arguments are extracted before this boundary; handler selection only
+     * records the selected frame and invokes no guest behavior.
+     */
+    @TruffleBoundary
+    private static ProtosSignalException indexedErrorOf(
+            ProtosActivation activation) {
         return ProtosCoreErrors.signal(
                 activation,
                 ProtosCoreErrors.newError(activation));
@@ -2303,11 +2313,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 Object receiver,
                 Object index,
                 @Bind VirtualFrame frame) {
-            ProtosActivation activation =
-                    ProtosFrameArguments.activation(frame.getArguments());
-            throw ProtosCoreErrors.signal(
-                    activation,
-                    ProtosCoreErrors.newError(activation));
+            throw indexedError(frame);
         }
     }
 
@@ -2370,17 +2376,16 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 Object receiver,
                 Object index,
                 @Bind VirtualFrame frame) {
-            ProtosActivation activation =
-                    ProtosFrameArguments.activation(frame.getArguments());
-            throw ProtosCoreErrors.signal(
-                    activation,
-                    ProtosCoreErrors.newError(activation));
+            throw indexedError(frame);
         }
     }
 
     /*
-     * PBytecodeDSLRootNode.MakeConstantLongList.
-     * The long[] constant is copied on every evaluation.
+     * Constant signed-64 Array construction. Emitted only behind
+     * IsStandardArrayConstructionSelection: the dynamic operand is the
+     * already admitted factory receiver, which becomes the delegation
+     * parent. The long[] constant is copied on every evaluation, so each
+     * Array has a fresh identity and an independent primitive backing.
      */
     @Operation(storeBytecodeIndex = false)
     @ConstantOperand(type = long[].class, dimensions = 0)
@@ -2389,18 +2394,185 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         @Specialization
         public static ProtosArrayValue perform(
                 long[] values,
-                @Bind VirtualFrame frame) {
-            ProtosPrelude prelude =
-                    ProtosFrameArguments.admittedPreludeOrNull(
-                            frame.getArguments());
+                Object factory) {
+            return new ProtosArrayValue(factory, values);
+        }
+    }
 
-            if (prelude == null) {
-                throw new IllegalStateException(
-                        "A constant Array requires a Core Prelude");
+    /*
+     * Positional Array construction over the already evaluated argument
+     * vector (CollectClosureCallArguments or SnapshotClosureCallArguments).
+     * Emitted only behind IsStandardArrayConstructionSelection; the factory
+     * receiver becomes the delegation parent and the values its shallow
+     * elements, materialized as guest values.
+     */
+    @Operation(storeBytecodeIndex = false)
+    public static final class MakeArray {
+
+        @Specialization
+        public static ProtosArrayValue perform(
+                Object factory,
+                Object[] values) {
+            return new ProtosArrayValue(factory, guestElements(values));
+        }
+
+        private static List<Object> guestElements(Object[] values) {
+            Object[] elements = new Object[values.length];
+            for (int index = 0; index < values.length; index++) {
+                elements[index] = ProtosNumericValueSupport.guestValue(values[index]);
             }
+            return java.util.Arrays.asList(elements);
+        }
+    }
 
-            return new ProtosArrayValue(
-                    prelude.arrayPrototype(), values);
+    /*
+     * Array construction admission. Answers whether calling the evaluated
+     * factory selects the canonical root Object.call and, through it, the
+     * original standard Array construct of the executing Prelude's
+     * canonical Array prototype. Only then does the lowering take
+     * MakeArray/MakeConstantLongArray; any other factory, including one with
+     * a nearer call or construct, goes through the ordinary Call*Method
+     * with the same evaluated receiver and arguments. Nothing is invoked
+     * here.
+     *
+     * The cached entry is keyed by the exact factory identity and holds the
+     * structural selections of call and construct starting at it. A
+     * structural change of any examined object misses the cache; a mutable
+     * selected slot is read again on every execution, so a reassignment that
+     * preserves Shape is observed. Only an all-FROZEN chain caches its
+     * classification.
+     */
+    @Operation(storeBytecodeIndex = false)
+    public static final class IsStandardArrayConstructionSelection {
+        @Specialization(
+                guards = {
+                    "factory == cachedFactory",
+                    "callSelection != null",
+                    "callSelection.isValid()",
+                    "constructSelection != null",
+                    "constructSelection.isValid()"
+                },
+                limit = "3",
+                excludeForUncached = true)
+        public static boolean doCached(
+                ProtosObjectValue factory,
+                @Bind VirtualFrame frame,
+                @Cached("ordinaryFactoryOrNull(factory)") ProtosObjectValue cachedFactory,
+                @Cached("selectCall(cachedFactory)")
+                        ProtosValueLookup.StructuralSelection callSelection,
+                @Cached("selectConstruct(cachedFactory)")
+                        ProtosValueLookup.StructuralSelection constructSelection,
+                @Cached("allOwnersFrozen(callSelection, constructSelection)") boolean frozen,
+                @Cached("frozenStandard(frozen, callSelection, constructSelection)")
+                        boolean frozenStandard) {
+            ProtosPrelude prelude =
+                    ProtosFrameArguments.admittedPreludeOrNull(frame.getArguments());
+            if (prelude == null) {
+                return false;
+            }
+            if (frozen) {
+                return frozenStandard
+                        && prelude.arrayPrototype() == constructSelection.home();
+            }
+            return ProtosStandardObjectProtocol.isCanonicalStandardCallSelection(
+                            callSelection.read(), callSelection.home())
+                    && ProtosStandardArrayProtocol.isCanonicalStandardConstructSelection(
+                            constructSelection.read(), constructSelection.home(), prelude);
+        }
+
+        /*
+         * The generic selection. It replaces no cached entry, so a site that
+         * also sees another factory keeps its cached entries eligible.
+         * Closures, numbers and every other representation keep dispatch.
+         */
+        @Specialization
+        @InliningCutoff
+        public static boolean doGeneric(
+                Object factory,
+                @Bind VirtualFrame frame) {
+            if (!isOrdinaryFactory(factory)) {
+                return false;
+            }
+            return selectsStandard(
+                    (ProtosObjectValue) factory,
+                    ProtosFrameArguments.admittedPreludeOrNull(frame.getArguments()));
+        }
+
+        /*
+         * Exactly an ordinary object: a Closure takes the Closure branch of
+         * Object.call, and other representations are never admitted here.
+         */
+        static boolean isOrdinaryFactory(Object factory) {
+            return ProtosValueLookup.isOrdinaryObject(factory)
+                    && ((ProtosObjectValue) factory).usesObjectStorageForRuntime();
+        }
+
+        static ProtosObjectValue ordinaryFactoryOrNull(ProtosObjectValue factory) {
+            return isOrdinaryFactory(factory) ? factory : null;
+        }
+
+        static ProtosValueLookup.StructuralSelection selectCall(ProtosObjectValue factory) {
+            return factory == null ? null : ProtosValueLookup.selectStructural(factory, "call");
+        }
+
+        static ProtosValueLookup.StructuralSelection selectConstruct(ProtosObjectValue factory) {
+            return factory == null ? null : ProtosValueLookup.selectStructural(factory, "construct");
+        }
+
+        static boolean allOwnersFrozen(
+                ProtosValueLookup.StructuralSelection callSelection,
+                ProtosValueLookup.StructuralSelection constructSelection) {
+            return callSelection != null
+                    && constructSelection != null
+                    && callSelection.allOwnersFrozen()
+                    && constructSelection.allOwnersFrozen();
+        }
+
+        /*
+         * Specialization-time classification of an all-FROZEN chain: while
+         * both selections stay valid their selected behaviors cannot change.
+         * The Prelude's canonical Array prototype is still checked per
+         * execution.
+         */
+        static boolean frozenStandard(
+                boolean frozen,
+                ProtosValueLookup.StructuralSelection callSelection,
+                ProtosValueLookup.StructuralSelection constructSelection) {
+            return frozen
+                    && ProtosStandardObjectProtocol.isCanonicalStandardCallSelection(
+                            callSelection.read(), callSelection.home())
+                    && ProtosStandardArrayProtocol.isInstalledStandardConstruct(
+                            constructSelection.read(), constructSelection.home());
+        }
+
+        /*
+         * The complete selections, observed without invoking anything. A
+         * missing or unsupported selection is not standard: the ordinary call
+         * then produces its own outcome.
+         */
+        @TruffleBoundary
+        static boolean selectsStandard(ProtosObjectValue factory, ProtosPrelude prelude) {
+            if (prelude == null) {
+                return false;
+            }
+            try {
+                ProtosSlotLookupResult call =
+                        ProtosValueLookup.lookup(factory, "call", prelude).orElse(null);
+                if (call == null
+                        || !ProtosStandardObjectProtocol.isCanonicalStandardCallSelection(
+                                call.value(), call.home())) {
+                    return false;
+                }
+                ProtosSlotLookupResult construct =
+                        ProtosValueLookup.lookup(factory, "construct", prelude).orElse(null);
+                return construct != null
+                        && ProtosStandardArrayProtocol.isCanonicalStandardConstructSelection(
+                                construct.value(), construct.home(), prelude);
+            } catch (IllegalStateException
+                    | UnsupportedOperationException
+                    | java.util.NoSuchElementException unavailable) {
+                return false;
+            }
         }
     }
 
@@ -2429,11 +2601,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         public static Object doOther(
                 Object receiver,
                 @Bind VirtualFrame frame) {
-            ProtosActivation activation =
-                    ProtosFrameArguments.activation(frame.getArguments());
-            throw ProtosCoreErrors.signal(
-                    activation,
-                    ProtosCoreErrors.newError(activation));
+            throw indexedError(frame);
         }
     }
 

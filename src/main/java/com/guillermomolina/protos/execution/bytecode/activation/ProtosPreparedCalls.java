@@ -45,6 +45,7 @@ import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.callables.ProtosNativeClosureBody;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.nodes.ControlFlowException;
 import java.util.List;
@@ -223,8 +224,10 @@ final class ProtosPreparedCalls {
          * the standard implementation, exactly as before I115. The supplied
          * arguments are taken from {@code activation} as one prepared
          * positional array only once the body is known to be structured, so
-         * an ordinary builtin never materializes them.
+         * an ordinary builtin never materializes them. Host-side
+         * classification only; no guest behavior is invoked here.
          */
+        @TruffleBoundary
         static StructuredNativeInvocation forBodyOrNull(
                 ProtosClosureValue closure,
                 ProtosActivation activation) {

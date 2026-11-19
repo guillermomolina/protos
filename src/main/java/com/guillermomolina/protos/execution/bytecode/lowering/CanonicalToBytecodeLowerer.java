@@ -3211,6 +3211,14 @@ final class CanonicalToBytecodeLowerer {
 
         builder.beginSourceSection(span.startOffset(), span.length());
 
+        if (expression instanceof CanonicalCall arrayCall
+                && isArrayConstructionCall(arrayCall.receiver(), arrayCall.arguments())
+                && !hasSpreadArgument(arrayCall.arguments())) {
+            emitTerminalStandardArrayConstruction(builder, arrayCall);
+            builder.endSourceSection();
+            return;
+        }
+
         if (expression instanceof CanonicalSend send) {
             emitDirectUnaryOperation(
                     builder, InvocationShape.SEND,
@@ -6145,6 +6153,18 @@ final class CanonicalToBytecodeLowerer {
             OperandStager stager,
             SpreadStager spreadStager,
             boolean primitiveCarrierResult) {
+        if (shape == InvocationShape.CALL
+                && isArrayConstructionCall(receiver, arguments)
+                && result != null
+                && scratch != null
+                && childResult != null
+                && resumeValue != null) {
+            emitStandardArrayConstruction(
+                    builder, receiver, arguments,
+                    result, scratch, childResult, resumeValue,
+                    stager, spreadStager, primitiveCarrierResult);
+            return;
+        }
         if (admitsDirectUnaryInvocation(shape, receiver, selector, arguments)) {
             if (result == null) {
                 builder.beginDiscardValue();
@@ -7958,6 +7978,227 @@ final class CanonicalToBytecodeLowerer {
 
         builder.emitClearLocal(outcome);
         builder.emitClearLocal(resumeValue);
+    }
+
+    /*
+     * Array construction: bracket provenance (CanonicalCall.arrayLiteral)
+     * or an explicit positional call of the unqualified identifier Array.
+     * Both still perform their ordinary lookup of Array; which factory is
+     * actually standard is decided at run time by
+     * IsStandardArrayConstructionSelection. Named arguments keep the
+     * ordinary named-binding path.
+     */
+    private static boolean isArrayConstructionCall(
+            CanonicalExpression receiver,
+            java.util.List<CanonicalExpression> arguments) {
+        return receiver instanceof CanonicalLookup lookup
+                && "Array".equals(lookup.name())
+                && !hasNamedArgument(arguments);
+    }
+
+    /*
+     * The compile-time long[] of a non-empty argument list made only of
+     * signed-64 Integer literals, in source order, or null. Large Integer
+     * and Float literals, spreads and every other expression disqualify it.
+     */
+    private long[] constantLongArrayOrNull(
+            java.util.List<CanonicalExpression> arguments) {
+        if (arguments.isEmpty()) {
+            return null;
+        }
+        long[] values = new long[arguments.size()];
+        for (int index = 0; index < values.length; index++) {
+            if (!(arguments.get(index) instanceof CanonicalLiteral literal)
+                    || literal.kind() != CanonicalLiteral.Kind.NUMBER
+                    || !(numberLiteralDescriptor(literal) instanceof Long small)) {
+                return null;
+            }
+            values[index] = small;
+        }
+        return values;
+    }
+
+    /*
+     * Standard Array construction (composed contexts).
+     *
+     * <ol>
+     *   <li>Evaluate and stage the factory receiver once.
+     *   <li>Evaluate the arguments once, left to right, into the ordinary
+     *       positional locals or spread vector. A constant signed-64 list has
+     *       no evaluation effects and is staged only on the ordinary path.
+     *   <li>After the packet is formed, IsStandardArrayConstructionSelection
+     *       observes the factory's call and construct selections.
+     *   <li>Standard: MakeConstantLongArray or MakeArray, without any send,
+     *       call packet or continuation composition (it cannot suspend).
+     *   <li>Otherwise: the existing Call*Method with the same receiver and
+     *       arguments, composed with Yield/ResumeDispatchedContinuation.
+     * </ol>
+     */
+    private void emitStandardArrayConstruction(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalExpression receiver,
+            java.util.List<CanonicalExpression> arguments,
+            BytecodeLocal result,
+            BytecodeLocal scratch,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue,
+            OperandStager stager,
+            SpreadStager spreadStager,
+            boolean primitiveCarrierResult) {
+        noteDynamicInvocation();
+        builder.beginTag(StandardTags.CallTag.class);
+        builder.beginBlock();
+
+        BytecodeLocal factory = builder.createLocal("arrayFactory", null);
+        stageOperand(builder, receiver, factory, scratch, childResult, resumeValue, stager);
+
+        long[] constant = hasSpreadArgument(arguments) ? null : constantLongArrayOrNull(arguments);
+        BytecodeLocal suppliedVector = null;
+        java.util.List<BytecodeLocal> argumentValues = new java.util.ArrayList<>(arguments.size());
+        if (constant == null) {
+            if (hasSpreadArgument(arguments)) {
+                suppliedVector = builder.createLocal("suppliedArgumentVector", null);
+                spreadStager.stage(
+                        builder, arguments, suppliedVector, scratch, childResult, resumeValue);
+            } else {
+                for (CanonicalExpression argument : arguments) {
+                    BytecodeLocal argumentValue = builder.createLocal("invocationArgument", null);
+                    stageOperand(
+                            builder, argument, argumentValue,
+                            scratch, childResult, resumeValue, stager);
+                    argumentValues.add(argumentValue);
+                }
+            }
+        } else {
+            // Created here, staged only on the ordinary path below.
+            for (int index = 0; index < arguments.size(); index++) {
+                argumentValues.add(builder.createLocal("invocationArgument", null));
+            }
+        }
+
+        builder.beginIfThenElse();
+        builder.beginIsStandardArrayConstructionSelection();
+        builder.emitLoadLocal(factory);
+        builder.endIsStandardArrayConstructionSelection();
+
+        builder.beginBlock();
+        builder.beginStoreLocal(result);
+        emitStandardArrayValue(builder, factory, constant, argumentValues, suppliedVector);
+        builder.endStoreLocal();
+        builder.endBlock();
+
+        builder.beginBlock();
+        if (constant != null) {
+            for (int index = 0; index < arguments.size(); index++) {
+                stageOperand(
+                        builder, arguments.get(index), argumentValues.get(index),
+                        scratch, childResult, resumeValue, stager);
+            }
+        }
+        emitDispatchedCall(
+                builder, factory, argumentValues, suppliedVector,
+                childResult, result, resumeValue,
+                primitiveCarrierResult);
+        builder.endBlock();
+        builder.endIfThenElse();
+
+        for (BytecodeLocal argumentValue : argumentValues) {
+            builder.emitClearLocal(argumentValue);
+        }
+        if (suppliedVector != null) {
+            builder.emitClearLocal(suppliedVector);
+        }
+        builder.emitClearLocal(factory);
+
+        builder.endBlock();
+        builder.endTag(StandardTags.CallTag.class);
+    }
+
+    /*
+     * Standard Array construction in terminal position: the value is either
+     * the native Array or the terminal call's result or transport.
+     */
+    private void emitTerminalStandardArrayConstruction(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalCall call) {
+        noteDynamicInvocation();
+        java.util.List<CanonicalExpression> arguments = call.arguments();
+        builder.beginTag(StandardTags.CallTag.class);
+        builder.beginBlock();
+
+        BytecodeLocal factory = builder.createLocal("terminalCallable", null);
+        builder.beginStoreLocal(factory);
+        emitTerminalCallOperand(builder, call.receiver());
+        builder.endStoreLocal();
+
+        long[] constant = constantLongArrayOrNull(arguments);
+        java.util.List<BytecodeLocal> argumentValues = new java.util.ArrayList<>(arguments.size());
+        for (CanonicalExpression argument : arguments) {
+            BytecodeLocal argumentValue = builder.createLocal("terminalArgument", null);
+            if (constant == null) {
+                stageTerminalArgument(builder, argument, argumentValue);
+            }
+            argumentValues.add(argumentValue);
+        }
+
+        builder.beginConditional();
+        builder.beginIsStandardArrayConstructionSelection();
+        builder.emitLoadLocal(factory);
+        builder.endIsStandardArrayConstructionSelection();
+
+        emitStandardArrayValue(builder, factory, constant, argumentValues, null);
+
+        builder.beginBlock();
+        if (constant != null) {
+            for (int index = 0; index < arguments.size(); index++) {
+                stageTerminalArgument(builder, arguments.get(index), argumentValues.get(index));
+            }
+        }
+        // The block's value: the terminal call result or transport.
+        emitCallOperation(builder, true, factory, argumentValues, null);
+        builder.endBlock();
+        builder.endConditional();
+
+        builder.endBlock();
+        builder.endTag(StandardTags.CallTag.class);
+    }
+
+    private void stageTerminalArgument(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalExpression argument,
+            BytecodeLocal argumentValue) {
+        builder.beginStoreLocal(argumentValue);
+        emitTerminalCallOneArgument(builder, argument);
+        builder.endStoreLocal();
+    }
+
+    /* The native Array value of an admitted standard factory. */
+    private static void emitStandardArrayValue(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            BytecodeLocal factory,
+            long[] constant,
+            java.util.List<BytecodeLocal> argumentValues,
+            BytecodeLocal suppliedVector) {
+        if (constant != null) {
+            builder.beginMakeConstantLongArray(constant);
+            builder.emitLoadLocal(factory);
+            builder.endMakeConstantLongArray();
+            return;
+        }
+        builder.beginMakeArray();
+        builder.emitLoadLocal(factory);
+        if (suppliedVector != null) {
+            builder.beginSnapshotClosureCallArguments();
+            builder.emitLoadLocal(suppliedVector);
+            builder.endSnapshotClosureCallArguments();
+        } else {
+            builder.beginCollectClosureCallArguments();
+            for (BytecodeLocal argumentValue : argumentValues) {
+                builder.emitLoadLocal(argumentValue);
+            }
+            builder.endCollectClosureCallArguments();
+        }
+        builder.endMakeArray();
     }
 
     /** The arity-selected {@code Call*Method} operation over staged locals. */

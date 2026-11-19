@@ -301,6 +301,109 @@ final class ProtosI115IndexedOperationTest {
     }
 
     @Test
+    void constantLongArraySortedInNestedLoopsIsFreshEachRun() {
+        assertTrue(evalBoolean("""
+                sort: () => {
+                    a: [5, 3, 9, 1, 7, 2, 8, 4, 6, 0]
+                    n: a.size()
+                    i: 0
+                    while(i < n) {
+                        j: 0
+                        while(j < n - 1 - i) {
+                            if(a[j] > a[j + 1]) {
+                                t: a[j]
+                                a[j] = a[j + 1]
+                                a[j + 1] = t
+                            }
+                            j = j + 1
+                        }
+                        i = i + 1
+                    }
+                    a
+                }
+                ok: true
+                previous: null
+                k: 0
+                while(k < 5) {
+                    sorted: sort()
+                    m: 0
+                    while(m < 10) {
+                        ok = ok && (sorted[m] == m)
+                        m = m + 1
+                    }
+                    ok = ok && (sorted !== previous)
+                    previous = sorted
+                    k = k + 1
+                }
+                ok
+                """));
+    }
+
+    @Test
+    void longStorageArrayErrorsFrozenWritesAndAtPutResult() {
+        assertTrue(signals("""
+                a: [1, 2, 3]
+                a["0"]
+                """));
+
+        assertTrue(signals("""
+                a: [1, 2, 3]
+                a[0 - 1]
+                """));
+
+        assertTrue(signals("""
+                a: [1, 2, 3]
+                a[3]
+                """));
+
+        assertTrue(signals("""
+                a: [1, 2, 3]
+                a[1.0]
+                """));
+
+        assertTrue(signals("""
+                a: [1, 2, 3]
+                a.freeze()
+                a[0] = 4
+                """));
+
+        assertTrue(signals("""
+                a: [1, 2, 3]
+                a.freeze()
+                a[9] = 4
+                """));
+        assertTrue(evalBoolean("""
+                a: [1, 2, 3]
+                value: { tag: 1 }
+                same: a.atPut(0, value) === value
+                stored: a[0] === value
+                b: [4, 5]
+                c: (b[1] = 2.5) == 2.5
+                same && stored && c && (b[1] == 2.5) && (b[0] == 4)
+                """));
+    }
+
+    @Test
+    void sameSiteAlternatesStandardAndCustomIndexedSelection() {
+        assertTrue(evalBoolean("""
+                Custom: Array { at: (index) => { 100 } }
+                read: (r) => { r[1] }
+                ok: true
+                i: 0
+                while(i < 12) {
+                    plain: [1, 2, 3]
+                    custom: Custom(1, 2, 3)
+                    ok = ok && (read(plain) == 2) && (read(custom) == 100)
+                    i = i + 1
+                }
+                Custom.at = (index) => { 200 }
+                ok = ok && (read(Custom(1, 2)) == 200) && (read([7, 8]) == 8)
+                Custom.removeSlot("at")
+                ok && (read(Custom(1, 2)) == 2)
+                """));
+    }
+
+    @Test
     void overridingReceiversDoNotDisableTheStandardIndexedPath() {
         assertTrue(evalBoolean("""
                 Special: Array {

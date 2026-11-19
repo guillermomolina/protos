@@ -498,6 +498,258 @@ class ProtosI145AConstructProtocolTest {
         assertEquals(ProtosExecutionOutcome.State.FAILED, outcome.state());
     }
 
+    @Test
+    void bracketAndExplicitArrayConstructionProduceEqualElements() throws IOException {
+        assertAllTrue("""
+                a: [1, 2, 3]
+                b: Array(1, 2, 3)
+                [a.size() == 3, b.size() == 3, a[0] == b[0], a[1] == b[1], a[2] == b[2],
+                    a.parent() === Array, b.parent() === Array]
+                """);
+    }
+
+    @Test
+    void repeatedConstructionIsFreshAndDoesNotShareBacking() throws IOException {
+        assertAllTrue("""
+                make: () => [1, 2, 3]
+                makeEmpty: () => []
+                makeExplicit: (n) => Array(n, n)
+                x: make()
+                y: make()
+                x[0] = 9
+                e1: makeEmpty()
+                e2: makeEmpty()
+                p: makeExplicit(4)
+                q: makeExplicit(4)
+                p[1] = 5
+                [x !== y, x[0] == 9, y[0] == 1, make()[0] == 1,
+                    e1 !== e2, e1.size() == 0, e2.size() == 0,
+                    p !== q, p[1] == 5, q[1] == 4]
+                """);
+    }
+
+    @Test
+    void descendantFactoryRemainsDelegationParent() throws IOException {
+        assertAllTrue("""
+                Derived: Array {}
+                build: (Array) => [1, 2]
+                d: build(Derived)
+                e: Derived(3, 4)
+                [d.parent() === Derived, d[1] == 2, d.size() == 2,
+                    e.parent() === Derived, e[0] == 3]
+                """);
+    }
+
+    @Test
+    void localArrayShadowingAffectsBracketsAndExplicitCallsEqually()
+            throws IOException {
+        Object result = evaluate("""
+                f: () => {
+                    Array: { construct: (...args) => 7 }
+                    a: [1, 2]
+                    b: Array(1, 2)
+                    a + b
+                }
+                f()
+                """);
+        assertEquals("14", ProtosNumericValueSupport.integerDecimalText(result));
+    }
+
+    @Test
+    void customCallOverrideIsSelected() throws IOException {
+        Object result = evaluate("""
+                Base: Array
+                f: () => {
+                    Array: Base { call: (...args) => 5 }
+                    [1, 2] + Array(3)
+                }
+                f()
+                """);
+        assertEquals("10", ProtosNumericValueSupport.integerDecimalText(result));
+    }
+
+    @Test
+    void customConstructOverrideIsSelected() throws IOException {
+        Object result = evaluate("""
+                Base: Array
+                f: () => {
+                    Array: Base { construct: (...args) => args.size() }
+                    [1, 2] + Array(3)
+                }
+                f()
+                """);
+        assertEquals("3", ProtosNumericValueSupport.integerDecimalText(result));
+    }
+
+    @Test
+    void constructReassignmentPreservingShapeIsObserved() throws IOException {
+        assertAllTrue("""
+                Base: Array
+                Factory: Base { construct: (...args) => 1 }
+                build: (Array) => [7, 8]
+                buildExplicit: (Array, n) => Array(n, 8)
+                first: build(Factory)
+                firstExplicit: buildExplicit(Factory, 7)
+                Factory.construct = (...args) => 2
+                second: build(Factory)
+                secondExplicit: buildExplicit(Factory, 7)
+                standard: build(Base)
+                standardExplicit: buildExplicit(Base, 7)
+                [first == 1, firstExplicit == 1, second == 2, secondExplicit == 2,
+                    standard[1] == 8, standard.parent() === Base,
+                    standardExplicit[0] == 7, standardExplicit.parent() === Base]
+                """);
+    }
+
+    @Test
+    void factoryMutationDuringArgumentEvaluationChangesSelection()
+            throws IOException {
+        assertAllTrue("""
+                Base: Array
+                Factory: Base {}
+                build: (Array, mutate) => [mutate(), 2]
+                first: build(Factory, () => 1)
+                second: build(Factory, () => {
+                    Factory.construct: (...args) => 99
+                    1
+                })
+                [first.size() == 2, first.parent() === Factory, second == 99]
+                """);
+    }
+
+    @Test
+    void nonInvokableShadowedArrayFailsThroughOrdinaryInvocation()
+            throws IOException {
+        assertAllTrue("""
+                literal: (Array) => [1]
+                explicit: (Array) => Array(1)
+                a: Error.handle(() => { literal(5); false }, (caught) => true)
+                b: Error.handle(() => { explicit(5); false }, (caught) => true)
+                c: Error.handle(() => { literal({}); false }, (caught) => true)
+                [a, b, c]
+                """);
+    }
+
+    @Test
+    void namedArgumentsKeepOrdinaryBindingOutcome() throws IOException {
+        ProtosPrelude prelude = corePrelude();
+        ProtosExecutionOutcome bracket =
+                ProtosTestExecutionSupport.execute(
+                        "[a: 10]", prelude.newModuleActivation());
+        ProtosExecutionOutcome explicit =
+                ProtosTestExecutionSupport.execute(
+                        "Array(a: 10)", prelude.newModuleActivation());
+        assertEquals(explicit.state(), bracket.state());
+    }
+
+    @Test
+    void largeSignedAndBigIntegerLiteralsKeepExactValues() throws IOException {
+        assertAllTrue("""
+                make: () => [9223372036854775807, 1, 9223372036854775806]
+                a: make()
+                big: [9223372036854775808, 1]
+                [a[0] == 9223372036854775807, a[2] == 9223372036854775806,
+                    make()[0] == 9223372036854775807,
+                    big[0] > 9223372036854775807, big[0] - 1 == 9223372036854775807,
+                    big[1] == 1]
+                """);
+    }
+
+    @Test
+    void spreadArgumentsPreserveOrderSnapshotsAndSingleEvaluation()
+            throws IOException {
+        assertAllTrue("""
+                trace: { count: 0 }
+                items: () => {
+                    trace.count = trace.count + 1
+                    [2, 3]
+                }
+                a: [1, ...items(), 4]
+                src: [5, 6]
+                b: [...src]
+                src[0] = 9
+                c: Array(...src, 7)
+                [a.size() == 4, a[0] == 1, a[1] == 2, a[2] == 3, a[3] == 4,
+                    trace.count == 1, b[0] == 5, b.size() == 2, b !== src,
+                    c[0] == 9, c[2] == 7]
+                """);
+    }
+
+    @Test
+    void customArrayConstructorSuspendsAndAnswersExactResult() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            Harness harness = harness();
+            ProtosFutureValue future = harness.future();
+            Long resolved = Long.valueOf(73);
+            harness.activation().context().createLocalSlot("f", future);
+
+            ProtosTask task =
+                    execute(
+                            harness,
+                            lowerRoot(
+                                    scope.language(),
+                                    """
+                                    trace: {
+                                        constructs: 0
+                                        afterWait: 0
+                                    }
+                                    Base: Array
+                                    Custom: Base {
+                                        construct: (future) => {
+                                            trace.constructs = trace.constructs + 1
+                                            result: future.value()
+                                            trace.afterWait = trace.afterWait + 1
+                                            result
+                                        }
+                                    }
+                                    build: (Array) => {
+                                        made: [f]
+                                        made
+                                    }
+                                    build(Custom)
+                                    """,
+                                    "array-construct-suspension.protos"));
+
+            assertTrue(harness.domain().dispatchOne());
+            assertEquals(ProtosTask.State.SUSPENDED, task.state());
+            assertTraceCount(harness, "constructs", "1");
+            assertTraceCount(harness, "afterWait", "0");
+
+            assertTrue(future.resolve(resolved, harness.activation()));
+            assertTrue(harness.domain().dispatchOne());
+            assertEquals(ProtosTask.State.COMPLETED, task.state());
+
+            assertSame(resolved, task.result().orElseThrow());
+            assertTraceCount(harness, "constructs", "1");
+            assertTraceCount(harness, "afterWait", "1");
+        }
+    }
+
+    @Test
+    void customArrayConstructorErrorIsSignaledToGuestHandler() throws IOException {
+        assertAllTrue("""
+                Base: Array
+                Failing: Base { construct: (...args) => Error().signal() }
+                build: (Array) => [1, 2]
+                caught: Error.handle(() => { build(Failing); false }, (error) => true)
+                after: build(Base)
+                [caught, after.size() == 2]
+                """);
+    }
+
+    private static Object evaluate(String source) throws IOException {
+        return ProtosTestExecutionSupport.evaluate(
+                source, corePrelude().newModuleActivation());
+    }
+
+    private static void assertAllTrue(String source) throws IOException {
+        ProtosArrayValue values =
+                assertInstanceOf(ProtosArrayValue.class, evaluate(source));
+        for (int index = 0; index < values.indexedSize(); index++) {
+            assertSame(Boolean.TRUE, values.indexedAt(index), "element " + index);
+        }
+    }
+
     private static void assertTraceCount(Harness harness, String name, String expected) {
         ProtosObjectValue trace =
                 assertInstanceOf(

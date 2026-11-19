@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.172-SNAPSHOT
+
+- **I115.** Construct standard Arrays through admitted Bytecode DSL operations and keep indexed Error signaling cold. Extend Array construction, indexed-operation and numeric-continuation regressions.
+
 ## 0.4.171-SNAPSHOT
 
 - **I115.** Keep standard Array and Bytes indexed selection caches eligible alongside generic receivers, move indexed Error signaling and Array snapshot detachment behind cold boundaries, and access normalized Array storage after admission. Add indexed-operation, iteration and numeric-continuation regressions.
