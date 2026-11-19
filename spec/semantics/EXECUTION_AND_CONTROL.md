@@ -207,6 +207,34 @@ At SOURCE top level, the current lexical context is the SOURCE's `moduleContext`
 At MODULE initializer top level (D242), the current lexical context is the private initializer context. The bare-name path is exactly: local private initializer binding, then own slot of the public module object, then local prelude binding, then absence. Closures created by the initializer capture this same chain, so they observe later-published public slots and later-created private bindings by reference.
 
 During a MODULE initializer, `context` denotes the private initializer context and `this` denotes the public module object. Bare `name: value` therefore creates a private binding, while `this.name: value` creates an ordinary own slot of the public module object through ordinary receiver slot creation (`OBJECT_MODEL.md`); unqualified `name = value` assigns through the same lexical chain under §7 and may therefore update an existing public own slot found there. No module-specific lookup, assignment, or slot-creation rule exists, and ordinary message send and member access gain no module-kind distinction. Module execution has no additional implicit global receiver namespace. Module-specific ownership, freezing, isolation, and import behavior remain owned by `MODULES.md`.
+### Representation note (informative)
+
+A compact frame may contain physical local binding storage even when no
+activation or guest Context has been published. Absence of a published activation
+is therefore not evidence that the current lexical context lacks a name.
+
+Lexical selection may read an invocation's compact frame state without publishing
+an activation when the existing lexical classifications and physical storage
+layout prove that the current context cannot supply a preceding binding, the
+captured environment is the same live chain, every nearer scope still lacks the
+name, and the selected owner still holds it. These membership
+conditions must be checked on each execution: guest `null` is present, removal
+can reveal another owner, and creation can introduce a nearer binding. Caching
+an owner never makes a binding or the standard `Array` factory permanent.
+
+After demonstrated lexical exhaustion, receiver lookup may likewise use the
+real receiver and an already available effective Prelude; its result remains a
+live ordinary member lookup. When the necessary state or proof is unavailable,
+the full selection order above remains authoritative, with existing frame-backed
+local authority made available when needed. Observing `context`,
+publishing frame-backed lexical authority, constructing an Error, or preserving
+an observable continuation identity may require the exact activation. Later
+publication must be observed by subsequent selections.
+
+Compact write selection is only a representation optimization of §7: it returns
+the exact destination before evaluating the right-hand side. Effects during that
+evaluation never cause the assignment to select another destination.
+
 ## 7. Unqualified Assignment and Creation
 
 Bare read, bare assignment, and bare creation are distinct operations and do not share one generic lookup walk.

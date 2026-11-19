@@ -2348,6 +2348,34 @@ final class CanonicalToBytecodeLowerer {
      * current activation" must obtain it through this method rather than
      * emitting the argument load directly. This is a compile-time choice only.
      */
+    /** Classify against the same owned LOCAL/CELL storage used to record the root layout. */
+    private boolean usesCompactLexicalSelection(String name) {
+        return currentActivationLocal == null
+                && currentRootTopScope != null
+                && currentRootTopScope.kind() == CanonicalLexicalScope.Kind.CLOSURE
+                && !currentInlineClosureCallBody
+                && currentNormalCallbackScalarLocals.isEmpty()
+                && !currentRootTopScope.declaredNames().contains(name)
+                && !currentRootFrameLocals.containsKey(name);
+    }
+
+    private boolean needsLexicalSelectionPreparation(String name) {
+        return !usesCompactLexicalSelection(name)
+                && currentActivationLocal == null
+                && currentRootTopScope != null
+                && currentRootTopScope.kind() == CanonicalLexicalScope.Kind.CLOSURE;
+    }
+
+    /** Emits only the value operand; any required frame-view preparation precedes its consumer. */
+    private void emitLexicalSelectionState(
+            ProtosBytecodeRootNodeGen.Builder builder, String name) {
+        if (usesCompactLexicalSelection(name)) {
+            builder.emitLoadConstant(true);
+        } else {
+            emitCurrentActivation(builder);
+        }
+    }
+
     private void emitCurrentActivation(
             ProtosBytecodeRootNodeGen.Builder builder) {
         if (currentActivationLocal == null) {
@@ -5873,9 +5901,12 @@ final class CanonicalToBytecodeLowerer {
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalAssign assign,
             BytecodeLocal mutationTarget) {
+        if (needsLexicalSelectionPreparation(assign.name())) {
+            builder.emitEnsureCurrentClosureLexicalView();
+        }
         builder.beginStoreLocal(mutationTarget);
         builder.beginAccessNamedLexical(ProtosNamedLexicalAccess.RESOLVE_WRITE);
-        emitCurrentActivation(builder);
+        emitLexicalSelectionState(builder, assign.name());
         builder.emitLoadConstant(assign.name());
         builder.endAccessNamedLexical();
         builder.endStoreLocal();
@@ -9145,10 +9176,19 @@ final class CanonicalToBytecodeLowerer {
                 }
             }
         }
+        boolean prepare = needsLexicalSelectionPreparation(lookup.name());
+        if (prepare) {
+            // The block supplies one value to any enclosing expression consumer.
+            builder.beginBlock();
+            builder.emitEnsureCurrentClosureLexicalView();
+        }
         builder.beginAccessNamedLexical(ProtosNamedLexicalAccess.LOOKUP);
-        emitCurrentActivation(builder);
+        emitLexicalSelectionState(builder, lookup.name());
         builder.emitLoadConstant(lookup.name());
         builder.endAccessNamedLexical();
+        if (prepare) {
+            builder.endBlock();
+        }
     }
 
     /*

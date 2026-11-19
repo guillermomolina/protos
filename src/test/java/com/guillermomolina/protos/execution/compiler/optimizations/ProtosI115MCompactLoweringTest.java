@@ -87,6 +87,168 @@ final class ProtosI115MCompactLoweringTest {
     }
 
     @Test
+    void inlineDynamicSelectionPreparesBeforeValueOperands() throws Exception {
+        try (ProtosStandaloneHostedSession session = openSession(
+                "inline-dynamic-operands", """
+                run: () => {
+                    selected: true.ifTrue() { lateBoundName }
+                    selected
+                }
+                """)) {
+            ProtosBytecodeRootNode root = selectedRoot(session.prepareTopLevel("run"));
+            List<Instruction> instructions = root.getBytecodeNode().getInstructionsAsList();
+            int preparation = -1;
+            int selection = -1;
+            for (int index = 0; index < instructions.size(); index++) {
+                String operation = ProtosInstructionNames.of(instructions.get(index));
+                if (operation.contains("EnsureCurrentClosureLexicalView")) {
+                    preparation = index;
+                }
+                if (operation.equals("c.Lookup")) {
+                    assertEquals("c.AccessNamedLexical", instructions.get(index).getName());
+                    assertTrue(index >= 2 && preparation >= 0 && preparation < index - 2,
+                            "Frame preparation must precede both value operands: " + instructions);
+                    assertTrue(ProtosInstructionNames.of(instructions.get(index - 2))
+                            .contains("CurrentActivation"), instructions.toString());
+                    assertEquals("lateBoundName", loadedConstant(instructions.get(index - 1)));
+                    assertEquals(ProtosNamedLexicalAccess.LOOKUP,
+                            instructions.get(index).getArguments().stream()
+                                    .filter(argument -> argument.getName().equals("access"))
+                                    .findFirst().orElseThrow().asConstant());
+                    selection = index;
+                }
+            }
+            assertTrue(selection >= 0, "The control body must inline its dynamic selection");
+        }
+    }
+
+    @Test
+    void standardArrayConstructionRetainsTypedAndGeneralOperations() throws Exception {
+        try (ProtosStandaloneHostedSession session = openSession(
+                "array-construction-selection", """
+                longs: () => Array(1, 2)
+                doubles: () => Array(1.5, 2.5)
+                booleans: () => Array(true, false)
+                mixed: (value) => Array(value, true, null)
+                """)) {
+            for (var entry : java.util.Map.of(
+                    "longs", "MakeConstantLongArray",
+                    "doubles", "MakeConstantDoubleArray",
+                    "booleans", "MakeConstantBooleanArray",
+                    "mixed", "MakeArray").entrySet()) {
+                ProtosBytecodeRootNode root = selectedRoot(session.prepareTopLevel(entry.getKey()));
+                List<String> names = root.getBytecodeNode().getInstructionsAsList().stream()
+                        .map(ProtosInstructionNames::of).toList();
+                assertTrue(names.stream().anyMatch(op -> op.contains(entry.getValue())), names.toString());
+                List<Instruction> instructions = root.getBytecodeNode().getInstructionsAsList();
+                int lookup = -1;
+                int guard = -1;
+                int construction = -1;
+                int ordinaryCall = -1;
+                String ordinaryOperation = entry.getKey().equals("mixed")
+                        ? "c.CallTernaryMethod" : "c.CallBinaryMethod";
+                for (int index = 2; index < instructions.size(); index++) {
+                    String operation = names.get(index);
+                    if (operation.equals("c.Lookup")) {
+                        assertEquals("c.AccessNamedLexical", instructions.get(index).getName());
+                        assertEquals(ProtosNamedLexicalAccess.LOOKUP,
+                                instructions.get(index).getArguments().stream()
+                                        .filter(argument -> argument.getName().equals("access"))
+                                        .findFirst().orElseThrow().asConstant());
+                        assertEquals("Array", loadedConstant(instructions.get(index - 1)));
+                        assertEquals(Boolean.TRUE, loadedConstant(instructions.get(index - 2)));
+                        lookup = index;
+                    }
+                    if (operation.contains(entry.getValue())) {
+                        construction = index;
+                    }
+                    if (operation.equals(ordinaryOperation)) {
+                        ordinaryCall = index;
+                    }
+                    if (operation.contains("IsStandardArrayConstructionSelection")) {
+                        assertTrue(names.get(index - 1).startsWith("load.local"), names.toString());
+                        guard = index;
+                    }
+                }
+                assertTrue(lookup >= 0 && guard > lookup,
+                        "The actual factory lookup must precede its standard-selection guard: " + names);
+                assertTrue(construction > guard && ordinaryCall > construction,
+                        "Both standard construction and the nonstandard factory call must remain: " + names);
+            }
+        }
+    }
+
+    @Test
+    void dynamicRootLookupUsesFrameSelectionWithoutCurrentActivation() throws Exception {
+        try (ProtosStandaloneHostedSession session = openSession(
+                "dynamic-frame-selection", "run: () => lateBoundName")) {
+            ProtosBytecodeRootNode run = selectedRoot(session.prepareTopLevel("run"));
+            List<Instruction> instructions = run.getBytecodeNode().getInstructionsAsList();
+            List<String> names = instructions.stream().map(ProtosInstructionNames::of).toList();
+            int lookup = -1;
+            for (int index = 2; index < instructions.size(); index++) {
+                if (names.get(index).equals("c.Lookup")) {
+                    assertEquals("c.AccessNamedLexical", instructions.get(index).getName());
+                    assertEquals(ProtosNamedLexicalAccess.LOOKUP,
+                            instructions.get(index).getArguments().stream()
+                                    .filter(argument -> argument.getName().equals("access"))
+                                    .findFirst().orElseThrow().asConstant());
+                    assertEquals("lateBoundName", loadedConstant(instructions.get(index - 1)));
+                    assertEquals(Boolean.TRUE, loadedConstant(instructions.get(index - 2)));
+                    lookup = index;
+                }
+            }
+            assertTrue(lookup >= 0, names.toString());
+            assertEquals(-1, run.lexicalFrameLayoutOrNull().indexOf("lateBoundName"));
+            assertFalse(names.stream().anyMatch(op -> op.contains("CurrentActivation")));
+        }
+    }
+
+    @Test
+    void observableCurrentBindingUsesItsPhysicalPresenceAwareRead() throws Exception {
+        try (ProtosStandaloneHostedSession session = openSession(
+                "current-binding-selection", "run: (lateBoundName) => { context\nlateBoundName }")) {
+            ProtosBytecodeRootNode run = selectedRoot(session.prepareTopLevel("run"));
+            List<Instruction> instructions = run.getBytecodeNode().getInstructionsAsList();
+            assertTrue(run.lexicalFrameLayoutOrNull().indexOf("lateBoundName") >= 0);
+            Instruction read = instructions.stream()
+                    .filter(instruction -> ProtosInstructionNames.of(instruction).contains("LoadLexicalLocal"))
+                    .findFirst().orElseThrow();
+            assertEquals("lateBoundName", read.getArguments().stream()
+                    .filter(argument -> argument.getName().equals("name"))
+                    .findFirst().orElseThrow().asConstant());
+            assertTrue(instructions.stream().anyMatch(instruction ->
+                    ProtosInstructionNames.of(instruction).contains("PublishCurrentClosureContext")));
+            assertFalse(instructions.stream().anyMatch(instruction ->
+                    ProtosInstructionNames.of(instruction).equals("c.Lookup")));
+        }
+    }
+
+    @Test
+    void inlineObjectLookupKeepsExplicitActivationOperand() throws Exception {
+        try (ProtosStandaloneHostedSession session = openSession(
+                "inline-object-selection", "run: () => { { result: lateBoundName } }")) {
+            ProtosBytecodeRootNode run = selectedRoot(session.prepareTopLevel("run"));
+            List<Instruction> instructions = run.getBytecodeNode().getInstructionsAsList();
+            List<String> names = instructions.stream().map(ProtosInstructionNames::of).toList();
+            boolean explicitOwner = false;
+            for (int index = 2; index < names.size(); index++) {
+                if (names.get(index).equals("c.Lookup")
+                        && names.get(index - 2).startsWith("load.local")) {
+                    assertEquals("c.AccessNamedLexical", instructions.get(index).getName());
+                    assertEquals(ProtosNamedLexicalAccess.LOOKUP,
+                            instructions.get(index).getArguments().stream()
+                                    .filter(argument -> argument.getName().equals("access"))
+                                    .findFirst().orElseThrow().asConstant());
+                    assertEquals("lateBoundName", loadedConstant(instructions.get(index - 1)));
+                    explicitOwner = true;
+                }
+            }
+            assertTrue(explicitOwner, "Inline construction must pass its exact activation: " + names);
+        }
+    }
+
+    @Test
     void baseLoop() throws Exception {
         Census census = runCase("base", """
                 run: () => {
@@ -419,6 +581,14 @@ final class ProtosI115MCompactLoweringTest {
             }
         }
         assertTrue(longs >= minimum, name + " Long literals: " + longs);
+    }
+
+    private static Object loadedConstant(Instruction instruction) {
+        assertTrue(ProtosInstructionNames.of(instruction).startsWith("load.constant"),
+                instruction.toString());
+        return instruction.getArguments().stream()
+                .filter(argument -> argument.getKind() == Instruction.Argument.Kind.CONSTANT)
+                .findFirst().orElseThrow().asConstant();
     }
 
     private static Census runCase(String name, String source, int expected, Sites sites)

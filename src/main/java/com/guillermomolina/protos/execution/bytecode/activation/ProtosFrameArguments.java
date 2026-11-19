@@ -1120,6 +1120,18 @@ final class ProtosFrameArguments {
                 .capturedLexicalEnvironmentForRuntime();
     }
 
+    /**
+     * Live chain for selection from an admitted root, including later publication.
+     * This accessor says nothing about LOCAL/CELL storage in the current frame;
+     * compact selection must separately prove absence using the root's layout.
+     */
+    static ProtosLexicalEnvironment lexicalSelectionEnvironment(Object[] arguments) {
+        return hasPublishedActivation(arguments)
+                ? publishedActivation(arguments).capturedLexicalEnvironmentForRuntime()
+                : compactCapturedLexicalEnvironment(arguments);
+    }
+
+
 
     /**
      * The Prelude a new Closure retains from its creator, read from the

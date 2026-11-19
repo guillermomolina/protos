@@ -18,11 +18,13 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.execution.ProtosFrameLocalBindings.ResolvedLexicalWriteTarget;
+import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.LexicalFrameLayout;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosLexicalEnvironment;
 import com.guillermomolina.protos.runtime.ProtosModuleBindingLocation;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
@@ -74,8 +76,8 @@ import java.util.Optional;
  * or no binding of the name (an exploded loop over the cached depth that
  * skips scopes without storage), and the owner still holds it. The selected
  * write destination is cached too, so the fast path allocates nothing.
- * {@link #readCachedReceiver} caches the lexical exhaustion of a chain whose
- * scopes hold no storage at all, leaving only the receiver lookup. The generic
+ * {@link #readCachedReceiver} caches lexical exhaustion while validating live
+ * absence in every captured scope, leaving only the receiver lookup. The generic
  * specializations implement the same order for genuinely dynamic situations
  * (megamorphic chains, a current scope with storage, a cache miss); only
  * their name traversal runs behind a Truffle boundary.
@@ -85,34 +87,43 @@ import java.util.Optional;
 abstract class ProtosLexicalSelectionNode extends Node {
 
     /**
-     * Selects {@code name} from {@code activation}: the value for a read, the
-     * {@link ResolvedLexicalWriteTarget} for {@code write}.
+     * Selects from an exact activation or the running root's admitted B5 arguments.
+     * A Java null result requests the existing full activation-based resolution;
+     * guest null is a non-null value. Without the executing root's physical
+     * layout, a compact state always requests full resolution. Returns the value
+     * for a read, the {@link ResolvedLexicalWriteTarget} for {@code write}.
      */
-    abstract Object execute(ProtosActivation activation, String name, boolean write);
+    final Object execute(Object activation, String name, boolean write) {
+        return execute(activation, name, write, null);
+    }
+
+    /** The layout is the executing root's existing layout, never another owner's. */
+    abstract Object execute(
+            Object activation, String name, boolean write, LexicalFrameLayout currentLayout);
 
     @Specialization(
-            excludeForUncached = true,
             guards = {
                 "!write",
                 "name == cachedName",
-                "activation.capturedLexicalEnvironmentForRuntime() == cachedEnvironment",
+                "capturedEnvironment(activation) == cachedEnvironment",
                 "cachedOwner != null",
-                "hasNoCurrentScopeStorage(activation)",
+                "hasNoCurrentScopeStorage(activation, name, currentLayout)",
                 "nearerScopesLackBinding(cachedEnvironment, cachedDepth, cachedName)"
             },
             limit = "3")
     static Object readCachedOwner(
-            ProtosActivation activation,
+            Object activation,
             String name,
             boolean write,
-            @Cached(value = "name") String cachedName,
-            @Cached(value = "activation.capturedLexicalEnvironmentForRuntime()")
+            LexicalFrameLayout currentLayout,
+            @Cached(value = "name", uncached = "name") String cachedName,
+            @Cached(value = "capturedEnvironment(activation)", uncached = "capturedEnvironment(activation)")
                     ProtosLexicalEnvironment cachedEnvironment,
-            @Cached(value = "ownerDepth(cachedEnvironment, cachedName)")
+            @Cached(value = "ownerDepth(cachedEnvironment, cachedName)", uncached = "ownerDepth(cachedEnvironment, cachedName)")
                     int cachedDepth,
-            @Cached(value = "ownerOrNull(cachedEnvironment, cachedDepth)")
+            @Cached(value = "ownerOrNull(cachedEnvironment, cachedDepth)", uncached = "ownerOrNull(cachedEnvironment, cachedDepth)")
                     ProtosLexicalEnvironment cachedOwner,
-            @Cached(value = "moduleLocationOrNull(cachedOwner, cachedName)")
+            @Cached(value = "moduleLocationOrNull(cachedOwner, cachedName)", uncached = "moduleLocationOrNull(cachedOwner, cachedName)")
                     ProtosModuleBindingLocation location,
             @Cached DynamicObject.GetNode getNode) {
         Object value = location != null
@@ -122,85 +133,119 @@ abstract class ProtosLexicalSelectionNode extends Node {
             return value;
         }
         // The cached owner lost the binding: continue the ordinary order.
-        return readOrThrow(activation, name);
+        return read(activation, name, false, currentLayout);
     }
 
     @Specialization(
-            excludeForUncached = true,
             guards = {
                 "!write",
                 "name == cachedName",
-                "activation.capturedLexicalEnvironmentForRuntime() == cachedEnvironment",
+                "capturedEnvironment(activation) == cachedEnvironment",
                 "cachedDepth < 0",
-                "hasNoCurrentScopeStorage(activation)",
+                "hasReceiverPrelude(activation)",
+                "hasNoCurrentScopeStorage(activation, name, currentLayout)",
                 "nearerScopesLackBinding(cachedEnvironment, cachedChainLength, cachedName)"
             },
             limit = "3")
     static Object readCachedReceiver(
-            ProtosActivation activation,
+            Object activation,
             String name,
             boolean write,
-            @Cached(value = "name") String cachedName,
-            @Cached(value = "activation.capturedLexicalEnvironmentForRuntime()")
+            LexicalFrameLayout currentLayout,
+            @Cached(value = "name", uncached = "name") String cachedName,
+            @Cached(value = "capturedEnvironment(activation)", uncached = "capturedEnvironment(activation)")
                     ProtosLexicalEnvironment cachedEnvironment,
-            @Cached(value = "ownerDepth(cachedEnvironment, cachedName)")
+            @Cached(value = "ownerDepth(cachedEnvironment, cachedName)", uncached = "ownerDepth(cachedEnvironment, cachedName)")
                     int cachedDepth,
-            @Cached(value = "chainLength(cachedEnvironment)")
+            @Cached(value = "chainLength(cachedEnvironment)", uncached = "chainLength(cachedEnvironment)")
                     int cachedChainLength) {
         return readReceiverOrThrow(activation, name);
     }
 
     @Specialization(guards = "!write", replaces = {"readCachedOwner", "readCachedReceiver"})
-    static Object read(ProtosActivation activation, String name, boolean write) {
-        return readOrThrow(activation, name);
+    static Object read(
+            Object activation, String name, boolean write, LexicalFrameLayout currentLayout) {
+        ProtosActivation published = publishedActivationOrNull(activation);
+        return published == null ? null : readOrThrow(published, name);
     }
 
     @Specialization(
-            excludeForUncached = true,
             guards = {
                 "write",
                 "name == cachedName",
-                "activation.capturedLexicalEnvironmentForRuntime() == cachedEnvironment",
+                "capturedEnvironment(activation) == cachedEnvironment",
                 "cachedTarget != null",
-                "hasNoCurrentScopeStorage(activation)",
+                "hasNoCurrentScopeStorage(activation, name, currentLayout)",
                 "nearerScopesLackBinding(cachedEnvironment, cachedDepth, cachedName)"
             },
             limit = "3")
     static Object selectWriteCachedOwner(
-            ProtosActivation activation,
+            Object activation,
             String name,
             boolean write,
-            @Cached(value = "name") String cachedName,
-            @Cached(value = "activation.capturedLexicalEnvironmentForRuntime()")
+            LexicalFrameLayout currentLayout,
+            @Cached(value = "name", uncached = "name") String cachedName,
+            @Cached(value = "capturedEnvironment(activation)", uncached = "capturedEnvironment(activation)")
                     ProtosLexicalEnvironment cachedEnvironment,
-            @Cached(value = "ownerDepth(cachedEnvironment, cachedName)")
+            @Cached(value = "ownerDepth(cachedEnvironment, cachedName)", uncached = "ownerDepth(cachedEnvironment, cachedName)")
                     int cachedDepth,
-            @Cached(value = "ownerTargetOrNull(cachedEnvironment, cachedDepth, cachedName)")
+            @Cached(value = "ownerTargetOrNull(cachedEnvironment, cachedDepth, cachedName)", uncached = "ownerTargetOrNull(cachedEnvironment, cachedDepth, cachedName)")
                     ResolvedLexicalWriteTarget cachedTarget,
-            @Cached(value = "ownerOrNull(cachedEnvironment, cachedDepth)")
+            @Cached(value = "ownerOrNull(cachedEnvironment, cachedDepth)", uncached = "ownerOrNull(cachedEnvironment, cachedDepth)")
                     ProtosLexicalEnvironment cachedOwner) {
         if (ownerHolds(cachedOwner, cachedName)) {
             return cachedTarget;
         }
-        return writeTargetOrThrow(activation, name);
+        return selectWrite(activation, name, true, currentLayout);
     }
 
     @Specialization(guards = "write", replaces = "selectWriteCachedOwner")
-    static Object selectWrite(ProtosActivation activation, String name, boolean write) {
-        return writeTargetOrThrow(activation, name);
+    static Object selectWrite(
+            Object activation, String name, boolean write, LexicalFrameLayout currentLayout) {
+        ProtosActivation published = publishedActivationOrNull(activation);
+        return published == null ? null : writeTargetOrThrow(published, name);
     }
 
     // ---- Guards and specialization-time helpers ----------------------------------
 
     /*
-     * The current scope holds nothing while it has neither a Context nor a
-     * frame view. Both may appear later, so the guard is re-evaluated on
-     * every execution.
+     * An unpublished invocation can still own LOCAL/CELL bindings. Only its
+     * existing physical layout can exclude the searched name. Publication is
+     * re-read on each execution, because Context or frame authority may appear.
      */
     @NonIdempotent
-    static boolean hasNoCurrentScopeStorage(ProtosActivation activation) {
-        return activation.materializedContextOrNullForRuntime() == null
-                && activation.publishedClosureLexicalAuthorityForRuntime() == null;
+    static boolean hasNoCurrentScopeStorage(
+            Object state, String name, LexicalFrameLayout currentLayout) {
+        ProtosActivation activation = publishedActivationOrNull(state);
+        if (activation != null) {
+            return activation.materializedContextOrNullForRuntime() == null
+                    && activation.publishedClosureLexicalAuthorityForRuntime() == null;
+        }
+        return currentLayout != null && currentLayout.indexOf(name) < 0;
+    }
+
+    @NonIdempotent
+    static ProtosActivation publishedActivationOrNull(Object state) {
+        if (state instanceof ProtosActivation activation) {
+            return activation;
+        }
+        Object[] arguments = (Object[]) state;
+        return ProtosFrameArguments.hasPublishedActivation(arguments)
+                ? ProtosFrameArguments.publishedActivation(arguments)
+                : null;
+    }
+
+    static ProtosLexicalEnvironment capturedEnvironment(Object state) {
+        return state instanceof ProtosActivation activation
+                ? activation.capturedLexicalEnvironmentForRuntime()
+                : ProtosFrameArguments.lexicalSelectionEnvironment((Object[]) state);
+    }
+
+    @NonIdempotent
+    static boolean hasReceiverPrelude(Object state) {
+        return publishedActivationOrNull(state) != null
+                || ProtosFrameArguments.admittedCompactCreatorOrNull((Object[]) state)
+                        .preludeOrNullForRuntime() != null;
     }
 
     /*
@@ -320,13 +365,32 @@ abstract class ProtosLexicalSelectionNode extends Node {
                 activation.receiver(), name, activation.preludeOrNullForRuntime());
     }
 
-    /* The receiver phase alone, after the cached lexical exhaustion. */
+    /*
+     * The receiver phase alone, after proved lexical exhaustion. A compact
+     * miss requests exact-activation Error construction by the operation.
+     */
     @TruffleBoundary
-    static Object readReceiverOrThrow(ProtosActivation activation, String name) {
-        Optional<Object> member = ProtosValueLookup.readMember(
-                activation.receiver(), name, activation.preludeOrNullForRuntime());
+    static Object readReceiverOrThrow(Object state, String name) {
+        ProtosActivation activation = publishedActivationOrNull(state);
+        Object receiver;
+        ProtosPrelude prelude;
+        if (activation != null) {
+            receiver = activation.receiver();
+            prelude = activation.preludeOrNullForRuntime();
+        } else {
+            Object[] arguments = (Object[]) state;
+            receiver = ProtosFrameArguments.currentReceiver(arguments);
+            // The specialization proved an own Prelude: no inherited-caller demand.
+            prelude = ProtosFrameArguments.admittedCompactCreatorOrNull(arguments)
+                    .preludeOrNullForRuntime();
+        }
+        Optional<Object> member = ProtosValueLookup.readMember(receiver, name, prelude);
         if (member.isPresent()) {
             return member.get();
+        }
+        if (activation == null) {
+            // Error construction needs the exact activation, supplied by the operation.
+            return null;
         }
         throw new ProtosSignalException(ProtosCoreErrors.newUnqualifiedLookupError(activation));
     }

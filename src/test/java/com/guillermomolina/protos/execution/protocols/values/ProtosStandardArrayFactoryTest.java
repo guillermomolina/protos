@@ -19,6 +19,7 @@ package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -27,6 +28,7 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
+import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
@@ -38,6 +40,88 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class ProtosStandardArrayFactoryTest {
+    @Test
+    void currentArrayFactoryShadowsCapturedFactoryUntilRemoval() throws IOException {
+        ProtosPrelude prelude = corePrelude();
+        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosArrayValue results = (ProtosArrayValue) ProtosTestExecutionSupport.evaluate(
+                """
+                StandardArray: Array
+                Array: (a, b) => a + b
+                CapturedFactory: Array
+                run: () => {
+                    before: Array(2, 3)
+                    Array: (a, b) => a * b
+                    current: Array(2, 3)
+                    context.removeSlot("Array")
+                    after: Array(2, 3)
+                    StandardArray(before, current, after, Array === CapturedFactory)
+                }
+                StandardArray(run(), run())
+                """, activation);
+        ProtosArrayValue first = (ProtosArrayValue) results.indexedAt(0);
+        ProtosArrayValue second = (ProtosArrayValue) results.indexedAt(1);
+        assertNotSame(first, second);
+        for (ProtosArrayValue result : List.of(first, second)) {
+            assertEquals(5L, result.indexedAt(0));
+            assertEquals(6L, result.indexedAt(1));
+            assertEquals(5L, result.indexedAt(2));
+            assertSame(Boolean.TRUE, result.indexedAt(3));
+            assertSame(prelude.arrayPrototype(), result.parent().orElseThrow());
+        }
+        assertSame(activation.context().readLocalSlot("CapturedFactory").orElseThrow(),
+                activation.context().readLocalSlot("Array").orElseThrow());
+    }
+
+    @Test
+    void dynamicArrayFactoryObservesNearerReplacementAndRemoval() throws IOException {
+        ProtosPrelude prelude = corePrelude();
+        ProtosActivation activation = prelude.newModuleActivation();
+        Object result = ProtosTestExecutionSupport.evaluate(
+                """
+                make: () => Array(1, 2)
+                first: make()
+                Array: (a, b) => a + b
+                replaced: make()
+                Array = (a, b) => a * b
+                reassigned: make()
+                context.removeSlot("Array")
+                restored: make()
+                Array(first, replaced, reassigned, restored)
+                """, activation);
+        ProtosArrayValue values = (ProtosArrayValue) result;
+        ProtosArrayValue first = (ProtosArrayValue) values.indexedAt(0);
+        ProtosArrayValue restored = (ProtosArrayValue) values.indexedAt(3);
+        assertEquals(3L, values.indexedAt(1));
+        assertEquals(2L, values.indexedAt(2));
+        assertEquals(1L, first.indexedAt(0));
+        assertEquals(2L, restored.indexedAt(1));
+        assertNotSame(first, restored);
+        assertSame(prelude.arrayPrototype(), first.parent().orElseThrow());
+        assertSame(prelude.arrayPrototype(), restored.parent().orElseThrow());
+    }
+
+    @Test
+    void arrayConstructionPreservesPrimitiveMixedAndNonconstantValues() throws IOException {
+        ProtosActivation activation = corePrelude().newModuleActivation();
+        ProtosArrayValue values = (ProtosArrayValue) ProtosTestExecutionSupport.evaluate(
+                """
+                number: 7
+                make: () => Array(1, 2)
+                Array(Array(1, 2), Array(1.5, 2.5), Array(true, false),
+                      Array(1, true, null), Array(number, 8), make(), make())
+                """, activation);
+        assertEquals(1L, ((ProtosArrayValue) values.indexedAt(0)).indexedAt(0));
+        assertEquals(1.5d, ((ProtosArrayValue) values.indexedAt(1)).indexedAt(0));
+        assertSame(Boolean.FALSE, ((ProtosArrayValue) values.indexedAt(2)).indexedAt(1));
+        ProtosArrayValue mixed = (ProtosArrayValue) values.indexedAt(3);
+        assertEquals(1L, mixed.indexedAt(0));
+        assertSame(Boolean.TRUE, mixed.indexedAt(1));
+        assertSame(ProtosNullValue.INSTANCE, mixed.indexedAt(2));
+        assertEquals(7L, ((ProtosArrayValue) values.indexedAt(4)).indexedAt(0));
+        assertNotSame(values.indexedAt(5), values.indexedAt(6));
+    }
+
     // Deliberately Java-side: this verifies the represented-value materialization
     // and mutation state, while source-level factory semantics live in .protos.
     @Test

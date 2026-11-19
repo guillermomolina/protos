@@ -28,6 +28,7 @@ import com.guillermomolina.protos.runtime.ProtosTestPrelude;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -258,6 +259,107 @@ class ProtosLexicalSelectionNodeTest {
         assertSame(
                 ProtosTestPrelude.slotNotFoundPrototype(),
                 signal.error().parent().orElseThrow());
+    }
+
+    @Test
+    void cachedAndUncachedSelectionAgreeAfterDynamicContextShadowing() {
+        ProtosObjectValue root = ProtosObjectValue.rootObject();
+        ProtosObjectValue current = new ProtosObjectValue(root);
+        ProtosObjectValue nearer = new ProtosObjectValue(root);
+        ProtosObjectValue owner = new ProtosObjectValue(root);
+        ProtosObjectValue receiver = new ProtosObjectValue(root);
+        Object original = new ProtosStringValue("original");
+        Object shadow = new ProtosStringValue("shadow");
+        owner.createLocalSlot("name", original);
+        receiver.createLocalSlot("name", Boolean.FALSE);
+        ProtosActivation activation = ProtosTestPrelude.activation(
+                current, List.of(nearer, owner), receiver);
+        ProtosLexicalSelectionNode cached = ProtosLexicalSelectionNodeGen.create();
+        assertSame(original, cached.execute(activation, "name", false));
+        nearer.createLocalSlot("name", shadow);
+        assertSame(shadow, cached.execute(activation, "name", false));
+        assertSame(shadow, read(activation, "name"));
+        nearer.removeLocalSlot("name");
+        owner.removeLocalSlot("name");
+        assertSame(Boolean.FALSE, cached.execute(activation, "name", false));
+        current.createLocalSlot("name", ProtosNullValue.INSTANCE);
+        assertSame(ProtosNullValue.INSTANCE, cached.execute(activation, "name", false));
+        assertSame(ProtosNullValue.INSTANCE, read(activation, "name"));
+    }
+
+    @Test
+    void removedSelectedWriteOwnerDoesNotRedirectToAnotherScope() {
+        ProtosObjectValue root = ProtosObjectValue.rootObject();
+        ProtosObjectValue current = new ProtosObjectValue(root);
+        ProtosObjectValue selected = new ProtosObjectValue(root);
+        ProtosObjectValue outer = new ProtosObjectValue(root);
+        Object original = new ProtosStringValue("selected");
+        Object untouched = new ProtosStringValue("outer");
+        selected.createLocalSlot("name", original);
+        outer.createLocalSlot("name", untouched);
+        ProtosActivation activation = ProtosTestPrelude.activation(
+                current, List.of(selected, outer), new ProtosObjectValue(root));
+        ResolvedLexicalWriteTarget destination = selectWrite(activation, "name");
+        assertSame(original, selected.removeLocalSlot("name"));
+        current.createLocalSlot("name", ProtosNullValue.INSTANCE);
+        assertThrows(ProtosSignalException.class,
+                () -> ProtosFrameLocalBindings.assignResolvedLexicalTarget(
+                        activation, destination, "name", Boolean.TRUE));
+        assertFalse(selected.hasLocalSlot("name"));
+        assertSame(untouched, outer.readLocalSlot("name").orElseThrow());
+        assertSame(ProtosNullValue.INSTANCE, current.readLocalSlot("name").orElseThrow());
+    }
+
+    @Test
+    void sameCachedSelectorObservesCurrentCreationNullRemovalAndFixedWriteOwner() {
+        ProtosObjectValue root = ProtosObjectValue.rootObject();
+        ProtosObjectValue current = new ProtosObjectValue(root);
+        ProtosObjectValue captured = new ProtosObjectValue(root);
+        Object capturedValue = new ProtosStringValue("captured");
+        Object localValue = new ProtosStringValue("local");
+        Object assignedValue = new ProtosStringValue("assigned");
+        captured.createLocalSlot("name", capturedValue);
+        ProtosActivation activation = ProtosTestPrelude.activation(
+                current, List.of(captured), new ProtosObjectValue(root));
+        ProtosLexicalSelectionNode selection = ProtosLexicalSelectionNodeGen.create();
+        assertSame(capturedValue, selection.execute(activation, "name", false));
+        current.createLocalSlot("name", localValue);
+        assertSame(localValue, selection.execute(activation, "name", false));
+        assertSame(capturedValue, captured.readLocalSlot("name").orElseThrow());
+        current.assignLocalSlot("name", ProtosNullValue.INSTANCE);
+        assertSame(ProtosNullValue.INSTANCE, selection.execute(activation, "name", false));
+        assertSame(ProtosNullValue.INSTANCE, current.removeLocalSlot("name"));
+        assertSame(capturedValue, selection.execute(activation, "name", false));
+        ResolvedLexicalWriteTarget destination = assertInstanceOf(
+                ResolvedLexicalWriteTarget.class, selection.execute(activation, "name", true));
+        current.createLocalSlot("name", localValue);
+        assertSame(assignedValue, ProtosFrameLocalBindings.assignResolvedLexicalTarget(
+                activation, destination, "name", assignedValue));
+        assertSame(assignedValue, captured.readLocalSlot("name").orElseThrow());
+        assertSame(localValue, current.readLocalSlot("name").orElseThrow());
+        assertSame(localValue, selection.execute(activation, "name", false));
+    }
+
+    @Test
+    void unpublishedHeaderWithoutPhysicalLayoutIsNotAnAbsenceProof() {
+        ProtosObjectValue root = ProtosObjectValue.rootObject();
+        ProtosObjectValue captured = new ProtosObjectValue(root);
+        ProtosObjectValue receiver = new ProtosObjectValue(root);
+        captured.createLocalSlot("name", ProtosNullValue.INSTANCE);
+        ProtosActivation caller = ProtosTestPrelude.activation(
+                new ProtosObjectValue(root), List.of(), receiver);
+        ProtosClosureValue closure = new ProtosClosureValue(null, List.of(captured), receiver);
+        Object[] arguments = ProtosFrameArguments.compactImmediateMethodCall(
+                closure, receiver, root, caller, new Object[0]);
+        ProtosLexicalSelectionNode selection = ProtosLexicalSelectionNodeGen.create();
+        assertFalse(ProtosLexicalSelectionNode.hasNoCurrentScopeStorage(arguments, "name", null));
+        assertNull(selection.execute(arguments, "name", false));
+        assertNull(selection.execute(arguments, "name", true));
+        assertSame(closure, arguments[0]);
+        assertSame(ProtosNullValue.INSTANCE,
+                ProtosLexicalSelectionNodeGen.create().execute(arguments, "name", false,
+                        ProtosBytecodeRootNode.EMPTY_LEXICAL_FRAME_LAYOUT));
+        assertSame(closure, arguments[0]);
     }
 
     private static Object read(ProtosActivation activation, String name) {

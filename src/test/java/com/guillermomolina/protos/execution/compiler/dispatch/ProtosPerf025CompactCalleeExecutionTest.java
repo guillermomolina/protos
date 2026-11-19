@@ -70,6 +70,369 @@ final class ProtosPerf025CompactCalleeExecutionTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
 
     @Test
+    void inlineControlDynamicReadPreservesValueAndLaterContextIdentity() throws Exception {
+        withCore(module -> {
+            ProtosObjectValue owner = newObject();
+            Object expected = newObject();
+            owner.createLocalSlot("liveName", expected);
+            for (boolean observesContext : new boolean[] {false, true}) {
+                String body = observesContext
+                        ? "() => { selected: true.ifTrue() { liveName }\ncontext\nselected }"
+                        : "() => { selected: true.ifTrue() { liveName }\nselected }";
+                ProtosClosureValue template = closure(body, module);
+                ProtosClosureValue reader = new ProtosClosureValue(
+                        template.definition(), List.of(owner), newObject(), null, null,
+                        module.prelude().orElseThrow(), template.executionPlan().orElseThrow());
+                assertContains(instructionNames(reader), "c.Lookup");
+                assertContains(instructionNames(reader), "EnsureCurrentClosureLexicalView");
+                for (int attempt = 0; attempt < 8; attempt++) {
+                    Object[] arguments = ProtosFrameArguments.compactDirectClosureCall(
+                            reader, module, null, new Object[0]);
+                    assertSame(reader, arguments[0]);
+                    assertSame(expected, target(reader).call(arguments));
+                    ProtosActivation published = assertInstanceOf(ProtosActivation.class, arguments[0]);
+                    assertNotNull(published.publishedClosureLexicalAuthorityForRuntime());
+                    if (observesContext) {
+                        ProtosObjectValue observed = published.materializedContextOrNullForRuntime();
+                        assertNotNull(observed);
+                        assertSame(observed, published.context());
+                        assertSame(expected, observed.readLocalSlot("selected").orElseThrow());
+                    } else {
+                        assertNull(published.materializedContextOrNullForRuntime());
+                    }
+                    assertSame(published, arguments[0]);
+                    assertSame(expected, owner.readLocalSlot("liveName").orElseThrow());
+                }
+            }
+        });
+    }
+
+    @Test
+    void compactAdmissionDistinguishesPhysicalLocalAndLaterPublication() throws Exception {
+        withCore(module -> {
+            ProtosObjectValue owner = newObject();
+            Object captured = newObject();
+            Object localValue = newObject();
+            owner.createLocalSlot("liveName", captured);
+            ProtosClosureValue template = closure("() => liveName", module);
+            ProtosClosureValue reader = new ProtosClosureValue(
+                    template.definition(), List.of(owner), newObject(), null, null,
+                    module.prelude().orElseThrow(), template.executionPlan().orElseThrow());
+            Object[] eligible = ProtosFrameArguments.compactDirectClosureCall(
+                    reader, module, null, new Object[0]);
+            assertSame(captured, target(reader).call(eligible));
+            assertSame(reader, eligible[0], "A proved read must stay compact");
+
+            ProtosActivation published = ProtosFrameArguments.activation(eligible);
+            published.context().createLocalSlot("liveName", localValue);
+            assertSame(localValue, target(reader).call(eligible));
+            assertSame(published, eligible[0]);
+            assertSame(captured, owner.readLocalSlot("liveName").orElseThrow());
+
+            ProtosObjectValue receiver = newObject();
+            Object receiverValue = newObject();
+            receiver.createLocalSlot("liveName", receiverValue);
+            ProtosClosureValue receiverReader = new ProtosClosureValue(
+                    template.definition(), List.of(), receiver, null, null,
+                    module.prelude().orElseThrow(), template.executionPlan().orElseThrow());
+            // Deliberately dynamic sites must respect physical locals for reads and writes.
+            for (var access : List.of(ProtosNamedLexicalAccess.LOOKUP,
+                    ProtosNamedLexicalAccess.RESOLVE_WRITE)) {
+                com.oracle.truffle.api.bytecode.BytecodeLocal[] local =
+                        new com.oracle.truffle.api.bytecode.BytecodeLocal[1];
+                ProtosBytecodeRootNode root = ProtosBytecodeRootNodeGen.create(
+                        com.oracle.truffle.api.TruffleLanguage.LanguageReference
+                                .create(ProtosLanguage.class).get(null),
+                        com.oracle.truffle.api.bytecode.BytecodeConfig.DEFAULT,
+                        builder -> {
+                            builder.beginRoot();
+                            local[0] = builder.createLocal("liveName", null);
+                            builder.beginStoreLocal(local[0]);
+                            builder.emitLoadArgument(ProtosFrameArguments.SUPPLIED_ARGUMENT_OFFSET);
+                            builder.endStoreLocal();
+                            builder.beginReturn();
+                            builder.beginAccessNamedLexical(access);
+                            builder.emitLoadConstant(true);
+                            builder.emitLoadConstant("liveName");
+                            builder.endAccessNamedLexical();
+                            builder.endReturn();
+                            builder.endRoot();
+                        }).getNode(0);
+                root.recordLexicalFrameLayout(new ProtosBytecodeRootNode.LexicalFrameLayout(
+                        new String[] {"liveName"}, new int[] {local[0].getLocalOffset()},
+                        new boolean[] {false}, new com.oracle.truffle.api.bytecode.LocalAccessor[] {
+                            com.oracle.truffle.api.bytecode.LocalAccessor.constantOf(local[0])
+                        }));
+                for (ProtosClosureValue invocation : List.of(reader, receiverReader)) {
+                    for (int attempt = 0; attempt < 8; attempt++) {
+                        Object expected = attempt % 2 == 0 ? localValue : ProtosNullValue.INSTANCE;
+                        Object[] arguments = ProtosFrameArguments.compactDirectClosureCall(
+                                invocation, module, null, new Object[] {expected});
+                        assertSame(invocation, arguments[0]);
+                        Object selected = root.getCallTarget().call(arguments);
+                        ProtosActivation actual = assertInstanceOf(ProtosActivation.class, arguments[0]);
+                        assertNotNull(actual.publishedClosureLexicalAuthorityForRuntime());
+                        assertSame(expected, actual.readCurrentLocalSlotForRuntime("liveName").orElseThrow());
+                        if (access == ProtosNamedLexicalAccess.LOOKUP) {
+                            assertSame(expected, selected);
+                        } else {
+                            var destination = assertInstanceOf(
+                                    ProtosFrameLocalBindings.ResolvedLexicalWriteTarget.class, selected);
+                            Object assigned = newObject();
+                            assertSame(assigned, ProtosFrameLocalBindings.assignResolvedLexicalTarget(
+                                    actual, destination, "liveName", assigned));
+                            assertSame(assigned, actual.readCurrentLocalSlotForRuntime("liveName").orElseThrow());
+                        }
+                        assertSame(captured, owner.readLocalSlot("liveName").orElseThrow());
+                        assertSame(receiverValue, receiver.readLocalSlot("liveName").orElseThrow());
+                    }
+                }
+            }
+        });
+    }
+
+    @Test
+    void contextAfterDynamicReadPublishesOneExactGuestIdentity() throws Exception {
+        withCore(module -> {
+            ProtosObjectValue owner = newObject();
+            Object expected = newObject();
+            owner.createLocalSlot("liveName", expected);
+            ProtosClosureValue template = closure("() => { liveName\ncontext }", module);
+            ProtosClosureValue observing = new ProtosClosureValue(
+                    template.definition(), List.of(owner), newObject(), null, null,
+                    module.prelude().orElseThrow(), template.executionPlan().orElseThrow());
+            Object[] arguments = ProtosFrameArguments.compactDirectClosureCall(
+                    observing, module, null, new Object[0]);
+            Object result = target(observing).call(arguments);
+            ProtosActivation published = assertInstanceOf(ProtosActivation.class, arguments[0]);
+            assertSame(published.context(), result);
+            assertSame(expected, owner.readLocalSlot("liveName").orElseThrow());
+        });
+    }
+
+    @Test
+    void inheritedPreludeFallbackStillRequestsExactCaller() throws Exception {
+        withCore(module -> {
+            ProtosObjectValue receiver = newObject();
+            Object expected = newObject();
+            receiver.createLocalSlot("liveName", expected);
+            ProtosClosureValue template = closure("() => liveName", module);
+            ProtosClosureValue reader = new ProtosClosureValue(
+                    template.definition(), List.of(), receiver, null, null, null,
+                    template.executionPlan().orElseThrow());
+            Object[] arguments = ProtosFrameArguments.compactDirectClosureCall(
+                    reader, module, null, new Object[0]);
+            assertSame(expected, target(reader).call(arguments));
+            assertInstanceOf(ProtosActivation.class, arguments[0]);
+            ProtosBytecodeRootNode root = (ProtosBytecodeRootNode) target(reader).getRootNode();
+            assertTrue(root.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION));
+        });
+    }
+
+    @Test
+    void dynamicAssignmentSelectsBeforeRightHandSideChangesScopes() throws Exception {
+        withCore(module -> {
+            ProtosObjectValue nearer = newObject();
+            ProtosObjectValue owner = newObject();
+            Object original = newObject();
+            Object shadow = newObject();
+            Object assigned = newObject();
+            owner.createLocalSlot("liveName", original);
+            owner.createLocalSlot("changeScope", ProtosClosureValue.nativeClosure((activation, supplied) -> {
+                nearer.createLocalSlot("liveName", shadow);
+                return assigned;
+            }));
+            ProtosClosureValue template = closure("() => { liveName = changeScope() }", module);
+            ProtosClosureValue writer = new ProtosClosureValue(
+                    template.definition(), List.of(nearer, owner), newObject(), null, null,
+                    module.prelude().orElseThrow(), template.executionPlan().orElseThrow());
+            Object[] arguments = ProtosFrameArguments.compactDirectClosureCall(
+                    writer, module, null, new Object[0]);
+            assertSame(assigned, target(writer).call(arguments));
+            assertSame(assigned, owner.readLocalSlot("liveName").orElseThrow());
+            assertSame(shadow, nearer.readLocalSlot("liveName").orElseThrow());
+        });
+    }
+
+    @Test
+    void suspendedCompactSelectionKeepsEachOriginalCapturedOwner() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue template = closure("() => liveName", module);
+            ProtosBytecodeRootNode root = ProtosBytecodeRootNodeGen.create(
+                    com.oracle.truffle.api.TruffleLanguage.LanguageReference
+                            .create(ProtosLanguage.class).get(null),
+                    com.oracle.truffle.api.bytecode.BytecodeConfig.DEFAULT,
+                    builder -> {
+                        builder.beginRoot();
+                        builder.beginYield();
+                        builder.emitLoadConstant(ProtosNullValue.INSTANCE);
+                        builder.endYield();
+                        builder.beginReturn();
+                        builder.beginAccessNamedLexical(ProtosNamedLexicalAccess.LOOKUP);
+                        builder.emitLoadConstant(true);
+                        builder.emitLoadConstant("liveName");
+                        builder.endAccessNamedLexical();
+                        builder.endReturn();
+                        builder.endRoot();
+                    }).getNode(0);
+            ProtosObjectValue firstOwner = newObject();
+            ProtosObjectValue secondOwner = newObject();
+            Object firstValue = newObject();
+            Object secondValue = newObject();
+            firstOwner.createLocalSlot("liveName", firstValue);
+            secondOwner.createLocalSlot("liveName", secondValue);
+            ProtosClosureValue first = new ProtosClosureValue(
+                    template.definition(), List.of(firstOwner), newObject(), null, null,
+                    module.prelude().orElseThrow(), template.executionPlan().orElseThrow());
+            ProtosClosureValue second = new ProtosClosureValue(
+                    template.definition(), List.of(secondOwner), newObject(), null, null,
+                    module.prelude().orElseThrow(), template.executionPlan().orElseThrow());
+            var firstContinuation = assertInstanceOf(
+                    com.oracle.truffle.api.bytecode.ContinuationResult.class,
+                    root.getCallTarget().call(ProtosFrameArguments.compactDirectClosureCall(
+                            first, module, null, new Object[0])));
+            var secondContinuation = assertInstanceOf(
+                    com.oracle.truffle.api.bytecode.ContinuationResult.class,
+                    root.getCallTarget().call(ProtosFrameArguments.compactDirectClosureCall(
+                            second, module, null, new Object[0])));
+            assertSame(secondValue, secondContinuation.continueWith(ProtosNullValue.INSTANCE));
+            assertSame(firstValue, firstContinuation.continueWith(ProtosNullValue.INSTANCE));
+        });
+    }
+
+    @Test
+    void dynamicCapturedReadKeepsCompactHeaderAndGuestNullPresent() throws Exception {
+        withCore(module -> {
+            ProtosObjectValue owner = newObject();
+            Object value = newObject();
+            owner.createLocalSlot("liveName", value);
+            ProtosClosureValue template = closure("() => liveName", module);
+            ProtosClosureValue reader = new ProtosClosureValue(
+                    template.definition(), List.of(owner), newObject(), null, null,
+                    module.prelude().orElseThrow(), template.executionPlan().orElseThrow());
+            assertContains(instructionNames(reader), "c.Lookup");
+            assertNone(instructionNames(reader), "CurrentActivation");
+            for (Object expected : new Object[] {value, ProtosNullValue.INSTANCE, newObject()}) {
+                owner.assignLocalSlot("liveName", expected);
+                Object[] arguments = ProtosFrameArguments.compactDirectClosureCall(
+                        reader, module, null, new Object[0]);
+                assertSame(expected, target(reader).call(arguments));
+                assertSame(reader, arguments[0]);
+                assertSame(expected, owner.readLocalSlot("liveName").orElseThrow());
+            }
+        });
+    }
+
+    @Test
+    void compactSelectionObservesNearerCreationOwnerRemovalAndLaterContext() throws Exception {
+        withCore(module -> {
+            ProtosObjectValue nearer = newObject();
+            ProtosObjectValue owner = newObject();
+            ProtosObjectValue receiver = newObject();
+            Object outerValue = newObject();
+            Object nearerValue = newObject();
+            Object receiverValue = newObject();
+            owner.createLocalSlot("liveName", outerValue);
+            receiver.createLocalSlot("liveName", receiverValue);
+            ProtosClosureValue template = closure("() => liveName", module);
+            ProtosClosureValue reader = new ProtosClosureValue(
+                    template.definition(), List.of(nearer, owner), receiver, null, null,
+                    module.prelude().orElseThrow(), template.executionPlan().orElseThrow());
+            Object[] arguments = ProtosFrameArguments.compactDirectClosureCall(
+                    reader, module, null, new Object[0]);
+            var layout = ((ProtosBytecodeRootNode) target(reader).getRootNode())
+                    .lexicalFrameLayoutOrNull();
+            ProtosLexicalSelectionNode selection = ProtosLexicalSelectionNodeGen.create();
+            assertSame(outerValue, selection.execute(arguments, "liveName", false, layout));
+            assertSame(reader, arguments[0]);
+            nearer.createLocalSlot("liveName", nearerValue);
+            assertSame(nearerValue, selection.execute(arguments, "liveName", false, layout));
+            assertSame(reader, arguments[0]);
+            ProtosActivation published = ProtosFrameArguments.activation(arguments);
+            assertSame(nearerValue, selection.execute(published, "liveName", false));
+            assertSame(nearerValue, nearer.removeLocalSlot("liveName"));
+            assertSame(outerValue, selection.execute(arguments, "liveName", false, layout));
+            assertSame(outerValue, owner.removeLocalSlot("liveName"));
+            assertSame(receiverValue, selection.execute(arguments, "liveName", false, layout));
+            published.context().createLocalSlot("liveName", ProtosNullValue.INSTANCE);
+            assertSame(ProtosNullValue.INSTANCE, selection.execute(arguments, "liveName", false, layout));
+            assertSame(published, arguments[0]);
+            assertSame(receiverValue, receiver.readLocalSlot("liveName").orElseThrow());
+        });
+    }
+
+    @Test
+    void compactReceiverLookupDelegatesAndReadsEachNewValue() throws Exception {
+        withCore(module -> {
+            ProtosObjectValue prototype = newObject();
+            ProtosObjectValue receiver = new ProtosObjectValue(prototype);
+            prototype.createLocalSlot("liveName", newObject());
+            ProtosClosureValue template = closure("() => liveName", module);
+            ProtosClosureValue reader = new ProtosClosureValue(
+                    template.definition(), List.of(), receiver, null, null,
+                    module.prelude().orElseThrow(), template.executionPlan().orElseThrow());
+            for (Object expected : new Object[] {newObject(), ProtosNullValue.INSTANCE, newObject()}) {
+                prototype.assignLocalSlot("liveName", expected);
+                Object[] arguments = ProtosFrameArguments.compactDirectClosureCall(
+                        reader, module, null, new Object[0]);
+                assertSame(expected, target(reader).call(arguments));
+                assertSame(reader, arguments[0]);
+            }
+        });
+    }
+
+    @Test
+    void compactMissingNamePublishesForFreshSlotNotFound() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue reader = closure("() => missingDynamicName", module);
+            ProtosObjectValue previousError = null;
+            for (int attempt = 0; attempt < 2; attempt++) {
+                Object[] arguments = ProtosFrameArguments.compactDirectClosureCall(
+                        reader, module, null, new Object[0]);
+                ProtosSignalException signal = assertThrows(
+                        ProtosSignalException.class, () -> target(reader).call(arguments));
+                ProtosActivation published = assertInstanceOf(ProtosActivation.class, arguments[0]);
+                assertSame(ProtosCoreErrors.prototype(published,
+                                ProtosCoreErrors.StandardError.SLOT_NOT_FOUND),
+                        signal.error().parent().orElseThrow());
+                assertNotSame(previousError, signal.error());
+                previousError = signal.error();
+            }
+        });
+    }
+
+    @Test
+    void compactWriteKeepsSelectedOwnerAcrossNearerCreation() throws Exception {
+        withCore(module -> {
+            ProtosObjectValue nearer = newObject();
+            ProtosObjectValue owner = newObject();
+            Object original = newObject();
+            Object shadow = newObject();
+            Object assigned = newObject();
+            owner.createLocalSlot("liveName", original);
+            ProtosClosureValue template = closure("() => liveName", module);
+            ProtosClosureValue reader = new ProtosClosureValue(
+                    template.definition(), List.of(nearer, owner), newObject(), null, null,
+                    module.prelude().orElseThrow(), template.executionPlan().orElseThrow());
+            Object[] arguments = ProtosFrameArguments.compactDirectClosureCall(
+                    reader, module, null, new Object[0]);
+            var layout = ((ProtosBytecodeRootNode) target(reader).getRootNode())
+                    .lexicalFrameLayoutOrNull();
+            ProtosLexicalSelectionNode selection = ProtosLexicalSelectionNodeGen.create();
+            var destination = assertInstanceOf(
+                    ProtosFrameLocalBindings.ResolvedLexicalWriteTarget.class,
+                    selection.execute(arguments, "liveName", true, layout));
+            assertSame(reader, arguments[0]);
+            nearer.createLocalSlot("liveName", shadow);
+            ProtosActivation published = ProtosFrameArguments.activation(arguments);
+            assertSame(assigned, ProtosFrameLocalBindings.assignResolvedLexicalTarget(
+                    published, destination, "liveName", assigned));
+            assertSame(assigned, owner.readLocalSlot("liveName").orElseThrow());
+            assertSame(shadow, nearer.readLocalSlot("liveName").orElseThrow());
+        });
+    }
+
+    @Test
     void escapedCapturesPublishExactOwnersWithoutObservingTheirContexts() throws Exception {
         withCore(module -> {
             ProtosClosureValue template = closure("() => { () => context }", module);

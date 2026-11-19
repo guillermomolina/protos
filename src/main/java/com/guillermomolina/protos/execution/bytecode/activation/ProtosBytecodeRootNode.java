@@ -2819,6 +2819,34 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation(storeBytecodeIndex = true)
     @ConstantOperand(type = ProtosNamedLexicalAccess.class, name = "access")
     public static final class AccessNamedLexical {
+        /*
+         * A true internal operand selects this physical root, without retaining a
+         * frame or publishing it. Inline bodies pass their exact owner instead.
+         * Only the selector proves a compact access safe; the operand is no proof.
+         */
+        @Specialization(guards = "currentFrame")
+        public static Object compact(
+                ProtosNamedLexicalAccess access,
+                boolean currentFrame,
+                String name,
+                @Bind VirtualFrame frame,
+                @Bind ProtosBytecodeRootNode root,
+                @Bind BytecodeNode bytecode,
+                @Bind("$bytecodeIndex") int bytecodeIndex,
+                @Cached ProtosLexicalSelectionNode selection) {
+            Object[] arguments = frame.getArguments();
+            if (ProtosFrameArguments.isUnmaterializedCompactCall(arguments)) {
+                Object selected = selection.execute(
+                        arguments, name, access.write(), root.lexicalFrameLayoutOrNull());
+                if (selected != null) {
+                    return selected;
+                }
+            }
+            ProtosActivation activation = lexicalActivation(frame, root);
+            root.ensureLexicalFrameView(frame, bytecode, bytecodeIndex, activation);
+            return selection.execute(activation, name, access.write());
+        }
+
         @Specialization
         public static Object perform(
                 ProtosNamedLexicalAccess access,
