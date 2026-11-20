@@ -3067,22 +3067,32 @@ production Java, runtime, provider, `std:sqlite` or specification change.
 
 | Test | Result |
 |---|---|
-| D1-R1-T1 `d1R1T1FullSupportedLandlockProfileIsApplied` | NOT RUN |
-| D1-R1-T2 `d1R1T2TcpConnectOutsideDomainIsDenied` | NOT RUN |
-| D1-R1-T3 `d1R1T3UdpSendOutsideDomainIsDenied` | NOT RUN |
-| D1-R1-T4 `d1R1T4PathnameUnixSocketOutsideDomainIsDenied` | NOT RUN |
-| D1-R1-T5 `d1R1T5AbstractUnixSocketOutsideDomainIsDenied` | NOT RUN |
-| D1-R1-T6 `d1R1T6SignalsCannotEscapeTheHelperDomain` | NOT RUN |
-| D1-R1-T7 `d1R1T7AuthorizedProtosSqliteSurvivesExpandedRestrictions` | NOT RUN |
-| D1-R1-T8 `d1R1T8InheritedExteriorFileDescriptorIsClosedBeforeExec` | NOT RUN |
-| D1-R1-T9 `d1R1T9UnsafeEnvironmentVariablesAreRejected` | NOT RUN |
-| D1-R1-T10 `d1R1T10HardlinkOutcomeIsAssertedAndRecorded` | NOT RUN |
-| D1-R1-T11 `d1R1T11UnsupportedSecurityProfileRefusesWithoutFallback` | NOT RUN |
-| D1-R1-T12 `d1R1T12ClientDeathDoesNotYetProvideHelperRevocation` | NOT RUN |
-| D1-R1-T13 `d1R1T13ParentCanTerminateConfinedHelper` | NOT RUN |
+| D1-R1-T1 `d1R1T1FullSupportedLandlockProfileIsApplied` | PASS (focal, owner-observed 2026-11-20) |
+| D1-R1-T2 `d1R1T2TcpConnectOutsideDomainIsDenied` | PASS (focal, owner-observed 2026-11-20) |
+| D1-R1-T3 `d1R1T3UdpSendOutsideDomainIsDenied` | PASS (focal, owner-observed 2026-11-20) |
+| D1-R1-T4 `d1R1T4PathnameUnixSocketOutsideDomainIsDenied` | PASS (focal, owner-observed 2026-11-20) |
+| D1-R1-T5 `d1R1T5AbstractUnixSocketOutsideDomainIsDenied` | PASS (focal, owner-observed 2026-11-20) |
+| D1-R1-T6 `d1R1T6SignalsCannotEscapeTheHelperDomain` | PASS (focal, owner-observed 2026-11-20) |
+| D1-R1-T7 `d1R1T7AuthorizedProtosSqliteSurvivesExpandedRestrictions` | PASS (focal, owner-observed 2026-11-20) |
+| D1-R1-T8 `d1R1T8InheritedExteriorFileDescriptorIsClosedBeforeExec` | PASS (focal, owner-observed 2026-11-20) |
+| D1-R1-T9 `d1R1T9UnsafeEnvironmentVariablesAreRejected` | PASS (focal, owner-observed 2026-11-20) |
+| D1-R1-T10 `d1R1T10HardlinkOutcomeIsAssertedAndRecorded` | PASS (focal, owner-observed 2026-11-20) |
+| D1-R1-T11 `d1R1T11UnsupportedSecurityProfileRefusesWithoutFallback` | PASS (focal, owner-observed 2026-11-20) |
+| D1-R1-T12 `d1R1T12ClientDeathDoesNotYetProvideHelperRevocation` | PASS (focal, owner-observed 2026-11-20) |
+| D1-R1-T13 `d1R1T13ParentCanTerminateConfinedHelper` | PASS (focal, owner-observed 2026-11-20) |
 
 D1-R1-T12 is a negative architecture control. If it passes, that confirms D-10
 is **not** implemented. It is not a cleanup guarantee.
+
+Owner-observed focal evidence (20 November 2026): selector `#d1*` 25/25 PASS
+(12 D1 and 13 D1-R1 tests), 0 failures, errors or skips, 86.83 s;
+`mvn -o test-compile` BUILD SUCCESS; `git diff --check` clean. The ABI 10
+profile was installed on a kernel reporting ABI 11 (`handled_fs=0x1ffff`,
+`handled_net=0xf`, `scoped=0x3`). D1-R1-T10 confirmed that the interior
+hardlink reaches the exterior inode, a real identity limitation. D1-R1-T12
+confirmed that the helper survives its client's death while the harness holds
+its pipes, so D-10 stays unresolved. The complete JUnit class was not run as
+part of this evidence.
 
 ### Pending risks
 
@@ -3095,12 +3105,211 @@ is **not** implemented. It is not a cleanup guarantee.
 - The JVM/GraalVM boot under denied TCP/UDP, RESOLVE_UNIX and the signal scope
   has not yet been observed (for example, a glibc `nscd` socket lookup has to
   fall back to files).
-- COMMIT without an acknowledgement stays uncertain. There is no reconciliation
-  and no deduplication.
+- COMMIT without an acknowledgement stays uncertain. Experimental
+  reconciliation and deduplication are added by D2 (§26), not yet run.
 - `/proc` and `/sys` are broad read surfaces. Memory safety of native code is
   not covered. There is no identity-provisioning policy.
 
 The B1–B7 record is unchanged.
 
 State: **PLAT074 OPEN; D256 pending; LIB031 BLOCKED; D0 8/8 PASS; D1 12/12
-PASS; D1-R1-T1–T13 NOT RUN; D-10 pending.**
+PASS; D1-R1 13/13 PASS (focal); D-10 pending.**
+
+## 26. PLAT074-D2 — Atomic receipts and uncertain-commit reconciliation
+
+D2 is an experimental fixture. Full detail is in
+[sqlite-isolated-process-spike.md](sqlite-isolated-process-spike.md) §17. No
+production Java, runtime, provider, `std:sqlite`, `std:ffi` or specification
+changed.
+
+Observed focal result, reported by the human executor: **D2 16/16 PASS**, zero
+failures, errors and skips, 104.3 seconds. COMMIT, a lost acknowledgement after
+COMMIT, reconciliation and `REPLAYED` were all observed for real. This is
+prototype evidence. Two points were still pending after that run, and §27
+addresses them: a durable identity of the database, and demonstrable
+termination of the original helper before an `ABSENT` may count as final.
+
+### What a durable operation is
+
+A durable operation is a client request identified by a key that outlives
+every process: `(client_id, operation_id)`, stored in SQLite. The transport
+`id` only pairs a request with its reply inside one helper process. It restarts
+with each helper, so it cannot say whether an earlier request took effect.
+Correlation and deduplication are separate problems.
+
+### What the persistent key guarantees
+
+The receipt table's primary key admits at most one receipt per key, and the
+entry is written in the same transaction as its receipt. Within one database,
+under the verified SQLite conditions, a key therefore has **at most one
+effect**. This is not exactly-once delivery. A request can still be lost, and
+the client has to ask.
+
+- **Replay with the same value** (`REPLAYED`) is the safe retry: the earlier
+  effect is recognized and nothing is written.
+- **Replay with a different value** (`CONFLICT`) is rejected without writing.
+  Accepting it would either duplicate an effect or silently rewrite a
+  confirmed one.
+
+### Why the receipt is in the same transaction
+
+If the entry were committed first and the receipt later, a crash between the
+two commits would leave an effect without a receipt. A retry would then apply
+it twice. In the opposite order, the crash would leave a receipt without an
+effect. One `COMMIT` makes both visible together or neither (D2-T7, D2-T12).
+
+### Why a successful COMMIT without an acknowledgement is still UNCERTAIN
+
+The client knows only what reached it. If the helper dies after `COMMIT`
+returned but before the reply was written, the effect exists but the client has
+no evidence of it. EOF is therefore `UNCERTAIN`, never `ERROR` and never
+rollback (D2-T8, D2-T15). When the helper itself cannot establish a COMMIT
+result, it answers `RECONCILE_REQUIRED`, writes nothing more on that session
+and claims no rollback.
+
+### Why LOOKUP after restart is needed
+
+The only authority on whether the effect happened is the database. After a
+restart, the client asks for the same key under a new transport id. `FOUND`
+with the same value means committed. `FOUND` with another value is a conflict.
+`ABSENT` means not applied **only** if the queried database is the right one
+and the helper that ran the operation can no longer COMMIT it. D2 assumed both.
+§27 makes both explicit. Retrying the same key and value
+without asking is also safe, because the answer is `REPLAYED` (D2-T8, D2-T16).
+
+### Why an unauthenticated client key is not production authority
+
+`clientId` is a number the peer chooses. Nothing binds it to an authenticated
+principal, so one client can read, or block with `CONFLICT`, another client's
+keys. A production design needs an authenticated, host-assigned client
+identity. D2 does not decide one.
+
+### Durability scope
+
+Each session sets `PRAGMA synchronous=FULL` and checks it. The journal stays
+enabled. The evidence comes from JVM process kills and restarts. Power loss and
+storage that violates its own guarantees are not tested.
+
+### Reconciliation with D-6–D-10
+
+| Item | D2 experimental coverage (pending) | Production guarantee |
+|---|---|---|
+| D-6 Operation identity | Durable `(clientId, operationId)` separate from transport `id`; `REPLAYED`/`CONFLICT` (D2-T3–T6, T13, T16) | not approved: identifier format, authentication and scope undecided |
+| D-7 Process-crash detection | Lost reply is client-local `UNCERTAIN`, never `ERROR`/rollback (D2-T8, T15) | not approved |
+| D-8 Unacknowledged COMMIT | Reconcile by `LOOKUP` before any retry; no automatic COMMIT retry (D2-T8, T15, T16) | not approved |
+| D-9 Recovery and restart | Reopen in other confined JVMs; concurrent helper meets `BUSY`, no duplicate (D2-T2, T7, T10, T12) | not approved |
+| D-10 Custody and revocation | none in D2: the harness still owns helper lifetime (D3 tries OS parent custody, §27) | **unresolved** |
+
+### Tests
+
+| Test | Result |
+|---|---|
+| D2-T1 `d2T1DurableProtocolRejectsInvalidIdentityAndPayload` | PASS |
+| D2-T2 `d2T2ApplyOncePersistsEntryAndReceiptAtomically` | PASS |
+| D2-T3 `d2T3SameKeyReplayAfterRestartDoesNotDuplicate` | PASS |
+| D2-T4 `d2T4ConflictingReplayIsRejectedWithoutWrite` | PASS |
+| D2-T5 `d2T5DifferentClientsMayUseSameOperationNumber` | PASS |
+| D2-T6 `d2T6SameClientDistinctOperationIdsRemainIndependent` | PASS |
+| D2-T7 `d2T7KilledBeforeCommitLeavesNoEntryOrReceipt` | PASS |
+| D2-T8 `d2T8KilledAfterCommitBeforeAckReconcilesWithoutDuplicate` | PASS |
+| D2-T9 `d2T9MissingReceiptCannotBeMistakenForZeroValue` | PASS |
+| D2-T10 `d2T10TwoConfinedHelpersCannotApplyTheSameKeyTwice` | PASS |
+| D2-T11 `d2T11UnauthorizedProtocolCannotReachSqlite` | PASS |
+| D2-T12 `d2T12FailedOrInterruptedWriteNeverCreatesOrphanReceipt` | PASS |
+| D2-T13 `d2T13TransportIdsAreNotDurableOperationIds` | PASS |
+| D2-T14 `d2T14DurableCloseRevokesConnectionCustody` | PASS |
+| D2-T15 `d2T15UncertainReplyNeverMeansConfirmedRollback` | PASS |
+| D2-T16 `d2T16ConflictAfterUncertainCommitCannotOverwriteReceipt` | PASS |
+
+The B1–B7 record is unchanged.
+
+Authentication of `clientId`, storage guarantees beyond process kills, and
+production supervision remain out of scope, as stated above.
+
+State: **PLAT074 OPEN; D256 pending; LIB031 BLOCKED; D-10 unresolved; D2-T1–T16
+PASS (focal, prototype).**
+
+## 27. PLAT074-D3 — Parent-owned helper lifetime and finality of reconciliation
+
+D3 is an experimental fixture. Full detail is in
+[sqlite-isolated-process-spike.md](sqlite-isolated-process-spike.md) §18. No
+production Java, runtime, provider, `std:sqlite`, `std:ffi`, specification or
+public subprocess API changed. The only new C is the test fixture
+`isolated/native/owner-exec.c` and the additive `--expected-parent-pid` option
+of `sandbox-exec.c`.
+
+This slice tries **one concrete form of OS custody**: the Protos client JVM is
+the OS parent of its helper, and the helper carries
+`PR_SET_PDEATHSIG(SIGKILL)` from before its JVM existed. It does **not**
+authorize integrating that form with the Actor lifecycle in production.
+
+### Eight identities that must not be confused
+
+| Concept | What it is in D3 | What it is not |
+|---|---|---|
+| Owning process | The client JVM. Its PID is the helper's parent, and its death kills the helper through the kernel. | Not an Actor, not a Protos value, not a capability. |
+| Owning Actor | The client's RootActor runs the session logic. | Ending an Actor while its JVM lives revokes nothing in the helper. |
+| SQLite connection | One connection, held by the helper's RootActor, never exported. | Not an identity of the database or of an operation. |
+| Durable database identity | The `database_identity` pair, provisioned once from the trusted bootstrap and verified before READY. | Not a path, a PID, a connection, an Actor or a transport id. Not authentication. |
+| Durable operation identity | `(client_id, operation_id)` in `operation_receipts`. | Not the transport id. Not authenticated. |
+| Transport id | Correlates one request with one reply inside one helper process. | Not durable. It restarts with every helper. |
+| Evidence of helper death | The host observed that the source process stopped running: `/proc` state and start time, or a reaped exit status. Recorded with the harness command `SOURCE_TERMINATED`. | Not EOF, not a missing reply, not a protocol field, not a helper message. |
+| Final reconciliation result | `COMMITTED` or `CONFLICT` (`FOUND`). `NOT_APPLIED` only for `ABSENT` with termination evidence and a verified database identity. | `ABSENT_OBSERVED` is not final: the source might still COMMIT. |
+
+### Why ABSENT alone is not a rollback
+
+A helper held before COMMIT has inserted the entry and the receipt inside an
+open transaction that other connections cannot see. Another helper's `LOOKUP`
+answers `ABSENT`, yet the source can still COMMIT a moment later. A client that
+concluded `NOT_APPLIED` and retried elsewhere could then cause a second effect.
+`applyOnce` would prevent that within one database, but the client would still
+have reported something false. D3 therefore keeps such a key at
+`ABSENT_OBSERVED` (D3-T10). Only after the host observes that the source
+process has stopped running can a later `ABSENT` become `NOT_APPLIED` (D3-T11).
+A stopped process cannot COMMIT.
+
+### Why the database identity matters
+
+`ABSENT` is a statement about one database. A reconnection to another file,
+whether by mistake, after a restore or because the path was swapped, answers
+`ABSENT` for every key. Before READY the helper verifies the persisted identity
+against its bootstrap and refuses on a mismatch. The client compares the
+published identity with its own bootstrap. The reconciliation driver accepts a
+reconciliation for a bound key only from a helper whose identity it verified
+(D3-T8, T12). This gives consistency. It is not authentication: a malicious
+host can copy the file together with its identity.
+
+### What parent custody does not give
+
+It does not revoke a live Actor, cancel a C call cooperatively, interrupt an
+uninterruptible kernel wait, supervise or restart helpers, authenticate
+clients or databases, persist pending client requests, or survive power loss.
+It depends on Linux semantics: the signal follows the forking thread, and a
+helper whose parent is still alive stays alive. D-10 is not fully resolved.
+
+### Tests
+
+| Test | Result |
+|---|---|
+| D3-T1 `d3T1ParentOwnershipIsEstablishedBeforeJvmStartup` | NOT RUN |
+| D3-T2 `d3T2DirectProtosToProtosCommunication` | NOT RUN |
+| D3-T3 `d3T3ParentDeathSignalSurvivesExecve` | NOT RUN |
+| D3-T4 `d3T4ClientSigkillTerminatesIdleHelper` | NOT RUN |
+| D3-T5 `d3T5ClientSigkillBeforeCommitLeavesNothing` | NOT RUN |
+| D3-T6 `d3T6ClientSigkillAfterCommitBeforeAckReplays` | NOT RUN |
+| D3-T7 `d3T7NormalClientExitDoesNotLeaveHelperRunning` | NOT RUN |
+| D3-T8 `d3T8WrongDatabaseIdentityRefusesReconciliation` | NOT RUN |
+| D3-T9 `d3T9SameDatabaseIdentitySurvivesRestart` | NOT RUN |
+| D3-T10 `d3T10LiveSourcePlusAbsentDoesNotEstablishRollback` | NOT RUN |
+| D3-T11 `d3T11TerminatedSourcePlusAbsentPermitsSafeRetry` | NOT RUN |
+| D3-T12 `d3T12WrongIdentityCannotProduceFalseNotApplied` | NOT RUN |
+| D3-T13 `d3T13ParentMismatchRefusesStartup` | NOT RUN |
+| D3-T14 `d3T14LossOfClientDoesNotWidenLandlockAuthority` | NOT RUN |
+| D3-T15 `d3T15NoNativeHandleCrossesDirectProtosIpc` | NOT RUN |
+| D3-T16 `d3T16D2ReconciliationRequiresExplicitSourceTermination` | NOT RUN |
+
+The B1–B7 and D0–D2 records are unchanged apart from the D2 results and the
+`ABSENT` correction above.
+
+State: **PLAT074 OPEN; D256 pending; LIB031 BLOCKED; D-10 not fully resolved;
+D3-T1–T16 NOT RUN.**

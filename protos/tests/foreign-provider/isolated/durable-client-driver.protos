@@ -1,0 +1,343 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// PLAT074-D2 test-only CLI entry: the Protos client logic for durable
+// operations. It imports no std:ffi, opens no database and launches no
+// process. The JUnit harness relays opaque lines between this process and the
+// helper; every request is built, and every reply decoded and correlated, here.
+//
+// Transport ids correlate one request with one reply inside one helper
+// process. The durable identity (clientId, operationId) is kept separately so
+// that, after an uncertain outcome, a LOOKUP with the same identity can be
+// prepared for a restarted helper under a fresh transport id.
+//
+// Harness commands, one field per line (numbers are JSON scalars):
+//   REQUEST, id, clientId, operationId, op, value
+//                                  -> "TEXT <request line>" | "REJECTED"
+//   MATCH, id, reply               -> "ACCEPTED <status> <value> <reason>" | "REJECTED"
+//   RESPONSE, reply                -> "ACCEPTED <id> <status> <value> <reason>" | "REJECTED"
+//   DECODE_REQUEST, line           -> "ADMITTED <id> <clientId> <operationId> <op> <value>"
+//                                     | "REFUSED <id> <reason>"
+//   READY, line                    -> "ACCEPTED" | "REJECTED"
+//   LOST, id, clientId, operationId, value
+//                                  -> "UNCERTAIN <clientId> <operationId> CONNECTION_LOST"
+//   STATE, clientId, operationId   -> "STATE <state>" (NONE | UNCERTAIN | ABSENT_OBSERVED |
+//                                     COMMITTED | NOT_APPLIED | CONFLICT)
+//   RECONCILE, id, clientId, operationId
+//                                  -> "TEXT <LOOKUP request line>" | "REJECTED"
+//   RESOLVE, id, reply             -> "RESOLVED <state> <value>" | "REJECTED"
+//   SOURCE_TERMINATED, clientId, operationId
+//                                  -> "TERMINATED <clientId> <operationId>" | "REJECTED"
+//   BIND_DATABASE, identityHi, identityLo
+//                                  -> "BOUND <identityHi> <identityLo>" | "REJECTED"
+//   HELPER_IDENTITY, line          -> "VERIFIED" | "MISMATCH" | "REJECTED"
+//
+// PLAT074-D3 finality rule. LOOKUP -> ABSENT only means "no receipt was
+// visible during this query" (ABSENT_OBSERVED): the helper that ran the
+// original operation might still COMMIT it. NOT_APPLIED additionally requires
+// SOURCE_TERMINATED, a harness command (never a protocol field and never a
+// helper reply) by which the trusted host records that it observed the
+// effective termination of the OS process that executed the operation. The
+// evidence never changes a state by itself; it is consumed only by a later
+// ABSENT. FOUND resolves COMMITTED or CONFLICT with or without it. Nothing is
+// retried automatically.
+//
+// Database binding. After BIND_DATABASE (the trusted bootstrap identity),
+// every key recorded by LOST is bound to that identity, and RECONCILE/RESOLVE
+// for it require the current helper's DATABASE_IDENTITY event to have been
+// VERIFIED equal (READY starts a new helper and clears the verification), so a
+// reconnection to another database can never yield NOT_APPLIED for this one.
+// Keys recorded while unbound (the D2 one-argument helper, which publishes no
+// identity) keep the D2 behavior apart from the finality rule; their database
+// is not verified. All of this is volatile client state, not a production
+// intent log.
+ProcessStreams: import("std:io/process_streams")
+JSON: import("std:json/json")
+Protocol: import("./DurableProtocol.protos")
+
+reader: ProcessStreams.stdinReader(process)
+writer: ProcessStreams.stdoutWriter(process)
+
+fail: () => {
+    Error().signal()
+}
+
+emit: (text) => {
+    writer.writeLine(text).value()
+    writer.flush().value()
+}
+
+field: () => {
+    line: reader.readLine(8192).value()
+    if(line === null) { fail() }
+    line
+}
+
+// A JSON scalar argument: null or an exact Integer (exponent zero).
+scalar: (text) => {
+    node: JSON.parse(text)
+    result: null
+    if(node.kind !== "null") {
+        (node.kind === "number").ifFalse(() => { fail() })
+        (node.value.exponent == 0).ifFalse(() => { fail() })
+        result = node.value.coefficient
+    }
+    result
+}
+
+render: (value) => {
+    text: "null"
+    if(value !== null) {
+        if((value === true) || (value === false)) {
+            text = JSON.encode(JSON.boolean(value))
+        } else {
+            text = JSON.encode(JSON.number(value, 0))
+        }
+    }
+    text
+}
+
+renderText: (value) => {
+    text: "null"
+    if(value !== null) { text = value }
+    text
+}
+
+outcome: (decoded) => "ACCEPTED " + decoded.status + " " + render(decoded.value) + " " +
+    renderText(decoded.reason)
+
+guarded: (body, refusal) => {
+    text: null
+    Error.handle(() => {
+        text = body()
+    }, (error) => {
+        text = null
+    })
+    if(text === null) { text = refusal }
+    text
+}
+
+positive: (value) => {
+    Integer.recognizes(value).ifFalse(() => { fail() })
+    (value > 0).ifFalse(() => { fail() })
+    value
+}
+
+// Accepts only a well-formed reply correlated with transport `id`.
+requireMatchingResponse: (id, text) => {
+    decoded: Protocol.decodeResponse(text)
+    (decoded.id !== null).ifFalse(() => { fail() })
+    (decoded.id == id).ifFalse(() => { fail() })
+    decoded
+}
+
+// Client-local knowledge of durable keys whose outcome was not acknowledged.
+// Process memory only: it is not, and does not replace, the helper's durable
+// receipt table.
+ledger: Map()
+keyOf: (clientId, operationId) => render(positive(clientId)) + ":" + render(positive(operationId))
+
+// D3: the trusted bootstrap database identity (null while unbound) and
+// whether the current helper published exactly that identity.
+expectedIdentity: null
+helperVerified: false
+
+remember: (clientId, operationId, value, state, database, terminated) => {
+    entry: {
+        clientId: clientId
+        operationId: operationId
+        value: value
+        state: state
+        database: database
+        terminated: terminated
+    }
+    entry.freeze()
+    ledger[keyOf(clientId, operationId)] = entry
+    entry
+}
+
+// Unresolved: still eligible for reconciliation.
+unresolved: (entry) => (entry.state == "UNCERTAIN") || (entry.state == "ABSENT_OBSERVED")
+
+// A bound key may be reconciled only against a verified helper of its database.
+requireDatabase: (entry) => {
+    if(entry.database !== null) {
+        helperVerified.ifFalse(() => { fail() })
+        (expectedIdentity === entry.database).ifFalse(() => { fail() })
+    }
+}
+
+identityText: (identity) => render(identity.identityHi) + " " + render(identity.identityLo)
+
+// The one pending reconciliation LOOKUP: its transport id and durable key.
+pendingLookup: null
+
+running: true
+while(running) {
+    command: reader.readLine(64).value()
+    if(command === null) {
+        running = false
+    } else {
+        if(command == "REQUEST") {
+            id: scalar(field())
+            clientId: scalar(field())
+            operationId: scalar(field())
+            operation: field()
+            value: scalar(field())
+            emit(guarded(() => "TEXT " + Protocol.encodeRequest(id, clientId, operationId,
+                operation, value), "REJECTED"))
+        }
+        if(command == "MATCH") {
+            id: scalar(field())
+            reply: field()
+            emit(guarded(() => outcome(requireMatchingResponse(id, reply)), "REJECTED"))
+        }
+        if(command == "RESPONSE") {
+            reply: field()
+            emit(guarded(() => {
+                decoded: Protocol.decodeResponse(reply)
+                "ACCEPTED " + render(decoded.id) + " " + decoded.status + " " +
+                    render(decoded.value) + " " + renderText(decoded.reason)
+            }, "REJECTED"))
+        }
+        if(command == "DECODE_REQUEST") {
+            admission: Protocol.decodeRequest(field())
+            if(admission.admitted) {
+                emit("ADMITTED " + render(admission.id) + " " + render(admission.clientId) + " " +
+                    render(admission.operationId) + " " + admission.operation + " " +
+                    render(admission.value))
+            } else {
+                emit("REFUSED " + render(admission.id) + " " + admission.reason)
+            }
+        }
+        if(command == "READY") {
+            line: field()
+            // A new helper: its database is unverified until HELPER_IDENTITY.
+            helperVerified = false
+            emit(guarded(() => {
+                Protocol.decodeReady(line)
+                "ACCEPTED"
+            }, "REJECTED"))
+        }
+        if(command == "LOST") {
+            // The channel ended before a correlated reply. The operation may or
+            // may not have taken effect: UNCERTAIN, never ERROR or rollback.
+            positive(scalar(field()))
+            clientId: scalar(field())
+            operationId: scalar(field())
+            value: scalar(field())
+            entry: remember(clientId, operationId, value, "UNCERTAIN", expectedIdentity, false)
+            emit("UNCERTAIN " + render(entry.clientId) + " " + render(entry.operationId) +
+                " CONNECTION_LOST")
+        }
+        if(command == "STATE") {
+            key: keyOf(scalar(field()), scalar(field()))
+            state: "NONE"
+            if(ledger.containsKey(key)) { state = ledger[key].state }
+            emit("STATE " + state)
+        }
+        if(command == "RECONCILE") {
+            id: scalar(field())
+            clientId: scalar(field())
+            operationId: scalar(field())
+            emit(guarded(() => {
+                key: keyOf(clientId, operationId)
+                ledger.containsKey(key).ifFalse(() => { fail() })
+                unresolved(ledger[key]).ifFalse(() => { fail() })
+                requireDatabase(ledger[key])
+                text: Protocol.encodeRequest(id, clientId, operationId, "LOOKUP", null)
+                pendingLookup = {
+                    id: id
+                    key: key
+                }
+                pendingLookup.freeze()
+                "TEXT " + text
+            }, "REJECTED"))
+        }
+        if(command == "RESOLVE") {
+            id: scalar(field())
+            reply: field()
+            emit(guarded(() => {
+                (pendingLookup !== null).ifFalse(() => { fail() })
+                (pendingLookup.id == id).ifFalse(() => { fail() })
+                decoded: requireMatchingResponse(id, reply)
+                entry: ledger[pendingLookup.key]
+                unresolved(entry).ifFalse(() => { fail() })
+                requireDatabase(entry)
+                state: null
+                if(decoded.status == "FOUND") {
+                    if(decoded.value == entry.value) {
+                        state = "COMMITTED"
+                    } else {
+                        state = "CONFLICT"
+                    }
+                }
+                if(decoded.status == "ABSENT") {
+                    // Final only once the source can no longer COMMIT.
+                    if(entry.terminated) {
+                        state = "NOT_APPLIED"
+                    } else {
+                        state = "ABSENT_OBSERVED"
+                    }
+                }
+                // Any other reply (ERROR included) leaves the key unchanged.
+                (state !== null).ifFalse(() => { fail() })
+                remember(entry.clientId, entry.operationId, entry.value, state, entry.database,
+                    entry.terminated)
+                pendingLookup = null
+                "RESOLVED " + state + " " + render(decoded.value)
+            }, "REJECTED"))
+        }
+        if(command == "SOURCE_TERMINATED") {
+            // Harness-only evidence; it records, it does not resolve.
+            clientId: scalar(field())
+            operationId: scalar(field())
+            emit(guarded(() => {
+                key: keyOf(clientId, operationId)
+                ledger.containsKey(key).ifFalse(() => { fail() })
+                entry: ledger[key]
+                unresolved(entry).ifFalse(() => { fail() })
+                remember(entry.clientId, entry.operationId, entry.value, entry.state, entry.database, true)
+                "TERMINATED " + render(entry.clientId) + " " + render(entry.operationId)
+            }, "REJECTED"))
+        }
+        if(command == "BIND_DATABASE") {
+            identityHi: scalar(field())
+            identityLo: scalar(field())
+            emit(guarded(() => {
+                (expectedIdentity === null).ifFalse(() => { fail() })
+                // Validated through the same exact v2 event codec.
+                expectedIdentity = Protocol.decodeDatabaseIdentity(
+                    Protocol.encodeDatabaseIdentity(identityHi, identityLo))
+                "BOUND " + identityText(expectedIdentity)
+            }, "REJECTED"))
+        }
+        if(command == "HELPER_IDENTITY") {
+            line: field()
+            helperVerified = false
+            emit(guarded(() => {
+                (expectedIdentity !== null).ifFalse(() => { fail() })
+                published: Protocol.decodeDatabaseIdentity(line)
+                result: "MISMATCH"
+                if((published.identityHi == expectedIdentity.identityHi) &&
+                        (published.identityLo == expectedIdentity.identityLo)) {
+                    helperVerified = true
+                    result = "VERIFIED"
+                }
+                result
+            }, "REJECTED"))
+        }
+    }
+}

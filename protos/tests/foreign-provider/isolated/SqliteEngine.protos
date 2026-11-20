@@ -22,6 +22,17 @@
 // ../sqlite-landlock-provider.protos and std:sqlite/abi.protos. They are
 // restated here instead of imported: the B4 module also exposes arbitrary-SQL
 // test operations, and B1-B6 must not gain a new dependent.
+//
+// PLAT074-D2 adds durable operation identity: an `operation_receipts` row keyed
+// by (client_id, operation_id) is written in the same SQLite transaction as its
+// `entries` row. Neither the transport correlation id, a PID, an Actor nor an
+// FFM session identifies an operation durably. The D2 surface is test-only too.
+//
+// PLAT074-D3 adds a durable database identity: one `database_identity` row,
+// a pair of signed 64-bit Integers supplied only by the trusted helper
+// bootstrap. It lets a reconciliation prove which database answered; it is not
+// authentication against a malicious host. A PID, a path, a connection, an
+// Actor or a transport id is never a database identity.
 
 // Private lexical scope: Connection and Statement custody never leaves it.
 _engine: (() => {
@@ -29,12 +40,18 @@ _engine: (() => {
     native: import("ffi:sqlite3")
 
     SQLITE_OK: 0
+    SQLITE_BUSY: 5
     SQLITE_ROW: 100
     SQLITE_DONE: 101
     // SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE; no URI, no memory database.
     OPEN_FILE: 6
     maxInteger: 9223372036854775807
     minInteger: 0 - 9223372036854775807 - 1
+    // PRAGMA synchronous value of FULL.
+    SYNCHRONOUS_FULL: 2
+    // Bounded native wait for a competing writer's lock, in milliseconds. A
+    // timeout still answers SQLITE_BUSY; it is never retried or turned into success.
+    BUSY_TIMEOUT_MS: 250
 
     database: FFI.opaque(native, "sqlite3")
     statement: FFI.opaque(native, "sqlite3_stmt")
@@ -51,6 +68,7 @@ _engine: (() => {
     bindInteger: bind("sqlite3_bind_int64", FFI.i32, Array(statement, FFI.i32, FFI.i64))
     columnInteger: bind("sqlite3_column_int64", FFI.i64, Array(statement, FFI.i32))
     getAutocommit: bind("sqlite3_get_autocommit", FFI.i32, Array(database))
+    busyTimeout: bind("sqlite3_busy_timeout", FFI.i32, Array(database, FFI.i32))
 
     fail: () => {
         Error().signal()
@@ -61,8 +79,37 @@ _engine: (() => {
         code
     }
 
+    isI64: (value) => {
+        result: false
+        if(Integer.recognizes(value)) {
+            result = (value >= minInteger) && (value <= maxInteger)
+        }
+        result
+    }
+
+    // A durable identifier component: positive, exact, signed 64-bit.
+    requireId: (value) => {
+        isI64(value).ifFalse(() => { fail() })
+        (value > 0).ifFalse(() => { fail() })
+    }
+
+    // Copies one fixed outcome; no native value is ever part of it.
+    outcome: (status, value) => {
+        result: {
+            status: status
+            value: value
+        }
+        result.freeze()
+        result
+    }
+
     session: (initial) => {
         connection: initial
+        // D2: null while writes are admissible. "RECONCILE_REQUIRED" once COMMIT
+        // was attempted without an established result (or a post-commit hook
+        // failed): this session never writes again and claims no rollback.
+        // "BROKEN" once a ROLLBACK after a pre-commit failure itself failed.
+        hazard: null
 
         requireOpen: () => {
             if(connection === null) { fail() }
@@ -115,6 +162,237 @@ _engine: (() => {
         // Irreversible and idempotent: guest custody is retired before the
         // native destructor runs, so no path can release the connection twice
         // or observe it again. A failed destructor result is signalled.
+        requireWritable: () => {
+            requireOpen()
+            if(hazard !== null) { fail() }
+        }
+
+        inTransaction: () => {
+            requireOpen()
+            getAutocommit(connection) == 0
+        }
+
+        // Binds the composite durable key to parameters 1 and 2.
+        bindKey: (handle, clientId, operationId) => {
+            check(bindInteger(handle, 1, clientId), SQLITE_OK)
+            check(bindInteger(handle, 2, operationId), SQLITE_OK)
+        }
+
+        // null when no receipt exists; otherwise the copied persisted value, so
+        // an absent receipt is never confused with a stored zero.
+        receiptValue: (clientId, operationId) => {
+            run("SELECT value FROM operation_receipts WHERE client_id = ? AND operation_id = ?",
+                    (handle) => {
+                bindKey(handle, clientId, operationId)
+                found: null
+                code: step(handle)
+                if(code == SQLITE_ROW) {
+                    found = columnInteger(handle, 0)
+                    check(step(handle), SQLITE_DONE)
+                } else {
+                    check(code, SQLITE_DONE)
+                }
+                found
+            })
+        }
+
+        insertEntry: (value) => {
+            run("INSERT INTO entries(value) VALUES (?)", (handle) => {
+                check(bindInteger(handle, 1, value), SQLITE_OK)
+                check(step(handle), SQLITE_DONE)
+                null
+            })
+        }
+
+        insertReceipt: (clientId, operationId, value) => {
+            run("INSERT INTO operation_receipts(client_id, operation_id, value) VALUES (?, ?, ?)",
+                    (handle) => {
+                bindKey(handle, clientId, operationId)
+                check(bindInteger(handle, 3, value), SQLITE_OK)
+                check(step(handle), SQLITE_DONE)
+                null
+            })
+        }
+
+        // Per-connection durability settings, re-established by every session.
+        configureDurable: () => {
+            requireOpen()
+            check(busyTimeout(connection, BUSY_TIMEOUT_MS), SQLITE_OK)
+            execute("PRAGMA synchronous=FULL")
+            check(queryInteger("PRAGMA synchronous"), SYNCHRONOUS_FULL)
+            null
+        }
+
+        initializeDurable: () => {
+            configureDurable()
+            execute("CREATE TABLE IF NOT EXISTS entries(value INTEGER NOT NULL)")
+            execute("CREATE TABLE IF NOT EXISTS operation_receipts (client_id INTEGER NOT NULL, operation_id INTEGER NOT NULL, value INTEGER NOT NULL, PRIMARY KEY (client_id, operation_id))")
+            null
+        }
+
+        // At most one effect per durable key. The entry and its receipt commit in
+        // one SQLite transaction. Answers APPLIED, REPLAYED (same key, same
+        // value; no write), CONFLICT (same key, other value; no write) with the
+        // persisted value, or BUSY when BEGIN IMMEDIATE could not obtain the
+        // write lock (no transaction began, nothing was written). Any other
+        // failure signals an Error; see `hazard` for the session afterwards.
+        applyOnce: (clientId, operationId, value, beforeCommit, afterCommit) => {
+            requireId(clientId)
+            requireId(operationId)
+            isI64(value).ifFalse(() => { fail() })
+            requireWritable()
+            // sqlite3_finalize repeats a failed step's code, so a BUSY BEGIN is
+            // signalled from the body (its finalize status is then not
+            // re-reported) and recognized through `busy`.
+            busy: false
+            beginFailed: false
+            Error.handle(() => {
+                run("BEGIN IMMEDIATE", (handle) => {
+                    code: step(handle)
+                    if(code == SQLITE_BUSY) { busy = true }
+                    check(code, SQLITE_DONE)
+                    null
+                })
+            }, (error) => {
+                beginFailed = true
+            })
+            if(beginFailed && !busy) { fail() }
+            result: null
+            if(busy) {
+                result = outcome("BUSY", null)
+            } else {
+                committing: false
+                committed: false
+                failed: false
+                Error.handle(() => {
+                    existing: receiptValue(clientId, operationId)
+                    if(existing === null) {
+                        insertEntry(value)
+                        insertReceipt(clientId, operationId, value)
+                        if(beforeCommit !== null) { beforeCommit() }
+                        committing = true
+                        execute("COMMIT")
+                        committed = true
+                        result = outcome("APPLIED", value)
+                    } else {
+                        if(existing == value) {
+                            result = outcome("REPLAYED", existing)
+                        } else {
+                            result = outcome("CONFLICT", existing)
+                        }
+                        // Read-only transaction: nothing was written.
+                        execute("ROLLBACK")
+                    }
+                }, (error) => {
+                    failed = true
+                })
+                if(failed) {
+                    if(committing) {
+                        // COMMIT was attempted: its outcome is not established.
+                        // No rollback is claimed and no retry is attempted.
+                        hazard = "RECONCILE_REQUIRED"
+                    } else {
+                        rolledBack: false
+                        Error.handle(() => {
+                            if(inTransaction()) { execute("ROLLBACK") }
+                            rolledBack = !inTransaction()
+                        }, (error) => {
+                            rolledBack = false
+                        })
+                        if(!rolledBack) { hazard = "BROKEN" }
+                    }
+                    fail()
+                }
+                if(committed && (afterCommit !== null)) {
+                    hookFailed: false
+                    Error.handle(() => {
+                        afterCommit()
+                    }, (error) => {
+                        hookFailed = true
+                    })
+                    if(hookFailed) {
+                        // Committed but never acknowledged: reconcile first.
+                        hazard = "RECONCILE_REQUIRED"
+                        fail()
+                    }
+                }
+            }
+            result
+        }
+
+        // PLAT074-D3: one-time provisioning of a brand-new database. Refused
+        // when any schema object already exists (an existing identity is never
+        // overwritten and a populated database without one is never adopted).
+        provisionDatabaseIdentity: (identityHi, identityLo) => {
+            isI64(identityHi).ifFalse(() => { fail() })
+            isI64(identityLo).ifFalse(() => { fail() })
+            requireWritable()
+            execute("BEGIN IMMEDIATE")
+            committing: false
+            provisioned: false
+            Error.handle(() => {
+                (queryInteger("SELECT count(*) FROM sqlite_master") == 0).ifFalse(() => { fail() })
+                execute("CREATE TABLE IF NOT EXISTS database_identity (singleton INTEGER PRIMARY KEY CHECK(singleton = 1), identity_hi INTEGER NOT NULL, identity_lo INTEGER NOT NULL)")
+                run("INSERT INTO database_identity(singleton, identity_hi, identity_lo) VALUES (1, ?, ?)",
+                        (handle) => {
+                    check(bindInteger(handle, 1, identityHi), SQLITE_OK)
+                    check(bindInteger(handle, 2, identityLo), SQLITE_OK)
+                    check(step(handle), SQLITE_DONE)
+                    null
+                })
+                committing = true
+                execute("COMMIT")
+                provisioned = true
+            }, (error) => {
+                provisioned = false
+            })
+            if(!provisioned) {
+                if(committing) {
+                    // The provisioning COMMIT outcome is unknown: never claimed.
+                    hazard = "RECONCILE_REQUIRED"
+                } else {
+                    rolledBack: false
+                    Error.handle(() => {
+                        if(inTransaction()) { execute("ROLLBACK") }
+                        rolledBack = !inTransaction()
+                    }, (error) => {
+                        rolledBack = false
+                    })
+                    if(!rolledBack) { hazard = "BROKEN" }
+                }
+                fail()
+            }
+            null
+        }
+
+        // PLAT074-D3: read-only verification. Exactly one identity row whose
+        // two components equal the bootstrap pair; anything else signals.
+        requireDatabaseIdentity: (identityHi, identityLo) => {
+            isI64(identityHi).ifFalse(() => { fail() })
+            isI64(identityLo).ifFalse(() => { fail() })
+            requireOpen()
+            tables: queryInteger("SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'database_identity'")
+            (tables == 1).ifFalse(() => { fail() })
+            (queryInteger("SELECT count(*) FROM database_identity") == 1).ifFalse(() => { fail() })
+            matched: run("SELECT identity_hi, identity_lo FROM database_identity WHERE singleton = 1",
+                    (handle) => {
+                check(step(handle), SQLITE_ROW)
+                storedHi: columnInteger(handle, 0)
+                storedLo: columnInteger(handle, 1)
+                check(step(handle), SQLITE_DONE)
+                (storedHi == identityHi) && (storedLo == identityLo)
+            })
+            matched.ifFalse(() => { fail() })
+            null
+        }
+
+        lookupReceipt: (clientId, operationId) => {
+            requireId(clientId)
+            requireId(operationId)
+            requireOpen()
+            receiptValue(clientId, operationId)
+        }
+
         close: () => {
             handle: connection
             connection = null
@@ -144,11 +422,19 @@ _engine: (() => {
             integrityOk: () => {
                 queryInteger("SELECT count(*) FROM pragma_integrity_check WHERE integrity_check='ok'") == 1
             }
-            inTransaction: () => {
-                requireOpen()
-                getAutocommit(connection) == 0
-            }
+            inTransaction: inTransaction
             isOpen: () => connection !== null
+            // PLAT074-D2 durable identity operations (test-only).
+            configureDurable: configureDurable
+            initializeDurable: initializeDurable
+            applyOnce: applyOnce
+            lookupReceipt: lookupReceipt
+            receiptCount: () => queryInteger("SELECT count(*) FROM operation_receipts")
+            // PLAT074-D3 durable database identity (test-only).
+            provisionDatabaseIdentity: provisionDatabaseIdentity
+            requireDatabaseIdentity: requireDatabaseIdentity
+            // null, "RECONCILE_REQUIRED" or "BROKEN"; never a native value.
+            writeHazard: () => hazard
             close: close
         }
         operations.freeze()

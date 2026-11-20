@@ -1,0 +1,366 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// PLAT074-D2 experimental JSON Lines protocol, version 2. Test-only: neither a
+// normative protocol nor an approved production format. Version 1
+// (./Protocol.protos) is unchanged. This module owns no native authority and
+// never carries files, libraries, symbols, SQL or Protos code.
+//
+// `id` is transport correlation only and restarts with every helper process.
+// The durable operation identity is the pair (`clientId`, `operationId`).
+// UNCERTAIN is a client-local outcome (see ./durable-client-driver.protos); it
+// is never a helper status.
+//
+// PLAT074-D3 adds one experimental event, DATABASE_IDENTITY, published by a
+// D3 helper after READY. It carries the durable database identity pair that
+// the helper verified against SQLite. It does not authenticate the helper: it
+// lets the client check consistency between its bootstrap, the database and
+// the helper. It never carries a path or SQL.
+JSON: import("std:json/json")
+
+_durableProtocol: (() => {
+    version: 2
+    lineLimit: 4096
+    maxInteger: 9223372036854775807
+    minInteger: 0 - 9223372036854775807 - 1
+    requestFields: Array("version", "id", "clientId", "operationId", "op", "value")
+    responseFields: Array("version", "id", "status", "value", "reason")
+    readyFields: Array("version", "event")
+    identityFields: Array("version", "event", "identityHi", "identityLo")
+    // Durable key and value required.
+    keyedValueOperations: Array("APPLY_ONCE", "HOLD_BEFORE_COMMIT", "HOLD_AFTER_COMMIT")
+    // Durable key required, value forbidden.
+    keyedOperations: Array("LOOKUP")
+    // Key and value forbidden. HOLD_* and CONTINUE are test-only.
+    plainOperations: Array("PING", "INIT", "COUNT", "RECEIPTS", "SUM", "INTEGRITY", "CLOSE",
+        "STOP", "CONTINUE")
+    statuses: Array("APPLIED", "REPLAYED", "FOUND", "ABSENT", "CONFLICT", "OK", "ERROR")
+    // Statuses whose value is the persisted Integer of one durable key.
+    valuedStatuses: Array("APPLIED", "REPLAYED", "FOUND", "CONFLICT")
+    reasons: Array("MALFORMED", "OVERSIZED", "INVALID_VERSION", "INVALID_ID",
+        "UNSUPPORTED_OPERATION", "INVALID_IDENTITY", "INVALID_VALUE", "NON_INCREASING_ID",
+        "UNEXPECTED_CONTINUE", "CLOSED", "BUSY", "SQLITE_FAILURE", "RECONCILE_REQUIRED")
+
+    fail: () => {
+        Error().signal()
+    }
+
+    contains: (names, candidate) => {
+        found: false
+        for(name in names) {
+            if(name == candidate) { found = true }
+        }
+        found
+    }
+
+    isI64: (value) => {
+        result: false
+        if(Integer.recognizes(value)) {
+            result = (value >= minInteger) && (value <= maxInteger)
+        }
+        result
+    }
+
+    isId: (value) => {
+        result: false
+        if(isI64(value)) { result = value > 0 }
+        result
+    }
+
+    isOperation: (value) => {
+        result: false
+        if(String.recognizes(value)) {
+            result = contains(keyedValueOperations, value) || contains(keyedOperations, value) ||
+                contains(plainOperations, value)
+        }
+        result
+    }
+
+    needsKey: (operation) => contains(keyedValueOperations, operation) ||
+        contains(keyedOperations, operation)
+
+    needsValue: (operation) => contains(keyedValueOperations, operation)
+
+    withinLine: (text) => Encoding.UTF8.encode(text).size() <= lineLimit
+
+    requireExactObject: (node, names) => {
+        (node.kind === "object").ifFalse(() => { fail() })
+        (node.value.size() == names.size()).ifFalse(() => { fail() })
+        for(name in names) {
+            node.value.containsKey(name).ifFalse(() => { fail() })
+        }
+        node.value
+    }
+
+    // Exact JSON integer: Integer coefficient, exponent zero, signed 64-bit.
+    exactInteger: (node) => {
+        (node.kind === "number").ifFalse(() => { fail() })
+        coefficient: node.value.coefficient
+        Integer.recognizes(coefficient).ifFalse(() => { fail() })
+        (node.value.exponent == 0).ifFalse(() => { fail() })
+        isI64(coefficient).ifFalse(() => { fail() })
+        coefficient
+    }
+
+    nullOrInteger: (node) => {
+        copied: null
+        if(node.kind !== "null") { copied = exactInteger(node) }
+        copied
+    }
+
+    // A null-or-positive identifier: a present id must be positive.
+    nullOrId: (node) => {
+        copied: nullOrInteger(node)
+        if(copied !== null) { isId(copied).ifFalse(() => { fail() }) }
+        copied
+    }
+
+    stringValue: (node) => {
+        (node.kind === "string").ifFalse(() => { fail() })
+        node.value
+    }
+
+    integerNode: (value) => JSON.number(value, 0)
+
+    nullableIntegerNode: (value) => {
+        node: JSON.nullValue()
+        if(value !== null) {
+            isI64(value).ifFalse(() => { fail() })
+            node = integerNode(value)
+        }
+        node
+    }
+
+    encodeLine: (root) => {
+        text: JSON.encode(root)
+        withinLine(text).ifFalse(() => { fail() })
+        text
+    }
+
+    // Operation-specific shape: key and value present exactly when required.
+    requireShape: (operation, clientId, operationId, value) => {
+        if(needsKey(operation)) {
+            (isId(clientId) && isId(operationId)).ifFalse(() => { fail() })
+        } else {
+            ((clientId === null) && (operationId === null)).ifFalse(() => { fail() })
+        }
+        if(needsValue(operation)) {
+            isI64(value).ifFalse(() => { fail() })
+        } else {
+            (value === null).ifFalse(() => { fail() })
+        }
+    }
+
+    encodeRequest: (id, clientId, operationId, operation, value) => {
+        isId(id).ifFalse(() => { fail() })
+        isOperation(operation).ifFalse(() => { fail() })
+        if(clientId !== null) { isId(clientId).ifFalse(() => { fail() }) }
+        if(operationId !== null) { isId(operationId).ifFalse(() => { fail() }) }
+        if(value !== null) { isI64(value).ifFalse(() => { fail() }) }
+        requireShape(operation, clientId, operationId, value)
+        encodeLine(JSON.object("version", integerNode(version), "id", integerNode(id),
+            "clientId", nullableIntegerNode(clientId), "operationId", nullableIntegerNode(operationId),
+            "op", JSON.string(operation), "value", nullableIntegerNode(value)))
+    }
+
+    // Admission result: a fresh frozen object of copied, validated values. A
+    // rejection carries the transport id only when that id itself was valid.
+    decodeRequest: (text) => {
+        reason: "MALFORMED"
+        echoedId: null
+        admitted: null
+        Error.handle(() => {
+            String.recognizes(text).ifFalse(() => { fail() })
+            reason = "OVERSIZED"
+            withinLine(text).ifFalse(() => { fail() })
+            reason = "MALFORMED"
+            members: requireExactObject(JSON.parse(text), requestFields)
+            reason = "INVALID_VERSION"
+            (exactInteger(members["version"]) == version).ifFalse(() => { fail() })
+            reason = "INVALID_ID"
+            id: exactInteger(members["id"])
+            isId(id).ifFalse(() => { fail() })
+            echoedId = id
+            reason = "UNSUPPORTED_OPERATION"
+            operation: stringValue(members["op"])
+            isOperation(operation).ifFalse(() => { fail() })
+            reason = "INVALID_IDENTITY"
+            clientId: nullOrId(members["clientId"])
+            operationId: nullOrId(members["operationId"])
+            if(needsKey(operation)) {
+                ((clientId !== null) && (operationId !== null)).ifFalse(() => { fail() })
+            } else {
+                ((clientId === null) && (operationId === null)).ifFalse(() => { fail() })
+            }
+            reason = "INVALID_VALUE"
+            value: nullOrInteger(members["value"])
+            (needsValue(operation) == (value !== null)).ifFalse(() => { fail() })
+            admitted = {
+                admitted: true
+                id: id
+                clientId: clientId
+                operationId: operationId
+                operation: operation
+                value: value
+                reason: null
+            }
+        }, (error) => {
+            admitted = null
+        })
+        if(admitted === null) {
+            admitted = {
+                admitted: false
+                id: echoedId
+                clientId: null
+                operationId: null
+                operation: null
+                value: null
+                reason: reason
+            }
+        }
+        admitted.freeze()
+        admitted
+    }
+
+    // The single response contract shared by the encoder and the decoder.
+    requireResponseShape: (id, status, value, reason) => {
+        contains(statuses, status).ifFalse(() => { fail() })
+        if(id === null) {
+            (status == "ERROR").ifFalse(() => { fail() })
+        } else {
+            isId(id).ifFalse(() => { fail() })
+        }
+        if(status == "ERROR") {
+            (value === null).ifFalse(() => { fail() })
+            contains(reasons, reason).ifFalse(() => { fail() })
+        } else {
+            (reason === null).ifFalse(() => { fail() })
+            if(contains(valuedStatuses, status)) {
+                isI64(value).ifFalse(() => { fail() })
+            }
+            if(status == "ABSENT") {
+                (value === null).ifFalse(() => { fail() })
+            }
+            if(status == "OK") {
+                if(value !== null) {
+                    ((value === true) || (value === false) || isI64(value)).ifFalse(() => { fail() })
+                }
+            }
+        }
+    }
+
+    encodeResponse: (id, status, value, reason) => {
+        requireResponseShape(id, status, value, reason)
+        idNode: JSON.nullValue()
+        if(id !== null) { idNode = integerNode(id) }
+        valueNode: JSON.nullValue()
+        if(value !== null) {
+            if((value === true) || (value === false)) {
+                valueNode = JSON.boolean(value)
+            } else {
+                valueNode = integerNode(value)
+            }
+        }
+        reasonNode: JSON.nullValue()
+        if(reason !== null) { reasonNode = JSON.string(reason) }
+        encodeLine(JSON.object("version", integerNode(version), "id", idNode,
+            "status", JSON.string(status), "value", valueNode, "reason", reasonNode))
+    }
+
+    // Signals an Error for any response outside the D2 contract.
+    decodeResponse: (text) => {
+        String.recognizes(text).ifFalse(() => { fail() })
+        withinLine(text).ifFalse(() => { fail() })
+        members: requireExactObject(JSON.parse(text), responseFields)
+        (exactInteger(members["version"]) == version).ifFalse(() => { fail() })
+        status: stringValue(members["status"])
+        id: nullOrInteger(members["id"])
+        valueMember: members["value"]
+        value: null
+        if(valueMember.kind === "boolean") {
+            value = valueMember.value
+        } else {
+            value = nullOrInteger(valueMember)
+        }
+        reason: null
+        if(members["reason"].kind !== "null") { reason = stringValue(members["reason"]) }
+        requireResponseShape(id, status, value, reason)
+        response: {
+            id: id
+            status: status
+            value: value
+            reason: reason
+        }
+        response.freeze()
+        response
+    }
+
+    encodeReady: () => encodeLine(JSON.object("version", integerNode(version),
+        "event", JSON.string("READY")))
+
+    decodeReady: (text) => {
+        String.recognizes(text).ifFalse(() => { fail() })
+        withinLine(text).ifFalse(() => { fail() })
+        members: requireExactObject(JSON.parse(text), readyFields)
+        (exactInteger(members["version"]) == version).ifFalse(() => { fail() })
+        (stringValue(members["event"]) == "READY").ifFalse(() => { fail() })
+        true
+    }
+
+    encodeDatabaseIdentity: (identityHi, identityLo) => {
+        isI64(identityHi).ifFalse(() => { fail() })
+        isI64(identityLo).ifFalse(() => { fail() })
+        encodeLine(JSON.object("version", integerNode(version), "event", JSON.string("DATABASE_IDENTITY"),
+            "identityHi", integerNode(identityHi), "identityLo", integerNode(identityLo)))
+    }
+
+    // A fresh frozen object of the two copied, validated components; signals
+    // for anything outside the exact four-field event.
+    decodeDatabaseIdentity: (text) => {
+        String.recognizes(text).ifFalse(() => { fail() })
+        withinLine(text).ifFalse(() => { fail() })
+        members: requireExactObject(JSON.parse(text), identityFields)
+        (exactInteger(members["version"]) == version).ifFalse(() => { fail() })
+        (stringValue(members["event"]) == "DATABASE_IDENTITY").ifFalse(() => { fail() })
+        identity: {
+            identityHi: exactInteger(members["identityHi"])
+            identityLo: exactInteger(members["identityLo"])
+        }
+        identity.freeze()
+        identity
+    }
+
+    surface: {
+        encodeRequest: encodeRequest
+        decodeRequest: decodeRequest
+        encodeResponse: encodeResponse
+        decodeResponse: decodeResponse
+        encodeReady: encodeReady
+        decodeReady: decodeReady
+        encodeDatabaseIdentity: encodeDatabaseIdentity
+        decodeDatabaseIdentity: decodeDatabaseIdentity
+    }
+    surface.freeze()
+    surface
+})()
+
+encodeRequest: _durableProtocol.encodeRequest
+decodeRequest: _durableProtocol.decodeRequest
+encodeResponse: _durableProtocol.encodeResponse
+decodeResponse: _durableProtocol.decodeResponse
+encodeReady: _durableProtocol.encodeReady
+decodeReady: _durableProtocol.decodeReady
+encodeDatabaseIdentity: _durableProtocol.encodeDatabaseIdentity
+decodeDatabaseIdentity: _durableProtocol.decodeDatabaseIdentity

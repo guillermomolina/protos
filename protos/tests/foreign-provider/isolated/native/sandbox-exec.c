@@ -52,7 +52,7 @@
  *
  * Usage (every path absolute and canonical; nothing comes from helper IPC):
  *
- *   sandbox-exec [--require-abi N] [--abi-only]
+ *   sandbox-exec [--require-abi N] [--abi-only] [--expected-parent-pid PID]
  *       --db DIR --tmp DIR
  *       [--rx PATH]... [--ro PATH]... [--dev PATH]...
  *       [--env NAME=VALUE]...
@@ -79,6 +79,21 @@
  *          this launcher does not implement and is refused. Used by the
  *          refusal tests only; it can never weaken the profile.
  *   --abi-only  validates platform support only, then exits 0 without exec.
+ *   --expected-parent-pid PID  (PLAT074-D3, optional) parent-death custody:
+ *          before any Landlock state exists this process verifies that
+ *          getppid() is PID, sets prctl(PR_SET_PDEATHSIG, SIGKILL), reads it
+ *          back with PR_GET_PDEATHSIG, and verifies getppid() again (the parent
+ *          may have died between fork and prctl). The parent and the setting
+ *          are checked once more immediately before execve. The setting is
+ *          preserved across execve of this non-set-user-ID JVM and is never
+ *          weakened here: no handler can catch SIGKILL. It is an option of the
+ *          host that builds the process tree, never of helper IPC. Any failure
+ *          is SANDBOX_REFUSED PARENT_OWNERSHIP_FAILED before the JVM exists;
+ *          there is no fallback without it and no periodic PID polling.
+ *          Linux delivers the signal when the thread that forked this process
+ *          terminates (PR_SET_PDEATHSIG(2const)); see owner-exec.c. Absent the
+ *          option, D0-D2 behavior is unchanged. The Landlock profile is the
+ *          same with or without it.
  *
  * There is no unconfined fallback: any failure exits non-zero before execve.
  */
@@ -87,6 +102,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -177,6 +193,7 @@ struct ll_path_beneath_attr {
 #define EXIT_UNSUPPORTED 69 /* Landlock missing or ABI insufficient */
 #define EXIT_INSTALL 70     /* a rule, no_new_privs or the restriction failed */
 #define EXIT_EXEC 71        /* execve failed after the restriction */
+#define EXIT_OWNERSHIP 72   /* D3 parent-death custody could not be established */
 
 /* Rights a rule may grant on a non-directory inode. */
 #define FILE_RIGHTS (LL_FS_EXECUTE | LL_FS_WRITE_FILE | LL_FS_READ_FILE | \
@@ -379,6 +396,61 @@ static void validate(const char *executable) {
         refuse(EXIT_INVALID, "EXECUTABLE_IN_WRITE_ROOT", executable);
 }
 
+/* PLAT074-D3: the parent PID required by --expected-parent-pid; 0 = absent. */
+static long expected_parent;
+
+static void refuse_ownership(const char *detail) {
+    refuse(EXIT_OWNERSHIP, "PARENT_OWNERSHIP_FAILED", detail);
+}
+
+static long parse_parent(const char *text) {
+    char *end = NULL;
+    errno = 0;
+    long value = strtol(text, &end, 10);
+    if (errno != 0 || end == text || *end != '\0' || value <= 0 || value > INT_MAX)
+        refuse_ownership("INVALID_PID");
+    return value;
+}
+
+static void require_parent(const char *phase) {
+    long actual = (long)getppid();
+    if (actual != expected_parent) {
+        char text[96];
+        snprintf(text, sizeof text, "%s expected=%ld actual=%ld", phase, expected_parent, actual);
+        refuse_ownership(text);
+    }
+}
+
+static void require_parent_death_signal(const char *phase) {
+    int signal_number = 0;
+    if (prctl(PR_GET_PDEATHSIG, (unsigned long)&signal_number, 0UL, 0UL, 0UL) != 0) {
+        char text[64];
+        snprintf(text, sizeof text, "%s PR_GET_PDEATHSIG errno=%d", phase, errno);
+        refuse_ownership(text);
+    }
+    if (signal_number != SIGKILL) {
+        char text[64];
+        snprintf(text, sizeof text, "%s signal=%d", phase, signal_number);
+        refuse_ownership(text);
+    }
+}
+
+/* The documented order: verify the parent, set the signal in this (child)
+ * process, read it back, then verify the parent again so a parent that died
+ * before prctl is detected instead of silently leaving no custody. */
+static void install_parent_death_signal(void) {
+    require_parent("BEFORE_PDEATHSIG");
+    if (prctl(PR_SET_PDEATHSIG, (unsigned long)SIGKILL, 0UL, 0UL, 0UL) != 0) {
+        char text[64];
+        snprintf(text, sizeof text, "PR_SET_PDEATHSIG errno=%d", errno);
+        refuse_ownership(text);
+    }
+    require_parent_death_signal("AFTER_PDEATHSIG");
+    require_parent("AFTER_PDEATHSIG");
+    fprintf(stderr, "PARENT_OWNERSHIP_VERIFIED parent=%ld signal=SIGKILL\n", expected_parent);
+    fflush(stderr);
+}
+
 static long landlock_abi(void) {
     long abi = syscall(__NR_landlock_create_ruleset, NULL, 0, LL_CREATE_RULESET_VERSION);
     if (abi < 0) {
@@ -440,6 +512,9 @@ int main(int argc, char **argv) {
         const char *value = argv[++i];
         if (strcmp(option, "--require-abi") == 0) {
             required = parse_abi(value);
+        } else if (strcmp(option, "--expected-parent-pid") == 0) {
+            if (expected_parent != 0) refuse_ownership("DUPLICATE_OPTION");
+            expected_parent = parse_parent(value);
         } else if (strcmp(option, "--rx") == 0 || strcmp(option, "--ro") == 0 ||
                    strcmp(option, "--dev") == 0 || strcmp(option, "--db") == 0 ||
                    strcmp(option, "--tmp") == 0) {
@@ -451,6 +526,10 @@ int main(int argc, char **argv) {
         }
     }
     environment[environment_count] = NULL;
+
+    /* D3 custody first: no Landlock state, no JVM and no helper code exists
+     * until the parent-death signal is installed and verified. */
+    if (expected_parent != 0) install_parent_death_signal();
 
     /* Platform guarantee first: an insufficient ABI is UNSUPPORTED, not a
      * reason to install a weaker profile. */
@@ -506,6 +585,12 @@ int main(int argc, char **argv) {
     fprintf(stderr, "LANDLOCK_APPLIED\n");
     fprintf(stderr, "LANDLOCK_ABI %ld\n", abi);
     fflush(stderr);
+
+    /* Last check before the JVM exists: same parent, signal still SIGKILL. */
+    if (expected_parent != 0) {
+        require_parent_death_signal("BEFORE_EXEC");
+        require_parent("BEFORE_EXEC");
+    }
 
     execve(executable, &argv[separator + 1], environment);
     refuse_errno(EXIT_EXEC, "EXECVE_FAILED", executable);

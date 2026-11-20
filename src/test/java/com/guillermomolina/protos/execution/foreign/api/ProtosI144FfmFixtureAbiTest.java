@@ -3143,7 +3143,9 @@ class ProtosI144FfmFixtureAbiTest {
                         log.append(line).append('\n');
                     }
                     if (List.of("COMMITTED_BEFORE_ACK", "FRAMING_REJECTED", "COMMIT_ACK_WITHHELD",
-                            "ADMISSION_FAILED_CLOSED", "LANDLOCK_APPLIED").contains(line)
+                            "ADMISSION_FAILED_CLOSED", "LANDLOCK_APPLIED", "DURABLE_PRECOMMIT",
+                            "DURABLE_COMMITTED_BEFORE_ACK", "DURABLE_ACK_WITHHELD",
+                            "DURABLE_RECONCILE_REQUIRED", "DURABLE_SESSION_BROKEN").contains(line)
                             || line.startsWith("SANDBOX_REFUSED ")) events.offer(line);
                 }
             } catch (Exception failure) {
@@ -4276,6 +4278,1572 @@ class ProtosI144FfmFixtureAbiTest {
                             java.security.MessageDigest.getInstance("SHA-256").digest(content)));
         }
         return snapshot;
+    }
+
+    // ---- PLAT074-D2: durable operation identity, atomic receipts and uncertain-COMMIT
+    // reconciliation. isolated/durable-helper.protos runs under the D1-R1 Landlock launcher;
+    // the receipt table, the single-transaction apply, the v2 protocol and the client-side
+    // UNCERTAIN/reconciliation logic are Protos. JUnit only launches, relays opaque lines,
+    // kills and observes; raw JSON appears here only as adversarial vectors. Transport ids
+    // restart with every helper; the durable key is (clientId, operationId).
+
+    @Test
+    void d2T1DurableProtocolRejectsInvalidIdentityAndPayload() throws Exception {
+        runD0(() -> {
+            Process client = d2Client();
+            assertEquals("ADMITTED 5 101 7001 APPLY_ONCE 42", d0Client(client, "DECODE_REQUEST",
+                    d2Text(client, 5, "101", "7001", "APPLY_ONCE", "42")));
+            assertEquals("ADMITTED 1 null null PING null", d0Client(client, "DECODE_REQUEST",
+                    d2Text(client, 1, "null", "null", "PING", "null")));
+            assertEquals("ADMITTED 3 9223372036854775807 9223372036854775807 LOOKUP null",
+                    d0Client(client, "DECODE_REQUEST", d2Text(client, 3, Long.toString(Long.MAX_VALUE),
+                            Long.toString(Long.MAX_VALUE), "LOOKUP", "null")));
+            assertEquals("ADMITTED 4 1 1 APPLY_ONCE -9223372036854775808", d0Client(client,
+                    "DECODE_REQUEST", d2Text(client, 4, "1", "1", "APPLY_ONCE", Long.toString(Long.MIN_VALUE))));
+            // The Protos encoder refuses every request outside the v2 contract.
+            String[][] unencodable = {
+                {"0", "101", "7001", "APPLY_ONCE", "42"},
+                {"1", "0", "7001", "APPLY_ONCE", "42"},
+                {"1", "-101", "7001", "APPLY_ONCE", "42"},
+                {"1", "101", "null", "APPLY_ONCE", "42"},
+                {"1", "101", "7001", "APPLY_ONCE", "null"},
+                {"1", "101", "9223372036854775808", "APPLY_ONCE", "42"},
+                {"1", "101", "7001", "APPLY_ONCE", "9223372036854775808"},
+                {"1", "101", "7001", "PING", "null"},
+                {"1", "null", "null", "LOOKUP", "null"},
+                {"1", "101", "7001", "LOOKUP", "3"},
+                {"1", "null", "null", "EXEC", "null"},
+            };
+            for (String[] vector : unencodable) {
+                assertEquals("REJECTED", d0Client(client, "REQUEST", vector[0], vector[1], vector[2],
+                        vector[3], vector[4]), String.join(",", vector));
+            }
+            String[][] refused = {
+                {"{\"version\":2,", "REFUSED null MALFORMED"},
+                {d2Json("5", "101", "7001", "\"APPLY_ONCE\"", "42").replace("}", ",\"extra\":1}"),
+                    "REFUSED null MALFORMED"},
+                {"{\"version\":2,\"id\":5,\"operationId\":7001,\"op\":\"APPLY_ONCE\",\"value\":42}",
+                    "REFUSED null MALFORMED"},
+                {d2Json("5", "101", "7001", "\"APPLY_ONCE\"", "42").replace("\"version\":2", "\"version\":1"),
+                    "REFUSED null INVALID_VERSION"},
+                {d2Json("1.0", "101", "7001", "\"APPLY_ONCE\"", "42"), "REFUSED null INVALID_ID"},
+                {d2Json("-5", "101", "7001", "\"APPLY_ONCE\"", "42"), "REFUSED null INVALID_ID"},
+                {d2Json("9223372036854775808", "101", "7001", "\"APPLY_ONCE\"", "42"), "REFUSED null INVALID_ID"},
+                {d2Json("5", "101", "7001", "\"EXEC\"", "42"), "REFUSED 5 UNSUPPORTED_OPERATION"},
+                {d2Json("5", "101", "7001", "7", "42"), "REFUSED 5 UNSUPPORTED_OPERATION"},
+                {d2Json("5", "-101", "7001", "\"APPLY_ONCE\"", "42"), "REFUSED 5 INVALID_IDENTITY"},
+                {d2Json("5", "0", "7001", "\"APPLY_ONCE\"", "42"), "REFUSED 5 INVALID_IDENTITY"},
+                {d2Json("5", "\"101\"", "7001", "\"APPLY_ONCE\"", "42"), "REFUSED 5 INVALID_IDENTITY"},
+                {d2Json("5", "101.5", "7001", "\"APPLY_ONCE\"", "42"), "REFUSED 5 INVALID_IDENTITY"},
+                {d2Json("5", "101", "9223372036854775808", "\"APPLY_ONCE\"", "42"), "REFUSED 5 INVALID_IDENTITY"},
+                {d2Json("5", "null", "7001", "\"APPLY_ONCE\"", "42"), "REFUSED 5 INVALID_IDENTITY"},
+                {d2Json("5", "101", "null", "\"LOOKUP\"", "null"), "REFUSED 5 INVALID_IDENTITY"},
+                {d2Json("5", "101", "7001", "\"PING\"", "null"), "REFUSED 5 INVALID_IDENTITY"},
+                {d2Json("5", "101", "7001", "\"APPLY_ONCE\"", "1.5"), "REFUSED 5 INVALID_VALUE"},
+                {d2Json("5", "101", "7001", "\"APPLY_ONCE\"", "\"42\""), "REFUSED 5 INVALID_VALUE"},
+                {d2Json("5", "101", "7001", "\"APPLY_ONCE\"", "true"), "REFUSED 5 INVALID_VALUE"},
+                {d2Json("5", "101", "7001", "\"APPLY_ONCE\"", "null"), "REFUSED 5 INVALID_VALUE"},
+                {d2Json("5", "101", "7001", "\"APPLY_ONCE\"", "9223372036854775808"), "REFUSED 5 INVALID_VALUE"},
+                {d2Json("5", "101", "7001", "\"LOOKUP\"", "1"), "REFUSED 5 INVALID_VALUE"},
+                {d0Padded(d2Json("9", "null", "null", "\"PING\"", "null").replace("}", ""), 4097),
+                    "REFUSED null OVERSIZED"},
+            };
+            for (String[] vector : refused) {
+                assertEquals(vector[1], d0Client(client, "DECODE_REQUEST", vector[0]), vector[0]);
+            }
+            assertEquals("ADMITTED 9 null null PING null", d0Client(client, "DECODE_REQUEST",
+                    d0Padded(d2Json("9", "null", "null", "\"PING\"", "null").replace("}", ""), 4096)));
+            // Responses: exact correlation, status-specific value and fixed reasons.
+            String applied = d2Reply("5", "APPLIED", "42", "null");
+            assertEquals("ACCEPTED APPLIED 42 null", d0Client(client, "MATCH", "5", applied));
+            assertEquals("REJECTED", d0Client(client, "MATCH", "6", applied), "uncorrelated reply");
+            assertEquals("ACCEPTED ABSENT null null", d0Client(client, "MATCH", "5",
+                    d2Reply("5", "ABSENT", "null", "null")));
+            assertEquals("ACCEPTED FOUND 0 null", d0Client(client, "MATCH", "5", d2Reply("5", "FOUND", "0", "null")));
+            assertEquals("ACCEPTED ERROR null BUSY", d0Client(client, "MATCH", "5",
+                    d2Reply("5", "ERROR", "null", "\"BUSY\"")));
+            String[] rejectedResponses = {
+                d2Reply("5", "UNCERTAIN", "null", "null"),
+                d2Reply("5", "ABSENT", "0", "null"),
+                d2Reply("5", "FOUND", "null", "null"),
+                d2Reply("5", "APPLIED", "1.5", "null"),
+                d2Reply("5", "APPLIED", "42", "\"BUSY\""),
+                d2Reply("5", "ERROR", "null", "null"),
+                d2Reply("5", "ERROR", "1", "\"BUSY\""),
+                d2Reply("5", "ERROR", "null", "\"java.lang.IllegalStateException at 0x7f00\""),
+                d2Reply("5", "OK", "\"x\"", "null"),
+                d2Reply("null", "APPLIED", "42", "null"),
+                d2Reply("5", "APPLIED", "42", "null").replace("\"version\":2", "\"version\":1"),
+                d2Reply("5", "APPLIED", "42", "null").replace("}", ",\"extra\":0}"),
+                "",
+                "not json",
+            };
+            for (String response : rejectedResponses) {
+                assertEquals("REJECTED", d0Client(client, "MATCH", "5", response), response);
+            }
+            assertEquals("ACCEPTED", d0Client(client, "READY", "{\"version\":2,\"event\":\"READY\"}"));
+            assertEquals("REJECTED", d0Client(client, "READY", "{\"version\":1,\"event\":\"READY\"}"));
+            // Lost replies are client-local UNCERTAIN, tracked per durable key.
+            assertEquals("UNCERTAIN 101 7001 CONNECTION_LOST", d0Client(client, "LOST", "5", "101", "7001", "42"));
+            assertEquals("STATE UNCERTAIN", d0Client(client, "STATE", "101", "7001"));
+            assertEquals("STATE NONE", d0Client(client, "STATE", "101", "7002"));
+            assertEquals("REJECTED", d0Client(client, "RECONCILE", "1", "101", "7002"),
+                    "only an uncertain key is reconciled");
+            d0CloseClient(client);
+            return null;
+        });
+    }
+
+    @Test
+    void d2T2ApplyOncePersistsEntryAndReceiptAtomically() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d2-t2-");
+        Path db = root.resolve("d2.db");
+        runD0(() -> {
+            Process client = d2Client();
+            Process a = d2Helper(client, root, db);
+            d2Ok(client, a, 1, null, null, "INIT", null, "null");
+            d2Expect(client, a, 2, 101L, 7001L, "APPLY_ONCE", 42L, "APPLIED 42");
+            d2State(client, a, 3, 1, 1, 42);
+            d2Expect(client, a, 6, 101L, 7001L, "LOOKUP", null, "FOUND 42");
+            d2Ok(client, a, 7, null, null, "INTEGRITY", null, "true");
+            d2Ok(client, a, 8, null, null, "STOP", null, "null");
+            d0Exit(a);
+            Process b = d2Helper(client, root, db);
+            assertNotEquals(a.pid(), b.pid());
+            d2State(client, b, 1, 1, 1, 42);
+            d2Expect(client, b, 4, 101L, 7001L, "LOOKUP", null, "FOUND 42");
+            d2Ok(client, b, 5, null, null, "INTEGRITY", null, "true");
+            d2Ok(client, b, 6, null, null, "STOP", null, "null");
+            d0Exit(b);
+            d0CloseClient(client);
+            return null;
+        });
+    }
+
+    @Test
+    void d2T3SameKeyReplayAfterRestartDoesNotDuplicate() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d2-t3-");
+        Path db = root.resolve("d2.db");
+        runD0(() -> {
+            Process client = d2Client();
+            Process a = d2Helper(client, root, db);
+            d2Ok(client, a, 1, null, null, "INIT", null, "null");
+            d2Expect(client, a, 2, 101L, 7001L, "APPLY_ONCE", 42L, "APPLIED 42");
+            d2Ok(client, a, 3, null, null, "STOP", null, "null");
+            d0Exit(a);
+            for (int restart = 0; restart < 2; restart++) {
+                Process b = d2Helper(client, root, db);
+                d2Expect(client, b, 1, 101L, 7001L, "APPLY_ONCE", 42L, "REPLAYED 42");
+                d2State(client, b, 2, 1, 1, 42);
+                d2Ok(client, b, 5, null, null, "STOP", null, "null");
+                d0Exit(b);
+            }
+            d0CloseClient(client);
+            return null;
+        });
+    }
+
+    @Test
+    void d2T4ConflictingReplayIsRejectedWithoutWrite() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d2-t4-");
+        Path db = root.resolve("d2.db");
+        runD0(() -> {
+            Process client = d2Client();
+            Process a = d2Helper(client, root, db);
+            d2Ok(client, a, 1, null, null, "INIT", null, "null");
+            d2Expect(client, a, 2, 101L, 7001L, "APPLY_ONCE", 42L, "APPLIED 42");
+            d2Expect(client, a, 3, 101L, 7001L, "APPLY_ONCE", 43L, "CONFLICT 42");
+            d2Expect(client, a, 4, 101L, 7001L, "LOOKUP", null, "FOUND 42");
+            d2State(client, a, 5, 1, 1, 42);
+            d2Ok(client, a, 8, null, null, "STOP", null, "null");
+            d0Exit(a);
+            Process b = d2Helper(client, root, db);
+            d2Expect(client, b, 1, 101L, 7001L, "APPLY_ONCE", 43L, "CONFLICT 42");
+            d2Expect(client, b, 2, 101L, 7001L, "LOOKUP", null, "FOUND 42");
+            d2State(client, b, 3, 1, 1, 42);
+            d2Ok(client, b, 6, null, null, "INTEGRITY", null, "true");
+            d2Ok(client, b, 7, null, null, "STOP", null, "null");
+            d0Exit(b);
+            d0CloseClient(client);
+            return null;
+        });
+    }
+
+    @Test
+    void d2T5DifferentClientsMayUseSameOperationNumber() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d2-t5-");
+        Path db = root.resolve("d2.db");
+        runD0(() -> {
+            Process client = d2Client();
+            Process a = d2Helper(client, root, db);
+            d2Ok(client, a, 1, null, null, "INIT", null, "null");
+            d2Expect(client, a, 2, 101L, 7001L, "APPLY_ONCE", 10L, "APPLIED 10");
+            d2Expect(client, a, 3, 202L, 7001L, "APPLY_ONCE", 20L, "APPLIED 20");
+            d2State(client, a, 4, 2, 2, 30);
+            d2Ok(client, a, 7, null, null, "STOP", null, "null");
+            d0Exit(a);
+            Process b = d2Helper(client, root, db);
+            d2Expect(client, b, 1, 101L, 7001L, "LOOKUP", null, "FOUND 10");
+            d2Expect(client, b, 2, 202L, 7001L, "LOOKUP", null, "FOUND 20");
+            d2State(client, b, 3, 2, 2, 30);
+            d2Ok(client, b, 6, null, null, "STOP", null, "null");
+            d0Exit(b);
+            d0CloseClient(client);
+            return null;
+        });
+    }
+
+    @Test
+    void d2T6SameClientDistinctOperationIdsRemainIndependent() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d2-t6-");
+        Path db = root.resolve("d2.db");
+        runD0(() -> {
+            Process client = d2Client();
+            Process a = d2Helper(client, root, db);
+            d2Ok(client, a, 1, null, null, "INIT", null, "null");
+            d2Expect(client, a, 2, 101L, 1L, "APPLY_ONCE", 1L, "APPLIED 1");
+            d2Expect(client, a, 3, 101L, 2L, "APPLY_ONCE", 2L, "APPLIED 2");
+            d2Expect(client, a, 4, 101L, 3L, "APPLY_ONCE", 4L, "APPLIED 4");
+            d2Expect(client, a, 5, 101L, 2L, "APPLY_ONCE", 2L, "REPLAYED 2");
+            d2Expect(client, a, 6, 101L, 4L, "APPLY_ONCE", 8L, "APPLIED 8");
+            d2State(client, a, 7, 4, 4, 15);
+            d2Ok(client, a, 10, null, null, "STOP", null, "null");
+            d0Exit(a);
+            d0CloseClient(client);
+            return null;
+        });
+    }
+
+    @Test
+    void d2T7KilledBeforeCommitLeavesNoEntryOrReceipt() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d2-t7-");
+        Path db = root.resolve("d2.db");
+        runD0(() -> {
+            Process client = d2Client();
+            d2Initialize(client, root, db);
+            Process b = d2Helper(client, root, db);
+            d0Send(b, d2Text(client, 1, "101", "7001", "HOLD_BEFORE_COMMIT", "42"));
+            d0AwaitEvent(b, "DURABLE_PRECOMMIT");
+            assertEquals(null, d0Stdout.get(b).poll(), "no reply may precede COMMIT");
+            d0Kill(b);
+            assertEquals("UNCERTAIN 101 7001 CONNECTION_LOST", d0Client(client, "LOST", "1", "101", "7001", "42"));
+            // D3: d0Kill observed the source's exit 137; ABSENT is final only with that evidence.
+            assertEquals("TERMINATED 101 7001", d0Client(client, "SOURCE_TERMINATED", "101", "7001"));
+            Process c = d2Helper(client, root, db);
+            assertEquals("RESOLVED NOT_APPLIED null", d2Reconcile(client, c, 1, 101, 7001));
+            d2State(client, c, 2, 0, 0, 0);
+            d2Expect(client, c, 5, 101L, 7001L, "APPLY_ONCE", 42L, "APPLIED 42");
+            d2Expect(client, c, 6, 101L, 7001L, "APPLY_ONCE", 42L, "REPLAYED 42");
+            d2State(client, c, 7, 1, 1, 42);
+            d2Ok(client, c, 10, null, null, "INTEGRITY", null, "true");
+            d2Ok(client, c, 11, null, null, "STOP", null, "null");
+            d0Exit(c);
+            d0CloseClient(client);
+            return null;
+        });
+    }
+
+    @Test
+    void d2T8KilledAfterCommitBeforeAckReconcilesWithoutDuplicate() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d2-t8-");
+        Path db = root.resolve("d2.db");
+        runD0(() -> {
+            Process client = d2Client();
+            d2Initialize(client, root, db);
+            Process b = d2Helper(client, root, db);
+            d0Send(b, d2Text(client, 1, "101", "7001", "HOLD_AFTER_COMMIT", "42"));
+            d0AwaitEvent(b, "DURABLE_COMMITTED_BEFORE_ACK");
+            assertEquals(null, d0Stdout.get(b).poll(), "no acknowledgement may precede the continuation");
+            d0Kill(b);
+            assertEquals("UNCERTAIN 101 7001 CONNECTION_LOST", d0Client(client, "LOST", "1", "101", "7001", "42"));
+            assertEquals("STATE UNCERTAIN", d0Client(client, "STATE", "101", "7001"));
+            Process c = d2Helper(client, root, db);
+            assertEquals("RESOLVED COMMITTED 42", d2Reconcile(client, c, 1, 101, 7001));
+            assertEquals("STATE COMMITTED", d0Client(client, "STATE", "101", "7001"));
+            d2Expect(client, c, 2, 101L, 7001L, "APPLY_ONCE", 42L, "REPLAYED 42");
+            d2State(client, c, 3, 1, 1, 42);
+            d2Ok(client, c, 6, null, null, "INTEGRITY", null, "true");
+            d2Ok(client, c, 7, null, null, "STOP", null, "null");
+            d0Exit(c);
+            d0CloseClient(client);
+            return null;
+        });
+    }
+
+    @Test
+    void d2T9MissingReceiptCannotBeMistakenForZeroValue() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d2-t9-");
+        Path db = root.resolve("d2.db");
+        runD0(() -> {
+            Process client = d2Client();
+            Process a = d2Helper(client, root, db);
+            d2Ok(client, a, 1, null, null, "INIT", null, "null");
+            d2Expect(client, a, 2, 101L, 9001L, "LOOKUP", null, "ABSENT null");
+            d2Expect(client, a, 3, 101L, 9001L, "APPLY_ONCE", 0L, "APPLIED 0");
+            d2Expect(client, a, 4, 101L, 9001L, "LOOKUP", null, "FOUND 0");
+            d2Expect(client, a, 5, 101L, 9002L, "LOOKUP", null, "ABSENT null");
+            d2Ok(client, a, 6, null, null, "STOP", null, "null");
+            d0Exit(a);
+            Process b = d2Helper(client, root, db);
+            d2Expect(client, b, 1, 101L, 9001L, "LOOKUP", null, "FOUND 0");
+            d2Expect(client, b, 2, 101L, 9002L, "LOOKUP", null, "ABSENT null");
+            d2State(client, b, 3, 1, 1, 0);
+            d2Ok(client, b, 6, null, null, "STOP", null, "null");
+            d0Exit(b);
+            d0CloseClient(client);
+            return null;
+        });
+    }
+
+    @Test
+    void d2T10TwoConfinedHelpersCannotApplyTheSameKeyTwice() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d2-t10-");
+        Path db = root.resolve("d2.db");
+        runD0(() -> {
+            Process client = d2Client();
+            Process a = d2Helper(client, root, db);
+            Process b = d2Helper(client, root, db);
+            d2Ok(client, a, 1, null, null, "INIT", null, "null");
+            d2Ok(client, b, 1, null, null, "INIT", null, "null");
+            // A holds the RESERVED write lock inside its open transaction (observable event).
+            d0Send(a, d2Text(client, 2, "101", "7001", "HOLD_BEFORE_COMMIT", "42"));
+            d0AwaitEvent(a, "DURABLE_PRECOMMIT");
+            // B's BEGIN IMMEDIATE meets SQLITE_BUSY after its bounded native wait: no effect.
+            d2Expect(client, b, 2, 101L, 7001L, "APPLY_ONCE", 42L, "ERROR null BUSY");
+            assertEquals(null, d0Stdout.get(a).poll(), "A has not committed yet");
+            d0Send(a, d2Text(client, 3, "null", "null", "CONTINUE", "null"));
+            String reply = d0Next(a);
+            assertEquals("ACCEPTED APPLIED 42 null", d0Client(client, "MATCH", "2", reply), reply);
+            // Reconciliation by B: the key is already applied; no second effect.
+            d2Expect(client, b, 3, 101L, 7001L, "LOOKUP", null, "FOUND 42");
+            d2Expect(client, b, 4, 101L, 7001L, "APPLY_ONCE", 42L, "REPLAYED 42");
+            d2State(client, b, 5, 1, 1, 42);
+            d2State(client, a, 4, 1, 1, 42);
+            d2Ok(client, a, 7, null, null, "STOP", null, "null");
+            d2Ok(client, b, 8, null, null, "INTEGRITY", null, "true");
+            d2Ok(client, b, 9, null, null, "STOP", null, "null");
+            d0Exit(a);
+            d0Exit(b);
+            d0CloseClient(client);
+            return null;
+        });
+    }
+
+    @Test
+    void d2T11UnauthorizedProtocolCannotReachSqlite() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d2-t11-");
+        Path db = root.resolve("d2.db");
+        Path exterior = d1Dir("d2-t11-exterior-").resolve("outside.db");
+        runD0(() -> {
+            Process client = d2Client();
+            Process a = d2Helper(client, root, db);
+            d2Ok(client, a, 1, null, null, "INIT", null, "null");
+            d2Expect(client, a, 2, 101L, 1L, "APPLY_ONCE", 5L, "APPLIED 5");
+            long id = 3;
+            for (String operation : List.of("OPEN", "EXEC", "ATTACH", "LOAD", "VACUUM", "EVAL", "IMPORT",
+                    "BEGIN", "INSERT", "COMMIT", "COMMIT_HOLD_ACK", "CONTINUE_ACK", "sqlite3_exec",
+                    "sqlite3_load_extension", "libsqlite3.so", exterior.toString())) {
+                d0Raw(client, a, d2Json(Long.toString(id), "null", "null", "\"" + operation + "\"", "null"),
+                        "ACCEPTED " + id + " ERROR null UNSUPPORTED_OPERATION");
+                id++;
+            }
+            String[][] carried = {
+                {d2Json("ID", "101", "2", "\"APPLY_ONCE\"", "\"INSERT INTO entries VALUES (99)\""), "INVALID_VALUE"},
+                {d2Json("ID", "101", "2", "\"APPLY_ONCE\"", "\"ATTACH '" + exterior + "' AS x\""), "INVALID_VALUE"},
+                {d2Json("ID", "101", "2", "\"APPLY_ONCE\"", "\"Error().signal()\""), "INVALID_VALUE"},
+                {d2Json("ID", "\"" + exterior + "\"", "2", "\"APPLY_ONCE\"", "7"), "INVALID_IDENTITY"},
+                {d2Json("ID", "\"libsqlite3.so\"", "2", "\"LOOKUP\"", "null"), "INVALID_IDENTITY"},
+            };
+            for (String[] vector : carried) {
+                d0Raw(client, a, vector[0].replace("ID", Long.toString(id)),
+                        "ACCEPTED " + id + " ERROR null " + vector[1]);
+                id++;
+            }
+            d0Raw(client, a, d2Json(Long.toString(id), "101", "2", "\"APPLY_ONCE\"", "7")
+                    .replace("}", ",\"sql\":\"DROP TABLE entries\"}"), "ACCEPTED null ERROR null MALFORMED");
+            d0Raw(client, a, "{\"version\":1,\"id\":" + id + ",\"op\":\"INSERT\",\"value\":7}",
+                    "ACCEPTED null ERROR null MALFORMED");
+            d2Expect(client, a, id++, null, null, "CONTINUE", null, "ERROR null UNEXPECTED_CONTINUE");
+            d2State(client, a, id, 1, 1, 5);
+            id += 3;
+            String limit = d0Padded(d2Json(Long.toString(id), "null", "null", "\"COUNT\"", "null")
+                    .replace("}", ""), 4096);
+            d0Raw(client, a, limit, "ACCEPTED " + id + " OK 1 null");
+            id++;
+            d0Send(a, d0Padded(d2Json(Long.toString(id), "101", "3", "\"APPLY_ONCE\"", "7").replace("}", ""), 4097));
+            d0AwaitEvent(a, "FRAMING_REJECTED");
+            assertEquals(D0_EOF, d0Next(a), "an oversized line must never receive a reply");
+            assertTrue(a.waitFor(30, TimeUnit.SECONDS), "fail-closed helper termination timeout");
+            assertNotEquals(0, a.exitValue(), "framing failure must not be a clean protocol exit");
+            assertFalse(Files.exists(exterior), "no request may create or open an exterior path");
+            Process b = d2Helper(client, root, db);
+            d2State(client, b, 1, 1, 1, 5);
+            d2Expect(client, b, 4, 101L, 2L, "LOOKUP", null, "ABSENT null");
+            d2Expect(client, b, 5, 101L, 3L, "LOOKUP", null, "ABSENT null");
+            d2Ok(client, b, 6, null, null, "INTEGRITY", null, "true");
+            d2Ok(client, b, 7, null, null, "STOP", null, "null");
+            d0Exit(b);
+            assertFalse(Files.exists(exterior));
+            d0CloseClient(client);
+            return null;
+        });
+    }
+
+    @Test
+    void d2T12FailedOrInterruptedWriteNeverCreatesOrphanReceipt() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d2-t12-");
+        Path db = root.resolve("d2.db");
+        runD0(() -> {
+            Process client = d2Client();
+            Process a = d2Helper(client, root, db);
+            d2Ok(client, a, 1, null, null, "INIT", null, "null");
+            d2Expect(client, a, 2, 101L, 1L, "APPLY_ONCE", 7L, "APPLIED 7");
+            d2Ok(client, a, 3, null, null, "STOP", null, "null");
+            d0Exit(a);
+            // Interruption 1: SIGKILL while the entry and receipt are written but uncommitted.
+            Process b = d2Helper(client, root, db);
+            d0Send(b, d2Text(client, 1, "101", "2", "HOLD_BEFORE_COMMIT", "9"));
+            d0AwaitEvent(b, "DURABLE_PRECOMMIT");
+            d0Kill(b);
+            // Interruption 2: an invalid continuation; the helper rolls back, withholds any
+            // reply and fails closed.
+            Process c = d2Helper(client, root, db);
+            d0Send(c, d2Text(client, 1, "101", "3", "HOLD_BEFORE_COMMIT", "11"));
+            d0AwaitEvent(c, "DURABLE_PRECOMMIT");
+            d0Send(c, d2Text(client, 2, "null", "null", "PING", "null"));
+            d0AwaitEvent(c, "DURABLE_ACK_WITHHELD");
+            assertEquals(D0_EOF, d0Next(c), "an interrupted write must never be acknowledged");
+            assertTrue(c.waitFor(30, TimeUnit.SECONDS), "fail-closed helper termination timeout");
+            assertNotEquals(0, c.exitValue());
+            // Entries and receipts agree exactly: neither an orphan receipt nor an unkeyed entry.
+            Process d = d2Helper(client, root, db);
+            d2Expect(client, d, 1, 101L, 1L, "LOOKUP", null, "FOUND 7");
+            d2Expect(client, d, 2, 101L, 2L, "LOOKUP", null, "ABSENT null");
+            d2Expect(client, d, 3, 101L, 3L, "LOOKUP", null, "ABSENT null");
+            d2State(client, d, 4, 1, 1, 7);
+            d2Ok(client, d, 7, null, null, "INTEGRITY", null, "true");
+            d2Ok(client, d, 8, null, null, "STOP", null, "null");
+            d0Exit(d);
+            d0CloseClient(client);
+            return null;
+        });
+    }
+
+    @Test
+    void d2T13TransportIdsAreNotDurableOperationIds() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d2-t13-");
+        Path db = root.resolve("d2.db");
+        runD0(() -> {
+            Process client = d2Client();
+            Process a = d2Helper(client, root, db);
+            d2Ok(client, a, 1, null, null, "INIT", null, "null");
+            d2Expect(client, a, 2, 101L, 7001L, "APPLY_ONCE", 42L, "APPLIED 42");
+            d2Expect(client, a, 3, 101L, 7001L, "APPLY_ONCE", 42L, "REPLAYED 42");
+            d2Expect(client, a, 7, 101L, 7001L, "APPLY_ONCE", 42L, "REPLAYED 42");
+            d2Expect(client, a, 7001, 101L, 7001L, "APPLY_ONCE", 42L, "REPLAYED 42");
+            // A repeated transport id is a transport error, never a durable decision.
+            d2Expect(client, a, 7001, 101L, 7002L, "APPLY_ONCE", 1L, "ERROR null NON_INCREASING_ID");
+            d2State(client, a, 7002, 1, 1, 42);
+            d2Ok(client, a, 7005, null, null, "STOP", null, "null");
+            d0Exit(a);
+            // The transport counter restarts at 1; the durable identity is unchanged.
+            Process b = d2Helper(client, root, db);
+            d2Expect(client, b, 1, 101L, 7001L, "APPLY_ONCE", 42L, "REPLAYED 42");
+            d2Expect(client, b, 2, 101L, 2L, "LOOKUP", null, "ABSENT null");
+            d2State(client, b, 3, 1, 1, 42);
+            d2Ok(client, b, 6, null, null, "STOP", null, "null");
+            d0Exit(b);
+            d0CloseClient(client);
+            return null;
+        });
+    }
+
+    @Test
+    void d2T14DurableCloseRevokesConnectionCustody() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d2-t14-");
+        Path db = root.resolve("d2.db");
+        runD0(() -> {
+            Process client = d2Client();
+            Process a = d2Helper(client, root, db);
+            d2Ok(client, a, 1, null, null, "INIT", null, "null");
+            d2Expect(client, a, 2, 101L, 1L, "APPLY_ONCE", 5L, "APPLIED 5");
+            assertEquals(0, a.toHandle().descendants().count(), "the confined helper spawns no process");
+            d2Ok(client, a, 3, null, null, "CLOSE", null, "null");
+            d2Expect(client, a, 4, 101L, 2L, "APPLY_ONCE", 6L, "ERROR null CLOSED");
+            d2Expect(client, a, 5, 101L, 1L, "LOOKUP", null, "ERROR null CLOSED");
+            d2Expect(client, a, 6, null, null, "INIT", null, "ERROR null CLOSED");
+            d2Expect(client, a, 7, null, null, "COUNT", null, "ERROR null CLOSED");
+            d2Expect(client, a, 8, 101L, 3L, "HOLD_AFTER_COMMIT", 1L, "ERROR null CLOSED");
+            d2Ok(client, a, 9, null, null, "CLOSE", null, "null");
+            d2Expect(client, a, 10, null, null, "RECEIPTS", null, "ERROR null CLOSED");
+            d2Ok(client, a, 11, null, null, "STOP", null, "null");
+            d0Exit(a);
+            assertFalse(ProcessHandle.of(a.pid()).map(ProcessHandle::isAlive).orElse(false),
+                    "no surviving helper process");
+            assertEquals(List.of("d2.db"), directoryNames(root), "no journal survives a clean close");
+            Process b = d2Helper(client, root, db);
+            d2Expect(client, b, 1, 101L, 1L, "LOOKUP", null, "FOUND 5");
+            d2Expect(client, b, 2, 101L, 2L, "LOOKUP", null, "ABSENT null");
+            d2State(client, b, 3, 1, 1, 5);
+            d2Ok(client, b, 6, null, null, "STOP", null, "null");
+            d0Exit(b);
+            for (Process child : d0Stdout.keySet()) {
+                if (child != client) assertFalse(child.isAlive(), "PID=" + child.pid() + " survived");
+            }
+            d0CloseClient(client);
+            return null;
+        });
+    }
+
+    @Test
+    void d2T15UncertainReplyNeverMeansConfirmedRollback() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d2-t15-");
+        Path db = root.resolve("d2.db");
+        runD0(() -> {
+            Process client = d2Client();
+            d2Initialize(client, root, db);
+            Process b = d2Helper(client, root, db);
+            d0Send(b, d2Text(client, 1, "101", "7001", "HOLD_AFTER_COMMIT", "42"));
+            d0AwaitEvent(b, "DURABLE_COMMITTED_BEFORE_ACK");
+            // The channel is lost after COMMIT: EOF instead of a continuation.
+            b.getOutputStream().close();
+            d0AwaitEvent(b, "DURABLE_ACK_WITHHELD");
+            assertEquals(D0_EOF, d0Next(b), "a withheld acknowledgement is never sent");
+            assertTrue(b.waitFor(30, TimeUnit.SECONDS), "fail-closed helper termination timeout");
+            assertNotEquals(0, b.exitValue());
+            // EOF is neither a decodable ERROR nor a rollback: the key stays UNCERTAIN.
+            assertEquals("REJECTED", d0Client(client, "MATCH", "1", ""));
+            assertEquals("UNCERTAIN 101 7001 CONNECTION_LOST", d0Client(client, "LOST", "1", "101", "7001", "42"));
+            assertEquals("STATE UNCERTAIN", d0Client(client, "STATE", "101", "7001"));
+            Process c = d2Helper(client, root, db);
+            // A non-LOOKUP reply cannot resolve it either.
+            assertEquals("TEXT ", d0Client(client, "RECONCILE", "1", "101", "7001").substring(0, 5));
+            assertEquals("REJECTED", d0Client(client, "RESOLVE", "1", d2Reply("1", "ERROR", "null", "\"BUSY\"")));
+            assertEquals("STATE UNCERTAIN", d0Client(client, "STATE", "101", "7001"));
+            assertEquals("RESOLVED COMMITTED 42", d2Reconcile(client, c, 2, 101, 7001));
+            d2State(client, c, 3, 1, 1, 42);
+            d2Ok(client, c, 6, null, null, "STOP", null, "null");
+            d0Exit(c);
+            d0CloseClient(client);
+            return null;
+        });
+    }
+
+    @Test
+    void d2T16ConflictAfterUncertainCommitCannotOverwriteReceipt() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d2-t16-");
+        Path db = root.resolve("d2.db");
+        runD0(() -> {
+            Process client = d2Client();
+            d2Initialize(client, root, db);
+            Process b = d2Helper(client, root, db);
+            d0Send(b, d2Text(client, 1, "101", "7001", "HOLD_AFTER_COMMIT", "42"));
+            d0AwaitEvent(b, "DURABLE_COMMITTED_BEFORE_ACK");
+            d0Kill(b);
+            assertEquals("UNCERTAIN 101 7001 CONNECTION_LOST", d0Client(client, "LOST", "1", "101", "7001", "42"));
+            for (int restart = 0; restart < 2; restart++) {
+                Process c = d2Helper(client, root, db);
+                d2Expect(client, c, 1, 101L, 7001L, "APPLY_ONCE", 99L, "CONFLICT 42");
+                d2Expect(client, c, 2, 101L, 7001L, "LOOKUP", null, "FOUND 42");
+                d2State(client, c, 3, 1, 1, 42);
+                d2Ok(client, c, 6, null, null, "INTEGRITY", null, "true");
+                d2Ok(client, c, 7, null, null, "STOP", null, "null");
+                d0Exit(c);
+            }
+            d0CloseClient(client);
+            return null;
+        });
+    }
+
+    /** The Protos durable client driver: builds v2 requests and validates replies; no provider. */
+    private static Process d2Client() throws Exception {
+        return d0Launch(D0.resolve("durable-client-driver.protos"), false);
+    }
+
+    /**
+     * A durable helper behind the D1-R1 launcher: the full ABI 10 profile and LANDLOCK_APPLIED must
+     * precede the Protos v2 READY event, which the Protos client validates.
+     */
+    private static Process d2Helper(Process client, Path grant, Path db) throws Exception {
+        assertTrue(db.isAbsolute(), "D2 database path must be absolute");
+        Process helper = d1Launch(grant, List.of(), D0.resolve("durable-helper.protos"), db.toString());
+        d0AwaitEvent(helper, "LANDLOCK_APPLIED");
+        String log;
+        synchronized (d0Logs.get(helper)) { log = d0Logs.get(helper).toString(); }
+        assertTrue(log.contains(D1R1_PROFILE + "\n"), log);
+        assertEquals("ACCEPTED", d0Client(client, "READY", d0Next(helper)),
+                "the confined durable helper must publish the Protos v2 READY event first");
+        return helper;
+    }
+
+    /** Creates the durable schema in one confined helper and stops it cleanly. */
+    private static void d2Initialize(Process client, Path grant, Path db) throws Exception {
+        Process helper = d2Helper(client, grant, db);
+        d2Ok(client, helper, 1, null, null, "INIT", null, "null");
+        d2Ok(client, helper, 2, null, null, "STOP", null, "null");
+        d0Exit(helper);
+    }
+
+    private static String d2Scalar(Long value) {
+        return value == null ? "null" : Long.toString(value);
+    }
+
+    /** One v2 request line, built by the Protos driver. */
+    private static String d2Text(Process client, long id, String clientId, String operationId,
+            String operation, String value) throws Exception {
+        String reply = d0Client(client, "REQUEST", Long.toString(id), clientId, operationId, operation, value);
+        assertTrue(reply.startsWith("TEXT "), reply);
+        return reply.substring("TEXT ".length());
+    }
+
+    /** Protos builds the request; the reply is correlated and decoded by the Protos client. */
+    private static void d2Expect(Process client, Process helper, long id, Long clientId, Long operationId,
+            String operation, Long value, String expected) throws Exception {
+        d0Send(helper, d2Text(client, id, d2Scalar(clientId), d2Scalar(operationId), operation, d2Scalar(value)));
+        String reply = d0Next(helper);
+        assertNotEquals(D0_EOF, reply, "helper closed stdout before replying to " + operation);
+        String[] parts = expected.split(" ");
+        String full = parts.length == 2 ? "ACCEPTED " + expected + " null" : "ACCEPTED " + expected;
+        assertEquals(full, d0Client(client, "MATCH", Long.toString(id), reply), reply);
+    }
+
+    private static void d2Ok(Process client, Process helper, long id, Long clientId, Long operationId,
+            String operation, Long value, String result) throws Exception {
+        d2Expect(client, helper, id, clientId, operationId, operation, value, "OK " + result);
+    }
+
+    /** COUNT, RECEIPTS and SUM with transport ids {@code id}, {@code id + 1}, {@code id + 2}. */
+    private static void d2State(Process client, Process helper, long id, long entries, long receipts, long sum)
+            throws Exception {
+        d2Ok(client, helper, id, null, null, "COUNT", null, Long.toString(entries));
+        d2Ok(client, helper, id + 1, null, null, "RECEIPTS", null, Long.toString(receipts));
+        d2Ok(client, helper, id + 2, null, null, "SUM", null, Long.toString(sum));
+    }
+
+    /** The Protos client prepares the LOOKUP for an uncertain key and resolves its reply. */
+    private static String d2Reconcile(Process client, Process helper, long id, long clientId, long operationId)
+            throws Exception {
+        String request = d0Client(client, "RECONCILE", Long.toString(id), Long.toString(clientId),
+                Long.toString(operationId));
+        assertTrue(request.startsWith("TEXT "), request);
+        d0Send(helper, request.substring("TEXT ".length()));
+        String reply = d0Next(helper);
+        assertNotEquals(D0_EOF, reply, "helper closed stdout before answering the reconciliation");
+        return d0Client(client, "RESOLVE", Long.toString(id), reply);
+    }
+
+    /** A raw adversarial v2 request object; every argument is inserted verbatim. */
+    private static String d2Json(String id, String clientId, String operationId, String operation, String value) {
+        return "{\"version\":2,\"id\":" + id + ",\"clientId\":" + clientId + ",\"operationId\":" + operationId
+                + ",\"op\":" + operation + ",\"value\":" + value + "}";
+    }
+
+    /** A raw v2 response object for client-side validation vectors. */
+    private static String d2Reply(String id, String status, String value, String reason) {
+        return "{\"version\":2,\"id\":" + id + ",\"status\":\"" + status + "\",\"value\":" + value
+                + ",\"reason\":" + reason + "}";
+    }
+
+    // ---- PLAT074-D3: OS parent custody of the helper and verified reconciliation.
+    // isolated/native/owner-exec.c (test fixture only) forks the D1-R1 launcher with
+    // --expected-parent-pid and then execve()s the Protos client JVM in the same process, so the
+    // client is the helper's OS parent, and stdin/stdout link the two Protos JVMs directly. The
+    // launcher sets PR_SET_PDEATHSIG(SIGKILL) before Landlock and before the helper JVM exists.
+    // JUnit only sees stderr: it builds no protocol line for the session and relays nothing.
+    // Process liveness is read from /proc (state and start time), so a zombie or a reused PID is
+    // never mistaken for a helper that still executes code. All D3 claims are experimental.
+
+    private static final String D3_SESSION = "durable-session-client.protos";
+    private static final int D3_SIGKILL = 9;
+    private static final int D3_SIGSTOP = 19;
+    private static Path d3OwnerExec;
+    private static final List<D3Pid> d3Helpers = new ArrayList<>();
+
+    /** One observed process: its PID and its /proc start time, which detects PID reuse. */
+    private record D3Pid(long pid, String startTime) {}
+
+    /** A session: the owner/client process launched by JUnit and its forked helper. */
+    private record D3Session(Process client, D3Pid helper) {}
+
+    @Test
+    void d3T1ParentOwnershipIsEstablishedBeforeJvmStartup() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d3-t1-");
+        Path db = root.resolve("d3.db");
+        runD3(() -> {
+            Process driver = d3Driver(11, 12);
+            d3Provision(driver, root, db, 11, 12);
+            D3Session session = d3Session(root, db, 11, 12, "HOLD_AFTER_READY", 11, 12);
+            Process client = session.client();
+            D3Pid helper = session.helper();
+            d3Await(client, "CLIENT_READY");
+            assertNotEquals(client.pid(), helper.pid(), "client and helper are distinct OS processes");
+            assertEquals(client.pid(), d3Parent(helper), "the Protos client JVM is the helper's OS parent");
+            assertTrue(client.toHandle().children().anyMatch(child -> child.pid() == helper.pid()));
+            assertEquals(ProcessHandle.current().pid(),
+                    client.toHandle().parent().map(ProcessHandle::pid).orElse(-1L));
+            // owner-exec and sandbox-exec were replaced by execve: both are Protos CLI JVMs now.
+            String clientCommand = d3Command(client.pid());
+            String helperCommand = d3Command(helper.pid());
+            assertTrue(clientCommand.contains("com.guillermomolina.protos.cli.ProtosCli")
+                    && clientCommand.contains(D3_SESSION), clientCommand);
+            assertTrue(helperCommand.contains("com.guillermomolina.protos.cli.ProtosCli")
+                    && helperCommand.contains("durable-helper.protos"), helperCommand);
+            assertFalse(helperCommand.contains("sandbox-exec") || helperCommand.contains("owner-exec"),
+                    helperCommand);
+            // The launcher verified this very parent and SIGKILL before the profile and the JVM.
+            String log = d3Log(client);
+            String verified = "PARENT_OWNERSHIP_VERIFIED parent=" + client.pid() + " signal=SIGKILL\n";
+            assertTrue(log.contains(verified), log);
+            assertTrue(log.indexOf(verified) < log.indexOf(D1R1_PROFILE + "\n"), log);
+            assertTrue(log.indexOf(D1R1_PROFILE + "\n") < log.indexOf("LANDLOCK_APPLIED\n"), log);
+            assertTrue(log.indexOf("LANDLOCK_APPLIED\n") < log.indexOf("CLIENT_READY\n"), log);
+            d3KillClient(session);
+            return null;
+        });
+    }
+
+    @Test
+    void d3T2DirectProtosToProtosCommunication() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d3-t2-");
+        Path db = root.resolve("d3.db");
+        runD3(() -> {
+            Process driver = d3Driver(13, 14);
+            d3Provision(driver, root, db, 13, 14);
+            D3Session session = d3Session(root, db, 13, 14, "NORMAL", 13, 14);
+            Process client = session.client();
+            d3Await(client, "CLIENT_READY");
+            d3Await(client, "CLIENT_APPLY APPLIED");
+            d3Await(client, "CLIENT_LOOKUP FOUND");
+            d3Await(client, "CLIENT_STOPPED");
+            assertTrue(client.waitFor(60, TimeUnit.SECONDS), "client termination timeout");
+            assertEquals(0, client.exitValue(), d3Log(client));
+            // JUnit never had a data channel: its stdout pipe was replaced in both processes.
+            assertEquals(D0_EOF, d0Next(client), "no protocol line may reach the harness");
+            assertTrue(d3AwaitGone(session.helper(), 30), "the stopped helper must terminate");
+            // INIT, APPLY_ONCE and STOP were executed: verified by an independent restricted helper.
+            Process check = d3Helper(driver, root, db, 13, 14, false);
+            d2Expect(driver, check, 1, 301L, 9001L, "LOOKUP", null, "FOUND 77");
+            d2State(driver, check, 2, 1, 1, 77);
+            d2Ok(driver, check, 5, null, null, "INTEGRITY", null, "true");
+            d2Ok(driver, check, 6, null, null, "STOP", null, "null");
+            d0Exit(check);
+            d0CloseClient(driver);
+            return null;
+        });
+    }
+
+    @Test
+    void d3T3ParentDeathSignalSurvivesExecve() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d3-t3-");
+        Path db = root.resolve("d3.db");
+        runD3(() -> {
+            Process driver = d3Driver(15, 16);
+            d3Provision(driver, root, db, 15, 16);
+            D3Session session = d3Session(root, db, 15, 16, "HOLD_AFTER_READY", 15, 16);
+            Process client = session.client();
+            D3Pid helper = session.helper();
+            d3Await(client, "CLIENT_READY");
+            String log = d3Log(client);
+            assertTrue(log.indexOf("PARENT_OWNERSHIP_VERIFIED parent=" + client.pid())
+                    < log.indexOf("LANDLOCK_APPLIED\n"), "SIGKILL custody must precede the exec: " + log);
+            assertTrue(d3Command(helper.pid()).contains("durable-helper.protos"),
+                    "the helper image is the exec'd JVM");
+            // A stopped helper cannot execute code, so it can never observe EOF: only a signal can
+            // end it. SIGKILL also terminates stopped tasks.
+            d3Signal(helper, D3_SIGSTOP);
+            d3AwaitState(helper, "T");
+            client.destroyForcibly();
+            assertTrue(client.waitFor(30, TimeUnit.SECONDS), "client SIGKILL timeout");
+            assertEquals(137, client.exitValue());
+            assertTrue(d3AwaitGone(helper, 30),
+                    "a stopped helper must be ended by the parent-death SIGKILL, state=" + d3State(helper));
+            return null;
+        });
+    }
+
+    @Test
+    void d3T4ClientSigkillTerminatesIdleHelper() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d3-t4-");
+        Path db = root.resolve("d3.db");
+        runD3(() -> {
+            Process driver = d3Driver(17, 18);
+            d3Provision(driver, root, db, 17, 18);
+            D3Session session = d3Session(root, db, 17, 18, "HOLD_AFTER_READY", 17, 18);
+            d3Await(session.client(), "CLIENT_READY");
+            assertTrue(d3Running(session.helper()), "the idle helper must be running before the kill");
+            d3KillClient(session);
+            return null;
+        });
+    }
+
+    @Test
+    void d3T5ClientSigkillBeforeCommitLeavesNothing() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d3-t5-");
+        Path db = root.resolve("d3.db");
+        runD3(() -> {
+            Process driver = d3Driver(19, 20);
+            d3Provision(driver, root, db, 19, 20);
+            D3Session session = d3Session(root, db, 19, 20, "HOLD_BEFORE_COMMIT", 19, 20);
+            d3Await(session.client(), "CLIENT_READY");
+            d3Await(session.client(), "DURABLE_PRECOMMIT");
+            assertTrue(d3Running(session.helper()));
+            d3KillClient(session);
+            Process check = d3Helper(driver, root, db, 19, 20, false);
+            d2Expect(driver, check, 1, 301L, 9001L, "LOOKUP", null, "ABSENT null");
+            d2State(driver, check, 2, 0, 0, 0);
+            d2Ok(driver, check, 5, null, null, "INTEGRITY", null, "true");
+            d2Ok(driver, check, 6, null, null, "STOP", null, "null");
+            d0Exit(check);
+            d0CloseClient(driver);
+            return null;
+        });
+    }
+
+    @Test
+    void d3T6ClientSigkillAfterCommitBeforeAckReplays() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d3-t6-");
+        Path db = root.resolve("d3.db");
+        runD3(() -> {
+            Process driver = d3Driver(21, 22);
+            d3Provision(driver, root, db, 21, 22);
+            D3Session session = d3Session(root, db, 21, 22, "HOLD_AFTER_COMMIT", 21, 22);
+            d3Await(session.client(), "CLIENT_READY");
+            d3Await(session.client(), "DURABLE_COMMITTED_BEFORE_ACK");
+            d3KillClient(session);
+            Process check = d3Helper(driver, root, db, 21, 22, false);
+            d2Expect(driver, check, 1, 301L, 9001L, "LOOKUP", null, "FOUND 77");
+            d2Expect(driver, check, 2, 301L, 9001L, "APPLY_ONCE", 77L, "REPLAYED 77");
+            d2State(driver, check, 3, 1, 1, 77);
+            d2Ok(driver, check, 6, null, null, "INTEGRITY", null, "true");
+            d2Ok(driver, check, 7, null, null, "STOP", null, "null");
+            d0Exit(check);
+            d0CloseClient(driver);
+            return null;
+        });
+    }
+
+    @Test
+    void d3T7NormalClientExitDoesNotLeaveHelperRunning() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d3-t7-");
+        Path db = root.resolve("d3.db");
+        runD3(() -> {
+            Process driver = d3Driver(23, 24);
+            d3Provision(driver, root, db, 23, 24);
+            for (String scenario : List.of("EXIT_AFTER_READY", "EXIT_AFTER_COMMIT")) {
+                D3Session session = d3Session(root, db, 23, 24, scenario, 23, 24);
+                Process client = session.client();
+                d3Await(client, "CLIENT_READY");
+                if (scenario.equals("EXIT_AFTER_COMMIT")) d3Await(client, "CLIENT_APPLIED");
+                d3Await(client, "CLIENT_EXIT_WITHOUT_STOP");
+                assertTrue(client.waitFor(60, TimeUnit.SECONDS), scenario + " client termination timeout");
+                assertEquals(0, client.exitValue(), d3Log(client));
+                // Not running: absent, or a zombie that executes no code, never a live helper.
+                assertTrue(d3AwaitGone(session.helper(), 30),
+                        scenario + " left helper state=" + d3State(session.helper()));
+            }
+            Process check = d3Helper(driver, root, db, 23, 24, false);
+            d2Expect(driver, check, 1, 301L, 9001L, "LOOKUP", null, "FOUND 77");
+            d2State(driver, check, 2, 1, 1, 77);
+            d2Ok(driver, check, 5, null, null, "STOP", null, "null");
+            d0Exit(check);
+            d0CloseClient(driver);
+            return null;
+        });
+    }
+
+    @Test
+    void d3T8WrongDatabaseIdentityRefusesReconciliation() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d3-t8-");
+        Path a = root.resolve("a.db");
+        Path b = root.resolve("b.db");
+        Path legacy = root.resolve("legacy.db");
+        runD3(() -> {
+            Process driverA = d3Driver(31, 32);
+            Process driverB = d3Driver(41, 42);
+            d3Provision(driverA, root, a, 31, 32);
+            d3Provision(driverB, root, b, 41, 42);
+            // A populated database without an identity (the D2 helper) is never adopted.
+            Process seeder = d2Helper(driverA, root, legacy);
+            d2Ok(driverA, seeder, 1, null, null, "INIT", null, "null");
+            d2Expect(driverA, seeder, 2, 101L, 1L, "APPLY_ONCE", 5L, "APPLIED 5");
+            d2Ok(driverA, seeder, 3, null, null, "STOP", null, "null");
+            d0Exit(seeder);
+            Map<String, String> before = d1Snapshot(root);
+            // Database A started with B's identity, A re-provisioned, legacy provisioned: refused
+            // before READY, so no LOOKUP or APPLY_ONCE can ever be sent.
+            d3Refused(root, a, "41", "42", null);
+            d3Refused(root, a, "31", "32", "PROVISION");
+            d3Refused(root, legacy, "51", "52", "PROVISION");
+            d3Refused(root, legacy, "51", "52", null);
+            assertEquals(before, d1Snapshot(root), "a refused identity must leave every database unchanged");
+            // The real client: the helper verified A correctly, but the client's bootstrap names B.
+            D3Session session = d3Session(root, a, 31, 32, "NORMAL", 41, 42);
+            d3Await(session.client(), "CLIENT_DATABASE_IDENTITY_MISMATCH");
+            assertTrue(session.client().waitFor(60, TimeUnit.SECONDS));
+            assertNotEquals(0, session.client().exitValue());
+            assertFalse(d3Log(session.client()).contains("CLIENT_READY\n"), d3Log(session.client()));
+            assertTrue(d3AwaitGone(session.helper(), 30), "the helper must not outlive the refused client");
+            Process check = d3Helper(driverA, root, a, 31, 32, false);
+            d2State(driverA, check, 1, 0, 0, 0);
+            d2Ok(driverA, check, 4, null, null, "STOP", null, "null");
+            d0Exit(check);
+            d0CloseClient(driverA);
+            d0CloseClient(driverB);
+            return null;
+        });
+    }
+
+    @Test
+    void d3T9SameDatabaseIdentitySurvivesRestart() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d3-t9-");
+        Path db = root.resolve("d3.db");
+        runD3(() -> {
+            Process driver = d3Driver(-9223372036854775808L, 9223372036854775807L);
+            d3Provision(driver, root, db, Long.MIN_VALUE, Long.MAX_VALUE);
+            D3Session first = d3Session(root, db, Long.MIN_VALUE, Long.MAX_VALUE, "NORMAL",
+                    Long.MIN_VALUE, Long.MAX_VALUE);
+            d3Await(first.client(), "CLIENT_APPLY APPLIED");
+            d3Await(first.client(), "CLIENT_STOPPED");
+            assertTrue(first.client().waitFor(60, TimeUnit.SECONDS));
+            assertEquals(0, first.client().exitValue(), d3Log(first.client()));
+            assertTrue(d3AwaitGone(first.helper(), 30));
+            // Another restricted JVM: READY, then the same DATABASE_IDENTITY (VERIFIED by Protos).
+            Process check = d3Helper(driver, root, db, Long.MIN_VALUE, Long.MAX_VALUE, false);
+            d2Expect(driver, check, 1, 301L, 9001L, "LOOKUP", null, "FOUND 77");
+            d2Ok(driver, check, 2, null, null, "STOP", null, "null");
+            d0Exit(check);
+            D3Session second = d3Session(root, db, Long.MIN_VALUE, Long.MAX_VALUE, "NORMAL",
+                    Long.MIN_VALUE, Long.MAX_VALUE);
+            d3Await(second.client(), "CLIENT_APPLY REPLAYED");
+            d3Await(second.client(), "CLIENT_STOPPED");
+            assertTrue(second.client().waitFor(60, TimeUnit.SECONDS));
+            assertEquals(0, second.client().exitValue(), d3Log(second.client()));
+            assertTrue(d3AwaitGone(second.helper(), 30));
+            Process last = d3Helper(driver, root, db, Long.MIN_VALUE, Long.MAX_VALUE, false);
+            d2State(driver, last, 1, 1, 1, 77);
+            d2Ok(driver, last, 4, null, null, "STOP", null, "null");
+            d0Exit(last);
+            d0CloseClient(driver);
+            return null;
+        });
+    }
+
+    @Test
+    void d3T10LiveSourcePlusAbsentDoesNotEstablishRollback() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d3-t10-");
+        Path db = root.resolve("d3.db");
+        runD3(() -> {
+            Process driver = d3Driver(51, 52);
+            d3Provision(driver, root, db, 51, 52);
+            D3Session session = d3Session(root, db, 51, 52, "HOLD_BEFORE_COMMIT", 51, 52);
+            d3Await(session.client(), "CLIENT_READY");
+            d3Await(session.client(), "DURABLE_PRECOMMIT");
+            assertEquals("UNCERTAIN 301 9001 CONNECTION_LOST",
+                    d0Client(driver, "LOST", "1", "301", "9001", "77"));
+            Process other = d3Helper(driver, root, db, 51, 52, false);
+            for (long id = 1; id <= 2; id++) {
+                String resolved = d2Reconcile(driver, other, id, 301, 9001);
+                // ABSENT while the source can still COMMIT is an observation, never a rollback.
+                assertTrue(resolved.equals("RESOLVED ABSENT_OBSERVED null") || resolved.equals("REJECTED"),
+                        resolved);
+                String state = d0Client(driver, "STATE", "301", "9001");
+                assertTrue(state.equals("STATE ABSENT_OBSERVED") || state.equals("STATE UNCERTAIN"), state);
+                assertTrue(d3Running(session.helper()), "the source helper is still alive and holding");
+            }
+            d2Ok(driver, other, 3, null, null, "STOP", null, "null");
+            d0Exit(other);
+            d3KillClient(session);
+            d0CloseClient(driver);
+            return null;
+        });
+    }
+
+    @Test
+    void d3T11TerminatedSourcePlusAbsentPermitsSafeRetry() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d3-t11-");
+        Path db = root.resolve("d3.db");
+        runD3(() -> {
+            Process driver = d3Driver(61, 62);
+            d3Provision(driver, root, db, 61, 62);
+            D3Session session = d3Session(root, db, 61, 62, "HOLD_BEFORE_COMMIT", 61, 62);
+            d3Await(session.client(), "CLIENT_READY");
+            d3Await(session.client(), "DURABLE_PRECOMMIT");
+            assertEquals("UNCERTAIN 301 9001 CONNECTION_LOST",
+                    d0Client(driver, "LOST", "1", "301", "9001", "77"));
+            // Kill the source helper itself; the host then observes its effective termination.
+            d3Signal(session.helper(), D3_SIGKILL);
+            assertTrue(d3AwaitGone(session.helper(), 30), "the source helper must terminate");
+            d3Await(session.client(), "CLIENT_CONNECTION_LOST UNCERTAIN");
+            assertTrue(session.client().waitFor(60, TimeUnit.SECONDS));
+            assertNotEquals(0, session.client().exitValue());
+            assertEquals("TERMINATED 301 9001", d0Client(driver, "SOURCE_TERMINATED", "301", "9001"));
+            Process other = d3Helper(driver, root, db, 61, 62, false);
+            assertEquals("RESOLVED NOT_APPLIED null", d2Reconcile(driver, other, 1, 301, 9001));
+            assertEquals("STATE NOT_APPLIED", d0Client(driver, "STATE", "301", "9001"));
+            d2Expect(driver, other, 2, 301L, 9001L, "APPLY_ONCE", 77L, "APPLIED 77");
+            d2Expect(driver, other, 3, 301L, 9001L, "APPLY_ONCE", 77L, "REPLAYED 77");
+            d2State(driver, other, 4, 1, 1, 77);
+            d2Ok(driver, other, 7, null, null, "STOP", null, "null");
+            d0Exit(other);
+            d0CloseClient(driver);
+            return null;
+        });
+    }
+
+    @Test
+    void d3T12WrongIdentityCannotProduceFalseNotApplied() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d3-t12-");
+        Path a = root.resolve("a.db");
+        Path b = root.resolve("b.db");
+        runD3(() -> {
+            Process driver = d3Driver(71, 72);
+            Process driverB = d3Driver(81, 82);
+            d3Provision(driver, root, a, 71, 72);
+            d3Provision(driverB, root, b, 81, 82);
+            D3Session session = d3Session(root, a, 71, 72, "HOLD_BEFORE_COMMIT", 71, 72);
+            d3Await(session.client(), "CLIENT_READY");
+            d3Await(session.client(), "DURABLE_PRECOMMIT");
+            assertEquals("UNCERTAIN 301 9001 CONNECTION_LOST",
+                    d0Client(driver, "LOST", "1", "301", "9001", "77"));
+            d3KillClient(session);
+            assertEquals("TERMINATED 301 9001", d0Client(driver, "SOURCE_TERMINATED", "301", "9001"));
+            // The LOOKUP is prepared against a verified helper of A ...
+            Process first = d3Helper(driver, root, a, 71, 72, false);
+            String request = d0Client(driver, "RECONCILE", "1", "301", "9001");
+            assertTrue(request.startsWith("TEXT "), request);
+            d2Ok(driver, first, 2, null, null, "STOP", null, "null");
+            d0Exit(first);
+            // ... but the reconnection reaches B, a correctly provisioned database without the receipt.
+            Process wrong = d1Launch(root, List.of(), D0.resolve("durable-helper.protos"), b.toString(), "81", "82");
+            d0AwaitEvent(wrong, "LANDLOCK_APPLIED");
+            assertEquals("ACCEPTED", d0Client(driver, "READY", d0Next(wrong)));
+            assertEquals("MISMATCH", d0Client(driver, "HELPER_IDENTITY", d0Next(wrong)));
+            d0Send(wrong, request.substring("TEXT ".length()));
+            String reply = d0Next(wrong);
+            assertEquals("ACCEPTED 1 ABSENT null null", d0Client(driver, "RESPONSE", reply));
+            assertEquals("REJECTED", d0Client(driver, "RESOLVE", "1", reply),
+                    "an ABSENT from another database must never resolve this key");
+            assertEquals("REJECTED", d0Client(driver, "RECONCILE", "2", "301", "9001"));
+            assertEquals("STATE UNCERTAIN", d0Client(driver, "STATE", "301", "9001"));
+            d2Ok(driver, wrong, 3, null, null, "STOP", null, "null");
+            d0Exit(wrong);
+            // The verified original database then gives the final answer.
+            Process right = d3Helper(driver, root, a, 71, 72, false);
+            assertEquals("RESOLVED NOT_APPLIED null", d2Reconcile(driver, right, 1, 301, 9001));
+            d2Ok(driver, right, 2, null, null, "STOP", null, "null");
+            d0Exit(right);
+            d0CloseClient(driver);
+            d0CloseClient(driverB);
+            return null;
+        });
+    }
+
+    @Test
+    void d3T13ParentMismatchRefusesStartup() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d3-t13-");
+        Path db = root.resolve("d3.db");
+        runD0(() -> {
+            Process driver = d3Driver(91, 92);
+            // PID 1 is never this launcher's parent (the JUnit JVM is); the rest are invalid PIDs.
+            for (String parent : List.of("1", "0", "-7", "abc", Long.toString(Integer.MAX_VALUE + 1L))) {
+                Process refused = d1Launch(root, List.of("--expected-parent-pid", parent),
+                        D0.resolve("durable-helper.protos"), db.toString(), "91", "92", "PROVISION");
+                d1r1Refused(refused, "SANDBOX_REFUSED PARENT_OWNERSHIP_FAILED", 72);
+            }
+            assertFalse(Files.exists(db), "a refused launch must never open SQLite");
+            // Positive control: the true parent passes the same check and the profile follows.
+            String self = Long.toString(ProcessHandle.current().pid());
+            Process helper = d1Launch(root, List.of("--expected-parent-pid", self),
+                    D0.resolve("durable-helper.protos"), db.toString(), "91", "92", "PROVISION");
+            d0AwaitEvent(helper, "LANDLOCK_APPLIED");
+            String log;
+            synchronized (d0Logs.get(helper)) { log = d0Logs.get(helper).toString(); }
+            assertTrue(log.contains("PARENT_OWNERSHIP_VERIFIED parent=" + self + " signal=SIGKILL\n"), log);
+            assertEquals("ACCEPTED", d0Client(driver, "READY", d0Next(helper)));
+            assertEquals("VERIFIED", d0Client(driver, "HELPER_IDENTITY", d0Next(helper)));
+            d2Ok(driver, helper, 1, null, null, "STOP", null, "null");
+            d0Exit(helper);
+            d0CloseClient(driver);
+            return null;
+        });
+    }
+
+    @Test
+    void d3T14LossOfClientDoesNotWidenLandlockAuthority() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d3-t14-");
+        Path db = root.resolve("d3.db");
+        Path outside = d1Dir("d3-t14-exterior-");
+        Path exterior = outside.resolve("exterior.db");
+        runD3(() -> {
+            Process seedClient = d0Client();
+            d1Seed(seedClient, exterior, 7);
+            Map<String, String> before = d1Snapshot(outside);
+            Process driver = d3Driver(101, 102);
+            d3Provision(driver, root, db, 101, 102);
+            D3Session session = d3Session(root, db, 101, 102, "HOLD_AFTER_READY", 101, 102);
+            d3Await(session.client(), "CLIENT_READY");
+            d3KillClient(session);
+            // A fresh restricted helper JVM after the crash: same grant, same denials.
+            assertEquals(List.of(D1_AUTHORIZED, D1_EXTERIOR_DENIED),
+                    d1Probe(root, root.resolve("authorized.db"), exterior));
+            // The custody option adds no authority: the native probe stays denied with it.
+            try (var server = java.nio.channels.ServerSocketChannel.open()) {
+                server.bind(new java.net.InetSocketAddress(java.net.InetAddress.getByName("127.0.0.1"), 0));
+                server.configureBlocking(false);
+                String port = Integer.toString(((java.net.InetSocketAddress) server.getLocalAddress()).getPort());
+                d1r1Expect(d1r1Run(d1r1Control("tcp-connect", port)), "TCP_ALLOWED");
+                try (var accepted = server.accept()) {
+                    assertTrue(accepted != null, "the control connection must reach the listener");
+                }
+                Path tmp = d1Dir("d1-tmp-");
+                List<String> command = d1Policy(root, tmp,
+                        List.of("--expected-parent-pid", Long.toString(ProcessHandle.current().pid())),
+                        List.of(d1r1Probe().getParent().toString()), List.of(), d1Environment(tmp));
+                command.add(d1r1Probe().toString());
+                command.addAll(List.of("tcp-connect", port));
+                String[] result = d1r1Run(command);
+                d1r1Denied(result, "TCP");
+                assertTrue(result[2].contains("PARENT_OWNERSHIP_VERIFIED"), String.join("\n", result));
+                assertEquals(null, server.accept(), "no connection may arrive from the restricted probe");
+            }
+            Process check = d3Helper(driver, root, db, 101, 102, false);
+            d2Ok(driver, check, 1, null, null, "STOP", null, "null");
+            d0Exit(check);
+            assertEquals(before, d1Snapshot(outside), "no recovery path may touch the exterior");
+            d0CloseClient(driver);
+            d0CloseClient(seedClient);
+            return null;
+        });
+    }
+
+    @Test
+    void d3T15NoNativeHandleCrossesDirectProtosIpc() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d3-t15-");
+        Path db = root.resolve("d3.db");
+        runD3(() -> {
+            Process driver = d3Driver(111, 112);
+            String event = "{\"version\":2,\"event\":\"DATABASE_IDENTITY\",\"identityHi\":HI,\"identityLo\":LO}";
+            assertEquals("VERIFIED", d0Client(driver, "HELPER_IDENTITY", event.replace("HI", "111").replace("LO", "112")));
+            assertEquals("MISMATCH", d0Client(driver, "HELPER_IDENTITY", event.replace("HI", "111").replace("LO", "113")));
+            for (String vector : List.of(
+                    event.replace("HI", "111").replace("LO", "112").replace("}", ",\"handle\":1}"),
+                    event.replace("HI", "111").replace("LO", "112").replace("}", ",\"path\":\"/tmp/d3.db\"}"),
+                    event.replace("HI", "\"111\"").replace("LO", "112"),
+                    event.replace("HI", "{\"address\":1}").replace("LO", "112"),
+                    event.replace("HI", "[111]").replace("LO", "112"),
+                    event.replace("HI", "1.5").replace("LO", "112"),
+                    event.replace("HI", "1E2").replace("LO", "112"),
+                    event.replace("HI", "9223372036854775808").replace("LO", "112"),
+                    event.replace("HI", "111").replace("LO", "null"),
+                    event.replace("\"version\":2", "\"version\":1").replace("HI", "111").replace("LO", "112"),
+                    event.replace("DATABASE_IDENTITY", "READY").replace("HI", "111").replace("LO", "112"),
+                    "{\"version\":2,\"event\":\"DATABASE_IDENTITY\",\"identityHi\":111}")) {
+                assertEquals("REJECTED", d0Client(driver, "HELPER_IDENTITY", vector), vector);
+            }
+            for (String value : List.of("{\"handle\":1}", "[1]", "\"0x7f00\"")) {
+                assertEquals("REJECTED", d0Client(driver, "RESPONSE", d2Reply("1", "FOUND", value, "null")), value);
+            }
+            for (String source : List.of(D3_SESSION, "DurableProtocol.protos", "durable-client-driver.protos")) {
+                String text = Files.readString(D0.resolve(source));
+                assertFalse(text.contains("import(\"std:ffi\")") || text.contains("import(\"ffi:"), source);
+            }
+            d3Provision(driver, root, db, 111, 112);
+            Process helper = d3Helper(driver, root, db, 111, 112, false);
+            d2Ok(driver, helper, 1, null, null, "INIT", null, "null");
+            d0Raw(driver, helper, d2Json("2", "301", "1", "\"APPLY_ONCE\"", "{\"handle\":1}"),
+                    "ACCEPTED 2 ERROR null INVALID_VALUE");
+            d0Raw(driver, helper, d2Json("3", "301", "1", "\"APPLY_ONCE\"", "[1]"),
+                    "ACCEPTED 3 ERROR null INVALID_VALUE");
+            d0Raw(driver, helper, d2Json("4", "{\"handle\":1}", "1", "\"LOOKUP\"", "null"),
+                    "ACCEPTED 4 ERROR null INVALID_IDENTITY");
+            // A real reply is one flat JSON object of copied scalars.
+            d0Send(helper, d2Text(driver, 5, "301", "1", "APPLY_ONCE", "7"));
+            String reply = d0Next(helper);
+            assertEquals("ACCEPTED APPLIED 7 null", d0Client(driver, "MATCH", "5", reply));
+            assertEquals(1, reply.chars().filter(c -> c == '{').count(), reply);
+            assertFalse(reply.contains("["), reply);
+            d2State(driver, helper, 6, 1, 1, 7);
+            d2Ok(driver, helper, 9, null, null, "STOP", null, "null");
+            d0Exit(helper);
+            d0CloseClient(driver);
+            return null;
+        });
+    }
+
+    @Test
+    void d3T16D2ReconciliationRequiresExplicitSourceTermination() throws Exception {
+        d1RequireProfile();
+        Path before = d1Dir("d3-t16-before-");
+        Path after = d1Dir("d3-t16-after-");
+        Path eof = d1Dir("d3-t16-eof-");
+        runD0(() -> {
+            Process client = d2Client();
+            assertEquals("REJECTED", d0Client(client, "SOURCE_TERMINATED", "101", "7001"),
+                    "termination evidence needs a recorded uncertain key");
+            // D2-T7: killed before COMMIT. ABSENT alone is only an observation.
+            Path db = before.resolve("d2.db");
+            d2Initialize(client, before, db);
+            Process b = d2Helper(client, before, db);
+            d0Send(b, d2Text(client, 1, "101", "7001", "HOLD_BEFORE_COMMIT", "42"));
+            d0AwaitEvent(b, "DURABLE_PRECOMMIT");
+            d0Kill(b);
+            assertEquals("UNCERTAIN 101 7001 CONNECTION_LOST", d0Client(client, "LOST", "1", "101", "7001", "42"));
+            Process c = d2Helper(client, before, db);
+            assertEquals("RESOLVED ABSENT_OBSERVED null", d2Reconcile(client, c, 1, 101, 7001));
+            assertEquals("STATE ABSENT_OBSERVED", d0Client(client, "STATE", "101", "7001"));
+            // d0Kill observed exit 137: the host records the source's effective termination.
+            assertEquals("TERMINATED 101 7001", d0Client(client, "SOURCE_TERMINATED", "101", "7001"));
+            assertEquals("STATE ABSENT_OBSERVED", d0Client(client, "STATE", "101", "7001"),
+                    "evidence alone changes no state");
+            assertEquals("RESOLVED NOT_APPLIED null", d2Reconcile(client, c, 2, 101, 7001));
+            assertEquals("REJECTED", d0Client(client, "SOURCE_TERMINATED", "101", "7001"));
+            d2Expect(client, c, 3, 101L, 7001L, "APPLY_ONCE", 42L, "APPLIED 42");
+            d2Expect(client, c, 4, 101L, 7001L, "APPLY_ONCE", 42L, "REPLAYED 42");
+            d2State(client, c, 5, 1, 1, 42);
+            d2Ok(client, c, 8, null, null, "STOP", null, "null");
+            d0Exit(c);
+            // D2-T8: killed after COMMIT before ACK, with termination evidence: COMMITTED.
+            Path db2 = after.resolve("d2.db");
+            d2Initialize(client, after, db2);
+            Process d = d2Helper(client, after, db2);
+            d0Send(d, d2Text(client, 1, "102", "7002", "HOLD_AFTER_COMMIT", "43"));
+            d0AwaitEvent(d, "DURABLE_COMMITTED_BEFORE_ACK");
+            d0Kill(d);
+            assertEquals("UNCERTAIN 102 7002 CONNECTION_LOST", d0Client(client, "LOST", "1", "102", "7002", "43"));
+            assertEquals("TERMINATED 102 7002", d0Client(client, "SOURCE_TERMINATED", "102", "7002"));
+            Process e = d2Helper(client, after, db2);
+            assertEquals("RESOLVED COMMITTED 43", d2Reconcile(client, e, 1, 102, 7002));
+            d2Expect(client, e, 2, 102L, 7002L, "APPLY_ONCE", 43L, "REPLAYED 43");
+            d2State(client, e, 3, 1, 1, 43);
+            d2Ok(client, e, 6, null, null, "STOP", null, "null");
+            d0Exit(e);
+            // D2-T15: lost acknowledgement through EOF; the fail-closed exit is observed first.
+            Path db3 = eof.resolve("d2.db");
+            d2Initialize(client, eof, db3);
+            Process f = d2Helper(client, eof, db3);
+            d0Send(f, d2Text(client, 1, "103", "7003", "HOLD_AFTER_COMMIT", "44"));
+            d0AwaitEvent(f, "DURABLE_COMMITTED_BEFORE_ACK");
+            f.getOutputStream().close();
+            d0AwaitEvent(f, "DURABLE_ACK_WITHHELD");
+            assertEquals(D0_EOF, d0Next(f), "a withheld acknowledgement is never sent");
+            assertTrue(f.waitFor(30, TimeUnit.SECONDS), "fail-closed helper termination timeout");
+            assertNotEquals(0, f.exitValue());
+            assertEquals("UNCERTAIN 103 7003 CONNECTION_LOST", d0Client(client, "LOST", "1", "103", "7003", "44"));
+            assertEquals("TERMINATED 103 7003", d0Client(client, "SOURCE_TERMINATED", "103", "7003"));
+            Process g = d2Helper(client, eof, db3);
+            assertEquals("RESOLVED COMMITTED 44", d2Reconcile(client, g, 1, 103, 7003));
+            d2State(client, g, 2, 1, 1, 44);
+            d2Ok(client, g, 5, null, null, "STOP", null, "null");
+            d0Exit(g);
+            d0CloseClient(client);
+            return null;
+        });
+    }
+
+    /** Runs one D3 scenario; D0 cleanup kills the JUnit children, then no tracked helper may run. */
+    private static void runD3(java.util.concurrent.Callable<?> scenario) throws Exception {
+        d3Helpers.clear();
+        Throwable primary = null;
+        try {
+            runD0(scenario);
+        } catch (Exception | Error failure) {
+            primary = failure;
+            throw failure;
+        } finally {
+            AssertionError retained = null;
+            for (D3Pid helper : d3Helpers) {
+                if (d3Running(helper)) {
+                    ProcessHandle.of(helper.pid()).ifPresent(ProcessHandle::destroyForcibly);
+                }
+                if (!d3AwaitGone(helper, 15)) {
+                    if (retained == null) retained = new AssertionError("D3 helper retained after cleanup");
+                    retained.addSuppressed(new AssertionError("PID=" + helper.pid()));
+                }
+            }
+            if (retained != null) {
+                if (primary != null) primary.addSuppressed(retained);
+                else throw retained;
+            }
+        }
+    }
+
+    /** Compiles the D3 process-tree fixture next to the D1 launcher, once. */
+    private static Path d3Owner() throws Exception {
+        if (d3OwnerExec == null) d3OwnerExec = d1Compile("owner-exec");
+        return d3OwnerExec;
+    }
+
+    /** A durable client driver bound to the trusted bootstrap database identity. */
+    private static Process d3Driver(long identityHi, long identityLo) throws Exception {
+        Process driver = d2Client();
+        assertEquals("BOUND " + identityHi + " " + identityLo,
+                d0Client(driver, "BIND_DATABASE", Long.toString(identityHi), Long.toString(identityLo)));
+        return driver;
+    }
+
+    /**
+     * A D3 helper launched by JUnit behind the D1-R1 launcher (no parent custody: used for
+     * provisioning and independent reconciliation). READY and a DATABASE_IDENTITY VERIFIED by the
+     * Protos driver must precede any request.
+     */
+    private static Process d3Helper(Process driver, Path grant, Path db, long identityHi, long identityLo,
+            boolean provision) throws Exception {
+        List<String> arguments = new ArrayList<>(List.of(db.toString(), Long.toString(identityHi),
+                Long.toString(identityLo)));
+        if (provision) arguments.add("PROVISION");
+        Process helper = d1Launch(grant, List.of(), D0.resolve("durable-helper.protos"),
+                arguments.toArray(String[]::new));
+        d0AwaitEvent(helper, "LANDLOCK_APPLIED");
+        String log;
+        synchronized (d0Logs.get(helper)) { log = d0Logs.get(helper).toString(); }
+        assertTrue(log.contains(D1R1_PROFILE + "\n"), log);
+        assertEquals("ACCEPTED", d0Client(driver, "READY", d0Next(helper)));
+        assertEquals("VERIFIED", d0Client(driver, "HELPER_IDENTITY", d0Next(helper)));
+        return helper;
+    }
+
+    /** Provisions a brand-new database with its identity and the durable schema, then stops. */
+    private static void d3Provision(Process driver, Path grant, Path db, long identityHi, long identityLo)
+            throws Exception {
+        Process helper = d3Helper(driver, grant, db, identityHi, identityLo, true);
+        d2Ok(driver, helper, 1, null, null, "INIT", null, "null");
+        d2Ok(driver, helper, 2, null, null, "STOP", null, "null");
+        d0Exit(helper);
+    }
+
+    /** A D3 helper whose identity bootstrap must be refused before READY. */
+    private static void d3Refused(Path grant, Path db, String identityHi, String identityLo, String policy)
+            throws Exception {
+        List<String> arguments = new ArrayList<>(List.of(db.toString(), identityHi, identityLo));
+        if (policy != null) arguments.add(policy);
+        Process helper = d1Launch(grant, List.of(), D0.resolve("durable-helper.protos"),
+                arguments.toArray(String[]::new));
+        d0AwaitEvent(helper, "LANDLOCK_APPLIED");
+        assertEquals(D0_EOF, d0Next(helper), "a refused identity must never publish READY");
+        d0AwaitEvent(helper, "ADMISSION_FAILED_CLOSED");
+        assertTrue(helper.waitFor(30, TimeUnit.SECONDS), "refused helper termination timeout");
+        assertNotEquals(0, helper.exitValue());
+        String log;
+        synchronized (d0Logs.get(helper)) { log = d0Logs.get(helper).toString(); }
+        assertTrue(log.contains("DURABLE_DATABASE_IDENTITY_REFUSED\n"), log);
+    }
+
+    /** The Protos CLI JVM command line shared by the D3 client and helper. */
+    private static List<String> d3Java(List<String> jvmOptions, boolean provider, Path entry,
+            String... arguments) throws Exception {
+        String classpath = System.getProperty("surefire.test.class.path",
+                System.getProperty("java.class.path"));
+        assertTrue(classpath != null && !classpath.isBlank(), "missing test subprocess classpath");
+        Path java = Path.of(System.getProperty("java.home"), "bin", "java").toRealPath();
+        List<String> command = new ArrayList<>(List.of(java.toString(),
+                "--enable-native-access=ALL-UNNAMED", "--sun-misc-unsafe-memory-access=allow"));
+        command.addAll(jvmOptions);
+        command.addAll(List.of("-cp", classpath, "com.guillermomolina.protos.cli.ProtosCli"));
+        if (provider) command.addAll(List.of("--foreign-provider-path", sqliteJar.toAbsolutePath().toString()));
+        command.add(entry.toAbsolutePath().toString());
+        command.addAll(List.of(arguments));
+        return command;
+    }
+
+    /**
+     * Launches owner-exec: the confined helper (identity {@code helperHi/helperLo}) and the Protos
+     * session client (scenario and bootstrap identity {@code clientHi/clientLo}) as parent and child.
+     * Every stderr line of both processes is queued; stdout must reach EOF without a line.
+     */
+    private static D3Session d3Session(Path grant, Path db, long helperHi, long helperLo, String scenario,
+            long clientHi, long clientLo) throws Exception {
+        Path tmp = d1Dir("d3-tmp-");
+        List<String> command = new ArrayList<>(List.of(d3Owner().toString(), "--owner-helper"));
+        command.addAll(d1Policy(grant, tmp, List.of(), List.of(), List.of(), d1Environment(tmp)));
+        command.addAll(d3Java(List.of("-XX:-UsePerfData", "-Djava.io.tmpdir=" + tmp, "-Duser.home=" + tmp,
+                        "-Dpolyglot.engine.userResourceCache=" + tmp.resolve("polyglot-cache")), true,
+                D0.resolve("durable-helper.protos"), db.toString(), Long.toString(helperHi),
+                Long.toString(helperLo)));
+        command.add("--owner-client");
+        List<String> clientOptions = new ArrayList<>();
+        String cache = System.getProperty("polyglot.engine.userResourceCache");
+        if (cache != null) clientOptions.add("-Dpolyglot.engine.userResourceCache=" + cache);
+        command.addAll(d3Java(clientOptions, false, D0.resolve(D3_SESSION), scenario,
+                Long.toString(clientHi), Long.toString(clientLo)));
+        Path home = Path.of("").toAbsolutePath();
+        ProcessBuilder builder = new ProcessBuilder(command).directory(home.toFile());
+        builder.environment().put("PROTOS_HOME", home.toString());
+        Process client = builder.start();
+        var lines = new java.util.concurrent.LinkedBlockingQueue<String>();
+        var events = new java.util.concurrent.LinkedBlockingQueue<String>();
+        StringBuilder log = new StringBuilder();
+        d0Stdout.put(client, lines);
+        d0Events.put(client, events);
+        d0Logs.put(client, log);
+        Thread.ofPlatform().daemon().name("d3-stdout-" + client.pid()).start(() -> {
+            try (var reader = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(client.getInputStream(), StandardCharsets.UTF_8))) {
+                for (String line; (line = reader.readLine()) != null; ) lines.offer(line);
+            } catch (Exception failure) {
+                synchronized (log) { log.append("stdout drain: ").append(failure).append('\n'); }
+            } finally {
+                lines.offer(D0_EOF);
+            }
+        });
+        Thread.ofPlatform().daemon().name("d3-stderr-" + client.pid()).start(() -> {
+            try (var reader = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(client.getErrorStream(), StandardCharsets.UTF_8))) {
+                for (String line; (line = reader.readLine()) != null; ) {
+                    synchronized (log) { log.append(line).append('\n'); }
+                    events.offer(line);
+                }
+            } catch (Exception failure) {
+                synchronized (log) { log.append("stderr drain: ").append(failure).append('\n'); }
+            } finally {
+                events.offer(D0_EOF);
+            }
+        });
+        String owned = d3AwaitPrefix(client, "OWNER_HELPER_PID ");
+        D3Pid helper = d3Track(Long.parseLong(owned.substring("OWNER_HELPER_PID ".length()).strip()));
+        return new D3Session(client, helper);
+    }
+
+    /** Skips stderr lines until exactly {@code expected}; EOF or the deadline fails. */
+    private static void d3Await(Process client, String expected) throws Exception {
+        d3AwaitMatching(client, expected::equals, expected);
+    }
+
+    private static String d3AwaitPrefix(Process client, String prefix) throws Exception {
+        return d3AwaitMatching(client, line -> line.startsWith(prefix), prefix);
+    }
+
+    private static String d3AwaitMatching(Process client, java.util.function.Predicate<String> match,
+            String description) throws Exception {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(90);
+        while (true) {
+            long remaining = deadline - System.nanoTime();
+            String line = remaining > 0 ? d0Events.get(client).poll(remaining, TimeUnit.NANOSECONDS) : null;
+            if (line == null || line.equals(D0_EOF)) {
+                throw new AssertionError("PID=" + client.pid() + " missing " + description + "\n" + d3Log(client));
+            }
+            if (match.test(line)) return line;
+        }
+    }
+
+    private static String d3Log(Process client) {
+        StringBuilder log = d0Logs.get(client);
+        synchronized (log) { return log.toString(); }
+    }
+
+    /** /proc/PID/stat fields after the command name: [0] state, [1] ppid, [19] start time. */
+    private static String[] d3Stat(long pid) {
+        try {
+            String stat = Files.readString(Path.of("/proc", Long.toString(pid), "stat"));
+            return stat.substring(stat.lastIndexOf(')') + 2).strip().split(" ");
+        } catch (java.io.IOException failure) {
+            return null;
+        }
+    }
+
+    private static D3Pid d3Track(long pid) {
+        String[] stat = d3Stat(pid);
+        assertTrue(stat != null, "helper PID=" + pid + " not observable");
+        D3Pid helper = new D3Pid(pid, stat[19]);
+        d3Helpers.add(helper);
+        return helper;
+    }
+
+    /** "GONE" when absent or when the PID now names another process. */
+    private static String d3State(D3Pid helper) {
+        String[] stat = d3Stat(helper.pid());
+        if (stat == null || !stat[19].equals(helper.startTime())) return "GONE";
+        return stat[0];
+    }
+
+    /** Running means able to execute code: present, same process, neither zombie nor dead. */
+    private static boolean d3Running(D3Pid helper) {
+        String state = d3State(helper);
+        return !List.of("GONE", "Z", "X", "x").contains(state);
+    }
+
+    private static long d3Parent(D3Pid helper) {
+        String[] stat = d3Stat(helper.pid());
+        assertTrue(stat != null && stat[19].equals(helper.startTime()), "helper not observable");
+        return Long.parseLong(stat[1]);
+    }
+
+    /** Observes termination of a non-child process within a bounded deadline. */
+    private static boolean d3AwaitGone(D3Pid helper, long seconds) {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(seconds);
+        while (d3Running(helper)) {
+            if (System.nanoTime() >= deadline) return false;
+            LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(5));
+        }
+        return true;
+    }
+
+    private static void d3AwaitState(D3Pid helper, String expected) {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+        while (!d3State(helper).equals(expected)) {
+            if (System.nanoTime() >= deadline) {
+                throw new AssertionError("helper state " + d3State(helper) + ", expected " + expected);
+            }
+            LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(5));
+        }
+    }
+
+    private static String d3Command(long pid) throws Exception {
+        return new String(Files.readAllBytes(Path.of("/proc", Long.toString(pid), "cmdline")),
+                StandardCharsets.UTF_8).replace('\u0000', ' ');
+    }
+
+    /** Sends one signal from the unrestricted harness to a tracked, still running helper. */
+    private static void d3Signal(D3Pid helper, int signal) {
+        assertTrue(d3Running(helper), "helper not running before signal " + signal);
+        try {
+            MethodHandle kill = Linker.nativeLinker().downcallHandle(
+                    Linker.nativeLinker().defaultLookup().find("kill").orElseThrow(),
+                    FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT, ValueLayout.JAVA_INT));
+            assertEquals(0, (int) kill.invokeExact((int) helper.pid(), signal), "kill failed");
+        } catch (Throwable failure) {
+            throw new AssertionError("host kill diagnostic failed", failure);
+        }
+    }
+
+    /** SIGKILL of the client JVM; its helper must then stop running. */
+    private static void d3KillClient(D3Session session) throws Exception {
+        Process client = session.client();
+        assertTrue(client.isAlive(), "client died before SIGKILL");
+        client.destroyForcibly();
+        assertTrue(client.waitFor(30, TimeUnit.SECONDS), "client SIGKILL timeout");
+        assertEquals(137, client.exitValue());
+        assertTrue(d3AwaitGone(session.helper(), 30),
+                "helper still running after client death, state=" + d3State(session.helper()));
     }
 
     private static Probe sqliteProbe(ProtosExternalForeignProviderTest.Fixture fixture,

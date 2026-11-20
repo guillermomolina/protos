@@ -489,6 +489,8 @@ pending until the maintainer runs it.
   [sqlite-durable-confinement.md](sqlite-durable-confinement.md).
 - No general transaction abstraction, native callbacks, ORM or query builder.
 
-The public `std:sqlite` API remains in-memory only. The isolated PLAT074-D0
-prototype is experimental: it exports no durable API and grants no filesystem
+The public `std:sqlite` API remains in-memory only. The isolated PLAT074-D0–D2
+experiments (process isolation, Landlock confinement, durable operation
+receipts) are test fixtures, not part of the public API: none of their
+operations is a `std:sqlite` operation, and they grant no filesystem
 authority. See [sqlite-isolated-process-spike.md](sqlite-isolated-process-spike.md).

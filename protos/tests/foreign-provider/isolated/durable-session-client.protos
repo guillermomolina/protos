@@ -1,0 +1,213 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// PLAT074-D3 test-only CLI entry: a Protos client that is the OS parent of its
+// isolated SQLite helper. native/owner-exec.c forks the helper (behind the
+// D1-R1 launcher with PR_SET_PDEATHSIG) and then execve()s this client in the
+// same process, so stdin carries exactly the helper's protocol lines and
+// stdout exactly this client's requests. There is no relay: JUnit only sees
+// stderr. This entry imports no FFI, opens no database and spawns no process.
+//
+// Application arguments, from the trusted bootstrap only:
+//   SCENARIO IDENTITY_HI IDENTITY_LO
+// SCENARIO is one closed name below. The durable key and value are fixed.
+// Diagnostics are bounded CLIENT_* lines on stderr. EOF before a correlated
+// reply is reported as UNCERTAIN and never as a rollback.
+ProcessStreams: import("std:io/process_streams")
+JSON: import("std:json/json")
+Protocol: import("./DurableProtocol.protos")
+
+arguments: process.args()
+reader: ProcessStreams.stdinReader(process)
+writer: ProcessStreams.stdoutWriter(process)
+diagnostics: ProcessStreams.stderrWriter(process)
+
+CLIENT_ID: 301
+OPERATION_ID: 9001
+VALUE: 77
+scenarios: Array("NORMAL", "EXIT_AFTER_READY", "HOLD_AFTER_READY", "HOLD_BEFORE_COMMIT",
+    "HOLD_AFTER_COMMIT", "EXIT_AFTER_COMMIT")
+
+fail: () => {
+    Error().signal()
+}
+
+diagnose: (text) => {
+    diagnostics.writeLine(text).value()
+    diagnostics.flush().value()
+}
+
+abort: (event) => {
+    diagnose(event)
+    fail()
+}
+
+listed: (names, candidate) => {
+    found: false
+    for(name in names) {
+        if(name == candidate) { found = true }
+    }
+    found
+}
+
+// Exact canonical signed 64-bit Integer text.
+identityArgument: (text) => {
+    node: JSON.parse(text)
+    (node.kind === "number").ifFalse(() => { fail() })
+    (node.value.exponent == 0).ifFalse(() => { fail() })
+    value: node.value.coefficient
+    Integer.recognizes(value).ifFalse(() => { fail() })
+    ((value >= (0 - 9223372036854775807 - 1)) && (value <= 9223372036854775807)).ifFalse(() => { fail() })
+    (JSON.encode(JSON.number(value, 0)) == text).ifFalse(() => { fail() })
+    value
+}
+
+if(arguments.size() != 3) { abort("CLIENT_INVALID_BOOTSTRAP") }
+scenario: arguments[0]
+listed(scenarios, scenario).ifFalse(() => { abort("CLIENT_INVALID_BOOTSTRAP") })
+expectedHi: null
+expectedLo: null
+bootstrapValid: false
+Error.handle(() => {
+    expectedHi = identityArgument(arguments[1])
+    expectedLo = identityArgument(arguments[2])
+    bootstrapValid = true
+}, (error) => {
+    bootstrapValid = false
+})
+bootstrapValid.ifFalse(() => { abort("CLIENT_INVALID_BOOTSTRAP") })
+
+// One bounded line from the helper, or null on EOF or framing failure.
+receive: () => {
+    line: null
+    Error.handle(() => {
+        line = reader.readLine(4096).value()
+    }, (error) => {
+        line = null
+    })
+    line
+}
+
+lastId: 0
+
+send: (clientId, operationId, operation, value) => {
+    lastId = lastId + 1
+    writer.writeLine(Protocol.encodeRequest(lastId, clientId, operationId, operation, value)).value()
+    writer.flush().value()
+    lastId
+}
+
+// The reply correlated with transport `id`. EOF leaves the operation UNCERTAIN.
+awaitReply: (id) => {
+    line: receive()
+    if(line === null) { abort("CLIENT_CONNECTION_LOST UNCERTAIN") }
+    decoded: null
+    Error.handle(() => {
+        decoded = Protocol.decodeResponse(line)
+    }, (error) => {
+        decoded = null
+    })
+    if(decoded === null) { abort("CLIENT_INVALID_REPLY") }
+    if(decoded.id === null) { abort("CLIENT_UNCORRELATED_REPLY") }
+    if(decoded.id != id) { abort("CLIENT_UNCORRELATED_REPLY") }
+    decoded
+}
+
+call: (clientId, operationId, operation, value) => awaitReply(send(clientId, operationId, operation, value))
+
+// Exact status and value; `value` null means the reply value must be null.
+expect: (decoded, status, value) => {
+    matches: decoded.status == status
+    if(matches) {
+        if(value === null) {
+            matches = decoded.value === null
+        } else {
+            matches = Integer.recognizes(decoded.value)
+            if(matches) { matches = decoded.value == value }
+        }
+    }
+    matches.ifFalse(() => { abort("CLIENT_UNEXPECTED_REPLY " + decoded.status) })
+    decoded
+}
+
+// READY, then the helper's DATABASE_IDENTITY, compared with the bootstrap.
+// A mismatch sends no operation at all.
+readyLine: receive()
+if(readyLine === null) { abort("CLIENT_HELPER_NOT_READY") }
+readyValid: false
+Error.handle(() => {
+    readyValid = Protocol.decodeReady(readyLine)
+}, (error) => {
+    readyValid = false
+})
+readyValid.ifFalse(() => { abort("CLIENT_HELPER_NOT_READY") })
+identityLine: receive()
+if(identityLine === null) { abort("CLIENT_HELPER_NOT_READY") }
+published: null
+Error.handle(() => {
+    published = Protocol.decodeDatabaseIdentity(identityLine)
+}, (error) => {
+    published = null
+})
+if(published === null) { abort("CLIENT_DATABASE_IDENTITY_MISMATCH") }
+((published.identityHi == expectedHi) && (published.identityLo == expectedLo)).ifFalse(() => {
+    abort("CLIENT_DATABASE_IDENTITY_MISMATCH")
+})
+diagnose("CLIENT_READY")
+
+if(scenario == "NORMAL") {
+    expect(call(null, null, "INIT", null), "OK", null)
+    applied: call(CLIENT_ID, OPERATION_ID, "APPLY_ONCE", VALUE)
+    if(applied.status == "REPLAYED") {
+        expect(applied, "REPLAYED", VALUE)
+    } else {
+        expect(applied, "APPLIED", VALUE)
+    }
+    diagnose("CLIENT_APPLY " + applied.status)
+    expect(call(CLIENT_ID, OPERATION_ID, "LOOKUP", null), "FOUND", VALUE)
+    diagnose("CLIENT_LOOKUP FOUND")
+    expect(call(null, null, "STOP", null), "OK", null)
+    // After the STOP reply the helper closes its stdout: nothing else arrives.
+    if(receive() !== null) { abort("CLIENT_UNEXPECTED_REPLY") }
+    diagnose("CLIENT_STOPPED")
+}
+
+if(scenario == "EXIT_AFTER_READY") {
+    // No STOP: the JVM ends while the helper is idle.
+    diagnose("CLIENT_EXIT_WITHOUT_STOP")
+}
+
+if(scenario == "HOLD_AFTER_READY") {
+    // The idle helper sends nothing unsolicited: this waits until killed.
+    diagnose("CLIENT_HOLDING_IDLE")
+    if(receive() !== null) { abort("CLIENT_UNEXPECTED_REPLY") }
+    abort("CLIENT_CONNECTION_LOST")
+}
+
+if((scenario == "HOLD_BEFORE_COMMIT") || (scenario == "HOLD_AFTER_COMMIT")) {
+    expect(call(null, null, "INIT", null), "OK", null)
+    // The test-only held operation; CONTINUE is never sent.
+    send(CLIENT_ID, OPERATION_ID, scenario, VALUE)
+    diagnose("CLIENT_HOLD_SENT")
+    if(receive() !== null) { abort("CLIENT_UNEXPECTED_REPLY") }
+    abort("CLIENT_CONNECTION_LOST UNCERTAIN")
+}
+
+if(scenario == "EXIT_AFTER_COMMIT") {
+    expect(call(null, null, "INIT", null), "OK", null)
+    expect(call(CLIENT_ID, OPERATION_ID, "APPLY_ONCE", VALUE), "APPLIED", VALUE)
+    diagnose("CLIENT_APPLIED")
+    diagnose("CLIENT_EXIT_WITHOUT_STOP")
+}
