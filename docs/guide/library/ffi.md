@@ -263,6 +263,15 @@ not be described as automatically confined operations. The
 [SQLite durable confinement packet](sqlite-durable-confinement.md) records the
 experimental evidence (B2-T5, B6-T2).
 
+Actor ownership is a resource-custody property, not physical thread affinity,
+and Context identity does not imply native destructor affinity. The Truffle
+`finalizeThread` and `disposeThread` notifications do not universally guarantee
+that their arguments identify the currently executing physical thread. Any
+native-confinement claim needs evidence about the thread that actually executes
+the destructor downcall; B2-T5 remains the current provider's concrete
+counterexample. See
+[Truffle precedents and limits](sqlite-durable-confinement.md#21-truffle-precedents-and-limits).
+
 This FFM profile is not a Native Image portability promise. Native Image cannot
 load this external provider JAR. Platform support is limited to the portable
 JVM, Java 25, supported GraalVM 25.5 and Linux x86-64 LP64.

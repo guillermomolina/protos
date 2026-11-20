@@ -518,6 +518,30 @@ PLAT074 experiment B6-T2 showed that a native operation can be executed from a
 different, unrestricted host thread through the same Actor; B2-T5 showed a
 destructor running on a thread other than the restricted owner.
 
+### Thread lifecycle versus native execution affinity
+
+- **Polyglot thread.** A thread created through `Env.newTruffleThreadBuilder()`
+  belongs to the Truffle-managed lifecycle, and `TruffleLanguage.finalizeThread`
+  documents that its finalization callback runs on that thread. This does not
+  mean that every owned native resource associated with an Actor is closed on
+  that thread.
+- **Embedder thread.** A thread created by the host or embedder has no such
+  guarantee: Truffle may run its `finalizeThread` from the thread finalizing the
+  Context. Physical affinity must not be inferred from the `Thread thread`
+  argument.
+- **State disposal.** `TruffleLanguage.disposeThread` allows
+  `Thread.currentThread()` to differ from the thread whose state is disposed.
+  NFI and Sulong provide per-thread state-disposal precedents, but they do not
+  by themselves demonstrate SQLite destructor affinity.
+- **Destructor execution.** The relevant property is the physical thread that
+  actually executes the C downcall. The current FFM provider does not guarantee
+  that it matches the acquiring thread; B2-T5 is the observed counterexample.
+- **Context close.** Finalizing a Context cannot be described as safe close of a
+  confined SQLite session while C operations are in flight or destructors run
+  on physically uncontrolled threads.
+
+See [Truffle precedents and limits](../library/sqlite-durable-confinement.md#21-truffle-precedents-and-limits).
+
 > **Warning:** a Protos `Filesystem` grant is not automatic confinement of
 > SQLite C (or any C library). No provider configuration or flag provides such
 > confinement. See the

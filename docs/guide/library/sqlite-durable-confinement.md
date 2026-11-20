@@ -2539,11 +2539,42 @@ owner-approved slice must demonstrate.
 | DA-5 | **Pre-grant resources.** A native connection or descriptor opened before Landlock installation is not automatically revoked. | — | B6-T1: pre-opened connection still read exterior value 71 after restriction. | A defined initialization/acquisition order in which no durable resource exists before the grant, with a T1-style test showing no pre-grant resource reaches the domain. |
 | DA-6 | **Grant identity.** Authority over a directory is not exclusive authority over one SQLite file. | B6-T3/T5/T6/T7: symlink, URI, ATTACH and retarget escapes denied in the controlled path. | B6-T4: in-grant hardlink exposes an exterior-named file. Hardlinks, aliases, namespace changes and alternative names undecided. | An owner decision on the grant's identity unit and its treatment of hardlinks/aliases/namespace changes, with tests for each decided case. |
 | DA-7 | **No alternative FFM authority.** An application able to call `ffi:sqlite3` arbitrarily outside the domain cannot be described as confined by the `std:sqlite` API. | Provider is `TRUSTED_IN_PROCESS` (§2). | Trusted and confined profiles are not distinguished today. | Explicitly distinct trusted and confined profiles; in the confined profile, no exterior path to `ffi:sqlite3` for the governed databases. |
-| DA-8 | **Non-reentrant Actor.** Confinement introduces no simultaneous guest execution in one Actor and no implicit suspension to hide a blocking SQLite call. | Native calls are synchronous; a blocked call holds its Actor ([ffm-provider.md](../interop/ffm-provider.md#security-and-limits)). | No confined mechanism exists to verify. | Tests showing one guest execution per Actor and no implicit suspension under the confined mechanism. |
-| DA-9 | **Cancellation.** No promise of safe interruption of arbitrary C through `Thread.interrupt`, `ThreadLocalAction` or Future cancellation. States distinguished: request before admission; native call admitted; call blocked; cancellation requested; operation finished; uncertain outcome. | `ThreadLocalAction` requires safepoint servicing and cannot interrupt blocked C (§14). | State model not defined in any contract. | An approved state model covering all six states, with only pre-admission cancellation guaranteed and other states reported, never silently resolved. |
+| DA-8 | **Non-reentrant Actor.** Confinement introduces no simultaneous guest execution in one Actor and no implicit suspension to hide a blocking SQLite call. | Native calls are synchronous; a blocked call holds its Actor ([ffm-provider.md](../interop/ffm-provider.md#security-and-limits)). | No confined mechanism exists to verify. | Tests showing one guest execution per Actor and no implicit suspension under the confined mechanism, and separately showing that physical-thread restriction and Actor non-reentrancy are each established on their own (neither inferred from the other). |
+| DA-9 | **Cancellation.** No promise of safe interruption of arbitrary C through `Thread.interrupt`, `ThreadLocalAction` or Future cancellation. States distinguished: request before admission; native call admitted; call blocked; cancellation requested; operation finished; uncertain outcome. | `ThreadLocalAction` requires safepoint servicing and cannot interrupt blocked C (§14). | State model not defined in any contract. | An approved state model covering all six states, with only pre-admission cancellation guaranteed and other states reported, never silently resolved; tests showing that cancelling a client wait does not cancel an admitted SQLite transaction, and that safepoint polling or `ThreadLocalAction` is never relied on for a blocked C call. |
 | DA-10 | **Uncertain COMMIT.** If the process ends before a confirmation reaches the client, the operation is reported neither as committed nor as rolled back; recovery must observe durable state before deciding whether to repeat. | B5 SIGKILL recovery observes durable state after kill. | No client-visible uncertain outcome exists. | An uncertain-outcome result and a recovery procedure that inspects durable state before any retry, tested across process termination. |
 | DA-11 | **Final close.** Session close is irreversible and idempotent; normal Actor/Process termination is not necessarily completed physical destruction while SQLite keeps live dependencies. | Single release; closed session not reactivated (§2, B4-R1). | close_v2 deferred destruction and dependent resources not tracked through termination. | Tests showing repeated close is a no-op, no reopen of a closed session, and an explicit distinction between logical close and completed physical destruction. |
 | DA-12 | **Compatibility.** Preserve LIB029/LIB030; Protos-first `std:sqlite`; Actor-local owned handles; copied results; terminal Futures; current message semantics; no JDBC or ORM; no historical Java infrastructure; no implicit durable access. | Current in-memory API and tests (LIB029/LIB030). | Any durable mechanism not yet evaluated against these. | Existing LIB029/LIB030 coverage unchanged and passing, with the durable addition purely additive and owner-approved. |
+
+### Reconciliation of DA-2, DA-3 and DA-4 with Truffle finalization
+
+Truffle finalization callbacks (`finalizeThread`, `disposeThread`,
+`finalizeContext`; §21) are **not** substitutes for restricted native custody.
+Whatever mechanism is later approved, admission must guarantee that:
+
+- no exterior thread executes a SQLite operation of the confined session;
+- a close requested from another thread does not move the destructor to the
+  requester;
+- a context thread being finalized cannot abandon pending owned resources in a
+  domain that ceases to exist;
+- a blocking native operation prevents claiming that the Context terminated
+  cleanly while it still holds live resources.
+
+No implementation mechanism is defined here.
+
+### Reconciliation of DA-8 and DA-9
+
+These facts are distinct and none implies another:
+
+- A restricted physical thread does not imply a restricted Actor.
+- A non-reentrant Actor does not imply physical thread affinity.
+- `ThreadLocalAction` does not replace the scheduler.
+- Safepoint polling does not guarantee progress of a blocked C call.
+- Terminating a JVM releases its OS resources but does not automatically
+  produce a Protos COMMIT confirmation.
+- Cancelling a client wait does not imply cancelling an admitted SQLite
+  transaction.
+
+The DA-8 and DA-9 future acceptance conditions above reflect this separation.
 
 ## 20. Pending implementation contract
 
@@ -2553,59 +2584,173 @@ PASS of the contract item.
 
 ### Contract B — in-JVM confinement
 
-| Acceptance item | Required property | Current status |
-|---|---|---|
-| B-1 Physically confined native execution | All SQLite C for a confined session runs on threads under the authorized Landlock domain. | NOT IMPLEMENTED (experimental feasibility only: B1, B4) |
-| B-2 Mandatory affinity of all operations | Every operation of DA-2 executes in the domain. | NOT IMPLEMENTED (contradicted by B2-T5) |
-| B-3 Close from any requester without destructor displacement | A close requested from any thread executes the destructor in the acquisition domain. | NOT IMPLEMENTED (B3 shows cooperative feasibility only; B2-T5 counterexample) |
-| B-4 Host-entry admission | Unauthorized host entry cannot reach C with session authority. | NOT IMPLEMENTED (contradicted by B6-T2) |
-| B-5 In-flight C operations | Admitted, blocked and finishing calls handled per DA-9 without unsafe interruption. | NOT IMPLEMENTED |
-| B-6 Pre-Landlock resources | No durable resource exists before the grant. | NOT IMPLEMENTED (contradicted by B6-T1) |
-| B-7 Multiple grants | Distinct grants/domains coexist without widening each other. | NOT IMPLEMENTED |
-| B-8 WAL, SHM, locking and recovery | Sidecars, locks, checkpoints and recovery stay inside the domain. | NOT IMPLEMENTED (B4/B5 cover a bounded subset only) |
+| Acceptance item | Required property | Current status | Required falsification test |
+|---|---|---|---|
+| B-1 Physically confined native execution | All SQLite C for a confined session runs on threads under the authorized Landlock domain. | NOT IMPLEMENTED (experimental feasibility only: B1, B4) | FFM operations executed from an unrestricted carrier. |
+| B-2 Mandatory affinity of all operations | Every operation of DA-2 executes in the domain. | NOT IMPLEMENTED (contradicted by B2-T5) | prepare, step, reset, checkpoint and finalize physically observed outside the grant. |
+| B-3 Close from any requester without destructor displacement | A close requested from any thread executes the destructor in the acquisition domain. | NOT IMPLEMENTED (B3 shows cooperative feasibility only; B2-T5 counterexample) | Repetition of B2-T5 with the exterior destructor. |
+| B-4 Host-entry admission | Unauthorized host entry cannot reach C with session authority. | NOT IMPLEMENTED (contradicted by B6-T2) | Repetition of B6-T2 with the same Actor. |
+| B-5 In-flight C operations | Admitted, blocked and finishing calls handled per DA-9 without unsafe interruption. | NOT IMPLEMENTED | close requested while a C call blocks and does not service safepoints. |
+| B-6 Pre-Landlock resources | No durable resource exists before the grant. | NOT IMPLEMENTED (contradicted by B6-T1) | Repetition of B6-T1 with a pre-opened connection. |
+| B-7 Multiple grants | Distinct grants/domains coexist without widening each other. | NOT IMPLEMENTED | Multiple grants, linked files and aliases. |
+| B-8 WAL, SHM, locking and recovery | Sidecars, locks, checkpoints and recovery stay inside the domain. | NOT IMPLEMENTED (B4/B5 cover a bounded subset only) | WAL/SHM, two independent JVMs, SIGKILL and recovery. |
 
 ### Contract D — isolated OS process
 
-| Acceptance item | Required property | Current status |
-|---|---|---|
-| D-1 Truly isolated OS process | SQLite runs in a separate OS process. | NOT IMPLEMENTED (B5 shows independent JVM processes only) |
-| D-2 Restricted filesystem authority | The process running SQLite holds only the granted filesystem authority. | NOT IMPLEMENTED |
-| D-3 Bounded communication with Protos | A bounded, validated channel between Protos and the helper. | NOT IMPLEMENTED |
-| D-4 No transferred native handles | No native handle crosses the boundary. | NOT IMPLEMENTED |
-| D-5 Copied Protos messages and results | Requests and results are copied Protos values. | NOT IMPLEMENTED |
-| D-6 Operation identity | Every operation has an identity usable for correlation and recovery. | NOT IMPLEMENTED |
-| D-7 Process-crash detection | Helper termination is detected and surfaced. | NOT IMPLEMENTED |
-| D-8 Unacknowledged COMMIT is uncertain | Per DA-10. | NOT IMPLEMENTED |
-| D-9 Recovery and restart | The helper can be restarted with recovery that observes durable state. | NOT IMPLEMENTED (B5 SIGKILL recovery is bounded context) |
-| D-10 Process cleanup and revocation | Helper resources and authority are released/revoked on close. | NOT IMPLEMENTED |
-| D-11 No shared Landlock domain assumption | No reliance on a main-process Actor sharing the helper's Landlock domain. | NOT IMPLEMENTED |
+| Acceptance item | Required property | Current status | Required falsification test |
+|---|---|---|---|
+| D-1 Truly isolated OS process | SQLite runs in a separate OS process. | NOT IMPLEMENTED (B5 shows independent JVM processes only) | Force-terminate the helper: SQLite runs under a PID distinct from the Protos client, in an independent address space, and the helper's forced termination does not terminate the client. (A grant-escape attempt alone is not evidence of process separation.) |
+| D-2 Restricted filesystem authority | The process running SQLite holds only the granted filesystem authority. | NOT IMPLEMENTED | Attempts to access paths outside the grant, and access through descriptors opened before the grant was applied; a distinct process is not automatically a sufficiently restricted one. |
+| D-3 Bounded communication with Protos | A bounded, validated channel between Protos and the helper. | NOT IMPLEMENTED | Malformed IPC input, oversized messages, unauthorized operations and channel closure mid-message are each rejected without executing any unauthorized SQLite operation. |
+| D-4 No transferred native handles | No native handle crosses the boundary. | NOT IMPLEMENTED | No pointer, memory address or owned SQLite handle is usable outside the helper; logical resource identifiers, if a future decision authorizes them, cannot be confused with native handles. |
+| D-5 Copied Protos messages and results | Requests and results are copied Protos values. | NOT IMPLEMENTED | Mutating a sent guest value after admission does not alter the admitted request, and mutating a copied response does not alter the helper's native state (distinct from the D-3 malformed-message tests). |
+| D-6 Operation identity | Every operation has an identity usable for correlation and recovery. | NOT IMPLEMENTED | Correct request/response correlation, and explicit rejection or handling of a repeated, already-confirmed operation (identifier format not defined here). |
+| D-7 Process-crash detection | Helper termination is detected and surfaced. | NOT IMPLEMENTED | Terminate the helper while it processes an operation; the client observes the failure, and connection loss is never reported as success or as a confirmed rollback. |
+| D-8 Unacknowledged COMMIT is uncertain | Per DA-10. | NOT IMPLEMENTED | Kill the helper after SQLite has committed but before the client receives the acknowledgement; the result must be uncertain and durable state must be reconciled before any retry. A client timeout does not prove the native call was cancelled. |
+| D-9 Recovery and restart | The helper can be restarted with recovery that observes durable state. | NOT IMPLEMENTED (B5 SIGKILL recovery is bounded context) | Restart the helper, recover committed data and run integrity checks, including concurrent reopen from another JVM and rejection of improper duplication. |
+| D-10 Process cleanup and revocation | Helper resources and authority are released/revoked on close. | NOT IMPLEMENTED | Terminate the client while the helper holds an active transaction; verify the required finalization, resource release, process shutdown and authority revocation, without assuming automatic guest cleanup after SIGKILL. |
+| D-11 No shared Landlock domain assumption | No reliance on a main-process Actor sharing the helper's Landlock domain. | NOT IMPLEMENTED | With the main process unrestricted and the helper restricted, repeat an exterior access attempt from the helper and an authorized access from the main process; the main process's authority must not widen the helper's grant. |
+
+A falsification test passes only when the approved implementation rejects or
+safely handles the counterexample that the test attempts to introduce. This is
+distinct from the historical B6 negative controls, whose PASS demonstrates that
+the current unrestricted path remains possible.
+
+Each future falsification test must **fail** if the mechanism admits the
+corresponding counterexample. None is implemented. No production IPC
+protocol, Java structure or normative operation identifier is introduced.
 
 No hypothetical Java class or method names are introduced by either contract.
 
 ## 21. Truffle precedents and limits
 
-Only precedents already recorded with pinned sources in §§14–15 are retained:
-GraalPy at `5c8486970dead373d888f25210788cca5d79c374`, Espresso at
-`bd884eb3effea2b31f3fbdd7250267ba8e9eca8e`. Espresso entries were supplied as
-already-verified input (§14); no new upstream investigation is claimed here.
+Pinned revisions: GraalPy (`oracle/graalpython`) at
+`5c8486970dead373d888f25210788cca5d79c374`; Espresso, Truffle API, NFI and
+Sulong (`oracle/graal`) at `bd884eb3effea2b31f3fbdd7250267ba8e9eca8e`. The
+behaviors below were supplied as owner-verified input for PLAT074-B7-R1; no
+additional upstream investigation is claimed.
 
-| Mechanism (real method, annotations) | Verified behavior | Property it may contribute to Protos design | Property it does not demonstrate |
-|---|---|---|---|
-| GraalPy `PythonContext.createSystemThread` (no method annotation) | Builds a thread through `env.newTruffleThreadBuilder(task).threadGroup(...).build()`, sets daemon/name, registers a weak reference, returns it unstarted. | Context-managed thread creation for a dedicated execution domain. | That raw Java workers are equivalent; any Landlock or native affinity. |
-| GraalPy `PythonContext.finalizeContext` (`@TruffleBoundary`, `@SuppressWarnings("try")`) | Ordered shutdown: hooks, async handler, stream flush, thread joins, thread-state disposal, NativeContext closed last, then system-thread joins. | Explicit ordering of native cleanup at context end. | Affinity of arbitrary native destructors to an acquisition domain. |
-| GraalPy `PythonLanguage.initializeThread` (`@Override`) | Delegates to `context.attachThread(thread, threadState)`. | A lifecycle hook for per-thread setup. | An owned-resource or filesystem policy. |
-| GraalPy `PythonLanguage.disposeThread` (`@Override`) | Delegates to `context.disposeThread(thread, false)`. | A lifecycle hook for per-thread teardown. | That resources acquired on the thread are destroyed there. |
-| GraalPy `PythonSystemThreadTask.run` (`@Override`, `public final`) | Calls `doRun()`, handles the thread-kill exception, logs/rethrows other failures; contract requires safepoint polling. | Explicit lifecycle handling of a system thread. | Native teardown affinity or interruption of blocked C. |
-| Espresso `EspressoReferenceDrainer.startReferenceDrain` | Starts the reference-drain thread (per the recorded precedent). | A dedicated cleanup thread started under language control. | Landlock restriction or SQLite-domain affinity. |
-| Espresso `EspressoReferenceDrainer.shutdownAndWaitReferenceDrain` | Shuts down and waits for the drain thread. | Bounded, cooperative termination of a cleanup thread. | Interruption of arbitrary blocked C. |
-| Espresso `EspressoReferenceDrainer.ReferenceDrain.run` | Runs the drain loop on that dedicated thread. | Cleanup confined to one controlled thread. | That native destructors of an Actor run in its authorized domain. |
-| Espresso `EspressoLanguage.finalizeContext` | Context finalization at the same revision. | Ordered teardown at context end. | Completed physical destruction of SQLite dependencies. |
+### GraalPy
+
+`graalpython/com.oracle.graal.python/src/com/oracle/graal/python/runtime/PythonContext.java`:
+
+- `createSystemThread()` uses `env.newTruffleThreadBuilder(task)`, assigns a
+  thread group, a name and daemon status, registers a reference to the
+  thread, and returns it **unstarted**. The implementation distinguishes
+  system threads that need to run guest code.
+- `finalizeContext()` (`@TruffleBoundary`) orders hooks, asynchronous
+  shutdown, stream flush and native cleanup; the C dependencies are finalized
+  in the order the context prescribes. It is an ordering mechanism, **not** a
+  general mechanism of physical destructor affinity.
+
+Retained with their limits: `PythonLanguage.initializeThread` (`@Override`,
+delegates to `context.attachThread`) is a per-thread setup hook with no
+owned-resource or filesystem policy; `PythonLanguage.disposeThread`
+(`@Override`, delegates to `context.disposeThread(thread, false)`) is a
+teardown hook that does not show resources acquired on a thread are destroyed
+on it; `PythonSystemThreadTask.run` (`@Override`, `public final`) handles the
+thread-kill exception and requires safepoint polling, demonstrating neither
+native teardown affinity nor interruption of blocked C.
+
+### Espresso
+
+`espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/runtime/EspressoReferenceDrainer.java`:
+
+- `startReferenceDrain()` starts the configured Truffle thread.
+- `shutdownAndWaitReferenceDrain()` loops while the thread is alive: it
+  submits a `ThreadLocalAction`, interrupts the thread and calls `join(10)`.
+  The outer loop has **no global deadline**; termination is not temporally
+  bounded.
+- `ReferenceDrain.run()` attaches the thread to the guest environment and
+  runs the drain loop.
+- `ReferenceDrain.drain()` (`@TruffleBoundary`) uses safepoint polling.
+- `ReferenceDrain.popQueue()` uses
+  `TruffleSafepoint.setBlockedThreadInterruptible` for the managed queue wait.
+
+**Espresso demonstrates a Truffle-managed thread and cooperative termination
+of a loop that services safepoints. It does not demonstrate a global time
+bound, nor a way to arbitrarily cancel a blocked SQLite C call.**
+`Thread.interrupt()` does not guarantee native cancellation.
+
+`espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/EspressoLanguage.java`:
+`finalizeContext(EspressoContext)` (`@Override`) performs, in order:
+`context.ensureThreadsJoined()`; `TruffleSafepoint.getCurrent()`;
+`setAllowActions(false)`; `context.prepareDispose()`;
+`context.cleanupNativeEnv()`; restoration of the safepoint state;
+`context.setFinalized()`. This demonstrates finalization ordering and context
+control. It does **not** show that `cleanupNativeEnv()` runs SQLite-like
+destructors on the thread where the resources were acquired.
+
+### Truffle thread lifecycle guarantees and non-guarantees
+
+Source:
+[`TruffleLanguage.java`](https://github.com/oracle/graal/blob/bd884eb3effea2b31f3fbdd7250267ba8e9eca8e/truffle/src/com.oracle.truffle.api/src/com/oracle/truffle/api/TruffleLanguage.java).
+
+- **A. `finalizeContext(C context)`.** The API requires the language to stop
+  and join threads created with `Env.newTruffleThreadBuilder()` during
+  `finalizeContext`. Leaving a daemon thread to outlive the context is not
+  sufficient. The documentation warns that strategies relying solely on
+  `ExecutorService.awaitTermination` do not reliably detect the end of
+  polyglot threads.
+- **B. `initializeThread(C context, Thread thread)`.** The per-thread
+  initialization hook; the context and thread correspond to that thread's
+  actual entry.
+- **C. `finalizeThread(C context, Thread thread)`.** For polyglot threads
+  created through `Env.newTruffleThreadBuilder`, finalization is documented
+  to occur on the thread itself, subject to the cancellation/hard-exit
+  restrictions on guest execution. For embedder-created threads, finalization
+  may run on the thread finalizing the context. Therefore
+  `thread == Thread.currentThread()` is **not** a universal property of
+  `finalizeThread`.
+- **D. `disposeThread(C context, Thread thread)`.** `Thread.currentThread()`
+  may differ from the thread being disposed. Disposal of embedder-thread state
+  is not guaranteed in every case.
+
+**Mandatory conclusion:** SQLite destructors must not be executed on the sole
+basis of the thread identity passed to `disposeThread` or `finalizeThread`.
+The required property is the **physical thread that actually performs the
+destruction downcall**.
+
+### NFI and Sulong
+
+- **NFI** —
+  `truffle/src/com.oracle.truffle.nfi/src/com/oracle/truffle/nfi/NFILanguage.java`:
+  `disposeThread(NFIContext context, Thread thread)` (`@Override`) obtains the
+  state via `nfiState.get(thread)` and calls `state.dispose()`. This shows
+  native per-thread state managed by thread identity, **not** a guarantee that
+  the call physically runs on that thread.
+- **Sulong** —
+  `sulong/projects/com.oracle.truffle.llvm.runtime/src/com/oracle/truffle/llvm/runtime/LLVMLanguage.java`:
+  `disposeThread(LLVMContext context, Thread thread)` (`@Override`) delegates
+  to `PlatformCapability.disposeThread` and then to
+  `disposeThreadNoGuestCode(LLVMContext context, Thread thread)`, which frees
+  thread-specific state including stack and TLS and is documented not to run
+  arbitrary guest code; the documentation admits it may use a native helper
+  through NFI. This is a precedent for separating per-thread state cleanup
+  from guest execution, but it does **not** allow assuming that an owned
+  SQLite destructor runs under the original thread's Landlock domain.
 
 `ThreadLocalAction` is **not** a native scheduler and **not** a cancellation
 solution for blocking C: delivery requires the target to service safepoints,
-which a thread blocked in C does not do. The existence of these mechanisms
-authorizes **no** production Java change, and no production comment cites
-them.
+which a thread blocked in C does not do. None of these mechanisms authorizes a
+production Java change, and no production comment cites them.
+
+### Technical traceability
+
+| Obligation | Verifiable Truffle method/annotation | What it demonstrates | What it does not demonstrate | Current gate |
+|---|---|---|---|---|
+| Thread creation | `Env.newTruffleThreadBuilder`; GraalPy `PythonContext.createSystemThread()` | Context-managed thread, returned unstarted, registered | Landlock restriction or native affinity | B-1 / DA-2 — NOT IMPLEMENTED |
+| Context entry | Espresso `ReferenceDrain.run()` (attach to guest environment) | A dedicated thread entering the guest environment | Refusal of unauthorized host entry | B-4 / DA-3 — contradicted by B6-T2 |
+| Per-thread initialization | `TruffleLanguage.initializeThread` (`@Override` in GraalPy `PythonLanguage`) | Per-thread hook on the actual entry | Grant installation or owned-resource policy | B-1, B-6 — NOT IMPLEMENTED |
+| Native operation execution | NO VERIFIED EQUIVALENT | — | Physical domain of SQLite downcalls | B-1, B-2 — NOT IMPLEMENTED |
+| Thread-directed action | `ThreadLocalAction` in Espresso `shutdownAndWaitReferenceDrain()` | Cooperative delivery to a safepoint-servicing thread | Scheduling or cancellation of C | DA-9 — NOT IMPLEMENTED |
+| Blocking native operation | `TruffleSafepoint.setBlockedThreadInterruptible` (Espresso `ReferenceDrain.popQueue()`) | Interruptible managed Java wait | Progress or cancellation of a blocked C call | B-5 / DA-9 — NOT IMPLEMENTED |
+| Polyglot thread finalization | `TruffleLanguage.finalizeThread` (polyglot threads) | Runs on the thread itself, with cancel/hard-exit restrictions | Owned SQLite destructor affinity | B-3 / DA-4 — B2-T5 counterexample |
+| Embedder thread finalization | `TruffleLanguage.finalizeThread` (embedder threads) | May run on the finalizing thread | `thread == Thread.currentThread()` | B-3, B-4 — NOT IMPLEMENTED |
+| Per-thread state disposal | `TruffleLanguage.disposeThread`; NFI `NFILanguage.disposeThread`; Sulong `LLVMLanguage.disposeThread` / `disposeThreadNoGuestCode` | State keyed by thread identity; cleanup separated from guest code | Physical execution on that thread | DA-4 — NOT IMPLEMENTED |
+| Owned-resource close | NO VERIFIED EQUIVALENT | — | Destructor in acquisition domain | B-3 / DA-4, DA-11 — B2-T5 counterexample |
+| Context finalization | `TruffleLanguage.finalizeContext`; Espresso `EspressoLanguage.finalizeContext` (`@Override`); GraalPy `PythonContext.finalizeContext` (`@TruffleBoundary`) | Ordering, thread join obligation, context control | Physical destruction of SQLite dependencies in domain | DA-11 — NOT IMPLEMENTED |
+| Process termination | NO VERIFIED EQUIVALENT | — | Protos-visible COMMIT confirmation | DA-10, B-8 / D-8 — NOT IMPLEMENTED |
 
 ## 22. Decision requested from the owner
 
@@ -2622,12 +2767,82 @@ Retained: **A** as the trusted, unconfined profile (never labelled confined);
 **C/E** as alternatives without sufficient evidence; **F** as legitimate
 deferral.
 
+### Technical comparison of B and D — no candidate selected
+
+| Dimension | B — in-JVM confinement | D — isolated OS process |
+|---|---|---|
+| Safety against arbitrary native C | Limited to the Landlock domain of the executing thread; same address space as the JVM | Address-space and process separation; NOT ESTABLISHED (no helper exists) |
+| Process fault isolation | None: a SQLite fault affects the JVM | Helper crash separable from the main process; NOT ESTABLISHED |
+| Affinity guarantees | Required (B-1–B-4); contradicted by B2-T5, B6-T2 | Not dependent on main-process thread affinity (D-11) |
+| Required host complexity | Native execution boundary, admission and custody in the runtime | Helper lifecycle, IPC channel, packaging |
+| Protos guest complexity | NOT ESTABLISHED | NOT ESTABLISHED |
+| Actor semantics | Must keep DA-8 while confining threads | Copied messages/results (D-5); NOT ESTABLISHED |
+| Blocking operations | Blocked C holds the confined thread; no cancellation (DA-9) | Helper may block; timeout without native cancellation (D-8) |
+| Uncertain COMMIT | JVM termination loses confirmation (DA-10) | Crash between COMMIT and acknowledgement (D-8) |
+| IPC cost | None | NOT ESTABLISHED |
+| Resource consumption | NOT ESTABLISHED | NOT ESTABLISHED |
+| Portability | Linux Landlock only | NOT ESTABLISHED |
+| Reversibility | NOT ESTABLISHED | NOT ESTABLISHED |
+| Existing evidence | B1, B3, B4, B6 (focal) SQLite under Landlock | B5 independent JVM processes, SIGKILL recovery |
+| Missing evidence | B-1–B-8 falsification tests; counterexamples B2-T5, B6-T1, B6-T2, B6-T4 unresolved | Isolated helper, IPC protocol, D-1–D-11 falsification tests |
+
+- **B:** sufficient evidence of SQLite operating under Landlock, but material
+  counterexamples stand against the complete runtime guarantee.
+- **D:** can separate SQLite execution from the main process, but no isolated
+  helper implementation and IPC protocol have been sufficiently tested.
+- **F:** keeping the public durable API blocked remains a valid alternative
+  while no mechanism is approved.
+
+### Production implementation authorization gate
+
+A future approval must explicitly identify:
+
+1. The selected alternative.
+2. The supported platform profile.
+3. The durable authority unit.
+4. Treatment of hardlinks/aliases and pre-opened handles.
+5. Physical ownership of native execution.
+6. Session admission and close.
+7. Policy for blocking C calls.
+8. Uncertain COMMIT outcome.
+9. **Impact on Actor semantics.** The approved design must explain how Actor
+   non-reentrancy, synchronous native calls, permitted suspension, guest
+   activation, host re-entry, cancellation and Process termination preserve
+   the established Protos semantics. Physical-thread confinement must never be
+   inferred from Actor identity alone.
+10. **Compatibility with `std:sqlite` and `std:ffi`.** The approved
+    implementation must preserve the existing Protos-first module APIs,
+    explicit native authorization, Actor-local owned handles, borrowed-resource
+    rules, copied results, terminal Futures, irreversible session close and the
+    behavior of the existing in-memory SQLite library. Durable access must be
+    additive and explicitly authorized.
+11. **Exact verified Truffle implementation precedents.** Every proposed Java
+    production change must identify the real upstream repository, pinned
+    revision, source file, method, relevant annotations, observed behavior and
+    precise equivalence to the proposed Protos behavior. An incomplete analogy
+    is insufficient. If no equivalent is verified, the implementation is not
+    authorized. Protos retains `long`, `double` and `boolean` primitive types
+    rather than introducing primitive `int`.
+12. **Mandatory falsification tests.** The approval must identify tests that
+    would fail if any required security or lifecycle invariant were violated,
+    including unauthorized native entry, destructor displacement, pre-grant
+    resources, hardlink/alias behavior, cross-Actor authority, blocked C calls,
+    cancellation, uncertain COMMIT, process failure, recovery and final
+    teardown. Passing cooperative-path tests alone is insufficient.
+
+**Production implementation may begin only after explicit approval by the
+project owner of all twelve items.** Neither the existence of Truffle
+precedents nor the experimental success of B1–B6 constitutes that approval.
+
 **No owner approval is recorded.** PLAT074 remains **OPEN**, D256 **pending**,
 LIB031 **BLOCKED**.
 
 ### Scope, inspection and validation handoff
 
-B7 is documentation only: this packet, [sqlite.md](sqlite.md),
+B7 is documentation only. B7-R1 initially corrected only §§19–22 of this
+packet; B7-R2 completes the production authorization gate, sharpens the D
+falsification tests and adds lifecycle clarifications to the FFI guides. No
+production code or test was modified. Files: this packet, [sqlite.md](sqlite.md),
 [ffi.md](ffi.md) and [ffm-provider.md](../interop/ffm-provider.md). No source,
 test, specification, build or packaging file changed. B6 inputs inspected were
 the existing §§14–18 of this packet and the owner-reported B6 execution above.
