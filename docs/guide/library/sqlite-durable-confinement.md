@@ -2118,7 +2118,7 @@ supersedes its NOT RUN status. Integrated `make test` remains unaccredited.
 
 ## 16. PLAT074-B5 — Independent OS processes, SIGKILL recovery and locking
 
-**Candidate status: NOT RUN for every new case.** These are acceptance tests,
+**Observed B5 result: 7/7 PASS on 20 November 2026.** These are acceptance tests,
 not new production machinery or selection of candidate B. PLAT074 remains
 **OPEN**, D256 **pending**, LIB031 **BLOCKED**. B1 remains **13/13 PASS**, B2-T5
 **noncompliance reproduced**, B3 **6/6 PASS**, B4 **10/10 PASS**, with the historical
@@ -2126,13 +2126,13 @@ failures retained above. No power-loss result follows from those runs.
 
 | Case and Java method | Required, executable acceptance evidence | Status |
 |---|---|---|
-| B5-T1 `b5T1TwoIndependentOsProcessesReopenCommittedSqlite` | A commits value 10 and exits normally; independent B reopens, checks count 1, maximum/sum 10 and integrity. Both deny exterior read/write opens. | NOT RUN |
-| B5-T2 `b5T2WalFullCommittedTransactionSurvivesSigkill` | A verifies WAL/FULL, commits 10 and 20, retains a live connection and nonempty WAL plus SHM; parent kills A after COMMITTED; B recovers exact count 2, maximum 20, sum 30 and integrity. | NOT RUN |
-| B5-T3 `b5T3UncommittedTransactionRollsBackAfterSigkill` | A new writer inserts 20 inside BEGIN IMMEDIATE with autocommit 0; SIGKILL precedes any voluntary rollback/close; recovery retains only committed 10, then commits 30. Another JVM checks count 2, maximum 30, sum 40. | NOT RUN |
-| B5-T4 `b5T4IndependentOsProcessesRespectSqliteWriteLocks` | A holds an uncommitted 20; independent B sets 100 ms busy timeout, sees SQLITE_BUSY on insert 30, autocommit 1 and only 10 visible; A commits, B explicitly retries and commits; third JVM checks count 3, maximum 30, sum 60 and integrity. | NOT RUN |
-| B5-T5 `b5T5WalRecoveryWithLiveReaderAndInterruptedWriter` | B pins a read snapshot containing only 10; A commits 20, B still observes count 1/sum 10; A is killed with its connection live, B closes on its owner, C sees 10 and 20, quick/integrity checks and copied checkpoint results. | NOT RUN |
-| B5-T6 `b5T6RollbackJournalRecoversAfterKilledWriter` | DELETE/FULL initial 10 survives a killed writer that updates rows and spills a 12000-row insertion beyond a five-page cache; populated journal is observed before killing, recovery sees only 10, commits 30, and third JVM verifies the new committed state and integrity. | NOT RUN |
-| B5-T7 `b5T7ProcessBoundaryDoesNotImplicitlyExtendLandlockGrant` | Confined A opens its own database and denies both exterior open modes; unrestricted B with the same provider opens the exterior database; live owned SQLite references fail the canonical guest transfer gate with NonTransferableValue in both JVMs; A closes confined. | NOT RUN |
+| B5-T1 `b5T1TwoIndependentOsProcessesReopenCommittedSqlite` | A commits value 10 and exits normally; independent B reopens, checks count 1, maximum/sum 10 and integrity. Both deny exterior read/write opens. | PASS (20 November 2026) |
+| B5-T2 `b5T2WalFullCommittedTransactionSurvivesSigkill` | A verifies WAL/FULL, commits 10 and 20, retains a live connection and nonempty WAL plus SHM; parent kills A after COMMITTED; B recovers exact count 2, maximum 20, sum 30 and integrity. | PASS (20 November 2026) |
+| B5-T3 `b5T3UncommittedTransactionRollsBackAfterSigkill` | A new writer inserts 20 inside BEGIN IMMEDIATE with autocommit 0; SIGKILL precedes any voluntary rollback/close; recovery retains only committed 10, then commits 30. Another JVM checks count 2, maximum 30, sum 40. | PASS (20 November 2026) |
+| B5-T4 `b5T4IndependentOsProcessesRespectSqliteWriteLocks` | A holds an uncommitted 20; independent B sets 100 ms busy timeout, sees SQLITE_BUSY on insert 30, autocommit 1 and only 10 visible; A commits, B explicitly retries and commits; third JVM checks count 3, maximum 30, sum 60 and integrity. | PASS (20 November 2026) |
+| B5-T5 `b5T5WalRecoveryWithLiveReaderAndInterruptedWriter` | B pins a read snapshot containing only 10; A commits 20, B still observes count 1/sum 10; A is killed with its connection live, B closes on its owner, C sees 10 and 20, quick/integrity checks and copied checkpoint results. | PASS (20 November 2026) |
+| B5-T6 `b5T6RollbackJournalRecoversAfterKilledWriter` | DELETE/FULL initial 10 survives a killed writer that updates rows and spills a 12000-row insertion beyond a five-page cache; populated journal is observed before killing, recovery sees only 10, commits 30, and third JVM verifies the new committed state and integrity. | PASS (20 November 2026) |
+| B5-T7 `b5T7ProcessBoundaryDoesNotImplicitlyExtendLandlockGrant` | Confined A opens its own database and denies both exterior open modes; unrestricted B with the same provider opens the exterior database; live owned SQLite references fail the canonical guest transfer gate with NonTransferableValue in both JVMs; A closes confined. | PASS (20 November 2026) |
 
 ### Process, thread, dependency and protocol boundaries
 
@@ -2270,7 +2270,7 @@ no source file, generated/third-party file or packaging configuration is added.
 Only the three requested files are modified. One read-only `git status --short`
 was inadvertently executed at the beginning and reported a clean checkout;
 no other Git operation, build, compiler, test or validation was executed.
-All new checks remain **NOT RUN**. No case is marked NOT IMPLEMENTED; T7's
+That editing session left B5 **NOT RUN**; the subsequent owner-supplied run below supersedes that initial status. No case is marked NOT IMPLEMENTED; T7's
 transfer assertion has the bounded scope described above.
 
 Human gates, run sequentially only after the preceding gate passes:
@@ -2287,7 +2287,7 @@ mvn -DskipTests test-compile
 
 The focal suite dynamically compiles its existing Java/C provider fixtures and
 starts multiple JVMs; it costs more than the compilation-only check. No duration
-is predicted. Run the complete affected B1–B5 class:
+is predicted. The original B5 handoff requested the complete affected B1–B5 class:
 
 ```sh
 mvn -Dtest=ProtosI144FfmFixtureAbiTest test
@@ -2304,3 +2304,215 @@ Integrated `make test` remains the final FULL gate for shared executable test
 infrastructure/closure after these cheaper gates pass. It has not been run or
 accredited by this record. Portable distribution success above belongs to the
 owner-confirmed B4 candidate, not this new B5 candidate.
+
+### Owner-supplied B5 execution — 20 November 2026
+
+| Gate / observation | Reported result |
+|---|---|
+| `git diff --check` | PASS |
+| `mvn -DskipTests test-compile` | BUILD SUCCESS |
+| `mvn -Dtest=ProtosI144FfmFixtureAbiTest test` | 40 tests; 1 failure; 0 errors; 1 skipped |
+| Class duration | 58.66 seconds |
+| Maven total duration | 1 minute 23 seconds |
+| Overall Maven result | **BUILD FAILURE**, exclusively B2-T5 |
+| B5-T1–T7 | **7/7 PASS**, derived from the sole class failure belonging to B2-T5 |
+| B2-T5 physical evidence | Restricted owner TID **352634**; exterior destructor TID **352635**; affinity assertion failed |
+
+This is not a PASS for the complete class. The B2-T5 failure remains required
+adversarial evidence; it is neither disabled nor repaired by this slice.
+Packaging (`mvn -DskipTests package`), `make test-protos-foreign` and `make test`
+are **not accredited for the B5 candidate** by this execution. B1–B4 evidence
+and the B2 chronology above remain unchanged. B5 SIGKILL recovery does not prove
+power-loss durability or production-wide native confinement.
+
+## 17. PLAT074-B6 — Native authority boundaries
+
+**All seven new tests: NOT RUN.** The following are required outcomes, not
+observations. SQL and owned acquisition remain in the experimental Protos
+closures; Java supplies only controlled files, links, host coordination and
+assertions. No production Java, public SQLite API, grant or scheduler changes.
+
+| Case / JUnit method | Hypothesis and positive control | Required adversarial outcome | Status |
+|---|---|---|---|
+| B6-T1 `b6T1PreopenedSqliteConnectionRetainsExteriorReadAccess` | Same physical Actor owner opens exterior value 71 before installing Landlock, retains it and reads the copied marker after restriction. | Read remains 71; close on restricted owner; fresh exterior open returns SQLITE_CANTOPEN; zero custody and owner session close. **Negative control:** PASS exposes retained authority. | NOT RUN |
+| B6-T2 `b6T2UnrestrictedHostEntryCanBypassRestrictedCarrier` | Restricted owner reads/closes granted DB, keeps session alive and parks outside guest code. | Distinct unrestricted platform TID enters the **same Actor/session** sequentially, reads exterior 72 and closes normally; restricted owner closes session. **Negative control:** PASS exposes explicit host-entry authority. | NOT RUN |
+| B6-T3 `b6T3SymlinkOutsideGrantCannotBeOpenedBySqlite` | Observer opens preexisting symlink to exterior value 73; restricted owner reads granted DB. | SQLite open through exterior-resolving link returns SQLITE_CANTOPEN; link target and exterior bytes intact. | NOT RUN |
+| B6-T4 `b6T4PreexistingHardlinkDemonstratesPathNotDatabaseIdentity` | Cleanly closed DELETE/FULL exterior DB, in-grant hardlink and Files.isSameFile establish a shared physical file. | Exterior name denied; in-grant hardlink reads 74; bytes unchanged. **Scope control:** PASS permits content through an already granted name. | NOT RUN |
+| B6-T5 `b6T5ExplicitUriModeStillObeysRestrictedFilesystemGrant` | Observer validates exterior file URI; restricted URI read returns granted 75. | Explicit URI flags 65 and 70 both deny exterior acquisition with SQLITE_CANTOPEN; no live/uncertain custody or byte changes. | NOT RUN |
+| B6-T6 `b6T6UriAttachCannotEscapeRestrictedDirectory` | URI-enabled primary ATTACHes granted secondary, checks schema and value 176, then DETACHes. | Exterior URI ATTACH fails acquisition; no exterior schema; primary read and insert still work; exterior bytes unchanged. | NOT RUN |
+| B6-T7 `b6T7SymlinkRetargetAfterRestrictionCannotExpandGrant` | Restricted owner opens initial in-grant symlink, reads 77 and closes. | Observer deterministically retargets link to exterior 177 between latch phases; fresh link open denied; direct granted path still reads 77. | NOT RUN |
+
+`openUriReadOnly` and `openUriFile` reuse `acquire` and the existing
+`sqlite3_open_v2` binding with flags 65 and 70. Failed-open handles keep the
+existing single-release rule and native status. `nativeReadMarker` copies only
+`SELECT value FROM t LIMIT 1`; `readOnlyProbe` requires an open connection and
+runs that read-only query without opening additional connections or enabling
+journals/WAL. `prepareB6` warms these closures with memory databases before
+restriction, without changing existing tests or fixture preparation.
+
+T1 intentionally installs the unchanged Landlock policy inside the owner
+experiment **after** acquisition. Its explicit installation flag and TID checks
+are the evidence; the outer launcher has no preinstalled grant. Cleanup still
+runs on that now-restricted physical thread. T2 uses the existing platform
+launcher and owner-side custody checks, with an atomic segment admission seal.
+On a timeout with an active host segment it withholds owner teardown and reports
+failure; `finishB3` withholds exterior Context teardown while a session is open.
+It never destroys pending resources concurrently from the exterior thread.
+All latch waits and joins are bounded; no sleep or probabilistic race is used.
+Cleanup failures remain primary or suppressed failures. No uncertain destructor
+is retried. T7 replaces the symlink only after the first SQLite connection closes.
+ATTACH SQL contains only fixed schema names and fixture-controlled canonical URI
+literals, with SQL quotes doubled; no arbitrary SQL input or extensions are added.
+
+These distinguish **preexisting resource authority**, **physical carrier
+restriction**, **symlink resolution**, **hardlink aliases**, **explicit URI
+interpretation**, **secondary ATTACH acquisition**, and **later namespace
+mutation**. A directory path policy alone cannot establish exclusive logical
+SQLite database identity. A preexisting hardlink may expose the same content
+through a granted hierarchy. Permitting unrestricted `ffi:sqlite3` on another
+physical thread does not create an authority barrier per Actor. T2 tests an
+explicit host entry; it makes no claim that the ordinary scheduler migrates an
+Actor automatically. Neither T1 nor T2 nor T4 is a positive confinement proof.
+
+## 18. Preliminary decision packet — owner decision pending
+
+This evidence update supplements §§4–7; it does not ratify their earlier
+speculative scores. For this preliminary packet the matrix below supersedes
+§5 wherever evidence is insufficient. Scores are provisional **1 (poor) to 5
+(strong)**, with confidence H/M; **NOT ESTABLISHED** means no justified score,
+not zero. There is no weighted total or automatic B/D selection. PLAT074 #1122's
+twelve dimensions remain distinct.
+
+A = trusted native SQLite without confinement; B = normal Unix VFS on physically
+Landlock-restricted execution; C = custom SQLite VFS; D = isolated OS process
+with IPC; E = other native restrictions; F = defer confined durable access.
+
+| Dimension | A | B | C | D | E | F |
+|---|---|---|---|---|---|---|
+| Correctness | 1/H: no confinement | 2/H: current lifecycle fails B2-T5 | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | 5/H: withholds durable acquisition; supplies no durability |
+| Protos alignment | 2/M: trusted FFI, missing durable authority | 3/M: ordinary Protos SQL demonstrated B4/B5; execution-domain obligation open | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | 4/H: preserves current memory-only boundary |
+| Present proportionality | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | 5/H: no additional mechanism |
+| Incremental growth | NOT ESTABLISHED | 3/M: B1–B5 extend experiments without production change | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | 4/M: later additive proposal possible; workloads delayed |
+| Future-option resilience | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | 4/M: no new host mechanism committed |
+| Scalability | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED |
+| Conceptual simplicity | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | 5/H: existing memory-only surface retained |
+| Portability | NOT ESTABLISHED | 1/H: Landlock mechanism is Linux-specific; tested JVM profile only | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | 4/M: adds no host dependency; not a portability certification |
+| Runtime cost | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | 5/H: no added durable runtime mechanism |
+| Failure and operability | 1/H: in-process native faults share JVM | 2/M: B5 recovery evidence, B2-T5 cleanup-domain violation remains | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | 3/M: existing service scope; no durable recovery service |
+| Deferral and reversibility | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | 4/M: no new API migration; consumer delay remains |
+| Evidence and implementation risk | 2/M: unrestricted access observed B4/B5, unsuitable confinement | 3/M: bounded B1–B5 evidence; complete runtime boundary disproved | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | 5/H: deferral requires no new implementation |
+
+### Candidate evidence, limitations and strongest counterarguments
+
+| Alternative | Evidence actually available from B1–B5 | Limitations and strongest counterargument |
+|---|---|---|
+| A — trusted native | B4 unrestricted Actor and B5 unrestricted process controls access exterior SQLite through the authorized provider. | This supplies useful native access but **cannot be described as confined SQLite**. It fails the motivating authority boundary, regardless of convenience. |
+| B — Unix VFS plus Landlock execution | B1 13/13 PASS; B3 6/6 PASS for cooperative owner cleanup; B4 10/10 PASS for real Protos SQLite on restricted owners; B5 7/7 PASS for independent process locking and SIGKILL recovery. | **Strongest counterargument:** B2-T5's exterior destructor is a concrete counterexample to complete runtime enforcement. Cooperative experimental sequencing is insufficient. B6 authority cases remain NOT RUN; no scale, portability, power-loss or overhead certification. |
+| C — custom VFS | B1–B5 exercise the normal VFS, providing no implementation or performance evidence for a custom VFS. | File access alone does not justify replacing mature locking, journal and WAL machinery. Strongest argument for C: it could expose an explicit host capability boundary; callback substrate, locking/SHM correctness and failure handling remain unimplemented and unmeasured. |
+| D — isolated OS process and IPC | B5 establishes independent JVM/PID orchestration, locks and recovery across SIGKILL; this is bounded evidence about OS-process separation. | B5 is **not** a production IPC service or complete sandbox. Strongest counterargument: command uncertainty, cancellation, packaging, handle identity, IPC and startup/copy costs are unimplemented/unmeasured. A distinct isolation boundary is available, not a proved Protos architecture. |
+| E — other native restrictions | B1–B5 supply Landlock evidence only, not comparable experiments for other restrictions. Existing §6 references remain precedents. | Strongest counterargument: platform policies and lifecycle mechanisms differ; a portable portfolio cannot be inferred from one Linux experiment. Coverage, compatibility and cost are NOT ESTABLISHED. |
+| F — defer | Existing memory-only API can remain unchanged; no experiment requires granting production durable authority. | Strongest counterargument: the requested durable workload remains unavailable. Deferral preserves options but cannot stand in for a durable implementation or claim its correctness. |
+
+### Provisional recommendation for the owner's decision
+
+B is viable for **controlled SQLite operations in the tested Linux/JVM profile**.
+It still lacks a runtime guarantee that every operation and destructor executes
+under the same authorized physical domain. B2-T5's owner TID 352634 versus
+exterior destructor TID 352635 demonstrates that current close does not satisfy
+that property. No performance score can compensate for this missing invariant.
+D offers a different process isolation boundary, but its production IPC,
+uncertainty semantics and costs have not been implemented or measured. C is not
+justified merely because SQLite needs files. A is trusted native access and
+cannot be labelled confined. The owner must **explicitly approve the definitive
+mechanism before any production modification**. This packet selects neither B
+nor D, closes no issue and unblocks no durable API.
+
+The smallest justified next scope is this bounded adversarial test slice. A
+future high-Actor-count or long-lived service could expose per-domain carrier
+costs and in-process native globals for B; escape requires an explicitly approved
+host-domain replacement while preserving ordinary library behavior. A future
+low-latency deployment could make D's IPC cost unacceptable; escape requires
+revisiting deployment/transport before exposing a public contract. Neither cost
+has been measured. F delays consumers but avoids shipping a compatibility promise
+that later needs tightening. C/E should be revisited only with concrete missing
+requirements and an implementation/evidence plan, rather than speculative extra
+machinery. Cancellation, uncertain commit outcomes, process crash, grant identity,
+carrier admission and final teardown must be resolved in the definitive packet.
+
+### Primary sources and retained Truffle precedents
+
+- [Landlock userspace API](https://www.kernel.org/doc/html/latest/userspace-api/landlock.html): enforcement domain, filesystem hierarchy and existing authority limits.
+- [SQLite URI filenames](https://www.sqlite.org/uri.html): explicit connection URI mode and ATTACH URI interpretation.
+- [sqlite3_open_v2](https://www.sqlite.org/c3ref/open.html): open flags, status and failed-open handle cleanup.
+- [SQLite temporary files](https://www.sqlite.org/tempfiles.html): auxiliary files require separate consideration.
+- [SQLite WAL](https://www.sqlite.org/wal.html): sidecars, locks, checkpoints and recovery context; not a B6 execution result.
+- [sqlite3_close / close_v2](https://www.sqlite.org/c3ref/close.html): dependent-resource cleanup and deferred physical destruction.
+
+The pinned source references in §§14–15 remain intact: GraalPy
+`PythonContext.createSystemThread`, `PythonContext.finalizeContext`,
+`PythonLanguage.initializeThread`, `PythonLanguage.disposeThread`,
+`PythonSystemThreadTask.run`; Espresso
+`EspressoReferenceDrainer.startReferenceDrain`,
+`EspressoReferenceDrainer.shutdownAndWaitReferenceDrain`,
+`EspressoReferenceDrainer.ReferenceDrain.run`, and
+`EspressoLanguage.finalizeContext`. They partially support Truffle thread
+lifecycle and cleanup reasoning; **they do not themselves implement the required
+SQLite/Landlock solution**. No production comments are changed to cite them.
+
+### Scope, inspection and validation handoff
+
+Materially inspected for B6: the three changed files (existing closures, test
+lifecycle and B1–B5 history); `AGENTS.work/DESIGN.md` (owner approval boundary),
+`AGENTS.work/IMPLEMENTATION.md` (human-executed validation and blocker ownership),
+`AGENTS.work/REFERENCE.md` and `LICENSE.TXT` (Part 5 notice preservation),
+`src/AGENTS.md` (existing guest-entry boundary), `protos/AGENTS.md` (source
+conventions), `spec/AGENTS.md` (normative ownership), and
+`spec/semantics/FFI.md` (trusted synchronous calls, Actor-local authority,
+nontransferability, single retirement/destruction and native status as data);
+`ProtosLinuxConfinedFilesystemNative.java` and
+`ProtosLinuxConfinedFilesystemLandlock.java` (existing root-descriptor, close and
+restriction signatures only; no production changes).
+The locally documented D256-C1 handoff/blocker assessment in §§1–3 was retained;
+the remote blocker ledger and durable work records were not refreshed in this
+local repository slice. No normative gap is implemented or blocker discharged.
+The existing APL notices remain intact; no source file or packaging metadata was
+added, removed or renamed. Production and specifications are unaffected.
+
+State: **PLAT074 OPEN; D256 pending; LIB031 BLOCKED; B1 13/13 PASS;
+B2-T5 FAIL observed; B3 6/6 PASS; B4 10/10 PASS; B5 7/7 PASS observed;
+B6 NOT RUN.** No new compilation, test or validator was executed by the agent.
+
+Owner validation proceeds in order, stopping on failure:
+
+```sh
+git status --short
+git diff --check
+git diff -- protos/tests/foreign-provider/sqlite-landlock-provider.protos src/test/java/com/guillermomolina/protos/execution/foreign/api/ProtosI144FfmFixtureAbiTest.java docs/guide/library/sqlite-durable-confinement.md
+mvn -DskipTests test-compile
+```
+
+After those gates, focal B6 execution (native fixture compilation is included;
+duration not yet measured):
+
+```sh
+mvn '-Dtest=ProtosI144FfmFixtureAbiTest#b6T*' test
+```
+
+Then run the complete affected class (B5 previously took 58.66 seconds for the
+class, 1 minute 23 seconds total; the new candidate's duration is unknown):
+
+```sh
+mvn -Dtest=ProtosI144FfmFixtureAbiTest test
+```
+
+B2-T5 must retain its assertion and observed failure evidence. If it fails,
+report the failure without proceeding to costlier gates or claiming the complete
+class passed. Packaging, the foreign-provider lane and final integrated FULL
+gate remain outstanding, for a subsequent owner-directed handoff after focal
+failure assessment:
+
+```sh
+mvn -DskipTests package
+make test-protos-foreign
+make test
+```

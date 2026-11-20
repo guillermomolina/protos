@@ -114,6 +114,14 @@ prepare: () => {
         threadsafe: () => threadsafe()
         openFile: (path) => acquire(path, 6)
         openReadOnly: (path) => acquire(path, 1)
+        // Explicit SQLITE_OPEN_URI; acquisition and failed-open custody are unchanged.
+        openUriReadOnly: (uri) => acquire(uri, 65)
+        openUriFile: (uri) => acquire(uri, 70)
+        nativeReadMarker: () => queryInteger("SELECT value FROM t LIMIT 1")
+        readOnlyProbe: () => {
+            requireOpen()
+            queryInteger("SELECT value FROM t LIMIT 1")
+        }
         openMemory: () => acquire(":memory:", 6)
         execute: execute
         executeStatus: executeStatus

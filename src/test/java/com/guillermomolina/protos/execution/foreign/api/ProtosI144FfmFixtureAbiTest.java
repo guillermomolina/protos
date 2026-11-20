@@ -1846,6 +1846,393 @@ class ProtosI144FfmFixtureAbiTest {
         finally { finishB3(primary, reporter, "B4-T10", fixture, owners, calls); }
     }
 
+    // ---- PLAT074-B6: authority boundaries; negative controls do not prove confinement.
+
+    @Test
+    void b6T1PreopenedSqliteConnectionRetainsExteriorReadAccess(TestReporter reporter) throws Exception {
+        Path root = Files.createTempDirectory(work, "b6-t1-").toRealPath();
+        Path granted = root.resolve("granted.db");
+        Path exterior = work.resolve("b6-t1-exterior.db").toAbsolutePath();
+        var fixture = sqliteFixture();
+        Probe[] owners = new Probe[1];
+        PlatformCall[] calls = new PlatformCall[1];
+        boolean[] installed = new boolean[1];
+        Throwable primary = null;
+        try {
+            Probe observer = sqliteProbe(fixture, fixture.root, reporter);
+            seedSqlite(observer, granted, 71);
+            seedSqlite(observer, exterior, 71);
+            ProtosLinuxConfinedFilesystemTestSupport.assumeConfinementPrimitives();
+            ProtosLinuxConfinedFilesystemNative.preloadForRestrictedThread();
+            byte[] before = Files.readAllBytes(exterior);
+            Probe owner = owners[0] = sqliteProbe(fixture, fixture.newActorActivation(), reporter);
+            prepareB6(owner);
+            calls[0] = startB4Owner(null, owner, reporter, () -> {
+                // The SAME physical owner acquires before restriction and closes after it.
+                int rootFd = ProtosLinuxConfinedFilesystemNative.openRootDirectory(root.toString());
+                Throwable nativeFailure = null;
+                try {
+                    long beforeTid = kernelTid();
+                    assertEquals(0, number(owner.call("openReadOnly", exterior.toString())));
+                    ProtosLinuxConfinedFilesystemLandlock.restrictCurrentThreadBeneath(rootFd);
+                    installed[0] = true;
+                    assertEquals(beforeTid, kernelTid());
+                    reporter.publishEntry("B6-T1 installed grant", root + "; restricted TID=" + kernelTid());
+                    assertEquals(71, number(owner.call("nativeReadMarker")));
+                    owner.call("close");
+                    assertEquals(14, number(owner.call("openReadOnly", exterior.toString())));
+                    assertSame(false, owner.call("isOpen"));
+                    assertEquals(0, sqliteCustody(owner, "ownedCountForDiagnostics"));
+                    assertEquals(0, sqliteCustody(owner, "uncertainCountForDiagnostics"));
+                    reporter.publishEntry("B6-T1 NEGATIVE CONTROL",
+                            "preopened connection retained exterior read authority; new open denied");
+                } catch (Exception | Error problem) { nativeFailure = problem; throw problem; }
+                finally {
+                    try { ProtosLinuxConfinedFilesystemNative.close(rootFd); }
+                    catch (Exception | Error cleanup) {
+                        if (nativeFailure != null) nativeFailure.addSuppressed(cleanup);
+                        else throw cleanup;
+                    }
+                }
+            });
+            calls[0].finish();
+            assertTrue(installed[0], "Landlock installed after acquisition on the owner");
+            assertTrue(calls[0].tid > 0);
+            assertFalse(owner.session.isOpenForRuntime());
+            assertTrue(java.util.Arrays.equals(before, Files.readAllBytes(exterior)), "exterior bytes unchanged");
+        } catch (Exception | Error problem) { primary = problem; throw problem; }
+        finally {
+            finishB3(primary, reporter, "B6-T1", fixture, owners, calls);
+        }
+    }
+
+    @Test
+    void b6T2UnrestrictedHostEntryCanBypassRestrictedCarrier(TestReporter reporter) throws Exception {
+        Path root = Files.createTempDirectory(work, "b6-t2-").toRealPath();
+        Path granted = root.resolve("granted.db");
+        Path exterior = work.resolve("b6-t2-exterior.db").toAbsolutePath();
+        var fixture = sqliteFixture();
+        Probe[] owners = new Probe[1];
+        PlatformCall[] calls = new PlatformCall[2];
+        CountDownLatch ready = new CountDownLatch(1), release = new CountDownLatch(1);
+        var segments = new java.util.concurrent.atomic.AtomicInteger();
+        Throwable primary = null;
+        try {
+            Probe observer = sqliteProbe(fixture, fixture.root, reporter);
+            seedSqlite(observer, granted, 72);
+            seedSqlite(observer, exterior, 72);
+            byte[] before = Files.readAllBytes(exterior);
+            Probe owner = owners[0] = sqliteProbe(fixture, fixture.newActorActivation(), reporter);
+            prepareB6(owner);
+            calls[0] = startPlatform(root, () -> {
+                Throwable ownerFailure = null;
+                try {
+                    assertTrue(segments.compareAndSet(0, 1), "only one guest segment");
+                    try {
+                        assertEquals(0, number(owner.call("openReadOnly", granted.toString())));
+                        assertEquals(72, number(owner.call("readOnlyProbe")));
+                        owner.call("close");
+                    } finally { segments.decrementAndGet(); }
+                    ready.countDown();
+                    // No guest entry while the unrestricted host owns the sequential segment.
+                    awaitB3(release, "unrestricted same-Actor host segment completed");
+                    assertEquals(0, segments.get(), "host segment ended before owner teardown");
+                } catch (Exception | Error problem) { ownerFailure = problem; throw problem; }
+                finally {
+                    try {
+                        // Seal admission before cleanup, including a timeout. If a host
+                        // segment is still active, leave custody intact and fail; never
+                        // race its guest work with teardown on either carrier.
+                        assertTrue(segments.compareAndSet(0, -1), "active host entry: owner cleanup withheld");
+                        owner.call("closeForSession");
+                        Object backend = ((ProtosForeignPluginProvider.Session)
+                                owner.session.sessionForRuntime()).plugin;
+                        owner.session.closeForRuntime();
+                        assertFalse(owner.session.isOpenForRuntime());
+                        assertEquals(0, sqliteCustody(backend, "ownedCountForDiagnostics"));
+                        assertEquals(0, sqliteCustody(backend, "uncertainCountForDiagnostics"));
+                        reporter.publishEntry("B6-T2 owner close", "restricted TID=" + kernelTid()
+                                + "; session closed; owned=0, uncertain=0");
+                    } catch (Exception | Error cleanup) {
+                        if (ownerFailure != null) ownerFailure.addSuppressed(cleanup);
+                        else throw cleanup;
+                    }
+                }
+            });
+            awaitB3(ready, "restricted owner parked outside guest code");
+            assertTrue(calls[0].installed);
+            assertTrue(calls[0].thread.isAlive());
+            calls[1] = startPlatform(null, () -> {
+                assertNotEquals(calls[0].tid, kernelTid());
+                assertTrue(segments.compareAndSet(0, 1), "no overlapping guest segment or retired owner");
+                try {
+                    assertTrue(owner.session.isOpenForRuntime());
+                    assertEquals(0, number(owner.call("openReadOnly", exterior.toString())));
+                    assertEquals(72, number(owner.call("nativeReadMarker")));
+                    owner.call("close");
+                    reporter.publishEntry("B6-T2 NEGATIVE CONTROL", "same Actor/session; unrestricted host TID="
+                            + kernelTid() + "; restricted owner TID=" + calls[0].tid
+                            + "; explicit sequential host entry, not scheduler migration");
+                } finally { segments.decrementAndGet(); }
+            });
+            calls[1].finish();
+            assertFalse(calls[1].restricted);
+            assertFalse(calls[1].installed);
+            assertEquals(0, segments.get());
+            release.countDown();
+            calls[0].finish();
+            assertTrue(calls[0].installed);
+            assertTrue(calls[0].tid > 0);
+            assertFalse(owner.session.isOpenForRuntime());
+            assertTrue(java.util.Arrays.equals(before, Files.readAllBytes(exterior)), "exterior bytes unchanged");
+        } catch (Exception | Error problem) { primary = problem; throw problem; }
+        finally {
+            release.countDown();
+            finishB3(primary, reporter, "B6-T2", fixture, owners, calls);
+        }
+    }
+
+    @Test
+    void b6T3SymlinkOutsideGrantCannotBeOpenedBySqlite(TestReporter reporter) throws Exception {
+        Path root = Files.createTempDirectory(work, "b6-t3-").toRealPath();
+        Path granted = root.resolve("granted.db");
+        Path exterior = work.resolve("b6-t3-exterior.db").toAbsolutePath();
+        var fixture = sqliteFixture();
+        Probe[] owners = new Probe[1];
+        PlatformCall[] calls = new PlatformCall[1];
+        Throwable primary = null;
+        try {
+            Probe observer = sqliteProbe(fixture, fixture.root, reporter);
+            seedSqlite(observer, granted, 73);
+            seedSqlite(observer, exterior, 73);
+            Path link = root.resolve("outside-link.db");
+            Files.createSymbolicLink(link, exterior);
+            assertTrue(Files.isSymbolicLink(link));
+            assertEquals(exterior, Files.readSymbolicLink(link));
+            assertEquals(0, number(observer.call("openReadOnly", link.toString())));
+            assertEquals(73, number(observer.call("nativeReadMarker")));
+            observer.call("close");
+            byte[] before = Files.readAllBytes(exterior);
+            Probe owner = owners[0] = sqliteProbe(fixture, fixture.newActorActivation(), reporter);
+            prepareB6(owner);
+            calls[0] = startB4Owner(root, owner, reporter, () -> {
+                assertEquals(0, number(owner.call("openReadOnly", granted.toString())));
+                assertEquals(73, number(owner.call("readOnlyProbe")));
+                owner.call("close");
+                assertEquals(14, number(owner.call("openReadOnly", link.toString())));
+                assertSame(false, owner.call("isOpen"));
+            });
+            calls[0].finish();
+            assertTrue(Files.isSymbolicLink(link));
+            assertEquals(exterior, Files.readSymbolicLink(link));
+            assertTrue(calls[0].installed);
+            assertTrue(calls[0].tid > 0);
+            assertFalse(owner.session.isOpenForRuntime());
+            assertTrue(java.util.Arrays.equals(before, Files.readAllBytes(exterior)), "exterior bytes unchanged");
+        } catch (Exception | Error problem) { primary = problem; throw problem; }
+        finally {
+            finishB3(primary, reporter, "B6-T3", fixture, owners, calls);
+        }
+    }
+
+    @Test
+    void b6T4PreexistingHardlinkDemonstratesPathNotDatabaseIdentity(TestReporter reporter) throws Exception {
+        Path root = Files.createTempDirectory(work, "b6-t4-").toRealPath();
+        Path granted = root.resolve("granted.db");
+        Path exterior = work.resolve("b6-t4-exterior.db").toAbsolutePath();
+        var fixture = sqliteFixture();
+        Probe[] owners = new Probe[1];
+        PlatformCall[] calls = new PlatformCall[1];
+        Throwable primary = null;
+        try {
+            Probe observer = sqliteProbe(fixture, fixture.root, reporter);
+            seedSqlite(observer, granted, 74);
+            seedSqlite(observer, exterior, 74);
+            assertEquals(0, number(observer.call("openFile", exterior.toString())));
+            observer.call("setRollbackJournal");
+            observer.call("close");
+            Path link = root.resolve("hardlink.db");
+            Files.createLink(link, exterior);
+            assertTrue(Files.isSameFile(link, exterior));
+            byte[] before = Files.readAllBytes(exterior);
+            Probe owner = owners[0] = sqliteProbe(fixture, fixture.newActorActivation(), reporter);
+            prepareB6(owner);
+            calls[0] = startB4Owner(root, owner, reporter, () -> {
+                assertEquals(14, number(owner.call("openReadOnly", exterior.toString())));
+                assertSame(false, owner.call("isOpen"));
+                assertEquals(0, number(owner.call("openReadOnly", link.toString())));
+                assertEquals(74, number(owner.call("nativeReadMarker")));
+                owner.call("close");
+                reporter.publishEntry("B6-T4 AUTHORITY SCOPE CONTROL",
+                        "preexisting in-grant hardlink reads the same exterior inode; directory grant is not exclusive DB identity");
+            });
+            calls[0].finish();
+            assertTrue(Files.isSameFile(link, exterior));
+            assertTrue(calls[0].installed);
+            assertTrue(calls[0].tid > 0);
+            assertFalse(owner.session.isOpenForRuntime());
+            assertTrue(java.util.Arrays.equals(before, Files.readAllBytes(exterior)), "exterior bytes unchanged");
+        } catch (Exception | Error problem) { primary = problem; throw problem; }
+        finally {
+            finishB3(primary, reporter, "B6-T4", fixture, owners, calls);
+        }
+    }
+
+    @Test
+    void b6T5ExplicitUriModeStillObeysRestrictedFilesystemGrant(TestReporter reporter) throws Exception {
+        Path root = Files.createTempDirectory(work, "b6-t5-").toRealPath();
+        Path granted = root.resolve("granted.db");
+        Path exterior = work.resolve("b6-t5-exterior.db").toAbsolutePath();
+        var fixture = sqliteFixture();
+        Probe[] owners = new Probe[1];
+        PlatformCall[] calls = new PlatformCall[1];
+        Throwable primary = null;
+        try {
+            Probe observer = sqliteProbe(fixture, fixture.root, reporter);
+            seedSqlite(observer, granted, 75);
+            seedSqlite(observer, exterior, 75);
+            String grantedUri = granted.toUri().toASCIIString();
+            String exteriorUri = exterior.toUri().toASCIIString();
+            assertEquals(0, number(observer.call("openUriReadOnly", exteriorUri)));
+            assertEquals(75, number(observer.call("nativeReadMarker")));
+            observer.call("close");
+            byte[] before = Files.readAllBytes(exterior);
+            Probe owner = owners[0] = sqliteProbe(fixture, fixture.newActorActivation(), reporter);
+            prepareB6(owner);
+            calls[0] = startB4Owner(root, owner, reporter, () -> {
+                assertEquals(0, number(owner.call("openUriReadOnly", grantedUri)));
+                assertEquals(75, number(owner.call("readOnlyProbe")));
+                owner.call("close");
+                for (String mode : List.of("openUriReadOnly", "openUriFile")) {
+                    assertEquals(14, number(owner.call(mode, exteriorUri)), mode);
+                    assertSame(false, owner.call("isOpen"));
+                    assertEquals(0, sqliteCustody(owner, "ownedCountForDiagnostics"));
+                    assertEquals(0, sqliteCustody(owner, "uncertainCountForDiagnostics"));
+                }
+            });
+            calls[0].finish();
+            assertTrue(calls[0].installed);
+            assertTrue(calls[0].tid > 0);
+            assertFalse(owner.session.isOpenForRuntime());
+            assertTrue(java.util.Arrays.equals(before, Files.readAllBytes(exterior)), "exterior bytes unchanged");
+        } catch (Exception | Error problem) { primary = problem; throw problem; }
+        finally {
+            finishB3(primary, reporter, "B6-T5", fixture, owners, calls);
+        }
+    }
+
+    @Test
+    void b6T6UriAttachCannotEscapeRestrictedDirectory(TestReporter reporter) throws Exception {
+        Path root = Files.createTempDirectory(work, "b6-t6-").toRealPath();
+        Path granted = root.resolve("granted.db");
+        Path exterior = work.resolve("b6-t6-exterior.db").toAbsolutePath();
+        var fixture = sqliteFixture();
+        Probe[] owners = new Probe[1];
+        PlatformCall[] calls = new PlatformCall[1];
+        Throwable primary = null;
+        try {
+            Probe observer = sqliteProbe(fixture, fixture.root, reporter);
+            seedSqlite(observer, granted, 76);
+            seedSqlite(observer, exterior, 76);
+            Path secondary = root.resolve("secondary 'quoted.db");
+            seedSqlite(observer, secondary, 176);
+            String grantedUri = granted.toUri().toASCIIString();
+            String secondarySql = "'" + secondary.toUri().toASCIIString().replace("'", "''") + "'";
+            String exteriorSql = "'" + exterior.toUri().toASCIIString().replace("'", "''") + "'";
+            byte[] before = Files.readAllBytes(exterior);
+            Probe owner = owners[0] = sqliteProbe(fixture, fixture.newActorActivation(), reporter);
+            prepareB6(owner);
+            calls[0] = startB4Owner(root, owner, reporter, () -> {
+                assertEquals(0, number(owner.call("openUriFile", grantedUri)));
+                assertEquals(101, number(owner.call("executeStatus", "ATTACH DATABASE " + secondarySql + " AS permitted")));
+                assertEquals(1, number(owner.call("queryInteger",
+                        "SELECT count(*) FROM pragma_database_list WHERE name='permitted'")));
+                assertEquals(176, number(owner.call("queryInteger", "SELECT value FROM permitted.t LIMIT 1")));
+                assertEquals(101, number(owner.call("executeStatus", "DETACH DATABASE permitted")));
+                assertEquals(0, number(owner.call("queryInteger",
+                        "SELECT count(*) FROM pragma_database_list WHERE name='permitted'")));
+                assertEquals(14, number(owner.call("executeStatus", "ATTACH DATABASE " + exteriorSql + " AS exterior")),
+                        "SQLITE_CANTOPEN from denied ATTACH acquisition");
+                assertEquals(0, number(owner.call("queryInteger",
+                        "SELECT count(*) FROM pragma_database_list WHERE name='exterior'")));
+                assertEquals(76, number(owner.call("readOnlyProbe")));
+                owner.call("insertInteger", 276);
+                assertEquals(2, number(owner.call("queryInteger", "SELECT count(*) FROM t")));
+                owner.call("close");
+            });
+            calls[0].finish();
+            assertTrue(calls[0].installed);
+            assertTrue(calls[0].tid > 0);
+            assertFalse(owner.session.isOpenForRuntime());
+            assertTrue(java.util.Arrays.equals(before, Files.readAllBytes(exterior)), "exterior bytes unchanged");
+        } catch (Exception | Error problem) { primary = problem; throw problem; }
+        finally {
+            finishB3(primary, reporter, "B6-T6", fixture, owners, calls);
+        }
+    }
+
+    @Test
+    void b6T7SymlinkRetargetAfterRestrictionCannotExpandGrant(TestReporter reporter) throws Exception {
+        Path root = Files.createTempDirectory(work, "b6-t7-").toRealPath();
+        Path granted = root.resolve("granted.db");
+        Path exterior = work.resolve("b6-t7-exterior.db").toAbsolutePath();
+        var fixture = sqliteFixture();
+        Probe[] owners = new Probe[1];
+        PlatformCall[] calls = new PlatformCall[1];
+        CountDownLatch ready = new CountDownLatch(1), release = new CountDownLatch(1);
+        Throwable primary = null;
+        try {
+            Probe observer = sqliteProbe(fixture, fixture.root, reporter);
+            seedSqlite(observer, granted, 77);
+            seedSqlite(observer, exterior, 177);
+            Path link = root.resolve("retarget.db");
+            Files.createSymbolicLink(link, granted);
+            assertEquals(granted, Files.readSymbolicLink(link));
+            byte[] before = Files.readAllBytes(exterior);
+            Probe owner = owners[0] = sqliteProbe(fixture, fixture.newActorActivation(), reporter);
+            prepareB6(owner);
+            calls[0] = startB4Owner(root, owner, reporter, () -> {
+                assertEquals(0, number(owner.call("openReadOnly", link.toString())));
+                assertEquals(77, number(owner.call("nativeReadMarker")));
+                owner.call("close");
+                ready.countDown();
+                awaitB3(release, "deterministic symlink replacement");
+                assertEquals(14, number(owner.call("openReadOnly", link.toString())));
+                assertSame(false, owner.call("isOpen"));
+                assertEquals(0, number(owner.call("openReadOnly", granted.toString())));
+                assertEquals(77, number(owner.call("readOnlyProbe")));
+                owner.call("close");
+            });
+            awaitB3(ready, "initial symlink read and close");
+            assertTrue(calls[0].installed);
+            Files.delete(link);
+            Files.createSymbolicLink(link, exterior);
+            assertEquals(exterior, Files.readSymbolicLink(link));
+            release.countDown();
+            calls[0].finish();
+            assertTrue(calls[0].installed);
+            assertTrue(calls[0].tid > 0);
+            assertFalse(owner.session.isOpenForRuntime());
+            assertTrue(java.util.Arrays.equals(before, Files.readAllBytes(exterior)), "exterior bytes unchanged");
+        } catch (Exception | Error problem) { primary = problem; throw problem; }
+        finally {
+            release.countDown();
+            finishB3(primary, reporter, "B6-T7", fixture, owners, calls);
+        }
+    }
+
+    private static void prepareB6(Probe owner) {
+        // Warm new guest closure/copy paths before Landlock, using no persistent file.
+        assertEquals(0, number(owner.call("openUriFile", "file::memory:")));
+        owner.call("execute", "CREATE TABLE t(value INTEGER)");
+        owner.call("insertInteger", 1);
+        assertEquals(1, number(owner.call("nativeReadMarker")));
+        assertEquals(1, number(owner.call("readOnlyProbe")));
+        owner.call("close");
+        assertEquals(0, number(owner.call("openUriReadOnly", "file::memory:")));
+        owner.call("close");
+    }
+
     // ---- PLAT074-B5: independent JVMs; SQL and owned resources stay in Protos.
 
     @Test
