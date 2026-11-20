@@ -3078,23 +3078,45 @@ class ProtosI144FfmFixtureAbiTest {
 
     /** Launches the real Protos CLI on one D0 entry; stdout and stderr stay separate pipes. */
     private static Process d0Launch(Path entry, boolean provider, String... arguments) throws Exception {
+        return d0Start(null, null, entry, provider, arguments);
+    }
+
+    /**
+     * D0 launch, optionally behind the PLAT074-D1 pre-exec launcher. With {@code sandbox == null}
+     * the invocation is exactly D0's. Otherwise {@code sandbox} (launcher, policy, environment and
+     * the {@code --} separator) precedes the same canonical JVM, the extra {@code jvmOptions}
+     * relocate JVM temporary state into the private grant, and nothing is inherited from the
+     * harness environment: the launcher passes only its explicit {@code --env} entries.
+     */
+    private static Process d0Start(List<String> sandbox, List<String> jvmOptions, Path entry,
+            boolean provider, String... arguments) throws Exception {
         String classpath = System.getProperty("surefire.test.class.path",
                 System.getProperty("java.class.path"));
         assertTrue(classpath != null && !classpath.isBlank(), "missing test subprocess classpath");
         Path java = Path.of(System.getProperty("java.home"), "bin", "java");
         assertTrue(Files.isExecutable(java), "missing child JVM: " + java);
         Path home = Path.of("").toAbsolutePath();
-        List<String> invocation = new ArrayList<>(List.of(java.toString(),
+        List<String> invocation = new ArrayList<>();
+        if (sandbox != null) {
+            invocation.addAll(sandbox);
+            java = java.toRealPath();
+        }
+        invocation.addAll(List.of(java.toString(),
                 "--enable-native-access=ALL-UNNAMED", "--sun-misc-unsafe-memory-access=allow"));
-        String cache = System.getProperty("polyglot.engine.userResourceCache");
-        if (cache != null) invocation.add("-Dpolyglot.engine.userResourceCache=" + cache);
+        if (sandbox == null) {
+            String cache = System.getProperty("polyglot.engine.userResourceCache");
+            if (cache != null) invocation.add("-Dpolyglot.engine.userResourceCache=" + cache);
+        } else {
+            invocation.addAll(jvmOptions);
+        }
         invocation.addAll(List.of("-cp", classpath, "com.guillermomolina.protos.cli.ProtosCli"));
         // The only native authority: the CLI's explicit foreign-provider authorization.
         if (provider) invocation.addAll(List.of("--foreign-provider-path", sqliteJar.toAbsolutePath().toString()));
         invocation.add(entry.toAbsolutePath().toString());
         invocation.addAll(List.of(arguments));
         ProcessBuilder builder = new ProcessBuilder(invocation).directory(home.toFile());
-        builder.environment().put("PROTOS_HOME", home.toString());
+        if (sandbox == null) builder.environment().put("PROTOS_HOME", home.toString());
+        else builder.environment().clear();
         Process child = builder.start();
         var lines = new java.util.concurrent.LinkedBlockingQueue<String>();
         var events = new java.util.concurrent.LinkedBlockingQueue<String>();
@@ -3121,7 +3143,8 @@ class ProtosI144FfmFixtureAbiTest {
                         log.append(line).append('\n');
                     }
                     if (List.of("COMMITTED_BEFORE_ACK", "FRAMING_REJECTED", "COMMIT_ACK_WITHHELD",
-                            "ADMISSION_FAILED_CLOSED").contains(line)) events.offer(line);
+                            "ADMISSION_FAILED_CLOSED", "LANDLOCK_APPLIED").contains(line)
+                            || line.startsWith("SANDBOX_REFUSED ")) events.offer(line);
                 }
             } catch (Exception failure) {
                 synchronized (log) { log.append("stderr drain: ").append(failure).append('\n'); }
@@ -3231,6 +3254,1028 @@ class ProtosI144FfmFixtureAbiTest {
     private static void d0CloseClient(Process client) throws Exception {
         client.getOutputStream().close();
         d0Exit(client);
+    }
+
+    // ---- PLAT074-D1: pre-exec Landlock confinement of the D0 helper JVM.
+    // isolated/native/sandbox-exec.c (test fixture only) installs a Landlock domain in a
+    // single-threaded process and then execve()s the same D0 JVM, so every JVM and GraalVM
+    // thread inherits it. The Protos client stays unrestricted. A missing Landlock profile is
+    // UNSUPPORTED (JUnit assumption, never a pass); no scenario ever falls back to running
+    // unconfined. LANDLOCK_APPLIED is a diagnostic only: every claim rests on allowed and
+    // denied real SQLite opens compared with unrestricted controls.
+
+    private static final String D1_AUTHORIZED = "AUTHORIZED_OPENED true";
+    private static final String D1_EXTERIOR_OPENED = "EXTERIOR_OPENED true";
+    private static final String D1_EXTERIOR_DENIED = "EXTERIOR_DENIED";
+    private static Path d1Launcher;
+    private static String d1Unsupported;
+    private static boolean d1Checked;
+    private static long d1Abi;
+
+    @Test
+    void d1T1LandlockIsInstalledBeforeProtosBoot() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d1-t1-");
+        runD0(() -> {
+            Process client = d0Client();
+            // d1Helper requires LANDLOCK_APPLIED from the launcher first, then the Protos READY.
+            Process helper = d1Helper(root, root.resolve("d1.db"));
+            assertNotEquals(ProcessHandle.current().pid(), helper.pid());
+            assertNotEquals(client.pid(), helper.pid());
+            // execve replaced the launcher image in place: the confined PID now runs the JVM.
+            assertEquals(Path.of(System.getProperty("java.home"), "bin", "java").toRealPath().toString(),
+                    helper.info().command().orElse(""), "the launcher must exec the JVM, not fork it");
+            d0Ok(client, helper, 1, "PING", null, "0");
+            d0Ok(client, helper, 2, "CLOSE", null, "null");
+            d0Ok(client, helper, 3, "STOP", null, "null");
+            d0Exit(helper);
+            d0CloseClient(client);
+            return null;
+        });
+    }
+
+    @Test
+    void d1T2ConfinedSqliteCreatesAndReopensDurableDatabase() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d1-t2-");
+        Path db = root.resolve("d1.db");
+        runD0(() -> {
+            Process client = d0Client();
+            Process a = d1Helper(root, db);
+            d0Ok(client, a, 1, "INIT", null, "null");
+            d0Ok(client, a, 2, "BEGIN", null, "null");
+            d0Ok(client, a, 3, "INSERT", "10", "null");
+            d0Ok(client, a, 4, "INSERT", "20", "null");
+            d0Ok(client, a, 5, "COMMIT", null, "null");
+            d0Ok(client, a, 6, "COUNT", null, "2");
+            d0Ok(client, a, 7, "SUM", null, "30");
+            d0Ok(client, a, 8, "INTEGRITY", null, "true");
+            d0Ok(client, a, 9, "CLOSE", null, "null");
+            d0Ok(client, a, 10, "STOP", null, "null");
+            d0Exit(a);
+            Process b = d1Helper(root, db);
+            assertNotEquals(a.pid(), b.pid());
+            d0Ok(client, b, 1, "COUNT", null, "2");
+            d0Ok(client, b, 2, "SUM", null, "30");
+            d0Ok(client, b, 3, "INTEGRITY", null, "true");
+            d0Ok(client, b, 4, "STOP", null, "null");
+            d0Exit(b);
+            d0CloseClient(client);
+            assertEquals(List.of("d1.db"), directoryNames(root), "no journal survives a clean close");
+            return null;
+        });
+    }
+
+    @Test
+    void d1T3NativeSqliteCannotOpenExteriorDatabase() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d1-t3-grant-");
+        Path control = d1Dir("d1-t3-control-");
+        Path outside = d1Dir("d1-t3-exterior-");
+        Path exterior = outside.resolve("exterior.db");
+        runD0(() -> {
+            Process client = d0Client();
+            d1Seed(client, exterior, 7);
+            Map<String, String> before = d1Snapshot(outside);
+            // Positive control: the same probe, module and FFM provider, unrestricted.
+            assertEquals(List.of(D1_AUTHORIZED, D1_EXTERIOR_OPENED),
+                    d1Probe(null, control.resolve("control.db"), exterior));
+            assertEquals(before, d1Snapshot(outside), "the control probe must not modify the exterior");
+            // Restricted: the authorized open succeeds in the same JVM, the exterior is denied.
+            assertEquals(List.of(D1_AUTHORIZED, D1_EXTERIOR_DENIED),
+                    d1Probe(root, root.resolve("authorized.db"), exterior));
+            assertTrue(Files.isRegularFile(root.resolve("authorized.db")));
+            assertEquals(before, d1Snapshot(outside), "a denied open must leave the exterior untouched");
+            d0CloseClient(client);
+            return null;
+        });
+    }
+
+    @Test
+    void d1T4SeparateHelpersCannotWidenEachOthersGrants() throws Exception {
+        d1RequireProfile();
+        Path a = d1Dir("d1-t4-a-");
+        Path b = d1Dir("d1-t4-b-");
+        Path dbA = a.resolve("a.db");
+        Path dbB = b.resolve("b.db");
+        runD0(() -> {
+            Process client = d0Client();
+            Process helperA = d1Helper(a, dbA);
+            Process helperB = d1Helper(b, dbB);
+            for (Object[] step : new Object[][] {{helperA, "1"}, {helperB, "2"}}) {
+                Process helper = (Process) step[0];
+                d0Ok(client, helper, 1, "INIT", null, "null");
+                d0Ok(client, helper, 2, "BEGIN", null, "null");
+                d0Ok(client, helper, 3, "INSERT", (String) step[1], "null");
+                d0Ok(client, helper, 4, "COMMIT", null, "null");
+            }
+            Map<String, String> beforeA = d1Snapshot(a);
+            Map<String, String> beforeB = d1Snapshot(b);
+            // Control: both databases are openable without Landlock.
+            assertEquals(List.of(D1_AUTHORIZED, D1_EXTERIOR_OPENED), d1Probe(null, dbA, dbB));
+            assertEquals(List.of(D1_AUTHORIZED, D1_EXTERIOR_OPENED), d1Probe(null, dbB, dbA));
+            // Each grant opens its own database and is denied the other's.
+            assertEquals(List.of(D1_AUTHORIZED, D1_EXTERIOR_DENIED), d1Probe(a, dbA, dbB));
+            assertEquals(List.of(D1_AUTHORIZED, D1_EXTERIOR_DENIED), d1Probe(b, dbB, dbA));
+            // A helper confined to A cannot even boot on B's database: no READY, failed exit.
+            Process cross = d1Launch(a, List.of(), D0.resolve("helper.protos"), dbB.toString());
+            d0AwaitEvent(cross, "LANDLOCK_APPLIED");
+            assertEquals(D0_EOF, d0Next(cross), "a helper confined to A must not open B");
+            assertTrue(cross.waitFor(60, TimeUnit.SECONDS), "cross-grant helper termination timeout");
+            assertNotEquals(0, cross.exitValue());
+            assertEquals(beforeA, d1Snapshot(a));
+            assertEquals(beforeB, d1Snapshot(b));
+            // Both helpers keep serving their own authorized operations.
+            d0Ok(client, helperA, 5, "COUNT", null, "1");
+            d0Ok(client, helperA, 6, "SUM", null, "1");
+            d0Ok(client, helperB, 5, "COUNT", null, "1");
+            d0Ok(client, helperB, 6, "SUM", null, "2");
+            d0Ok(client, helperA, 7, "STOP", null, "null");
+            d0Ok(client, helperB, 7, "STOP", null, "null");
+            d0Exit(helperA);
+            d0Exit(helperB);
+            d0CloseClient(client);
+            return null;
+        });
+    }
+
+    @Test
+    void d1T5UnrestrictedClientDoesNotWidenHelperAuthority() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d1-t5-grant-");
+        Path clientSide = d1Dir("d1-t5-client-");
+        Path outside = d1Dir("d1-t5-exterior-");
+        Path db = root.resolve("d1.db");
+        Path control = outside.resolve("control.db");
+        runD0(() -> {
+            Process client = d0Client();
+            d1Seed(client, control, 3);
+            Map<String, String> before = d1Snapshot(outside);
+            // The client-side authority (unrestricted Protos CLI, the client's launch profile)
+            // opens the exterior control database with the real provider.
+            assertEquals(List.of(D1_AUTHORIZED, D1_EXTERIOR_OPENED),
+                    d1Probe(null, clientSide.resolve("client.db"), control));
+            Process helper = d1Helper(root, db);
+            // The client cannot hand its authority to the helper through the protocol.
+            d0Raw(client, helper, "{\"version\":1,\"id\":1,\"op\":\"OPEN\",\"value\":\"" + control + "\"}",
+                    "ACCEPTED 1 ERROR null INVALID_VALUE");
+            d0Expect(client, helper, 2, "OPEN", null, "ACCEPTED ERROR null UNSUPPORTED_OPERATION");
+            d0Expect(client, helper, 3, "ATTACH", null, "ACCEPTED ERROR null UNSUPPORTED_OPERATION");
+            d0Ok(client, helper, 4, "INIT", null, "null");
+            d0Ok(client, helper, 5, "COUNT", null, "0");
+            d0Ok(client, helper, 6, "STOP", null, "null");
+            d0Exit(helper);
+            // The helper's own grant, through the same module and provider, is denied the control.
+            assertEquals(List.of(D1_AUTHORIZED, D1_EXTERIOR_DENIED), d1Probe(root, db, control));
+            assertEquals(before, d1Snapshot(outside));
+            d0CloseClient(client);
+            return null;
+        });
+    }
+
+    @Test
+    void d1T6UnauthorizedSqlOperationsRemainRejectedUnderConfinement() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d1-t6-");
+        Path db = root.resolve("d1.db");
+        Path outside = d1Dir("d1-t6-exterior-");
+        Path existing = outside.resolve("existing.db");
+        Path missing = outside.resolve("outside.db");
+        runD0(() -> {
+            Process client = d0Client();
+            d1Seed(client, existing, 1);
+            Map<String, String> before = d1Snapshot(outside);
+            Process a = d1Helper(root, db);
+            d0Ok(client, a, 1, "INIT", null, "null");
+            d0Ok(client, a, 2, "BEGIN", null, "null");
+            d0Ok(client, a, 3, "INSERT", "5", "null");
+            d0Ok(client, a, 4, "COMMIT", null, "null");
+            d0Raw(client, a, "{\"version\":1,\"id\":5,\"op\":\"OPEN\",\"value\":\"" + missing + "\"}",
+                    "ACCEPTED 5 ERROR null INVALID_VALUE");
+            d0Raw(client, a, "{\"version\":1,\"id\":6,\"op\":\"EXEC\",\"value\":\"ATTACH DATABASE '"
+                    + existing + "' AS x\"}", "ACCEPTED 6 ERROR null INVALID_VALUE");
+            long id = 7;
+            for (String operation : List.of("OPEN", "EXEC", "ATTACH", "VACUUM", "LOAD", "IMPORT")) {
+                d0Expect(client, a, id++, operation, null, "ACCEPTED ERROR null UNSUPPORTED_OPERATION");
+            }
+            d0Ok(client, a, id++, "COUNT", null, "1");
+            d0Ok(client, a, id++, "SUM", null, "5");
+            String limit = d0Padded("{\"version\":1,\"id\":" + id + ",\"op\":\"COUNT\",\"value\":null", 4096);
+            d0Raw(client, a, limit, "ACCEPTED " + id + " OK 1 null");
+            id++;
+            d0Send(a, d0Padded("{\"version\":1,\"id\":" + id + ",\"op\":\"INSERT\",\"value\":7", 4097));
+            d0AwaitEvent(a, "FRAMING_REJECTED");
+            assertEquals(D0_EOF, d0Next(a), "an oversized line must never receive a reply");
+            assertTrue(a.waitFor(30, TimeUnit.SECONDS), "fail-closed helper termination timeout");
+            assertNotEquals(0, a.exitValue(), "framing failure must not be a clean protocol exit");
+            assertFalse(Files.exists(missing), "no request may create an exterior path");
+            assertEquals(before, d1Snapshot(outside), "no request may modify an exterior database");
+            Process b = d1Helper(root, db);
+            d0Ok(client, b, 1, "COUNT", null, "1");
+            d0Ok(client, b, 2, "SUM", null, "5");
+            d0Ok(client, b, 3, "STOP", null, "null");
+            d0Exit(b);
+            d0CloseClient(client);
+            return null;
+        });
+    }
+
+    @Test
+    void d1T7UncommittedTransactionRollsBackAfterSandboxedHelperKill() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d1-t7-");
+        Path db = root.resolve("d1.db");
+        runD0(() -> {
+            Process client = d0Client();
+            Process a = d1Helper(root, db);
+            d0Ok(client, a, 1, "INIT", null, "null");
+            d0Ok(client, a, 2, "BEGIN", null, "null");
+            d0Ok(client, a, 3, "INSERT", "10", "null");
+            d0Ok(client, a, 4, "COMMIT", null, "null");
+            d0Ok(client, a, 5, "STOP", null, "null");
+            d0Exit(a);
+            Process b = d1Helper(root, db);
+            d0Ok(client, b, 1, "BEGIN", null, "null");
+            d0Ok(client, b, 2, "INSERT", "77", "null");
+            d0Kill(b);
+            Process c = d1Helper(root, db);
+            d0Ok(client, c, 1, "COUNT", null, "1");
+            d0Ok(client, c, 2, "SUM", null, "10");
+            d0Ok(client, c, 3, "INTEGRITY", null, "true");
+            d0Ok(client, c, 4, "STOP", null, "null");
+            d0Exit(c);
+            d0CloseClient(client);
+            return null;
+        });
+    }
+
+    @Test
+    void d1T8CommittedButUnacknowledgedTransactionRemainsUncertain() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d1-t8-");
+        Path db = root.resolve("d1.db");
+        runD0(() -> {
+            Process client = d0Client();
+            Process a = d1Helper(root, db);
+            d0Ok(client, a, 1, "INIT", null, "null");
+            d0Ok(client, a, 2, "BEGIN", null, "null");
+            d0Ok(client, a, 3, "INSERT", "10", "null");
+            d0Ok(client, a, 4, "COMMIT", null, "null");
+            d0Ok(client, a, 5, "STOP", null, "null");
+            d0Exit(a);
+            Process b = d1Helper(root, db);
+            d0Ok(client, b, 1, "BEGIN", null, "null");
+            d0Ok(client, b, 2, "INSERT", "40", "null");
+            d0Send(b, d0RequestText(client, 3, "COMMIT_HOLD_ACK", null));
+            d0AwaitEvent(b, "COMMITTED_BEFORE_ACK");
+            assertEquals(null, d0Stdout.get(b).poll(), "no acknowledgement may precede the continuation");
+            d0Kill(b);
+            assertEquals("ACCEPTED UNCERTAIN null CONNECTION_LOST", d0Client(client, "LOST", "3"));
+            // No automatic retry: the durable state is inspected by another confined helper.
+            Process c = d1Helper(root, db);
+            d0Ok(client, c, 1, "COUNT", null, "2");
+            d0Ok(client, c, 2, "SUM", null, "50");
+            d0Ok(client, c, 3, "INTEGRITY", null, "true");
+            d0Ok(client, c, 4, "STOP", null, "null");
+            d0Exit(c);
+            d0CloseClient(client);
+            return null;
+        });
+    }
+
+    @Test
+    void d1T9UnsupportedLandlockProfileRefusesExecution() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d1-t9-");
+        runD0(() -> {
+            // An impossible minimum ABI: the launcher must refuse before any JVM exists.
+            Process refused = d1Launch(root, List.of("--require-abi", "1000000"),
+                    D0.resolve("helper.protos"), root.resolve("d1.db").toString());
+            String event = d0Events.get(refused).poll(60, TimeUnit.SECONDS);
+            assertTrue(event != null && event.startsWith("SANDBOX_REFUSED LANDLOCK_ABI_INSUFFICIENT "),
+                    "PID=" + refused.pid() + " event=" + event + "\n" + d0Logs.get(refused));
+            assertEquals(D0_EOF, d0Events.get(refused).poll(60, TimeUnit.SECONDS),
+                    "no LANDLOCK_APPLIED after a refusal");
+            assertEquals(D0_EOF, d0Next(refused), "a refused launch must never publish READY");
+            assertTrue(refused.waitFor(30, TimeUnit.SECONDS), "refused launcher termination timeout");
+            assertEquals(69, refused.exitValue(), "an unsupported profile is a non-zero refusal");
+            assertEquals(List.of(), directoryNames(root), "no SQLite operation may have run");
+            assertEquals(1, d0Stdout.size(), "the harness must not retry without restriction");
+            return null;
+        });
+    }
+
+    @Test
+    void d1T10HardlinkDoesNotProvideExclusiveDatabaseIdentity(TestReporter reporter) throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d1-t10-grant-");
+        Path outside = d1Dir("d1-t10-exterior-");
+        Path exterior = outside.resolve("exterior.db");
+        Path alias = root.resolve("alias.db");
+        runD0(() -> {
+            Process client = d0Client();
+            d1Seed(client, exterior, 9);
+            // Pre-existing alias created by the unrestricted harness, as in B6-T4.
+            Files.createLink(alias, exterior);
+            assertTrue(Files.isSameFile(alias, exterior), "the alias must be the same physical inode");
+            Map<String, String> before = d1Snapshot(outside);
+            assertEquals(List.of(D1_AUTHORIZED, D1_EXTERIOR_OPENED), d1Probe(null, alias, exterior));
+            List<String> restricted = d1Probe(root, alias, exterior);
+            assertEquals(2, restricted.size(), restricted.toString());
+            assertEquals(D1_EXTERIOR_DENIED, restricted.get(1), "the direct exterior path must be denied");
+            String through = restricted.get(0);
+            assertTrue(through.equals(D1_AUTHORIZED) || through.equals("AUTHORIZED_FAILED"), through);
+            if (through.equals(D1_AUTHORIZED)) {
+                reporter.publishEntry("D1-T10", "KNOWN LIMITATION of the per-directory authorization "
+                        + "unit: a pre-existing hardlink inside the grant opened the exterior inode; "
+                        + "Landlock authorizes paths, not database identity");
+            } else {
+                reporter.publishEntry("D1-T10", "hardlink alias denied on this kernel: " + through);
+            }
+            assertEquals(before, d1Snapshot(outside), "the read-only probe must not modify the inode");
+            d0CloseClient(client);
+            return null;
+        });
+    }
+
+    @Test
+    void d1T11NoResourceOrProcessSurvivesNormalClose() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d1-t11-");
+        Path db = root.resolve("d1.db");
+        runD0(() -> {
+            Process client = d0Client();
+            Process a = d1Helper(root, db);
+            d0Ok(client, a, 1, "INIT", null, "null");
+            d0Ok(client, a, 2, "BEGIN", null, "null");
+            d0Ok(client, a, 3, "INSERT", "4", "null");
+            d0Ok(client, a, 4, "COMMIT", null, "null");
+            assertEquals(0, a.toHandle().descendants().count(), "the confined helper spawns no process");
+            d0Ok(client, a, 5, "CLOSE", null, "null");
+            d0Ok(client, a, 6, "STOP", null, "null");
+            d0Exit(a);
+            assertFalse(ProcessHandle.of(a.pid()).map(ProcessHandle::isAlive).orElse(false),
+                    "no surviving helper process");
+            assertEquals(List.of("d1.db"), directoryNames(root), "no journal survives a clean close");
+            Process b = d1Helper(root, db);
+            d0Ok(client, b, 1, "COUNT", null, "1");
+            d0Ok(client, b, 2, "SUM", null, "4");
+            d0Ok(client, b, 3, "INTEGRITY", null, "true");
+            d0Ok(client, b, 4, "STOP", null, "null");
+            d0Exit(b);
+            for (Process child : d0Stdout.keySet()) {
+                if (child != client) assertFalse(child.isAlive(), "PID=" + child.pid() + " survived");
+            }
+            // Only scalar protocol values ever reached the client: each reply above was decoded
+            // and correlated by the Protos client as an exact OK/ERROR value.
+            d0CloseClient(client);
+            return null;
+        });
+    }
+
+    @Test
+    void d1T12ConfinedHelperPreservesD0ProtocolAndActorSemantics() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d1-t12-");
+        runD0(() -> {
+            Process client = d0Client();
+            Process a = d1Helper(root, root.resolve("d1.db"));
+            d0Ok(client, a, 1, "PING", null, "0");
+            d0Raw(client, a, "{\"version\":1,", "ACCEPTED null ERROR null MALFORMED");
+            d0Ok(client, a, 2, "INIT", null, "null");
+            d0Ok(client, a, 3, "BEGIN", null, "null");
+            d0Ok(client, a, 4, "INSERT", "11", "null");
+            d0Expect(client, a, 4, "INSERT", "9", "ACCEPTED ERROR null NON_INCREASING_ID");
+            d0Expect(client, a, 3, "COUNT", null, "ACCEPTED ERROR null NON_INCREASING_ID");
+            d0Ok(client, a, 5, "INSERT", "31", "null");
+            d0Ok(client, a, 6, "COMMIT", null, "null");
+            d0Ok(client, a, 7, "COUNT", null, "2");
+            d0Ok(client, a, 8, "SUM", null, "42");
+            d0Expect(client, a, 9, "EVAL", null, "ACCEPTED ERROR null UNSUPPORTED_OPERATION");
+            d0Expect(client, a, 10, "INSERT", null, "ACCEPTED ERROR null INVALID_VALUE");
+            d0Ok(client, a, 11, "CLOSE", null, "null");
+            d0Expect(client, a, 12, "COUNT", null, "ACCEPTED ERROR null CLOSED");
+            d0Expect(client, a, 13, "INSERT", "1", "ACCEPTED ERROR null CLOSED");
+            d0Ok(client, a, 14, "CLOSE", null, "null");
+            d0Ok(client, a, 15, "STOP", null, "null");
+            d0Exit(a);
+            d0CloseClient(client);
+            return null;
+        });
+    }
+
+    // ---- PLAT074-D1-R1: extended Landlock profile (ABI 10 contract) and its falsification.
+    // isolated/native/authority-probe.c performs one OS operation per mode. Every restricted
+    // claim is paired with an unrestricted control of the same operation that succeeds first;
+    // a restricted result counts only as an authorization errno (EACCES/EPERM) after the
+    // launcher printed the full profile. A missing listener, ECONNREFUSED, ESRCH or a lost
+    // datagram is never accepted as isolation. The Protos SQLite helper is unchanged.
+
+    private static final String D1R1_PROFILE =
+            "LANDLOCK_PROFILE abi=10 handled_fs=0x1ffff handled_net=0xf scoped=0x3";
+    private static final String D1R1_FD = "9";
+    private static final String D1R1_MARKER = "D1R1-FD-MARKER";
+    private static Path d1r1Probe;
+
+    @Test
+    void d1R1T1FullSupportedLandlockProfileIsApplied() throws Exception {
+        d1RequireProfile();
+        assertTrue(d1Abi >= 10, "the D1-R1 profile requires Landlock ABI 10, found " + d1Abi);
+        Path root = d1Dir("d1-r1-t1-grant-");
+        Path outside = d1Dir("d1-r1-t1-exterior-");
+        Path exterior = outside.resolve("exterior.db");
+        runD0(() -> {
+            Process client = d0Client();
+            d1Seed(client, exterior, 5);
+            Process helper = d1Helper(root, root.resolve("d1.db"));
+            // Diagnostic: all FS rights through ABI 10, TCP+UDP, abstract-UNIX and signal scopes.
+            String log;
+            synchronized (d0Logs.get(helper)) { log = d0Logs.get(helper).toString(); }
+            assertTrue(log.contains(D1R1_PROFILE + "\n"), log);
+            assertTrue(log.indexOf(D1R1_PROFILE) < log.indexOf("LANDLOCK_APPLIED"), log);
+            // Real allowed operations in the JVM booted after the restriction.
+            d0Ok(client, helper, 1, "INIT", null, "null");
+            d0Ok(client, helper, 2, "BEGIN", null, "null");
+            d0Ok(client, helper, 3, "INSERT", "3", "null");
+            d0Ok(client, helper, 4, "COMMIT", null, "null");
+            d0Ok(client, helper, 5, "COUNT", null, "1");
+            d0Ok(client, helper, 6, "STOP", null, "null");
+            d0Exit(helper);
+            // Real allowed and denied native SQLite opens under the same extended profile.
+            assertEquals(List.of(D1_AUTHORIZED, D1_EXTERIOR_DENIED),
+                    d1Probe(root, root.resolve("authorized.db"), exterior));
+            d0CloseClient(client);
+            return null;
+        });
+    }
+
+    @Test
+    void d1R1T2TcpConnectOutsideDomainIsDenied() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d1-r1-t2-");
+        try (var server = java.nio.channels.ServerSocketChannel.open()) {
+            server.bind(new java.net.InetSocketAddress(java.net.InetAddress.getByName("127.0.0.1"), 0));
+            server.configureBlocking(false);
+            String port = Integer.toString(((java.net.InetSocketAddress) server.getLocalAddress()).getPort());
+            d1r1Expect(d1r1Run(d1r1Control("tcp-connect", port)), "TCP_ALLOWED");
+            // connect() completed the loopback handshake: the connection is already queued.
+            try (var accepted = server.accept()) {
+                assertTrue(accepted != null, "the control connection must reach the listener");
+            }
+            d1r1Denied(d1r1Run(d1r1Confined(root, List.of(), "tcp-connect", port)), "TCP");
+            assertEquals(null, server.accept(), "no connection may arrive from the restricted probe");
+        }
+    }
+
+    @Test
+    void d1R1T3UdpSendOutsideDomainIsDenied() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d1-r1-t3-");
+        try (var receiver = java.nio.channels.DatagramChannel.open(java.net.StandardProtocolFamily.INET)) {
+            receiver.bind(new java.net.InetSocketAddress(java.net.InetAddress.getByName("127.0.0.1"), 0));
+            receiver.configureBlocking(false);
+            String port = Integer.toString(((java.net.InetSocketAddress) receiver.getLocalAddress()).getPort());
+            d1r1Expect(d1r1Run(d1r1Control("udp-send", port)), "UDP_SENT");
+            // Loopback delivery is complete when sendto returns: the datagram is queued.
+            var buffer = java.nio.ByteBuffer.allocate(64);
+            assertTrue(receiver.receive(buffer) != null, "the control datagram must be received");
+            buffer.flip();
+            assertEquals("PROBE", StandardCharsets.US_ASCII.decode(buffer).toString());
+            // The restricted claim is the authorization errno, not the absence of a datagram.
+            d1r1Denied(d1r1Run(d1r1Confined(root, List.of(), "udp-send", port)), "UDP");
+            buffer.clear();
+            assertEquals(null, receiver.receive(buffer), "no datagram may arrive from the restricted probe");
+        }
+    }
+
+    @Test
+    void d1R1T4PathnameUnixSocketOutsideDomainIsDenied() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d1-r1-t4-grant-");
+        Path sockets = d1Dir("d1-r1-t4-socket-");
+        Path socket = sockets.resolve("s.sock");
+        try (var server = java.nio.channels.ServerSocketChannel.open(java.net.StandardProtocolFamily.UNIX)) {
+            server.bind(java.net.UnixDomainSocketAddress.of(socket));
+            server.configureBlocking(false);
+            d1r1Expect(d1r1Run(d1r1Control("unix-path-connect", socket.toString())), "UNIX_PATH_CONNECTED");
+            try (var accepted = server.accept()) {
+                assertTrue(accepted != null, "the control connection must reach the socket");
+            }
+            // The socket directory is deliberately readable (--ro) and the probe stat()s the
+            // socket before connecting: only RESOLVE_UNIX can produce the denial.
+            d1r1Denied(d1r1Run(d1r1Confined(root, List.of(sockets.toString()), "unix-path-connect",
+                    socket.toString())), "UNIX_PATH");
+            assertEquals(null, server.accept(), "no connection may arrive from the restricted probe");
+            assertTrue(Files.exists(socket), "the socket must still exist");
+        } finally {
+            Files.deleteIfExists(socket);
+        }
+    }
+
+    @Test
+    void d1R1T5AbstractUnixSocketOutsideDomainIsDenied() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d1-r1-t5-");
+        String name = "protos-d1r1-" + ProcessHandle.current().pid() + "-" + System.nanoTime();
+        ProcessBuilder builder = new ProcessBuilder(d1r1Control("unix-abstract-listen", name))
+                .directory(work.toFile()).redirectErrorStream(true);
+        builder.environment().clear();
+        Process listener = builder.start();
+        var lines = new java.util.concurrent.LinkedBlockingQueue<String>();
+        Thread.ofPlatform().daemon().name("d1r1-listener-" + listener.pid()).start(() -> {
+            try (var reader = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(listener.getInputStream(), StandardCharsets.UTF_8))) {
+                for (String line; (line = reader.readLine()) != null; ) lines.offer(line);
+            } catch (Exception failure) {
+                lines.offer("DRAIN_FAILED " + failure);
+            } finally {
+                lines.offer(D0_EOF);
+            }
+        });
+        try {
+            assertEquals("READY", lines.poll(30, TimeUnit.SECONDS), "listener READY");
+            d1r1Expect(d1r1Run(d1r1Control("unix-abstract-connect", name)), "UNIX_ABSTRACT_CONNECTED");
+            assertEquals("ACCEPTED", lines.poll(30, TimeUnit.SECONDS), "control connection accepted");
+            d1r1Denied(d1r1Run(d1r1Confined(root, List.of(), "unix-abstract-connect", name)), "UNIX_ABSTRACT");
+            // Closing stdin makes the listener drain pending connections and report the total.
+            listener.getOutputStream().close();
+            assertEquals("CLOSED total=1", lines.poll(30, TimeUnit.SECONDS),
+                    "the restricted probe must not have reached the listener");
+            assertTrue(listener.waitFor(30, TimeUnit.SECONDS), "listener termination timeout");
+            assertEquals(0, listener.exitValue());
+        } finally {
+            if (listener.isAlive()) listener.destroyForcibly();
+            listener.waitFor(15, TimeUnit.SECONDS);
+        }
+    }
+
+    @Test
+    void d1R1T6SignalsCannotEscapeTheHelperDomain() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d1-r1-t6-");
+        // A live same-user process outside the domain: this JUnit JVM. Signal 0 only checks
+        // permission; nothing is delivered and the target is not modified.
+        String target = Long.toString(ProcessHandle.current().pid());
+        d1r1Expect(d1r1Run(d1r1Control("signal-check", target)), "SIGNAL_ALLOWED");
+        // SIGNAL_NO_TARGET (ESRCH) would fail d1r1Denied: it is never taken for a scope denial.
+        d1r1Denied(d1r1Run(d1r1Confined(root, List.of(), "signal-check", target)), "SIGNAL");
+        assertTrue(ProcessHandle.current().isAlive());
+    }
+
+    @Test
+    void d1R1T7AuthorizedProtosSqliteSurvivesExpandedRestrictions() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d1-r1-t7-");
+        Path db = root.resolve("d1.db");
+        runD0(() -> {
+            Process client = d0Client();
+            Process a = d1Helper(root, db);
+            String log;
+            synchronized (d0Logs.get(a)) { log = d0Logs.get(a).toString(); }
+            assertTrue(log.contains(D1R1_PROFILE + "\n"), log);
+            d0Ok(client, a, 1, "INIT", null, "null");
+            d0Ok(client, a, 2, "BEGIN", null, "null");
+            d0Ok(client, a, 3, "INSERT", "12", "null");
+            d0Ok(client, a, 4, "INSERT", "30", "null");
+            d0Ok(client, a, 5, "COMMIT", null, "null");
+            d0Ok(client, a, 6, "COUNT", null, "2");
+            d0Ok(client, a, 7, "SUM", null, "42");
+            d0Ok(client, a, 8, "INTEGRITY", null, "true");
+            d0Ok(client, a, 9, "CLOSE", null, "null");
+            d0Ok(client, a, 10, "STOP", null, "null");
+            d0Exit(a);
+            Process b = d1Helper(root, db);
+            assertNotEquals(a.pid(), b.pid());
+            d0Ok(client, b, 1, "COUNT", null, "2");
+            d0Ok(client, b, 2, "SUM", null, "42");
+            d0Ok(client, b, 3, "INTEGRITY", null, "true");
+            d0Ok(client, b, 4, "STOP", null, "null");
+            d0Exit(b);
+            d0CloseClient(client);
+            assertEquals(List.of("d1.db"), directoryNames(root), "no journal survives a clean close");
+            return null;
+        });
+    }
+
+    @Test
+    void d1R1T8InheritedExteriorFileDescriptorIsClosedBeforeExec() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d1-r1-t8-grant-");
+        Path outside = d1Dir("d1-r1-t8-exterior-");
+        Path authority = outside.resolve("authority.txt");
+        Files.writeString(authority, D1R1_MARKER, StandardCharsets.US_ASCII);
+        List<String> preopen = List.of(d1r1Probe().toString(), "preopen-exec", authority.toString(), D1R1_FD, "--");
+        // Control without the launcher: the fixture's descriptor survives execve (no CLOEXEC).
+        List<String> control = new ArrayList<>(preopen);
+        control.addAll(d1r1Control("fd-check", D1R1_FD));
+        String[] open = d1r1Run(control);
+        d1r1Expect(open, "FD_OPEN_READ " + D1R1_MARKER);
+        assertTrue(open[2].contains("PREOPENED fd=" + D1R1_FD), open[2]);
+        // Through the launcher: the same inheritable descriptor reaches sandbox-exec, which
+        // closes it with close_range before exec'ing the probe.
+        List<String> confined = new ArrayList<>(preopen);
+        confined.addAll(d1r1Confined(root, List.of(), "fd-check", D1R1_FD));
+        String[] closed = d1r1Run(confined);
+        assertEquals("0", closed[0], String.join("\n", closed));
+        int preopened = closed[2].indexOf("PREOPENED fd=" + D1R1_FD);
+        int applied = closed[2].indexOf("LANDLOCK_APPLIED");
+        assertTrue(preopened >= 0 && applied > preopened, closed[2]);
+        // fd-check ran in the exec'd image: the descriptor no longer exists (EBADF).
+        assertEquals("FD_CLOSED", closed[1], String.join("\n", closed));
+        assertEquals(D1R1_MARKER, Files.readString(authority, StandardCharsets.US_ASCII));
+    }
+
+    @Test
+    void d1R1T9UnsafeEnvironmentVariablesAreRejected() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d1-r1-t9-");
+        Path db = root.resolve("d1.db");
+        runD0(() -> {
+            Process client = d0Client();
+            // Appended to the exact harness environment; the JUnit environment is never touched.
+            String[][] appended = {
+                {"JAVA_TOOL_OPTIONS=-Xmx1m", "ENV_FORBIDDEN JAVA_TOOL_OPTIONS"},
+                {"_JAVA_OPTIONS=-Xmx1m", "ENV_FORBIDDEN _JAVA_OPTIONS"},
+                {"JDK_JAVA_OPTIONS=-Xmx1m", "ENV_FORBIDDEN JDK_JAVA_OPTIONS"},
+                {"LD_PRELOAD=/nonexistent/preload.so", "ENV_FORBIDDEN LD_PRELOAD"},
+                {"LD_LIBRARY_PATH=/nonexistent", "ENV_FORBIDDEN LD_LIBRARY_PATH"},
+                {"LD_AUDIT=/nonexistent/audit.so", "ENV_FORBIDDEN LD_AUDIT"},
+                {"GCONV_PATH=/nonexistent", "ENV_FORBIDDEN GCONV_PATH"},
+                {"PROTOS_EXTRA=1", "ENV_UNKNOWN PROTOS_EXTRA"},
+                {"LANG=C", "ENV_DUPLICATE LANG"},
+                {"LANG", "ENV_MISSING_SEPARATOR LANG"},
+                {"=value", "ENV_EMPTY_NAME =value"},
+            };
+            for (String[] entry : appended) {
+                Path tmp = d1Dir("d1-tmp-");
+                List<String> environment = new ArrayList<>(d1Environment(tmp));
+                environment.add(entry[0]);
+                d1r1Refused(d1LaunchWith(root, tmp, List.of(), environment, D0.resolve("helper.protos"),
+                        db.toString()), "SANDBOX_REFUSED " + entry[1], 64);
+            }
+            // Replaced entries: an invalid value and a HOME outside the private temporary root.
+            String[][] replaced = {
+                {"LANG=", "ENV_INVALID_VALUE LANG"},
+                {"HOME=" + root, "ENV_NOT_PRIVATE_TMP HOME"},
+            };
+            for (String[] entry : replaced) {
+                Path tmp = d1Dir("d1-tmp-");
+                String name = entry[0].substring(0, entry[0].indexOf('=') + 1);
+                List<String> environment = new ArrayList<>();
+                for (String variable : d1Environment(tmp)) {
+                    environment.add(variable.startsWith(name) ? entry[0] : variable);
+                }
+                d1r1Refused(d1LaunchWith(root, tmp, List.of(), environment, D0.resolve("helper.protos"),
+                        db.toString()), "SANDBOX_REFUSED " + entry[1], 64);
+            }
+            assertEquals(List.of(), directoryNames(root), "no refused launch may reach SQLite");
+            // The exact authorized environment still boots the helper normally.
+            Process helper = d1Helper(root, db);
+            d0Ok(client, helper, 1, "PING", null, "0");
+            d0Ok(client, helper, 2, "STOP", null, "null");
+            d0Exit(helper);
+            d0CloseClient(client);
+            return null;
+        });
+    }
+
+    @Test
+    void d1R1T10HardlinkOutcomeIsAssertedAndRecorded(TestReporter reporter) throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d1-r1-t10-grant-");
+        Path outside = d1Dir("d1-r1-t10-exterior-");
+        Path exterior = outside.resolve("exterior.db");
+        Path alias = root.resolve("alias.db");
+        runD0(() -> {
+            Process client = d0Client();
+            d1Seed(client, exterior, 9);
+            Files.createLink(alias, exterior);
+            assertTrue(Files.isSameFile(alias, exterior), "the alias must be the same physical inode");
+            Map<String, String> before = d1Snapshot(outside);
+            assertEquals(List.of(D1_AUTHORIZED, D1_EXTERIOR_OPENED), d1Probe(null, alias, exterior));
+            // Landlock evaluates the path walked, not the inode: the interior name is beneath the
+            // grant and is allowed; the exterior name of the same inode is denied.
+            assertEquals(List.of(D1_AUTHORIZED, D1_EXTERIOR_DENIED), d1Probe(root, alias, exterior));
+            reporter.publishEntry("D1-R1-T10", "hardlink alias inside the grant OPENED the exterior inode; "
+                    + "the per-directory grant does not establish exclusive database identity");
+            assertEquals(before, d1Snapshot(outside), "the read-only probe must not modify the inode");
+            d0CloseClient(client);
+            return null;
+        });
+    }
+
+    @Test
+    void d1R1T11UnsupportedSecurityProfileRefusesWithoutFallback() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d1-r1-t11-");
+        Path db = root.resolve("d1.db");
+        runD0(() -> {
+            // A requirement below the profile can never select a weaker (filesystem-only) profile.
+            d1r1Refused(d1Launch(root, List.of("--require-abi", "9"), D0.resolve("helper.protos"),
+                    db.toString()), "SANDBOX_REFUSED ABI_BELOW_PROFILE_FLOOR 9", 64);
+            // A requirement beyond the reviewed ABI 10 contract claims unimplemented guarantees.
+            long beyond = Math.max(d1Abi, 11);
+            String expected = d1Abi >= 11 ? "SANDBOX_REFUSED PROFILE_DOES_NOT_COVER_ABI "
+                    : "SANDBOX_REFUSED LANDLOCK_ABI_INSUFFICIENT ";
+            d1r1Refused(d1Launch(root, List.of("--require-abi", Long.toString(beyond)),
+                    D0.resolve("helper.protos"), db.toString()), expected, 69);
+            assertEquals(List.of(), directoryNames(root), "no SQLite operation may have run");
+            assertEquals(2, d0Stdout.size(), "the harness must not retry with a weaker profile");
+            return null;
+        });
+    }
+
+    @Test
+    void d1R1T12ClientDeathDoesNotYetProvideHelperRevocation(TestReporter reporter) throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d1-r1-t12-");
+        runD0(() -> {
+            Process client = d0Client();
+            Process helper = d1Helper(root, root.resolve("d1.db"));
+            d0Ok(client, helper, 1, "INIT", null, "null");
+            client.destroyForcibly();
+            assertTrue(client.waitFor(30, TimeUnit.SECONDS), "client SIGKILL timeout");
+            assertEquals(137, client.exitValue());
+            // Negative architecture control, not a guarantee: the JUnit harness, not the Protos
+            // client, owns the helper process, so the client's death revokes nothing.
+            assertTrue(helper.isAlive(), "expected the helper to outlive its client (D-10 unresolved)");
+            assertEquals(null, d0Stdout.get(helper).poll(), "no unsolicited helper output");
+            reporter.publishEntry("D1-R1-T12", "D-10 UNRESOLVED: confined helper PID=" + helper.pid()
+                    + " survived the forced death of client PID=" + client.pid()
+                    + "; it was terminated by the JUnit harness, not by client-death revocation");
+            d0Kill(helper);
+            return null;
+        });
+    }
+
+    @Test
+    void d1R1T13ParentCanTerminateConfinedHelper() throws Exception {
+        d1RequireProfile();
+        Path root = d1Dir("d1-r1-t13-");
+        Path db = root.resolve("d1.db");
+        runD0(() -> {
+            Process client = d0Client();
+            Process a = d1Helper(root, db);
+            d0Ok(client, a, 1, "INIT", null, "null");
+            d0Ok(client, a, 2, "BEGIN", null, "null");
+            d0Ok(client, a, 3, "INSERT", "21", "null");
+            d0Ok(client, a, 4, "COMMIT", null, "null");
+            // The signal scope restricts signals sent by the domain, not to it: the
+            // unrestricted harness still kills the helper (no guest cleanup is implied).
+            d0Kill(a);
+            assertFalse(ProcessHandle.of(a.pid()).map(ProcessHandle::isAlive).orElse(false),
+                    "the killed helper must not survive");
+            Process b = d1Helper(root, db);
+            d0Ok(client, b, 1, "COUNT", null, "1");
+            d0Ok(client, b, 2, "SUM", null, "21");
+            d0Ok(client, b, 3, "INTEGRITY", null, "true");
+            d0Ok(client, b, 4, "STOP", null, "null");
+            d0Exit(b);
+            d0CloseClient(client);
+            return null;
+        });
+    }
+
+    /** Compiles the D1-R1 OS-authority probe next to the launcher, once. */
+    private static Path d1r1Probe() throws Exception {
+        if (d1r1Probe == null) d1r1Probe = d1Compile("authority-probe");
+        return d1r1Probe;
+    }
+
+    /** Unrestricted control: the probe exec'd directly (d1r1Run clears the environment). */
+    private static List<String> d1r1Control(String... arguments) throws Exception {
+        List<String> command = new ArrayList<>(List.of(d1r1Probe().toString()));
+        command.addAll(List.of(arguments));
+        return command;
+    }
+
+    /** Restricted probe: the shared D1 policy; the probe directory is the only extra --rx. */
+    private static List<String> d1r1Confined(Path grant, List<String> extraRo, String... arguments)
+            throws Exception {
+        Path tmp = d1Dir("d1-tmp-");
+        List<String> command = d1Policy(grant, tmp, List.of(), List.of(d1r1Probe().getParent().toString()),
+                extraRo, d1Environment(tmp));
+        command.add(d1r1Probe().toString());
+        command.addAll(List.of(arguments));
+        return command;
+    }
+
+    /**
+     * Runs one native command to completion with an empty environment and closed stdin; stdout and
+     * stderr are drained concurrently. Returns {exit status, stripped stdout, stderr}.
+     */
+    private static String[] d1r1Run(List<String> command) throws Exception {
+        ProcessBuilder builder = new ProcessBuilder(command).directory(work.toFile());
+        builder.environment().clear();
+        Process process = builder.start();
+        try {
+            process.getOutputStream().close();
+            var stdout = java.util.concurrent.CompletableFuture.supplyAsync(
+                    () -> d1r1Drain(process.getInputStream()));
+            var stderr = java.util.concurrent.CompletableFuture.supplyAsync(
+                    () -> d1r1Drain(process.getErrorStream()));
+            assertTrue(process.waitFor(60, TimeUnit.SECONDS), "native command timeout: " + command);
+            return new String[] {Integer.toString(process.exitValue()),
+                    stdout.get(30, TimeUnit.SECONDS).strip(), stderr.get(30, TimeUnit.SECONDS)};
+        } finally {
+            if (process.isAlive()) process.destroyForcibly();
+            process.waitFor(15, TimeUnit.SECONDS);
+        }
+    }
+
+    private static String d1r1Drain(java.io.InputStream stream) {
+        try (stream) {
+            return new String(stream.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (java.io.IOException failure) {
+            return "DRAIN_FAILED " + failure;
+        }
+    }
+
+    /** An unrestricted control: exit 0 and exactly {@code expected}. */
+    private static void d1r1Expect(String[] result, String expected) {
+        assertEquals("0", result[0], String.join("\n", result));
+        assertEquals(expected, result[1], String.join("\n", result));
+    }
+
+    /** A restricted probe: full profile installed, then an authorization errno for the operation. */
+    private static void d1r1Denied(String[] result, String prefix) {
+        String all = String.join("\n", result);
+        assertEquals("0", result[0], all);
+        assertTrue(result[2].contains(D1R1_PROFILE + "\n") && result[2].contains("LANDLOCK_APPLIED\n"), all);
+        assertTrue(result[1].startsWith(prefix + "_DENIED errno="), all);
+    }
+
+    /** A refused launch: one SANDBOX_REFUSED event, no LANDLOCK_APPLIED, no READY, given status. */
+    private static void d1r1Refused(Process refused, String expectedPrefix, int status) throws Exception {
+        String event = d0Events.get(refused).poll(60, TimeUnit.SECONDS);
+        assertTrue(event != null && event.startsWith(expectedPrefix),
+                "PID=" + refused.pid() + " event=" + event + "\n" + d0Logs.get(refused));
+        assertEquals(D0_EOF, d0Events.get(refused).poll(60, TimeUnit.SECONDS),
+                "no LANDLOCK_APPLIED after a refusal");
+        assertEquals(D0_EOF, d0Next(refused), "a refused launch must never publish READY");
+        assertTrue(refused.waitFor(30, TimeUnit.SECONDS), "refused launcher termination timeout");
+        assertEquals(status, refused.exitValue());
+    }
+
+    /** UNSUPPORTED (assumption, never PASS) when the platform cannot install the D1 profile. */
+    private static void d1RequireProfile() throws Exception {
+        Path launcher = d1Launcher();
+        if (!d1Checked) {
+            Process check = new ProcessBuilder(launcher.toString(), "--abi-only")
+                    .redirectErrorStream(true).start();
+            String output = new String(check.getInputStream().readAllBytes(), StandardCharsets.UTF_8).strip();
+            assertTrue(check.waitFor(30, TimeUnit.SECONDS), "launcher ABI check timed out");
+            if (check.exitValue() == 69) {
+                d1Unsupported = output;
+            } else {
+                assertEquals(0, check.exitValue(), output);
+                assertTrue(output.startsWith("LANDLOCK_ABI "), output);
+                d1Abi = Long.parseLong(output.substring("LANDLOCK_ABI ".length()).strip());
+            }
+            d1Checked = true;
+        }
+        assumeTrue(d1Unsupported == null, "UNSUPPORTED: " + d1Unsupported);
+    }
+
+    /** Compiles the experimental launcher into the test temporary directory, once. */
+    private static Path d1Launcher() throws Exception {
+        if (d1Launcher == null) d1Launcher = d1Compile("sandbox-exec");
+        return d1Launcher;
+    }
+
+    /** Compiles one isolated/native fixture into the shared native directory. */
+    private static Path d1Compile(String name) throws Exception {
+        Path compiler = findCompiler();
+        assumeTrue(compiler != null, "UNSUPPORTED: no C compiler for the D1 native fixtures");
+        Path output = Files.createDirectories(work.resolve("d1-native")).resolve(name);
+        Process cc = new ProcessBuilder(compiler.toString(), "-O2", "-std=c11", "-Wall", "-Werror",
+                        "-o", output.toString(), D0.resolve("native").resolve(name + ".c").toString())
+                .redirectErrorStream(true).start();
+        String ccOutput = new String(cc.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        assertTrue(cc.waitFor(60, TimeUnit.SECONDS), "cc timed out");
+        assertEquals(0, cc.exitValue(), ccOutput);
+        return output.toRealPath();
+    }
+
+    private static Path d1Dir(String prefix) throws Exception {
+        return Files.createTempDirectory(work, prefix).toRealPath();
+    }
+
+    /**
+     * Launches {@code entry} behind the launcher. {@code grant} is the only SQLite directory; a fresh
+     * private temporary directory is created per process. Every read path is listed explicitly by
+     * this host; none comes from helper IPC.
+     */
+    private static Process d1Launch(Path grant, List<String> launcherOptions, Path entry,
+            String... arguments) throws Exception {
+        Path tmp = d1Dir("d1-tmp-");
+        return d1LaunchWith(grant, tmp, launcherOptions, d1Environment(tmp), entry, arguments);
+    }
+
+    /** {@link #d1Launch} with an explicit launcher environment (D1-R1-T9 adversarial entries). */
+    private static Process d1LaunchWith(Path grant, Path tmp, List<String> launcherOptions,
+            List<String> environment, Path entry, String... arguments) throws Exception {
+        List<String> sandbox = d1Policy(grant, tmp, launcherOptions, List.of(), List.of(), environment);
+        List<String> jvm = List.of("-XX:-UsePerfData", "-Djava.io.tmpdir=" + tmp, "-Duser.home=" + tmp,
+                "-Dpolyglot.engine.userResourceCache=" + tmp.resolve("polyglot-cache"));
+        return d0Start(sandbox, jvm, entry, true, arguments);
+    }
+
+    /** The exact harness environment: the five allowlisted names, HOME/TMPDIR = private tmp. */
+    private static List<String> d1Environment(Path tmp) throws Exception {
+        Path home = Path.of("").toAbsolutePath().toRealPath();
+        return List.of("PROTOS_HOME=" + home, "HOME=" + tmp, "TMPDIR=" + tmp, "LANG=C.UTF-8",
+                "PATH=/usr/bin:/bin");
+    }
+
+    /**
+     * The launcher prefix shared by the Protos JVM and the D1-R1 native probe: one policy builder,
+     * so both run under identical grants. {@code extraRx}/{@code extraRo} only add explicit host
+     * paths (the probe directory, a socket directory); the result ends with {@code --}.
+     */
+    private static List<String> d1Policy(Path grant, Path tmp, List<String> launcherOptions,
+            List<String> extraRx, List<String> extraRo, List<String> environment) throws Exception {
+        Path home = Path.of("").toAbsolutePath().toRealPath();
+        List<String> sandbox = new ArrayList<>(List.of(d1Launcher().toString()));
+        sandbox.addAll(launcherOptions);
+        sandbox.addAll(List.of("--db", grant.toRealPath().toString(), "--tmp", tmp.toString()));
+        sandbox.addAll(List.of("--rx", Path.of(System.getProperty("java.home")).toRealPath().toString()));
+        for (String path : extraRx) sandbox.addAll(List.of("--rx", path));
+        Path interpreter = Path.of("/lib64/ld-linux-x86-64.so.2");
+        if (Files.exists(interpreter)) sandbox.addAll(List.of("--rx", interpreter.toRealPath().toString()));
+        java.util.Set<String> readable = new java.util.LinkedHashSet<>();
+        for (String library : List.of("/usr/lib64", "/usr/lib")) {
+            if (Files.isDirectory(Path.of(library))) readable.add(Path.of(library).toRealPath().toString());
+        }
+        String classpath = System.getProperty("surefire.test.class.path",
+                System.getProperty("java.class.path"));
+        for (String element : classpath.split(File.pathSeparator)) {
+            if (!element.isBlank() && Files.exists(Path.of(element))) {
+                readable.add(Path.of(element).toRealPath().toString());
+            }
+        }
+        readable.add(sqliteJar.toRealPath().toString());
+        readable.add(home.resolve("protos").resolve("lib").toRealPath().toString());
+        readable.add(D0.toAbsolutePath().toRealPath().toString());
+        for (String system : List.of("/etc/ld.so.cache", "/etc/localtime", "/etc/nsswitch.conf",
+                "/etc/passwd", "/etc/group", "/proc", "/sys", "/dev/urandom", "/dev/random")) {
+            if (Files.exists(Path.of(system))) readable.add(Path.of(system).toRealPath().toString());
+        }
+        readable.addAll(extraRo);
+        for (String path : readable) sandbox.addAll(List.of("--ro", path));
+        sandbox.addAll(List.of("--dev", "/dev/null"));
+        for (String variable : environment) sandbox.addAll(List.of("--env", variable));
+        sandbox.add("--");
+        return sandbox;
+    }
+
+    /** A confined helper: LANDLOCK_APPLIED must precede the Protos READY event. */
+    private static Process d1Helper(Path grant, Path db) throws Exception {
+        assertTrue(db.isAbsolute(), "D1 database path must be absolute");
+        Process helper = d1Launch(grant, List.of(), D0.resolve("helper.protos"), db.toString());
+        d0AwaitEvent(helper, "LANDLOCK_APPLIED");
+        Process client = d0Stdout.keySet().iterator().next();
+        assertEquals("ACCEPTED", d0Client(client, "READY", d0Next(helper)),
+                "the confined helper must publish the Protos READY event first");
+        return helper;
+    }
+
+    /** Runs isolation-probe.protos, confined to {@code grant} or unrestricted when null. */
+    private static List<String> d1Probe(Path grant, Path authorized, Path exterior) throws Exception {
+        Path entry = D0.resolve("isolation-probe.protos");
+        Process probe = grant == null
+                ? d0Launch(entry, true, authorized.toString(), exterior.toString())
+                : d1Launch(grant, List.of(), entry, authorized.toString(), exterior.toString());
+        if (grant != null) d0AwaitEvent(probe, "LANDLOCK_APPLIED");
+        List<String> lines = new ArrayList<>();
+        for (String line = d0Next(probe); !line.equals(D0_EOF); line = d0Next(probe)) lines.add(line);
+        assertTrue(probe.waitFor(60, TimeUnit.SECONDS), "probe termination timeout");
+        assertEquals(0, probe.exitValue(), "PID=" + probe.pid() + "\n" + d0Logs.get(probe));
+        return lines;
+    }
+
+    /** Creates a valid committed database through an unrestricted D0 helper. */
+    private static void d1Seed(Process client, Path db, long value) throws Exception {
+        Process seeder = d0Helper(db);
+        d0Ok(client, seeder, 1, "INIT", null, "null");
+        d0Ok(client, seeder, 2, "BEGIN", null, "null");
+        d0Ok(client, seeder, 3, "INSERT", Long.toString(value), "null");
+        d0Ok(client, seeder, 4, "COMMIT", null, "null");
+        d0Ok(client, seeder, 5, "STOP", null, "null");
+        d0Exit(seeder);
+    }
+
+    /** Names, sizes, modification times and SHA-256 digests of a directory's entries. */
+    private static Map<String, String> d1Snapshot(Path directory) throws Exception {
+        Map<String, String> snapshot = new java.util.TreeMap<>();
+        for (String name : directoryNames(directory)) {
+            Path path = directory.resolve(name);
+            byte[] content = Files.readAllBytes(path);
+            snapshot.put(name, content.length + ":" + Files.getLastModifiedTime(path).toMillis() + ":"
+                    + java.util.HexFormat.of().formatHex(
+                            java.security.MessageDigest.getInstance("SHA-256").digest(content)));
+        }
+        return snapshot;
     }
 
     private static Probe sqliteProbe(ProtosExternalForeignProviderTest.Fixture fixture,

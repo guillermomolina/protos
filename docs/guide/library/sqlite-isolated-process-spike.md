@@ -220,3 +220,266 @@ durability.
 - No reconciliation of uncertain commits; no durable request identity.
 - Linux x86-64 with the FFM provider only. D0-T1–T8 passed in a focal run
   (owner-reported); see the §23 evidence table.
+
+## 15. PLAT074-D1 — Pre-exec filesystem confinement of the helper
+
+> **D1 is experimental filesystem confinement, not a complete sandbox.** It
+> restricts which paths the helper JVM (and the SQLite C code inside it) can
+> open. It does not restrict system calls, network access, signals, memory, CPU,
+> or what arbitrary native code can do with descriptors it already holds. D1-T1–T12
+> passed in one owner-reported focal run (prototype evidence only). D1 does not mark any D-1–D-11 item
+> implemented.
+
+### 15.1 Mechanism
+
+`protos/tests/foreign-provider/isolated/native/sandbox-exec.c` is a test-only
+C launcher. The JUnit harness compiles it into its temporary directory with the
+same compiler lookup as `ffi_test.c`. It is not a provider, not part of any
+distribution, and contains no SQLite or protocol logic. It follows the
+documented Linux procedure
+(<https://www.kernel.org/doc/html/latest/userspace-api/landlock.html>), written
+independently of `samples/landlock/sandboxer.c`:
+
+1. validate every policy path (absolute, existing, canonical; no `/` write
+   root; write roots independent of each other and never containing a runtime
+   path; the JVM executable inside an execute grant);
+2. query the Landlock ABI and require at least ABI 3 (truncation);
+3. `landlock_create_ruleset` handling every filesystem right the kernel knows:
+   `EXECUTE`, `WRITE_FILE`, `READ_FILE`, `READ_DIR`, `REMOVE_DIR`,
+   `REMOVE_FILE`, `MAKE_CHAR`, `MAKE_DIR`, `MAKE_REG`, `MAKE_SOCK`,
+   `MAKE_FIFO`, `MAKE_BLOCK`, `MAKE_SYM`, `REFER`, `TRUNCATE`, plus
+   `IOCTL_DEV` from ABI 5;
+4. one `landlock_add_rule` (path beneath) per grant, each through an
+   `O_PATH|O_CLOEXEC` descriptor that is closed immediately;
+5. `prctl(PR_SET_NO_NEW_PRIVS, 1)`;
+6. `landlock_restrict_self`;
+7. close the ruleset and every inherited descriptor above 2 (`close_range`);
+8. write the diagnostic `LANDLOCK_APPLIED` to stderr;
+9. `execve` the JVM with only the environment the harness provided.
+
+The process is still single-threaded at step 6, before any JVM exists.
+Landlock domains survive `execve` and are inherited by every thread and child
+the JVM later creates (GraalVM compiler threads, Actor carriers, FFM
+downcalls). `LANDLOCK_APPLIED` is a diagnostic only. The evidence is a real
+SQLite open that is allowed or denied, compared with an unrestricted control.
+
+### 15.2 Grants
+
+| Grant | Rights | Paths (all chosen by the harness, none from IPC) |
+|---|---|---|
+| execute + read | `READ_FILE`, `READ_DIR`, `EXECUTE` | `java.home`; the ELF interpreter |
+| read | `READ_FILE`, `READ_DIR` | `/usr/lib64`, `/usr/lib` (system and `libsqlite3.so.0`); each test class-path entry; the FFM provider JAR; `$PROTOS_HOME/protos/lib`; `protos/tests/foreign-provider/isolated`; `/etc/ld.so.cache`, `/etc/localtime`, `/etc/nsswitch.conf`, `/etc/passwd`, `/etc/group`; `/proc`; `/sys`; `/dev/urandom`, `/dev/random` |
+| device read/write | `READ_FILE`, `WRITE_FILE` (+ `IOCTL_DEV`) | `/dev/null` |
+| SQLite directory | `READ_FILE`, `READ_DIR`, `WRITE_FILE`, `TRUNCATE`, `MAKE_REG`, `REMOVE_FILE` | one private directory per test |
+| private temporary | SQLite rights + `MAKE_DIR`, `REMOVE_DIR`, `REFER` | a fresh directory per process |
+
+The repository is never writable, and neither is the whole repository, `$HOME`
+or `/tmp` readable. The JVM is started with `-XX:-UsePerfData`,
+`-Djava.io.tmpdir`, `-Duser.home` and `-Dpolyglot.engine.userResourceCache`
+pointing into its private temporary directory. Its environment is exactly
+`PROTOS_HOME`, `HOME`, `TMPDIR`, `LANG`, `PATH`. The Protos client is not
+launched through the launcher and stays unrestricted.
+
+### 15.3 Fail-closed behaviour
+
+The launcher exits non-zero without starting Protos when arguments or policy
+paths are invalid (64), Landlock is missing or its ABI is insufficient (69), a
+rule, `no_new_privs` or the restriction fails (70), or `execve` fails (71).
+Each failure writes `SANDBOX_REFUSED <reason>`. There is no degraded or
+unconfined mode. `--require-abi` can only raise the minimum, never lower it
+below 3. Before the D1 tests, the harness runs `sandbox-exec --abi-only`; exit
+69 makes every D1 test **UNSUPPORTED** (a JUnit assumption, never a pass).
+
+### 15.4 Tests
+
+| Test | Claim exercised | Status |
+|---|---|---|
+| D1-T1 `d1T1LandlockIsInstalledBeforeProtosBoot` | `LANDLOCK_APPLIED` then Protos READY; same PID now runs the JVM (exec, not fork); distinct from the client; PING; clean exit | PASS (focal) |
+| D1-T2 `d1T2ConfinedSqliteCreatesAndReopensDurableDatabase` | confined INIT/BEGIN/INSERT/COMMIT/COUNT/SUM/INTEGRITY, reopen by another confined JVM, no leftover journal | PASS (focal) |
+| D1-T3 `d1T3NativeSqliteCannotOpenExteriorDatabase` | unrestricted probe opens the exterior; confined probe opens its grant and is denied the exterior; exterior unchanged | PASS (focal) |
+| D1-T4 `d1T4SeparateHelpersCannotWidenEachOthersGrants` | A and B each denied the other's database (probe and helper boot); controls open both; both keep serving | PASS (focal) |
+| D1-T5 `d1T5UnrestrictedClientDoesNotWidenHelperAuthority` | client-profile process opens the control; protocol cannot carry the path; helper grant denied the control | PASS (focal) |
+| D1-T6 `d1T6UnauthorizedSqlOperationsRemainRejectedUnderConfinement` | OPEN/EXEC/ATTACH/VACUUM/LOAD/IMPORT rejected; 4096 admitted, 4097 fail-closed; no exterior created or modified | PASS (focal) |
+| D1-T7 `d1T7UncommittedTransactionRollsBackAfterSandboxedHelperKill` | D0-T6 under confinement | PASS (focal) |
+| D1-T8 `d1T8CommittedButUnacknowledgedTransactionRemainsUncertain` | D0-T7 under confinement; UNCERTAIN; no retry | PASS (focal) |
+| D1-T9 `d1T9UnsupportedLandlockProfileRefusesExecution` | impossible ABI: `SANDBOX_REFUSED`, exit 69, no READY, no SQLite file, no retry | PASS (focal) |
+| D1-T10 `d1T10HardlinkDoesNotProvideExclusiveDatabaseIdentity` | direct exterior path denied; a pre-existing hardlink inside the grant may open the same inode (reported as a known limitation) | PASS (focal) |
+| D1-T11 `d1T11NoResourceOrProcessSurvivesNormalClose` | CLOSE/STOP, exit 0, no descendants or survivors, no journal, reopen | PASS (focal) |
+| D1-T12 `d1T12ConfinedHelperPreservesD0ProtocolAndActorSemantics` | D0 admission, id ordering, transaction, CLOSE and post-close rejections unchanged | PASS (focal) |
+
+Owner-reported focal run on 20 November 2026 (`ProtosI144FfmFixtureAbiTest#d1*`): 12/12 PASS, 0 failures, 0 errors, 0 skipped, 63.54 s, Landlock ABI 11. Stderr confirms `LANDLOCK_APPLIED` for every confined JVM, the D1-T4 cross-grant helper failing in `SqliteEngine.openFile`, the D1-T6 fail-closed framing path and the D1-T9 refusal (`SANDBOX_REFUSED LANDLOCK_ABI_INSUFFICIENT abi=11 required=1000000`). The D1-T10 hardlink outcome (alias allowed or denied) was published through `TestReporter` and was not captured in the returned output. This is prototype evidence only.
+
+`isolation-probe.protos` is the probe used by D1-T3/T4/T5/T10. It is a CLI FILE
+entry that takes both database paths from `process.args()` and uses the same
+`SqliteEngine.openFile` and FFM provider as the helper. It runs only the
+read-only `integrity_check` query.
+
+### 15.5 Open limits
+
+- **Path, not identity.** Landlock authorizes path hierarchies. A hardlink
+  that already exists inside the grant reaches an exterior inode (B6-T4,
+  D1-T10). A bind mount would do the same. After restriction, `REFER` and the
+  `MAKE_*` rights stop the helper from creating new links outside the grant.
+- **Pre-opened descriptors.** Landlock checks `open`, not descriptors already
+  held. The launcher closes every inherited descriptor above 2. This relies
+  on the launcher, not on the kernel.
+- **Broad read surfaces.** `/proc`, `/sys` and the system library directories
+  are readable, so files there can be read even though nothing outside the
+  grants is writable.
+- **Not all native capabilities.** Network, IPC, signals, `ptrace` (limited
+  only by `no_new_privs` and Yama), resource exhaustion and memory corruption
+  inside the helper are not confined. Read-only access to `/proc` exposes
+  metadata of other same-user processes.
+- **Platform.** Linux with Landlock ABI ≥ 3, x86-64 FFM fixture only. The
+  read list assumes the FHS layout of the test host; a missing runtime path
+  fails the launch and never widens the grant.
+- **D-10.** Normal close only. Client-crash cleanup and revocation are not
+  tested.
+- **D1-T10 outcome** not captured; a rerun that keeps the surefire report would record it.
+
+## 16. PLAT074-D1-R1 — Extended Landlock restrictions
+
+D1-R1 corrects and widens the D1 launcher profile. It reuses the same
+launcher (`isolated/native/sandbox-exec.c`) and the same sequence: validation,
+ruleset creation, rules, `no_new_privs`, `landlock_restrict_self`, descriptor
+closing, `execve`. It adds no fork. The Protos executable, the helper,
+`SqliteEngine.protos`, the protocol and the FFM provider are unchanged. All
+SQLite and protocol logic stays in Protos. The new C code is test fixtures
+only.
+
+### 16.1 Correction: `FS_RESOLVE_UNIX`
+
+The D1 launcher said it handled every known filesystem right, but its list
+ended at `LANDLOCK_ACCESS_FS_IOCTL_DEV`. It left out
+`LANDLOCK_ACCESS_FS_RESOLVE_UNIX` (ABI 9, bit 16). D1-R1 adds it to the
+handled mask and grants it to no path. Connecting to a pathname UNIX socket is
+therefore denied everywhere, even beneath a readable `--ro` grant. Being able
+to read the directory that holds a socket does not authorize connecting to it.
+
+### 16.2 Network, UNIX IPC and signals
+
+| Mechanism | Field | Bits | ABI | Rule granted |
+|---|---|---|---|---|
+| TCP bind / connect | `handled_access_net` | `BIND_TCP` (0), `CONNECT_TCP` (1) | 4 | none |
+| UDP bind / connect-send | `handled_access_net` | `BIND_UDP` (2), `CONNECT_SEND_UDP` (3) | 10 | none |
+| Abstract UNIX sockets | `scoped` | `SCOPE_ABSTRACT_UNIX_SOCKET` (0) | 6 | — |
+| Signals | `scoped` | `SCOPE_SIGNAL` (1) | 6 | — |
+| Pathname UNIX sockets | `handled_access_fs` | `FS_RESOLVE_UNIX` (16) | 9 | none |
+
+No port rule exists, so every TCP and UDP operation covered by these rights is
+denied. There is no loopback exception, and IPC cannot authorize a port. The
+scopes stop the helper from connecting to abstract sockets or signalling
+processes outside its own domain. The unrestricted parent can still signal and
+kill the helper. The signal scope is not protection against every form of IPC.
+
+The ruleset attribute is the ABI 10 layout: `handled_access_fs`,
+`handled_access_net`, `scoped`, `quiet_access_fs`, `quiet_access_net`,
+`quiet_scoped`, all `uint64_t`. The quiet fields are always zero, so audit is
+never silenced. `sizeof` of exactly this structure goes to
+`landlock_create_ruleset`. The launcher prints the installed masks as the
+diagnostic
+`LANDLOCK_PROFILE abi=10 handled_fs=0x1ffff handled_net=0xf scoped=0x3`.
+
+### 16.3 ABI 10 profile
+
+`PROFILE_ABI` (= `MINIMUM_ABI`) is 10, because the profile needs ABI 3
+TRUNCATE, ABI 4 TCP, ABI 5 IOCTL_DEV, ABI 6 scopes, ABI 9 RESOLVE_UNIX and
+ABI 10 UDP. Below ABI 10 the launcher prints
+`SANDBOX_REFUSED LANDLOCK_ABI_INSUFFICIENT` and exits 69. A weaker profile is
+never installed.
+
+- `--require-abi` below 10 is refused with `ABI_BELOW_PROFILE_FLOOR` (exit 64).
+- A requirement above 10 asks for guarantees the launcher does not implement.
+  It is refused with `PROFILE_DOES_NOT_COVER_ABI` (exit 69), or with
+  `LANDLOCK_ABI_INSUFFICIENT` if the kernel is older than the requirement.
+- On a newer kernel (the owner's host reports ABI 11) the profile is still the
+  ABI 10 one, and the launcher prints `LANDLOCK_UNREVIEWED_ABI abi=N profile=10`.
+  Rights added after ABI 10 are not handled and are not claimed. A newer ABI
+  never grants anything implicitly.
+- `--abi-only` checks the same requirement.
+
+### 16.4 Descriptors
+
+`close_range(3, ~0U, 0)` must succeed. Any failure, including `ENOSYS`, prints
+`SANDBOX_REFUSED CLOSE_RANGE_FAILED`, exits non-zero and never runs the
+executable. The per-descriptor `close` fallback from D1 is removed.
+Descriptors 0, 1 and 2 stay open. They are the harness's explicit channels and
+they still carry communication authority.
+
+### 16.5 Environment and paths
+
+The environment is explicit and never inherited. The only allowed names are
+`PROTOS_HOME`, `HOME`, `TMPDIR`, `LANG` and `PATH`, each at most once, with a
+non-empty value and no control characters. `HOME` and `TMPDIR` must equal the
+private `--tmp` root. The launcher refuses with exit 64:
+
+- the named JVM/loader variables (`JAVA_TOOL_OPTIONS`, `_JAVA_OPTIONS`,
+  `JDK_JAVA_OPTIONS`, `LD_PRELOAD`, `LD_LIBRARY_PATH`, `LD_AUDIT`,
+  `GCONV_PATH`) and any other `LD_` name, with `ENV_FORBIDDEN`;
+- an unknown name (`ENV_UNKNOWN`);
+- a duplicate (`ENV_DUPLICATE`);
+- a missing `=` (`ENV_MISSING_SEPARATOR`);
+- an empty name (`ENV_EMPTY_NAME`);
+- an invalid value (`ENV_INVALID_VALUE`);
+- a private-root mismatch (`ENV_NOT_PRIVATE_TMP`).
+
+There is no general environment configuration.
+
+`/` is refused as an `--rx` or `--ro` root, as it already was for the write
+roots. The executable after `--` is either the JVM or a native probe. It must
+be absolute, canonical, a regular executable file beneath an `--rx` grant and
+outside both write roots. It is exec'd directly, with no shell and no lookup.
+Paths are checked by name (`realpath`, then `open(O_PATH)`) before the ruleset
+exists. That check does not exclude every race with concurrent host namespace
+changes, so the provisioning host stays trusted.
+
+### 16.6 Tests
+
+`isolated/native/authority-probe.c` is a fixture that performs one OS
+operation per mode: `tcp-connect`, `udp-send`, `unix-path-connect`,
+`unix-abstract-listen`, `unix-abstract-connect`, `signal-check`,
+`preopen-exec` and `fd-check`. Every restricted claim has an unrestricted
+control of the same operation, and that control must succeed first. A
+restricted result counts only if two things hold: the launcher printed the full
+profile and `LANDLOCK_APPLIED`, and the probe reported `*_DENIED`, meaning
+`EACCES` or `EPERM`. `ECONNREFUSED`, `ENOENT`, `ESRCH`, timeouts, a missing
+listener or a lost datagram are `*_OTHER_ERROR` / `*_NO_TARGET` and fail the
+test. The JVM and the probe share one policy builder (`d1Policy`). The probe
+directory is the probe's only extra `--rx`.
+
+| Test | Claim | Result |
+|---|---|---|
+| D1-R1-T1 `d1R1T1FullSupportedLandlockProfileIsApplied` | ABI ≥ 10; profile masks printed before `LANDLOCK_APPLIED`; helper serves SQLite; probe opens its grant and is denied the exterior | NOT RUN |
+| D1-R1-T2 `d1R1T2TcpConnectOutsideDomainIsDenied` | control connects to a JUnit loopback listener; restricted `TCP_DENIED`; no restricted connection queued | NOT RUN |
+| D1-R1-T3 `d1R1T3UdpSendOutsideDomainIsDenied` | control datagram sent and received; restricted `UDP_DENIED`; nothing received | NOT RUN |
+| D1-R1-T4 `d1R1T4PathnameUnixSocketOutsideDomainIsDenied` | socket in an `--ro` directory, visible to `stat`; control connects; restricted `UNIX_PATH_DENIED` | NOT RUN |
+| D1-R1-T5 `d1R1T5AbstractUnixSocketOutsideDomainIsDenied` | listener READY; control accepted; restricted `UNIX_ABSTRACT_DENIED`; listener total exactly 1 | NOT RUN |
+| D1-R1-T6 `d1R1T6SignalsCannotEscapeTheHelperDomain` | `kill(JUnit PID, 0)` allowed unrestricted, `SIGNAL_DENIED` restricted; ESRCH never accepted | NOT RUN |
+| D1-R1-T7 `d1R1T7AuthorizedProtosSqliteSurvivesExpandedRestrictions` | INIT…STOP and reopen in another confined JVM; values and integrity unchanged | NOT RUN |
+| D1-R1-T8 `d1R1T8InheritedExteriorFileDescriptorIsClosedBeforeExec` | inheritable fd 9 readable after exec without launcher; `FD_CLOSED` after launcher | NOT RUN |
+| D1-R1-T9 `d1R1T9UnsafeEnvironmentVariablesAreRejected` | every forbidden/unknown/duplicate/malformed/mismatched entry refused before any JVM; exact set boots | NOT RUN |
+| D1-R1-T10 `d1R1T10HardlinkOutcomeIsAssertedAndRecorded` | asserts: interior hardlink alias opens, exterior name denied | NOT RUN |
+| D1-R1-T11 `d1R1T11UnsupportedSecurityProfileRefusesWithoutFallback` | `--require-abi 9` and a requirement above 10 refused; no SQLite file; no retry | NOT RUN |
+| D1-R1-T12 `d1R1T12ClientDeathDoesNotYetProvideHelperRevocation` | negative control: helper survives forced client death; D-10 unresolved; JUnit kills it | NOT RUN |
+| D1-R1-T13 `d1R1T13ParentCanTerminateConfinedHelper` | harness SIGKILLs the confined helper; committed state and integrity intact on reopen | NOT RUN |
+
+D1-R1-T10 asserts the path-based outcome: the alias inside the grant opens the
+exterior inode. If the kernel denies it, the test fails, and that result has
+to be reported, not absorbed. D1-T10 is kept unchanged.
+
+### 16.7 Still not protected
+
+- Landlock does not make the native C code memory-safe.
+- The helper keeps its inherited standard channels (0, 1, 2).
+- `/proc` and `/sys` are still broad read surfaces.
+- Hardlinks and bind mounts need an identity-provisioning policy.
+- Name validation before Landlock does not by itself protect against every
+  namespace race.
+- A COMMIT without an acknowledgement is still uncertain. There is no automatic
+  reconciliation and no durable operation deduplication.
+- The helper is still launched by the Java harness. There is no public OS
+  process API and no approved client/helper supervisor. D-10 is still pending.
+- `ptrace` (only `no_new_privs`/Yama), resource exhaustion, and syscalls
+  outside the Landlock-covered families are not confined.
+
+This profile is not a general container and not complete syscall confinement.

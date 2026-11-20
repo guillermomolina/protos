@@ -2919,3 +2919,188 @@ Design and protocol: [sqlite-isolated-process-spike.md](sqlite-isolated-process-
 State: **PLAT074 OPEN; D256 pending; LIB031 BLOCKED; D0 8/8 PASS (focal).**
 Not run after D0: the complete `ProtosI144FfmFixtureAbiTest` class (B2-T5
 expected to fail), `make test-protos-foreign` and `make test`.
+
+## 24. PLAT074-D1 — Pre-exec filesystem confinement of isolated helper
+
+**Starting point.** The owner selected alternative D as the experimental
+direction (§23). D0 passed 8/8 (focal, owner-reported, 39.90 s), including the
+fail-closed D0-T4 framing path. PLAT074 stays **OPEN**, D256 **pending** and
+LIB031 **BLOCKED**. Production Java is still not authorized.
+
+**Mechanism.** A test-only C launcher,
+`protos/tests/foreign-provider/isolated/native/sandbox-exec.c`, runs before
+the helper JVM exists. In a single-threaded process it validates the policy
+paths, requires Landlock ABI ≥ 3, and then calls `landlock_create_ruleset` (handling every
+filesystem right the kernel knows, including `REFER` and `TRUNCATE`),
+`landlock_add_rule` (path beneath), `prctl(PR_SET_NO_NEW_PRIVS)` and
+`landlock_restrict_self`. It closes the ruleset and every inherited descriptor
+above 2, writes `LANDLOCK_APPLIED` to stderr, and `execve`s the unchanged D0
+JVM command. Primary source: the kernel userspace documentation
+<https://www.kernel.org/doc/html/latest/userspace-api/landlock.html>; the
+kernel's `samples/landlock/sandboxer.c` is a procedural precedent only, and no
+code was copied from it.
+
+**Thread inheritance.** Landlock domains are preserved across `execve` and
+inherited by every thread created afterwards. Because the domain exists
+before the JVM starts, every JVM, GraalVM and Actor carrier thread runs in the
+helper's domain, and so does every FFM downcall into SQLite. This is the
+property that the in-process B2-T5/B6-T2 counterexamples showed cannot be
+obtained by restricting individual threads of a shared JVM. The Protos client
+stays unrestricted in its own process.
+
+**Grants** (harness-chosen, never from IPC; details in
+[sqlite-isolated-process-spike.md](sqlite-isolated-process-spike.md) §15):
+
+- read/execute: `java.home` and the ELF interpreter;
+- read-only: system library directories, the test class path entries, the FFM
+  provider JAR, `$PROTOS_HOME/protos/lib`, the `isolated` fixture directory,
+  selected `/etc` files, `/proc`, `/sys`, `/dev/urandom` and `/dev/random`;
+- read/write: `/dev/null`;
+- one private SQLite directory, which may create, write, truncate and unlink regular files;
+- one private temporary directory per process for JVM and Truffle state.
+
+The launcher refuses non-canonical paths, `/` as a write root, and write
+roots that contain a runtime path. An unsupported platform exits 69 and its
+tests are UNSUPPORTED. There is no unconfined fallback.
+
+### D1 evidence
+
+| Test | Claim exercised | Status |
+|---|---|---|
+| D1-T1 `d1T1LandlockIsInstalledBeforeProtosBoot` | restriction precedes JVM boot; exec in place; READY; PING; clean exit | PASS (focal) |
+| D1-T2 `d1T2ConfinedSqliteCreatesAndReopensDurableDatabase` | SQLite works within the grant; reopen by another confined JVM | PASS (focal) |
+| D1-T3 `d1T3NativeSqliteCannotOpenExteriorDatabase` | real SQLite open of an exterior DB denied; unrestricted control opens it; exterior unchanged | PASS (focal) |
+| D1-T4 `d1T4SeparateHelpersCannotWidenEachOthersGrants` | two confined helpers' grants stay separate | PASS (focal) |
+| D1-T5 `d1T5UnrestrictedClientDoesNotWidenHelperAuthority` | unrestricted client authority does not reach the helper | PASS (focal) |
+| D1-T6 `d1T6UnauthorizedSqlOperationsRemainRejectedUnderConfinement` | D0 admission and 4096-octet bound unchanged; no exterior effects | PASS (focal) |
+| D1-T7 `d1T7UncommittedTransactionRollsBackAfterSandboxedHelperKill` | SIGKILL recovery under confinement | PASS (focal) |
+| D1-T8 `d1T8CommittedButUnacknowledgedTransactionRemainsUncertain` | UNCERTAIN commit under confinement; no retry | PASS (focal) |
+| D1-T9 `d1T9UnsupportedLandlockProfileRefusesExecution` | impossible ABI refused, no READY, no SQLite, no retry | PASS (focal) |
+| D1-T10 `d1T10HardlinkDoesNotProvideExclusiveDatabaseIdentity` | path-based grant versus inode identity (B6-T4 interpretation) | PASS (focal) |
+| D1-T11 `d1T11NoResourceOrProcessSurvivesNormalClose` | normal-close cleanup; no surviving process | PASS (focal) |
+| D1-T12 `d1T12ConfinedHelperPreservesD0ProtocolAndActorSemantics` | D0 protocol and Actor transitions unchanged | PASS (focal) |
+
+Owner-reported focal run on 20 November 2026 (`ProtosI144FfmFixtureAbiTest#d1*`): 12/12 PASS, 0 failures, 0 errors, 0 skipped, 63.54 s, Landlock ABI 11. Stderr confirms `LANDLOCK_APPLIED` for every confined JVM, the D1-T4 cross-grant helper failing in `SqliteEngine.openFile`, the D1-T6 fail-closed framing path and the D1-T9 refusal (`SANDBOX_REFUSED LANDLOCK_ABI_INSUFFICIENT abi=11 required=1000000`). The D1-T10 hardlink outcome (alias allowed or denied) was published through `TestReporter` and was not captured in the returned output. This is prototype evidence only.
+
+### Contract reconciliation (§20 table unchanged)
+
+- **D-1:** unchanged. D1-T1/T7 exercise the falsification test again, under
+  confinement.
+- **D-2:** D1-T3/T4/T6 provide the exterior-path part of its falsification
+  test (focal PASS). The pre-opened-descriptor part is addressed only by
+  the launcher closing inherited descriptors. It is not falsified by a test
+  here, and B6-T1 still stands as the counterexample for descriptors opened
+  before restriction. Not implemented.
+- **D-11:** D1-T5 is the falsification test described in §20. It passed in the
+  focal run: experimental evidence only, not a production implementation.
+- **D-10:** still pending. D1-T11 covers normal close only. Client-crash
+  cleanup and revocation are untested.
+- **D-3–D-9:** unchanged from §23.
+
+The B2 failures and the B6 counterexamples (B6-T1 pre-opened descriptor,
+B6-T2 unrestricted host entry, B6-T4 hardlink) are kept as they are. D1 avoids
+B6-T2 by process separation and does not refute it for a shared JVM.
+
+### Pending risks
+
+- The grant is per directory and path-based: hardlinks or bind mounts inside
+  the grant reach exterior inodes (D1-T10).
+- Not a complete sandbox: network, IPC, signals, resource limits and memory
+  safety of native code are not confined. `/proc` and `/sys` are readable.
+- Descriptor hygiene is enforced by the launcher (`close_range`), not by
+  Landlock.
+- The read list depends on the test host's filesystem layout. Its sufficiency
+  is unknown until the owner runs the tests.
+- No Protos-level OS-process API exists. Launching remains in the test harness.
+
+State: **PLAT074 OPEN; D256 pending; LIB031 BLOCKED; D0 8/8 PASS (focal);
+D1-T1–T12 12/12 PASS (focal).**
+Not run after D1: the complete `ProtosI144FfmFixtureAbiTest` class, `make test-protos-foreign`
+and `make test`.
+
+## 25. PLAT074-D1-R1 — Network, IPC and inherited-authority falsification
+
+### Starting evidence (owner-reported, 20 November 2026)
+
+- D0: 8/8 PASS (focal).
+- D1: 12/12 PASS, 0 failures/errors/skipped, 63.54 s, Landlock ABI 11. D1 was
+  installed before the JVM (`LANDLOCK_APPLIED` before the Protos READY).
+- Review found that the D1 launcher omitted `LANDLOCK_ACCESS_FS_RESOLVE_UNIX`
+  (ABI 9) even though it claimed to handle every known filesystem right. It
+  also left `handled_access_net` and `scoped` unset. D1 results are evidence for
+  the filesystem profile only. They do not approve D-1–D-11.
+
+### Experimental widening
+
+D1-R1 raises the launcher to an ABI 10 profile:
+
+- handled filesystem rights: everything through RESOLVE_UNIX;
+- handled TCP and UDP rights, with no port rule;
+- the abstract-UNIX and signal scopes;
+- mandatory `close_range`, with no per-descriptor fallback;
+- an allowlisted explicit environment;
+- `/` refused as a read root;
+- refusal of any requirement above the reviewed contract.
+
+Full detail is in `sqlite-isolated-process-spike.md` §16. There is no
+production Java, runtime, provider, `std:sqlite` or specification change.
+
+### Distinctions that must stay separate
+
+1. **FS access:** path-based Landlock rights on new opens. They do not identify
+   databases (hardlinks, bind mounts).
+2. **Network access:** TCP/UDP rights. No port is granted, so every covered
+   operation is denied.
+3. **UNIX IPC:** pathname sockets via `FS_RESOLVE_UNIX` and abstract sockets via
+   the scope. The standard channels 0–2 remain explicit IPC authority.
+4. **Signals:** the scope limits signals sent from the domain. It does not limit
+   signals sent to the domain (D1-R1-T13).
+5. **Inherited descriptors:** Landlock does not check them. Only the launcher's
+   `close_range` removes them (D1-R1-T8).
+6. **Client and helper are distinct OS processes.** Confining the helper does not
+   confine the client, and the client's death does not end the helper
+   (D1-R1-T12).
+7. **Custody and revocation:** no implemented mechanism ties helper lifetime or
+   resource custody to the client. This is D-10, and it is unresolved.
+
+### Tests
+
+| Test | Result |
+|---|---|
+| D1-R1-T1 `d1R1T1FullSupportedLandlockProfileIsApplied` | NOT RUN |
+| D1-R1-T2 `d1R1T2TcpConnectOutsideDomainIsDenied` | NOT RUN |
+| D1-R1-T3 `d1R1T3UdpSendOutsideDomainIsDenied` | NOT RUN |
+| D1-R1-T4 `d1R1T4PathnameUnixSocketOutsideDomainIsDenied` | NOT RUN |
+| D1-R1-T5 `d1R1T5AbstractUnixSocketOutsideDomainIsDenied` | NOT RUN |
+| D1-R1-T6 `d1R1T6SignalsCannotEscapeTheHelperDomain` | NOT RUN |
+| D1-R1-T7 `d1R1T7AuthorizedProtosSqliteSurvivesExpandedRestrictions` | NOT RUN |
+| D1-R1-T8 `d1R1T8InheritedExteriorFileDescriptorIsClosedBeforeExec` | NOT RUN |
+| D1-R1-T9 `d1R1T9UnsafeEnvironmentVariablesAreRejected` | NOT RUN |
+| D1-R1-T10 `d1R1T10HardlinkOutcomeIsAssertedAndRecorded` | NOT RUN |
+| D1-R1-T11 `d1R1T11UnsupportedSecurityProfileRefusesWithoutFallback` | NOT RUN |
+| D1-R1-T12 `d1R1T12ClientDeathDoesNotYetProvideHelperRevocation` | NOT RUN |
+| D1-R1-T13 `d1R1T13ParentCanTerminateConfinedHelper` | NOT RUN |
+
+D1-R1-T12 is a negative architecture control. If it passes, that confirms D-10
+is **not** implemented. It is not a cleanup guarantee.
+
+### Pending risks
+
+- The UAPI constants for ABI 9/10 (RESOLVE_UNIX bit 16, UDP bits 2/3, quiet
+  fields) are written into the fixture from the referenced kernel header
+  revision. The installed headers in the development container stop at ABI 6,
+  so the owner's run is the first check against a real ABI 10+ kernel.
+- The exact denial errno per mechanism (`EACCES` vs `EPERM`) is accepted as
+  either and reported. It has not yet been observed.
+- The JVM/GraalVM boot under denied TCP/UDP, RESOLVE_UNIX and the signal scope
+  has not yet been observed (for example, a glibc `nscd` socket lookup has to
+  fall back to files).
+- COMMIT without an acknowledgement stays uncertain. There is no reconciliation
+  and no deduplication.
+- `/proc` and `/sys` are broad read surfaces. Memory safety of native code is
+  not covered. There is no identity-provisioning policy.
+
+The B1–B7 record is unchanged.
+
+State: **PLAT074 OPEN; D256 pending; LIB031 BLOCKED; D0 8/8 PASS; D1 12/12
+PASS; D1-R1-T1–T13 NOT RUN; D-10 pending.**
