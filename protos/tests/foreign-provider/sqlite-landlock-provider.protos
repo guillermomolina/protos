@@ -91,6 +91,15 @@ prepare: () => {
         if((code != 100) && (code != 101)) { Error { code: code }.signal() }
         code
     }
+    queryInteger: (sql) => {
+        (() => {
+            check(compileHere(sql), 0)
+            if(pending === null) { Error().signal() }
+            check(step(pending), 100)
+            // Copy while SQLITE_ROW is current, before the ensure finalizes.
+            columnInteger(pending, 0)
+        }).ensure(() => { finish() })
+    }
     close: () => {
         // Retire guest state before any uncertain native destructor result.
         handle: connection
@@ -119,15 +128,7 @@ prepare: () => {
         finalizePending: () => finish()
         publicMemory: publicMemory
         publicModule: () => SQLite
-        queryInteger: (sql) => {
-            (() => {
-                check(compileHere(sql), 0)
-                if(pending === null) { Error().signal() }
-                check(step(pending), 100)
-                // Copy while SQLITE_ROW is current, before the ensure finalizes.
-                columnInteger(pending, 0)
-            }).ensure(() => { finish() })
-        }
+        queryInteger: queryInteger
         insertInteger: (value) => {
             (() => {
                 check(compileHere("INSERT INTO t(value) VALUES (?)"), 0)
@@ -135,6 +136,47 @@ prepare: () => {
                 check(step(pending), 101)
                 check(reset(pending), 0)
                 101
+            }).ensure(() => { finish() })
+        }
+        // Test-only configuration checks copy scalar results before finalization.
+        setWalFull: () => {
+            modeStatus: execute("PRAGMA journal_mode=WAL")
+            mode: queryInteger("SELECT count(*) FROM pragma_journal_mode WHERE journal_mode='wal'")
+            check(mode, 1)
+            syncStatus: execute("PRAGMA synchronous=FULL")
+            sync: queryInteger("PRAGMA synchronous")
+            check(sync, 2)
+            Array(modeStatus, mode, syncStatus, sync)
+        }
+        setRollbackJournal: () => {
+            modeStatus: execute("PRAGMA journal_mode=DELETE")
+            mode: queryInteger("SELECT count(*) FROM pragma_journal_mode WHERE journal_mode='delete'")
+            check(mode, 1)
+            syncStatus: execute("PRAGMA synchronous=FULL")
+            sync: queryInteger("PRAGMA synchronous")
+            check(sync, 2)
+            Array(modeStatus, mode, syncStatus, sync)
+        }
+        integrityOk: () => {
+            result: queryInteger("SELECT count(*) FROM pragma_integrity_check WHERE integrity_check='ok'")
+            check(result, 1)
+        }
+        quickCheckOk: () => {
+            result: queryInteger("SELECT count(*) FROM pragma_quick_check WHERE quick_check='ok'")
+            check(result, 1)
+        }
+        // Host test observes the existing guest transfer admission gate only.
+        ownedConnectionForTransferTest: () => {
+            requireOpen()
+            connection
+        }
+        committedCount: () => queryInteger("SELECT count(*) FROM t")
+        committedValue: () => queryInteger("SELECT max(value) FROM t")
+        checkpoint: () => {
+            (() => {
+                check(compileHere("PRAGMA wal_checkpoint(TRUNCATE)"), 0)
+                check(step(pending), 100)
+                Array(columnInteger(pending, 0), columnInteger(pending, 1), columnInteger(pending, 2))
             }).ensure(() => { finish() })
         }
         beginImmediate: () => execute("BEGIN IMMEDIATE")

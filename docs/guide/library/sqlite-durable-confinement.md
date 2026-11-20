@@ -1550,6 +1550,27 @@ No temporary audit file, commit, push, index operation or publication was made.
 
 ## 15. PLAT074-B4 — Real SQLite through the FFM provider, Protos-first
 
+### Latest owner-confirmed B4 execution — 19 November 2026
+
+The owner confirms the following run of the B4-R1 candidate:
+
+| Gate | Owner-reported result |
+|---|---|
+| `git diff --check` | PASS |
+| `mvn -DskipTests test-compile` | BUILD SUCCESS |
+| B4-T1–T10 | 10 tests, 0 failures, 0 errors, 0 skipped; focal duration 8.889 seconds |
+| `mvn -DskipTests package` | BUILD SUCCESS |
+| `make test-protos-foreign` | 41/41 PASS |
+| Portable distribution | PASS |
+
+**B4-R1 is validated by that concrete execution.** The earlier T7 failures and
+correction history below are preserved as historical evidence. The latest B4
+status is **10/10 PASS observed**. This record does **not** accredit `make test`,
+SIGKILL recovery or power-loss durability. B5 below remains a separate NOT RUN
+candidate. PLAT074 stays OPEN, D256 pending and LIB031 BLOCKED; B is not selected.
+
+### Historical B4-T7 evidence (preserved)
+
 **Latest focal execution: T7 FAIL at openMemory; required compatibility NOT IMPLEMENTED under the current constraints.**
 The owner reports a T7-only run finishing on 19 November 2026 at 19:40:09 UTC:
 **1 test, 1 failure, 0 errors, 0 skipped**, class duration **2.707 seconds**,
@@ -2009,7 +2030,9 @@ authorized or made to bypass the limitation.
 
 ### B4-R1 — Actor-local deferred ABI retention
 
-**Candidate status: NOT RUN.** The earlier B4 result remains **7 PASS / 1 FAIL**;
+**Latest candidate status: validated by the owner-confirmed B4 execution above.**
+The following records the pre-validation candidate and its historical evidence.
+At that point the earlier B4 result remained **7 PASS / 1 FAIL**;
 its T7 failure chronology and conclusion above apply to the old module, whose
 repeated ABI import required access to standard-library directories. Inspection
 identifies resolution before cache lookup and real directory enumeration as a
@@ -2044,11 +2067,11 @@ trace proving that no filesystem operation was attempted.
 
 | B4-R1 case | Required evidence | Status |
 |---|---|---|
-| T7 expanded | Three public memory operations under restriction with directory access denied and owner-thread close | NOT RUN |
-| T9 `b4T9PublicSqliteAbiPreparationRemainsActorLocal` | Stable public module identity within each Actor, distinct modules and sessions across Actors; separate restricted physical threads and grants; copied values, no residual custody and owner-thread close | NOT RUN |
-| T10 `b4T10CachedSqliteAbiCannotReviveClosedProviderSession` | Prepared public closure refuses after explicit session close; original binding remains closed, session lookup refuses replacement, zero owned/uncertain custody; idempotent cleanup | NOT RUN |
-| Public lifecycle regression | Three successive acquisitions, distinct identities and schemas, independent survival after peer close, repeated terminal Future observations and ordinary resource release | NOT RUN |
-| Missing-provider regression | Import succeeds and retains public module identity; three acquisitions signal ordinary Errors without yielding a SQLite resource or native authority | NOT RUN |
+| T7 expanded | Three public memory operations under restriction with directory access denied and owner-thread close | PASS — owner-confirmed B4 run, 19 November 2026 |
+| T9 `b4T9PublicSqliteAbiPreparationRemainsActorLocal` | Stable public module identity within each Actor, distinct modules and sessions across Actors; separate restricted physical threads and grants; copied values, no residual custody and owner-thread close | PASS — same B4 run |
+| T10 `b4T10CachedSqliteAbiCannotReviveClosedProviderSession` | Prepared public closure refuses after explicit session close; original binding remains closed, session lookup refuses replacement, zero owned/uncertain custody; idempotent cleanup | PASS — same B4 run |
+| Public lifecycle regression | Three successive acquisitions, distinct identities and schemas, independent survival after peer close, repeated terminal Future observations and ordinary resource release | PASS — owner-confirmed 41/41 foreign-provider lane |
+| Missing-provider regression | Import succeeds and retains public module identity; three acquisitions signal ordinary Errors without yielding a SQLite resource or native authority | PASS — same foreign-provider lane |
 
 The lifecycle regression observes public behavior, not resolver I/O or native
 destructor counters. Repeated Future reads and closes observe one recorded
@@ -2072,6 +2095,7 @@ assessment recorded in this section remains unchanged; no blocker is discharged.
 All modified source files preserve their existing APL Part 5 notices; no new
 source, third-party change or packaging change is introduced.
 
+Historical pre-execution status, superseded by the confirmed run above:
 B1 remains **13/13 PASS observed**; B2 retains **T5 noncompliance reproduced**;
 B3 remains **6/6 PASS observed**; previous B4 remains **7 PASS / 1 FAIL**.
 **PLAT074 OPEN; D256 pending; LIB031 BLOCKED.** B4-R1 does not establish SQLite
@@ -2086,4 +2110,197 @@ current candidate. Maven and the dynamic Java/C fixtures may take several
 minutes; the external provider lane takes additional build/integration time.
 Run each gate only after its predecessor succeeds. Integrated `make test`
 validation remains required for final shared-library closure, after cheaper
-gates, and is not claimed here. All B4-R1 checks remain **NOT RUN**.
+gates, and is not claimed here.
+
+That was the pre-execution handoff; the owner-confirmed run at the start of §15
+supersedes its NOT RUN status. Integrated `make test` remains unaccredited.
+
+
+## 16. PLAT074-B5 — Independent OS processes, SIGKILL recovery and locking
+
+**Candidate status: NOT RUN for every new case.** These are acceptance tests,
+not new production machinery or selection of candidate B. PLAT074 remains
+**OPEN**, D256 **pending**, LIB031 **BLOCKED**. B1 remains **13/13 PASS**, B2-T5
+**noncompliance reproduced**, B3 **6/6 PASS**, B4 **10/10 PASS**, with the historical
+failures retained above. No power-loss result follows from those runs.
+
+| Case and Java method | Required, executable acceptance evidence | Status |
+|---|---|---|
+| B5-T1 `b5T1TwoIndependentOsProcessesReopenCommittedSqlite` | A commits value 10 and exits normally; independent B reopens, checks count 1, maximum/sum 10 and integrity. Both deny exterior read/write opens. | NOT RUN |
+| B5-T2 `b5T2WalFullCommittedTransactionSurvivesSigkill` | A verifies WAL/FULL, commits 10 and 20, retains a live connection and nonempty WAL plus SHM; parent kills A after COMMITTED; B recovers exact count 2, maximum 20, sum 30 and integrity. | NOT RUN |
+| B5-T3 `b5T3UncommittedTransactionRollsBackAfterSigkill` | A new writer inserts 20 inside BEGIN IMMEDIATE with autocommit 0; SIGKILL precedes any voluntary rollback/close; recovery retains only committed 10, then commits 30. Another JVM checks count 2, maximum 30, sum 40. | NOT RUN |
+| B5-T4 `b5T4IndependentOsProcessesRespectSqliteWriteLocks` | A holds an uncommitted 20; independent B sets 100 ms busy timeout, sees SQLITE_BUSY on insert 30, autocommit 1 and only 10 visible; A commits, B explicitly retries and commits; third JVM checks count 3, maximum 30, sum 60 and integrity. | NOT RUN |
+| B5-T5 `b5T5WalRecoveryWithLiveReaderAndInterruptedWriter` | B pins a read snapshot containing only 10; A commits 20, B still observes count 1/sum 10; A is killed with its connection live, B closes on its owner, C sees 10 and 20, quick/integrity checks and copied checkpoint results. | NOT RUN |
+| B5-T6 `b5T6RollbackJournalRecoversAfterKilledWriter` | DELETE/FULL initial 10 survives a killed writer that updates rows and spills a 12000-row insertion beyond a five-page cache; populated journal is observed before killing, recovery sees only 10, commits 30, and third JVM verifies the new committed state and integrity. | NOT RUN |
+| B5-T7 `b5T7ProcessBoundaryDoesNotImplicitlyExtendLandlockGrant` | Confined A opens its own database and denies both exterior open modes; unrestricted B with the same provider opens the exterior database; live owned SQLite references fail the canonical guest transfer gate with NonTransferableValue in both JVMs; A closes confined. | NOT RUN |
+
+### Process, thread, dependency and protocol boundaries
+
+A Protos Process and Actor are language/runtime entities, not OS PIDs. Every
+scenario participant here runs the existing test class's `main(String[] args)`
+in a distinct JVM created by ProcessBuilder. Each child constructs a real
+`ProtosExternalForeignProviderTest.Fixture` and an Actor with the existing
+plugins. The parent checks positive, distinct PIDs different from its own,
+normal exit 0, or Linux SIGKILL exit 137 after destroyForcibly and timed waitFor.
+A separate confined control JVM seeds the exterior database with its own grant;
+its grant does not belong to the scenario participants. T7's deliberately
+unrestricted observer is the only child role without Landlock.
+
+The launcher passes the actual Surefire test classpath (or the effective JVM
+classpath), both already-built provider JARs, the C fixture library, absolute
+temporary paths and the parent PID. It explicitly supplies the current native
+access/Unsafe options and propagates the configured Truffle resource cache.
+Missing dependencies fail with child diagnostics; there is no in-parent fallback
+or Maven invocation in a child. No extra Java class or production API is added.
+
+Each child prepares `sqliteProbe`, the B4 classes, public SQLite memory paths,
+and B5 integrity/checkpoint/transfer failure paths before installing Landlock.
+Only memory databases are opened by that preparation. The restricted platform
+thread publishes CONFINED after successful installation, proves denied exterior
+read/write opens and then opens its persistent database. The parent requires
+this sequence before issuing scenario commands. Thread-local confinement is
+retained during SQL, statement finalization, connection release and session
+close; the child records its physical Linux TID and requires the same TID at
+normal connection close. An existing unrestricted JVM sibling does not become
+restricted merely because an Actor was created or another thread installed
+Landlock. This is the physical-domain experiment of §§13–15, not a production
+scheduler design.
+
+Stdout events are complete newline-terminated lines with an explicit flush:
+`READY`, `CONFINED`, `TRANSACTION_STARTED`, `COMMITTED`, `UNCOMMITTED`, `BUSY`,
+`RELEASED`, `CLOSED`, `FAILED`. READY first means prepared, then persistent open,
+and subsequently a verified command result in the parent's fixed sequence.
+CLOSED follows owner/session cleanup and Process Context teardown. The stdin
+vocabulary is fixed: INIT_WAL, INIT_DELETE, COMMIT, LOCK, UNCOMMITTED, SPILL,
+RELEASE, BUSY, RETRY, READ, SNAPSHOT, VERIFY_INITIAL, RECOVER_WRITE, VERIFY_TWO,
+VERIFY_THREE, VERIFY_RECOVERED, CHECKPOINT, TRANSFER, CLOSE. No SQL or native
+address arrives through that transport. The parent sends no CLOSE to killed
+writers. SIGKILL is issued only after the acknowledged condition while the
+connection and restricted owner thread remain alive.
+
+Background pipe readers consume output continuously; diagnostic lines and the
+retained log are bounded, and only complete recognized event lines reach the
+bounded queue. Event/command waits, thread joins and process termination waits
+have deadlines. FAILED, EOF at an unexpected phase, nonzero normal exit or
+timeout fails the test, without converting child failures into skips. The only
+skip gates are the existing Linux/architecture/compiler/confinement platform
+preconditions. On every failure the parent kills all survivors and waits for
+each; it never closes a native resource owned by another JVM. Logs are retained
+only for test execution, with no repository control files or audit artifacts.
+
+### SQLite recovery, integrity and authority limits
+
+All SQL runs through the experimental Protos object's closures. Existing FFI
+declarations, owned acquisition, release and session revocation are retained.
+New `setWalFull` and `setRollbackJournal` query effective journal mode and require
+synchronous level 2 inside Protos, returning copied ordinary Arrays.
+`integrityOk` and `quickCheckOk` use table-valued PRAGMAs, require exactly one
+affirmative result and propagate query errors. Merely opening the file is no
+integrity proof. `committedCount` and `committedValue` use fixed fixture SQL,
+with count, maximum, an independent sum and exact membership/multiplicity of
+values 10, 20 and 30 asserted by each reader. `checkpoint`
+copies SQLite's three status columns before finalizing the statement.
+`ownedConnectionForTransferTest` exposes the existing live reference only to the
+test host's canonical transfer admission assertion; it neither changes custody
+nor transports it to another JVM. No public std:sqlite API is extended.
+
+The transfer test exercises the established guest Actor snapshot gate on the
+actual SQLite resource, requiring NonTransferableValue before serialization.
+There is no guest native-address reconstruction or cross-process handle import
+API in FFI R1. This bounded negative evidence does not claim to audit every
+possible host/native IPC mechanism or isolate the process from arbitrary native
+code. The unrestricted observer has its own host authority, not an inherited
+Landlock directory grant. Descriptor revocation, guest retirement and physical
+destruction remain distinct: normal cleanup observes zero owned/uncertain
+custody and a closed session on the owner thread; SIGKILL supplies no destructor
+or graceful-finalization evidence. The OS reclaims that process's resources,
+and SQLite recovery is assessed independently in a fresh JVM.
+
+[SQLite WAL](https://www.sqlite.org/wal.html) describes snapshots, writer locking,
+WAL/SHM sidecars, checkpoints and the same-host shared-memory requirement. WAL
+on NFS is not supported or tested here. No sidecar is deleted or renamed to
+force recovery. A reader may prevent checkpoint completion;
+[wal_checkpoint_v2](https://www.sqlite.org/c3ref/wal_checkpoint_v2.html) explains
+the busy/progress distinction. CHECKPOINT records all three PRAGMA results and
+accepts busy 0 or 1; a busy checkpoint is not interpreted as corruption.
+[PRAGMAs](https://www.sqlite.org/pragma.html) govern effective journal/synchronous
+settings, quick_check, integrity_check and checkpoint result columns.
+
+[Atomic commit](https://www.sqlite.org/atomiccommit.html) and
+[How to corrupt a database](https://www.sqlite.org/howtocorrupt.html) explain why
+native locking, flushes, correct journals and filesystem assumptions matter.
+A returned COMMIT followed by process termination is different evidence from an
+unconfirmed transaction whose changes must disappear. Both WAL/FULL and
+DELETE/FULL here test recovery after SIGKILL, **not power interruption**, storage
+cache loss, torn sectors or dishonest flushes. No power-loss durability promise
+is made for either configuration. Rollback journal removal after successful
+recovery is allowed; a journal is never manually deleted to simulate a crash.
+
+[Landlock](https://docs.kernel.org/userspace-api/landlock.html) supplies the
+physical-thread enforcement context and authority limits;
+[Java 25 Process](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/lang/Process.html)
+supplies process/termination/pipe contracts. Neither JVM FFM checks nor a trusted
+native provider make arbitrary native code memory-safe or grant-confined.
+The GraalPy and Espresso precedents and exact baselines in §15 remain partial
+thread lifecycle/finalization precedents, with no claim that either implements
+an equivalent SQLite/Landlock system. Native Image, Windows and macOS are not
+tested. These official sources are incorporated as references; no fresh remote
+source verification was performed in this local-files-only editing session.
+
+### Inspection and human validation handoff
+
+Material inspection: supplied root instructions and attachment;
+`AGENTS.work/DESIGN.md` (no architecture selection),
+`AGENTS.work/IMPLEMENTATION.md` (human-executed checks and existing blocker gates),
+`AGENTS.work/REFERENCE.md` and `LICENSE.TXT` (APL Part 5), `src/AGENTS.md`,
+`protos/AGENTS.md`, `spec/AGENTS.md`, `spec/PROTOS_LANGUAGE_SPEC.md` (authority map),
+`spec/semantics/MODULES.md` (Actor-local foreign modules),
+`spec/semantics/CALLABLES.md` (ordinary FFI closures), `spec/PROTOS_GRAMMAR.md`
+(source syntax), `spec/semantics/FFI.md`
+(exact admission, custody, nontransferability and in-process limits),
+`ProtosExternalForeignProviderTest.java` (Fixture lifecycle), the three modified
+files (existing experiment, test host and history), and `pom.xml` (effective JVM
+options/classpath environment). No normative specification is changed. The
+remote blocker ledger and durable D256/PLAT074 records were not freshly read:
+this session is restricted to local files. Their prior assessment in §§3/15 is
+retained as historical context; no blocker is discharged or design approved.
+The Java and Protos source notices are preserved against LICENSE.TXT Part 5;
+no source file, generated/third-party file or packaging configuration is added.
+
+Only the three requested files are modified. One read-only `git status --short`
+was inadvertently executed at the beginning and reported a clean checkout;
+no other Git operation, build, compiler, test or validation was executed.
+All new checks remain **NOT RUN**. No case is marked NOT IMPLEMENTED; T7's
+transfer assertion has the bounded scope described above.
+
+Human gates, run sequentially only after the preceding gate passes:
+
+```sh
+git diff --check
+```
+
+Then inspect the exact three-file diff and run the compilation-only gate:
+
+```sh
+mvn -DskipTests test-compile
+```
+
+The focal suite dynamically compiles its existing Java/C provider fixtures and
+starts multiple JVMs; it costs more than the compilation-only check. No duration
+is predicted. Run the complete affected B1–B5 class:
+
+```sh
+mvn -Dtest=ProtosI144FfmFixtureAbiTest test
+```
+
+Then package and exercise the affected Protos foreign-provider lane:
+
+```sh
+mvn -DskipTests package
+make test-protos-foreign
+```
+
+Integrated `make test` remains the final FULL gate for shared executable test
+infrastructure/closure after these cheaper gates pass. It has not been run or
+accredited by this record. Portable distribution success above belongs to the
+owner-confirmed B4 candidate, not this new B5 candidate.

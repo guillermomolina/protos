@@ -1846,6 +1846,489 @@ class ProtosI144FfmFixtureAbiTest {
         finally { finishB3(primary, reporter, "B4-T10", fixture, owners, calls); }
     }
 
+    // ---- PLAT074-B5: independent JVMs; SQL and owned resources stay in Protos.
+
+    @Test
+    void b5T1TwoIndependentOsProcessesReopenCommittedSqlite() throws Exception {
+        runB5(1);
+    }
+
+    @Test
+    void b5T2WalFullCommittedTransactionSurvivesSigkill() throws Exception {
+        runB5(2);
+    }
+
+    @Test
+    void b5T3UncommittedTransactionRollsBackAfterSigkill() throws Exception {
+        runB5(3);
+    }
+
+    @Test
+    void b5T4IndependentOsProcessesRespectSqliteWriteLocks() throws Exception {
+        runB5(4);
+    }
+
+    @Test
+    void b5T5WalRecoveryWithLiveReaderAndInterruptedWriter() throws Exception {
+        runB5(5);
+    }
+
+    @Test
+    void b5T6RollbackJournalRecoversAfterKilledWriter() throws Exception {
+        runB5(6);
+    }
+
+    @Test
+    void b5T7ProcessBoundaryDoesNotImplicitlyExtendLandlockGrant() throws Exception {
+        runB5(7);
+    }
+
+    private static void b5Event(String event) {
+        System.out.println(event);
+        System.out.flush();
+        assertFalse(System.out.checkError(), "subprocess event pipe failed");
+    }
+
+    /** Test launcher only. No fixture compilation, SQL bridge or native call is added here. */
+    public static void main(String[] args) throws Exception {
+        try {
+            assertEquals(8, args.length, "role, grant, database, two provider JARs, C fixture, exterior, parent PID");
+            assertTrue(List.of("confined", "observer").contains(args[0]), "unknown child role");
+            Path root = Path.of(args[1]);
+            Path db = Path.of(args[2]);
+            jar = Path.of(args[3]);
+            sqliteJar = Path.of(args[4]);
+            library = Path.of(args[5]);
+            Path exterior = Path.of(args[6]);
+            for (Path path : List.of(root, db, jar, sqliteJar, library, exterior)) {
+                assertTrue(path.isAbsolute(), "child paths must be absolute: " + path);
+            }
+            assertNotEquals(Long.parseLong(args[7]), ProcessHandle.current().pid());
+            System.err.println("B5 child PID=" + ProcessHandle.current().pid() + ", role=" + args[0]);
+            for (Path path : List.of(jar, sqliteJar, library)) {
+                assertTrue(Files.isRegularFile(path), "missing compiled fixture dependency: " + path);
+            }
+            prepareRestrictedErrorClasses();
+            TestReporter reporter = entries -> System.err.println(entries);
+            var fixture = sqliteFixture();
+            try {
+                Probe owner = sqliteProbe(fixture, fixture.newActorActivation(), reporter);
+                // Warm B5-specific scalar, checkpoint and transfer/error paths using memory only.
+                assertEquals(0, number(owner.call("openMemory")));
+                owner.call("execute", "CREATE TABLE t(value INTEGER)");
+                b5Insert(owner, 10);
+                b5Rows(owner, 1, 10, 10);
+                owner.call("integrityOk");
+                owner.call("quickCheckOk");
+                owner.call("checkpoint");
+                Object warmHandle = owner.call("ownedConnectionForTransferTest");
+                assertThrows(ProtosSignalException.class,
+                        () -> ProtosActorValueTransfer.snapshotValue(warmHandle, owner.actor));
+                fixture.standardError("NonTransferableValue");
+                owner.call("close");
+                // Resolve command transport and synchronization before restricting the owner.
+                var commands = new java.util.concurrent.ArrayBlockingQueue<String>(16);
+                commands.offer("warmup");
+                assertEquals("warmup", commands.poll(1, TimeUnit.SECONDS));
+                var input = new java.io.BufferedReader(
+                        new java.io.InputStreamReader(System.in, StandardCharsets.UTF_8));
+                Thread.ofPlatform().daemon().name("b5-stdin").start(() -> {
+                    try {
+                        String line;
+                        while ((line = input.readLine()) != null) {
+                            if (line.length() > 64 || !commands.offer(line, 5, TimeUnit.SECONDS)) {
+                                throw new IllegalStateException("invalid or overflowing command pipe");
+                            }
+                        }
+                        commands.offer("EOF");
+                    } catch (Exception failure) {
+                        System.err.println("B5 stdin: " + failure);
+                        commands.offer("EOF");
+                    }
+                });
+                boolean confined = args[0].equals("confined");
+                b5Event("READY");
+                PlatformCall call = startB4Owner(confined ? root : null, owner, reporter, () -> {
+                    long tid = kernelTid();
+                    // startPlatform invokes this body only after restrictCurrentThreadBeneath.
+                    if (confined) b5Event("CONFINED");
+                    assertSame(false, owner.call("isOpen"));
+                    if (confined) rejectSqliteOpen(owner, exterior, reporter);
+                    assertEquals(0, number(owner.call("openFile", db.toString())));
+                    System.err.println("B5 persistent open after restriction=" + confined + ", TID=" + tid);
+                    b5Event("READY");
+                    while (true) {
+                        String command = commands.poll(40, TimeUnit.SECONDS);
+                        assertTrue(command != null, "child command timeout");
+                        switch (command) {
+                            case "INIT_WAL", "INIT_DELETE" -> {
+                                long[] settings = numbers(owner.call(command.equals("INIT_WAL")
+                                        ? "setWalFull" : "setRollbackJournal"), 4);
+                                assertEquals(1, settings[1]);
+                                assertEquals(2, settings[3]);
+                                owner.call("execute", "CREATE TABLE t(value INTEGER)");
+                                b5Insert(owner, 10);
+                                b5Event("COMMITTED");
+                            }
+                            case "COMMIT" -> {
+                                b5Insert(owner, 20);
+                                b5Event("COMMITTED");
+                            }
+                            case "LOCK", "UNCOMMITTED", "SPILL" -> {
+                                if (command.equals("SPILL")) {
+                                    owner.call("setRollbackJournal");
+                                    owner.call("execute", "PRAGMA cache_size=5");
+                                } else owner.call("setWalFull");
+                                owner.call("beginImmediate");
+                                owner.call("insertInteger", 20);
+                                if (command.equals("SPILL")) {
+                                    // Exceed the small page cache so recovery exercises a hot journal.
+                                    owner.call("execute", "UPDATE t SET value=99");
+                                    owner.call("execute", "WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL "
+                                            + "SELECT x+1 FROM n WHERE x<12000) INSERT INTO t SELECT x FROM n");
+                                }
+                                assertEquals(0, number(owner.call("autocommit")));
+                                b5Event(command.equals("LOCK") ? "TRANSACTION_STARTED" : "UNCOMMITTED");
+                            }
+                            case "RELEASE" -> {
+                                assertEquals(0, number(owner.call("autocommit")));
+                                owner.call("commit");
+                                assertEquals(1, number(owner.call("autocommit")));
+                                b5Event("RELEASED");
+                            }
+                            case "BUSY" -> {
+                                assertEquals(0, number(owner.call("setBusyTimeout", 100)));
+                                assertEquals(5, number(owner.call("executeStatus", "INSERT INTO t VALUES (30)")));
+                                assertEquals(1, number(owner.call("autocommit")));
+                                b5Rows(owner, 1, 10, 10);
+                                b5Event("BUSY");
+                            }
+                            case "RETRY" -> {
+                                b5Insert(owner, 30);
+                                b5Event("COMMITTED");
+                            }
+                            case "READ" -> {
+                                owner.call("execute", "BEGIN");
+                                b5Rows(owner, 1, 10, 10);
+                                assertEquals(0, number(owner.call("autocommit")));
+                                b5Event("TRANSACTION_STARTED");
+                            }
+                            case "SNAPSHOT" -> {
+                                b5Rows(owner, 1, 10, 10);
+                                assertEquals(0, number(owner.call("autocommit")));
+                                b5Event("READY");
+                            }
+                            case "VERIFY_INITIAL", "RECOVER_WRITE" -> {
+                                b5Rows(owner, 1, 10, 10);
+                                assertEquals(1, number(owner.call("integrityOk")));
+                                if (command.equals("RECOVER_WRITE")) b5Insert(owner, 30);
+                                b5Event("READY");
+                            }
+                            case "VERIFY_TWO", "VERIFY_THREE", "VERIFY_RECOVERED", "CHECKPOINT" -> {
+                                if (command.equals("VERIFY_THREE")) b5Rows(owner, 3, 30, 60);
+                                else if (command.equals("VERIFY_RECOVERED")) b5Rows(owner, 2, 30, 40);
+                                else b5Rows(owner, 2, 20, 30);
+                                assertEquals(1, number(owner.call("integrityOk")));
+                                if (command.equals("CHECKPOINT")) {
+                                    assertEquals(1, number(owner.call("quickCheckOk")));
+                                    long[] checkpoint = numbers(owner.call("checkpoint"), 3);
+                                    assertTrue(checkpoint[0] == 0 || checkpoint[0] == 1,
+                                            "unexpected checkpoint status " + checkpoint[0]);
+                                    System.err.println("B5 checkpoint [busy, log, checkpointed]="
+                                            + java.util.Arrays.toString(checkpoint));
+                                }
+                                b5Event("READY");
+                            }
+                            case "TRANSFER" -> {
+                                // Guest Actor transfer rejects this live SQLite owned reference before
+                                // it could be serialized to a different Process; no address IPC exists.
+                                Object handle = owner.call("ownedConnectionForTransferTest");
+                                ProtosSignalException failure = assertThrows(ProtosSignalException.class,
+                                        () -> ProtosActorValueTransfer.snapshotValue(handle, owner.actor));
+                                assertSame(fixture.standardError("NonTransferableValue"),
+                                        failure.error().parent().orElseThrow());
+                                b5Event("READY");
+                            }
+                            case "CLOSE" -> {
+                                if (number(owner.call("autocommit")) == 0) owner.call("rollback");
+                                assertEquals(tid, kernelTid(), "close left physical owner thread");
+                                owner.call("close");
+                                assertEquals(0, sqliteCustody(owner, "ownedCountForDiagnostics"));
+                                assertEquals(0, sqliteCustody(owner, "uncertainCountForDiagnostics"));
+                                return;
+                            }
+                            default -> throw new AssertionError("unknown/closed command pipe: " + command);
+                        }
+                    }
+                });
+                call.thread.join(TimeUnit.SECONDS.toMillis(90));
+                assertFalse(call.thread.isAlive(), "child owner timeout");
+                if (call.failure != null) throw new AssertionError("child owner failed", call.failure);
+                assertEquals(confined, call.installed);
+                assertFalse(owner.session.isOpenForRuntime());
+            } finally {
+                closeB3Fixture(fixture);
+            }
+            b5Event("CLOSED");
+        } catch (Throwable failure) {
+            b5Event("FAILED");
+            failure.printStackTrace(System.err);
+            throw new AssertionError("B5 subprocess failed", failure);
+        }
+    }
+
+    private static void b5Insert(Probe owner, int value) {
+        owner.call("beginImmediate");
+        owner.call("insertInteger", value);
+        assertEquals(101, number(owner.call("commit")));
+        assertEquals(1, number(owner.call("autocommit")));
+    }
+
+    private static void b5Rows(Probe owner, long count, long maximum, long sum) {
+        assertEquals(count, number(owner.call("committedCount")));
+        assertEquals(maximum, number(owner.call("committedValue")));
+        assertEquals(sum, number(owner.call("queryInteger", "SELECT sum(value) FROM t")));
+        assertEquals(1, number(owner.call("queryInteger", "SELECT count(*) FROM t WHERE value=10")));
+        assertEquals(maximum == 20 || count == 3 ? 1 : 0,
+                number(owner.call("queryInteger", "SELECT count(*) FROM t WHERE value=20")));
+        assertEquals(maximum == 30 ? 1 : 0,
+                number(owner.call("queryInteger", "SELECT count(*) FROM t WHERE value=30")));
+    }
+
+    private static Process b5Start(Path root, Path db, Path exterior, boolean confined,
+            Map<Process, java.util.concurrent.BlockingQueue<String>> events,
+            Map<Process, StringBuilder> diagnostics) throws Exception {
+        String classpath = System.getProperty("surefire.test.class.path",
+                System.getProperty("java.class.path"));
+        assertTrue(classpath != null && !classpath.isBlank(), "missing test subprocess classpath");
+        Path java = Path.of(System.getProperty("java.home"), "bin", "java");
+        assertTrue(Files.isExecutable(java), "missing child JVM: " + java);
+        List<String> invocation = new ArrayList<>(List.of(java.toString(),
+                "--enable-native-access=ALL-UNNAMED", "--sun-misc-unsafe-memory-access=allow"));
+        String cache = System.getProperty("polyglot.engine.userResourceCache");
+        if (cache != null) invocation.add("-Dpolyglot.engine.userResourceCache=" + cache);
+        invocation.addAll(List.of("-cp", classpath, ProtosI144FfmFixtureAbiTest.class.getName(),
+                confined ? "confined" : "observer", root.toString(), db.toString(),
+                jar.toAbsolutePath().toString(), sqliteJar.toAbsolutePath().toString(),
+                library.toAbsolutePath().toString(), exterior.toString(),
+                Long.toString(ProcessHandle.current().pid())));
+        Process child = new ProcessBuilder(invocation).redirectErrorStream(true).start();
+        var queue = new java.util.concurrent.ArrayBlockingQueue<String>(64);
+        StringBuilder log = new StringBuilder();
+        events.put(child, queue);
+        diagnostics.put(child, log);
+        // One bounded drainer consumes both pipes. Diagnostic truncation never blocks a child.
+        Thread.ofPlatform().daemon().name("b5-output-" + child.pid()).start(() -> {
+            try (var output = new java.io.InputStreamReader(child.getInputStream(), StandardCharsets.UTF_8)) {
+                StringBuilder line = new StringBuilder();
+                int next;
+                boolean oversized = false;
+                while ((next = output.read()) >= 0) {
+                    if (next == '\n') {
+                        String complete = line.toString();
+                        synchronized (log) {
+                            if (log.length() > 32768) log.delete(0, 16384);
+                            log.append(complete).append('\n');
+                        }
+                        if (!oversized && List.of("READY", "CONFINED", "TRANSACTION_STARTED", "COMMITTED",
+                                "UNCOMMITTED", "BUSY", "RELEASED", "CLOSED", "FAILED").contains(complete)) {
+                            if (!queue.offer(complete)) queue.offer("FAILED");
+                        }
+                        line.setLength(0);
+                        oversized = false;
+                    } else if (line.length() < 4096) line.append((char) next);
+                    else oversized = true;
+                }
+                queue.offer("EOF");
+            } catch (Exception failure) {
+                synchronized (log) { log.append(failure); }
+                queue.offer("FAILED");
+            }
+        });
+        assertTrue(child.pid() > 0);
+        assertNotEquals(ProcessHandle.current().pid(), child.pid());
+        assertEquals(events.size(), events.keySet().stream().map(Process::pid).distinct().count(),
+                "each role requires a distinct OS process PID");
+        b5Await(child, "READY", events, diagnostics);
+        if (confined) b5Await(child, "CONFINED", events, diagnostics);
+        b5Await(child, "READY", events, diagnostics);
+        return child;
+    }
+
+    private static void b5Await(Process child, String expected,
+            Map<Process, java.util.concurrent.BlockingQueue<String>> events,
+            Map<Process, StringBuilder> diagnostics) throws Exception {
+        String actual = events.get(child).poll(45, TimeUnit.SECONDS);
+        String diagnostic;
+        synchronized (diagnostics.get(child)) { diagnostic = diagnostics.get(child).toString(); }
+        assertEquals(expected, actual, "PID=" + child.pid() + ", alive=" + child.isAlive() + "\n" + diagnostic);
+    }
+
+    private static void b5Command(Process child, String command) throws Exception {
+        child.getOutputStream().write((command + "\n").getBytes(StandardCharsets.UTF_8));
+        child.getOutputStream().flush();
+    }
+
+    private static void b5NormalClose(Process child,
+            Map<Process, java.util.concurrent.BlockingQueue<String>> events,
+            Map<Process, StringBuilder> diagnostics) throws Exception {
+        b5Command(child, "CLOSE");
+        b5Await(child, "CLOSED", events, diagnostics);
+        assertTrue(child.waitFor(15, TimeUnit.SECONDS), "normal child termination timeout");
+        assertEquals(0, child.exitValue(), "PID=" + child.pid() + "\n" + diagnostics.get(child));
+        b5Await(child, "EOF", events, diagnostics);
+    }
+
+    private static void b5Kill(Process child,
+            Map<Process, java.util.concurrent.BlockingQueue<String>> events,
+            Map<Process, StringBuilder> diagnostics) throws Exception {
+        assertTrue(child.isAlive(), "writer died before SIGKILL");
+        assertTrue(child.supportsNormalTermination(), "Linux process termination contract required");
+        child.destroyForcibly();
+        assertTrue(child.waitFor(15, TimeUnit.SECONDS), "SIGKILL termination timeout");
+        assertEquals(137, child.exitValue(), "Linux SIGKILL must not be a normal SQLite close");
+        assertFalse(child.isAlive());
+        // Drain through EOF: FAILED or CLOSED before the kill must never be hidden by exit 137.
+        b5Await(child, "EOF", events, diagnostics);
+    }
+
+    private static void runB5(int scenario) throws Exception {
+        // Only the established platform precondition can skip. Child failures are assertions.
+        ProtosLinuxConfinedFilesystemTestSupport.assumeConfinementPrimitives();
+        Path root = Files.createTempDirectory(work, "b5-grant-").toRealPath();
+        Path outside = Files.createTempDirectory(work, "b5-exterior-").toRealPath();
+        Path exterior = outside.resolve("outside.db");
+        Path db = root.resolve("persistent.db");
+        Map<Process, java.util.concurrent.BlockingQueue<String>> events = new java.util.LinkedHashMap<>();
+        Map<Process, StringBuilder> diagnostics = new java.util.LinkedHashMap<>();
+        Throwable primary = null;
+        try {
+            // A separate, confined fixture control seeds the exterior with its own grant.
+            Process control = b5Start(outside, exterior, db, true, events, diagnostics);
+            b5Command(control, "INIT_DELETE");
+            b5Await(control, "COMMITTED", events, diagnostics);
+            b5NormalClose(control, events, diagnostics);
+            Process a = b5Start(root, db, exterior, true, events, diagnostics);
+            b5Command(a, scenario == 6 ? "INIT_DELETE" : "INIT_WAL");
+            b5Await(a, "COMMITTED", events, diagnostics);
+            switch (scenario) {
+                case 1 -> {
+                    b5NormalClose(a, events, diagnostics);
+                    Process b = b5Start(root, db, exterior, true, events, diagnostics);
+                    b5Command(b, "VERIFY_INITIAL");
+                    b5Await(b, "READY", events, diagnostics);
+                    b5NormalClose(b, events, diagnostics);
+                }
+                case 2 -> {
+                    b5Command(a, "COMMIT");
+                    b5Await(a, "COMMITTED", events, diagnostics);
+                    assertTrue(Files.size(Path.of(db + "-wal")) > 0, "committed WAL must remain live");
+                    assertTrue(Files.isRegularFile(Path.of(db + "-shm")), "live WAL index missing");
+                    b5Kill(a, events, diagnostics);
+                    Process b = b5Start(root, db, exterior, true, events, diagnostics);
+                    b5Command(b, "VERIFY_TWO");
+                    b5Await(b, "READY", events, diagnostics);
+                    b5NormalClose(b, events, diagnostics);
+                }
+                case 3, 6 -> {
+                    // Initial committed state is in a different, normally closed JVM.
+                    b5NormalClose(a, events, diagnostics);
+                    Process writer = b5Start(root, db, exterior, true, events, diagnostics);
+                    b5Command(writer, scenario == 6 ? "SPILL" : "UNCOMMITTED");
+                    b5Await(writer, "UNCOMMITTED", events, diagnostics);
+                    if (scenario == 6) assertTrue(Files.size(Path.of(db + "-journal")) > 512,
+                            "rollback recovery requires a populated journal before the kill");
+                    b5Kill(writer, events, diagnostics);
+                    Process b = b5Start(root, db, exterior, true, events, diagnostics);
+                    b5Command(b, "RECOVER_WRITE");
+                    b5Await(b, "READY", events, diagnostics);
+                    b5NormalClose(b, events, diagnostics);
+                    Process c = b5Start(root, db, exterior, true, events, diagnostics);
+                    b5Command(c, "VERIFY_RECOVERED");
+                    b5Await(c, "READY", events, diagnostics);
+                    b5NormalClose(c, events, diagnostics);
+                }
+                case 4 -> {
+                    b5Command(a, "LOCK");
+                    b5Await(a, "TRANSACTION_STARTED", events, diagnostics);
+                    Process b = b5Start(root, db, exterior, true, events, diagnostics);
+                    b5Command(b, "BUSY");
+                    b5Await(b, "BUSY", events, diagnostics);
+                    b5Command(a, "RELEASE");
+                    b5Await(a, "RELEASED", events, diagnostics);
+                    b5Command(b, "RETRY");
+                    b5Await(b, "COMMITTED", events, diagnostics);
+                    b5NormalClose(a, events, diagnostics);
+                    b5NormalClose(b, events, diagnostics);
+                    Process c = b5Start(root, db, exterior, true, events, diagnostics);
+                    b5Command(c, "VERIFY_THREE");
+                    b5Await(c, "READY", events, diagnostics);
+                    b5NormalClose(c, events, diagnostics);
+                }
+                case 5 -> {
+                    Process b = b5Start(root, db, exterior, true, events, diagnostics);
+                    b5Command(b, "READ");
+                    b5Await(b, "TRANSACTION_STARTED", events, diagnostics);
+                    b5Command(a, "COMMIT");
+                    b5Await(a, "COMMITTED", events, diagnostics);
+                    b5Command(b, "SNAPSHOT");
+                    b5Await(b, "READY", events, diagnostics);
+                    b5Kill(a, events, diagnostics);
+                    b5NormalClose(b, events, diagnostics);
+                    Process c = b5Start(root, db, exterior, true, events, diagnostics);
+                    b5Command(c, "CHECKPOINT");
+                    b5Await(c, "READY", events, diagnostics);
+                    b5NormalClose(c, events, diagnostics);
+                }
+                case 7 -> {
+                    Process b = b5Start(outside, exterior, exterior, false, events, diagnostics);
+                    for (Process child : List.of(a, b)) {
+                        b5Command(child, "TRANSFER");
+                        b5Await(child, "READY", events, diagnostics);
+                    }
+                    b5Command(b, "VERIFY_INITIAL");
+                    b5Await(b, "READY", events, diagnostics);
+                    b5NormalClose(a, events, diagnostics);
+                    b5NormalClose(b, events, diagnostics);
+                }
+                default -> throw new AssertionError("unknown B5 scenario " + scenario);
+            }
+        } catch (Exception | Error failure) {
+            primary = failure;
+            throw failure;
+        } finally {
+            // Kill every survivor before waiting for any one of them. Preserve the first failure.
+            for (Process child : events.keySet()) if (child.isAlive()) child.destroyForcibly();
+            AssertionError cleanup = null;
+            boolean interrupted = Thread.interrupted();
+            for (Process child : events.keySet()) {
+                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(15);
+                boolean terminated = false;
+                while (!terminated && System.nanoTime() < deadline) {
+                    try {
+                        terminated = child.waitFor(Math.max(1, deadline - System.nanoTime()),
+                                TimeUnit.NANOSECONDS);
+                    } catch (InterruptedException failure) {
+                        // Finish reaping every child before restoring the caller's interrupt.
+                        interrupted = true;
+                    }
+                }
+                if (!terminated) {
+                    if (cleanup == null) cleanup = new AssertionError("B5 child retained after cleanup");
+                    cleanup.addSuppressed(new AssertionError("PID=" + child.pid()));
+                }
+                synchronized (diagnostics.get(child)) {
+                    System.err.println("B5 PID=" + child.pid() + " diagnostics:\n" + diagnostics.get(child));
+                }
+            }
+            if (interrupted) Thread.currentThread().interrupt();
+            if (cleanup != null) {
+                if (primary != null) primary.addSuppressed(cleanup);
+                else throw cleanup;
+            }
+        }
+    }
+
     private static Probe sqliteProbe(ProtosExternalForeignProviderTest.Fixture fixture,
             ProtosActivation actor, TestReporter reporter) throws Exception {
         ProtosObjectValue module = (ProtosObjectValue) fixture.eval(actor,
