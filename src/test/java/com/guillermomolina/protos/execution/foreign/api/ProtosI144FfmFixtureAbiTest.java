@@ -2716,6 +2716,523 @@ class ProtosI144FfmFixtureAbiTest {
         }
     }
 
+    // ---- PLAT074-D0: Protos-first SQLite helper in an independent OS process.
+    // The helper is the real Protos CLI running isolated/helper.protos; protocol,
+    // validation and SQLite custody are Protos. JUnit only launches, relays opaque
+    // lines between the Protos client driver and the helper, kills and observes.
+
+    private static final Path D0 = CASES.resolve("isolated");
+    private static final String D0_EOF = "\u0000EOF";
+    private static final Map<Process, java.util.concurrent.BlockingQueue<String>> d0Stdout =
+            new java.util.LinkedHashMap<>();
+    private static final Map<Process, java.util.concurrent.BlockingQueue<String>> d0Events =
+            new java.util.LinkedHashMap<>();
+    private static final Map<Process, StringBuilder> d0Logs = new java.util.LinkedHashMap<>();
+
+    @Test
+    void d0T1ProtocolRoundTripsExactProtosValues() throws Exception {
+        runD0(() -> {
+            Process client = d0Client();
+            // Valid requests and exact signed 64-bit extremes round-trip through Protos.
+            assertEquals("ADMITTED 1 PING null", d0Client(client, "DECODE_REQUEST",
+                    d0RequestText(client, 1, "PING", null)));
+            assertEquals("ADMITTED 9223372036854775807 INSERT -9223372036854775808",
+                    d0Client(client, "DECODE_REQUEST", d0RequestText(client,
+                            Long.MAX_VALUE, "INSERT", Long.toString(Long.MIN_VALUE))));
+            // Unknown operations are syntactically admitted; the helper allowlist rejects them (T4).
+            assertEquals("ADMITTED 2 OPEN null", d0Client(client, "DECODE_REQUEST",
+                    d0RequestText(client, 2, "OPEN", null)));
+            // The encoder refuses ids and values outside the exact domain.
+            assertEquals("REJECTED", d0Client(client, "REQUEST", "0", "PING", "null"));
+            assertEquals("REJECTED", d0Client(client, "REQUEST", "-3", "PING", "null"));
+            assertEquals("REJECTED", d0Client(client, "REQUEST", "9223372036854775808", "PING", "null"));
+            assertEquals("REJECTED", d0Client(client, "REQUEST", "3", "INSERT", "9223372036854775808"));
+            // Admission failures: malformed JSON, wrong types, fractions, extra or nested fields.
+            String[][] refused = {
+                {"{\"version\":1,", "REFUSED null MALFORMED"},
+                {"[1,2]", "REFUSED null MALFORMED"},
+                {"{\"version\":1,\"id\":7,\"op\":\"PING\",\"value\":null,\"extra\":1}", "REFUSED null MALFORMED"},
+                {"{\"version\":1,\"id\":7,\"op\":\"PING\"}", "REFUSED null MALFORMED"},
+                {"{\"version\":2,\"id\":4,\"op\":\"PING\",\"value\":null}", "REFUSED null INVALID_VERSION"},
+                {"{\"version\":\"1\",\"id\":4,\"op\":\"PING\",\"value\":null}", "REFUSED null INVALID_VERSION"},
+                {"{\"version\":1,\"id\":\"5\",\"op\":\"PING\",\"value\":null}", "REFUSED null INVALID_ID"},
+                {"{\"version\":1,\"id\":-1,\"op\":\"PING\",\"value\":null}", "REFUSED null INVALID_ID"},
+                {"{\"version\":1,\"id\":0,\"op\":\"PING\",\"value\":null}", "REFUSED null INVALID_ID"},
+                {"{\"version\":1,\"id\":1.0,\"op\":\"PING\",\"value\":null}", "REFUSED null INVALID_ID"},
+                {"{\"version\":1,\"id\":9223372036854775808,\"op\":\"PING\",\"value\":null}", "REFUSED null INVALID_ID"},
+                {"{\"version\":1,\"id\":6,\"op\":7,\"value\":null}", "REFUSED 6 INVALID_OPERATION"},
+                {"{\"version\":1,\"id\":6,\"op\":\"\",\"value\":null}", "REFUSED 6 INVALID_OPERATION"},
+                {"{\"version\":1,\"id\":8,\"op\":\"INSERT\",\"value\":1.5}", "REFUSED 8 INVALID_VALUE"},
+                {"{\"version\":1,\"id\":8,\"op\":\"INSERT\",\"value\":\"1\"}", "REFUSED 8 INVALID_VALUE"},
+                {"{\"version\":1,\"id\":8,\"op\":\"INSERT\",\"value\":true}", "REFUSED 8 INVALID_VALUE"},
+                {"{\"version\":1,\"id\":8,\"op\":\"INSERT\",\"value\":[1]}", "REFUSED 8 INVALID_VALUE"},
+                {"{\"version\":1,\"id\":8,\"op\":\"INSERT\",\"value\":{\"v\":1}}", "REFUSED 8 INVALID_VALUE"},
+                {"{\"version\":1,\"id\":8,\"op\":\"INSERT\",\"value\":9223372036854775808}", "REFUSED 8 INVALID_VALUE"},
+                {d0Padded("{\"version\":1,\"id\":9,\"op\":\"PING\",\"value\":null", 4097), "REFUSED null OVERSIZED"},
+            };
+            for (String[] vector : refused) {
+                assertEquals(vector[1], d0Client(client, "DECODE_REQUEST", vector[0]), vector[0]);
+            }
+            assertEquals("ADMITTED 9 PING null", d0Client(client, "DECODE_REQUEST",
+                    d0Padded("{\"version\":1,\"id\":9,\"op\":\"PING\",\"value\":null", 4096)));
+            // Responses: correlation, status, result type and structured error are validated.
+            String ok = "{\"version\":1,\"id\":1,\"status\":\"OK\",\"value\":0,\"error\":null}";
+            assertEquals("ACCEPTED OK 0 null", d0Client(client, "MATCH", "1", ok));
+            assertEquals("REJECTED", d0Client(client, "MATCH", "2", ok));
+            assertEquals("ACCEPTED OK true null", d0Client(client, "MATCH", "3",
+                    "{\"version\":1,\"id\":3,\"status\":\"OK\",\"value\":true,\"error\":null}"));
+            assertEquals("ACCEPTED ERROR null CLOSED", d0Client(client, "MATCH", "4",
+                    "{\"version\":1,\"id\":4,\"status\":\"ERROR\",\"value\":null,\"error\":{\"reason\":\"CLOSED\"}}"));
+            String[] rejectedResponses = {
+                "{\"version\":1,\"id\":1,\"status\":\"DONE\",\"value\":0,\"error\":null}",
+                "{\"version\":2,\"id\":1,\"status\":\"OK\",\"value\":0,\"error\":null}",
+                "{\"version\":1,\"id\":1,\"status\":\"OK\",\"value\":0.5,\"error\":null}",
+                "{\"version\":1,\"id\":1,\"status\":\"OK\",\"value\":\"0\",\"error\":null}",
+                "{\"version\":1,\"id\":1,\"status\":\"OK\",\"value\":0,\"error\":{\"reason\":\"CLOSED\"}}",
+                "{\"version\":1,\"id\":1,\"status\":\"ERROR\",\"value\":null,\"error\":null}",
+                "{\"version\":1,\"id\":1,\"status\":\"ERROR\",\"value\":1,\"error\":{\"reason\":\"CLOSED\"}}",
+                "{\"version\":1,\"id\":1,\"status\":\"ERROR\",\"value\":null,\"error\":{\"reason\":\"0x7f00 /tmp/x\"}}",
+                "{\"version\":1,\"id\":1,\"status\":\"ERROR\",\"value\":null,\"error\":{\"reason\":\"CLOSED\",\"trace\":\"x\"}}",
+                "{\"version\":1,\"id\":1,\"status\":\"OK\",\"value\":0,\"error\":null,\"extra\":0}",
+                "{\"version\":1,\"id\":null,\"status\":\"ERROR\",\"value\":null,\"error\":{\"reason\":\"MALFORMED\"}}",
+                "not json",
+            };
+            for (String response : rejectedResponses) {
+                assertEquals("REJECTED", d0Client(client, "MATCH", "1", response), response);
+            }
+            assertEquals("ACCEPTED null ERROR null MALFORMED", d0Client(client, "RESPONSE",
+                    "{\"version\":1,\"id\":null,\"status\":\"ERROR\",\"value\":null,\"error\":{\"reason\":\"MALFORMED\"}}"));
+            assertEquals("ACCEPTED", d0Client(client, "READY", "{\"version\":1,\"event\":\"READY\"}"));
+            assertEquals("REJECTED", d0Client(client, "READY", "{\"version\":1,\"event\":\"GO\"}"));
+            assertEquals("ACCEPTED UNCERTAIN null CONNECTION_LOST", d0Client(client, "LOST", "5"));
+            d0CloseClient(client);
+            return null;
+        });
+    }
+
+    @Test
+    void d0T2ProtosHelperRunsInIndependentOsProcess() throws Exception {
+        Path db = Files.createTempDirectory(work, "d0-t2-").toRealPath().resolve("d0.db");
+        runD0(() -> {
+            Process client = d0Client();
+            Process helper = d0Helper(db);
+            long self = ProcessHandle.current().pid();
+            assertNotEquals(self, helper.pid());
+            assertNotEquals(client.pid(), helper.pid());
+            assertEquals(self, helper.toHandle().parent().map(ProcessHandle::pid).orElse(-1L),
+                    "the helper must be a separate child OS process of the JUnit JVM");
+            // READY was produced and PING answered by guest code, validated by the Protos client.
+            d0Ok(client, helper, 1, "PING", null, "0");
+            d0Ok(client, helper, 2, "CLOSE", null, "null");
+            d0Ok(client, helper, 3, "STOP", null, "null");
+            d0Exit(helper);
+            d0CloseClient(client);
+            assertTrue(Files.isRegularFile(db), "the helper opened the bootstrap database path");
+            return null;
+        });
+    }
+
+    @Test
+    void d0T3ProtosSqliteCommitsAndReopensAcrossHelpers() throws Exception {
+        Path db = Files.createTempDirectory(work, "d0-t3-").toRealPath().resolve("d0.db");
+        runD0(() -> {
+            Process client = d0Client();
+            Process a = d0Helper(db);
+            d0Ok(client, a, 1, "INIT", null, "null");
+            d0Ok(client, a, 2, "BEGIN", null, "null");
+            d0Ok(client, a, 3, "INSERT", "10", "null");
+            d0Ok(client, a, 4, "INSERT", "20", "null");
+            d0Ok(client, a, 5, "COMMIT", null, "null");
+            d0Ok(client, a, 6, "COUNT", null, "2");
+            d0Ok(client, a, 7, "SUM", null, "30");
+            d0Ok(client, a, 8, "CLOSE", null, "null");
+            d0Ok(client, a, 9, "STOP", null, "null");
+            d0Exit(a);
+            Process b = d0Helper(db);
+            assertNotEquals(a.pid(), b.pid());
+            d0Ok(client, b, 1, "COUNT", null, "2");
+            d0Ok(client, b, 2, "SUM", null, "30");
+            d0Ok(client, b, 3, "INTEGRITY", null, "true");
+            d0Ok(client, b, 4, "STOP", null, "null");
+            d0Exit(b);
+            d0CloseClient(client);
+            return null;
+        });
+    }
+
+    @Test
+    void d0T4MalformedAndUnauthorizedRequestsNeverReachSqlite() throws Exception {
+        Path root = Files.createTempDirectory(work, "d0-t4-").toRealPath();
+        Path db = root.resolve("d0.db");
+        Path exterior = Files.createTempDirectory(work, "d0-t4-exterior-").toRealPath().resolve("outside.db");
+        runD0(() -> {
+            Process client = d0Client();
+            Process a = d0Helper(db);
+            d0Ok(client, a, 1, "INIT", null, "null");
+            d0Ok(client, a, 2, "BEGIN", null, "null");
+            d0Ok(client, a, 3, "INSERT", "5", "null");
+            d0Ok(client, a, 4, "COMMIT", null, "null");
+            // Uncorrelated admission failures carry no id.
+            d0Raw(client, a, "{\"version\":1,", "ACCEPTED null ERROR null MALFORMED");
+            d0Raw(client, a, "{\"version\":1,\"id\":\"6\",\"op\":\"INSERT\",\"value\":7}",
+                    "ACCEPTED null ERROR null INVALID_ID");
+            d0Raw(client, a, "{\"version\":1,\"id\":6,\"op\":\"INSERT\",\"value\":\"7\"}",
+                    "ACCEPTED 6 ERROR null INVALID_VALUE");
+            // Duplicate and decreasing ids are rejected before dispatch.
+            d0Expect(client, a, 4, "INSERT", "9", "ACCEPTED ERROR null NON_INCREASING_ID");
+            d0Expect(client, a, 2, "INSERT", "9", "ACCEPTED ERROR null NON_INCREASING_ID");
+            // Paths, SQL and symbols cannot be carried; unknown operations never dispatch.
+            d0Raw(client, a, "{\"version\":1,\"id\":7,\"op\":\"OPEN\",\"value\":\"" + exterior + "\"}",
+                    "ACCEPTED 7 ERROR null INVALID_VALUE");
+            d0Raw(client, a, "{\"version\":1,\"id\":8,\"op\":\"EXEC\",\"value\":\"INSERT INTO entries VALUES (99)\"}",
+                    "ACCEPTED 8 ERROR null INVALID_VALUE");
+            long id = 9;
+            for (String operation : List.of("OPEN", "EXEC", "ATTACH", "VACUUM", "EVAL", "LOAD", "IMPORT",
+                    "CONTINUE_ACK", "sqlite3_exec")) {
+                d0Expect(client, a, id++, operation, null, "ACCEPTED ERROR null UNSUPPORTED_OPERATION");
+            }
+            d0Expect(client, a, id++, "INSERT", null, "ACCEPTED ERROR null INVALID_VALUE");
+            d0Expect(client, a, id++, "COUNT", "1", "ACCEPTED ERROR null INVALID_VALUE");
+            d0Ok(client, a, id++, "COUNT", null, "1");
+            d0Ok(client, a, id++, "SUM", null, "5");
+            // Exactly 4096 octets before the terminator is admitted (a read-only COUNT).
+            String limit = d0Padded("{\"version\":1,\"id\":" + id + ",\"op\":\"COUNT\",\"value\":null", 4096);
+            d0Raw(client, a, limit, "ACCEPTED " + id + " OK 1 null");
+            id++;
+            // 4097 octets fails the framing: no reply, no INSERT, fail-closed process exit.
+            d0Send(a, d0Padded("{\"version\":1,\"id\":" + id + ",\"op\":\"INSERT\",\"value\":7", 4097));
+            d0AwaitEvent(a, "FRAMING_REJECTED");
+            assertEquals(D0_EOF, d0Next(a), "an oversized line must never receive a reply");
+            assertTrue(a.waitFor(30, TimeUnit.SECONDS), "fail-closed helper termination timeout");
+            assertNotEquals(0, a.exitValue(), "framing failure must not be a clean protocol exit");
+            assertFalse(Files.exists(exterior), "no request may create or open an exterior path");
+            Process b = d0Helper(db);
+            d0Ok(client, b, 1, "COUNT", null, "1");
+            d0Ok(client, b, 2, "SUM", null, "5");
+            d0Ok(client, b, 3, "INTEGRITY", null, "true");
+            d0Ok(client, b, 4, "STOP", null, "null");
+            d0Exit(b);
+            assertFalse(Files.exists(exterior));
+            d0CloseClient(client);
+            return null;
+        });
+    }
+
+    @Test
+    void d0T5ExplicitRollbackKeepsCommittedState() throws Exception {
+        Path db = Files.createTempDirectory(work, "d0-t5-").toRealPath().resolve("d0.db");
+        runD0(() -> {
+            Process client = d0Client();
+            Process a = d0Helper(db);
+            d0Ok(client, a, 1, "INIT", null, "null");
+            d0Ok(client, a, 2, "BEGIN", null, "null");
+            d0Ok(client, a, 3, "INSERT", "10", "null");
+            d0Ok(client, a, 4, "COMMIT", null, "null");
+            d0Ok(client, a, 5, "COUNT", null, "1");
+            d0Ok(client, a, 6, "SUM", null, "10");
+            d0Ok(client, a, 7, "BEGIN", null, "null");
+            d0Ok(client, a, 8, "INSERT", "99", "null");
+            d0Ok(client, a, 9, "ROLLBACK", null, "null");
+            d0Ok(client, a, 10, "COUNT", null, "1");
+            d0Ok(client, a, 11, "SUM", null, "10");
+            d0Ok(client, a, 12, "STOP", null, "null");
+            d0Exit(a);
+            Process b = d0Helper(db);
+            d0Ok(client, b, 1, "COUNT", null, "1");
+            d0Ok(client, b, 2, "SUM", null, "10");
+            d0Ok(client, b, 3, "INTEGRITY", null, "true");
+            d0Ok(client, b, 4, "STOP", null, "null");
+            d0Exit(b);
+            d0CloseClient(client);
+            return null;
+        });
+    }
+
+    @Test
+    void d0T6KilledHelperRollsBackUncommittedTransaction() throws Exception {
+        Path db = Files.createTempDirectory(work, "d0-t6-").toRealPath().resolve("d0.db");
+        runD0(() -> {
+            Process client = d0Client();
+            Process a = d0Helper(db);
+            d0Ok(client, a, 1, "INIT", null, "null");
+            d0Ok(client, a, 2, "BEGIN", null, "null");
+            d0Ok(client, a, 3, "INSERT", "10", "null");
+            d0Ok(client, a, 4, "COMMIT", null, "null");
+            d0Ok(client, a, 5, "STOP", null, "null");
+            d0Exit(a);
+            Process b = d0Helper(db);
+            d0Ok(client, b, 1, "BEGIN", null, "null");
+            d0Ok(client, b, 2, "INSERT", "77", "null");
+            d0Kill(b);
+            Process c = d0Helper(db);
+            d0Ok(client, c, 1, "COUNT", null, "1");
+            d0Ok(client, c, 2, "SUM", null, "10");
+            d0Ok(client, c, 3, "INTEGRITY", null, "true");
+            d0Ok(client, c, 4, "STOP", null, "null");
+            d0Exit(c);
+            d0CloseClient(client);
+            return null;
+        });
+    }
+
+    @Test
+    void d0T7CommittedButUnacknowledgedOperationIsUncertain() throws Exception {
+        Path db = Files.createTempDirectory(work, "d0-t7-").toRealPath().resolve("d0.db");
+        runD0(() -> {
+            Process client = d0Client();
+            Process a = d0Helper(db);
+            d0Ok(client, a, 1, "INIT", null, "null");
+            d0Ok(client, a, 2, "BEGIN", null, "null");
+            d0Ok(client, a, 3, "INSERT", "10", "null");
+            d0Ok(client, a, 4, "COMMIT", null, "null");
+            d0Ok(client, a, 5, "STOP", null, "null");
+            d0Exit(a);
+            Process b = d0Helper(db);
+            d0Ok(client, b, 1, "BEGIN", null, "null");
+            d0Ok(client, b, 2, "INSERT", "40", "null");
+            d0Send(b, d0RequestText(client, 3, "COMMIT_HOLD_ACK", null));
+            d0AwaitEvent(b, "COMMITTED_BEFORE_ACK");
+            // The helper writes the acknowledgement only after a continuation that is never sent.
+            assertEquals(null, d0Stdout.get(b).poll(), "no acknowledgement may precede the continuation");
+            d0Kill(b);
+            // The lost reply is UNCERTAIN for the client: neither success nor rollback.
+            assertEquals("ACCEPTED UNCERTAIN null CONNECTION_LOST", d0Client(client, "LOST", "3"));
+            // No automatic retry: the durable state is inspected, not re-written.
+            Process c = d0Helper(db);
+            d0Ok(client, c, 1, "COUNT", null, "2");
+            d0Ok(client, c, 2, "SUM", null, "50");
+            d0Ok(client, c, 3, "INTEGRITY", null, "true");
+            d0Ok(client, c, 4, "STOP", null, "null");
+            d0Exit(c);
+            d0CloseClient(client);
+            return null;
+        });
+    }
+
+    @Test
+    void d0T8ClosedHelperRejectsFurtherDatabaseOperations() throws Exception {
+        Path db = Files.createTempDirectory(work, "d0-t8-").toRealPath().resolve("d0.db");
+        runD0(() -> {
+            Process client = d0Client();
+            Process a = d0Helper(db);
+            d0Ok(client, a, 1, "INIT", null, "null");
+            d0Ok(client, a, 2, "CLOSE", null, "null");
+            d0Expect(client, a, 3, "COUNT", null, "ACCEPTED ERROR null CLOSED");
+            d0Expect(client, a, 4, "INSERT", "1", "ACCEPTED ERROR null CLOSED");
+            d0Expect(client, a, 5, "BEGIN", null, "ACCEPTED ERROR null CLOSED");
+            d0Expect(client, a, 6, "INIT", null, "ACCEPTED ERROR null CLOSED");
+            // CLOSE is idempotent and never reopens; STOP still terminates cleanly.
+            d0Ok(client, a, 7, "CLOSE", null, "null");
+            d0Expect(client, a, 8, "COUNT", null, "ACCEPTED ERROR null CLOSED");
+            d0Ok(client, a, 9, "STOP", null, "null");
+            d0Exit(a);
+            assertFalse(a.isAlive());
+            assertFalse(ProcessHandle.of(a.pid()).map(ProcessHandle::isAlive).orElse(false),
+                    "no surviving helper process");
+            d0CloseClient(client);
+            return null;
+        });
+    }
+
+    /** Runs one D0 scenario; every launched process is killed and reaped even on failure. */
+    private static void runD0(java.util.concurrent.Callable<?> scenario) throws Exception {
+        d0Stdout.clear();
+        d0Events.clear();
+        d0Logs.clear();
+        Throwable primary = null;
+        try {
+            scenario.call();
+        } catch (Exception | Error failure) {
+            primary = failure;
+            throw failure;
+        } finally {
+            for (Process child : d0Stdout.keySet()) if (child.isAlive()) child.destroyForcibly();
+            AssertionError cleanup = null;
+            boolean interrupted = Thread.interrupted();
+            for (Process child : d0Stdout.keySet()) {
+                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(15);
+                boolean terminated = false;
+                while (!terminated && System.nanoTime() < deadline) {
+                    try {
+                        terminated = child.waitFor(Math.max(1, deadline - System.nanoTime()),
+                                TimeUnit.NANOSECONDS);
+                    } catch (InterruptedException failure) {
+                        interrupted = true;
+                    }
+                }
+                if (!terminated) {
+                    if (cleanup == null) cleanup = new AssertionError("D0 child retained after cleanup");
+                    cleanup.addSuppressed(new AssertionError("PID=" + child.pid()));
+                }
+                synchronized (d0Logs.get(child)) {
+                    System.err.println("D0 PID=" + child.pid() + " stderr:\n" + d0Logs.get(child));
+                }
+            }
+            if (interrupted) Thread.currentThread().interrupt();
+            if (cleanup != null) {
+                if (primary != null) primary.addSuppressed(cleanup);
+                else throw cleanup;
+            }
+        }
+    }
+
+    /** Launches the real Protos CLI on one D0 entry; stdout and stderr stay separate pipes. */
+    private static Process d0Launch(Path entry, boolean provider, String... arguments) throws Exception {
+        String classpath = System.getProperty("surefire.test.class.path",
+                System.getProperty("java.class.path"));
+        assertTrue(classpath != null && !classpath.isBlank(), "missing test subprocess classpath");
+        Path java = Path.of(System.getProperty("java.home"), "bin", "java");
+        assertTrue(Files.isExecutable(java), "missing child JVM: " + java);
+        Path home = Path.of("").toAbsolutePath();
+        List<String> invocation = new ArrayList<>(List.of(java.toString(),
+                "--enable-native-access=ALL-UNNAMED", "--sun-misc-unsafe-memory-access=allow"));
+        String cache = System.getProperty("polyglot.engine.userResourceCache");
+        if (cache != null) invocation.add("-Dpolyglot.engine.userResourceCache=" + cache);
+        invocation.addAll(List.of("-cp", classpath, "com.guillermomolina.protos.cli.ProtosCli"));
+        // The only native authority: the CLI's explicit foreign-provider authorization.
+        if (provider) invocation.addAll(List.of("--foreign-provider-path", sqliteJar.toAbsolutePath().toString()));
+        invocation.add(entry.toAbsolutePath().toString());
+        invocation.addAll(List.of(arguments));
+        ProcessBuilder builder = new ProcessBuilder(invocation).directory(home.toFile());
+        builder.environment().put("PROTOS_HOME", home.toString());
+        Process child = builder.start();
+        var lines = new java.util.concurrent.LinkedBlockingQueue<String>();
+        var events = new java.util.concurrent.LinkedBlockingQueue<String>();
+        StringBuilder log = new StringBuilder();
+        d0Stdout.put(child, lines);
+        d0Events.put(child, events);
+        d0Logs.put(child, log);
+        Thread.ofPlatform().daemon().name("d0-stdout-" + child.pid()).start(() -> {
+            try (var reader = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(child.getInputStream(), StandardCharsets.UTF_8))) {
+                for (String line; (line = reader.readLine()) != null; ) lines.offer(line);
+            } catch (Exception failure) {
+                synchronized (log) { log.append("stdout drain: ").append(failure).append('\n'); }
+            } finally {
+                lines.offer(D0_EOF);
+            }
+        });
+        Thread.ofPlatform().daemon().name("d0-stderr-" + child.pid()).start(() -> {
+            try (var reader = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(child.getErrorStream(), StandardCharsets.UTF_8))) {
+                for (String line; (line = reader.readLine()) != null; ) {
+                    synchronized (log) {
+                        if (log.length() > 32768) log.delete(0, 16384);
+                        log.append(line).append('\n');
+                    }
+                    if (List.of("COMMITTED_BEFORE_ACK", "FRAMING_REJECTED", "COMMIT_ACK_WITHHELD",
+                            "ADMISSION_FAILED_CLOSED").contains(line)) events.offer(line);
+                }
+            } catch (Exception failure) {
+                synchronized (log) { log.append("stderr drain: ").append(failure).append('\n'); }
+            } finally {
+                events.offer(D0_EOF);
+            }
+        });
+        assertTrue(child.pid() > 0);
+        assertNotEquals(ProcessHandle.current().pid(), child.pid());
+        return child;
+    }
+
+    /** The Protos client driver: builds requests and validates replies; no provider. */
+    private static Process d0Client() throws Exception {
+        return d0Launch(D0.resolve("client-driver.protos"), false);
+    }
+
+    /** The Protos helper; the absolute database path is its only bootstrap argument. */
+    private static Process d0Helper(Path db) throws Exception {
+        assertTrue(db.isAbsolute(), "D0 database path must be absolute");
+        Process helper = d0Launch(D0.resolve("helper.protos"), true, db.toString());
+        Process client = d0Stdout.keySet().iterator().next();
+        assertEquals("ACCEPTED", d0Client(client, "READY", d0Next(helper)),
+                "the helper must publish the Protos READY event first");
+        return helper;
+    }
+
+    private static String d0Next(Process child) throws Exception {
+        String line = d0Stdout.get(child).poll(60, TimeUnit.SECONDS);
+        String log;
+        synchronized (d0Logs.get(child)) { log = d0Logs.get(child).toString(); }
+        assertTrue(line != null, "PID=" + child.pid() + " stdout timeout, alive=" + child.isAlive() + "\n" + log);
+        return line;
+    }
+
+    private static void d0AwaitEvent(Process child, String expected) throws Exception {
+        String event = d0Events.get(child).poll(60, TimeUnit.SECONDS);
+        String log;
+        synchronized (d0Logs.get(child)) { log = d0Logs.get(child).toString(); }
+        assertEquals(expected, event, "PID=" + child.pid() + "\n" + log);
+    }
+
+    private static void d0Send(Process child, String line) throws Exception {
+        child.getOutputStream().write((line + "\n").getBytes(StandardCharsets.UTF_8));
+        child.getOutputStream().flush();
+    }
+
+    /** One driver command: each field is one line; the driver answers with one line. */
+    private static String d0Client(Process client, String... fields) throws Exception {
+        for (String field : fields) d0Send(client, field);
+        String reply = d0Next(client);
+        assertNotEquals(D0_EOF, reply, "Protos client driver terminated");
+        return reply;
+    }
+
+    private static String d0RequestText(Process client, long id, String operation, String value)
+            throws Exception {
+        String reply = d0Client(client, "REQUEST", Long.toString(id), operation,
+                value == null ? "null" : value);
+        assertTrue(reply.startsWith("TEXT "), reply);
+        return reply.substring("TEXT ".length());
+    }
+
+    /** Protos builds the request; the reply must be correlated with it by the Protos client. */
+    private static void d0Expect(Process client, Process helper, long id, String operation, String value,
+            String expected) throws Exception {
+        d0Send(helper, d0RequestText(client, id, operation, value));
+        String reply = d0Next(helper);
+        assertNotEquals(D0_EOF, reply, "helper closed stdout before replying to " + operation);
+        assertEquals(expected, d0Client(client, "MATCH", Long.toString(id), reply), reply);
+    }
+
+    private static void d0Ok(Process client, Process helper, long id, String operation, String value,
+            String result) throws Exception {
+        d0Expect(client, helper, id, operation, value, "ACCEPTED OK " + result + " null");
+    }
+
+    /** Sends an adversarial raw line; the reply is decoded by the Protos client. */
+    private static void d0Raw(Process client, Process helper, String line, String expected) throws Exception {
+        d0Send(helper, line);
+        String reply = d0Next(helper);
+        assertNotEquals(D0_EOF, reply, "helper closed stdout before rejecting " + line);
+        assertEquals(expected, d0Client(client, "RESPONSE", reply), reply);
+    }
+
+    /** A JSON object padded with insignificant spaces to exactly {@code octets} ASCII octets. */
+    private static String d0Padded(String unterminatedObject, int octets) {
+        int padding = octets - unterminatedObject.length() - 1;
+        assertTrue(padding >= 0, "padding target too small");
+        return unterminatedObject + " ".repeat(padding) + "}";
+    }
+
+    private static void d0Exit(Process child) throws Exception {
+        assertEquals(D0_EOF, d0Next(child), "stdout carries no line after the final reply");
+        assertTrue(child.waitFor(30, TimeUnit.SECONDS), "normal helper termination timeout");
+        assertEquals(0, child.exitValue(), "PID=" + child.pid() + "\n" + d0Logs.get(child));
+    }
+
+    private static void d0Kill(Process child) throws Exception {
+        assertTrue(child.isAlive(), "helper died before SIGKILL");
+        child.destroyForcibly();
+        assertTrue(child.waitFor(30, TimeUnit.SECONDS), "SIGKILL termination timeout");
+        assertEquals(137, child.exitValue(), "Linux SIGKILL must not be a normal SQLite close");
+        assertEquals(D0_EOF, d0Next(child), "a killed helper must not publish a later reply");
+    }
+
+    private static void d0CloseClient(Process client) throws Exception {
+        client.getOutputStream().close();
+        d0Exit(client);
+    }
+
     private static Probe sqliteProbe(ProtosExternalForeignProviderTest.Fixture fixture,
             ProtosActivation actor, TestReporter reporter) throws Exception {
         ProtosObjectValue module = (ProtosObjectValue) fixture.eval(actor,

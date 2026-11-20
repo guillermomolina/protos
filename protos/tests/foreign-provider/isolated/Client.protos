@@ -1,0 +1,73 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// PLAT074-D0 experimental client logic: builds requests and validates replies.
+// It launches no process, owns no native handle, executes no SQL and does not
+// import std:ffi. In D0 the transport and the helper launch are supplied by the
+// JUnit harness, because Protos has no public OS-process creation API yet.
+Protocol: import("./Protocol.protos")
+
+_client: (() => {
+    fail: () => {
+        Error().signal()
+    }
+
+    request: (id, operation, value) => Protocol.encodeRequest(id, operation, value)
+
+    response: (text) => Protocol.decodeResponse(text)
+
+    // Accepts only a well-formed reply correlated with `id`. A reply to any
+    // other request, or an uncorrelated rejection, signals an Error.
+    requireMatchingResponse: (id, text) => {
+        decoded: Protocol.decodeResponse(text)
+        (decoded.id !== null).ifFalse(() => { fail() })
+        (decoded.id == id).ifFalse(() => { fail() })
+        decoded
+    }
+
+    requireReady: (text) => Protocol.decodeReady(text)
+
+    // Local outcome when the channel was lost before a correlated reply. It
+    // never claims rollback: the operation may or may not have taken effect.
+    // EOF is therefore UNCERTAIN, not a failed or reverted operation.
+    connectionLost: (id) => {
+        Integer.recognizes(id).ifFalse(() => { fail() })
+        (id > 0).ifFalse(() => { fail() })
+        outcome: {
+            id: id
+            status: "UNCERTAIN"
+            value: null
+            reason: "CONNECTION_LOST"
+        }
+        outcome.freeze()
+        outcome
+    }
+
+    surface: {
+        request: request
+        response: response
+        requireMatchingResponse: requireMatchingResponse
+        requireReady: requireReady
+        connectionLost: connectionLost
+    }
+    surface.freeze()
+    surface
+})()
+
+request: _client.request
+response: _client.response
+requireMatchingResponse: _client.requireMatchingResponse
+requireReady: _client.requireReady
+connectionLost: _client.connectionLost

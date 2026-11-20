@@ -1,0 +1,213 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// PLAT074-D0 isolated SQLite helper: the initial FILE entry of a separate
+// Protos CLI JVM launched by the JUnit harness. Test-only; not a public API.
+//
+// One RootActor, one connection, one request at a time. stdout carries only
+// structured protocol lines; diagnostics go to stderr. The database path is
+// the single application argument and is never accepted from the channel.
+ProcessStreams: import("std:io/process_streams")
+Protocol: import("./Protocol.protos")
+SqliteEngine: import("./SqliteEngine.protos")
+
+arguments: process.args()
+reader: ProcessStreams.stdinReader(process)
+writer: ProcessStreams.stdoutWriter(process)
+diagnostics: ProcessStreams.stderrWriter(process)
+
+diagnose: (text) => {
+    diagnostics.writeLine(text).value()
+    diagnostics.flush().value()
+}
+
+// Each reply is one complete line, confirmed through its Futures.
+respond: (text) => {
+    writer.writeLine(text).value()
+    writer.flush().value()
+}
+
+if(arguments.size() != 1) {
+    diagnose("D0 helper requires exactly one database path argument")
+    Error().signal()
+}
+
+// Operations that need the live connection. CLOSE, STOP and PING do not.
+connectionOperations: Array("INIT", "BEGIN", "INSERT", "COMMIT", "ROLLBACK", "COUNT",
+    "SUM", "INTEGRITY", "COMMIT_HOLD_ACK")
+// TEST-ONLY: COMMIT_HOLD_ACK exists solely so JUnit can kill this process
+// between a successful SQLite COMMIT and its acknowledgement (D0-T7).
+allowedOperations: Array("PING", "INIT", "BEGIN", "INSERT", "COMMIT", "ROLLBACK", "COUNT",
+    "SUM", "INTEGRITY", "CLOSE", "STOP", "COMMIT_HOLD_ACK")
+
+listed: (names, candidate) => {
+    found: false
+    for(name in names) {
+        if(name == candidate) { found = true }
+    }
+    found
+}
+
+engine: SqliteEngine.openFile(arguments[0])
+lastAdmittedId: 0
+running: true
+// Set when admission must end without a clean protocol exit; the process then
+// fails after the connection cleanup below has been attempted.
+fatal: false
+
+// Reads one bounded line. A framing failure (oversized line, decoding or I/O
+// failure) permanently fails the reader, so admission ends fail-closed.
+nextLine: () => {
+    line: null
+    failed: false
+    Error.handle(() => {
+        line = reader.readLine(4096).value()
+    }, (error) => {
+        failed = true
+    })
+    if(failed) {
+        diagnose("FRAMING_REJECTED")
+        fatal = true
+        running = false
+        line = null
+    }
+    line
+}
+
+// Runs one recoverable database operation. An SQLite failure becomes a
+// bounded ERROR reply; it is never reported as success.
+attempt: (id, operation) => {
+    reply: null
+    Error.handle(() => {
+        reply = Protocol.encodeSuccess(id, operation())
+    }, (error) => {
+        reply = null
+    })
+    if(reply === null) { reply = Protocol.encodeFailure(id, "SQLITE_FAILURE") }
+    reply
+}
+
+// TEST-ONLY COMMIT_HOLD_ACK. After a real successful COMMIT the event goes to
+// stderr and the OK reply waits for one CONTINUE_ACK request on stdin. Waiting
+// executes no SQL. The event does not claim power-loss durability.
+holdCommit: (id) => {
+    if(engine.inTransaction()) {
+        committed: false
+        Error.handle(() => {
+            engine.commit()
+            committed = true
+        }, (error) => {
+            committed = false
+        })
+        if(committed) {
+            diagnose("COMMITTED_BEFORE_ACK")
+            continuationLine: nextLine()
+            released: false
+            if(continuationLine !== null) {
+                continuation: Protocol.decodeRequest(continuationLine)
+                if(continuation.admitted) {
+                    if((continuation.operation == "CONTINUE_ACK") && (continuation.id > id) &&
+                            (continuation.value === null)) {
+                        lastAdmittedId = continuation.id
+                        released = true
+                    }
+                }
+            }
+            if(released) {
+                respond(Protocol.encodeSuccess(id, null))
+            } else {
+                // Missing or invalid continuation: no acknowledgement is sent.
+                diagnose("COMMIT_ACK_WITHHELD")
+                fatal = true
+                running = false
+            }
+        } else {
+            respond(Protocol.encodeFailure(id, "SQLITE_FAILURE"))
+        }
+    } else {
+        respond(Protocol.encodeFailure(id, "NO_TRANSACTION"))
+    }
+}
+
+dispatch: (request) => {
+    id: request.id
+    operation: request.operation
+    value: request.value
+    if(!listed(allowedOperations, operation)) {
+        respond(Protocol.encodeFailure(id, "UNSUPPORTED_OPERATION"))
+    } else {
+        if((operation == "INSERT") != (value !== null)) {
+            respond(Protocol.encodeFailure(id, "INVALID_VALUE"))
+        } else {
+            if(listed(connectionOperations, operation) && !engine.isOpen()) {
+                respond(Protocol.encodeFailure(id, "CLOSED"))
+            } else {
+                if(operation == "PING") { respond(Protocol.encodeSuccess(id, 0)) }
+                if(operation == "INIT") { respond(attempt(id, () => engine.initialize())) }
+                if(operation == "BEGIN") { respond(attempt(id, () => engine.begin())) }
+                if(operation == "INSERT") { respond(attempt(id, () => engine.insert(value))) }
+                if(operation == "COMMIT") { respond(attempt(id, () => engine.commit())) }
+                if(operation == "ROLLBACK") { respond(attempt(id, () => engine.rollback())) }
+                if(operation == "COUNT") { respond(attempt(id, () => engine.count())) }
+                if(operation == "SUM") { respond(attempt(id, () => engine.sum())) }
+                if(operation == "INTEGRITY") { respond(attempt(id, () => engine.integrityOk())) }
+                if(operation == "COMMIT_HOLD_ACK") { holdCommit(id) }
+                // A close failure is irreversible: it is not caught here, so it
+                // ends admission and fails the process after cleanup.
+                if(operation == "CLOSE") {
+                    engine.close()
+                    respond(Protocol.encodeSuccess(id, null))
+                }
+                if(operation == "STOP") {
+                    engine.close()
+                    respond(Protocol.encodeSuccess(id, null))
+                    running = false
+                }
+            }
+        }
+    }
+}
+
+(() => {
+    respond(Protocol.encodeReady())
+    while(running) {
+        line: nextLine()
+        if(line === null) {
+            // EOF (or framing failure): end admission. Never implies rollback
+            // of a reply the client did not receive.
+            running = false
+        } else {
+            request: Protocol.decodeRequest(line)
+            if(!request.admitted) {
+                respond(Protocol.encodeFailure(request.id, request.reason))
+            } else {
+                if(request.id <= lastAdmittedId) {
+                    respond(Protocol.encodeFailure(request.id, "NON_INCREASING_ID"))
+                } else {
+                    lastAdmittedId = request.id
+                    dispatch(request)
+                }
+            }
+        }
+    }
+}).ensure(() => {
+    // Idempotent: a connection already closed by CLOSE/STOP is not released again.
+    engine.close()
+})
+
+if(fatal) {
+    diagnose("ADMISSION_FAILED_CLOSED")
+    Error().signal()
+}

@@ -488,3 +488,7 @@ pending until the maintainer runs it.
   are not a confinement guarantee; see
   [sqlite-durable-confinement.md](sqlite-durable-confinement.md).
 - No general transaction abstraction, native callbacks, ORM or query builder.
+
+The public `std:sqlite` API remains in-memory only. The isolated PLAT074-D0
+prototype is experimental: it exports no durable API and grants no filesystem
+authority. See [sqlite-isolated-process-spike.md](sqlite-isolated-process-spike.md).

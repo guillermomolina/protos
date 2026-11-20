@@ -2857,3 +2857,65 @@ B2-T5 FAIL observed; B3 6/6 PASS; B4 10/10 PASS; B5 7/7 PASS; B6 7/7 PASS
 Still outstanding (not run after B6): the complete
 `ProtosI144FfmFixtureAbiTest` class (B2-T5 expected to fail), packaging,
 `make test-protos-foreign` and `make test`.
+
+## 23. PLAT074-D0 — Experimental isolated Protos SQLite helper
+
+**Decision recorded.** On 20 November 2026 the project owner selected
+alternative D (isolated helper process) as the **experimental direction**.
+This is not approval of a durable public implementation and does **not**
+authorize production Java. Alternative B stays documented as investigated and
+is not implemented. All B1–B7 evidence above is kept unchanged; the B2
+failures and the B6 negative controls are not reinterpreted.
+
+**D0 scope.** Experimental Protos modules plus JUnit additions only:
+
+- the database is a real file managed by SQLite through the existing FFM
+  provider (`ffi:sqlite3`);
+- requests and replies travel as JSON Lines over the helper's stdin/stdout;
+- the helper JVM is launched by the Java test harness
+  (`ProtosI144FfmFixtureAbiTest`) running the real Protos CLI on
+  `protos/tests/foreign-provider/isolated/helper.protos`;
+- Protos has no public subprocess API yet;
+- the helper's filesystem confinement is **not** demonstrated: D0 is not a
+  sandbox.
+
+Design and protocol: [sqlite-isolated-process-spike.md](sqlite-isolated-process-spike.md).
+
+### D0 evidence
+
+| Test | Claim exercised | Status |
+|---|---|---|
+| D0-T1 `d0T1ProtocolRoundTripsExactProtosValues` | Protos codec: exact ids/values, 64-bit extremes, malformed JSON, wrong types, unknown ops, 4096-octet bound, mismatched ids and invalid statuses | PASS (focal) |
+| D0-T2 `d0T2ProtosHelperRunsInIndependentOsProcess` | helper is a distinct child OS process; Protos READY, PING/OK, CLOSE, STOP, clean exit | PASS (focal) |
+| D0-T3 `d0T3ProtosSqliteCommitsAndReopensAcrossHelpers` | explicit-transaction COMMIT survives into an independent JVM; COUNT/SUM/INTEGRITY | PASS (focal) |
+| D0-T4 `d0T4MalformedAndUnauthorizedRequestsNeverReachSqlite` | malformed, mistyped, non-increasing, OPEN/EXEC/ATTACH and oversized requests rejected; oversized framing fail-closed; no writes | PASS (focal) |
+| D0-T5 `d0T5ExplicitRollbackKeepsCommittedState` | explicit ROLLBACK leaves only committed state, also after reopen | PASS (focal) |
+| D0-T6 `d0T6KilledHelperRollsBackUncommittedTransaction` | SIGKILL with an admitted uncommitted INSERT; recovery keeps committed state only | PASS (focal) |
+| D0-T7 `d0T7CommittedButUnacknowledgedOperationIsUncertain` | kill between real COMMIT and acknowledgement; client records UNCERTAIN; commit present; no retry | PASS (focal) |
+| D0-T8 `d0T8ClosedHelperRejectsFurtherDatabaseOperations` | after CLOSE every database operation is CLOSED; no reopen; clean termination | PASS (focal) |
+
+### Status separation
+
+- **Observed prototype behaviour:** owner-reported focal run of
+  `ProtosI144FfmFixtureAbiTest#d0*` on 20 November 2026: 8/8 PASS (39.90 s).
+  The D0-T4 helper stderr shows the intended fail-closed path
+  (`FRAMING_REJECTED`, `ADMISSION_FAILED_CLOSED`, non-zero exit). This is
+  prototype evidence only.
+- **Architectural acceptance:** not granted. The presence of the prototype
+  does not implement any of D-1–D-11; the §20 table is unchanged. D0-T2 and
+  D0-T6 exercise parts of the D-1 falsification test; that alone does not
+  mark D-1 implemented. D0 does not address D-2, D-10 or D-11.
+- **Production authorization:** not granted (§22 gate unchanged).
+- **Platform support:** none claimed beyond the existing Linux x86-64 FFM
+  fixture preconditions.
+
+### Next slices
+
+- **D1** must resolve the helper's effective OS authority (filesystem grant,
+  inherited descriptors, environment) and falsify D-2/D-11.
+- **D2** (production) is possible only after the D tests pass and the owner
+  authorizes production work.
+
+State: **PLAT074 OPEN; D256 pending; LIB031 BLOCKED; D0 8/8 PASS (focal).**
+Not run after D0: the complete `ProtosI144FfmFixtureAbiTest` class (B2-T5
+expected to fail), `make test-protos-foreign` and `make test`.
