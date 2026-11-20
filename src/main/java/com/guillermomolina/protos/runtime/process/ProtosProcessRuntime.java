@@ -100,6 +100,8 @@ public final class ProtosProcessRuntime {
     private ProtosEncodingValue stdoutEncoding;
     private ProtosEncodingValue stderrEncoding;
     private ProtosProcessExecutionHost executionHost;
+    /** Optional host-provisioned durable SQLite authority; bound once before RootActor bootstrap. */
+    private ProtosObjectValue rootSqlite;
 
     /**
      * Creates one Process incarnation together with its unique RootActor and no optional
@@ -386,6 +388,64 @@ public final class ProtosProcessRuntime {
     /** Optional frozen D107 resource capability bundle granted only to RootActor bootstrap. */
     public Optional<ProtosMapValue> rootResourcesForRuntime() {
         return Optional.ofNullable(rootResources);
+    }
+
+    /**
+     * Binds the host-provisioned durable SQLite authority of this incarnation exactly once,
+     * before the initial RootActor Activation exists. The value is an opaque frozen object whose
+     * authority is recognized by its identity only; it is published solely as the RootActor
+     * bootstrap-local {@code sqlite} slot.
+     */
+    public synchronized void bindRootSqliteForRuntime(ProtosObjectValue capability) {
+        Objects.requireNonNull(capability, "capability");
+        if (!capability.isFrozen()) {
+            throw new IllegalArgumentException("SQLite authority must be frozen");
+        }
+        if (rootSqlite != null) {
+            throw new IllegalStateException("SQLite authority is already bound");
+        }
+        if (lifecycle != LifecycleState.RUNNING) {
+            throw new IllegalStateException("SQLite authority cannot be bound after termination begins");
+        }
+        rootSqlite = capability;
+    }
+
+    /** Optional durable SQLite authority, absent from the public Process capability. */
+    public synchronized Optional<ProtosObjectValue> rootSqliteForRuntime() {
+        return Optional.ofNullable(rootSqlite);
+    }
+
+    /**
+     * Mints one additional Process-local readable byte-stream view over a host backend. It uses
+     * the same binding and ordering machinery as the standard streams but is never one of them and
+     * is not reachable from the public Process capability.
+     */
+    public synchronized ProtosProcessStandardStreamValue openAuxiliaryReadableStreamForRuntime(
+            ProtosObjectValue readablePrototype,
+            ProtosObjectValue bytesPrototype,
+            ProtosProcessStandardStreamBinding.ReadableBackend backend) {
+        requireRunningForAuxiliaryStream();
+        return ProtosProcessStandardStreamBinding.readableForRuntime(
+                        this, readablePrototype, bytesPrototype, backend)
+                .newViewForRuntime();
+    }
+
+    /** Writable counterpart of {@link #openAuxiliaryReadableStreamForRuntime}. */
+    public synchronized ProtosProcessStandardStreamValue openAuxiliaryWritableStreamForRuntime(
+            ProtosObjectValue writablePrototype,
+            ProtosObjectValue bytesPrototype,
+            ProtosProcessStandardStreamBinding.WritableBackend backend) {
+        requireRunningForAuxiliaryStream();
+        return ProtosProcessStandardStreamBinding.writableForRuntime(
+                        this, writablePrototype, bytesPrototype, backend)
+                .newViewForRuntime();
+    }
+
+    private void requireRunningForAuxiliaryStream() {
+        if (lifecycle != LifecycleState.RUNNING) {
+            throw new IllegalStateException(
+                    "auxiliary byte streams cannot be opened after termination begins");
+        }
     }
 
     /**

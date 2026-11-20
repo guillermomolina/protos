@@ -839,6 +839,16 @@ public final class ProtosActorBootstrap {
                             }
                             locals.put("clock", clock);
                         });
+        // Host-provisioned durable SQLite authority: RootActor only, never inherited by spawn.
+        process.rootSqliteForRuntime()
+                .ifPresent(
+                        sqlite -> {
+                            if (!sqlite.isFrozen()) {
+                                throw new IllegalStateException(
+                                        "RootActor SQLite grant must be frozen");
+                            }
+                            locals.put("sqlite", sqlite);
+                        });
         process.rootResourcesForRuntime()
                 .ifPresent(
                         resources -> {

@@ -742,7 +742,11 @@ public final class ProtosCoreBootstrap {
                         ProtosModuleKey.module("std:sqlite"),
                         Map.of(
                                 "_terminalFutureFacility",
-                                ProtosHttpAsyncFacility::createTerminalFacility)),
+                                ProtosHttpAsyncFacility::createTerminalFacility,
+                                // Durable confined SQLite: launch/release custody only; the
+                                // bridge grants nothing without the RootActor sqlite authority.
+                                ProtosIsolatedSqliteHostFacility.BOOTSTRAP_SLOT,
+                                ProtosIsolatedSqliteHostFacility::createBridge)),
                 // LIB025: the private asynchronous bridge of std:http/server.
                 Map.entry(
                         ProtosHttpAsyncFacility.MODULE_KEY,

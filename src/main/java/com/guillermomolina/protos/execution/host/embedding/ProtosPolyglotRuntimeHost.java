@@ -18,6 +18,7 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActorScheduler;
 import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
+import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.guillermomolina.protos.runtime.ProtosResolverCapabilityValue;
@@ -81,6 +82,9 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
      */
     private final Map<ProtosProcessRuntime, ProtosLinuxConfinedReadWriteTreeFilesystemBackend>
             processFilesystems = new IdentityHashMap<>();
+    /** Host custody of confined durable SQLite helper processes; inert until a grant exists. */
+    private final ProtosIsolatedSqliteHostFacility isolatedSqlite =
+            new ProtosIsolatedSqliteHostFacility();
     private boolean closed;
 
     private ProtosPolyglotRuntimeHost(
@@ -294,7 +298,8 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
                             out,
                             err,
                             activeProcessContexts::decrementAndGet,
-                            inspectionAuthorized);
+                            inspectionAuthorized,
+                            isolatedSqlite.authorizedForRuntime(process));
             ProtosPolyglotProcessContext hosted =
                     new ProtosPolyglotProcessContext(this, process, context);
             process.bindExecutionHostForRuntime(hosted);
@@ -451,6 +456,23 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
         return capability;
     }
 
+    /**
+     * Mints an explicit confined SQLite grant. Only its bound owning Process
+     * Context receives process creation permission; other hosted Processes do not.
+     */
+    public synchronized ProtosObjectValue provisionIsolatedSqlite(
+            ProtosIsolatedSqliteHostFacility.Grant grant) {
+        Objects.requireNonNull(grant, "grant");
+        if (closed) {
+            throw new IllegalStateException("Polyglot runtime host is closed");
+        }
+        return isolatedSqlite.provisionForRuntime(grant);
+    }
+
+    ProtosIsolatedSqliteHostFacility isolatedSqliteForRuntime() {
+        return isolatedSqlite;
+    }
+
     /** Provisions authority only after the caller explicitly selects HOST_CLOCK. */
     public synchronized ProtosClockCapabilityValue provisionHostClock(ProtosPrelude prelude) {
         Objects.requireNonNull(prelude, "prelude");
@@ -569,6 +591,9 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
                     "Polyglot runtime host cannot close while Process Contexts are active");
         }
         Throwable failure = contextCloseFailure.get();
+
+        // Helpers whose Process never reached its termination callback are killed here.
+        isolatedSqlite.closeForRuntime();
 
         // Clock retirement cannot fail and precedes cleanup of independent host resources.
         clockRetired = true;

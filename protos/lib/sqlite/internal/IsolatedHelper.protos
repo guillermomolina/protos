@@ -1,0 +1,718 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Confined durable SQLite helper of std:sqlite: one connection, one session,
+//! one request at a time. It runs only inside the Landlock-confined helper JVM
+//! started by the host (../isolated-helper.protos). The database location comes
+//! exclusively from that trusted bootstrap; no request can name a path.
+//!
+//! Every SQLite call goes through the existing std:sqlite ABI (../abi.protos)
+//! and the existing FFM provider. Native statements stay in a private table of
+//! this module; the protocol carries only opaque per-session Integers that are
+//! never reused. Statements are finalized before the connection is closed.
+//!
+//! Durability: synchronous=FULL and a bounded busy timeout are configured
+//! before READY. The transaction state is always read from
+//! sqlite3_get_autocommit. A failed COMMIT, or one whose result cannot be
+//! established, is never repeated and never reported as a rollback: the session
+//! answers RECONCILE_REQUIRED and ends. Only APPLY_ONCE, an operation with a
+//! declared durable identity (client, operation), records a receipt in the same
+//! transaction. Replay is cooperative: arbitrary SQL can modify internal tables
+//! or transaction boundaries. There is no general exactly-once or SQL integrity
+//! guarantee; callers must preserve both tables and transaction boundaries.
+ABI: import("../abi.protos")
+FFI: import("std:ffi")
+Protocol: import("./IsolatedProtocol.protos")
+Resources: import("./Resources.protos")
+JSON: import("std:json/json")
+Arrays: import("std:collections/array")
+
+_isolatedHelper: (() => {
+    native: import("ffi:sqlite3")
+    getAutocommit: FFI.bind(native, "sqlite3_get_autocommit", FFI.i32, Array(ABI.database))
+    busyTimeout: FFI.bind(native, "sqlite3_busy_timeout", FFI.i32, Array(ABI.database, FFI.i32))
+    changes: FFI.bind(native, "sqlite3_changes", FFI.i32, Array(ABI.database))
+
+    SQLITE_BUSY: 5
+    SQLITE_MISUSE: 21
+    SQLITE_TOOBIG: 18
+    // SQLITE_OPEN_NOFOLLOW: the database name must not be a symbolic link.
+    SQLITE_OPEN_NOFOLLOW: 16777216
+    SYNCHRONOUS_FULL: 2
+    BUSY_TIMEOUT_MS: 250
+    inputLimit: 16777216
+    maxIndex: 2147483647
+
+    fail: () => {
+        Error().signal()
+    }
+
+    sqliteFailure: (code) => {
+        (Error { sqliteCode: code }).signal()
+    }
+
+    /// A database name is one plain file name of the granted directory.
+    validName: (name) => {
+        valid: false
+        if(String.recognizes(name)) {
+            octets: Encoding.UTF8.encode(name)
+            valid = (octets.size() >= 1) && (octets.size() <= 128)
+            if(valid) { valid = octets[0] != 46 }
+            for(octet in octets) {
+                allowed: ((octet >= 97) && (octet <= 122)) || ((octet >= 65) && (octet <= 90)) ||
+                    ((octet >= 48) && (octet <= 57)) || (octet == 46) || (octet == 95) || (octet == 45)
+                if(!allowed) { valid = false }
+            }
+        }
+        if(valid) {
+            for(suffix in Array("-journal", "-wal", "-shm", ".identity")) {
+                tail: Encoding.UTF8.encode(suffix)
+                nameOctets: Encoding.UTF8.encode(name)
+                matches: nameOctets.size() >= tail.size()
+                index: 0
+                while(matches && (index < tail.size())) {
+                    matches = nameOctets[nameOctets.size() - tail.size() + index] == tail[index]
+                    index = index + 1
+                }
+                if(matches) { valid = false }
+            }
+        }
+        valid
+    }
+
+    textLength: (text) => Encoding.UTF8.encode(text).size()
+
+    isBytes: (value) => {
+        recognized: false
+        if(!String.recognizes(value)) {
+            Error.handle(() => {
+                Encoding.Latin1.decode(value)
+                recognized = true
+            }, (error) => null)
+        }
+        recognized
+    }
+
+    /// Serves one session until CLOSE, EOF or a fail-closed condition.
+    /// Answers true for a clean end and false when admission ended fail-closed.
+    serve: (reader, writer, diagnose, directory, databaseName, session, identityHi, identityLo, provision) => {
+        validName(databaseName).ifFalse(() => { fail() })
+        opened: ABI.open(directory + "/" + databaseName,
+            ABI.SQLITE_OPEN_READWRITE + SQLITE_OPEN_NOFOLLOW, null)
+        db: opened[1]
+        if(opened[0] != ABI.SQLITE_OK) {
+            if(db !== null) { Error.handle(() => ABI.release(db), (error) => null) }
+            diagnose("HELPER_OPEN_FAILED " + opened[0])
+            fail()
+        }
+        if(db === null) { fail() }
+
+        statements: Map()
+        nextStatement: 1
+        // Set once a COMMIT result could not be established: no further request.
+        hazard: false
+        running: true
+        clean: true
+        sent: 0
+
+        send: (text) => {
+            sent = sent + 1
+            Protocol.writeMessage(writer, sent, text)
+        }
+
+        // Executes one fixed or admitted SQL text to completion; answers the
+        // step status (SQLITE_DONE on success) and always finalizes.
+        execute: (sql) => {
+            prepared: ABI.prepare(db, sql)
+            handle: prepared[1]
+            code: prepared[0]
+            primary: null
+            Error.handle(() => {
+                if((code == ABI.SQLITE_OK) && (handle !== null)) {
+                    code = ABI.step(handle)
+                    while(code == ABI.SQLITE_ROW) { code = ABI.step(handle) }
+                }
+            }, (error) => { primary = error })
+            if(handle !== null) {
+                Error.handle(() => {
+                    finalized: ABI.finalize(handle)
+                    if((code == ABI.SQLITE_DONE) && (finalized != ABI.SQLITE_OK)) { code = finalized }
+                }, (error) => { if(primary === null) { primary = error } })
+            }
+            if(primary !== null) { primary.signal() }
+            code
+        }
+
+        requireDone: (sql) => {
+            code: execute(sql)
+            if(code != ABI.SQLITE_DONE) { sqliteFailure(code) }
+        }
+
+        // One Integer from the first row of fixed SQL.
+        queryIntegers: (sql, count) => {
+            prepared: ABI.prepare(db, sql)
+            handle: prepared[1]
+            result: null
+            primary: null
+            Error.handle(() => {
+                if(prepared[0] != ABI.SQLITE_OK) { sqliteFailure(prepared[0]) }
+                (handle !== null).ifFalse(() => { fail() })
+                stepped: ABI.step(handle)
+                if(stepped != ABI.SQLITE_ROW) { sqliteFailure(stepped) }
+                result = Array()
+                index: 0
+                while(index < count) {
+                    result = Arrays.append(result, ABI.columnInteger(handle, index))
+                    index = index + 1
+                }
+            }, (error) => { primary = error })
+            if(handle !== null) {
+                Error.handle(() => {
+                    finalized: ABI.finalize(handle)
+                    if(finalized != ABI.SQLITE_OK) { sqliteFailure(finalized) }
+                }, (error) => { if(primary === null) { primary = error } })
+            }
+            if(primary !== null) { primary.signal() }
+            result
+        }
+
+        autocommit: () => getAutocommit(db) != 0
+
+        // Per-connection durability and the durable database identity, before READY.
+        (busyTimeout(db, BUSY_TIMEOUT_MS) == ABI.SQLITE_OK).ifFalse(() => { fail() })
+        requireDone("PRAGMA synchronous=FULL")
+        (queryIntegers("PRAGMA synchronous", 1)[0] == SYNCHRONOUS_FULL).ifFalse(() => { fail() })
+        // D3 identity contract: explicit first provisioning of an empty schema,
+        // otherwise read-only verification against the trusted bootstrap pair.
+        if(provision) {
+            requireDone("BEGIN IMMEDIATE")
+            identityCommitted: false
+            Error.handle(() => {
+                (queryIntegers("SELECT count(*) FROM sqlite_master", 1)[0] == 0).ifFalse(() => { fail() })
+                requireDone("CREATE TABLE protos_database_identity (singleton INTEGER PRIMARY KEY CHECK(singleton = 1), identity_hi INTEGER NOT NULL, identity_lo INTEGER NOT NULL)")
+                prepared: ABI.prepare(db, "INSERT INTO protos_database_identity VALUES (1, ?1, ?2)")
+                handle: prepared[1]
+                (() => {
+                    ((prepared[0] == ABI.SQLITE_OK) && (handle !== null)).ifFalse(() => { fail() })
+                    (ABI.bindInteger(handle, 1, identityHi) == ABI.SQLITE_OK).ifFalse(() => { fail() })
+                    (ABI.bindInteger(handle, 2, identityLo) == ABI.SQLITE_OK).ifFalse(() => { fail() })
+                    (ABI.step(handle) == ABI.SQLITE_DONE).ifFalse(() => { fail() })
+                }).ensure(() => {
+                    if(handle !== null) { (ABI.finalize(handle) == ABI.SQLITE_OK).ifFalse(() => { fail() }) }
+                })
+                requireDone("COMMIT")
+                identityCommitted = true
+            }, (error) => null)
+            if(!identityCommitted) {
+                if(!autocommit()) { execute("ROLLBACK") }
+                diagnose("HELPER_IDENTITY_FAILED")
+                fail()
+            }
+        }
+        (queryIntegers("SELECT count(*) FROM protos_database_identity", 1)[0] == 1).ifFalse(() => { fail() })
+        (queryIntegers("SELECT count(*) FROM protos_database_identity WHERE singleton = 1 AND typeof(identity_hi) = 'integer' AND typeof(identity_lo) = 'integer'", 1)[0] == 1).ifFalse(() => { fail() })
+        identity: queryIntegers("SELECT identity_hi, identity_lo FROM protos_database_identity WHERE singleton = 1", 2)
+        ((identity[0] == identityHi) && (identity[1] == identityLo)).ifFalse(() => { fail() })
+
+        statementOf: (members) => {
+            id: Protocol.id(members["statement"])
+            statements.containsKey(id).ifFalse(() => { fail() })
+            statements[id]
+        }
+
+        codeReply: (request, code) => Protocol.encodeResponse(session, request.id, request.operation,
+            Array(Protocol.integerNode(code)))
+
+        bindValue: (handle, index, value) => {
+            code: null
+            if(value === null) { code = ABI.bindNull(handle, index) }
+            if(Integer.recognizes(value)) { code = ABI.bindInteger(handle, index, value) }
+            if(Float.recognizes(value)) { code = ABI.bindFloat(handle, index, value) }
+            if(String.recognizes(value)) {
+                (textLength(value) <= inputLimit).ifFalse(() => { fail() })
+                code = ABI.bindText(handle, index, value)
+            }
+            if(code === null) {
+                isBytes(value).ifFalse(() => { fail() })
+                (value.size() <= inputLimit).ifFalse(() => { fail() })
+                code = ABI.bindBlob(handle, index, value)
+            }
+            code
+        }
+
+        // One copied cell, or a failure cell with the SQLite status (null for
+        // an encoding failure) that the client reports exactly like column().
+        cell: (handle, index) => {
+            kind: ABI.columnType(handle, index)
+            node: null
+            if(kind == ABI.SQLITE_INTEGER) { node = Protocol.encodeValue(ABI.columnInteger(handle, index)) }
+            if(kind == ABI.SQLITE_FLOAT) { node = Protocol.encodeValue(ABI.columnFloat(handle, index)) }
+            if(kind == ABI.SQLITE_NULL) { node = Protocol.encodeValue(null) }
+            if((kind == ABI.SQLITE_TEXT) || (kind == ABI.SQLITE_BLOB)) {
+                failedCode: null
+                copied: null
+                ok: false
+                Error.handle(() => {
+                    copied = ABI.copyColumn(db, handle, index, kind == ABI.SQLITE_TEXT, (code) => {
+                        failedCode = code
+                        Error()
+                    })
+                    ok = true
+                }, (error) => null)
+                if(ok) {
+                    node = Protocol.encodeValue(copied)
+                } else {
+                    node = JSON.object("t", JSON.string("failure"), "v", Protocol.nullableIntegerNode(failedCode))
+                }
+            }
+            if(node === null) {
+                node = JSON.object("t", JSON.string("failure"), "v", Protocol.integerNode(kind))
+            }
+            node
+        }
+
+        step: (request) => {
+            handle: statementOf(request.members)
+            code: ABI.step(handle)
+            rowNode: JSON.nullValue()
+            if(code == ABI.SQLITE_ROW) {
+                count: ABI.columnCount(handle)
+                cells: Array()
+                index: 0
+                encodedSize: 0
+                while((index < count) && (code == ABI.SQLITE_ROW)) {
+                    node: cell(handle, index)
+                    encodedSize = encodedSize + Encoding.UTF8.encode(JSON.encode(node)).size() + 1
+                    // Leave room for the fixed response envelope before retaining
+                    // another value; an arbitrarily wide row cannot accumulate
+                    // an unbounded aggregate before the transport check.
+                    if(encodedSize > (Protocol.MESSAGE_LIMIT - 1024)) {
+                        code = SQLITE_TOOBIG
+                    } else {
+                        cells = Arrays.append(cells, node)
+                    }
+                    index = index + 1
+                }
+                if(code == ABI.SQLITE_ROW) { rowNode = JSON.array(...cells) }
+            }
+            text: Protocol.encodeResponse(session, request.id, "STEP", Array(Protocol.integerNode(code), rowNode))
+            if(Encoding.UTF8.encode(text).size() > Protocol.MESSAGE_LIMIT) {
+                // The row cannot be transported; the statement position is not
+                // replayed and the client reports the step as failed.
+                text = Protocol.encodeResponse(session, request.id, "STEP",
+                    Array(Protocol.integerNode(SQLITE_TOOBIG), JSON.nullValue()))
+            }
+            text
+        }
+
+        prepare: (request) => {
+            sql: Protocol.string(request.members["sql"])
+            (nextStatement < 9223372036854775807).ifFalse(() => { fail() })
+            prepared: prepareSingle(sql)
+            statementNode: JSON.nullValue()
+            if(prepared[1] !== null) {
+                id: nextStatement
+                nextStatement = nextStatement + 1
+                statements[id] = prepared[1]
+                statementNode = Protocol.integerNode(id)
+            }
+            Protocol.encodeResponse(session, request.id, "PREPARE", Array(Protocol.integerNode(prepared[0]),
+                statementNode, Protocol.nullableIntegerNode(prepared[2])))
+        }
+
+        bind: (request) => {
+            handle: statementOf(request.members)
+            index: Protocol.i64(request.members["index"])
+            ((index >= 1) && (index <= maxIndex)).ifFalse(() => { fail() })
+            codeReply(request, bindValue(handle, index, Protocol.decodeValue(request.members["value"])))
+        }
+
+        finalize: (request) => {
+            id: Protocol.id(request.members["statement"])
+            statements.containsKey(id).ifFalse(() => { fail() })
+            handle: statements[id]
+            statements.remove(id)
+            codeReply(request, ABI.finalize(handle))
+        }
+
+        transactionReply: (request, code) => {
+            status: code
+            if(code == ABI.SQLITE_DONE) { status = ABI.SQLITE_OK }
+            Protocol.encodeResponse(session, request.id, request.operation,
+                Array(Protocol.integerNode(status), JSON.boolean(autocommit())))
+        }
+
+        commit: (request) => {
+            code: null
+            // A native failure inside COMMIT establishes no result: end the session.
+            Error.handle(() => { code = execute("COMMIT") }, (error) => {
+                hazard = true
+                error.signal()
+            })
+            if((code != ABI.SQLITE_DONE) && (code != SQLITE_BUSY)) {
+                // BUSY leaves the transaction open and nothing committed. Any
+                // other failure is not claimed either way and ends the session.
+                hazard = true
+            }
+            transactionReply(request, code)
+        }
+
+        outcomeReply: (request, outcome, changed, code) => Protocol.encodeResponse(session, request.id,
+            request.operation, Array(JSON.string(outcome), Protocol.nullableIntegerNode(changed),
+                Protocol.nullableIntegerNode(code)))
+
+        receiptsExist: () => queryIntegers("SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'protos_operation_receipts'", 1)[0] == 1
+
+        // Answers Array(requestText, changes) of a durable receipt, or null.
+        receipt: (client, operation) => {
+            found: null
+            prepared: ABI.prepare(db, "SELECT request, changes FROM protos_operation_receipts WHERE client_id = ?1 AND operation_id = ?2")
+            handle: prepared[1]
+            primary: null
+            Error.handle(() => {
+                if(prepared[0] != ABI.SQLITE_OK) { sqliteFailure(prepared[0]) }
+                (handle !== null).ifFalse(() => { fail() })
+                bound: ABI.bindInteger(handle, 1, client)
+                if(bound != ABI.SQLITE_OK) { sqliteFailure(bound) }
+                bound = ABI.bindInteger(handle, 2, operation)
+                if(bound != ABI.SQLITE_OK) { sqliteFailure(bound) }
+                code: ABI.step(handle)
+                if(code == ABI.SQLITE_ROW) {
+                    found = Array(ABI.copyColumn(db, handle, 0, true, (status) => Error { sqliteCode: status }),
+                        ABI.columnInteger(handle, 1))
+                    code = ABI.step(handle)
+                }
+                if(code != ABI.SQLITE_DONE) { sqliteFailure(code) }
+            }, (error) => { primary = error })
+            if(handle !== null) {
+                Error.handle(() => {
+                    finalized: ABI.finalize(handle)
+                    if(finalized != ABI.SQLITE_OK) { sqliteFailure(finalized) }
+                }, (error) => { if(primary === null) { primary = error } })
+            }
+            if(primary !== null) { primary.signal() }
+            found
+        }
+
+        // Validate the complete SQL before publishing a statement id. SQLite
+        // parses each tail; no client-only proof or prefix parser is trusted.
+        // The admitted remote ABI tail is zero because the helper checked it all.
+        prepareSingle: (sql) => {
+            octets: Resources.admitSql(sql)
+            first: ABI.prepare(db, sql)
+            handle: first[1]
+            code: first[0]
+            valid: code == ABI.SQLITE_OK
+            remaining: first[2]
+            if(remaining === null) { valid = false }
+            if(valid) {
+                if((remaining < 0) || (remaining > octets.size()) ||
+                    ((remaining == octets.size()) && (remaining > 0))) { valid = false }
+            }
+            while(valid && (remaining > 0)) {
+                next: ABI.prepare(db, Resources.suffix(octets, remaining))
+                if(next[1] !== null) {
+                    ABI.finalize(next[1])
+                    valid = false
+                }
+                if(next[0] != ABI.SQLITE_OK) { code = next[0]; valid = false }
+                if(next[2] === null) { valid = false }
+                if(valid) {
+                    if((next[2] < 0) || (next[2] >= remaining)) { valid = false }
+                    remaining = next[2]
+                }
+            }
+            if(!valid) {
+                if(code == ABI.SQLITE_OK) { code = SQLITE_MISUSE }
+                if(handle !== null) { ABI.finalize(handle) }
+                handle = null
+            }
+            Array(code, handle, 0)
+        }
+
+        applyOnce: (request) => {
+            client: Protocol.id(request.members["client"])
+            operation: Protocol.id(request.members["operation"])
+            sql: Protocol.string(request.members["sql"])
+            parameterNodes: request.members["parameters"]
+            (parameterNodes.kind === "array").ifFalse(() => { fail() })
+            parameters: Array()
+            for(node in parameterNodes.value) {
+                parameters = Arrays.append(parameters, Protocol.decodeValue(node))
+            }
+            // The canonical request text recorded with the receipt.
+            requestText: JSON.encode(JSON.array(JSON.string(sql), parameterNodes))
+            reply: null
+            if(!autocommit()) {
+                reply = outcomeReply(request, "IN_TRANSACTION", null, null)
+            } else {
+                begun: execute("BEGIN IMMEDIATE")
+                if(begun == SQLITE_BUSY) {
+                    reply = outcomeReply(request, "BUSY", null, SQLITE_BUSY)
+                } else {
+                    if(begun != ABI.SQLITE_DONE) {
+                        reply = outcomeReply(request, "FAILED", null, begun)
+                    }
+                }
+            }
+            if(reply === null) {
+                committing: false
+                failure: null
+                Error.handle(() => {
+                    requireDone("CREATE TABLE IF NOT EXISTS protos_operation_receipts (client_id INTEGER NOT NULL, operation_id INTEGER NOT NULL, request TEXT NOT NULL, changes INTEGER NOT NULL, PRIMARY KEY (client_id, operation_id))")
+                    existing: receipt(client, operation)
+                    if(existing !== null) {
+                        requireDone("ROLLBACK")
+                        if(existing[0] == requestText) {
+                            reply = outcomeReply(request, "REPLAYED", existing[1], null)
+                        } else {
+                            reply = outcomeReply(request, "CONFLICT", existing[1], null)
+                        }
+                    } else {
+                        prepared: prepareSingle(sql)
+                        handle: prepared[1]
+                        if(handle === null) {
+                            failure = prepared[0]
+                            if(failure == ABI.SQLITE_OK) { failure = SQLITE_MISUSE }
+                            fail()
+                        }
+                        code: ABI.SQLITE_DONE
+                        (() => {
+                            index: 0
+                            while((index < parameters.size()) && (code == ABI.SQLITE_DONE)) {
+                                bound: bindValue(handle, index + 1, parameters[index])
+                                if(bound != ABI.SQLITE_OK) { code = bound }
+                                index = index + 1
+                            }
+                            if(code == ABI.SQLITE_DONE) {
+                                code = ABI.step(handle)
+                                while(code == ABI.SQLITE_ROW) { code = ABI.step(handle) }
+                            }
+                        }).ensure(() => {
+                            finalized: ABI.finalize(handle)
+                            if((code == ABI.SQLITE_DONE) && (finalized != ABI.SQLITE_OK)) { code = finalized }
+                        })
+                        if(code != ABI.SQLITE_DONE) {
+                            failure = code
+                            fail()
+                        }
+                        changed: changes(db)
+                        recorded: ABI.prepare(db, "INSERT INTO protos_operation_receipts(client_id, operation_id, request, changes) VALUES (?1, ?2, ?3, ?4)")
+                        insertHandle: recorded[1]
+                        insertCode: recorded[0]
+                        (() => {
+                            if((insertCode == ABI.SQLITE_OK) && (insertHandle !== null)) {
+                                insertCode = ABI.bindInteger(insertHandle, 1, client)
+                                if(insertCode == ABI.SQLITE_OK) { insertCode = ABI.bindInteger(insertHandle, 2, operation) }
+                                if(insertCode == ABI.SQLITE_OK) { insertCode = ABI.bindText(insertHandle, 3, requestText) }
+                                if(insertCode == ABI.SQLITE_OK) { insertCode = ABI.bindInteger(insertHandle, 4, changed) }
+                                if(insertCode == ABI.SQLITE_OK) { insertCode = ABI.step(insertHandle) }
+                            }
+                        }).ensure(() => {
+                            if(insertHandle !== null) {
+                                finalized: ABI.finalize(insertHandle)
+                                if((insertCode == ABI.SQLITE_DONE) && (finalized != ABI.SQLITE_OK)) { insertCode = finalized }
+                            }
+                        })
+                        if(insertCode != ABI.SQLITE_DONE) {
+                            failure = insertCode
+                            fail()
+                        }
+                        committing = true
+                        committed: execute("COMMIT")
+                        if(committed == ABI.SQLITE_DONE) {
+                            reply = outcomeReply(request, "APPLIED", changed, null)
+                        } else {
+                            if(committed == SQLITE_BUSY) {
+                                // Nothing committed; the open transaction is rolled back.
+                                committing = false
+                                failure = SQLITE_BUSY
+                                fail()
+                            }
+                            hazard = true
+                            reply = outcomeReply(request, "RECONCILE_REQUIRED", null, committed)
+                        }
+                    }
+                }, (error) => {
+                    Error.handle(() => { failure = error.sqliteCode }, (missing) => null)
+                    if(reply === null) {
+                        if(committing) {
+                            hazard = true
+                            reply = outcomeReply(request, "RECONCILE_REQUIRED", null, null)
+                        } else {
+                            if(!autocommit()) { execute("ROLLBACK") }
+                            if(!autocommit()) {
+                                hazard = true
+                                reply = outcomeReply(request, "RECONCILE_REQUIRED", null, failure)
+                            } else {
+                                if(failure == SQLITE_BUSY) {
+                                    reply = outcomeReply(request, "BUSY", null, SQLITE_BUSY)
+                                } else {
+                                    reply = outcomeReply(request, "FAILED", null, failure)
+                                }
+                            }
+                        }
+                    }
+                })
+            }
+            reply
+        }
+
+        lookup: (request) => {
+            client: Protocol.id(request.members["client"])
+            operation: Protocol.id(request.members["operation"])
+            found: null
+            if(receiptsExist()) { found = receipt(client, operation) }
+            if(found === null) {
+                Protocol.encodeResponse(session, request.id, "LOOKUP",
+                    Array(JSON.string("ABSENT"), JSON.nullValue()))
+            } else {
+                Protocol.encodeResponse(session, request.id, "LOOKUP",
+                    Array(JSON.string("FOUND"), Protocol.integerNode(found[1])))
+            }
+        }
+
+        // Finalizes every remaining statement, then closes the connection once.
+        closeAll: () => {
+            code: ABI.SQLITE_OK
+            primary: null
+            if(db !== null) {
+                ids: Array()
+                statements.each((id, handle) => { ids = Arrays.append(ids, id) })
+                for(id in ids) {
+                    handle: statements[id]
+                    statements.remove(id)
+                    Error.handle(() => {
+                        finalized: ABI.finalize(handle)
+                        if((code == ABI.SQLITE_OK) && (finalized != ABI.SQLITE_OK)) { code = finalized }
+                    }, (error) => { if(primary === null) { primary = error } })
+                }
+                retired: db
+                db = null
+                Error.handle(() => {
+                    released: ABI.release(retired)
+                    if(code == ABI.SQLITE_OK) { code = released }
+                }, (error) => { if(primary === null) { primary = error } })
+            }
+            if(primary !== null) { primary.signal() }
+            code
+        }
+
+        dispatch: (request) => {
+            operation: request.operation
+            reply: null
+            if(operation == "PREPARE") { reply = prepare(request) }
+            if(operation == "BIND") { reply = bind(request) }
+            if(operation == "STEP") { reply = step(request) }
+            if(operation == "RESET") { reply = codeReply(request, ABI.reset(statementOf(request.members))) }
+            if(operation == "CLEAR_BINDINGS") {
+                reply = codeReply(request, ABI.clearBindings(statementOf(request.members)))
+            }
+            if(operation == "FINALIZE") { reply = finalize(request) }
+            if(operation == "BEGIN") { reply = transactionReply(request, execute("BEGIN IMMEDIATE")) }
+            if(operation == "COMMIT") { reply = commit(request) }
+            if(operation == "ROLLBACK") { reply = transactionReply(request, execute("ROLLBACK")) }
+            if(operation == "AUTOCOMMIT") {
+                reply = Protocol.encodeResponse(session, request.id, "AUTOCOMMIT", Array(JSON.boolean(autocommit())))
+            }
+            if(operation == "APPLY_ONCE") { reply = applyOnce(request) }
+            if(operation == "LOOKUP") { reply = lookup(request) }
+            if(operation == "CLOSE") {
+                reply = codeReply(request, closeAll())
+                running = false
+            }
+            (reply !== null).ifFalse(() => { fail() })
+            reply
+        }
+
+        (() => {
+            send(Protocol.encodeReady(session, identity[0], identity[1]))
+            lastId: 0
+            while(running) {
+                text: null
+                admitted: null
+                rejected: null
+                Error.handle(() => {
+                    text = Protocol.readMessage(reader, lastId + 1)
+                }, (error) => {
+                    rejected = "MALFORMED_FRAME"
+                })
+                if((rejected === null) && (text === null)) {
+                    // EOF: admission ends; an open transaction is rolled back by
+                    // closing the connection, and nothing is claimed to anyone.
+                    running = false
+                } else {
+                    if(rejected === null) {
+                        Error.handle(() => {
+                            admitted = Protocol.decodeRequest(text)
+                        }, (error) => {
+                            rejected = "MALFORMED_REQUEST"
+                        })
+                    }
+                    if(rejected === null) {
+                        if(admitted.id != (lastId + 1)) { rejected = "NON_CONSECUTIVE_ID" }
+                        if(admitted.session != session) { rejected = "WRONG_SESSION" }
+                    }
+                    if(rejected !== null) {
+                        send(Protocol.encodeRejection(session, null, rejected))
+                        diagnose("HELPER_REJECTED " + rejected)
+                        clean = false
+                        running = false
+                    } else {
+                        lastId = admitted.id
+                        reply: null
+                        Error.handle(() => {
+                            reply = dispatch(admitted)
+                        }, (error) => {
+                            // A native failure escaping COMMIT or APPLY_ONCE (including
+                            // its rollback) leaves the transaction outcome unestablished.
+                            if((admitted.operation == "COMMIT") || (admitted.operation == "APPLY_ONCE")) { hazard = true }
+                            nativeCode: null
+                            Error.handle(() => { nativeCode = error.sqliteCode }, (missing) => null)
+                            if(nativeCode !== null) {
+                                reply = Protocol.encodeSqliteFailure(session, admitted.id, nativeCode)
+                            }
+                        })
+                        if(reply === null) {
+                            send(Protocol.encodeRejection(session, admitted.id, "INVALID_ARGUMENT"))
+                            diagnose("HELPER_REJECTED INVALID_ARGUMENT")
+                            clean = false
+                            running = false
+                        } else {
+                            send(reply)
+                            if(hazard) {
+                                diagnose("HELPER_RECONCILE_REQUIRED")
+                                running = false
+                            }
+                        }
+                    }
+                }
+            }
+        }).ensure(() => {
+            Error.handle(() => closeAll(), (error) => null)
+        })
+        clean
+    }
+
+    surface: {
+        serve: serve
+        validName: validName
+    }
+    surface.freeze()
+    surface
+})()
+
+serve: _isolatedHelper.serve
+validName: _isolatedHelper.validName

@@ -91,6 +91,23 @@ public final class ProtosPolyglotExecutionContext implements AutoCloseable {
             OutputStream err,
             Runnable closedCallback,
             boolean inspectionAuthorized) {
+        return open(engine, in, out, err, closedCallback, inspectionAuthorized, false);
+    }
+
+    /**
+     * As above; {@code processCreationAuthorized} additionally allows process creation in this
+     * Context. Only a host that holds an explicit durable SQLite grant selects it, and only the
+     * SQLite host facility creates processes (through the Context's own process builder).
+     */
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
+    static ProtosPolyglotExecutionContext open(
+            Engine engine,
+            InputStream in,
+            OutputStream out,
+            OutputStream err,
+            Runnable closedCallback,
+            boolean inspectionAuthorized,
+            boolean processCreationAuthorized) {
         Objects.requireNonNull(in, "in");
         Objects.requireNonNull(out, "out");
         Objects.requireNonNull(err, "err");
@@ -109,6 +126,9 @@ public final class ProtosPolyglotExecutionContext implements AutoCloseable {
         }
         if (inspectionAuthorized) {
             builder.option("protos.Inspect", "true");
+        }
+        if (processCreationAuthorized) {
+            builder.allowCreateProcess(true);
         }
         Context context = builder.build();
         boolean initialized = false;

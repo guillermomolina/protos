@@ -1,0 +1,77 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Packaged entry of the confined durable SQLite helper of std:sqlite. The
+//! Protos host starts it only behind lib/sqlite/sandbox-exec, as a separate JVM
+//! whose only native authority is the packaged FFM provider. It is not an
+//! application program and not a public API.
+//!
+//! Application arguments, all from the trusted host bootstrap, never from IPC:
+//!   DIRECTORY DATABASE_NAME SESSION IDENTITY_HI IDENTITY_LO MODE
+//! stdin carries only client frames, stdout only helper frames, stderr only
+//! bounded diagnostics. The process fails when admission ended fail-closed.
+ProcessStreams: import("std:io/process_streams")
+JSON: import("std:json/json")
+Helper: import("./internal/IsolatedHelper.protos")
+
+arguments: process.args()
+diagnostics: ProcessStreams.stderrWriter(process)
+
+diagnose: (text) => {
+    diagnostics.writeLine(text).value()
+    diagnostics.flush().value()
+}
+
+// Exact canonical signed 64-bit Integer text.
+integerArgument: (text) => {
+    node: JSON.parse(text)
+    (node.kind === "number").ifFalse(() => { Error().signal() })
+    (node.value.exponent == 0).ifFalse(() => { Error().signal() })
+    value: node.value.coefficient
+    Integer.recognizes(value).ifFalse(() => { Error().signal() })
+    ((value >= -9223372036854775808) && (value <= 9223372036854775807)).ifFalse(() => { Error().signal() })
+    (JSON.encode(JSON.number(value, 0)) == text).ifFalse(() => { Error().signal() })
+    value
+}
+
+if(arguments.size() != 6) {
+    diagnose("HELPER_INVALID_BOOTSTRAP")
+    Error().signal()
+}
+directory: arguments[0]
+databaseName: arguments[1]
+session: null
+Error.handle(() => {
+    session = integerArgument(arguments[2])
+}, (error) => {
+    session = null
+})
+if((session === null) || !Helper.validName(databaseName)) {
+    diagnose("HELPER_INVALID_BOOTSTRAP")
+    Error().signal()
+}
+
+(session > 0).ifFalse(() => { Error().signal() })
+identityHi: integerArgument(arguments[3])
+identityLo: integerArgument(arguments[4])
+mode: arguments[5]
+((mode == "PROVISION") || (mode == "VERIFY")).ifFalse(() => { Error().signal() })
+
+clean: Helper.serve(ProcessStreams.stdinReader(process), ProcessStreams.stdoutWriter(process),
+    diagnose, directory, databaseName, session, identityHi, identityLo, mode == "PROVISION")
+if(!clean) {
+    diagnose("HELPER_ADMISSION_FAILED_CLOSED")
+    Error().signal()
+}

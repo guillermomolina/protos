@@ -76,7 +76,11 @@ isBytes: (value) => {
 
 // The ABI and terminal-Future facility are injected privately. This also lets
 // deterministic Protos fixtures exercise acquisition and destructor failures.
-openMemory: (abi, terminal, SQLiteError) => {
+// `location` and `flags` are passed unchanged to abi.open: the in-memory ABI
+// receives exactly ":memory:" and its fixed flags (openMemory below); the
+// isolated durable ABI receives null for both, because its database is fixed
+// by the trusted helper bootstrap and never named by the client.
+openConnection: (abi, terminal, SQLiteError, location, flags) => {
     failure: (operation, code) => SQLiteError {
         operation: operation
         code: code
@@ -90,7 +94,7 @@ openMemory: (abi, terminal, SQLiteError) => {
             Error.handle(() => release(handle), (error) => null)
         }
     }
-    opened: abi.open(":memory:", abi.SQLITE_OPEN_READWRITE + abi.SQLITE_OPEN_CREATE + abi.SQLITE_OPEN_MEMORY, null)
+    opened: abi.open(location, flags, null)
     native: opened[1]
     published: false
     (() => {
@@ -371,3 +375,7 @@ openMemory: (abi, terminal, SQLiteError) => {
         if(!published) { discard(native, abi.release) }
     })
 }
+
+// Unchanged LIB029/LIB030 in-memory acquisition.
+openMemory: (abi, terminal, SQLiteError) => openConnection(abi, terminal, SQLiteError, ":memory:",
+    abi.SQLITE_OPEN_READWRITE + abi.SQLITE_OPEN_CREATE + abi.SQLITE_OPEN_MEMORY)

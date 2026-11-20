@@ -102,6 +102,15 @@ public final class ProtosCli {
      */
     private FilesystemGrant filesystemGrant = FilesystemGrant.NONE;
 
+    /**
+     * Explicit durable SQLite grant (one private directory) for direct file execution only; reset
+     * by every dispatch. Independent of every other application option.
+     */
+    private ProtosIsolatedSqliteHostFacility.Grant sqliteGrant =
+            ProtosIsolatedSqliteHostFacility.Grant.NONE;
+
+    private static final String ALLOW_SQLITE_PREFIX = "--allow-sqlite";
+
     private static final String ALLOW_FILESYSTEM_OPTION = "--allow-filesystem";
     private static final String ALLOW_FILESYSTEM_PREFIX = "--allow-filesystem=";
 
@@ -144,6 +153,7 @@ public final class ProtosCli {
                             || value.equals("--allow-entropy")
                             || value.equals("--allow-clock")
                             || isFilesystemGrantOption(value)
+                            || isSqliteGrantOption(value)
                             || value.equals("--service")
                             || value.startsWith("--service="))) {
                 return usage(err, "application permissions and service mode are not available to bundled Tools");
@@ -191,6 +201,7 @@ public final class ProtosCli {
         entropyAuthorized = false;
         clockAuthorized = false;
         filesystemGrant = FilesystemGrant.NONE;
+        sqliteGrant = ProtosIsolatedSqliteHostFacility.Grant.NONE;
         try {
             // Relative grant roots resolve against the invocation directory, captured once here.
             Path invocationDirectory = Path.of("").toAbsolutePath();
@@ -202,6 +213,7 @@ public final class ProtosCli {
             boolean allowEntropy = false;
             boolean allowClock = false;
             Path grantedFilesystemRoot = null;
+            ProtosIsolatedSqliteHostFacility.Grant grantedSqlite = null;
             String requestedService = null;
             int first = 0;
             while (first < args.length
@@ -213,8 +225,21 @@ public final class ProtosCli {
                             || args[first].equals("--allow-entropy")
                             || args[first].equals("--allow-clock")
                             || isFilesystemGrantOption(args[first])
+                            || isSqliteGrantOption(args[first])
                             || args[first].equals("--service")
                             || args[first].startsWith("--service="))) {
+                if (isSqliteGrantOption(args[first])) {
+                    if (grantedSqlite != null) {
+                        return usage(err, "--allow-sqlite may be given only once");
+                    }
+                    try {
+                        grantedSqlite = sqliteGrant(args[first]);
+                    } catch (IllegalArgumentException invalid) {
+                        return usage(err, invalid.getMessage());
+                    }
+                    first++;
+                    continue;
+                }
                 if (isFilesystemGrantOption(args[first])) {
                     if (grantedFilesystemRoot != null) {
                         return usage(err, "--allow-filesystem may be given only once");
@@ -328,6 +353,17 @@ public final class ProtosCli {
             entropyAuthorized = allowEntropy;
             clockAuthorized = allowClock;
             filesystemGrant = filesystemGrant(grantedFilesystemRoot);
+
+            if (grantedSqlite != null
+                    && (args.length == 0
+                            || args[0].startsWith("-")
+                            || SUBCOMMANDS.contains(args[0])
+                            || requestedService != null)) {
+                return usage(err, "--allow-sqlite applies only to direct file execution");
+            }
+            if (grantedSqlite != null) {
+                sqliteGrant = grantedSqlite;
+            }
 
             if (args.length > 0
                     && SUBCOMMANDS.contains(args[0])
@@ -544,6 +580,38 @@ public final class ProtosCli {
         } catch (Throwable e) {
             return internalError(err, e);
         }
+    }
+
+    private static boolean isSqliteGrantOption(String value) {
+        return value.equals(ALLOW_SQLITE_PREFIX) || value.startsWith(ALLOW_SQLITE_PREFIX + "=");
+    }
+
+    /**
+     * Parses and validates one {@code --allow-sqlite=<directory>} option. The directory must be
+     * absolute, canonical, existing and private; it is never created or resolved against the
+     * invocation directory, and it must not overlap the toolchain or the Java runtime.
+     */
+    private static ProtosIsolatedSqliteHostFacility.Grant sqliteGrant(String option) {
+        if (!option.startsWith(ALLOW_SQLITE_PREFIX + "=")) {
+            throw new IllegalArgumentException("--allow-sqlite requires =<directory>");
+        }
+        String value = option.substring(ALLOW_SQLITE_PREFIX.length() + 1);
+        if (value.isEmpty()) {
+            throw new IllegalArgumentException("--allow-sqlite requires a non-empty directory");
+        }
+        Path requested;
+        Path toolchainRoot;
+        try {
+            requested = Path.of(value);
+        } catch (InvalidPathException invalid) {
+            throw new IllegalArgumentException("invalid --allow-sqlite directory: " + value);
+        }
+        try {
+            toolchainRoot = core().getParent().getParent().getParent();
+        } catch (IOException missing) {
+            throw new IllegalArgumentException("--allow-sqlite requires a located Protos toolchain");
+        }
+        return ProtosIsolatedSqliteHostFacility.Grant.directory(requested, toolchainRoot);
     }
 
     private static boolean isFilesystemGrantOption(String value) {
@@ -2003,6 +2071,7 @@ public final class ProtosCli {
                             resolverGrant,
                             entropyGrant, clockGrant,
                             filesystemGrant,
+                            sqliteGrant,
                             runtimeHost);
             bootstrapped = true;
         } finally {
@@ -2362,6 +2431,7 @@ public final class ProtosCli {
                         + "  protos lint [--output text|json] [--fail-on-warning] [<file>]\n"
                         + "  protos [--inspect] [--allow-network] [--allow-resolver] [--allow-entropy] [--allow-clock]\n"
                         + "  protos --allow-filesystem=<dir> <file> [args...]\n"
+                        + "  protos --allow-sqlite=<dir> <file> [args...]\n"
                         + "  protos --allow-filesystem=<dir> -e <source> [args...]\n"
                         + "  protos --allow-filesystem=<dir>\n"
                         + "  protos run --allow-filesystem=<dir> <entry> [args...]\n"
@@ -2376,6 +2446,8 @@ public final class ProtosCli {
                         + "  --allow-clock (initial application RootActor only; synchronous epoch nanoseconds)\n"
                         + "  --allow-filesystem=<dir> (application RootActor only; one existing "
                         + "directory)\n"
+                        + "  --allow-sqlite=<dir> (direct <file> RootActor only; Linux Landlock; "
+                        + "one existing private absolute directory for confined durable SQLite)\n"
                         + "  --service=<binding> (direct SOURCE message-service entry)\n"
                         + "  -h, --help\n"
                         + "  -v, --version\n\n"

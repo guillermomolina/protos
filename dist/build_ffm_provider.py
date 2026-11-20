@@ -126,6 +126,7 @@ def build_provider_jar(
         for path in compiled:
             jar.write(path, path.relative_to(classes).as_posix())
         jar.write(service, SERVICE)
+        jar.write(ROOT / "LICENSE.TXT", "META-INF/LICENSE.TXT")
     partial.replace(output_jar)
     return output_jar
 

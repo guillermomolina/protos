@@ -578,3 +578,20 @@ borrowed-memory descriptor or copying operation.
 Linux x86-64 portable JVM only; no Native Image, Windows, macOS, structs,
 callbacks, variadic functions, C++, TEXT/BLOB input binding with
 `SQLITE_TRANSIENT`, or native sandbox.
+
+
+## Private provider in the confined SQLite helper
+
+The provisional PLAT074 portable build packages another copy of this same
+provider as `lib/sqlite/protos-ffm-provider.jar`, with its service descriptor and
+APL license. It is not placed in the parent's runtime projection or automatically
+registered in the main JVM. The existing `openMemory()` path continues to require
+explicit external provider authorization.
+
+Only the helper JVM receives that provider option and native-access permission,
+after the packaged launcher has installed Linux Landlock ABI-10 confinement.
+SQLite, protocol, transactions and receipts stay in Protos. This does not turn
+the generic in-process FFM provider into a sandbox. A native fault can still kill
+the helper; native work may block, and loss of a COMMIT response is uncertain.
+See [the provisional durable contract](../library/sqlite.md#durable-confined-sqlite-provisional-d256-contract).
+Production integration, packaging and distribution acceptance are **NOT RUN**.

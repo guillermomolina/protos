@@ -1,0 +1,772 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Durable confined SQLite connection of std:sqlite (client side).
+//!
+//! The public Connection and Statement objects are produced by the same
+//! Resources.openConnection code as openMemory(), over a private remote ABI
+//! that forwards each native SQLite call to the confined helper. Statement
+//! state, input admission, single-statement prepare, value copying and the
+//! terminal-Future close contract are therefore exactly the LIB029/LIB030 ones.
+//! The client owns no native handle and loads no native library.
+//!
+//! Every call is synchronous for the owning Actor: it writes one request and
+//! waits for its correlated reply through ordinary Future.value() waits. There
+//! is no hidden thread, no automatic task and no timeout. When the channel ends
+//! before the reply, the outcome is UNCERTAIN (SQLiteUncertainError): the
+//! request may or may not have taken effect, nothing is retried and no rollback
+//! is claimed. The connection is then permanently broken; close() still retires
+//! it.
+Resources: import("./Resources.protos")
+Protocol: import("./IsolatedProtocol.protos")
+JSON: import("std:json/json")
+Arrays: import("std:collections/array")
+
+SQLITE_OK: 0
+SQLITE_BUSY: 5
+SQLITE_ROW: 100
+SQLITE_DONE: 101
+SQLITE_INTEGER: 1
+SQLITE_FLOAT: 2
+SQLITE_TEXT: 3
+SQLITE_BLOB: 4
+SQLITE_NULL: 5
+inputLimit: 16777216
+
+// Same rule as the host and the helper: one plain file name.
+validName: (name) => {
+    valid: false
+    if(String.recognizes(name)) {
+        octets: Encoding.UTF8.encode(name)
+        valid = (octets.size() >= 1) && (octets.size() <= 128)
+        if(valid) { valid = octets[0] != 46 }
+        for(octet in octets) {
+            allowed: ((octet >= 97) && (octet <= 122)) || ((octet >= 65) && (octet <= 90)) ||
+                ((octet >= 48) && (octet <= 57)) || (octet == 46) || (octet == 95) || (octet == 45)
+            if(!allowed) { valid = false }
+        }
+    }
+    if(valid) {
+        for(suffix in Array("-journal", "-wal", "-shm", ".identity")) {
+            tail: Encoding.UTF8.encode(suffix)
+            nameOctets: Encoding.UTF8.encode(name)
+            matches: nameOctets.size() >= tail.size()
+            index: 0
+            while(matches && (index < tail.size())) {
+                matches = nameOctets[nameOctets.size() - tail.size() + index] == tail[index]
+                index = index + 1
+            }
+            if(matches) { valid = false }
+        }
+    }
+    valid
+}
+
+isBytes: (value) => {
+    recognized: false
+    if(!String.recognizes(value)) {
+        Error.handle(() => {
+            Encoding.Latin1.decode(value)
+            recognized = true
+        }, (error) => null)
+    }
+    recognized
+}
+
+// The same value domain and bounds as Statement.bind.
+admitValue: (value) => {
+    admitted: (value === null) || Float.recognizes(value)
+    if(Integer.recognizes(value)) {
+        admitted = (value >= -9223372036854775808) && (value <= 9223372036854775807)
+    }
+    if(String.recognizes(value)) {
+        size: null
+        Error.handle(() => { size = Encoding.UTF8.encode(value).size() }, (error) => null)
+        admitted = (size !== null) && (size <= inputLimit)
+    }
+    if(!admitted && isBytes(value)) { admitted = value.size() <= inputLimit }
+    admitted.ifFalse(() => { Error().signal() })
+    value
+}
+
+// A durable operation identity: Array(clientId, operationId) of positive i64.
+admitKey: (key) => {
+    valid: false
+    Error.handle(() => {
+        valid = (key.size() == 2) && Protocol.isId(key[0]) && Protocol.isId(key[1])
+    }, (error) => null)
+    valid.ifFalse(() => { Error().signal() })
+    key
+}
+
+// Handler-style category test: the error itself or any delegation parent is
+// `prototype`. Error prototypes define no `recognizes`; sending it would signal
+// SlotNotFound and replace the error under inspection.
+isKind: (error, prototype) => {
+    found: false
+    current: error
+    while(!found && (current !== Object)) {
+        found = current === prototype
+        current = current.parent()
+    }
+    found
+}
+
+/// Opens the durable database `databaseName` of `authority` through `bridge`.
+open: (bridge, authority, databaseName, terminal, SQLiteError, SQLiteUncertainError) => {
+    hostFailure: (reason) => SQLiteError {
+        operation: "open"
+        code: null
+        reason: reason
+    }
+    if(!validName(databaseName)) { hostFailure("INVALID_DATABASE_NAME").signal() }
+    launched: bridge.launch(authority, databaseName)
+    if(String.recognizes(launched)) { hostFailure(launched).signal() }
+
+    session: launched.session
+    reader: TextReader(launched.reader, Encoding.UTF8)
+    writer: TextWriter(launched.writer, Encoding.UTF8)
+    lastId: 0
+    broken: false
+    released: false
+    identity: null
+    helperTerminated: false
+    cleanupError: null
+    inFlight: false
+    closing: false
+    reconcileRequired: false
+    closeFailure: null
+    // Copied cells of the current row of each statement, by opaque statement id.
+    rows: Map()
+
+    retireHelper: () => {
+        if(!released) {
+            released = true
+            broken = true
+            status: null
+            Error.handle(() => { status = bridge.release(session) }, (error) => { cleanupError = error })
+            helperTerminated = status !== null
+            if(helperTerminated && (status != 0)) {
+                cleanupError = SQLiteError {
+                    operation: "close"
+                    code: null
+                    reason: "HELPER_EXIT_FAILED"
+                    exitStatus: status
+                }
+            }
+            if(!helperTerminated && (cleanupError === null)) {
+                cleanupError = SQLiteError {
+                    operation: "close"
+                    code: null
+                    reason: "HELPER_TERMINATION_UNCONFIRMED"
+                }
+            }
+        }
+    }
+
+    busyError: (operation) => SQLiteError {
+        operation: operation
+        code: null
+        reason: "CONNECTION_BUSY"
+    }
+
+    requireAdmission: (operation) => {
+        if(reconcileRequired) {
+            (SQLiteUncertainError {
+                operation: operation
+                code: null
+                outcome: "UNCERTAIN"
+                reason: "RECONCILE_REQUIRED"
+            }).signal()
+        }
+        if(inFlight || closing) { busyError(operation).signal() }
+        if(released || !bridge.owns(session)) { IOLifecycleError().signal() }
+    }
+
+    closeAdmission: () => {
+        failure: null
+        if((inFlight || closing) && !reconcileRequired) { failure = busyError("close") }
+        if((failure === null) && !released) {
+            Error.handle(() => {
+                if(!bridge.owns(session)) { failure = IOLifecycleError() }
+            }, (error) => { failure = error })
+        }
+        failure
+    }
+
+    // One request and its correlated reply; answers the exact value members.
+    call: (operation, nodes) => {
+        if(inFlight) { busyError(operation).signal() }
+        if(!bridge.owns(session)) { IOLifecycleError().signal() }
+        if(broken) {
+            (SQLiteError {
+                operation: operation
+                code: null
+                reason: "CONNECTION_BROKEN"
+            }).signal()
+        }
+        (lastId < 9223372036854775806).ifFalse(() => { Error().signal() })
+        id: lastId + 1
+        text: Protocol.encodeRequest(id, session, operation, nodes)
+        // Complete local admission before any frame can become committed output.
+        (Encoding.UTF8.encode(text).size() <= Protocol.MESSAGE_LIMIT).ifFalse(() => { Error().signal() })
+        // Reservation and sequence commitment precede every suspension. No
+        // ensure/finally path releases this reservation after an unknown result.
+        inFlight = true
+        lastId = id
+        known: false
+        (() => {
+            reply: null
+            channelReason: "CONNECTION_LOST"
+            Error.handle(() => {
+                Protocol.writeMessage(writer, id, text)
+                reply = Protocol.readMessage(reader, id + 1)
+            }, (error) => {
+                if(isKind(error, Cancelled)) { error.signal() }
+                if(!isKind(error, IOError)) {
+                    channelReason = "PROTOCOL_VIOLATION"
+                }
+                reply = null
+            })
+            if(reply === null) {
+                retireHelper()
+                (SQLiteUncertainError {
+                    operation: operation
+                    code: null
+                    outcome: "UNCERTAIN"
+                    reason: channelReason
+                }).signal()
+            }
+            members: null
+            rejection: null
+            sqliteFailure: null
+            Error.handle(() => {
+                rejection = Protocol.decodeRejection(reply, session, id)
+                if(rejection === null) { sqliteFailure = Protocol.decodeSqliteFailure(reply, session, id) }
+                if((rejection === null) && (sqliteFailure === null)) { members = Protocol.decodeResponse(reply, session, id, operation) }
+            }, (error) => {
+                if(isKind(error, Cancelled)) { error.signal() }
+                members = null
+            })
+            if(sqliteFailure !== null) {
+                // COMMIT and APPLY_ONCE answer their failures as values. A native
+                // failure escaping either one leaves the transaction outcome
+                // unestablished: it stays unknown and is never reported as known.
+                if((operation == "COMMIT") || (operation == "APPLY_ONCE")) {
+                    (SQLiteUncertainError {
+                        operation: operation
+                        code: sqliteFailure
+                        outcome: "UNCERTAIN"
+                        reason: "RECONCILE_REQUIRED"
+                    }).signal()
+                }
+                known = true
+                inFlight = false
+                name: operation
+                if(operation == "LOOKUP") { name = "lookup" }
+                (SQLiteError {
+                    operation: name
+                    code: sqliteFailure
+                }).signal()
+            }
+            if(rejection !== null) {
+                retireHelper()
+                // These rejections precede dispatch. INVALID_ARGUMENT can instead
+                // follow entered SQLite work and must not assert non-execution.
+                admission: (rejection == "MALFORMED_FRAME") || (rejection == "MALFORMED_REQUEST") ||
+                    (rejection == "NON_CONSECUTIVE_ID") || (rejection == "WRONG_SESSION")
+                if(admission) {
+                    known = true
+                    inFlight = false
+                    (SQLiteError {
+                        operation: operation
+                        code: null
+                        reason: "ADMISSION_REJECTED"
+                        rejection: rejection
+                    }).signal()
+                }
+                (SQLiteUncertainError {
+                    operation: operation
+                    code: null
+                    outcome: "UNCERTAIN"
+                    reason: "HELPER_REJECTED"
+                    rejection: rejection
+                }).signal()
+            }
+            if(members === null) {
+                retireHelper()
+                (SQLiteUncertainError {
+                    operation: operation
+                    code: null
+                    outcome: "UNCERTAIN"
+                    reason: "PROTOCOL_VIOLATION"
+                }).signal()
+            }
+            // Decode response scalars and rows before releasing admission. The
+            // copied row is stored once; native/JSON buffers never escape.
+            valid: false
+            Error.handle(() => {
+                if(members.containsKey("code")) {
+                    if(operation == "APPLY_ONCE") { Protocol.nullOrI64(members["code"]) } else { Protocol.i64(members["code"]) }
+                }
+                if(members.containsKey("autocommit")) { Protocol.boolean(members["autocommit"]) }
+                if(members.containsKey("changes")) { Protocol.nullOrI64(members["changes"]) }
+                if(members.containsKey("outcome")) {
+                    outcome: Protocol.string(members["outcome"])
+                    accepted: false
+                    names: Array("FOUND", "ABSENT")
+                    if(operation == "APPLY_ONCE") {
+                        names = Array("APPLIED", "REPLAYED", "CONFLICT", "IN_TRANSACTION", "BUSY", "FAILED", "RECONCILE_REQUIRED")
+                    }
+                    for(name in names) { if(outcome == name) { accepted = true } }
+                    accepted.ifFalse(() => { Error().signal() })
+                }
+                if(operation == "PREPARE") {
+                    if(members["statement"].kind !== "null") { Protocol.id(members["statement"]) }
+                    Protocol.nullOrI64(members["remaining"])
+                }
+                if(operation == "STEP") {
+                    rowNode: members["row"]
+                    if(Protocol.i64(members["code"]) == SQLITE_ROW) {
+                        (rowNode.kind === "array").ifFalse(() => { Error().signal() })
+                        cells: Array()
+                        for(node in rowNode.value) { cells = Arrays.append(cells, decodeCell(node)) }
+                        rows[Protocol.id(nodes[0])] = cells
+                    } else {
+                        (rowNode.kind === "null").ifFalse(() => { Error().signal() })
+                    }
+                }
+                valid = true
+            }, (error) => {
+                if(isKind(error, Cancelled)) { error.signal() }
+            })
+            if(!valid) {
+                (SQLiteUncertainError {
+                    operation: operation
+                    code: null
+                    outcome: "UNCERTAIN"
+                    reason: "PROTOCOL_VIOLATION"
+                }).signal()
+            }
+            known = true
+            inFlight = false
+            members
+        }).ensure(() => {
+            if(!known) {
+                reconcileRequired = true
+                broken = true
+                // Cancelling the waiter is not completion of native work. End
+                // helper custody before permitting only explicit retirement.
+                retireHelper()
+            }
+        })
+    }
+
+    code: (members) => Protocol.i64(members["code"])
+
+    decodeCell: (node) => {
+        cell: null
+        failure: false
+        Error.handle(() => {
+            failure = (node.kind === "object") && (node.value.size() == 2) && node.value.containsKey("t") &&
+                node.value.containsKey("v") && (node.value["t"].kind === "string") &&
+                (node.value["t"].value == "failure")
+        }, (error) => null)
+        if(failure) {
+            cell = {
+                failed: true
+                failureCode: Protocol.nullOrI64(node.value["v"])
+                kind: SQLITE_TEXT
+                value: null
+            }
+        } else {
+            value: Protocol.decodeValue(node)
+            kind: SQLITE_NULL
+            if(Integer.recognizes(value)) { kind = SQLITE_INTEGER }
+            if(Float.recognizes(value)) { kind = SQLITE_FLOAT }
+            if(String.recognizes(value)) { kind = SQLITE_TEXT }
+            if((value !== null) && (kind == SQLITE_NULL)) { kind = SQLITE_BLOB }
+            cell = {
+                failed: false
+                failureCode: null
+                kind: kind
+                value: value
+            }
+        }
+        cell.freeze()
+        cell
+    }
+
+    cellOf: (handle, index) => {
+        rows.containsKey(handle).ifFalse(() => { Error().signal() })
+        row: rows[handle]
+        ((index >= 0) && (index < row.size())).ifFalse(() => { Error().signal() })
+        row[index]
+    }
+
+    statementNode: (handle) => Protocol.integerNode(handle)
+
+    bindRemote: (handle, index, value) => {
+        code(call("BIND", Array(statementNode(handle), Protocol.integerNode(index),
+            Protocol.encodeValue(value))))
+    }
+
+    // The private remote ABI consumed by Resources.openConnection.
+    remote: {
+        SQLITE_OK: SQLITE_OK
+        SQLITE_ROW: SQLITE_ROW
+        SQLITE_DONE: SQLITE_DONE
+        SQLITE_INTEGER: SQLITE_INTEGER
+        SQLITE_FLOAT: SQLITE_FLOAT
+        SQLITE_TEXT: SQLITE_TEXT
+        SQLITE_BLOB: SQLITE_BLOB
+        SQLITE_NULL: SQLITE_NULL
+        // The database is fixed by the trusted helper bootstrap; the client
+        // never names a location or flags. Answers the helper READY handshake.
+        open: (location, flags, vfs) => {
+            (((location === null) && (flags === null)) && (vfs === null)).ifFalse(() => { Error().signal() })
+            ready: null
+            Error.handle(() => {
+                text: Protocol.readMessage(reader, 1)
+                if(text !== null) { ready = Protocol.decodeReady(text) }
+            }, (error) => {
+                if(isKind(error, Cancelled)) {
+                    retireHelper()
+                    error.signal()
+                }
+                ready = null
+            })
+            if(ready !== null) {
+                if((ready.session != session) || (ready.identityHi != launched.identityHi) ||
+                    (ready.identityLo != launched.identityLo)) { ready = null }
+            }
+            if(ready === null) {
+                retireHelper()
+                hostFailure("HELPER_UNAVAILABLE").signal()
+            }
+            identity = Array(ready.identityHi, ready.identityLo)
+            token: {}
+            token.freeze()
+            Array(SQLITE_OK, token)
+        }
+        prepare: (native, sql) => {
+            members: call("PREPARE", Array(JSON.string(sql)))
+            Array(code(members), Protocol.nullOrI64(members["statement"]), Protocol.nullOrI64(members["remaining"]))
+        }
+        bindNull: (handle, index) => bindRemote(handle, index, null)
+        bindInteger: (handle, index, value) => bindRemote(handle, index, value)
+        bindFloat: (handle, index, value) => bindRemote(handle, index, value)
+        bindText: (handle, index, value) => bindRemote(handle, index, value)
+        bindBlob: (handle, index, value) => bindRemote(handle, index, value)
+        step: (handle) => {
+            rows.remove(handle)
+            code(call("STEP", Array(statementNode(handle))))
+        }
+        reset: (handle) => {
+            rows.remove(handle)
+            code(call("RESET", Array(statementNode(handle))))
+        }
+        clearBindings: (handle) => code(call("CLEAR_BINDINGS", Array(statementNode(handle))))
+        columnCount: (handle) => {
+            rows.containsKey(handle).ifFalse(() => { Error().signal() })
+            rows[handle].size()
+        }
+        columnType: (handle, index) => cellOf(handle, index).kind
+        columnInteger: (handle, index) => cellOf(handle, index).value
+        columnFloat: (handle, index) => cellOf(handle, index).value
+        // A fresh copy on every call, exactly like the in-memory column copy.
+        copyColumn: (native, handle, index, isText, failure) => {
+            found: cellOf(handle, index)
+            if(found.failed) {
+                if(found.failureCode === null) { Error().signal() }
+                failure(found.failureCode).signal()
+            }
+            copied: found.value
+            if(!isText) { copied = Encoding.Latin1.encode(Encoding.Latin1.decode(found.value)) }
+            copied
+        }
+        // A confirmed dead helper owns no remaining native statement. Otherwise
+        // an unconfirmed FINALIZE must remain a failed terminal close.
+        finalize: (handle) => {
+            rows.remove(handle)
+            status: SQLITE_OK
+            if(broken) {
+                if(!helperTerminated) {
+                    if(cleanupError !== null) { cleanupError.signal() }
+                    (SQLiteError {
+                        operation: "finalize"
+                        code: null
+                        reason: "HELPER_TERMINATION_UNCONFIRMED"
+                    }).signal()
+                }
+            } else {
+                status = code(call("FINALIZE", Array(statementNode(handle))))
+            }
+            status
+        }
+        release: (native) => {
+            status: SQLITE_OK
+            primary: null
+            Error.handle(() => {
+                if(!broken) { status = code(call("CLOSE", Array())) }
+            }, (error) => { primary = error })
+            retireHelper()
+            if(primary !== null) { primary.signal() }
+            if(cleanupError !== null) { cleanupError.signal() }
+            status
+        }
+    }
+
+    connection: Resources.openConnection(remote, terminal, SQLiteError, null, null)
+
+    transaction: (operation, publicName) => {
+        requireAdmission(publicName)
+        members: null
+        Error.handle(() => {
+            members = call(operation, Array())
+        }, (error) => {
+            // A lost COMMIT keeps its specific operation name.
+            if(isKind(error, SQLiteUncertainError)) {
+                (SQLiteUncertainError {
+                    operation: publicName
+                    code: error.code
+                    outcome: "UNCERTAIN"
+                    reason: error.reason
+                }).signal()
+            }
+            error.signal()
+        })
+        status: code(members)
+        if(status != SQLITE_OK) {
+            // SQLite keeps the transaction open after a BUSY COMMIT; that is
+            // known only when the helper also observed sqlite3_get_autocommit
+            // reporting an open transaction. Anything else is not claimed.
+            busyKeptOpen: ((status == SQLITE_BUSY) && members.containsKey("autocommit")) &&
+                !Protocol.boolean(members["autocommit"])
+            if((operation == "COMMIT") && !busyKeptOpen) {
+                // The helper did not establish the COMMIT result and ended the session.
+                reconcileRequired = true
+                retireHelper()
+                (SQLiteUncertainError {
+                    operation: publicName
+                    code: status
+                    outcome: "UNCERTAIN"
+                    reason: "RECONCILE_REQUIRED"
+                }).signal()
+            }
+            (SQLiteError {
+                operation: publicName
+                code: status
+            }).signal()
+        }
+        null
+    }
+
+    applyOnce: (key, sql, parameters) => {
+        requireAdmission("applyOnce")
+        admitKey(key)
+        Resources.admitSql(sql)
+        nodes: Array()
+        for(parameter in parameters) {
+            nodes = Arrays.append(nodes, Protocol.encodeValue(admitValue(parameter)))
+        }
+        members: null
+        Error.handle(() => {
+            members = call("APPLY_ONCE", Array(Protocol.integerNode(key[0]), Protocol.integerNode(key[1]),
+                JSON.string(sql), JSON.array(...nodes)))
+        }, (error) => {
+            // An unestablished APPLY_ONCE keeps its public operation name, code and reason.
+            if(isKind(error, SQLiteUncertainError)) {
+                (SQLiteUncertainError {
+                    operation: "applyOnce"
+                    code: error.code
+                    outcome: "UNCERTAIN"
+                    reason: error.reason
+                }).signal()
+            }
+            error.signal()
+        })
+        outcome: Protocol.string(members["outcome"])
+        changed: Protocol.nullOrI64(members["changes"])
+        status: Protocol.nullOrI64(members["code"])
+        if(outcome == "RECONCILE_REQUIRED") {
+            reconcileRequired = true
+            retireHelper()
+            (SQLiteUncertainError {
+                operation: "applyOnce"
+                code: status
+                outcome: "UNCERTAIN"
+                reason: "RECONCILE_REQUIRED"
+            }).signal()
+        }
+        if((outcome != "APPLIED") && (outcome != "REPLAYED")) {
+            (SQLiteError {
+                operation: "applyOnce"
+                code: status
+                reason: outcome
+            }).signal()
+        }
+        result: {
+            status: outcome
+            changes: changed
+        }
+        result.freeze()
+        result
+    }
+
+    lookup: (key) => {
+        requireAdmission("lookup")
+        admitKey(key)
+        members: call("LOOKUP", Array(Protocol.integerNode(key[0]), Protocol.integerNode(key[1])))
+        outcome: Protocol.string(members["outcome"])
+        ((outcome == "FOUND") || (outcome == "ABSENT")).ifFalse(() => { Error().signal() })
+        result: {
+            status: outcome
+            changes: Protocol.nullOrI64(members["changes"])
+        }
+        result.freeze()
+        result
+    }
+
+    // Public Statement facades check admission before Resources can mutate its
+    // local statement state. Their underlying resources retain parent custody.
+    exposeStatement: (statement) => {
+        statementFailure: null
+        exposed: {
+            bind: (index, value) => { requireAdmission("bind"); statement.bind(index, value); exposed }
+            step: () => { requireAdmission("step"); statement.step() }
+            reset: () => { requireAdmission("reset"); statement.reset(); exposed }
+            clearBindings: () => { requireAdmission("clearBindings"); statement.clearBindings(); exposed }
+            column: (index) => { requireAdmission("column"); statement.column(index) }
+            row: () => { requireAdmission("row"); statement.row() }
+            each: (callback) => { requireAdmission("each"); statement.each(callback); exposed }
+            close: () => {
+                failure: closeAdmission()
+                result: null
+                if(failure !== null) {
+                    result = terminal.failed(failure)
+                } else {
+                    if(statementFailure !== null) {
+                        result = terminal.failed(statementFailure)
+                    } else {
+                        finished: false
+                        (() => {
+                            Error.handle(() => {
+                                statement.close().value()
+                                if(reconcileRequired && !helperTerminated) {
+                                    if(cleanupError !== null) { cleanupError.signal() }
+                                    (SQLiteUncertainError {
+                                        operation: "finalize"
+                                        code: null
+                                        outcome: "UNCERTAIN"
+                                        reason: "RECONCILE_REQUIRED"
+                                    }).signal()
+                                }
+                                result = terminal.resolved(exposed)
+                            }, (error) => {
+                                if(isKind(error, Cancelled)) { error.signal() }
+                                statementFailure = error
+                                result = terminal.failed(error)
+                            })
+                            finished = true
+                        }).ensure(() => {
+                            if(!finished && reconcileRequired && (statementFailure === null)) {
+                                statementFailure = SQLiteUncertainError {
+                                    operation: "finalize"
+                                    code: null
+                                    outcome: "UNCERTAIN"
+                                    reason: "RECONCILE_REQUIRED"
+                                }
+                            }
+                        })
+                    }
+                }
+                result
+            }
+        }
+        exposed
+    }
+
+    durable: {
+        /// Prepares exactly one SQL statement (same contract as openMemory()).
+        prepare: (sql) => { requireAdmission("prepare"); exposeStatement(connection.prepare(sql)) }
+        /// Closes every child statement, the helper session and the helper.
+        close: () => {
+            failure: closeAdmission()
+            result: null
+            if(failure !== null) {
+                result = terminal.failed(failure)
+            } else {
+                if(closeFailure !== null) {
+                    result = terminal.failed(closeFailure)
+                } else {
+                    if(!released && !terminal.closeAllowed()) {
+                        result = terminal.failed(IOLifecycleError())
+                    } else {
+                        closing = true
+                        finished: false
+                        (() => {
+                            Error.handle(() => {
+                                connection.close().value()
+                                result = terminal.resolved(durable)
+                            }, (error) => {
+                                if(isKind(error, Cancelled)) { error.signal() }
+                                closeFailure = error
+                                result = terminal.failed(error)
+                            })
+                            finished = true
+                        }).ensure(() => {
+                            closing = false
+                            if(!finished && reconcileRequired && (closeFailure === null)) {
+                                closeFailure = SQLiteUncertainError {
+                                    operation: "close"
+                                    code: null
+                                    outcome: "UNCERTAIN"
+                                    reason: "RECONCILE_REQUIRED"
+                                }
+                            }
+                        })
+                    }
+                }
+            }
+            result
+        }
+        /// BEGIN IMMEDIATE; signals SQLiteError (code 5 when busy).
+        begin: () => transaction("BEGIN", "begin")
+        /// COMMIT; BUSY leaves the transaction open; a lost or unestablished
+        /// result signals SQLiteUncertainError and is never retried.
+        commit: () => transaction("COMMIT", "commit")
+        /// ROLLBACK of the open transaction.
+        rollback: () => transaction("ROLLBACK", "rollback")
+        /// true while a transaction is open, read from sqlite3_get_autocommit.
+        inTransaction: () => {
+            requireAdmission("inTransaction")
+            !Protocol.boolean(call("AUTOCOMMIT", Array())["autocommit"])
+        }
+        /// Cooperative receipt replay per durable key Array(clientId, operationId),
+        /// recording a receipt in the same transaction. Answers {status: "APPLIED"
+        /// or "REPLAYED", changes}.
+        applyOnce: applyOnce
+        /// Cooperative main-database transactional effects only, including triggers.
+        /// Attached databases/external effects have no advertised replay guarantee.
+        /// SQL must preserve the identity/receipt tables and transaction boundaries.
+        /// General guest SQL can modify these tables; this is no integrity barrier.
+        /// lookup ABSENT is provisional, never proof of rollback or safe retry.
+        lookup: lookup
+        /// The durable identity Array(hi, lo) the helper read from this database.
+        databaseIdentity: () => { requireAdmission("databaseIdentity"); Array(identity[0], identity[1]) }
+    }
+    durable
+}

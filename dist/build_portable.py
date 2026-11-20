@@ -26,6 +26,9 @@ import shutil
 import stat
 import subprocess
 import sys
+import tempfile
+
+from build_ffm_provider import build_provider_jar, javac_major, BuildError
 import xml.etree.ElementTree as ET
 import zipfile
 
@@ -153,6 +156,35 @@ def write_checksums(bundle: Path) -> None:
     write_text(bundle / "SHA256SUMS", "\n".join(lines))
 
 
+def build_sqlite_helper(root: Path, bundle: Path) -> None:
+    """Build host artifacts once; their presence grants no parent-VM native access."""
+    if sys.platform != "linux":
+        fail("confined SQLite packaging requires Linux (no unconfined fallback)")
+    compiler = shutil.which(os.environ.get("CC", "cc"))
+    java_home = os.environ.get("JAVA_HOME")
+    javac = str(Path(java_home) / "bin/javac") if java_home else shutil.which("javac")
+    if compiler is None:
+        fail("confined SQLite requires a C compiler (CC or cc)")
+    if javac is None or javac_major(javac) != 25:
+        fail("confined SQLite requires JDK 25 javac")
+    destination = bundle / "lib/sqlite"
+    destination.mkdir(parents=True)
+    launcher = destination / "sandbox-exec"
+    run([compiler, "-std=c11", "-O2", "-Wall", "-Wextra", "-Werror",
+         "-Wformat=2", "-Wformat-security", "-fstack-protector-strong",
+         "-D_FORTIFY_SOURCE=3", "-fPIE", "-pie", "-Wl,-z,relro,-z,now",
+         str(root / "dist/sqlite/sandbox-exec.c"), "-o", str(launcher)], cwd=root)
+    launcher.chmod(0o755)
+    with tempfile.TemporaryDirectory(prefix="protos-sqlite-build-") as scratch:
+        try:
+            build_provider_jar(javac, bundle / "lib/protos.jar",
+                               destination / "protos-ffm-provider.jar", Path(scratch))
+        except BuildError as failure:
+            fail(str(failure))
+    write_text(destination / "PROFILE.txt",
+               "profile=linux-landlock-abi10\nlauncher_sha256=" + sha256(launcher))
+
+
 def commit_zip_timestamp(root: Path) -> tuple[int, int, int, int, int, int]:
     epoch = int(git(root, "show", "-s", "--format=%ct", "HEAD"))
     stamp = dt.datetime.fromtimestamp(epoch, tz=dt.timezone.utc)
@@ -228,6 +260,10 @@ def verify_archive(
         f"{root_name}/SHA256SUMS",
         f"{root_name}/bin/protos",
         f"{root_name}/lib/protos.jar",
+        f"{root_name}/lib/sqlite/sandbox-exec",
+        f"{root_name}/lib/sqlite/PROFILE.txt",
+        f"{root_name}/lib/sqlite/protos-ffm-provider.jar",
+        f"{root_name}/protos/lib/sqlite/isolated-helper.protos",
     }
     required_prefixes = [
         f"{root_name}/protos/lib/core/",
@@ -252,6 +288,29 @@ def verify_archive(
             archive.read(f"{root_name}/lib/protos.jar"),
             expected_bytecode_release,
         )
+
+        sqlite_launcher = f"{root_name}/lib/sqlite/sandbox-exec"
+        sqlite_mode = (archive.getinfo(sqlite_launcher).external_attr >> 16) & 0o777
+        if not (sqlite_mode & 0o111):
+            fail("SQLite launcher is not executable")
+        profile = archive.read(f"{root_name}/lib/sqlite/PROFILE.txt").decode("utf-8")
+        expected_profile = ("profile=linux-landlock-abi10\nlauncher_sha256="
+                            + hashlib.sha256(archive.read(sqlite_launcher)).hexdigest() + "\n")
+        if profile != expected_profile:
+            fail("SQLite confinement profile or launcher digest mismatch")
+        checksums = archive.read(f"{root_name}/SHA256SUMS").decode("utf-8")
+        listed: set[str] = set()
+        for line in checksums.splitlines():
+            digest, relative = line.split("  ", 1)
+            if hashlib.sha256(archive.read(f"{root_name}/{relative}")).hexdigest() != digest:
+                fail(f"archive checksum mismatch: {relative}")
+            listed.add(f"{root_name}/{relative}")
+        uncovered = sorted(
+            name for name in names
+            if not name.endswith("/") and name != f"{root_name}/SHA256SUMS" and name not in listed
+        )
+        if uncovered:
+            fail("SHA256SUMS does not cover: " + ", ".join(uncovered))
 
         runtime_prefix = f"{root_name}/lib/runtime/"
         runtime_names = sorted(
@@ -491,6 +550,7 @@ def build(args: argparse.Namespace) -> Path:
             ]
         ),
     )
+    build_sqlite_helper(root, bundle)
     write_checksums(bundle)
 
     print("phase=dist04 create archive")

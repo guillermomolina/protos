@@ -1,0 +1,615 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Private wire protocol between std:sqlite and its confined durable helper.
+//! Not a public API and not a general IPC facility. It carries no bootstrap database path,
+//! a native handle, an FFM value, an executable, an environment entry or
+//! Protos code; statement identifiers are opaque per-session Integers.
+//!
+//! Transport: each logical message is one canonical JSON text. Its UTF-8 octets
+//! are split into chunks of at most CHUNK_OCTETS octets; each chunk travels as
+//! one frame line {"v","s","i","n","o","d"}: protocol version, message
+//! sequence, chunk index, chunk count, total octets and the chunk in canonical
+//! Base64url (std:text/base64url). Every frame line is at most LINE_LIMIT
+//! octets. The total is declared and bounded before any chunk is accepted;
+//! chunks must arrive complete and in order; a missing, repeated, reordered,
+//! oversized or trailing chunk rejects the message. A message is never
+//! partially admitted.
+//!
+//! Values: null, signed 64-bit Integer, binary64 Float (an exact Integer
+//! mantissa and binary exponent, or a named special value), String (TEXT, as a
+//! strict UTF-8 Base64url string, preserving NUL and non-ASCII scalars) and
+//! Bytes (BLOB, as canonical Base64url text). No lossy encoding is used.
+JSON: import("std:json/json")
+Base64url: import("std:text/base64url")
+Arrays: import("std:collections/array")
+
+_isolatedProtocol: (() => {
+    version: 3
+    LINE_LIMIT: 4096
+    // 2304 octets encode to exactly 3072 Base64url characters, leaving room for
+    // the fixed frame fields below LINE_LIMIT.
+    CHUNK_OCTETS: 2304
+    // One logical message: enough for two maximal (16 MiB) values after the
+    // 4/3 Base64url expansion of TEXT/BLOBs plus JSON structure.
+    MESSAGE_LIMIT: 50331648
+    maxInteger: 9223372036854775807
+    minInteger: 0 - 9223372036854775807 - 1
+    frameFields: Array("v", "s", "i", "n", "o", "d")
+
+    fail: () => {
+        Error().signal()
+    }
+
+    isI64: (value) => {
+        result: false
+        if(Integer.recognizes(value)) {
+            result = (value >= minInteger) && (value <= maxInteger)
+        }
+        result
+    }
+
+    isId: (value) => {
+        result: false
+        if(isI64(value)) { result = value > 0 }
+        result
+    }
+
+    requireExactObject: (node, names) => {
+        (node.kind === "object").ifFalse(() => { fail() })
+        (node.value.size() == names.size()).ifFalse(() => { fail() })
+        for(name in names) {
+            node.value.containsKey(name).ifFalse(() => { fail() })
+        }
+        node.value
+    }
+
+    // Exact JSON integer node: Integer coefficient, exponent zero.
+    exactInteger: (node) => {
+        (node.kind === "number").ifFalse(() => { fail() })
+        (node.value.exponent == 0).ifFalse(() => { fail() })
+        coefficient: node.value.coefficient
+        Integer.recognizes(coefficient).ifFalse(() => { fail() })
+        coefficient
+    }
+
+    i64: (node) => {
+        value: exactInteger(node)
+        isI64(value).ifFalse(() => { fail() })
+        value
+    }
+
+    id: (node) => {
+        value: i64(node)
+        (value > 0).ifFalse(() => { fail() })
+        value
+    }
+
+    nullOrI64: (node) => {
+        copied: null
+        if(node.kind !== "null") { copied = i64(node) }
+        copied
+    }
+
+    string: (node) => {
+        (node.kind === "string").ifFalse(() => { fail() })
+        node.value
+    }
+
+    nullOrString: (node) => {
+        copied: null
+        if(node.kind !== "null") { copied = string(node) }
+        copied
+    }
+
+    boolean: (node) => {
+        (node.kind === "boolean").ifFalse(() => { fail() })
+        node.value
+    }
+
+    integerNode: (value) => JSON.number(value, 0)
+
+    nullableIntegerNode: (value) => {
+        node: JSON.nullValue()
+        if(value !== null) { node = integerNode(value) }
+        node
+    }
+
+    nullableStringNode: (value) => {
+        node: JSON.nullValue()
+        if(value !== null) { node = JSON.string(value) }
+        node
+    }
+
+    // ---- exact value codec --------------------------------------------------
+
+    isBytes: (value) => {
+        recognized: false
+        if(!String.recognizes(value)) {
+            Error.handle(() => {
+                Encoding.Latin1.decode(value)
+                recognized = true
+            }, (error) => null)
+        }
+        recognized
+    }
+
+    integral: (value) => {
+        result: false
+        Error.handle(() => {
+            Integer(value)
+            result = true
+        }, (error) => null)
+        result
+    }
+
+    positiveInfinity: 1.0 / 0.0
+    negativeInfinity: -1.0 / 0.0
+
+    // Canonical odd signed significand times 2^-exponent. Scaling by two
+    // is exact; binary64 needs at most 971 halvings and 1074 doublings.
+    floatNode: (value) => {
+        kind: "finite"
+        mantissa: null
+        exponent: null
+        if(value != value) {
+            kind = "nan"
+        } else {
+            if(value == positiveInfinity) {
+                kind = "+inf"
+            } else {
+                if(value == negativeInfinity) {
+                    kind = "-inf"
+                } else {
+                    if((value == 0.0) && ((1.0 / value) < 0.0)) {
+                        kind = "-0"
+                    } else {
+                        scaled: value
+                        exponent = 0
+                        steps: 0
+                        while(((scaled >= 9007199254740992.0) || (scaled <= -9007199254740992.0)) && (steps < 971)) {
+                            scaled = scaled / 2.0
+                            exponent = exponent - 1
+                            steps = steps + 1
+                        }
+                        steps = 0
+                        while(!integral(scaled) && (steps < 1074)) {
+                            scaled = scaled * 2.0
+                            exponent = exponent + 1
+                            steps = steps + 1
+                        }
+                        integral(scaled).ifFalse(() => { fail() })
+                        mantissa = Integer(scaled)
+                        steps = 0
+                        while((mantissa != 0) && ((mantissa % 2) == 0) && (steps < 52)) {
+                            mantissa = mantissa.div(2)
+                            exponent = exponent - 1
+                            steps = steps + 1
+                        }
+                    }
+                }
+            }
+        }
+        JSON.object("t", JSON.string("float"), "k", JSON.string(kind),
+            "m", nullableIntegerNode(mantissa), "e", nullableIntegerNode(exponent))
+    }
+
+    decodeFloat: (members) => {
+        kind: string(members["k"])
+        result: null
+        if((kind == "nan") || (kind == "+inf") || (kind == "-inf") || (kind == "-0")) {
+            ((members["m"].kind === "null") && (members["e"].kind === "null")).ifFalse(() => { fail() })
+            if(kind == "nan") { result = 0.0 / 0.0 }
+            if(kind == "+inf") { result = positiveInfinity }
+            if(kind == "-inf") { result = negativeInfinity }
+            if(kind == "-0") { result = -0.0 }
+        } else {
+            (kind == "finite").ifFalse(() => { fail() })
+            mantissa: i64(members["m"])
+            exponent: i64(members["e"])
+            ((exponent >= -1023) && (exponent <= 1074)).ifFalse(() => { fail() })
+            ((mantissa < 9007199254740992) && (mantissa > -9007199254740992)).ifFalse(() => { fail() })
+            if(mantissa == 0) {
+                (exponent == 0).ifFalse(() => { fail() })
+            } else {
+                ((mantissa % 2) != 0).ifFalse(() => { fail() })
+            }
+            result = Float(mantissa)
+            step: 0
+            while(step < exponent) {
+                result = result / 2.0
+                step = step + 1
+            }
+            step = 0
+            while(step > exponent) {
+                result = result * 2.0
+                step = step - 1
+            }
+            // Reject overflow, underflow and non-representable wire pairs.
+            canonical: floatNode(result).value
+            (string(canonical["k"]) == "finite").ifFalse(() => { fail() })
+            ((i64(canonical["m"]) == mantissa) && (i64(canonical["e"]) == exponent)).ifFalse(() => { fail() })
+        }
+        result
+    }
+
+    /// One SQLite value as a JSON node. Signals for any other value.
+    encodeValue: (value) => {
+        node: null
+        if(value === null) {
+            node = JSON.object("t", JSON.string("null"), "v", JSON.nullValue())
+        } else {
+            if(Integer.recognizes(value)) {
+                isI64(value).ifFalse(() => { fail() })
+                node = JSON.object("t", JSON.string("integer"), "v", integerNode(value))
+            } else {
+                if(Float.recognizes(value)) {
+                    node = floatNode(value)
+                } else {
+                    if(String.recognizes(value)) {
+                        node = JSON.object("t", JSON.string("text"), "v", JSON.string(Base64url.encode(Encoding.UTF8.encode(value))))
+                    } else {
+                        isBytes(value).ifFalse(() => { fail() })
+                        node = JSON.object("t", JSON.string("blob"), "v", JSON.string(Base64url.encode(value)))
+                    }
+                }
+            }
+        }
+        node
+    }
+
+    /// The fresh value of one value node. Signals for any other shape.
+    decodeValue: (node) => {
+        (node.kind === "object").ifFalse(() => { fail() })
+        members: node.value
+        members.containsKey("t").ifFalse(() => { fail() })
+        tag: string(members["t"])
+        result: null
+        if(tag == "float") {
+            requireExactObject(node, Array("t", "k", "m", "e"))
+            result = decodeFloat(members)
+        } else {
+            requireExactObject(node, Array("t", "v"))
+            if(tag == "null") {
+                (members["v"].kind === "null").ifFalse(() => { fail() })
+            } else {
+                if(tag == "integer") {
+                    result = i64(members["v"])
+                } else {
+                    if(tag == "text") {
+                        octets: Base64url.decode(string(members["v"]))
+                        result = Encoding.UTF8.decode(octets)
+                        // A leading BOM is TEXT data, not an IPC encoding marker.
+                        if(octets.size() >= 3) {
+                            if((octets[0] == 239) && (octets[1] == 187) && (octets[2] == 191)) {
+                                result = "\u{FEFF}" + result
+                            }
+                        }
+                    } else {
+                        (tag == "blob").ifFalse(() => { fail() })
+                        result = Base64url.decode(string(members["v"]))
+                    }
+                }
+            }
+        }
+        result
+    }
+
+    // ---- framing ------------------------------------------------------------
+
+    /// Writes one logical message `text` with sequence `seq` as bounded frames.
+    writeMessage: (writer, seq, text) => {
+        isId(seq).ifFalse(() => { fail() })
+        octets: Encoding.UTF8.encode(text)
+        total: octets.size()
+        (total <= MESSAGE_LIMIT).ifFalse(() => { fail() })
+        count: (total + CHUNK_OCTETS - 1).div(CHUNK_OCTETS)
+        if(count == 0) { count = 1 }
+        index: 0
+        while(index < count) {
+            chunk: Encoding.UTF8.encode("")
+            position: index * CHUNK_OCTETS
+            end: position + CHUNK_OCTETS
+            if(end > total) { end = total }
+            while(position < end) {
+                chunk.add(octets[position])
+                position = position + 1
+            }
+            line: JSON.encode(JSON.object("v", integerNode(version), "s", integerNode(seq),
+                "i", integerNode(index), "n", integerNode(count), "o", integerNode(total),
+                "d", JSON.string(Base64url.encode(chunk))))
+            (Encoding.UTF8.encode(line).size() <= LINE_LIMIT).ifFalse(() => { fail() })
+            writer.writeLine(line).value()
+            index = index + 1
+        }
+        writer.flush().value()
+        null
+    }
+
+    /// Reads the logical message with sequence `seq`. Answers its text, or null
+    /// when the channel ended (EOF or a broken stream) before the message was
+    /// complete; a partial message is discarded, never admitted. Any frame that
+    /// violates the transport contract signals an Error.
+    readMessage: (reader, seq) => {
+        isId(seq).ifFalse(() => { fail() })
+        received: Encoding.UTF8.encode("")
+        expectedIndex: 0
+        count: null
+        total: null
+        complete: false
+        ended: false
+        while(!complete && !ended) {
+            line: null
+            line = reader.readLine(LINE_LIMIT).value()
+            if(line === null) {
+                ended = true
+            } else {
+                (Encoding.UTF8.encode(line).size() <= LINE_LIMIT).ifFalse(() => { fail() })
+                members: requireExactObject(JSON.parse(line), frameFields)
+                (i64(members["v"]) == version).ifFalse(() => { fail() })
+                (i64(members["s"]) == seq).ifFalse(() => { fail() })
+                (i64(members["i"]) == expectedIndex).ifFalse(() => { fail() })
+                frameCount: i64(members["n"])
+                frameTotal: i64(members["o"])
+                if(count === null) {
+                    // Bounded before any chunk is accepted.
+                    ((frameTotal >= 0) && (frameTotal <= MESSAGE_LIMIT)).ifFalse(() => { fail() })
+                    expectedCount: (frameTotal + CHUNK_OCTETS - 1).div(CHUNK_OCTETS)
+                    if(expectedCount == 0) { expectedCount = 1 }
+                    (frameCount == expectedCount).ifFalse(() => { fail() })
+                    count = frameCount
+                    total = frameTotal
+                } else {
+                    ((frameCount == count) && (frameTotal == total)).ifFalse(() => { fail() })
+                }
+                chunk: Base64url.decode(string(members["d"]))
+                expectedSize: CHUNK_OCTETS
+                if(expectedIndex == (count - 1)) {
+                    expectedSize = total - (CHUNK_OCTETS * (count - 1))
+                }
+                (chunk.size() == expectedSize).ifFalse(() => { fail() })
+                for(octet in chunk) {
+                    received.add(octet)
+                }
+                expectedIndex = expectedIndex + 1
+                if(expectedIndex == count) { complete = true }
+            }
+        }
+        text: null
+        if(complete) {
+            (received.size() == total).ifFalse(() => { fail() })
+            text = Encoding.UTF8.decode(received)
+        }
+        text
+    }
+
+    // ---- messages -------------------------------------------------------------
+
+    // Request argument names, exactly, per operation. `id` (the message
+    // sequence), `session` and `op` are common to every request.
+    requestArguments: Map()
+    requestArguments["PREPARE"] = Array("sql")
+    requestArguments["BIND"] = Array("statement", "index", "value")
+    requestArguments["STEP"] = Array("statement")
+    requestArguments["RESET"] = Array("statement")
+    requestArguments["CLEAR_BINDINGS"] = Array("statement")
+    requestArguments["FINALIZE"] = Array("statement")
+    requestArguments["BEGIN"] = Array()
+    requestArguments["COMMIT"] = Array()
+    requestArguments["ROLLBACK"] = Array()
+    requestArguments["AUTOCOMMIT"] = Array()
+    requestArguments["APPLY_ONCE"] = Array("client", "operation", "sql", "parameters")
+    requestArguments["LOOKUP"] = Array("client", "operation")
+    requestArguments["CLOSE"] = Array()
+
+    // Response value names, exactly, per operation.
+    responseValues: Map()
+    responseValues["PREPARE"] = Array("code", "statement", "remaining")
+    responseValues["BIND"] = Array("code")
+    responseValues["STEP"] = Array("code", "row")
+    responseValues["RESET"] = Array("code")
+    responseValues["CLEAR_BINDINGS"] = Array("code")
+    responseValues["FINALIZE"] = Array("code")
+    responseValues["BEGIN"] = Array("code", "autocommit")
+    responseValues["COMMIT"] = Array("code", "autocommit")
+    responseValues["ROLLBACK"] = Array("code", "autocommit")
+    responseValues["AUTOCOMMIT"] = Array("autocommit")
+    responseValues["APPLY_ONCE"] = Array("outcome", "changes", "code")
+    responseValues["LOOKUP"] = Array("outcome", "changes")
+    responseValues["CLOSE"] = Array("code")
+
+    namesOf: (table, operation) => {
+        String.recognizes(operation).ifFalse(() => { fail() })
+        table.containsKey(operation).ifFalse(() => { fail() })
+        table[operation]
+    }
+
+    // `prefix` followed by alternating schema names and their nodes.
+    withPairs: (prefix, names, nodes) => {
+        (names.size() == nodes.size()).ifFalse(() => { fail() })
+        result: Array(...prefix)
+        index: 0
+        while(index < names.size()) {
+            result = Arrays.append(Arrays.append(result, names[index]), nodes[index])
+            index = index + 1
+        }
+        result
+    }
+
+    /// Canonical request text; `nodes` are the argument nodes in schema order.
+    encodeRequest: (id, session, operation, nodes) => {
+        isId(id).ifFalse(() => { fail() })
+        isI64(session).ifFalse(() => { fail() })
+        names: namesOf(requestArguments, operation)
+        JSON.encode(JSON.object(...withPairs(Array("id", integerNode(id), "session", integerNode(session),
+            "op", JSON.string(operation)), names, nodes)))
+    }
+
+    /// Admitted request: {id, session, operation, members}. Signals for any
+    /// request outside the exact schema.
+    decodeRequest: (text) => {
+        node: JSON.parse(text)
+        (node.kind === "object").ifFalse(() => { fail() })
+        node.value.containsKey("op").ifFalse(() => { fail() })
+        operation: string(node.value["op"])
+        names: Arrays.concat(Array("id", "session", "op"), namesOf(requestArguments, operation))
+        members: requireExactObject(node, names)
+        admitted: {
+            id: id(members["id"])
+            session: i64(members["session"])
+            operation: operation
+            members: members
+        }
+        admitted.freeze()
+        admitted
+    }
+
+    /// Canonical OK response to request `re` of `operation`.
+    encodeResponse: (session, re, operation, nodes) => {
+        isId(re).ifFalse(() => { fail() })
+        names: namesOf(responseValues, operation)
+        JSON.encode(JSON.object("session", integerNode(session), "re", integerNode(re), "status", JSON.string("OK"),
+            "value", JSON.object(...withPairs(Array(), names, nodes)), "reason", JSON.nullValue()))
+    }
+
+    /// Protocol rejection: the request was not admitted and had no effect.
+    encodeRejection: (session, re, reason) => {
+        String.recognizes(reason).ifFalse(() => { fail() })
+        JSON.encode(JSON.object("session", integerNode(session), "re", nullableIntegerNode(re), "status", JSON.string("REJECTED"),
+            "value", JSON.nullValue(), "reason", JSON.string(reason)))
+    }
+
+    /// The exact value members of the OK response to request `re` of
+    /// `operation`. A rejection, an uncorrelated reply or any other shape signals.
+    decodeResponse: (text, session, re, operation) => {
+        members: requireExactObject(JSON.parse(text), Array("session", "re", "status", "value", "reason"))
+        (i64(members["session"]) == session).ifFalse(() => { fail() })
+        (string(members["status"]) == "OK").ifFalse(() => { fail() })
+        (id(members["re"]) == re).ifFalse(() => { fail() })
+        (members["reason"].kind === "null").ifFalse(() => { fail() })
+        requireExactObject(members["value"], namesOf(responseValues, operation))
+    }
+
+    // A schema-valid rejection is distinct from an SQLite status. Dispatch
+    // failures can occur after effects, so rejection alone does not prove rollback.
+    decodeRejection: (text, session, re) => {
+        members: requireExactObject(JSON.parse(text), Array("session", "re", "status", "value", "reason"))
+        (i64(members["session"]) == session).ifFalse(() => { fail() })
+        reason: null
+        if(string(members["status"]) == "REJECTED") {
+            correlation: nullOrI64(members["re"])
+            ((correlation === null) || (correlation == re)).ifFalse(() => { fail() })
+            (members["value"].kind === "null").ifFalse(() => { fail() })
+            reason = string(members["reason"])
+        }
+        reason
+    }
+
+    encodeSqliteFailure: (session, re, code) => JSON.encode(JSON.object(
+        "session", integerNode(session), "re", integerNode(re), "status", JSON.string("SQLITE_ERROR"),
+        "value", JSON.object("code", integerNode(code)), "reason", JSON.nullValue()))
+
+    decodeSqliteFailure: (text, session, re) => {
+        members: requireExactObject(JSON.parse(text), Array("session", "re", "status", "value", "reason"))
+        (i64(members["session"]) == session).ifFalse(() => { fail() })
+        code: null
+        if(string(members["status"]) == "SQLITE_ERROR") {
+            (id(members["re"]) == re).ifFalse(() => { fail() })
+            (members["reason"].kind === "null").ifFalse(() => { fail() })
+            values: requireExactObject(members["value"], Array("code"))
+            code = i64(values["code"])
+        }
+        code
+    }
+
+    encodeReady: (session, identityHi, identityLo) => JSON.encode(JSON.object(
+        "event", JSON.string("READY"), "protocol", integerNode(version), "session", integerNode(session),
+        "identityHi", integerNode(identityHi), "identityLo", integerNode(identityLo)))
+
+    /// {session, identityHi, identityLo} of the helper READY event.
+    decodeReady: (text) => {
+        members: requireExactObject(JSON.parse(text),
+            Array("event", "protocol", "session", "identityHi", "identityLo"))
+        (string(members["event"]) == "READY").ifFalse(() => { fail() })
+        (i64(members["protocol"]) == version).ifFalse(() => { fail() })
+        ready: {
+            session: i64(members["session"])
+            identityHi: i64(members["identityHi"])
+            identityLo: i64(members["identityLo"])
+        }
+        ready.freeze()
+        ready
+    }
+
+    surface: {
+        MESSAGE_LIMIT: MESSAGE_LIMIT
+        isI64: isI64
+        isId: isId
+        i64: i64
+        id: id
+        nullOrI64: nullOrI64
+        string: string
+        nullOrString: nullOrString
+        boolean: boolean
+        integerNode: integerNode
+        nullableIntegerNode: nullableIntegerNode
+        nullableStringNode: nullableStringNode
+        encodeValue: encodeValue
+        decodeValue: decodeValue
+        writeMessage: writeMessage
+        readMessage: readMessage
+        encodeRequest: encodeRequest
+        decodeRequest: decodeRequest
+        encodeResponse: encodeResponse
+        encodeRejection: encodeRejection
+        decodeRejection: decodeRejection
+        decodeResponse: decodeResponse
+        encodeSqliteFailure: encodeSqliteFailure
+        decodeSqliteFailure: decodeSqliteFailure
+        encodeReady: encodeReady
+        decodeReady: decodeReady
+    }
+    surface.freeze()
+    surface
+})()
+
+MESSAGE_LIMIT: _isolatedProtocol.MESSAGE_LIMIT
+isI64: _isolatedProtocol.isI64
+isId: _isolatedProtocol.isId
+i64: _isolatedProtocol.i64
+id: _isolatedProtocol.id
+nullOrI64: _isolatedProtocol.nullOrI64
+string: _isolatedProtocol.string
+nullOrString: _isolatedProtocol.nullOrString
+boolean: _isolatedProtocol.boolean
+integerNode: _isolatedProtocol.integerNode
+nullableIntegerNode: _isolatedProtocol.nullableIntegerNode
+nullableStringNode: _isolatedProtocol.nullableStringNode
+encodeValue: _isolatedProtocol.encodeValue
+decodeValue: _isolatedProtocol.decodeValue
+writeMessage: _isolatedProtocol.writeMessage
+readMessage: _isolatedProtocol.readMessage
+encodeRequest: _isolatedProtocol.encodeRequest
+decodeRequest: _isolatedProtocol.decodeRequest
+encodeResponse: _isolatedProtocol.encodeResponse
+encodeRejection: _isolatedProtocol.encodeRejection
+decodeResponse: _isolatedProtocol.decodeResponse
+encodeReady: _isolatedProtocol.encodeReady
+decodeReady: _isolatedProtocol.decodeReady
+
+decodeRejection: _isolatedProtocol.decodeRejection
+
+encodeSqliteFailure: _isolatedProtocol.encodeSqliteFailure
+decodeSqliteFailure: _isolatedProtocol.decodeSqliteFailure

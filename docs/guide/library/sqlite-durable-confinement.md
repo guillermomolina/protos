@@ -1,6 +1,11 @@
 # SQLite durable confinement architecture decision packet
 
-**PROPOSED — OWNER APPROVAL PENDING**
+**Historical decision packet; current integration update in §28.**
+
+The owner selected architecture D (a separate OS process confined before JVM
+startup) and authorized the provisional per-database manifest in the PLAT074-FINAL
+continuation. This does not ratify D256. Earlier candidate comparisons below
+remain historical; §28 supersedes their current implementation-status wording.
 
 PLAT074: **OPEN**. D256: **pending final reconciliation**. LIB031:
 **BLOCKED**. This is a non-normative research/proposal document, not a new
@@ -3313,3 +3318,377 @@ The B1–B7 and D0–D2 records are unchanged apart from the D2 results and the
 
 State: **PLAT074 OPEN; D256 pending; LIB031 BLOCKED; D-10 not fully resolved;
 D3-T1–T16 NOT RUN.**
+
+
+## 28. PLAT074-FINAL — Production integration candidate (first campaign failed; not accepted)
+
+Architecture D and the bounded manifest integration are owner-authorized in the
+continuation request. This section records the candidate code, not validation,
+publication, specification ratification or work-item closure. No normative
+specification, project version or changelog was changed.
+
+### Evidence boundary
+
+| Evidence | State |
+| --- | --- |
+| D0 | Owner-reported 8/8 PASS |
+| D1 + D1-R1 | Owner-reported 25/25 PASS |
+| D2 | Owner-reported 16/16 PASS |
+| D3 | Owner-reported 16/16 PASS |
+| Joint D1/D1-R1/D2/D3 | Owner-reported 57/57 PASS, zero failures/errors/skips |
+| Maven package (compilation) | Owner-reported BUILD SUCCESS |
+| Lint of the two indicated Protos modules | Owner-reported PASS |
+| Portable build | Owner-reported PASS |
+| Distribution checks (CRC, layout, runtime, source identity) | Owner-reported PASS |
+| `ProtosIsolatedSqliteIntegrationTest`, first campaign | Owner-reported 61 run: 24 PASS, 35 FAIL, 2 ERROR |
+| Corrections below, re-run of the focal class | NOT RUN |
+| General regression | NOT RUN |
+
+The integration is **not accepted**.
+
+### First integration campaign and corrections (NOT RUN)
+
+The 37 failures fall into four shared-cause families. The corrections below have
+not been executed; they are not validated.
+
+| Family | Observed | Cause | Corrected in |
+| --- | --- | --- | --- |
+| 1. Public path and close | `Error: Object {}` in the Statement/Connection close handlers | Demonstrated: the handlers sent `recognizes` to Error prototypes (`Cancelled`, `SQLiteUncertainError`, `IOError`). Error prototypes define no `recognizes`, so the send signaled SlotNotFound from inside the handler and replaced the primary error. The same pattern was in `call` and in the transaction/applyOnce handlers. Category tests now walk the delegation chain, as ERRORS handler matching does. An unconfirmed FINALIZE after retirement reports `HELPER_TERMINATION_UNCONFIRMED` instead of a generic Error. | `protos/lib/sqlite/internal/IsolatedConnection.protos` |
+| 2. IPC and concurrency models | `Error: Object {}` after the frame; missing `BUSY_ASSERTIONS_COMPLETE` | Demonstrated: the generated programs used the same `recognizes` sends (`uncertain`, `SQLiteError`, `Cancelled`) inside handlers, in Tasks reached through `Actor.request`. The concurrency harness now reports the scenario, exit code and guest stderr instead of only EOF/null. | `ProtosIsolatedSqliteIntegrationTest.java` |
+| 3. Launch cancellation | Child driver received `FAILED` | Demonstrated: the guest asserted `SQLiteError.recognizes(cancelled)`. The cleanup error "host cannot close while Process Contexts are active" was secondary. The child driver now terminates its Process in `finally`, so the primary failure is the one reported. | `ProtosIsolatedSqliteIntegrationTest.java` |
+| 4. Exterior native controls | `NoSuchFileException: outside.db` | Analysis of SQLite behavior, not yet re-executed: `openMemory()` opens with `SQLITE_OPEN_MEMORY`, and SQLite opens every database attached to that connection in memory, so ATTACH created no file. The control now opens `":memory:"` by name with READWRITE plus CREATE through the production ABI and the shared Resources engine. It then attaches, creates, inserts and reads back through SQLite, prints a marker, and Java checks that the file exists and starts with the SQLite header. Landlock is unchanged. | `ProtosIsolatedSqliteIntegrationTest.java` |
+
+`memoryRetainsPublicExampleBehavior` now runs the installed
+`sqlite-library.protos` unchanged with the explicit provider. Before, the test
+prepended the harness prelude, and the prelude repeated the example's own
+top-level declarations. `IsolatedHelper.protos` and `Resources.protos` were
+reviewed and left unchanged: the helper removes a statement before
+`sqlite3_finalize` and returns the real code, and `openConnection` is a faithful
+parameterization of the earlier `openMemory`.
+
+The historical experiments were preserved. Their PASS results do not extend to
+production code merely because that code uses the same architecture.
+
+### Candidate implementation
+
+`std:sqlite` captures and removes both private facilities. Import loads neither
+FFM nor a process. `openMemory()` keeps its original ABI and flags.
+`openDurable(sqliteAuthority, databaseName)` uses `IsolatedConnection`, checks
+host authority, starts a confined helper and validates READY against the expected
+session **and expected identity** before publishing a Connection. It reuses
+`Resources.openConnection`; no second resource engine was added.
+
+The helper uses the existing ABI and real SQLite, READWRITE plus NOFOLLOW (no
+CREATE during reopen), synchronous FULL, bounded busy timeout, native autocommit,
+private native statements and sequential dispatch. Client and helper use private
+protocol v3: structured JSON, strict UTF-8, canonical Base64url, bounded ordered
+fragmentation, 4096-octet frames and a 48 MiB logical-message ceiling. This does
+not lower the 16 MiB per-value public bound. Binary64 transport uses at most 971
+initial halvings, 1074 doublings and 52 significand reductions; decode bounds
+canonical exponents to [-1023, 1074] and validates exact round-trip form.
+
+Errors of local admission precede output. Confirmed SQLite codes, host refusals,
+transport loss, invalid protocol and helper rejection remain distinguishable.
+Unknown post-send results are uncertain, including COMMIT. Closing preserves
+finalize/release errors and checks whether helper termination was confirmed.
+The durable close Future resolves to the durable public receiver.
+
+### Exact manifest proposed for D256 ratification
+
+For `--allow-sqlite=/srv/private/dbs`, the host-controlled manifest directory is
+`/srv/private/dbs.sqlite-identities`; it is not granted to the helper. A database
+`application.db` requires `application.db.identity` there:
+
+```text
+identity_hi=101
+identity_lo=202
+provision=CREATE_NEW
+```
+
+Exactly three ASCII lines, final LF, maximum 256 octets, two canonical signed i64
+components. The manifest must be a regular file, not group/other-writable. No implicit identity generation. Directory grants must exist, be
+absolute/canonical, writable by the host, not group/other-writable, and disjoint
+from the runtime. The host opens the manifest without following its final
+symlink and uses an exclusive **nonblocking** FileChannel lock. Concurrent or
+malformed manifests refuse admission. Namespace control stays trusted.
+
+For CREATE_NEW the host consumes authorization to VERIFY and forces it, including
+when an existing DB causes refusal. Only an absent file is created exclusively. The helper receives the
+pair and PROVISION, requires an empty schema and provisions once inside BEGIN
+IMMEDIATE. VERIFY requires the existing regular file and exactly one matching
+SQLite identity row before READY. Disappearance never triggers recreation.
+Failure after consumption requires explicit host intervention; no repair or
+identity adoption is implicit. This is a trusted authorization record, not a
+second application journal. Hostile guest SQL cannot be assumed to preserve the
+SQLite identity/receipt tables; the expected identity remains outside its grant.
+
+### Owner-approved provisional Connection admission
+
+The continuation owner explicitly approved exclusive admission per Connection,
+including its Statements: reject concurrent operations with CONNECTION_BUSY
+before IPC/correlation changes; release admission only after a known result;
+retain RECONCILE_REQUIRED after uncertainty; reject new work while close is in
+progress; and never treat cancellation of a waiter as native completion.
+No specification was changed by this provisional decision.
+
+The Protos client owns the reservation, close-in-progress flag, stable close
+failures and reconciliation state. Public Statement facades check admission
+before invoking the existing Resources state machine. Each IPC call atomically
+reserves before its first suspension, validates/copied-decodes its reply before
+release, and retains the reservation on an unknown-result unwind while retiring
+helper custody. The only permitted action on an uncertain old session is
+explicit retirement; SQL reconciliation requires a new identity-verified session.
+No queues, locks, new Java implementation, implicit Tasks or schedulers were
+introduced for this decision.
+
+Six additional tests run explicit Tasks in one ordinary Actor and gate a pending
+protocol read with a standard stdin capability. Another Task verifies that STEP,
+COMMIT, CLOSE and Statement operations receive CONNECTION_BUSY without output or
+correlation changes. Known replies permit the exact next correlation; cancelling
+pending STEP/COMMIT/CLOSE leaves RECONCILE_REQUIRED and cannot report successful
+close when helper termination is unconfirmed. These are labelled protocol/client
+models using structural I/O and explicit test Tasks, not native SQLite timing
+claims. Existing native public/real-helper tests remain separate. All are NOT RUN.
+
+### Owner-approved provisional launch cancellation
+
+The owner approved, for PLAT074 and pending D256 ratification: **cancelling one
+SQLite open does not revoke the SQLite authority of the whole Process.** An
+open is one attempt to acquire one resource; the authority belongs to the
+Process and outlives the cancellation of any single Task. No specification was
+changed.
+
+| Event | Effect |
+| --- | --- |
+| Task cancellation while an open waits for its launch | Cancels and retires only that attempt (`LAUNCH_CANCELLED`) |
+| Launch failure of one helper | Retires only that attempt |
+| Session retirement (`Connection.close()`, uncertain result) | Retires that Connection and its helper |
+| Actor termination | Withdraws that Actor's pending attempts and retires its helpers |
+| Process termination | Same for the Process, then revokes its authority |
+| RuntimeHost close | Withdraws every attempt, retires every helper, revokes every authority, then ends the launcher thread |
+| CREATE_NEW consumption | Independent of cancellation: once consumed and forced it stays VERIFY; never restored, re-issued or re-identified; a database that was never created requires explicit host intervention |
+| Uncertain COMMIT/APPLY_ONCE result | RECONCILE_REQUIRED on the old session; reconciliation only through a new identity-verified session |
+
+Host mechanism (`ProtosIsolatedSqliteHostFacility`, same launcher thread, same
+monitor, same helper map): each launch first records a reservation keyed by its
+session. The launcher thread removes the reservation, re-checks the publication
+condition (attempt not withdrawn, authority still bound to the Process, Process
+RUNNING, Actor not terminating, host open), starts the process and records custody
+in one monitor section. Hence: cancelled before that section, the attempt is never
+started and its private temporary is deleted by whoever withdrew it; cancelled
+during it, the canceller waits for the monitor and retires the now-recorded helper;
+cancelled after it (before the session is returned), the exact session is retired.
+A cancelled Future is never taken as evidence that no process exists. Retirement
+answers whether termination was confirmed within the bounded wait; unconfirmed
+sessions are recorded explicitly and their temporaries are kept. Interrupt status
+is cleared only for the bounded cleanup and restored for the caller.
+
+Client classification of transaction results: a COMMIT answered SQLITE_BUSY is a
+known SQLiteError (code 5) only when the helper also observed
+`sqlite3_get_autocommit` reporting the transaction still open; every other failed
+or unestablished COMMIT is SQLiteUncertainError RECONCILE_REQUIRED with the helper
+retired once. A native failure escaping COMMIT or APPLY_ONCE (including the
+APPLY_ONCE rollback) now also ends the helper session on the helper side, and the
+client reports it under the public operation name with the code preserved.
+APPLY_ONCE BUSY/FAILED outcomes are known only after the helper confirmed rollback
+through autocommit; otherwise RECONCILE_REQUIRED.
+
+| New acceptance test (all NOT RUN) | Acceptance condition |
+| --- | --- |
+| `cancellingOneOpenDoesNotRevokeProcessAuthority` | Cancellation injected at submission (either interleaving); B gets `LAUNCH_CANCELLED`, A keeps working, C opens; no live/pending/unconfirmed helper, no leaked temporary |
+| `openCancelledBeforeStartIsNeverStarted` | Launcher thread held before its start section; B never reaches STARTED, no B helper process exists, temporary removed, authority valid |
+| `openCancelledAfterStartRetiresOnlyThatHelper` | B's real helper started then cancelled before publication; that OS process exits, A and C unaffected, no leaked temporary |
+| `ownerTerminationDuringLaunchPublishesNothing` | Root Actor, then Process, terminated while a launch is held; no published helper, no live helper; Actor termination keeps the authority, Process termination revokes it |
+| `consumedCreateNewSurvivesCancellationAsVerifyOnly` | After a cancelled launch the manifest is VERIFY; with the file removed, reopen is refused and nothing is recreated |
+| `realBusyCommitIsKnownAndKeepsTransactionOpen` | Real SHARED lock makes another helper's COMMIT return BUSY (code 5, not uncertain), transaction stays open; explicit commit after releasing the reader succeeds (positive control) |
+| `nativeFailureReplyToApplyOnceRemainsUncertainAndRetiresHelperOnce` | Protos model (not native evidence): RECONCILE_REQUIRED, code 10, operation `applyOnce`, one release, later applyOnce/lookup refused without IPC |
+
+The launch tests use a package-private Java observer of launch stages in the
+test-only child-JVM driver; it is unreachable from guest code and grants nothing.
+Cancellation is delivered as a thread interrupt by that driver: no current runtime
+path interrupts a launch waiting in the facility, so how ordinary Protos Task
+cancellation reaches a blocked launch remains a D256 question.
+
+### Host boundary and upstream precedents
+
+The one new production class remains `ProtosIsolatedSqliteHostFacility`.
+It does not parse JSON, SQL, values, receipts or SQLite status. It grants opaque
+identity authority, reads the trusted host manifest, launches through Truffle,
+connects existing stream bindings, checks Actor/Process custody and retires OS
+processes. Other Java edits propagate this grant through existing bootstrap and
+lifecycle paths. Process creation permission now follows the exact bound Process,
+not a host-wide Boolean. Copied ordinary connection closures cannot authorize a
+session owned by another Actor.
+
+Verifiable precedent:
+
+- [GraalPy EmulatedPosixSupport, commit 5c8486970dead373d888f25210788cca5d79c374](https://github.com/oracle/graalpython/blob/5c8486970dead373d888f25210788cca5d79c374/graalpython/com.oracle.graal.python/src/com/oracle/graal/python/runtime/EmulatedPosixSupport.java):
+  `forkExec` is a Truffle boundary; `exec` uses the Env process builder,
+  explicit pipes/environment/directory and start, then registers child custody.
+  `flock` / `doLockOperation` uses FileChannel locking including tryLock; ordinary
+  file-channel operations supply the host-only manifest I/O precedent.
+- [Espresso ProcessImpl, commit bd884eb3effea2b31f3fbdd7250267ba8e9eca8e](https://github.com/oracle/graal/blob/bd884eb3effea2b31f3fbdd7250267ba8e9eca8e/espresso/src/com.oracle.truffle.espresso/src/com/oracle/truffle/espresso/libs/libjava/impl/Target_java_lang_ProcessImpl.java):
+  `forkAndExec` checks permission before using Env.newProcessBuilder.
+- [TruffleProcessBuilder.start](https://github.com/oracle/graal/blob/master/truffle/src/com.oracle.truffle.api/src/com/oracle/truffle/api/io/TruffleProcessBuilder.java)
+  retains its associated language Context and delegates process creation through
+  engine access. With explicit environment and directory it performs no guest
+  execution on the launch thread.
+- [EngineAccessor.createSubProcess](https://github.com/oracle/graal/blob/master/truffle/src/com.oracle.truffle.polyglot/src/com/oracle/truffle/polyglot/EngineAccessor.java)
+  uses the retained Context's ProcessHandler and decorates process streams.
+  This source inspection supports the host-only launcher-thread approach;
+  actual behavior on the selected runtime is still NOT RUN. The stable platform
+  thread preserves Linux parent-thread-death custody, without entering Protos.
+
+No new Context, guest executor, scheduler, primitive, JNI, JDBC or Java SQL layer
+was added. stdin/stdout remain separate pipes and stderr is drained separately
+to a sink. Consuming a launch reservation, starting the process and recording
+custody form one monitor section, so an interrupted waiter never orphans a child;
+Process/Actor termination rechecks prevent reactivation. Cancelling one launch
+retires only that attempt (see the provisional launch-cancellation decision).
+
+### Distribution and acceptance coverage
+
+The existing portable pipeline compiles the C launcher with warnings-as-errors,
+PIE, stack protection, FORTIFY and RELRO, builds the existing private provider,
+writes the profile/digest, installs helper sources, and incorporates all artifacts
+into ZIP/checksum verification. The provider and main JAR retain LICENSE.TXT.
+The parent's canonical Maven runtime projection is unchanged.
+
+`ProtosIsolatedSqliteIntegrationTest` adds 61 test methods (54 earlier plus the 7 launch-cancellation and transaction tests above) and exercises an explicitly selected extracted
+installation from an unrelated temporary working directory. It covers grant
+refusal, copied grants/sessions, import/memory separation, real helper opening,
+values and binary64 codec, fragmentation, 16 MiB BLOB boundaries, single SQL,
+reset/clearBindings, copied rows, independent-JVM persistence/rollback,
+cooperative replay, wrong/missing identity, refusal to adopt populated databases,
+close and owner death, installed examples, native ATTACH denial with an
+unrestricted real SQLite positive control, interior hardlink limitation,
+ABI refusal, missing/modified launcher and protocol correlation/admission.
+One COMMIT-without-acknowledgement case is a deterministic EOF model using
+production Protos client code. A second uses the real confined helper and a
+test-only Protos observation fault: it reads the complete real COMMIT response,
+then drops it before the production client observes it. That test requires
+SQLiteUncertainError, helper retirement, reopening through public std:sqlite
+and persisted value 42. Java only provisions the existing host bridge and
+executes the canonical direct-file entry; it parses no SQL or protocol. Neither
+case is a power-cut or kernel-crash result.
+A separate test checks maximum-size NUL-containing TEXT without JSON expansion
+shrinking the public bound.
+Existing LIB029/LIB030 model and real-provider tests remain required.
+
+`dist/tests/runtime/test_sqlite_packaging.py` checks installed layout, executable
+mode, exact profile/digest, private licensed provider, parent runtime separation
+and checksum coverage. Neither suite runs implicitly here. Missing distribution
+selection or unsupported Landlock is reported as UNSUPPORTED/skipped, never as
+positive acceptance. Missing artifacts, wrong digest, timeouts, absent READY and
+SQLite failures on an otherwise selected supported profile fail tests.
+
+### Ratification checklist and remaining limits
+
+D256 must ratify the exact signature, manifest shape and consumption/recovery
+policy; opaque Process-local RootActor grant and Actor-local sessions;
+synchronous waiting and cancellation limits; Statement/Connection lifecycle;
+BEGIN/COMMIT/ROLLBACK and native autocommit; uncertain results and same-identity
+reconciliation; effective Linux profile; platform exclusions; LIB029/LIB030
+compatibility; and acceptance evidence against the final bytes.
+
+Receipt replay is cooperative only: arbitrary SQL can alter receipts, identity,
+transaction boundaries or durability PRAGMAs. Advertised receipt atomicity is
+limited to cooperative transactional effects in the verified main database,
+including cooperative triggers; attached-database and external-file effects
+have no advertised replay guarantee. LOOKUP ABSENT remains provisional, without an inferred
+rollback, termination proof or automatic retry. No SQL prefix filter, custom
+security parser, second journal or general exactly-once claim was added.
+Hardlinks, bind mounts, namespace races, a malicious helper owner, blocking native
+calls and kernel D-state waits remain limitations. There is no power-cut test or
+universal physical-release deadline. The test-only managed-Process driver exercises Actor termination with its Process
+and JVM still alive, semantic Process termination while the JVM stays alive,
+and a second Process's Context permission.
+It is NOT RUN. The real-helper lost-COMMIT response test is also NOT RUN.
+There is no new kernel-crash, storage-failure or power-cut execution evidence.
+
+PLAT074 **OPEN**; D256 **pending ratification**; LIB031 **BLOCKED**.
+
+### Materially inspected authorities and constraints
+
+- Root instructions, DESIGN, IMPLEMENTATION and REFERENCE, plus protos/src scoped
+  instructions: human execution only, one production class, preserve owned edits,
+  no normative change or version bump in this intervention, APL notice retention.
+- Durable D256-C1 decision and implementation handoff: Protos-first SQLite,
+  unchanged memory surface, explicit unresolved ratification gates. The current
+  durable IMPLEMENTATION_BLOCKERS registry was read; it has no SQLite-specific
+  entry discharging those gates. No registry state was changed.
+- VALUES_AND_COLLECTIONS numeric conversions and Float identity: exact integral
+  Integer(Float), ties-to-even Float(Integer), semantic NaN and signed zero.
+  IO_CORE close/termination, TEXT_IO strict decoding/bounded lines, PROCESS_IO
+  stream authority, ACTORS termination/reentrancy and FUTURES_AND_TASKS pending
+  observation/cancellation/FILE-entry exclusivity: reuse existing ownership, commitment
+  and cleanup contracts without inferring rollback from cancellation.
+- SQLite module, ABI/resource code, all four isolated Protos sources, current
+  Java host/bootstrap/runtime changes, C launcher, portable/provider builders,
+  existing LIB029 lifecycle tests, Landlock feasibility tests and D3 guide:
+  preserve one engine, existing FFM, statement custody and historical evidence.
+- Example index/programs, SQLite/CLI/FFM guides, Makefile and POM resource/test
+  configuration, LICENSE.TXT Part 5: preserve conventions, exact validation entry
+  points and packaged licenses. No build or validator was executed.
+
+
+### Inspected file inventory
+
+The following files supplied material constraints or were reconciled with the
+candidate. Reads were targeted to the governing sections and affected code;
+this is not a claim that every unrelated section of every large file was audited.
+
+| Files | Constraint or use |
+| --- | --- |
+| Supplied root AGENTS.md; `AGENTS.work/DESIGN.md`, `AGENTS.work/IMPLEMENTATION.md`, `AGENTS.work/REFERENCE.md`; `protos/AGENTS.md`, `src/AGENTS.md`, `spec/AGENTS.md` | Human execution, owner design authority, patch scope, source style, license and validation policy. |
+| `spec/semantics/VALUES_AND_COLLECTIONS.md`, `spec/semantics/FFI.md` | Exact conversions, binary64 special identity, no implicit FFI authority, Actor-local native custody, destructor status and one-time retirement. |
+| `spec/io/IO_CORE.md`, `spec/io/TEXT_IO.md`, `spec/io/PROCESS_IO.md`, `spec/concurrency/ACTORS.md`, `spec/concurrency/FUTURES_AND_TASKS.md` | Terminal close results, strict text, bounded framing, Process backend retirement, Actor exclusivity/reentrancy, Task cancellation versus native completion. |
+| `protos/lib/sqlite/module.protos`, `abi.protos`, `internal/Resources.protos`, `internal/Borrowed.protos`, `internal/IsolatedProtocol.protos`, `internal/IsolatedConnection.protos`, `internal/IsolatedHelper.protos`, `isolated-helper.protos` | One resource engine, existing ABI/bounds/copies, private protocol and helper, admission and lifecycle. Paths in this row share `protos/lib/sqlite/`. |
+| `protos/lib/core/Float.protos`, `Integer.protos`, `String.protos`; `ProtosNumericValueSupport.java`, `ProtosStandardIntegerProtocol.java` | Existing numeric operations; no invented String suffix selector or Java numeric serialization. |
+| `ProtosCli.java`, `ProtosCoreBootstrap.java`, `ProtosPolyglotExecutionContext.java`, `ProtosPolyglotProcessContext.java`, `ProtosPolyglotRuntimeHost.java`, `ProtosStandaloneHostedExecution.java`, `ProtosStandaloneProcessBootstrap.java`, `ProtosActorBootstrap.java`, `ProtosProcessRuntime.java`, `ProtosIsolatedSqliteHostFacility.java` | Reconcile all received production Java paths; preserve current bootstrap, scope permissions, no new executor of guest code. |
+| `ProtosToolchainRoots.java`, `ProtosStandaloneHostedSession.java`, `ProtosDirectFileModuleResolver.java`, `ProtosCanonicalInitialModuleExecution.java`, `ProtosExecutionOutcome.java`, `ProtosHttpAsyncFacility.java`, `ProtosActor.java`, `ProtosProcessStandardStreamBinding.java`, `ProtosIoOperation.java`, `ProtosStandardTextReaderProtocol.java`, `ProtosStandardTextWriterProtocol.java` | Installed roots, canonical entry/test boundary, terminal construction, lifecycle and structural I/O reuse. These existing Java names are unique in `src/main/java/`. |
+| `ProtosLib029SqliteLifecycleTest.java`, `ProtosExternalForeignProviderTest.java`, `ProtosPlat074SqliteLandlockFeasibilityTest.java`, `ProtosIsolatedSqliteIntegrationTest.java`; `protos/tests/foreign-provider/sqlite-failure-model.protos` | Existing model/harness conventions, real native positive controls and added acceptance/Task models. Java test names are unique in `src/test/java/`. |
+| `dist/sqlite/sandbox-exec.c`, `dist/build_portable.py`, `dist/build_ffm_provider.py`, `dist/verify_portable.py`, `dist/test_external_foreign_providers.py`, `dist/tests/runtime/test_native_launcher.py`, `test_native_elf.py`, `test_sqlite_packaging.py` | Landlock profile, packaging pipeline, private provider, installed checks and validation commands. Last two paths share `dist/tests/runtime/`. |
+| `protos/examples/ffi/README.md`, `sqlite-library.protos`, `sqlite-copied-values.protos`, `sqlite-durable-confined.protos`, `sqlite-durable-reopen.protos` | Existing public example style and new paired durable programs. Names in this row share `protos/examples/ffi/`. |
+| `docs/guide/library/sqlite.md`, `sqlite-isolated-process-spike.md`, `sqlite-durable-confinement.md`; `docs/guide/tools/cli.md`; `docs/guide/interop/ffm-provider.md` | Existing evidence versus provisional integration; truthful limits and usage. First three paths share `docs/guide/library/`. |
+| `Makefile`, `pom.xml`, `LICENSE.TXT`; `scripts/legacy_execution_guard.py` | Exact build/test entry points, current version, license packaging, canonical execution guard interface. |
+| Remote `IMPLEMENTATION_BLOCKERS.md`, D256-C1 approval and implementation handoff; pinned GraalPy/Espresso sources and Truffle builder/engine source | No SQLite blocker closure, no ratification inferred, verifiable host-platform precedents. No remote mutation. |
+
+### Human-executed final validation campaign
+
+Run from the current checkout, in order, stopping at the first failure. These
+commands were **not executed by the agent**. Compilation/portable construction
+and especially the acceptance/full suites can take several minutes or longer;
+maximum-value cases transfer 16 MiB payloads and need substantial heap. Report
+UNSUPPORTED/skipped cases separately from PASS and require a supported Linux
+ABI-10 host for positive confinement acceptance.
+
+```sh
+git status --short
+git diff --check
+git diff --stat
+python3 -m py_compile dist/build_portable.py dist/build_ffm_provider.py dist/tests/runtime/test_sqlite_packaging.py
+mvn -DskipTests package
+bin/protos lint --fail-on-warning protos/lib/sqlite/module.protos
+bin/protos lint --fail-on-warning protos/lib/sqlite/internal/Resources.protos
+bin/protos lint --fail-on-warning protos/lib/sqlite/internal/IsolatedProtocol.protos
+bin/protos lint --fail-on-warning protos/lib/sqlite/internal/IsolatedConnection.protos
+bin/protos lint --fail-on-warning protos/lib/sqlite/internal/IsolatedHelper.protos
+bin/protos lint --fail-on-warning protos/lib/sqlite/isolated-helper.protos
+bin/protos lint --fail-on-warning protos/examples/ffi/sqlite-durable-confined.protos
+bin/protos lint --fail-on-warning protos/examples/ffi/sqlite-durable-reopen.protos
+python3 dist/build_portable.py --allow-dirty --skip-project-build
+python3 dist/verify_portable.py --allow-dirty-source
+export PROTOS_SQLITE_DISTRIBUTION=/workspaces/protos/target/distributions/protos-0.4.184-SNAPSHOT
+python3 -m unittest discover -s dist/tests/runtime -p test_sqlite_packaging.py
+mvn -Dprotos.sqlite.distribution="$PROTOS_SQLITE_DISTRIBUTION" -Dtest=ProtosIsolatedSqliteIntegrationTest,ProtosLib029SqliteLifecycleTest test
+make test MVN_FLAGS="-Dprotos.sqlite.distribution=$PROTOS_SQLITE_DISTRIBUTION"
+```
+
+The installation selection above matches the inspected POM version; use the
+actual current version if the owner changes it before this campaign. Inspect
+the exact diff in addition to the changed-path summary before compiling.
+Python syntax compilation, the Protos linter and Maven compilation are the
+available scoped static gates; the POM declares no dedicated Java style plugin.
+The C build itself supplies the warning/hardening compiler gate. No product
+version bump or publication is authorized by this continuation.

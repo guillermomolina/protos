@@ -12,7 +12,7 @@ The dispatch code is
 
 | Command | What it does | Guide |
 |---|---|---|
-| `protos [--inspect] [--allow-network] [--allow-resolver] [--allow-entropy] [--allow-clock] [--allow-filesystem=<dir>] [--service=<binding>] <file> [args...]` | Runs one source file | below |
+| `protos [--allow-sqlite=<dir>] [--inspect] [--allow-network] [--allow-resolver] [--allow-entropy] [--allow-clock] [--allow-filesystem=<dir>] [--service=<binding>] <file> [args...]` | Runs one source file | below |
 | `protos [--inspect] [--allow-network] [--allow-resolver] [--allow-entropy] [--allow-clock] [--allow-filesystem=<dir>] -e <source> [args...]` | Runs one source String | below |
 | `protos [--inspect] [--allow-network] [--allow-resolver] [--allow-entropy] [--allow-clock] [--allow-filesystem=<dir>]` | Starts the interactive REPL | below |
 | `protos run [--allow-network] [--allow-resolver] [--allow-entropy] [--allow-clock] [--allow-filesystem=<dir>] [--service=<binding>] <entry> [args...]` | Runs a root-package logical entry of the project in the current directory | below |
@@ -538,3 +538,24 @@ Service mode itself grants no Clock. Package preflight and materialization
 receive no application Clock authority. Samples are wall time, not monotonic
 measurements; the [authority guide](../11-process-io-filesystems-and-authority.md)
 explains lifecycle and isolation.
+
+
+## Confined durable SQLite (provisional PLAT074 integration)
+
+`protos --allow-sqlite=/absolute/private/dbs <file> [args...]` supplies the opaque
+`sqlite` grant to the initial FILE RootActor only. It permits the private
+`std:sqlite` helper; it does not authorize arbitrary guest process spawning.
+The grant is Process-local and checked against the owning Actor per session.
+Import alone grants nothing. Filesystem and foreign-provider grants are independent.
+
+The existing canonical private directory and the host-provisioned sibling
+`dbs.sqlite-identities/<databaseName>.identity` are mandatory; see the exact
+[identity and first-creation contract](../library/sqlite.md#authority-and-trusted-identity-manifest).
+The parent JVM needs no FFM provider option for this mode. The packaged helper
+loads its own provider only after the native launcher installs Landlock.
+
+Supported proposal: Linux x86-64, Landlock ABI >= 10, Java 25 portable JVM and
+installed libsqlite3. There is no fallback. The option is for direct FILE entry;
+`-e`, REPL, Tools, workspace/package entry, services, embedding and Native Image
+have no supported SQLite-grant contract. This integration is NOT RUN and pending
+D256 ratification; PLAT074 OPEN and LIB031 BLOCKED.

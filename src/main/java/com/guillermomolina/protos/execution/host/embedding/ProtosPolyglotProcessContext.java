@@ -372,14 +372,23 @@ public final class ProtosPolyglotProcessContext implements ProtosProcessExecutio
                 owner, normalizedPassword, salt, expectedTag, completion);
     }
 
+    /** The durable SQLite helper custody of the owning runtime host. */
+    ProtosIsolatedSqliteHostFacility isolatedSqliteForRuntime() {
+        return runtimeHost.isolatedSqliteForRuntime();
+    }
+
     @Override
     public void actorTerminatedForRuntime(ProtosActor actor) {
+        // Durable SQLite helpers opened by this Actor are killed; nothing runs guest code.
+        runtimeHost.isolatedSqliteForRuntime().actorTerminatedForRuntime(actor);
         passwordKdfCustody.cancelActorForRuntime(actor);
         foreignProviders.actorTerminatedForRuntime(actor);
     }
 
     @Override
     public void processTerminatedForRuntime() {
+        // Every durable SQLite helper of this Process is killed and its authority withdrawn.
+        runtimeHost.isolatedSqliteForRuntime().processTerminatedForRuntime(process);
         passwordKdfCustody.retireForRuntime();
 
         // D248-B: the Process-owned standalone Filesystem is revoked first, so no File of this

@@ -9,12 +9,17 @@ SQLite-specific Java.
 
 | Example | Purpose |
 | --- | --- |
+| [`sqlite-durable-confined.protos`](sqlite-durable-confined.protos) | Proposed D256 confined durable API: explicit host grant, parameters, COMMIT and query. |
+| [`sqlite-durable-reopen.protos`](sqlite-durable-reopen.protos) | Reopen the same database in a second JVM and check persisted values. |
 | [`sqlite-library.protos`](sqlite-library.protos) | Public `std:sqlite` introduction: one table, one numeric insert, one query and deterministic cleanup. |
 | [`sqlite-prepared-numeric.protos`](sqlite-prepared-numeric.protos) | Query and filter numeric records: several inserts with fresh Statements, a parameterized numeric predicate and deterministic ordered `each` traversal with Float and NULL checks. |
 | [`sqlite-copied-values.protos`](sqlite-copied-values.protos) | Read independent TEXT/BLOB results: multibyte and NUL-containing TEXT, BLOB octets, empty TEXT/BLOB versus NULL, and copies that survive stepping and close. |
 
 See the [SQLite library guide](../../../docs/guide/library/sqlite.md) for the
-bounded LIB029 API and its practical learning path.
+LIB029/LIB030 memory API and provisional D256 durable contract. The two durable
+examples use the packaged helper provider, not a parent `--foreign-provider-path`;
+they require the explicit SQLite grant and trusted identity manifest described
+in that guide. Their new production integration is NOT RUN.
 
 ## Public `std:ffi` examples
 

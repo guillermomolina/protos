@@ -23,6 +23,7 @@ import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.io.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
+import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosResolverCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosEntropyCapabilityValue;
@@ -217,7 +218,47 @@ public final class ProtosStandaloneProcessBootstrap {
                 defaultNetwork,
                 null,
                 defaultResolver,
-                defaultEntropy, defaultClock);
+                defaultEntropy, defaultClock, null);
+    }
+
+    /**
+     * As the full {@code create} above, additionally binding the host-provisioned durable SQLite
+     * authority as the RootActor bootstrap-local {@code sqlite} slot. {@code defaultSqlite} is
+     * null when the host granted no SQLite directory.
+     */
+    public static Result create(
+            ProtosPrelude prelude,
+            List<String> applicationArguments,
+            ProtosEnvironmentValue.NativeNameDomain environmentNameDomain,
+            List<ProtosEnvironmentValue.NativeEntry> environmentEntries,
+            ProtosProcessStandardStreamBinding.ReadableBackend stdinBackend,
+            ProtosProcessStandardStreamBinding.WritableBackend stdoutBackend,
+            ProtosProcessStandardStreamBinding.WritableBackend stderrBackend,
+            ProtosEncodingValue stdinEncoding,
+            ProtosEncodingValue stdoutEncoding,
+            ProtosEncodingValue stderrEncoding,
+            ProtosFilesystemValue defaultFilesystem,
+            ProtosNetworkCapabilityValue defaultNetwork,
+            ProtosResolverCapabilityValue defaultResolver,
+            ProtosEntropyCapabilityValue defaultEntropy,
+            ProtosClockCapabilityValue defaultClock,
+            ProtosObjectValue defaultSqlite) {
+        return createInternal(
+                prelude,
+                applicationArguments,
+                environmentNameDomain,
+                environmentEntries,
+                stdinBackend,
+                stdoutBackend,
+                stderrBackend,
+                stdinEncoding,
+                stdoutEncoding,
+                stderrEncoding,
+                defaultFilesystem,
+                defaultNetwork,
+                null,
+                defaultResolver,
+                defaultEntropy, defaultClock, defaultSqlite);
     }
 
     static Result createWithRootResources(
@@ -251,6 +292,7 @@ public final class ProtosStandaloneProcessBootstrap {
                 rootResources,
                 null,
                 null,
+                null,
                 null);
     }
 
@@ -270,7 +312,8 @@ public final class ProtosStandaloneProcessBootstrap {
             ProtosMapValue rootResources,
             ProtosResolverCapabilityValue defaultResolver,
             ProtosEntropyCapabilityValue defaultEntropy,
-            ProtosClockCapabilityValue defaultClock) {
+            ProtosClockCapabilityValue defaultClock,
+            ProtosObjectValue defaultSqlite) {
         ProtosProcessRuntime process;
         try {
             Objects.requireNonNull(prelude, "prelude");
@@ -310,6 +353,10 @@ public final class ProtosStandaloneProcessBootstrap {
         // initial Activation escapes, retire it so no unowned live backend survives; the Process
         // lifecycle and every other grant are left exactly as before.
         try {
+            if (defaultSqlite != null) {
+                // Bound before the initial Activation computes the RootActor bootstrap locals.
+                process.bindRootSqliteForRuntime(defaultSqlite);
+            }
             process.establishArgumentsForRuntime(List.copyOf(applicationArguments));
             process.establishEnvironmentForRuntime(
                     ProtosStandardEnvironmentProtocol.createPrototype(),

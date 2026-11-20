@@ -1,4 +1,9 @@
-# In-memory SQLite: `std:sqlite`
+# SQLite: `std:sqlite`
+
+The memory API below is the LIB029/LIB030 baseline. The additive confined
+durable API is a provisional PLAT074 integration pending D256 ratification;
+see [Durable confined SQLite](#durable-confined-sqlite-provisional-d256-contract).
+Production integration and distribution acceptance are **NOT RUN**.
 
 This guide describes the bounded LIB029 source implementation and its LIB030
 extension (TEXT/BLOB input, complete single-statement SQL admission and explicit
@@ -230,8 +235,7 @@ apply unchanged. No Native Image plugin support or other platform promise is
 introduced. A missing or denied provider is a failure; an unavailable test
 platform is UNSUPPORTED, never passing SQLite acceptance.
 
-Only `:memory:` acquisition is exposed; there is no database filename API or
-implicit Protos Filesystem grant. This is not SQL sandboxing: explicitly supplied
+The memory API exposes only `:memory:` and grants no implicit Protos Filesystem authority. This is not SQL sandboxing: explicitly supplied
 SQL still runs in a trusted in-process C library with process authority. Native
 faults can corrupt memory or terminate the process.
 
@@ -489,8 +493,222 @@ pending until the maintainer runs it.
   [sqlite-durable-confinement.md](sqlite-durable-confinement.md).
 - No general transaction abstraction, native callbacks, ORM or query builder.
 
-The public `std:sqlite` API remains in-memory only. The isolated PLAT074-D0–D2
-experiments (process isolation, Landlock confinement, durable operation
-receipts) are test fixtures, not part of the public API: none of their
-operations is a `std:sqlite` operation, and they grant no filesystem
-authority. See [sqlite-isolated-process-spike.md](sqlite-isolated-process-spike.md).
+The historical D0–D3 protocols remain private test fixtures. The production
+integration described below is additive and unvalidated; historical results
+do not establish its correctness.
+
+
+## Durable confined SQLite (provisional D256 contract)
+
+`SQLite.openDurable(sqlite, "application.db")` opens a database using the exact
+opaque `sqlite` authority supplied to the initial FILE RootActor by the host.
+It is an integration proposal for ratification, not normative specification.
+PLAT074 remains **OPEN**, D256 **pending**, LIB031 **BLOCKED**.
+
+```protos
+SQLite: import("std:sqlite")
+db: SQLite.openDurable(sqlite, "application.db")
+(() => {
+    statement: db.prepare("SELECT ?1")
+    (() => {
+        statement.bind(1, "durable SQLite")
+        statement.step()
+        row: statement.row()
+    }).ensure(() => statement.close().value())
+}).ensure(() => db.close().value())
+```
+
+### Authority and trusted identity manifest
+
+The installed portable JVM CLI accepts `--allow-sqlite=/absolute/private/dbs`
+for direct FILE execution only. The directory must exist, be canonical, writable
+by the host, disjoint from runtime dependencies, and not writable by group or
+others. There is no grant by default, from Filesystem authority, or from a
+foreign provider option. The opaque frozen authority is recognized by host
+identity and bound to one Process. It is not a Prelude entry or Process method.
+Copying its slots does not grant permission. Live sessions are checked against
+their owning Actor before IPC; rows contain ordinary copied values.
+
+The trusted host must also provision the sibling directory
+`/absolute/private/dbs.sqlite-identities`, with the same private-directory
+requirements. It is **outside the helper's writable grant**. Each database has
+an ASCII file there named `application.db.identity` with exactly these three
+lines, in order, and a final LF:
+
+```text
+identity_hi=101
+identity_lo=202
+provision=CREATE_NEW
+```
+
+The host supplies the two signed 64-bit identity components, in canonical decimal
+(no plus sign, leading zeroes, whitespace or exponent). Choose a persistent pair
+appropriate to the application's identity requirements: the implementation does
+not generate, derive from a path, or replace it. The example pair is illustrative.
+Manifests are regular files, at most 256 octets, and must not be writable by
+group or others. The host needs read/write access to lock the manifest; the
+directory and manifest inode must remain under trusted control.
+
+`CREATE_NEW` explicitly authorizes one initial attempt only. Under an exclusive nonblocking
+file lock the host consumes the mode to `provision=VERIFY` and forces that
+update, even when it must refuse an existing database. Only an absent database
+is then created with exclusive creation. The helper receives the expected pair and `PROVISION`,
+requires an empty SQLite schema, and provisions the identity transactionally.
+Later opens use `VERIFY`, require an existing regular database and check exactly
+one matching identity row before READY. No identity is generated on reopen.
+A missing/replaced database, wrong pair, identity-less populated database,
+symlink, malformed manifest or reused creation permission fails closed.
+
+A failed initial launch or interrupted provisioning can consume the permission
+without producing a usable database. Recovery requires explicit trusted-host
+inspection; there is no automatic reset, recreation or adoption. The manifest
+is an authority record, not an application journal. Namespace replacement by a
+privileged or malicious provisioning host remains outside the guarantee.
+
+Database names are 1–128 ASCII octets from `[A-Za-z0-9._-]`, cannot start with
+`.` and cannot end with `-journal`, `-wal`, `-shm` or `.identity`. Paths and SQLite
+special names are rejected before launching.
+
+### Statements, values and close
+
+Durable connections reuse `Resources.openConnection` over a remote ABI. The
+memory wrapper retains its original flags and in-process authorized FFM path.
+Both variants use the same complete single-statement admission, signed i64
+binding, 16 MiB **per TEXT/BLOB value** limits, strict UTF-8, embedded NUL,
+independent Bytes copies, `reset`, `clearBindings`, `row`, `each` and child-first
+terminal-Future close. The remote client owns no native handles.
+
+Float transport uses a bounded exact binary significand/exponent codec, including
+subnormals, signed zero, large finite magnitudes and special values. SQLite itself
+normalizes NaN bindings to SQL NULL; the wire codec preserves Core NaN semantics.
+
+`close()` finalizes statements, closes SQLite, then retires the helper. A failed
+FINALIZE/CLOSE or unconfirmed helper termination remains an error, rather than
+being reported as successful cleanup. Actor, Process and runtime-host termination
+withdraw custody and kill helpers without running guest cleanup. These backend
+retirement actions are not implicit successful SQL COMMIT or user `close()`.
+An uninterruptible kernel wait can outlive the bounded host termination wait.
+
+### Exclusive admission (owner-approved provisional PLAT074/D256 rule)
+
+Each durable Connection has one Actor-local IPC reservation shared by all its
+Statements. Checking and reserving it is one non-suspending Actor segment,
+before any write or Future wait. A concurrent operation fails with
+`SQLiteError(reason: "CONNECTION_BUSY", code: null)` before sending bytes,
+advancing correlation IDs or mutating Statement state. Close returns a failed
+Future for this rejection. This differs from confirmed SQLite BUSY (code 5).
+There is no queue, automatic retry, new Task, Java lock or alternate scheduler.
+
+A validated response, including a confirmed SQLite error, releases admission.
+Row decoding/copying completes before release. A lost response, protocol failure
+or cancellation while the result is unknown leaves the Connection permanently
+in RECONCILE_REQUIRED; cancelling a waiting Task is not evidence that native
+work ended. An ensure path retains the reservation and retires helper custody,
+rather than unconditionally clearing a busy flag. No new SQL is admitted on that
+session. Only explicit retirement through close is allowed; reconciliation uses
+a newly opened, identity-verified session, with no automatic retries. Save the
+copied databaseIdentity before starting work when application reconciliation
+needs to compare the old and new identity.
+
+During Connection close, concurrent operations and repeated close requests fail
+with CONNECTION_BUSY. Statement and Connection close failures are recorded;
+unwinding a waiter cannot turn an unfinished close into later successful cleanup.
+Success requires confirmed completion. An unconfirmed helper termination remains
+an error/broken state; confirmed physical retirement can coexist with a recorded
+SQLite cleanup failure. Sequential memory and durable calls retain their
+existing resource contracts, including fresh terminal close Futures.
+
+This rule is provisional and pending D256 ratification. Ordinary FILE host
+entries retain RootActor exclusivity while suspended under the existing Future
+specification; ordinary Actor Tasks can interleave at explicit suspension
+points. The Connection guard does not change either scheduling rule.
+
+### Transactions, uncertainty and reconciliation
+
+`db.begin()` executes BEGIN IMMEDIATE; `commit()` and `rollback()` are explicit.
+`inTransaction()` reads `sqlite3_get_autocommit`, not a client Boolean. The helper
+sets and checks `synchronous=FULL` before READY and uses a 250 ms SQLite busy
+timeout. General SQL can change PRAGMAs afterwards; these settings are not an
+immutable policy barrier. The cooperative durability contract requires callers
+to preserve the journal/synchronous configuration. BUSY can
+leave the transaction open. No operation has an implicit retry.
+
+Calls synchronously wait for their correlated responses using existing stream
+Futures. Busy timeout bounds lock waiting only; SQL execution, filesystem sync
+and native calls can still block. Cancellation or abandonment of a caller wait
+cannot undo a request already sent. There is no native-call interruption promise.
+
+`SQLite.SQLiteError` carries confirmed SQLite codes or a host refusal reason.
+`SQLite.SQLiteUncertainError` derives from it and carries `outcome: "UNCERTAIN"`
+when an admitted operation loses its response or the response is invalid.
+Transport loss, protocol violation and helper rejection have distinct reasons.
+Confirmed pre-dispatch rejections use ADMISSION_REJECTED; dispatch failures
+that may follow effects remain uncertain.
+A lost COMMIT is neither success nor rollback. The session becomes permanently
+broken and must be reconciled; it cannot be reused or reopened in place.
+Local validation before any frame is written does not create an uncertain SQL
+outcome. COMMIT failures other than BUSY conservatively require reconciliation.
+
+`applyOnce(Array(clientId, operationId), sql, parameters)` records a cooperative
+receipt and the operation in one SQLite transaction. Positive i64 keys identify
+an application operation, independently of transport IDs. An identical receipt
+can answer REPLAYED; a different request under the key is a conflict. Callers
+must restrict the identified operation to transactional effects in the verified
+main database, preserve transaction boundaries and the `protos_database_identity`
+and `protos_operation_receipts` tables, preserve durability PRAGMAs, and keep
+triggers cooperative too.
+Attached databases, external-file effects and arbitrary transaction-control SQL
+have no advertised replay/atomic-receipt guarantee. Arbitrary public SQL can modify these tables
+or issue transaction control: **there is no SQL integrity barrier or general
+exactly-once execution guarantee**. No prefix filter or security parser is used.
+
+`lookup(key)` returns FOUND with changes, or provisional ABSENT. ABSENT alone
+never establishes rollback, source termination, or permission to retry. A caller
+reconciling a lost result must independently establish source termination and
+verify the same expected database identity. The API supplies no automatic final
+NOT_APPLIED inference and no automatic replay after an uncertain COMMIT.
+
+### Platform, packaging and examples
+
+The proposed initial profile is Linux x86-64 LP64, Java 25, portable JVM,
+Landlock ABI at least 10 and `libsqlite3.so.0`. Native Image, other OSes and other
+architectures have no acceptance claim. Missing/modified launcher, mismatching
+profile, insufficient ABI, denied process creation or unavailable provider all
+refuse opening; there is no unconfined fallback.
+
+`dist/build_portable.py` compiles `dist/sqlite/sandbox-exec.c` once at build time
+with compiler warnings and hardening, installs the executable under `lib/sqlite`,
+writes its profile/SHA-256 and builds the private provider with the existing
+provider builder. The ordinary ZIP, runtime projection and checksums include
+these files. The parent JVM does not load or authorize that provider implicitly.
+
+The host launches via Truffle's permitted process builder. The launcher installs
+Landlock before the helper JVM, closes inherited descriptors, sanitizes its
+environment and checks parent custody. stdin/stdout carry only bounded private
+protocol-v3 frames; stderr is separate and drained to a sink. Logical messages
+are bounded at 48 MiB and fragmented into frames at most 4096 octets; this is not
+a 4096-octet value limit. Session and request IDs, fragment sequence/count and
+strict decoding are checked before publishing a complete message. TEXT uses
+strict UTF-8 Base64url too, so JSON escaping cannot shrink the public value limit;
+a leading TEXT BOM is preserved as data. No bootstrap database paths,
+native handles or executable Protos code travel in IPC. General SQL can still
+contain path literals (for example ATTACH); Landlock, not a SQL filter, confines
+those operations.
+
+Landlock restricts access through granted paths; it is not inode provenance or a
+generic container. Interior hardlinks, bind mounts, namespace races, a malicious
+helper owner, privileged host changes and blocking native calls remain relevant
+limitations. There is no tested power-loss guarantee.
+
+See the paired installed examples
+[`sqlite-durable-confined.protos`](../../../protos/examples/ffi/sqlite-durable-confined.protos)
+and [`sqlite-durable-reopen.protos`](../../../protos/examples/ffi/sqlite-durable-reopen.protos).
+After trusted manifest provisioning, run each from a separate JVM:
+
+```sh
+/path/to/install/bin/protos --allow-sqlite=/absolute/private/dbs /path/to/install/protos/examples/ffi/sqlite-durable-confined.protos
+/path/to/install/bin/protos --allow-sqlite=/absolute/private/dbs /path/to/install/protos/examples/ffi/sqlite-durable-reopen.protos
+```
+
+The first example inserts primary key 42 once; repeating it is not idempotent.
+All new production, distribution and acceptance tests are **NOT RUN**.

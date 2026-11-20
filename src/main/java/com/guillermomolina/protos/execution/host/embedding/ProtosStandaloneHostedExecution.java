@@ -22,6 +22,7 @@ import com.guillermomolina.protos.runtime.ProtosActor;
 import com.guillermomolina.protos.runtime.ProtosEncodingValue;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
+import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosResolverCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosEntropyCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosClockCapabilityValue;
@@ -483,6 +484,50 @@ public final class ProtosStandaloneHostedExecution {
                 runtimeHost);
     }
 
+    /**
+     * As above, additionally applying the host's explicit durable SQLite selection. With a granted
+     * {@link ProtosIsolatedSqliteHostFacility.Grant} the RootActor receives the bootstrap-local
+     * {@code sqlite} authority and its bound Process Context allows process creation
+     * for the SQLite host facility only. Other Processes retain default denial. {@code Grant.NONE} is exactly the
+     * overload above.
+     */
+    public static ProtosStandaloneProcessBootstrap.Result bootstrapProcess(
+            Path coreRoot,
+            ProtosModuleResolver moduleResolver,
+            List<String> applicationArguments,
+            ProtosProcessStandardStreamBinding.ReadableBackend stdinBackend,
+            ProtosProcessStandardStreamBinding.WritableBackend stdoutBackend,
+            ProtosProcessStandardStreamBinding.WritableBackend stderrBackend,
+            NetworkGrant networkGrant,
+            ResolverGrant resolverGrant,
+            EntropyGrant entropyGrant,
+            ClockGrant clockGrant,
+            FilesystemGrant filesystemGrant,
+            ProtosIsolatedSqliteHostFacility.Grant sqliteGrant,
+            ProtosPolyglotRuntimeHost runtimeHost)
+            throws IOException {
+        Objects.requireNonNull(networkGrant, "networkGrant");
+        Objects.requireNonNull(resolverGrant, "resolverGrant");
+        Objects.requireNonNull(entropyGrant, "entropyGrant");
+        Objects.requireNonNull(clockGrant, "clockGrant");
+        Objects.requireNonNull(filesystemGrant, "filesystemGrant");
+        Objects.requireNonNull(sqliteGrant, "sqliteGrant");
+        Objects.requireNonNull(runtimeHost, "runtimeHost");
+        return bootstrapProcessWithGrant(
+                coreRoot,
+                moduleResolver,
+                applicationArguments,
+                stdinBackend,
+                stdoutBackend,
+                stderrBackend,
+                networkGrant,
+                resolverGrant,
+                entropyGrant, clockGrant,
+                filesystemGrant,
+                sqliteGrant,
+                runtimeHost);
+    }
+
     /** D243-C source compatibility: no Filesystem grant. */
     public static ProtosStandaloneProcessBootstrap.Result bootstrapProcess(
             Path coreRoot, ProtosModuleResolver moduleResolver, List<String> applicationArguments,
@@ -620,6 +665,37 @@ public final class ProtosStandaloneHostedExecution {
             FilesystemGrant filesystemGrant,
             ProtosPolyglotRuntimeHost runtimeHost)
             throws IOException {
+        return bootstrapProcessWithGrant(
+                coreRoot,
+                moduleResolver,
+                applicationArguments,
+                stdinBackend,
+                stdoutBackend,
+                stderrBackend,
+                networkGrant,
+                resolverGrant,
+                entropyGrant,
+                clockGrant,
+                filesystemGrant,
+                ProtosIsolatedSqliteHostFacility.Grant.NONE,
+                runtimeHost);
+    }
+
+    private static ProtosStandaloneProcessBootstrap.Result bootstrapProcessWithGrant(
+            Path coreRoot,
+            ProtosModuleResolver moduleResolver,
+            List<String> applicationArguments,
+            ProtosProcessStandardStreamBinding.ReadableBackend stdinBackend,
+            ProtosProcessStandardStreamBinding.WritableBackend stdoutBackend,
+            ProtosProcessStandardStreamBinding.WritableBackend stderrBackend,
+            NetworkGrant networkGrant,
+            ResolverGrant resolverGrant,
+            EntropyGrant entropyGrant,
+            ClockGrant clockGrant,
+            FilesystemGrant filesystemGrant,
+            ProtosIsolatedSqliteHostFacility.Grant sqliteGrant,
+            ProtosPolyglotRuntimeHost runtimeHost)
+            throws IOException {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(coreRoot, moduleResolver);
         ProtosEncodingValue utf8 = utf8(prelude);
         ProtosNetworkCapabilityValue network =
@@ -639,10 +715,13 @@ public final class ProtosStandaloneHostedExecution {
                         case HOST_ENTROPY -> runtimeHost.provisionHostEntropy(prelude);
                     };
             ProtosClockCapabilityValue clock = null;
+            ProtosObjectValue sqlite = null;
             ProtosStandaloneProcessBootstrap.Result bootstrap;
             try {
                 clock = clockGrant == ClockGrant.HOST_CLOCK
                         ? runtimeHost.provisionHostClock(prelude) : null;
+                sqlite = sqliteGrant.granted()
+                        ? runtimeHost.provisionIsolatedSqlite(sqliteGrant) : null;
                 bootstrap = ProtosStandaloneProcessBootstrap.create(
                         prelude,
                         applicationArguments,
@@ -657,8 +736,12 @@ public final class ProtosStandaloneHostedExecution {
                         filesystem.marker(),
                         network,
                         resolver,
-                        entropy, clock);
+                        entropy, clock, sqlite);
+                if (sqlite != null) {
+                    runtimeHost.isolatedSqliteForRuntime().bindOwnerForRuntime(sqlite, bootstrap.process());
+                }
             } catch (RuntimeException | Error failure) {
+                if (sqlite != null) runtimeHost.isolatedSqliteForRuntime().revokeForRuntime(sqlite);
                 if (clock != null) clock.retireForRuntime();
                 if (entropy != null) {
                     entropy.retireForRuntime();

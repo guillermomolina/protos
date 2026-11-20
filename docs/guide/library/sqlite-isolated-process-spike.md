@@ -913,3 +913,22 @@ topology.
 
 State: **PLAT074 OPEN; D256 pending; LIB031 BLOCKED; D-10 not fully resolved;
 D2-T1–T16 PASS (focal, prototype); D3-T1–T16 NOT RUN.**
+
+
+## 19. Production integration continuation (PLAT074-FINAL)
+
+The historical D0–D3 fixtures above are preserved. The production implementation
+now lives in `protos/lib/sqlite/internal/Isolated{Protocol,Connection,Helper}.protos`
+and `protos/lib/sqlite/isolated-helper.protos`, with a host-owned launcher facility
+and portable packaging. Applications use the proposed
+`SQLite.openDurable(sqlite, "application.db")`, not these historical protocols.
+The trusted manifest and D256 ratification details are in
+[the integration dossier](sqlite-durable-confinement.md#28-plat074-final--production-integration-candidate-not-run)
+and [the public guide](sqlite.md#durable-confined-sqlite-provisional-d256-contract).
+
+Owner-reported historical evidence: D0 8/8 PASS; D1+D1-R1 25/25 PASS;
+D2 16/16 PASS; D3 16/16 PASS; combined D1/D1-R1/D2/D3 57/57 PASS with no
+failures, errors or skips. Production compilation/integration, distribution
+acceptance and general regression are **NOT RUN**. Historical successes do not
+validate the production candidate. PLAT074 remains **OPEN**, D256 **pending**,
+LIB031 **BLOCKED**.
