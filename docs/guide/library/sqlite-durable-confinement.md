@@ -2327,20 +2327,48 @@ power-loss durability or production-wide native confinement.
 
 ## 17. PLAT074-B6 — Native authority boundaries
 
-**All seven new tests: NOT RUN.** The following are required outcomes, not
-observations. SQL and owned acquisition remain in the experimental Protos
-closures; Java supplies only controlled files, links, host coordination and
-assertions. No production Java, public SQLite API, grant or scheduler changes.
+### Owner-reported B6 execution — 20 November 2026
+
+| Gate / observation | Reported result |
+|---|---|
+| `git diff --check` | No errors |
+| `git diff --cached --check` | No errors |
+| `mvn -DskipTests test-compile` | BUILD SUCCESS |
+| `mvn '-Dtest=ProtosI144FfmFixtureAbiTest#b6T*' test` | BUILD SUCCESS |
+| Focal tests | 7 tests; 0 failures; 0 errors; 0 skipped |
+| Focal duration | 5.181 seconds |
+| B6-T1–T7 | **7/7 PASS observed** |
+
+This is a **focal** result only. The complete JUnit class, packaging
+(`mvn -DskipTests package`), `make test-protos-foreign` and `make test` were
+**not run** after B6, so no complete-class or integrated PASS is claimed.
+B2-T5 keeps its reproduced destructor-affinity failure (§16 owner-supplied B5
+execution: restricted owner TID 352634, exterior destructor TID 352635); B6
+neither repairs nor disables it.
+
+SQL and owned acquisition remain in the experimental Protos closures; Java
+supplies only controlled files, links, host coordination and assertions. No
+production Java, public SQLite API, grant or scheduler changes. The original
+hypotheses, required outcomes and negative/scope controls are preserved below;
+the status column now records the observed outcome.
 
 | Case / JUnit method | Hypothesis and positive control | Required adversarial outcome | Status |
 |---|---|---|---|
-| B6-T1 `b6T1PreopenedSqliteConnectionRetainsExteriorReadAccess` | Same physical Actor owner opens exterior value 71 before installing Landlock, retains it and reads the copied marker after restriction. | Read remains 71; close on restricted owner; fresh exterior open returns SQLITE_CANTOPEN; zero custody and owner session close. **Negative control:** PASS exposes retained authority. | NOT RUN |
-| B6-T2 `b6T2UnrestrictedHostEntryCanBypassRestrictedCarrier` | Restricted owner reads/closes granted DB, keeps session alive and parks outside guest code. | Distinct unrestricted platform TID enters the **same Actor/session** sequentially, reads exterior 72 and closes normally; restricted owner closes session. **Negative control:** PASS exposes explicit host-entry authority. | NOT RUN |
-| B6-T3 `b6T3SymlinkOutsideGrantCannotBeOpenedBySqlite` | Observer opens preexisting symlink to exterior value 73; restricted owner reads granted DB. | SQLite open through exterior-resolving link returns SQLITE_CANTOPEN; link target and exterior bytes intact. | NOT RUN |
-| B6-T4 `b6T4PreexistingHardlinkDemonstratesPathNotDatabaseIdentity` | Cleanly closed DELETE/FULL exterior DB, in-grant hardlink and Files.isSameFile establish a shared physical file. | Exterior name denied; in-grant hardlink reads 74; bytes unchanged. **Scope control:** PASS permits content through an already granted name. | NOT RUN |
-| B6-T5 `b6T5ExplicitUriModeStillObeysRestrictedFilesystemGrant` | Observer validates exterior file URI; restricted URI read returns granted 75. | Explicit URI flags 65 and 70 both deny exterior acquisition with SQLITE_CANTOPEN; no live/uncertain custody or byte changes. | NOT RUN |
-| B6-T6 `b6T6UriAttachCannotEscapeRestrictedDirectory` | URI-enabled primary ATTACHes granted secondary, checks schema and value 176, then DETACHes. | Exterior URI ATTACH fails acquisition; no exterior schema; primary read and insert still work; exterior bytes unchanged. | NOT RUN |
-| B6-T7 `b6T7SymlinkRetargetAfterRestrictionCannotExpandGrant` | Restricted owner opens initial in-grant symlink, reads 77 and closes. | Observer deterministically retargets link to exterior 177 between latch phases; fresh link open denied; direct granted path still reads 77. | NOT RUN |
+| B6-T1 `b6T1PreopenedSqliteConnectionRetainsExteriorReadAccess` | Same physical Actor owner opens exterior value 71 before installing Landlock, retains it and reads the copied marker after restriction. | Read remains 71; close on restricted owner; fresh exterior open returns SQLITE_CANTOPEN; zero custody and owner session close. **Negative control:** PASS exposes retained authority. | PASS observed 2026-11-20 |
+| B6-T2 `b6T2UnrestrictedHostEntryCanBypassRestrictedCarrier` | Restricted owner reads/closes granted DB, keeps session alive and parks outside guest code. | Distinct unrestricted platform TID enters the **same Actor/session** sequentially, reads exterior 72 and closes normally; restricted owner closes session. **Negative control:** PASS exposes explicit host-entry authority. | PASS observed 2026-11-20 |
+| B6-T3 `b6T3SymlinkOutsideGrantCannotBeOpenedBySqlite` | Observer opens preexisting symlink to exterior value 73; restricted owner reads granted DB. | SQLite open through exterior-resolving link returns SQLITE_CANTOPEN; link target and exterior bytes intact. | PASS observed 2026-11-20 |
+| B6-T4 `b6T4PreexistingHardlinkDemonstratesPathNotDatabaseIdentity` | Cleanly closed DELETE/FULL exterior DB, in-grant hardlink and Files.isSameFile establish a shared physical file. | Exterior name denied; in-grant hardlink reads 74; bytes unchanged. **Scope control:** PASS permits content through an already granted name. | PASS observed 2026-11-20 |
+| B6-T5 `b6T5ExplicitUriModeStillObeysRestrictedFilesystemGrant` | Observer validates exterior file URI; restricted URI read returns granted 75. | Explicit URI flags 65 and 70 both deny exterior acquisition with SQLITE_CANTOPEN; no live/uncertain custody or byte changes. | PASS observed 2026-11-20 |
+| B6-T6 `b6T6UriAttachCannotEscapeRestrictedDirectory` | URI-enabled primary ATTACHes granted secondary, checks schema and value 176, then DETACHes. | Exterior URI ATTACH fails acquisition; no exterior schema; primary read and insert still work; exterior bytes unchanged. | PASS observed 2026-11-20 |
+| B6-T7 `b6T7SymlinkRetargetAfterRestrictionCannotExpandGrant` | Restricted owner opens initial in-grant symlink, reads 77 and closes. | Observer deterministically retargets link to exterior 177 between latch phases; fresh link open denied; direct granted path still reads 77. | PASS observed 2026-11-20 |
+
+Reading the PASS results correctly: T3, T5, T6 and T7 PASS means Landlock
+denied the exterior acquisition attempted **on the restricted thread** in that
+controlled path. T1, T2 and T4 are negative/scope controls: their PASS means
+the **escape path exists** — retained pre-grant authority (T1), unrestricted
+host entry into the same Actor/session (T2) and a granted hardlink alias to an
+exterior-named file (T4). None of these results is a security proof of the
+complete runtime.
 
 `openUriReadOnly` and `openUriFile` reuse `acquire` and the existing
 `sqlite3_open_v2` binding with flags 65 and 70. Failed-open handles keep the
@@ -2374,6 +2402,23 @@ physical thread does not create an authority barrier per Actor. T2 tests an
 explicit host entry; it makes no claim that the ordinary scheduler migrates an
 Actor automatically. Neither T1 nor T2 nor T4 is a positive confinement proof.
 
+### Evidence summary B1–B6
+
+| Campaign | Result |
+|---|---|
+| B1 | 13/13 PASS |
+| B2 | T5 violation reproduced (exterior destructor TID ≠ restricted owner TID) |
+| B3 | 6/6 PASS |
+| B4 | 10/10 PASS |
+| B5 | 7/7 PASS |
+| B6 | 7/7 PASS (focal, 20 November 2026) |
+
+A PASS of a negative control (B6-T1, B6-T2, B6-T4) **confirms that an escape
+path exists**; it is not evidence that the runtime is secure. A PASS of a
+denial case (B6-T3, T5, T6, T7) holds only for the controlled thread, policy,
+fixture and sequence exercised. None of B1–B6 is a security proof of the
+complete runtime, and the B2-T5 failure remains open.
+
 ## 18. Preliminary decision packet — owner decision pending
 
 This evidence update supplements §§4–7; it does not ratify their earlier
@@ -2381,7 +2426,8 @@ speculative scores. For this preliminary packet the matrix below supersedes
 §5 wherever evidence is insufficient. Scores are provisional **1 (poor) to 5
 (strong)**, with confidence H/M; **NOT ESTABLISHED** means no justified score,
 not zero. There is no weighted total or automatic B/D selection. PLAT074 #1122's
-twelve dimensions remain distinct.
+twelve dimensions remain distinct. B6 does not change any score below; it
+sharpens the reasons recorded for B.
 
 A = trusted native SQLite without confinement; B = normal Unix VFS on physically
 Landlock-restricted execution; C = custom SQLite VFS; D = isolated OS process
@@ -2389,10 +2435,10 @@ with IPC; E = other native restrictions; F = defer confined durable access.
 
 | Dimension | A | B | C | D | E | F |
 |---|---|---|---|---|---|---|
-| Correctness | 1/H: no confinement | 2/H: current lifecycle fails B2-T5 | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | 5/H: withholds durable acquisition; supplies no durability |
+| Correctness | 1/H: no confinement | 2/H: current lifecycle fails B2-T5; B6-T1/T2/T4 escape paths exist | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | 5/H: withholds durable acquisition; supplies no durability |
 | Protos alignment | 2/M: trusted FFI, missing durable authority | 3/M: ordinary Protos SQL demonstrated B4/B5; execution-domain obligation open | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | 4/H: preserves current memory-only boundary |
 | Present proportionality | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | 5/H: no additional mechanism |
-| Incremental growth | NOT ESTABLISHED | 3/M: B1–B5 extend experiments without production change | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | 4/M: later additive proposal possible; workloads delayed |
+| Incremental growth | NOT ESTABLISHED | 3/M: B1–B6 extend experiments without production change | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | 4/M: later additive proposal possible; workloads delayed |
 | Future-option resilience | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | 4/M: no new host mechanism committed |
 | Scalability | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED |
 | Conceptual simplicity | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | 5/H: existing memory-only surface retained |
@@ -2400,46 +2446,72 @@ with IPC; E = other native restrictions; F = defer confined durable access.
 | Runtime cost | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | 5/H: no added durable runtime mechanism |
 | Failure and operability | 1/H: in-process native faults share JVM | 2/M: B5 recovery evidence, B2-T5 cleanup-domain violation remains | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | 3/M: existing service scope; no durable recovery service |
 | Deferral and reversibility | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | 4/M: no new API migration; consumer delay remains |
-| Evidence and implementation risk | 2/M: unrestricted access observed B4/B5, unsuitable confinement | 3/M: bounded B1–B5 evidence; complete runtime boundary disproved | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | 5/H: deferral requires no new implementation |
+| Evidence and implementation risk | 2/M: unrestricted access observed B4/B5, unsuitable confinement | 3/M: bounded B1–B6 evidence; complete runtime boundary disproved by B2-T5, B6-T1, B6-T2, B6-T4 | NOT ESTABLISHED | NOT ESTABLISHED | NOT ESTABLISHED | 5/H: deferral requires no new implementation |
+
+### Separated properties for B
+
+B is never given a single combined rating. Its properties are assessed
+independently:
+
+| Property | Status for B from B1–B6 |
+|---|---|
+| SQLite feasibility | Demonstrated in the controlled experimental path (B1, B4, B6 denial cases): the Unix VFS opens, reads, writes and closes granted databases on a Landlock-restricted thread. |
+| Transactional correctness | Bounded evidence: B4 commits/rollbacks and B5 independent-process locking and SIGKILL recovery. No power-loss, WAL-at-scale or long-running certification. |
+| Filesystem confinement | Holds only for operations executed on the restricted thread after the grant; B6-T1 (pre-grant resource) and B6-T4 (hardlink alias) show the limits of path-based policy. |
+| Actor authority | **Not guaranteed.** B6-T2: an unrestricted host thread entered the same Actor/session and read an exterior database. |
+| FFM custody | Single release and native status preserved; **destructor affinity not guaranteed** (B2-T5). |
+| Complete runtime guarantee | **Not established and currently contradicted** by the four counterexamples below. |
+
+### Material counterexamples against complete B enforcement
+
+1. **B2-T5:** native close executed from an exterior thread (owner TID 352634,
+   destructor TID 352635).
+2. **B6-T1:** a resource opened before Landlock installation retains exterior
+   read access after restriction.
+3. **B6-T2:** host entry into the same Actor from another, unrestricted thread
+   executes native SQLite with the session's resources outside the domain.
+4. **B6-T4:** an authorized hardlink exposes a file whose exterior path
+   identity is denied.
+
+While any of these paths remains possible, the matrix cannot give B a positive
+rating for complete security correctness.
 
 ### Candidate evidence, limitations and strongest counterarguments
 
-| Alternative | Evidence actually available from B1–B5 | Limitations and strongest counterargument |
+| Alternative | Evidence actually available from B1–B6 | Limitations and strongest counterargument |
 |---|---|---|
 | A — trusted native | B4 unrestricted Actor and B5 unrestricted process controls access exterior SQLite through the authorized provider. | This supplies useful native access but **cannot be described as confined SQLite**. It fails the motivating authority boundary, regardless of convenience. |
-| B — Unix VFS plus Landlock execution | B1 13/13 PASS; B3 6/6 PASS for cooperative owner cleanup; B4 10/10 PASS for real Protos SQLite on restricted owners; B5 7/7 PASS for independent process locking and SIGKILL recovery. | **Strongest counterargument:** B2-T5's exterior destructor is a concrete counterexample to complete runtime enforcement. Cooperative experimental sequencing is insufficient. B6 authority cases remain NOT RUN; no scale, portability, power-loss or overhead certification. |
-| C — custom VFS | B1–B5 exercise the normal VFS, providing no implementation or performance evidence for a custom VFS. | File access alone does not justify replacing mature locking, journal and WAL machinery. Strongest argument for C: it could expose an explicit host capability boundary; callback substrate, locking/SHM correctness and failure handling remain unimplemented and unmeasured. |
-| D — isolated OS process and IPC | B5 establishes independent JVM/PID orchestration, locks and recovery across SIGKILL; this is bounded evidence about OS-process separation. | B5 is **not** a production IPC service or complete sandbox. Strongest counterargument: command uncertainty, cancellation, packaging, handle identity, IPC and startup/copy costs are unimplemented/unmeasured. A distinct isolation boundary is available, not a proved Protos architecture. |
-| E — other native restrictions | B1–B5 supply Landlock evidence only, not comparable experiments for other restrictions. Existing §6 references remain precedents. | Strongest counterargument: platform policies and lifecycle mechanisms differ; a portable portfolio cannot be inferred from one Linux experiment. Coverage, compatibility and cost are NOT ESTABLISHED. |
+| B — Unix VFS plus Landlock execution | B1 13/13 PASS; B3 6/6 PASS for cooperative owner cleanup; B4 10/10 PASS for real Protos SQLite on restricted owners; B5 7/7 PASS for independent process locking and SIGKILL recovery; B6 7/7 PASS (focal) for authority boundaries. **SQLite Unix VFS works under Landlock in the controlled experimental path, but the current runtime does not guarantee the required authority or thread affinity.** | **Strongest counterargument:** the four material counterexamples above (B2-T5, B6-T1, B6-T2, B6-T4). Cooperative experimental sequencing is insufficient. No scale, portability, power-loss or overhead certification. |
+| C — custom VFS | B1–B6 exercise the normal VFS, providing no implementation or performance evidence for a custom VFS. | File access alone does not justify replacing mature locking, journal and WAL machinery. Strongest argument for C: it could expose an explicit host capability boundary; callback substrate, locking/SHM correctness and failure handling remain unimplemented and unmeasured. |
+| D — isolated OS process and IPC | B5 establishes independent JVM/PID orchestration, locks and recovery across SIGKILL; this is bounded evidence about OS-process separation. **D remains a pending candidate.** | The existence of independent JVMs in B5 does **not** demonstrate a secure IPC implementation or a whole-process sandbox. Strongest counterargument: command uncertainty, cancellation, packaging, handle identity, IPC and startup/copy costs are unimplemented/unmeasured. |
+| E — other native restrictions | B1–B6 supply Landlock evidence only, not comparable experiments for other restrictions. Existing §6 references remain precedents. | Strongest counterargument: platform policies and lifecycle mechanisms differ; a portable portfolio cannot be inferred from one Linux experiment. Coverage, compatibility and cost are NOT ESTABLISHED. |
 | F — defer | Existing memory-only API can remain unchanged; no experiment requires granting production durable authority. | Strongest counterargument: the requested durable workload remains unavailable. Deferral preserves options but cannot stand in for a durable implementation or claim its correctness. |
 
 ### Provisional recommendation for the owner's decision
 
 B is viable for **controlled SQLite operations in the tested Linux/JVM profile**.
 It still lacks a runtime guarantee that every operation and destructor executes
-under the same authorized physical domain. B2-T5's owner TID 352634 versus
-exterior destructor TID 352635 demonstrates that current close does not satisfy
-that property. No performance score can compensate for this missing invariant.
-D offers a different process isolation boundary, but its production IPC,
-uncertainty semantics and costs have not been implemented or measured. C is not
-justified merely because SQLite needs files. A is trusted native access and
-cannot be labelled confined. The owner must **explicitly approve the definitive
-mechanism before any production modification**. This packet selects neither B
-nor D, closes no issue and unblocks no durable API.
+under the same authorized physical domain, and B6 adds three further escape
+paths (pre-grant resources, unrestricted host entry, hardlink aliases). No
+performance score can compensate for these missing invariants. D offers a
+different process isolation boundary, but its production IPC, uncertainty
+semantics and costs have not been implemented or measured. C is not justified
+merely because SQLite needs files. A is trusted native access and cannot be
+labelled confined. The owner must **explicitly approve the definitive mechanism
+before any production modification**. This packet selects neither B nor D,
+closes no issue and unblocks no durable API.
 
-The smallest justified next scope is this bounded adversarial test slice. A
-future high-Actor-count or long-lived service could expose per-domain carrier
+A future high-Actor-count or long-lived service could expose per-domain carrier
 costs and in-process native globals for B; escape requires an explicitly approved
 host-domain replacement while preserving ordinary library behavior. A future
 low-latency deployment could make D's IPC cost unacceptable; escape requires
 revisiting deployment/transport before exposing a public contract. Neither cost
 has been measured. F delays consumers but avoids shipping a compatibility promise
 that later needs tightening. C/E should be revisited only with concrete missing
-requirements and an implementation/evidence plan, rather than speculative extra
-machinery. Cancellation, uncertain commit outcomes, process crash, grant identity,
-carrier admission and final teardown must be resolved in the definitive packet.
+requirements and an implementation/evidence plan. The invariants of §19 and the
+contracts of §20 state what any definitive packet must resolve.
 
-### Primary sources and retained Truffle precedents
+### Primary sources
 
 - [Landlock userspace API](https://www.kernel.org/doc/html/latest/userspace-api/landlock.html): enforcement domain, filesystem hierarchy and existing authority limits.
 - [SQLite URI filenames](https://www.sqlite.org/uri.html): explicit connection URI mode and ATTACH URI interpretation.
@@ -2448,71 +2520,125 @@ carrier admission and final teardown must be resolved in the definitive packet.
 - [SQLite WAL](https://www.sqlite.org/wal.html): sidecars, locks, checkpoints and recovery context; not a B6 execution result.
 - [sqlite3_close / close_v2](https://www.sqlite.org/c3ref/close.html): dependent-resource cleanup and deferred physical destruction.
 
-The pinned source references in §§14–15 remain intact: GraalPy
-`PythonContext.createSystemThread`, `PythonContext.finalizeContext`,
-`PythonLanguage.initializeThread`, `PythonLanguage.disposeThread`,
-`PythonSystemThreadTask.run`; Espresso
-`EspressoReferenceDrainer.startReferenceDrain`,
-`EspressoReferenceDrainer.shutdownAndWaitReferenceDrain`,
-`EspressoReferenceDrainer.ReferenceDrain.run`, and
-`EspressoLanguage.finalizeContext`. They partially support Truffle thread
-lifecycle and cleanup reasoning; **they do not themselves implement the required
-SQLite/Landlock solution**. No production comments are changed to cite them.
+Truffle precedents are recorded with their limits in §21.
+
+## 19. Minimum durable-authority contract
+
+These invariants are obligations any definitive durable-SQLite mechanism must
+satisfy. Identifiers are neutral document labels (`DA-1`…`DA-12`), not names
+for code entities. **None is implemented.** "Existing evidence" cites only
+experimental observations; "future acceptance condition" is what a later,
+owner-approved slice must demonstrate.
+
+| ID | Invariant | Existing evidence | Counterexample or pending coverage | Future acceptance condition |
+|---|---|---|---|---|
+| DA-1 | **Explicit grant.** An Actor cannot acquire a durable connection merely by importing `std:sqlite` or holding a path String; the host must supply an explicit, verifiable durable authority. | Importing `std:sqlite` acquires no native authority; only `openMemory()` exists; `ffi:sqlite3` requires host authorization (§2; [sqlite.md](sqlite.md#authority-and-target)). | No durable grant form exists; B4–B6 use a private test module, not a grant. | An approved grant form without which every durable acquisition fails, and tests showing a String path alone cannot open a file. |
+| DA-2 | **Mandatory physical domain.** Every SQLite operation with possible filesystem effects runs inside the authorized domain: open, prepare, step, reset, finalize, checkpoint, close, owned destructors, session cleanup, recovery and reopen. Not only `sqlite3_open_v2`. | B4 runs open/prepare/step/finalize/close on restricted owners; B3 shows cooperative owner-side close. | B2-T5 (exterior close); checkpoint, recovery-reopen and session cleanup under the domain not enforced. | Every listed operation is shown, including on failure and teardown paths, to execute only within the domain, with an exterior attempt rejected before entering C. |
+| DA-3 | **Host entry.** Entry from an unauthorized physical thread cannot execute native operations with the confined session's authority. | None positive. | B6-T2: unrestricted host thread entered the same Actor/session and read exterior value 72. Actor-local identity is insufficient. | Host entry from an unauthorized thread is refused or routed into the domain, demonstrated by a T2-style adversarial test failing to reach C outside it. |
+| DA-4 | **Custody.** Every release of native owned resources respects the domain of their acquisition. | Single release and native status preserved (B2–B4). | B2-T5: current `FfmSession.close()` does not guarantee destructor affinity. | Destructors (explicit release, session close, Actor/Process teardown) run only in the acquisition domain; B2-T5's adversarial assertion passes without being weakened. |
+| DA-5 | **Pre-grant resources.** A native connection or descriptor opened before Landlock installation is not automatically revoked. | — | B6-T1: pre-opened connection still read exterior value 71 after restriction. | A defined initialization/acquisition order in which no durable resource exists before the grant, with a T1-style test showing no pre-grant resource reaches the domain. |
+| DA-6 | **Grant identity.** Authority over a directory is not exclusive authority over one SQLite file. | B6-T3/T5/T6/T7: symlink, URI, ATTACH and retarget escapes denied in the controlled path. | B6-T4: in-grant hardlink exposes an exterior-named file. Hardlinks, aliases, namespace changes and alternative names undecided. | An owner decision on the grant's identity unit and its treatment of hardlinks/aliases/namespace changes, with tests for each decided case. |
+| DA-7 | **No alternative FFM authority.** An application able to call `ffi:sqlite3` arbitrarily outside the domain cannot be described as confined by the `std:sqlite` API. | Provider is `TRUSTED_IN_PROCESS` (§2). | Trusted and confined profiles are not distinguished today. | Explicitly distinct trusted and confined profiles; in the confined profile, no exterior path to `ffi:sqlite3` for the governed databases. |
+| DA-8 | **Non-reentrant Actor.** Confinement introduces no simultaneous guest execution in one Actor and no implicit suspension to hide a blocking SQLite call. | Native calls are synchronous; a blocked call holds its Actor ([ffm-provider.md](../interop/ffm-provider.md#security-and-limits)). | No confined mechanism exists to verify. | Tests showing one guest execution per Actor and no implicit suspension under the confined mechanism. |
+| DA-9 | **Cancellation.** No promise of safe interruption of arbitrary C through `Thread.interrupt`, `ThreadLocalAction` or Future cancellation. States distinguished: request before admission; native call admitted; call blocked; cancellation requested; operation finished; uncertain outcome. | `ThreadLocalAction` requires safepoint servicing and cannot interrupt blocked C (§14). | State model not defined in any contract. | An approved state model covering all six states, with only pre-admission cancellation guaranteed and other states reported, never silently resolved. |
+| DA-10 | **Uncertain COMMIT.** If the process ends before a confirmation reaches the client, the operation is reported neither as committed nor as rolled back; recovery must observe durable state before deciding whether to repeat. | B5 SIGKILL recovery observes durable state after kill. | No client-visible uncertain outcome exists. | An uncertain-outcome result and a recovery procedure that inspects durable state before any retry, tested across process termination. |
+| DA-11 | **Final close.** Session close is irreversible and idempotent; normal Actor/Process termination is not necessarily completed physical destruction while SQLite keeps live dependencies. | Single release; closed session not reactivated (§2, B4-R1). | close_v2 deferred destruction and dependent resources not tracked through termination. | Tests showing repeated close is a no-op, no reopen of a closed session, and an explicit distinction between logical close and completed physical destruction. |
+| DA-12 | **Compatibility.** Preserve LIB029/LIB030; Protos-first `std:sqlite`; Actor-local owned handles; copied results; terminal Futures; current message semantics; no JDBC or ORM; no historical Java infrastructure; no implicit durable access. | Current in-memory API and tests (LIB029/LIB030). | Any durable mechanism not yet evaluated against these. | Existing LIB029/LIB030 coverage unchanged and passing, with the durable addition purely additive and owner-approved. |
+
+## 20. Pending implementation contract
+
+Two candidate contracts are documented. **Neither is selected.** All items are
+**NOT IMPLEMENTED**; experimental evidence is cited only as context, never as a
+PASS of the contract item.
+
+### Contract B — in-JVM confinement
+
+| Acceptance item | Required property | Current status |
+|---|---|---|
+| B-1 Physically confined native execution | All SQLite C for a confined session runs on threads under the authorized Landlock domain. | NOT IMPLEMENTED (experimental feasibility only: B1, B4) |
+| B-2 Mandatory affinity of all operations | Every operation of DA-2 executes in the domain. | NOT IMPLEMENTED (contradicted by B2-T5) |
+| B-3 Close from any requester without destructor displacement | A close requested from any thread executes the destructor in the acquisition domain. | NOT IMPLEMENTED (B3 shows cooperative feasibility only; B2-T5 counterexample) |
+| B-4 Host-entry admission | Unauthorized host entry cannot reach C with session authority. | NOT IMPLEMENTED (contradicted by B6-T2) |
+| B-5 In-flight C operations | Admitted, blocked and finishing calls handled per DA-9 without unsafe interruption. | NOT IMPLEMENTED |
+| B-6 Pre-Landlock resources | No durable resource exists before the grant. | NOT IMPLEMENTED (contradicted by B6-T1) |
+| B-7 Multiple grants | Distinct grants/domains coexist without widening each other. | NOT IMPLEMENTED |
+| B-8 WAL, SHM, locking and recovery | Sidecars, locks, checkpoints and recovery stay inside the domain. | NOT IMPLEMENTED (B4/B5 cover a bounded subset only) |
+
+### Contract D — isolated OS process
+
+| Acceptance item | Required property | Current status |
+|---|---|---|
+| D-1 Truly isolated OS process | SQLite runs in a separate OS process. | NOT IMPLEMENTED (B5 shows independent JVM processes only) |
+| D-2 Restricted filesystem authority | The process running SQLite holds only the granted filesystem authority. | NOT IMPLEMENTED |
+| D-3 Bounded communication with Protos | A bounded, validated channel between Protos and the helper. | NOT IMPLEMENTED |
+| D-4 No transferred native handles | No native handle crosses the boundary. | NOT IMPLEMENTED |
+| D-5 Copied Protos messages and results | Requests and results are copied Protos values. | NOT IMPLEMENTED |
+| D-6 Operation identity | Every operation has an identity usable for correlation and recovery. | NOT IMPLEMENTED |
+| D-7 Process-crash detection | Helper termination is detected and surfaced. | NOT IMPLEMENTED |
+| D-8 Unacknowledged COMMIT is uncertain | Per DA-10. | NOT IMPLEMENTED |
+| D-9 Recovery and restart | The helper can be restarted with recovery that observes durable state. | NOT IMPLEMENTED (B5 SIGKILL recovery is bounded context) |
+| D-10 Process cleanup and revocation | Helper resources and authority are released/revoked on close. | NOT IMPLEMENTED |
+| D-11 No shared Landlock domain assumption | No reliance on a main-process Actor sharing the helper's Landlock domain. | NOT IMPLEMENTED |
+
+No hypothetical Java class or method names are introduced by either contract.
+
+## 21. Truffle precedents and limits
+
+Only precedents already recorded with pinned sources in §§14–15 are retained:
+GraalPy at `5c8486970dead373d888f25210788cca5d79c374`, Espresso at
+`bd884eb3effea2b31f3fbdd7250267ba8e9eca8e`. Espresso entries were supplied as
+already-verified input (§14); no new upstream investigation is claimed here.
+
+| Mechanism (real method, annotations) | Verified behavior | Property it may contribute to Protos design | Property it does not demonstrate |
+|---|---|---|---|
+| GraalPy `PythonContext.createSystemThread` (no method annotation) | Builds a thread through `env.newTruffleThreadBuilder(task).threadGroup(...).build()`, sets daemon/name, registers a weak reference, returns it unstarted. | Context-managed thread creation for a dedicated execution domain. | That raw Java workers are equivalent; any Landlock or native affinity. |
+| GraalPy `PythonContext.finalizeContext` (`@TruffleBoundary`, `@SuppressWarnings("try")`) | Ordered shutdown: hooks, async handler, stream flush, thread joins, thread-state disposal, NativeContext closed last, then system-thread joins. | Explicit ordering of native cleanup at context end. | Affinity of arbitrary native destructors to an acquisition domain. |
+| GraalPy `PythonLanguage.initializeThread` (`@Override`) | Delegates to `context.attachThread(thread, threadState)`. | A lifecycle hook for per-thread setup. | An owned-resource or filesystem policy. |
+| GraalPy `PythonLanguage.disposeThread` (`@Override`) | Delegates to `context.disposeThread(thread, false)`. | A lifecycle hook for per-thread teardown. | That resources acquired on the thread are destroyed there. |
+| GraalPy `PythonSystemThreadTask.run` (`@Override`, `public final`) | Calls `doRun()`, handles the thread-kill exception, logs/rethrows other failures; contract requires safepoint polling. | Explicit lifecycle handling of a system thread. | Native teardown affinity or interruption of blocked C. |
+| Espresso `EspressoReferenceDrainer.startReferenceDrain` | Starts the reference-drain thread (per the recorded precedent). | A dedicated cleanup thread started under language control. | Landlock restriction or SQLite-domain affinity. |
+| Espresso `EspressoReferenceDrainer.shutdownAndWaitReferenceDrain` | Shuts down and waits for the drain thread. | Bounded, cooperative termination of a cleanup thread. | Interruption of arbitrary blocked C. |
+| Espresso `EspressoReferenceDrainer.ReferenceDrain.run` | Runs the drain loop on that dedicated thread. | Cleanup confined to one controlled thread. | That native destructors of an Actor run in its authorized domain. |
+| Espresso `EspressoLanguage.finalizeContext` | Context finalization at the same revision. | Ordered teardown at context end. | Completed physical destruction of SQLite dependencies. |
+
+`ThreadLocalAction` is **not** a native scheduler and **not** a cancellation
+solution for blocking C: delivery requires the target to service safepoints,
+which a thread blocked in C does not do. The existence of these mechanisms
+authorizes **no** production Java change, and no production comment cites
+them.
+
+## 22. Decision requested from the owner
+
+The principal alternatives presented for later approval:
+
+- **B — In-JVM confinement.** Keeps SQLite in the same process, but requires
+  imposing a native execution boundary (Contract B, §20) that the current
+  runtime does not yet guarantee (§18 counterexamples).
+- **D — Isolated OS process.** Introduces a process boundary (Contract D,
+  §20), with pending cost and complexity of IPC, packaging, recovery and
+  custody.
+
+Retained: **A** as the trusted, unconfined profile (never labelled confined);
+**C/E** as alternatives without sufficient evidence; **F** as legitimate
+deferral.
+
+**No owner approval is recorded.** PLAT074 remains **OPEN**, D256 **pending**,
+LIB031 **BLOCKED**.
 
 ### Scope, inspection and validation handoff
 
-Materially inspected for B6: the three changed files (existing closures, test
-lifecycle and B1–B5 history); `AGENTS.work/DESIGN.md` (owner approval boundary),
-`AGENTS.work/IMPLEMENTATION.md` (human-executed validation and blocker ownership),
-`AGENTS.work/REFERENCE.md` and `LICENSE.TXT` (Part 5 notice preservation),
-`src/AGENTS.md` (existing guest-entry boundary), `protos/AGENTS.md` (source
-conventions), `spec/AGENTS.md` (normative ownership), and
-`spec/semantics/FFI.md` (trusted synchronous calls, Actor-local authority,
-nontransferability, single retirement/destruction and native status as data);
-`ProtosLinuxConfinedFilesystemNative.java` and
-`ProtosLinuxConfinedFilesystemLandlock.java` (existing root-descriptor, close and
-restriction signatures only; no production changes).
-The locally documented D256-C1 handoff/blocker assessment in §§1–3 was retained;
-the remote blocker ledger and durable work records were not refreshed in this
-local repository slice. No normative gap is implemented or blocker discharged.
-The existing APL notices remain intact; no source file or packaging metadata was
-added, removed or renamed. Production and specifications are unaffected.
+B7 is documentation only: this packet, [sqlite.md](sqlite.md),
+[ffi.md](ffi.md) and [ffm-provider.md](../interop/ffm-provider.md). No source,
+test, specification, build or packaging file changed. B6 inputs inspected were
+the existing §§14–18 of this packet and the owner-reported B6 execution above.
+The earlier B6 inspection record (the three B6 files, instruction files,
+`spec/semantics/FFI.md` and the Landlock native classes) is unchanged. The
+remote blocker ledger and durable work records were not refreshed.
 
 State: **PLAT074 OPEN; D256 pending; LIB031 BLOCKED; B1 13/13 PASS;
-B2-T5 FAIL observed; B3 6/6 PASS; B4 10/10 PASS; B5 7/7 PASS observed;
-B6 NOT RUN.** No new compilation, test or validator was executed by the agent.
+B2-T5 FAIL observed; B3 6/6 PASS; B4 10/10 PASS; B5 7/7 PASS; B6 7/7 PASS
+(focal).** No compilation, test or validator was executed by the agent.
 
-Owner validation proceeds in order, stopping on failure:
-
-```sh
-git status --short
-git diff --check
-git diff -- protos/tests/foreign-provider/sqlite-landlock-provider.protos src/test/java/com/guillermomolina/protos/execution/foreign/api/ProtosI144FfmFixtureAbiTest.java docs/guide/library/sqlite-durable-confinement.md
-mvn -DskipTests test-compile
-```
-
-After those gates, focal B6 execution (native fixture compilation is included;
-duration not yet measured):
-
-```sh
-mvn '-Dtest=ProtosI144FfmFixtureAbiTest#b6T*' test
-```
-
-Then run the complete affected class (B5 previously took 58.66 seconds for the
-class, 1 minute 23 seconds total; the new candidate's duration is unknown):
-
-```sh
-mvn -Dtest=ProtosI144FfmFixtureAbiTest test
-```
-
-B2-T5 must retain its assertion and observed failure evidence. If it fails,
-report the failure without proceeding to costlier gates or claiming the complete
-class passed. Packaging, the foreign-provider lane and final integrated FULL
-gate remain outstanding, for a subsequent owner-directed handoff after focal
-failure assessment:
-
-```sh
-mvn -DskipTests package
-make test-protos-foreign
-make test
-```
+Still outstanding (not run after B6): the complete
+`ProtosI144FfmFixtureAbiTest` class (B2-T5 expected to fail), packaging,
+`make test-protos-foreign` and `make test`.

@@ -502,6 +502,27 @@ symbol whitelist and none would be an isolation guarantee.
 - Session close waits for admitted calls, so a blocked C call can delay it.
 - No isolation of the process from arbitrary C behavior is guaranteed.
 
+Five identities are distinct and **not interchangeable**:
+
+| Identity | What it is |
+|---|---|
+| Authorizing host | The host that allows a logical native library alias. |
+| Owning Actor | The Actor that owns an FFM session and its owned references. |
+| Physical thread | The OS thread that actually executes a downcall or destructor. |
+| Landlock domain | The restriction attached to that physical thread, if any. |
+| OS process | The process hosting the native library and its global state. |
+
+Owning a session does not pin its downcalls or destructors to one thread, and a
+thread's Landlock domain says nothing about other threads of the same process.
+PLAT074 experiment B6-T2 showed that a native operation can be executed from a
+different, unrestricted host thread through the same Actor; B2-T5 showed a
+destructor running on a thread other than the restricted owner.
+
+> **Warning:** a Protos `Filesystem` grant is not automatic confinement of
+> SQLite C (or any C library). No provider configuration or flag provides such
+> confinement. See the
+> [PLAT074 durable confinement packet](../library/sqlite-durable-confinement.md).
+
 ## Relationship to LIB028 and LIB029
 
 - **LIB028** (`std:ffi`) defines the public Protos API: ordinary

@@ -235,6 +235,22 @@ implicit Protos Filesystem grant. This is not SQL sandboxing: explicitly supplie
 SQL still runs in a trusted in-process C library with process authority. Native
 faults can corrupt memory or terminate the process.
 
+Durable-confinement research (PLAT074) has not changed this boundary:
+
+1. `std:sqlite` remains a library written in Protos.
+2. The publicly tested API is in-memory only.
+3. Importing the module grants no native permission.
+4. Private ABI retention is Actor-local.
+5. The B4–B6 experiments use a private test module, not this library's API.
+6. Their results do not authorize a public `openFile` (or any file) API.
+7. Landlock restricts operations of the restricted thread only, not every host
+   entry into the same Actor: an unrestricted host thread entering that Actor
+   was observed reading an exterior database (B6-T2).
+8. The current FFM provider profile is trusted, not a sandbox.
+
+See the [durable confinement decision packet](sqlite-durable-confinement.md)
+for evidence, open counterexamples and the pending owner decision.
+
 ## Connection and Statement operations
 
 | Operation | Result |
@@ -468,5 +484,7 @@ pending until the maintainer runs it.
   provider only; no Native Image loading of external provider JARs.
 - Native authority must be granted explicitly by the host.
 - SQLite runs as trusted in-process native code: there is no native C sandbox,
-  and Protos Filesystem authority does not confine it.
+  and Protos Filesystem authority does not confine it. Landlock experiments
+  are not a confinement guarantee; see
+  [sqlite-durable-confinement.md](sqlite-durable-confinement.md).
 - No general transaction abstraction, native callbacks, ORM or query builder.

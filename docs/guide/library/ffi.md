@@ -254,6 +254,15 @@ memory or terminate the process. There is no sandbox, and Protos `Filesystem`
 authority does not confine C code. The provider accepts only host-authorized
 logical library aliases, not paths supplied to `FFI.bind`.
 
+FFM session identity is not thread affinity. Native resources may be closed
+from a host thread different from the one that acquired them, and a Landlock
+policy installed on another thread does not restrict that execution. Owned
+handles keep their custody semantics (single release, rejection after release),
+but custody is not a filesystem policy. `FFI.release` and session close must
+not be described as automatically confined operations. The
+[SQLite durable confinement packet](sqlite-durable-confinement.md) records the
+experimental evidence (B2-T5, B6-T2).
+
 This FFM profile is not a Native Image portability promise. Native Image cannot
 load this external provider JAR. Platform support is limited to the portable
 JVM, Java 25, supported GraalVM 25.5 and Linux x86-64 LP64.
