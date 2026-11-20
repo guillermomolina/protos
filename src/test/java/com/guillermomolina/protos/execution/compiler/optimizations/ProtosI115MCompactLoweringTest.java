@@ -205,6 +205,54 @@ final class ProtosI115MCompactLoweringTest {
     }
 
     @Test
+    void multiLocalLayoutRetainsCompactDynamicReadOutsidePhysicalNames() throws Exception {
+        try (ProtosStandaloneHostedSession session = openSession(
+                "multi-local-dynamic-selection", """
+                context.lateBoundName: 7
+                run: () => {
+                    first: 1
+                    middle: 2
+                    last: 3
+                    first + middle + last + lateBoundName
+                }
+                """)) {
+            var prepared = session.prepareTopLevel("run");
+            ProtosBytecodeRootNode root = selectedRoot(prepared);
+            var layout = root.lexicalFrameLayoutOrNull();
+            assertEquals(3, layout.size());
+            assertEquals(java.util.Set.of("first", "middle", "last"),
+                    java.util.stream.IntStream.range(0, layout.size())
+                            .mapToObj(layout::name).collect(java.util.stream.Collectors.toSet()));
+            for (int index = 0; index < layout.size(); index++) {
+                assertEquals(index, layout.indexOf(new String(layout.name(index))));
+            }
+            assertEquals(-1, layout.indexOf("lateBoundName"));
+            List<Instruction> instructions = root.getBytecodeNode().getInstructionsAsList();
+            List<String> names = instructions.stream().map(ProtosInstructionNames::of).toList();
+            int lookup = -1;
+            for (int index = 2; index < instructions.size(); index++) {
+                if (names.get(index).equals("c.Lookup")) {
+                    assertEquals("c.AccessNamedLexical", instructions.get(index).getName());
+                    assertEquals(ProtosNamedLexicalAccess.LOOKUP,
+                            instructions.get(index).getArguments().stream()
+                                    .filter(argument -> argument.getName().equals("access"))
+                                    .findFirst().orElseThrow().asConstant());
+                    assertEquals("lateBoundName", loadedConstant(instructions.get(index - 1)));
+                    assertEquals(Boolean.TRUE, loadedConstant(instructions.get(index - 2)));
+                    lookup = index;
+                }
+            }
+            assertTrue(lookup >= 0, names.toString());
+            assertFalse(names.stream().anyMatch(name -> name.contains("CurrentActivation")));
+            assertTrue(names.stream().filter(name -> name.startsWith("load.local")).count() >= 3,
+                    names.toString());
+            assertTrue(names.stream().filter(name -> name.startsWith("store.local")).count() >= 3,
+                    names.toString());
+            assertEquals(13L, prepared.executable().execute().asLong());
+        }
+    }
+
+    @Test
     void observableCurrentBindingUsesItsPhysicalPresenceAwareRead() throws Exception {
         try (ProtosStandaloneHostedSession session = openSession(
                 "current-binding-selection", "run: (lateBoundName) => { context\nlateBoundName }")) {
@@ -598,6 +646,109 @@ final class ProtosI115MCompactLoweringTest {
             session.prepareTopLevel("redefine").executable().execute();
             assertEquals(31L, prepared.executable().execute().asLong(),
                     "atPut preserves the element and the redefined size limits the loop");
+        }
+    }
+
+    @Test
+    void constantArrayOperationsKeepPrimitiveConstantOperands() throws Exception {
+        try (ProtosStandaloneHostedSession session = openSession(
+                "constant-array-operands", """
+                longs: () => [1, 2, 3]
+                doubles: () => [1.5, 0.0, 2.5]
+                booleans: () => [true, false, true]
+                """)) {
+            for (var entry : java.util.Map.of(
+                    "longs", long[].class,
+                    "doubles", double[].class,
+                    "booleans", boolean[].class).entrySet()) {
+                ProtosStandaloneHostedSession.PreparedTopLevel prepared =
+                        session.prepareTopLevel(entry.getKey());
+                ProtosBytecodeRootNode root = selectedRoot(prepared);
+                List<Instruction> instructions = root.getBytecodeNode().getInstructionsAsList();
+                List<String> names = instructions.stream()
+                        .map(ProtosInstructionNames::of).toList();
+                int constructions = 0;
+                for (Instruction instruction : instructions) {
+                    if (!ProtosInstructionNames.of(instruction).contains("MakeConstant")) {
+                        continue;
+                    }
+                    constructions++;
+                    assertTrue(instruction.getArguments().stream()
+                            .filter(argument -> argument.getKind()
+                                    == Instruction.Argument.Kind.CONSTANT)
+                            .anyMatch(argument -> entry.getValue()
+                                    .isInstance(argument.asConstant())),
+                            entry.getKey() + ": " + instruction);
+                }
+                assertEquals(1, constructions, names.toString());
+                assertTrue(names.stream().noneMatch(name -> name.equals("c.MakeArray")),
+                        "Admitted constant construction must not use the general vector: "
+                                + names);
+                Value first = prepared.executable().execute();
+                Value second = prepared.executable().execute();
+                assertEquals(3L, first.getArraySize());
+                assertEquals(3L, second.getArraySize());
+            }
+        }
+    }
+
+    @Test
+    void sixtyFourIntegerLiteralUsesConstantConstructionWithoutPublication()
+            throws Exception {
+        try (ProtosStandaloneHostedSession session = openSession(
+                "sixty-four-integer-literal", """
+                run: () => {
+                    values: [
+                        13, 18, 6, 42, 43, 1, 58, 4,
+                        7, 32, 8, 59, 9, 64, 38, 37,
+                        25, 61, 24, 21, 23, 63, 35, 31,
+                        34, 30, 17, 48, 51, 41, 27, 40,
+                        15, 33, 46, 2, 28, 44, 54, 56,
+                        62, 11, 22, 12, 19, 50, 26, 55,
+                        60, 53, 57, 36, 5, 45, 14, 16,
+                        20, 39, 47, 10, 3, 52, 29, 49
+                    ]
+                    values[0] = values[0] + values[63] * 1000
+                    values[0] * 100 + values.size()
+                }
+                shadowed: () => {
+                    Array: (a, b) => a + b
+                    [1, 2]
+                }
+                """)) {
+            ProtosStandaloneHostedSession.PreparedTopLevel prepared =
+                    session.prepareTopLevel("run");
+            ProtosBytecodeRootNode root = selectedRoot(prepared);
+            List<Instruction> instructions = root.getBytecodeNode().getInstructionsAsList();
+            List<String> names = instructions.stream().map(ProtosInstructionNames::of).toList();
+            assertEquals(1, names.stream()
+                    .filter(name -> name.contains("MakeConstantLongArray")).count(),
+                    names.toString());
+            for (Instruction instruction : instructions) {
+                if (ProtosInstructionNames.of(instruction).contains("MakeConstantLongArray")) {
+                    long[] constant = (long[]) instruction.getArguments().stream()
+                            .filter(argument -> argument.getKind()
+                                    == Instruction.Argument.Kind.CONSTANT)
+                            .map(Instruction.Argument::asConstant)
+                            .filter(long[].class::isInstance)
+                            .findFirst().orElseThrow();
+                    assertEquals(64, constant.length);
+                    assertEquals(13L, constant[0]);
+                    assertEquals(49L, constant[63]);
+                }
+            }
+            for (String forbidden : List.of("c.MakeArray", "PublishCurrentClosureContext",
+                    "CurrentActivation", "EnsureCurrentClosureLexicalView")) {
+                assertTrue(names.stream().noneMatch(name -> name.contains(forbidden)),
+                        forbidden + ": " + names);
+            }
+            long expected = (13L + 49L * 1000L) * 100L + 64L;
+            for (int round = 0; round < 4; round++) {
+                assertEquals(expected, prepared.executable().execute().asLong(),
+                        "Every evaluation starts from the original literal");
+            }
+            assertEquals(3L, session.prepareTopLevel("shadowed").executable().execute().asLong(),
+                    "An unadmitted factory keeps its dynamic selection");
         }
     }
 

@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.185-SNAPSHOT
+
+- **I115.** Cache constant primitive Array operands per site while each Array still receives a private copy, and make the Closure lexical frame layout compilation-final with an exploded name lookup. Read module bindings through a cached location only while its storage is still the context's current authority, otherwise fall back to the owner. Refresh the generated-bytecode BCI partial-evaluation baseline for the wider constant Array instructions and extend Array, lexical selection, lexical storage, compact lowering and compact callee regressions.
+
 ## 0.4.184-SNAPSHOT
 
 - **I115.** Store Array generation length independently of its physical backing and write directly to admitted primitive storage after copy-on-write detachment. Preserve generic storage generalization, indexed protocol selection and published snapshots. Extend Array factory, primitive indexed-write, snapshot and bytecode-lowering regressions.

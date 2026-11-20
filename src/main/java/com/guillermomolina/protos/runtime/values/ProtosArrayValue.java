@@ -26,6 +26,7 @@ import com.oracle.truffle.api.library.ExportLibrary;
 import com.oracle.truffle.api.library.ExportMessage;
 
 import java.util.AbstractList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
@@ -285,25 +286,25 @@ public final class ProtosArrayValue extends ProtosObjectValue {
      */
     public ProtosArrayValue(Object parent, long[] elements) {
         super(parent);
+        long[] source = Objects.requireNonNull(elements, "elements");
         this.indexedGeneration =
-                new IndexedGeneration(
-                        Objects.requireNonNull(elements, "elements").clone());
+                new IndexedGeneration(Arrays.copyOf(source, source.length));
     }
 
     /* Specialized Float-storage construction with its own primitive backing. */
     public ProtosArrayValue(Object parent, double[] elements) {
         super(parent);
+        double[] source = Objects.requireNonNull(elements, "elements");
         this.indexedGeneration =
-                new IndexedGeneration(
-                        Objects.requireNonNull(elements, "elements").clone());
+                new IndexedGeneration(Arrays.copyOf(source, source.length));
     }
 
     /* Specialized Boolean-storage construction with its own primitive backing. */
     public ProtosArrayValue(Object parent, boolean[] elements) {
         super(parent);
+        boolean[] source = Objects.requireNonNull(elements, "elements");
         this.indexedGeneration =
-                new IndexedGeneration(
-                        Objects.requireNonNull(elements, "elements").clone());
+                new IndexedGeneration(Arrays.copyOf(source, source.length));
     }
 
     public int indexedSize() {

@@ -57,6 +57,103 @@ final class ProtosI115IndexedOperationTest {
                 + "Error.handle(() => { a[0] = 9 }, (caught) => null)\na[0]"));
     }
 
+    private static final long[] SIXTY_FOUR = {
+        13, 18, 6, 42, 43, 1, 58, 4,
+        7, 32, 8, 59, 9, 64, 38, 37,
+        25, 61, 24, 21, 23, 63, 35, 31,
+        34, 30, 17, 48, 51, 41, 27, 40,
+        15, 33, 46, 2, 28, 44, 54, 56,
+        62, 11, 22, 12, 19, 50, 26, 55,
+        60, 53, 57, 36, 5, 45, 14, 16,
+        20, 39, 47, 10, 3, 52, 29, 49
+    };
+
+    private static final String MAKE_SIXTY_FOUR = "make: () => [\n"
+            + "    13, 18, 6, 42, 43, 1, 58, 4,\n"
+            + "    7, 32, 8, 59, 9, 64, 38, 37,\n"
+            + "    25, 61, 24, 21, 23, 63, 35, 31,\n"
+            + "    34, 30, 17, 48, 51, 41, 27, 40,\n"
+            + "    15, 33, 46, 2, 28, 44, 54, 56,\n"
+            + "    62, 11, 22, 12, 19, 50, 26, 55,\n"
+            + "    60, 53, 57, 36, 5, 45, 14, 16,\n"
+            + "    20, 39, 47, 10, 3, 52, 29, 49\n"
+            + "]\n"
+            + "weigh: (a) => {\n"
+            + "    sum: 0\n"
+            + "    i: 0\n"
+            + "    while(i < a.size()) {\n"
+            + "        sum = sum + a[i] * (i + 1)\n"
+            + "        i = i + 1\n"
+            + "    }\n"
+            + "    sum\n"
+            + "}\n";
+
+    @Test
+    void repeatedSixtyFourIntegerLiteralYieldsFreshOriginalArrays() {
+        long weight = 0;
+        for (int index = 0; index < SIXTY_FOUR.length; index++) {
+            weight += SIXTY_FOUR[index] * (index + 1);
+        }
+        String weighs = "weight: " + weight + "\n";
+        // Each round re-evaluates the same construction site, verifies the
+        // original contents, mutates the result and observes the next one.
+        assertEquals(6L, evalLong(MAKE_SIXTY_FOUR + weighs + """
+                previous: null
+                rounds: 0
+                passed: 0
+                while(rounds < 6) {
+                    a: make()
+                    fresh: (a.size() == 64) && (weigh(a) == weight) && (a[0] == 13) && (a[63] == 49) && (a !== previous)
+                    if(previous !== null) {
+                        fresh = fresh && (previous[0] == 1000) && (previous[63] == 2000)
+                    }
+                    written: (a[0] = 1000) == 1000
+                    selected: a.atPut(63, 2000) == 2000
+                    middle: (a[31] = 3000) == 3000
+                    mutated: (a[0] == 1000) && (a[63] == 2000) && (a[31] == 3000) && (a.size() == 64)
+                    if(fresh && written && selected && middle && mutated) {
+                        passed = passed + 1
+                    }
+                    previous = a
+                    rounds = rounds + 1
+                }
+                passed
+                """));
+        StringBuilder exact = new StringBuilder("a: make()\na[0] = 0\na[63] = 0\nb: make()\n");
+        for (int index = 0; index < SIXTY_FOUR.length; index++) {
+            exact.append(index == 0 ? "" : " && ")
+                    .append("(b[").append(index).append("] == ")
+                    .append(SIXTY_FOUR[index]).append(')');
+        }
+        assertTrue(evalBoolean(MAKE_SIXTY_FOUR + exact));
+        assertTrue(signals(MAKE_SIXTY_FOUR + "a: make()\na[64]"));
+        assertTrue(signals(MAKE_SIXTY_FOUR + "a: make()\na[64] = 1"));
+        assertTrue(signals(MAKE_SIXTY_FOUR + "a: make()\na[0 - 65] = 1"));
+        assertTrue(signals(MAKE_SIXTY_FOUR + "a: make()\na[1.0] = 1"));
+        assertTrue(signals(MAKE_SIXTY_FOUR + "a: make()\na.atPut(64, 1)"));
+        assertTrue(signals(MAKE_SIXTY_FOUR + "a: make()\na.freeze()\na[0] = 1"));
+        assertTrue(evalBoolean(MAKE_SIXTY_FOUR + """
+                a: make()
+                Error.handle(() => { a[64] = 1 }, (caught) => null)
+                a.freeze()
+                Error.handle(() => { a[0] = 1 }, (caught) => null)
+                b: make()
+                b[0] = 7
+                (a[0] == 13) && (a[63] == 49) && (a.size() == 64) && (b[0] == 7)
+                """));
+        // A dynamic override on one Array takes its semantic route; the next
+        // Array from the same site keeps the standard selection.
+        assertTrue(evalBoolean(MAKE_SIXTY_FOUR + """
+                a: make()
+                a.at: (index) => { index + 100 }
+                a.atPut: (index, value) => { 99 }
+                overridden: (a[5] == 105) && (a.atPut(0, 7) == 99) && ((a[0] = 8) == 8)
+                b: make()
+                standard: (b[5] == 1) && (b.atPut(0, 7) == 7) && (b[0] == 7) && (b[63] == 49)
+                overridden && standard
+                """));
+    }
+
     @Test
     void explicitAtPutUsesSetItemAndPreservesSelectedResult() throws Exception {
         try (ProtosStandaloneHostedSession session = open("""

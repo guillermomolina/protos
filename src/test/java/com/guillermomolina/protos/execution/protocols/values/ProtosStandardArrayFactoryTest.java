@@ -345,6 +345,72 @@ class ProtosStandardArrayFactoryTest {
         assertEquals(41L, results.indexedAt(4));
     }
 
+    @Test
+    void repeatedConstantLiteralsYieldFreshArraysWithPrivateBackings()
+            throws IOException {
+        ProtosPrelude prelude = corePrelude();
+        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosArrayValue results = (ProtosArrayValue) ProtosTestExecutionSupport.evaluate(
+                """
+                ints: () => Array(1, 2, 3)
+                floats: () => Array(1.5, 2.5, 0.5)
+                flags: () => Array(true, false, true)
+                i1: ints()
+                i1[0] = 9
+                i2: ints()
+                f1: floats()
+                f1[1] = 7.5
+                f2: floats()
+                b1: flags()
+                b1[2] = false
+                b2: flags()
+                b2.freeze()
+                rejected: Error.handle(() => { b2[0] = false; false }, (caught) => true)
+                b3: flags()
+                b3[0] = false
+                run: () => {
+                    Array: (a, b, c) => a
+                    Array(1, 2, 3)
+                }
+                shadowed: run()
+                Array(i1, i2, f1, f2, b1, b2, b3, rejected, shadowed, ints())
+                """, activation);
+        ProtosArrayValue i1 = (ProtosArrayValue) results.indexedAt(0);
+        ProtosArrayValue i2 = (ProtosArrayValue) results.indexedAt(1);
+        ProtosArrayValue f1 = (ProtosArrayValue) results.indexedAt(2);
+        ProtosArrayValue f2 = (ProtosArrayValue) results.indexedAt(3);
+        ProtosArrayValue b1 = (ProtosArrayValue) results.indexedAt(4);
+        ProtosArrayValue b2 = (ProtosArrayValue) results.indexedAt(5);
+        ProtosArrayValue b3 = (ProtosArrayValue) results.indexedAt(6);
+        ProtosArrayValue after = (ProtosArrayValue) results.indexedAt(9);
+
+        assertNotSame(i1, i2);
+        assertNotSame(i2, after);
+        assertNotSame(f1, f2);
+        assertNotSame(b1, b2);
+        assertNotSame(b2, b3);
+        for (ProtosArrayValue array : List.of(i1, i2, f1, f2, b1, b2, b3, after)) {
+            assertSame(prelude.arrayPrototype(), array.parent().orElseThrow());
+            assertEquals(3, array.indexedSize());
+        }
+        assertTrue(i1.hasLongStorageForRuntime() && i2.hasLongStorageForRuntime());
+        assertTrue(f1.hasDoubleStorageForRuntime() && f2.hasDoubleStorageForRuntime());
+        assertTrue(b1.hasBooleanStorageForRuntime() && b2.hasBooleanStorageForRuntime());
+        assertEquals(List.of(9L, 2L, 3L), i1.indexedSnapshot());
+        assertEquals(List.of(1L, 2L, 3L), i2.indexedSnapshot());
+        assertEquals(List.of(1L, 2L, 3L), after.indexedSnapshot());
+        assertEquals(List.of(1.5d, 7.5d, 0.5d), f1.indexedSnapshot());
+        assertEquals(List.of(1.5d, 2.5d, 0.5d), f2.indexedSnapshot());
+        assertEquals(List.of(true, false, false), b1.indexedSnapshot());
+        assertEquals(List.of(true, false, true), b2.indexedSnapshot());
+        assertEquals(List.of(false, false, true), b3.indexedSnapshot());
+        assertTrue(b2.isFrozen());
+        assertFalse(b3.isFrozen());
+        assertSame(Boolean.TRUE, results.indexedAt(7));
+        assertEquals(1L, results.indexedAt(8),
+                "A nonstandard Array factory keeps its ordinary call");
+    }
+
     private static Object index(long value) {
         return Long.valueOf(value);
     }

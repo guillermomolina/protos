@@ -390,10 +390,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * through it; there is no second layout.
      */
     static final class LexicalFrameLayout {
-        private final String[] names;
-        private final int[] offsets;
-        private final boolean[] cells;
-        private final LocalAccessor[] accessors;
+        @CompilationFinal(dimensions = 1) private final String[] names;
+        @CompilationFinal(dimensions = 1) private final int[] offsets;
+        @CompilationFinal(dimensions = 1) private final boolean[] cells;
+        @CompilationFinal(dimensions = 1) private final LocalAccessor[] accessors;
 
         LexicalFrameLayout(String[] names, int[] offsets, boolean[] cells, LocalAccessor[] accessors) {
             if (names.length != offsets.length
@@ -428,6 +428,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
 
         /** The layout index of {@code name}, or {@code -1} for a name outside the layout. */
+        @ExplodeLoop
         int indexOf(String name) {
             for (int index = 0; index < names.length; index++) {
                 if (names[index].equals(name)) {
@@ -442,7 +443,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             new LexicalFrameLayout(new String[0], new int[0], new boolean[0], new LocalAccessor[0]);
 
     /* The layout of a genuine Closure root, or null for any other root. */
-    private transient LexicalFrameLayout lexicalFrameLayout;
+    @CompilationFinal private transient LexicalFrameLayout lexicalFrameLayout;
 
     @CompilationFinal private transient boolean lexicalFrameEverEscaped;
     private final ConditionProfile publishedClosureFrameProfile =
@@ -2528,8 +2529,24 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @ConstantOperand(type = long[].class, dimensions = 0)
     public static final class MakeConstantLongArray {
 
-        @Specialization
-        public static ProtosArrayValue perform(
+        /*
+         * The cached constant's elements are stable for this site only; the
+         * Array still receives a private copy of them.
+         */
+        @Specialization(
+                guards = "values == cachedValues",
+                limit = "1",
+                excludeForUncached = true)
+        public static ProtosArrayValue performCached(
+                long[] values,
+                Object factory,
+                @Cached(value = "values", dimensions = 1)
+                        long[] cachedValues) {
+            return new ProtosArrayValue(factory, cachedValues);
+        }
+
+        @Specialization(replaces = "performCached")
+        public static ProtosArrayValue performGeneric(
                 long[] values,
                 Object factory) {
             return new ProtosArrayValue(factory, values);
@@ -2545,8 +2562,24 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @ConstantOperand(type = double[].class, dimensions = 0)
     public static final class MakeConstantDoubleArray {
 
-        @Specialization
-        public static ProtosArrayValue perform(
+        /*
+         * The cached constant's elements are stable for this site only; the
+         * Array still receives a private copy of them.
+         */
+        @Specialization(
+                guards = "values == cachedValues",
+                limit = "1",
+                excludeForUncached = true)
+        public static ProtosArrayValue performCached(
+                double[] values,
+                Object factory,
+                @Cached(value = "values", dimensions = 1)
+                        double[] cachedValues) {
+            return new ProtosArrayValue(factory, cachedValues);
+        }
+
+        @Specialization(replaces = "performCached")
+        public static ProtosArrayValue performGeneric(
                 double[] values,
                 Object factory) {
             return new ProtosArrayValue(factory, values);
@@ -2562,8 +2595,24 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @ConstantOperand(type = boolean[].class, dimensions = 0)
     public static final class MakeConstantBooleanArray {
 
-        @Specialization
-        public static ProtosArrayValue perform(
+        /*
+         * The cached constant's elements are stable for this site only; the
+         * Array still receives a private copy of them.
+         */
+        @Specialization(
+                guards = "values == cachedValues",
+                limit = "1",
+                excludeForUncached = true)
+        public static ProtosArrayValue performCached(
+                boolean[] values,
+                Object factory,
+                @Cached(value = "values", dimensions = 1)
+                        boolean[] cachedValues) {
+            return new ProtosArrayValue(factory, cachedValues);
+        }
+
+        @Specialization(replaces = "performCached")
+        public static ProtosArrayValue performGeneric(
                 boolean[] values,
                 Object factory) {
             return new ProtosArrayValue(factory, values);

@@ -21,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -31,6 +32,7 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosExecutionContextValue;
 import com.guillermomolina.protos.runtime.ProtosLexicalBindingAuthority;
 import com.guillermomolina.protos.runtime.ProtosLexicalCell;
+import com.guillermomolina.protos.runtime.ProtosLexicalEnvironment;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -328,6 +330,93 @@ final class ProtosI115PublishedLexicalContextTest {
             context.freeze();
             assertThrows(IllegalStateException.class, () -> context.assignLocalSlot("x", 3L));
             assertEquals(2L, local(context, "x"));
+        });
+    }
+
+    @Test
+    void preexistingCaptureObservesPublicationAndLiveFrameMembershipWithoutContextReplacement() throws Exception {
+        withFixture(f -> {
+            Object fallback = newObject();
+            Object nearer = newObject();
+            Object recreated = newObject();
+            f.module.context().createLocalSlot("liveName", fallback);
+            ProtosClosureValue ownerClosure = closure(f,
+                    "(() => { local: 1\n shared: 2\n getter: (() => shared)\n context })");
+            Object[] ownerArguments = ProtosFrameArguments.compactDirectClosureCall(
+                    ownerClosure, f.module, null, new Object[0]);
+            ProtosActivation owner = ProtosFrameArguments.activation(ownerArguments);
+            ProtosLexicalEnvironment environment = owner.lexicalEnvironmentForClosureCapture();
+            assertTrue(environment.isDeferredForRuntime());
+            assertNull(environment.materializedContextOrNullForRuntime());
+            assertNull(owner.materializedContextOrNullForRuntime());
+            ProtosClosureValue template = closure(f, "(() => liveName)");
+            ProtosClosureValue reader = new ProtosClosureValue(
+                    template.definition(), environment, newObject(), null, null,
+                    f.module.prelude().orElseThrow(), template.executionPlan().orElseThrow());
+            var sameTarget = reader.executionPlan().orElseThrow().bytecodeActivationRootForTesting().getCallTarget();
+            ProtosActivation readerState = ProtosFrameArguments.activation(
+                    ProtosFrameArguments.compactDirectClosureCall(reader, f.module, null, new Object[0]));
+            ProtosLexicalSelectionNode selection = ProtosLexicalSelectionNodeGen.create();
+            var get = com.oracle.truffle.api.object.DynamicObject.GetNode.create();
+            for (int repeat = 0; repeat < 8; repeat++) {
+                assertSame(fallback, selection.execute(readerState, "liveName", false));
+            }
+            int outerDepth = ProtosLexicalSelectionNode.ownerDepth(environment, "liveName");
+            assertTrue(outerDepth > 0);
+            var outerOwner = ProtosLexicalSelectionNode.ownerOrNull(environment, outerDepth);
+            assertNull(owner.materializedContextOrNullForRuntime());
+
+            ProtosExecutionContextValue context = assertInstanceOf(ProtosExecutionContextValue.class,
+                    ownerClosure.executionPlan().orElseThrow().executeBytecodeActivationForTesting(owner));
+            var authority = owner.publishedClosureLexicalAuthorityForRuntime();
+            assertSame(authority, context.lexicalBindingAuthorityForRuntime());
+            assertSame(context, owner.context());
+            assertSame(environment, reader.capturedLexicalEnvironmentForRuntime());
+            assertSame(outerOwner, ProtosLexicalSelectionNode.ownerOrNull(environment,
+                    ProtosLexicalSelectionNode.ownerDepth(environment, "liveName")));
+            assertSame(fallback, selection.execute(readerState, "liveName", false));
+            assertSame(fallback, execute(f, reader));
+
+            // The captured node remains deferred even though its owner has published a frame view.
+            assertTrue(environment.isDeferredForRuntime());
+            assertTrue(environment.mayHoldBindingsForRuntime());
+            context.createLocalSlot("liveName", nearer);
+            assertSame(authority, context.lexicalBindingAuthorityForRuntime());
+            assertFalse(ProtosLexicalSelectionNode.nearerScopesLackBinding(
+                    environment, outerDepth, "liveName"));
+            assertSame(environment, ProtosLexicalSelectionNode.ownerOrNull(environment,
+                    ProtosLexicalSelectionNode.ownerDepth(environment, "liveName")));
+            assertSame(nearer, selection.execute(readerState, "liveName", false));
+            assertSame(nearer, execute(f, reader));
+            assertTrue(environment.isDeferredForRuntime());
+            assertSame(context, environment.context());
+            assertSame(context, reader.capturedLexicalContexts().get(0));
+            assertSame(authority, context.lexicalBindingAuthorityForRuntime());
+            assertNull(get.execute(context, "liveName", null));
+
+            for (int repeat = 0; repeat < 8; repeat++) {
+                context.assignLocalSlot("liveName", ProtosNullValue.INSTANCE);
+                assertTrue(authority.containsBinding("liveName"));
+                assertSame(ProtosNullValue.INSTANCE, selection.execute(readerState, "liveName", false));
+                assertSame(ProtosNullValue.INSTANCE, execute(f, reader));
+                assertSame(ProtosNullValue.INSTANCE, context.removeLocalSlot("liveName"));
+                assertFalse(authority.containsBinding("liveName"));
+                assertSame(fallback, selection.execute(readerState, "liveName", false));
+                assertSame(fallback, execute(f, reader));
+                assertSame(outerOwner, ProtosLexicalSelectionNode.ownerOrNull(environment,
+                        ProtosLexicalSelectionNode.ownerDepth(environment, "liveName")));
+                context.createLocalSlot("liveName", recreated);
+                assertSame(recreated, selection.execute(readerState, "liveName", false));
+                assertSame(recreated, execute(f, reader));
+                assertSame(recreated, authority.readBinding("liveName").orElseThrow());
+                assertNull(get.execute(context, "liveName", null));
+                assertSame(context, owner.context());
+                assertSame(context, environment.context());
+                assertSame(authority, context.lexicalBindingAuthorityForRuntime());
+                assertSame(sameTarget, reader.executionPlan().orElseThrow()
+                        .bytecodeActivationRootForTesting().getCallTarget());
+            }
+            assertNull(readerState.materializedContextOrNullForRuntime());
         });
     }
 

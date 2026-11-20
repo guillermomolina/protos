@@ -126,7 +126,7 @@ abstract class ProtosLexicalSelectionNode extends Node {
             @Cached(value = "moduleLocationOrNull(cachedOwner, cachedName)", uncached = "moduleLocationOrNull(cachedOwner, cachedName)")
                     ProtosModuleBindingLocation location,
             @Cached DynamicObject.GetNode getNode) {
-        Object value = location != null
+        Object value = location != null && location.hasCurrentStorage()
                 ? location.readOrNull(getNode)
                 : readOwnerOrNull(cachedOwner, cachedName);
         if (value != null) {

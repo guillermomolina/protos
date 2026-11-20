@@ -66,6 +66,14 @@ public final class ProtosModuleBindingLocation {
                 : null;
     }
 
+    /** Whether this location's physical store is still authoritative for its context. */
+    public boolean hasCurrentStorage() {
+        return context instanceof ProtosExecutionContextValue executionContext
+                && executionContext.lexicalBindingAuthorityForRuntime()
+                        instanceof ProtosMapBackedLexicalBindingAuthority mapBacked
+                && mapBacked.storage() == store;
+    }
+
     /** The current guest value of the binding, or {@code null} when it is absent. */
     public Object readOrNull(DynamicObject.GetNode getNode) {
         Object stored = getNode.execute(store, key, null);

@@ -192,6 +192,69 @@ final class ProtosPerf025CompactCalleeExecutionTest {
     }
 
     @Test
+    void repeatedMultiBindingRootKeepsPhysicalAndLiveCapturedPrecedence() throws Exception {
+        withCore(module -> {
+            ProtosObjectValue owner = newObject();
+            Object capturedValue = newObject();
+            Object shadow = newObject();
+            owner.createLocalSlot("liveName", capturedValue);
+            owner.createLocalSlot("physical", shadow);
+            ProtosClosureValue template = closure(
+                    "(physical) => { first: 1\nmiddle: 2\nlast: 3\n"
+                            + "[physical, liveName, first, middle, last] }", module);
+            var capturedContexts = new java.util.ArrayList<>(template.capturedLexicalContexts());
+            capturedContexts.set(0, owner);
+            ProtosClosureValue reader = new ProtosClosureValue(
+                    template.definition(), capturedContexts, newObject(), null, null,
+                    module.prelude().orElseThrow(), template.executionPlan().orElseThrow());
+            RootCallTarget callTarget = target(reader);
+            var root = (ProtosBytecodeRootNode) callTarget.getRootNode();
+            var layout = root.lexicalFrameLayoutOrNull();
+            for (String name : List.of("physical", "first", "middle", "last")) {
+                assertTrue(layout.indexOf(name) >= 0, name);
+            }
+            assertEquals(-1, layout.indexOf("liveName"));
+            for (int attempt = 0; attempt < 128; attempt++) {
+                Object physical = attempt % 2 == 0 ? newObject() : ProtosNullValue.INSTANCE;
+                Object captured = attempt % 3 == 0 ? ProtosNullValue.INSTANCE : capturedValue;
+                owner.assignLocalSlot("liveName", captured);
+                Object[] arguments = ProtosFrameArguments.compactDirectClosureCall(
+                        reader, module, null, new Object[] {physical});
+                assertSame(reader, arguments[0]);
+                List<Object> values = assertInstanceOf(
+                        ProtosArrayValue.class, callTarget.call(arguments)).indexedSnapshot();
+                assertSame(physical, values.get(0));
+                assertSame(captured, values.get(1));
+                assertEquals(List.of(1L, 2L, 3L), values.subList(2, 5));
+                assertSame(reader, arguments[0], "ordinary reads do not publish an activation");
+                assertSame(root, callTarget.getRootNode());
+            }
+            Object[] arguments = ProtosFrameArguments.compactDirectClosureCall(
+                    reader, module, null, new Object[] {shadow});
+            ProtosActivation published = ProtosFrameArguments.activation(arguments);
+            ProtosObjectValue observed = published.context();
+            observed.createLocalSlot("liveName", shadow);
+            List<Object> values = assertInstanceOf(
+                    ProtosArrayValue.class, callTarget.call(arguments)).indexedSnapshot();
+            assertSame(shadow, values.get(0));
+            assertSame(shadow, values.get(1));
+            assertSame(published, arguments[0]);
+            assertSame(observed, published.context());
+            observed.assignLocalSlot("liveName", ProtosNullValue.INSTANCE);
+            values = assertInstanceOf(
+                    ProtosArrayValue.class, callTarget.call(arguments)).indexedSnapshot();
+            assertSame(ProtosNullValue.INSTANCE, values.get(1));
+            assertSame(published, arguments[0]);
+            observed.removeLocalSlot("liveName");
+            owner.assignLocalSlot("liveName", capturedValue);
+            values = assertInstanceOf(
+                    ProtosArrayValue.class, callTarget.call(arguments)).indexedSnapshot();
+            assertSame(capturedValue, values.get(1));
+            assertSame(published, arguments[0]);
+        });
+    }
+
+    @Test
     void contextAfterDynamicReadPublishesOneExactGuestIdentity() throws Exception {
         withCore(module -> {
             ProtosObjectValue owner = newObject();
@@ -358,6 +421,98 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             assertSame(ProtosNullValue.INSTANCE, selection.execute(arguments, "liveName", false, layout));
             assertSame(published, arguments[0]);
             assertSame(receiverValue, receiver.readLocalSlot("liveName").orElseThrow());
+        });
+    }
+
+    @Test
+    void sameCompactCallTargetObservesTwoCapturedOwnersAcrossRepeatedPrecedenceChanges() throws Exception {
+        withCore(module -> {
+            ProtosObjectValue nearer = new ProtosExecutionContextValue(ProtosObjectValue.rootObject());
+            ProtosObjectValue outer = newObject();
+            ProtosObjectValue receiver = newObject();
+            Object outerValue = newObject();
+            Object innerValue = newObject();
+            Object recreated = newObject();
+            Object receiverValue = newObject();
+            outer.createLocalSlot("liveName", outerValue);
+            receiver.createLocalSlot("liveName", receiverValue);
+            ProtosClosureValue template = closure("() => liveName", module);
+            ProtosClosureValue reader = new ProtosClosureValue(
+                    template.definition(), List.of(nearer, outer), receiver, null, null,
+                    module.prelude().orElseThrow(), template.executionPlan().orElseThrow());
+            RootCallTarget sameTarget = target(reader);
+            var chain = reader.capturedLexicalEnvironmentForRuntime();
+            var layout = ((ProtosBytecodeRootNode) sameTarget.getRootNode()).lexicalFrameLayoutOrNull();
+            ProtosLexicalSelectionNode writes = ProtosLexicalSelectionNodeGen.create();
+            for (int repeat = 0; repeat < 8; repeat++) {
+                for (Object value : new Object[] {outerValue, ProtosNullValue.INSTANCE, recreated}) {
+                    outer.assignLocalSlot("liveName", value);
+                    Object[] arguments = ProtosFrameArguments.compactDirectClosureCall(
+                            reader, module, null, new Object[0]);
+                    assertSame(reader, arguments[0]);
+                    assertSame(value, sameTarget.call(arguments));
+                    assertSame(reader, arguments[0], "value mutation needs no activation publication");
+                    assertSame(sameTarget, target(reader));
+                    assertSame(outer, chain.outer().materializedContextOrNullForRuntime());
+                    assertSame(value, chain.outer().readLocalSlotForRuntime("liveName").orElseThrow());
+                }
+            }
+            outer.assignLocalSlot("liveName", outerValue);
+            Object[] expectedValues = {outerValue, innerValue, outerValue, recreated,
+                    ProtosNullValue.INSTANCE, outerValue, receiverValue};
+            for (int round = 0; round < 8; round++) {
+                if (round != 0) {
+                    outer.createLocalSlot("liveName", outerValue);
+                }
+                for (int phase = 0; phase < expectedValues.length; phase++) {
+                    switch (phase) {
+                        case 1 -> nearer.createLocalSlot("liveName", innerValue);
+                        case 2, 5 -> nearer.removeLocalSlot("liveName");
+                        case 3 -> nearer.createLocalSlot("liveName", recreated);
+                        case 4 -> nearer.assignLocalSlot("liveName", ProtosNullValue.INSTANCE);
+                        case 6 -> outer.removeLocalSlot("liveName");
+                        default -> { }
+                    }
+                    for (int repeat = 0; repeat < 4; repeat++) {
+                        Object[] arguments = ProtosFrameArguments.compactDirectClosureCall(
+                                reader, module, null, new Object[0]);
+                        assertSame(reader, arguments[0]);
+                        assertSame(sameTarget, target(reader));
+                        assertSame(expectedValues[phase], sameTarget.call(arguments));
+                        if (round == 0 && phase == 0 && repeat == 0) {
+                            assertSame(reader, arguments[0], "the initial proved read stays compact");
+                        }
+                        // A changed membership may require full selection; it must not observe Context.
+                        if (arguments[0] instanceof ProtosActivation demanded) {
+                            assertNull(demanded.materializedContextOrNullForRuntime());
+                        }
+                        ProtosActivation published = ProtosFrameArguments.activation(arguments);
+                        assertSame(published, ProtosFrameArguments.activation(arguments));
+                        assertNull(published.materializedContextOrNullForRuntime());
+                        Object selected = writes.execute(arguments, "liveName", true, layout);
+                        var destination = assertInstanceOf(
+                                ProtosFrameLocalBindings.ResolvedLexicalWriteTarget.class, selected);
+                        if (phase == 6) {
+                            assertNull(privateField(destination, "environment"));
+                            assertSame(receiver, privateField(destination, "object"));
+                        } else {
+                            var expectedOwner = phase == 1 || phase == 3 || phase == 4
+                                    ? chain : chain.outer();
+                            assertSame(expectedOwner, privateField(destination, "environment"));
+                            assertSame(expectedValues[phase],
+                                    expectedOwner.readLocalSlotForRuntime("liveName").orElseThrow());
+                        }
+                        assertSame(expectedValues[phase], sameTarget.call(arguments));
+                        assertSame(published, arguments[0]);
+                        assertSame(published, ProtosFrameArguments.activation(arguments));
+                        ProtosObjectValue observed = published.context();
+                        assertSame(observed, published.context());
+                        assertSame(expectedValues[phase], sameTarget.call(arguments));
+                        assertSame(published, arguments[0]);
+                        assertSame(observed, published.context());
+                    }
+                }
+            }
         });
     }
 

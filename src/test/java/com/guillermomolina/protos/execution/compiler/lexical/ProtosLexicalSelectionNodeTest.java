@@ -20,11 +20,15 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.execution.ProtosFrameLocalBindings.ResolvedLexicalWriteTarget;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosExecutionContextValue;
+import com.guillermomolina.protos.runtime.ProtosLexicalEnvironment;
+import com.guillermomolina.protos.runtime.ProtosModuleBindingLocation;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.guillermomolina.protos.runtime.ProtosTestPrelude;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
@@ -360,6 +364,376 @@ class ProtosLexicalSelectionNodeTest {
                 ProtosLexicalSelectionNodeGen.create().execute(arguments, "name", false,
                         ProtosBytecodeRootNode.EMPTY_LEXICAL_FRAME_LAYOUT));
         assertSame(closure, arguments[0]);
+    }
+
+    @Test
+    void lexicalLayoutCopiesEveryArrayAndUsesContentEqualityPerRoot() {
+        try (org.graalvm.polyglot.Context context = org.graalvm.polyglot.Context
+                .newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                com.oracle.truffle.api.bytecode.BytecodeLocal[] locals =
+                        new com.oracle.truffle.api.bytecode.BytecodeLocal[4];
+                var roots = ProtosBytecodeRootNodeGen.create(
+                        com.oracle.truffle.api.TruffleLanguage.LanguageReference
+                                .create(ProtosLanguage.class).get(null),
+                        com.oracle.truffle.api.bytecode.BytecodeConfig.DEFAULT,
+                        builder -> {
+                            builder.beginRoot();
+                            for (int index = 0; index < 3; index++) {
+                                locals[index] = builder.createLocal("local" + index, null);
+                            }
+                            builder.beginReturn();
+                            builder.emitLoadConstant(ProtosNullValue.INSTANCE);
+                            builder.endReturn();
+                            builder.endRoot();
+                            builder.beginRoot();
+                            locals[3] = builder.createLocal("other", null);
+                            builder.beginReturn();
+                            builder.emitLoadConstant(ProtosNullValue.INSTANCE);
+                            builder.endReturn();
+                            builder.endRoot();
+                        });
+                String[] names = {new String("first"), "middle", "last"};
+                int[] offsets = {0, 1, 2};
+                boolean[] cells = {false, true, false};
+                com.oracle.truffle.api.bytecode.LocalAccessor[] accessors = {
+                    com.oracle.truffle.api.bytecode.LocalAccessor.constantOf(locals[0]),
+                    com.oracle.truffle.api.bytecode.LocalAccessor.constantOf(locals[1]),
+                    com.oracle.truffle.api.bytecode.LocalAccessor.constantOf(locals[2])
+                };
+                var firstAccessor = accessors[0];
+                var layout = new ProtosBytecodeRootNode.LexicalFrameLayout(
+                        names, offsets, cells, accessors);
+                names[0] = "changed";
+                offsets[0] = 99;
+                cells[0] = true;
+                accessors[0] = accessors[2];
+                assertEquals(3, layout.size());
+                assertEquals("first", layout.name(0));
+                assertEquals(0, layout.offset(0));
+                assertFalse(layout.isCell(0));
+                assertTrue(layout.isCell(1));
+                assertSame(firstAccessor, layout.accessor(0));
+                for (int index = 0; index < layout.size(); index++) {
+                    String equalName = new String(layout.name(index));
+                    assertNotSame(layout.name(index), equalName);
+                    assertEquals(index, layout.indexOf(equalName));
+                }
+                assertEquals(-1, layout.indexOf("missing"));
+                assertEquals(-1, layout.indexOf("changed"));
+                var other = new ProtosBytecodeRootNode.LexicalFrameLayout(
+                        new String[] {"other"}, new int[] {0}, new boolean[] {false},
+                        new com.oracle.truffle.api.bytecode.LocalAccessor[] {
+                            com.oracle.truffle.api.bytecode.LocalAccessor.constantOf(locals[3])
+                        });
+                roots.getNode(0).recordLexicalFrameLayout(layout);
+                roots.getNode(1).recordLexicalFrameLayout(other);
+                assertSame(layout, roots.getNode(0).lexicalFrameLayoutOrNull());
+                assertSame(other, roots.getNode(1).lexicalFrameLayoutOrNull());
+                assertEquals(-1, other.indexOf("first"));
+                assertEquals(-1, layout.indexOf("other"));
+
+                ProtosObjectValue objectRoot = ProtosObjectValue.rootObject();
+                ProtosObjectValue captured = new ProtosObjectValue(objectRoot);
+                captured.createLocalSlot("first", ProtosNullValue.INSTANCE);
+                captured.createLocalSlot("missing", ProtosNullValue.INSTANCE);
+                ProtosActivation caller = ProtosTestPrelude.activation(
+                        new ProtosObjectValue(objectRoot), List.of(), new ProtosObjectValue(objectRoot));
+                ProtosClosureValue closure = new ProtosClosureValue(
+                        null, List.of(captured), caller.receiver());
+                Object[] arguments = ProtosFrameArguments.compactImmediateMethodCall(
+                        closure, caller.receiver(), objectRoot, caller, new Object[0]);
+                var selection = ProtosLexicalSelectionNodeGen.create();
+                assertFalse(ProtosLexicalSelectionNode.hasNoCurrentScopeStorage(
+                        arguments, new String("first"), layout));
+                assertNull(ProtosLexicalSelectionNodeGen.create()
+                                .execute(arguments, "first", false, layout),
+                        "physical membership requests frame resolution before captured lookup");
+                assertSame(closure, arguments[0]);
+                assertSame(ProtosNullValue.INSTANCE,
+                        selection.execute(arguments, "missing", false, layout));
+                assertSame(closure, arguments[0]);
+            } finally {
+                context.leave();
+            }
+        }
+    }
+
+    @Test
+    void physicalMultiNameReadsPrecedeCapturedNullWithoutPublishingActivation() throws Exception {
+        try (org.graalvm.polyglot.Context context = org.graalvm.polyglot.Context
+                .newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                var prelude = new ProtosCoreBootstrap().bootstrap(
+                        java.nio.file.Path.of("protos", "lib", "core"));
+                ProtosActivation module = prelude.newModuleActivation();
+                var source = com.oracle.truffle.api.source.Source.newBuilder(
+                        ProtosLanguage.ID, "(first, middle, last) => [first, middle, last]",
+                        "multi-name-physical-selection.protos").build();
+                ProtosClosureValue template = assertInstanceOf(ProtosClosureValue.class,
+                        ProtosLanguageContext.current().parsePublic(source).call(module));
+                ProtosObjectValue captured = new ProtosObjectValue(ProtosObjectValue.rootObject());
+                for (String name : List.of("first", "middle", "last")) {
+                    captured.createLocalSlot(name, ProtosNullValue.INSTANCE);
+                }
+                captured.assignLocalSlot("middle", new ProtosStringValue("captured middle"));
+                var capturedContexts = new java.util.ArrayList<>(template.capturedLexicalContexts());
+                capturedContexts.set(0, captured);
+                ProtosClosureValue closure = new ProtosClosureValue(
+                        template.definition(), capturedContexts, module.receiver(), null, null,
+                        module.prelude().orElseThrow(), template.executionPlan().orElseThrow());
+                Object first = new ProtosStringValue("first");
+                Object last = new ProtosStringValue("last");
+                var entry = ProtosDispatchTestSupport.direct(
+                        closure, module, first, ProtosNullValue.INSTANCE, last);
+                List<Object> values = assertInstanceOf(
+                        com.guillermomolina.protos.runtime.ProtosArrayValue.class,
+                        ProtosDispatchTestSupport.enter(entry)).indexedSnapshot();
+                assertSame(first, values.get(0));
+                assertSame(ProtosNullValue.INSTANCE, values.get(1));
+                assertSame(last, values.get(2));
+                assertSame(closure, entry.targetArguments()[0]);
+            } finally {
+                context.leave();
+            }
+        }
+    }
+
+    @Test
+    void cachedModuleLocationRemainsUsableAcrossStableStorageMutations() {
+        ProtosObjectValue root = ProtosObjectValue.rootObject();
+        ProtosObjectValue receiver = new ProtosObjectValue(root);
+        ProtosActivation caller = ProtosTestPrelude.activation(new ProtosObjectValue(root), List.of(), receiver);
+        ProtosActivation module = caller.prelude().orElseThrow().newModuleActivation();
+        ProtosObjectValue context = module.context();
+        String name = "stableModuleName";
+        Object initial = new ProtosStringValue("initial");
+        Object replacement = new ProtosStringValue("replacement");
+        Object recreated = new ProtosStringValue("recreated");
+        Object fallback = new ProtosStringValue("receiver");
+        context.createLocalSlot(name, initial);
+        receiver.createLocalSlot(name, fallback);
+        ProtosActivation activation = deferredSelectionActivation(List.of(context), receiver);
+        ProtosLexicalEnvironment scope = activation.capturedLexicalEnvironmentForRuntime();
+        assertNull(scope.outer());
+        ProtosModuleBindingLocation location = assertInstanceOf(ProtosModuleBindingLocation.class,
+                ProtosModuleBindingLocation.ofOrNull(context, name));
+        assertInstanceOf(ProtosModuleBindingLocation.class,
+                ProtosLexicalSelectionNode.moduleLocationOrNull(scope, name));
+        assertTrue(location.hasCurrentStorage());
+        var get = com.oracle.truffle.api.object.DynamicObject.GetNode.getUncached();
+        ProtosLexicalSelectionNode selection = ProtosLexicalSelectionNodeGen.create();
+        for (Object value : new Object[] {initial, replacement, ProtosNullValue.INSTANCE}) {
+            context.assignLocalSlot(name, value);
+            for (int repeat = 0; repeat < 8; repeat++) {
+                assertSame(value, selection.execute(activation, name, false));
+                assertSame(value, location.readOrNull(get));
+                assertTrue(location.isPresent(get));
+                assertTrue(location.hasCurrentStorage());
+            }
+        }
+        assertSame(ProtosNullValue.INSTANCE, context.removeLocalSlot(name));
+        assertFalse(context.hasLocalSlot(name));
+        assertFalse(location.isPresent(get));
+        assertNull(location.readOrNull(get));
+        assertSame(fallback, selection.execute(activation, name, false));
+        assertTrue(location.hasCurrentStorage());
+        context.createLocalSlot(name, recreated);
+        for (int repeat = 0; repeat < 8; repeat++) {
+            assertSame(recreated, selection.execute(activation, name, false));
+            assertSame(recreated, location.readOrNull(get));
+            assertTrue(location.isPresent(get));
+            assertTrue(location.hasCurrentStorage());
+        }
+        assertSame(context, scope.context());
+        assertSame(context, module.context());
+        assertNull(activation.materializedContextOrNullForRuntime());
+    }
+
+    @Test
+    void frameBackedContextDoesNotExposeItsContainerShapeAsBindingStorage() throws Exception {
+        try (org.graalvm.polyglot.Context entered = org.graalvm.polyglot.Context
+                .newBuilder(ProtosLanguage.ID).build()) {
+            entered.initialize(ProtosLanguage.ID);
+            entered.enter();
+            try {
+                var prelude = new ProtosCoreBootstrap().bootstrap(
+                        java.nio.file.Path.of("protos", "lib", "core"));
+                ProtosActivation module = prelude.newModuleActivation();
+                var source = com.oracle.truffle.api.source.Source.newBuilder(
+                        ProtosLanguage.ID, "() => { probe: null\n context }",
+                        "frame-backed-store-query.protos").build();
+                ProtosClosureValue closure = assertInstanceOf(ProtosClosureValue.class,
+                        ProtosLanguageContext.current().parsePublic(source).call(module));
+                Object[] arguments = ProtosFrameArguments.compactDirectClosureCall(
+                        closure, module, null, new Object[0]);
+                ProtosExecutionContextValue context = assertInstanceOf(ProtosExecutionContextValue.class,
+                        ProtosDispatchTestSupport.target(closure).call(arguments));
+                ProtosLexicalEnvironment scope = ProtosLexicalEnvironment.ofContexts(List.of(context));
+                assertSame(context, scope.context());
+                assertTrue(scope.hasLocalSlotForRuntime("probe"));
+                assertSame(ProtosNullValue.INSTANCE, scope.readLocalSlotForRuntime("probe").orElseThrow());
+                assertNull(com.oracle.truffle.api.object.DynamicObject.GetNode.getUncached()
+                        .execute(context, "probe", null));
+                assertNull(scope.outer());
+                assertNull(ProtosModuleBindingLocation.ofOrNull(context, "probe"));
+                assertNull(ProtosLexicalSelectionNode.moduleLocationOrNull(scope, "probe"));
+                ProtosObjectValue receiver = new ProtosObjectValue(ProtosObjectValue.rootObject());
+                Object fallback = new ProtosStringValue("receiver");
+                Object replacement = new ProtosStringValue("frame binding");
+                receiver.createLocalSlot("probe", fallback);
+                ProtosActivation readerState = deferredSelectionActivation(List.of(context), receiver);
+                ProtosLexicalSelectionNode selection = ProtosLexicalSelectionNodeGen.create();
+                for (int repeat = 0; repeat < 8; repeat++) {
+                    assertSame(ProtosNullValue.INSTANCE, selection.execute(readerState, "probe", false));
+                }
+                context.assignLocalSlot("probe", replacement);
+                assertSame(replacement, selection.execute(readerState, "probe", false));
+                assertNull(com.oracle.truffle.api.object.DynamicObject.GetNode.getUncached()
+                        .execute(context, "probe", null));
+                assertSame(replacement, context.removeLocalSlot("probe"));
+                assertSame(fallback, selection.execute(readerState, "probe", false));
+                context.createLocalSlot("probe", ProtosNullValue.INSTANCE);
+                assertTrue(context.hasLocalSlot("probe"));
+                assertSame(ProtosNullValue.INSTANCE, selection.execute(readerState, "probe", false));
+                assertSame(context, scope.context());
+                assertNull(readerState.materializedContextOrNullForRuntime());
+            } finally {
+                entered.leave();
+            }
+        }
+    }
+
+    @Test
+    void sameSelectorReadsLiveMapBackedOwnersWithNoncanonicalNames() {
+        for (boolean executionContexts : new boolean[] {false, true}) {
+            ProtosObjectValue root = ProtosObjectValue.rootObject();
+            ProtosObjectValue inner = executionContexts
+                    ? new ProtosExecutionContextValue(root) : new ProtosObjectValue(root);
+            ProtosObjectValue outer = executionContexts
+                    ? new ProtosExecutionContextValue(root) : new ProtosObjectValue(root);
+            ProtosObjectValue receiver = new ProtosObjectValue(root);
+            Object outside = new ProtosStringValue("outside");
+            Object inside = new ProtosStringValue("inside");
+            Object recreated = new ProtosStringValue("recreated");
+            Object fallback = new ProtosStringValue("receiver");
+            String name = new String("liveMapName");
+            String equivalent = new String("liveMapName");
+            assertNotSame(name, equivalent);
+            outer.createLocalSlot(name, outside);
+            receiver.createLocalSlot(name, fallback);
+            // A trailing scope keeps the mutable Context owners off the module-location path.
+            ProtosActivation activation = deferredSelectionActivation(
+                    List.of(inner, outer, new ProtosObjectValue(root)), receiver);
+            ProtosLexicalSelectionNode selection = ProtosLexicalSelectionNodeGen.create();
+            var chain = activation.capturedLexicalEnvironmentForRuntime();
+            assertSame(outside, selection.execute(activation, name, false));
+            assertSame(outside, selection.execute(activation, equivalent, false));
+            for (Object value : new Object[] {recreated, ProtosNullValue.INSTANCE, outside}) {
+                outer.assignLocalSlot(name, value);
+                assertSame(value, selection.execute(activation, name, false));
+                assertSame(value, selection.execute(activation, equivalent, false));
+            }
+            for (int round = 0; round < 8; round++) {
+                assertSame(outside, selection.execute(activation, name, false));
+                assertTrue(ProtosLexicalSelectionNode.nearerScopesLackBinding(chain, 1, name));
+                inner.createLocalSlot(name, inside);
+                assertFalse(ProtosLexicalSelectionNode.nearerScopesLackBinding(chain, 1, name));
+                assertSame(inside, selection.execute(activation, name, false));
+                inner.assignLocalSlot(name, ProtosNullValue.INSTANCE);
+                assertSame(ProtosNullValue.INSTANCE, selection.execute(activation, name, false));
+                assertFalse(ProtosLexicalSelectionNode.nearerScopesLackBinding(chain, 1, name));
+                assertSame(ProtosNullValue.INSTANCE, inner.removeLocalSlot(name));
+                assertSame(outside, selection.execute(activation, name, false));
+                outer.removeLocalSlot(name);
+                assertSame(fallback, selection.execute(activation, name, false));
+                outer.createLocalSlot(name, recreated);
+                assertSame(recreated, selection.execute(activation, name, false));
+                assertSame(recreated, selection.execute(activation, equivalent, false));
+                outer.assignLocalSlot(name, outside);
+            }
+            assertNull(activation.materializedContextOrNullForRuntime());
+        }
+    }
+
+    @Test
+    void cachedReceiverYieldsToLaterMapBackedBindingIncludingGuestNull() {
+        ProtosObjectValue root = ProtosObjectValue.rootObject();
+        ProtosExecutionContextValue inner = new ProtosExecutionContextValue(root);
+        ProtosObjectValue receiver = new ProtosObjectValue(root);
+        Object fallback = new ProtosStringValue("receiver");
+        receiver.createLocalSlot("lateMapName", fallback);
+        ProtosActivation activation = deferredSelectionActivation(
+                List.of(inner, new ProtosObjectValue(root)), receiver);
+        ProtosLexicalSelectionNode selection = ProtosLexicalSelectionNodeGen.create();
+        String name = new String("lateMapName");
+        for (int repeat = 0; repeat < 8; repeat++) {
+            assertSame(fallback, selection.execute(activation, name, false));
+        }
+        inner.createLocalSlot(name, ProtosNullValue.INSTANCE);
+        assertSame(ProtosNullValue.INSTANCE, selection.execute(activation, name, false));
+        inner.removeLocalSlot(name);
+        assertSame(fallback, selection.execute(activation, name, false));
+        Object recreated = new ProtosStringValue("lexical");
+        inner.createLocalSlot(name, recreated);
+        assertSame(recreated, selection.execute(activation, name, false));
+        assertSame(fallback, receiver.readLocalSlot(name).orElseThrow());
+        assertNull(activation.materializedContextOrNullForRuntime());
+    }
+
+    @Test
+    void cachedMapBackedWriteSelectionChecksPresenceAndKeepsChosenDestination() {
+        ProtosObjectValue root = ProtosObjectValue.rootObject();
+        ProtosExecutionContextValue inner = new ProtosExecutionContextValue(root);
+        ProtosObjectValue outer = new ProtosObjectValue(root);
+        Object outside = new ProtosStringValue("outside");
+        Object assigned = new ProtosStringValue("assigned");
+        outer.createLocalSlot("liveWrite", outside);
+        inner.createLocalSlot("liveWrite", ProtosNullValue.INSTANCE);
+        ProtosActivation activation = deferredSelectionActivation(
+                List.of(inner, outer), new ProtosObjectValue(root));
+        ProtosLexicalSelectionNode selection = ProtosLexicalSelectionNodeGen.create();
+        for (int round = 0; round < 8; round++) {
+            var selected = assertInstanceOf(ResolvedLexicalWriteTarget.class,
+                    selection.execute(activation, "liveWrite", true));
+            ProtosFrameLocalBindings.assignResolvedLexicalTarget(activation, selected, "liveWrite", assigned);
+            assertSame(assigned, inner.readLocalSlot("liveWrite").orElseThrow());
+            assertSame(outside, outer.readLocalSlot("liveWrite").orElseThrow());
+            inner.assignLocalSlot("liveWrite", ProtosNullValue.INSTANCE);
+        }
+        var fixed = assertInstanceOf(ResolvedLexicalWriteTarget.class,
+                selection.execute(activation, "liveWrite", true));
+        inner.removeLocalSlot("liveWrite");
+        assertThrows(ProtosSignalException.class, () -> ProtosFrameLocalBindings.assignResolvedLexicalTarget(
+                activation, fixed, "liveWrite", assigned));
+        assertFalse(inner.hasLocalSlot("liveWrite"));
+        assertSame(outside, outer.readLocalSlot("liveWrite").orElseThrow());
+        var next = assertInstanceOf(ResolvedLexicalWriteTarget.class,
+                selection.execute(activation, "liveWrite", true));
+        ProtosFrameLocalBindings.assignResolvedLexicalTarget(activation, next, "liveWrite", assigned);
+        assertSame(assigned, outer.readLocalSlot("liveWrite").orElseThrow());
+        assertFalse(inner.hasLocalSlot("liveWrite"));
+        inner.createLocalSlot("liveWrite", ProtosNullValue.INSTANCE);
+        var recreated = assertInstanceOf(ResolvedLexicalWriteTarget.class,
+                selection.execute(activation, "liveWrite", true));
+        ProtosFrameLocalBindings.assignResolvedLexicalTarget(activation, recreated, "liveWrite", outside);
+        assertSame(outside, inner.readLocalSlot("liveWrite").orElseThrow());
+        assertSame(assigned, outer.readLocalSlot("liveWrite").orElseThrow());
+        assertNull(activation.materializedContextOrNullForRuntime());
+    }
+
+    private static ProtosActivation deferredSelectionActivation(
+            List<ProtosObjectValue> scopes, ProtosObjectValue receiver) {
+        ProtosActivation caller = ProtosTestPrelude.activation(
+                new ProtosObjectValue(ProtosObjectValue.rootObject()), List.of(), receiver);
+        ProtosClosureValue closure = new ProtosClosureValue(
+                null, scopes, receiver, null, null, caller.prelude().orElseThrow());
+        return ProtosFrameArguments.activation(ProtosFrameArguments.compactDirectClosureCall(
+                closure, caller, null, new Object[0]));
     }
 
     private static Object read(ProtosActivation activation, String name) {

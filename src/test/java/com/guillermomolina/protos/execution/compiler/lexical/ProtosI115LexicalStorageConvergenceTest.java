@@ -21,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -29,7 +30,11 @@ import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
+import com.guillermomolina.protos.runtime.ProtosExecutionContextValue;
 import com.guillermomolina.protos.runtime.ProtosLexicalCell;
+import com.guillermomolina.protos.runtime.ProtosLexicalEnvironment;
+import com.guillermomolina.protos.runtime.ProtosModuleBindingLocation;
+import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -847,6 +852,150 @@ final class ProtosI115LexicalStorageConvergenceTest {
                 .map(name -> name.startsWith("c.") ? name.substring(2) : name)
                 .map(name -> name.indexOf('$') < 0 ? name : name.substring(0, name.indexOf('$')))
                 .toList();
+    }
+
+    @Test
+    void cachedMapBackedOwnerFollowsItsOneTimeFrameAuthorityHandoff() throws Exception {
+        withFixture(f -> {
+            ProtosClosureValue ownerClosure = closure(f,
+                    "(() => { local: 1\n shared: 2\n getter: (() => shared)\n context })");
+            ProtosActivation owner = ProtosActivation.forClosureInvocation(
+                    ownerClosure, List.of(), f.module.prelude().orElseThrow(),
+                    f.module.actorModuleState(), f.module.currentModuleKey().orElse(null),
+                    f.module.executionDomain());
+            ProtosExecutionContextValue context = assertInstanceOf(
+                    ProtosExecutionContextValue.class, owner.context());
+            Object before = newObject();
+            Object after = newObject();
+            context.createLocalSlot("liveName", before);
+            ProtosObjectValue outer = newObject();
+            Object fallback = newObject();
+            outer.createLocalSlot("liveName", fallback);
+            ProtosLexicalEnvironment environment = ProtosLexicalEnvironment.ofContexts(List.of(context, outer));
+            var oldAuthority = context.lexicalBindingAuthorityForRuntime();
+            var get = com.oracle.truffle.api.object.DynamicObject.GetNode.getUncached();
+            assertNull(get.execute(context, "liveName", null));
+
+            ProtosClosureValue template = closure(f, "(() => liveName)");
+            ProtosClosureValue reader = new ProtosClosureValue(
+                    template.definition(), environment, newObject(), null, null,
+                    f.module.prelude().orElseThrow(), template.executionPlan().orElseThrow());
+            ProtosActivation readerState = ProtosFrameArguments.activation(
+                    ProtosFrameArguments.compactDirectClosureCall(reader, f.module, null, new Object[0]));
+            ProtosLexicalSelectionNode reads = ProtosLexicalSelectionNodeGen.create();
+            ProtosLexicalSelectionNode writes = ProtosLexicalSelectionNodeGen.create();
+            ProtosLexicalEnvironment singleScope = ProtosLexicalEnvironment.ofContexts(List.of(context));
+            assertNull(singleScope.outer());
+            ProtosModuleBindingLocation oldLocation = assertInstanceOf(ProtosModuleBindingLocation.class,
+                    ProtosModuleBindingLocation.ofOrNull(context, "liveName"));
+            assertTrue(oldLocation.hasCurrentStorage());
+            assertSame(before, oldLocation.readOrNull(get));
+            assertInstanceOf(ProtosModuleBindingLocation.class,
+                    ProtosLexicalSelectionNode.moduleLocationOrNull(singleScope, "liveName"));
+            ProtosObjectValue singleReceiver = newObject();
+            singleReceiver.createLocalSlot("liveName", fallback);
+            ProtosClosureValue singleReader = new ProtosClosureValue(
+                    template.definition(), singleScope, singleReceiver, null, null,
+                    f.module.prelude().orElseThrow(), template.executionPlan().orElseThrow());
+            ProtosActivation singleReaderState = ProtosFrameArguments.activation(
+                    ProtosFrameArguments.compactDirectClosureCall(singleReader, f.module, null, new Object[0]));
+            ProtosLexicalSelectionNode singleReads = ProtosLexicalSelectionNodeGen.create();
+            for (int repeat = 0; repeat < WARM_ROUNDS; repeat++) {
+                assertSame(before, reads.execute(readerState, "liveName", false));
+                assertSame(before, singleReads.execute(singleReaderState, "liveName", false));
+                assertSame(context, singleScope.materializedContextOrNullForRuntime());
+            }
+            var selectedBeforeHandoff = assertInstanceOf(
+                    ProtosFrameLocalBindings.ResolvedLexicalWriteTarget.class,
+                    writes.execute(readerState, "liveName", true));
+            assertSame(context, ownerClosure.executionPlan().orElseThrow()
+                    .executeBytecodeActivationForTesting(owner));
+            assertSame(context, owner.context());
+            assertSame(context, environment.context());
+            assertSame(environment, reader.capturedLexicalEnvironmentForRuntime());
+            assertSame(context, reader.capturedLexicalContexts().get(0));
+            var authority = owner.publishedClosureLexicalAuthorityForRuntime();
+            assertSame(authority, context.lexicalBindingAuthorityForRuntime());
+            assertNotSame(oldAuthority, authority);
+            assertFalse(oldLocation.hasCurrentStorage());
+            assertNull(ProtosModuleBindingLocation.ofOrNull(context, "liveName"));
+            assertSame(before, reads.execute(readerState, "liveName", false));
+            assertSame(before, singleReads.execute(singleReaderState, "liveName", false));
+            ProtosFrameLocalBindings.assignResolvedLexicalTarget(
+                    readerState, selectedBeforeHandoff, "liveName", after);
+            assertSame(after, reads.execute(readerState, "liveName", false));
+            assertSame(after, singleReads.execute(singleReaderState, "liveName", false));
+            assertSame(before, oldLocation.readOrNull(get));
+            assertFalse(oldLocation.hasCurrentStorage());
+            assertSame(after, authority.readBinding("liveName").orElseThrow());
+            assertSame(after, context.readLocalSlot("liveName").orElseThrow());
+            assertNull(get.execute(context, "liveName", null));
+
+            ProtosClosureValue cellReader = assertInstanceOf(ProtosClosureValue.class,
+                    context.readLocalSlot("getter").orElseThrow());
+            ProtosLexicalCell cell = cellReader.capturedCellsForRuntime()[0];
+            context.assignLocalSlot("local", before);
+            context.assignLocalSlot("shared", after);
+            assertSame(before, authority.readBinding("local").orElseThrow());
+            assertSame(after, cell.valueOrNullForRuntime());
+            assertSame(after, execute(f, cellReader));
+            assertTrue(operations(activationNode(ownerClosure)).contains("CreateCell"));
+            assertNull(get.execute(context, "local", null));
+            assertNull(get.execute(context, "shared", null));
+            assertSame(before, context.removeLocalSlot("local"));
+            assertFalse(authority.containsBinding("local"));
+            context.createLocalSlot("local", ProtosNullValue.INSTANCE);
+            assertTrue(authority.containsBinding("local"));
+            assertSame(ProtosNullValue.INSTANCE, authority.readBinding("local").orElseThrow());
+            assertSame(after, context.removeLocalSlot("shared"));
+            assertNull(cell.valueOrNullForRuntime());
+            assertFalse(authority.containsBinding("shared"));
+            context.createLocalSlot("shared", ProtosNullValue.INSTANCE);
+            assertSame(cell, cellReader.capturedCellsForRuntime()[0]);
+            assertSame(ProtosNullValue.INSTANCE, cell.valueOrNullForRuntime());
+            assertSame(ProtosNullValue.INSTANCE, execute(f, cellReader));
+            context.assignLocalSlot("shared", before);
+            assertSame(before, execute(f, cellReader));
+
+            for (int repeat = 0; repeat < 8; repeat++) {
+                context.assignLocalSlot("liveName", ProtosNullValue.INSTANCE);
+                assertTrue(authority.containsBinding("liveName"));
+                assertSame(ProtosNullValue.INSTANCE, reads.execute(readerState, "liveName", false));
+                assertSame(ProtosNullValue.INSTANCE, singleReads.execute(singleReaderState, "liveName", false));
+                var selected = assertInstanceOf(ProtosFrameLocalBindings.ResolvedLexicalWriteTarget.class,
+                        writes.execute(readerState, "liveName", true));
+                context.removeLocalSlot("liveName");
+                assertFalse(authority.containsBinding("liveName"));
+                assertSame(fallback, reads.execute(readerState, "liveName", false));
+                assertSame(fallback, singleReads.execute(singleReaderState, "liveName", false));
+                assertTrue(singleScope.readLocalSlotForRuntime("liveName").isEmpty());
+                assertThrows(ProtosSignalException.class,
+                        () -> ProtosFrameLocalBindings.assignResolvedLexicalTarget(
+                                readerState, selected, "liveName", after));
+                assertFalse(context.hasLocalSlot("liveName"));
+                assertSame(fallback, outer.readLocalSlot("liveName").orElseThrow());
+                context.createLocalSlot("liveName", before);
+                assertSame(before, reads.execute(readerState, "liveName", false));
+                assertSame(before, singleReads.execute(singleReaderState, "liveName", false));
+                var recreated = assertInstanceOf(ProtosFrameLocalBindings.ResolvedLexicalWriteTarget.class,
+                        writes.execute(readerState, "liveName", true));
+                ProtosFrameLocalBindings.assignResolvedLexicalTarget(readerState, recreated, "liveName", after);
+                assertSame(after, reads.execute(readerState, "liveName", false));
+                assertSame(after, singleReads.execute(singleReaderState, "liveName", false));
+                assertSame(after, authority.readBinding("liveName").orElseThrow());
+                assertSame(authority, context.lexicalBindingAuthorityForRuntime());
+                assertNotSame(oldAuthority, context.lexicalBindingAuthorityForRuntime());
+                assertFalse(oldLocation.hasCurrentStorage());
+                assertSame(context, singleScope.context());
+                assertSame(singleScope, singleReader.capturedLexicalEnvironmentForRuntime());
+            }
+            owner.installPublishedClosureLexicalAuthorityForRuntime(authority);
+            assertSame(context, owner.context());
+            assertSame(authority, context.lexicalBindingAuthorityForRuntime());
+            assertSame(environment, reader.capturedLexicalEnvironmentForRuntime());
+            assertNull(readerState.materializedContextOrNullForRuntime());
+            assertNull(singleReaderState.materializedContextOrNullForRuntime());
+        });
     }
 
     /* ReadGlobal operations, quickened or not, of the Closure's activation root. */
