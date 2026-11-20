@@ -98,6 +98,7 @@ import com.oracle.truffle.api.frame.FrameDescriptor;
 import com.oracle.truffle.api.frame.MaterializedFrame;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.profiles.ConditionProfile;
+import com.oracle.truffle.api.profiles.InlinedBranchProfile;
 import com.oracle.truffle.api.nodes.ControlFlowException;
 import com.oracle.truffle.api.nodes.DirectCallNode;
 import com.oracle.truffle.api.nodes.ExplodeLoop;
@@ -1597,8 +1598,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * the standard guest Error.
      */
     private static int existingBytesIndex(
-            ProtosBytesValue bytes, long index, VirtualFrame frame) {
-        if (index < 0 || index >= bytes.indexedSize()) {
+            ProtosBytesValue bytes, long index, VirtualFrame frame,
+            Node inliningTarget, InlinedBranchProfile errorProfile) {
+        if (Long.compareUnsigned(index, bytes.indexedSize()) >= 0) {
+            errorProfile.enter(inliningTarget);
             throw indexedError(frame);
         }
         return (int) index;
@@ -1609,8 +1612,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * an index outside 0..size-1 signals the standard guest Error.
      */
     private static int existingArrayIndex(
-            ProtosArrayValue array, long index, VirtualFrame frame) {
-        if (index < 0 || index >= array.indexedSize()) {
+            ProtosArrayValue array, long index, VirtualFrame frame,
+            Node inliningTarget, InlinedBranchProfile errorProfile) {
+        if (Long.compareUnsigned(index, array.indexedSize()) >= 0) {
+            errorProfile.enter(inliningTarget);
             throw indexedError(frame);
         }
         return (int) index;
@@ -1622,11 +1627,14 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * standard Array atPut behavior, before any narrowing to a host int.
      */
     private static int writableArrayIndex(
-            ProtosArrayValue array, long index, VirtualFrame frame) {
+            ProtosArrayValue array, long index, VirtualFrame frame,
+            Node inliningTarget, InlinedBranchProfile errorProfile) {
         if (array.isFrozen()) {
+            errorProfile.enter(inliningTarget);
             throw indexedError(frame);
         }
-        return existingArrayIndex(array, index, frame);
+        return existingArrayIndex(
+                array, index, frame, inliningTarget, errorProfile);
     }
 
     /*
@@ -1686,7 +1694,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     "receiverShape.check(receiver)",
                     "selection != null",
                     "hasSelectionParent(receiver, selection)",
-                    "selection.isValid()"
+                    "frozen || selection.isValid()"
                 },
                 limit = "3",
                 excludeForUncached = true)
@@ -2333,9 +2341,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosArrayValue array,
                 long index,
                 @Bind VirtualFrame frame,
-                @Shared("selection") @Cached StandardIndexedSelectionNode selection) {
+                @Shared("selection") @Cached StandardIndexedSelectionNode selection,
+                @Bind Node inliningTarget,
+                @Shared("indexError") @Cached InlinedBranchProfile errorProfile) {
             return array.indexedLongAtNormalized(
-                    existingArrayIndex(array, index, frame));
+                    existingArrayIndex(array, index, frame,
+                            inliningTarget, errorProfile));
         }
 
         @Specialization(guards = {"array.hasDoubleStorageForRuntime()",
@@ -2344,9 +2355,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosArrayValue array,
                 long index,
                 @Bind VirtualFrame frame,
-                @Shared("selection") @Cached StandardIndexedSelectionNode selection) {
+                @Shared("selection") @Cached StandardIndexedSelectionNode selection,
+                @Bind Node inliningTarget,
+                @Shared("indexError") @Cached InlinedBranchProfile errorProfile) {
             return array.indexedDoubleAtNormalized(
-                    existingArrayIndex(array, index, frame));
+                    existingArrayIndex(array, index, frame,
+                            inliningTarget, errorProfile));
         }
 
         @Specialization(guards = {"array.hasBooleanStorageForRuntime()",
@@ -2355,9 +2369,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosArrayValue array,
                 long index,
                 @Bind VirtualFrame frame,
-                @Shared("selection") @Cached StandardIndexedSelectionNode selection) {
+                @Shared("selection") @Cached StandardIndexedSelectionNode selection,
+                @Bind Node inliningTarget,
+                @Shared("indexError") @Cached InlinedBranchProfile errorProfile) {
             return array.indexedBooleanAtNormalized(
-                    existingArrayIndex(array, index, frame));
+                    existingArrayIndex(array, index, frame,
+                            inliningTarget, errorProfile));
         }
 
         /* Every storage representation, read as its exact guest value. */
@@ -2367,9 +2384,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosArrayValue array,
                 long index,
                 @Bind VirtualFrame frame,
-                @Shared("selection") @Cached StandardIndexedSelectionNode selection) {
+                @Shared("selection") @Cached StandardIndexedSelectionNode selection,
+                @Bind Node inliningTarget,
+                @Shared("indexError") @Cached InlinedBranchProfile errorProfile) {
             return array.indexedAtNormalized(
-                    existingArrayIndex(array, index, frame));
+                    existingArrayIndex(array, index, frame,
+                            inliningTarget, errorProfile));
         }
 
         /*
@@ -2382,9 +2402,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosBytesValue bytes,
                 long index,
                 @Bind VirtualFrame frame,
-                @Shared("selection") @Cached StandardIndexedSelectionNode selection) {
+                @Shared("selection") @Cached StandardIndexedSelectionNode selection,
+                @Bind Node inliningTarget,
+                @Shared("indexError") @Cached InlinedBranchProfile errorProfile) {
             return bytes.indexedAt(
-                    existingBytesIndex(bytes, index, frame));
+                    existingBytesIndex(bytes, index, frame,
+                            inliningTarget, errorProfile));
         }
 
         @Fallback
@@ -2427,9 +2450,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 long index,
                 long value,
                 @Bind VirtualFrame frame,
-                @Shared("selection") @Cached StandardIndexedSelectionNode selection) {
+                @Shared("selection") @Cached StandardIndexedSelectionNode selection,
+                @Bind Node inliningTarget,
+                @Shared("indexError") @Cached InlinedBranchProfile errorProfile) {
             array.indexedLongStoragePutNormalized(
-                    writableArrayIndex(array, index, frame), value);
+                    writableArrayIndex(array, index, frame,
+                            inliningTarget, errorProfile), value);
             return value;
         }
 
@@ -2440,9 +2466,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 long index,
                 double value,
                 @Bind VirtualFrame frame,
-                @Shared("selection") @Cached StandardIndexedSelectionNode selection) {
+                @Shared("selection") @Cached StandardIndexedSelectionNode selection,
+                @Bind Node inliningTarget,
+                @Shared("indexError") @Cached InlinedBranchProfile errorProfile) {
             array.indexedDoubleStoragePutNormalized(
-                    writableArrayIndex(array, index, frame), value);
+                    writableArrayIndex(array, index, frame,
+                            inliningTarget, errorProfile), value);
             return value;
         }
 
@@ -2453,9 +2482,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 long index,
                 boolean value,
                 @Bind VirtualFrame frame,
-                @Shared("selection") @Cached StandardIndexedSelectionNode selection) {
+                @Shared("selection") @Cached StandardIndexedSelectionNode selection,
+                @Bind Node inliningTarget,
+                @Shared("indexError") @Cached InlinedBranchProfile errorProfile) {
             array.indexedBooleanStoragePutNormalized(
-                    writableArrayIndex(array, index, frame), value);
+                    writableArrayIndex(array, index, frame,
+                            inliningTarget, errorProfile), value);
             return value;
         }
 
@@ -2467,9 +2499,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 long index,
                 Object value,
                 @Bind VirtualFrame frame,
-                @Shared("selection") @Cached StandardIndexedSelectionNode selection) {
+                @Shared("selection") @Cached StandardIndexedSelectionNode selection,
+                @Bind Node inliningTarget,
+                @Shared("indexError") @Cached InlinedBranchProfile errorProfile) {
             array.indexedPutNormalized(
-                    writableArrayIndex(array, index, frame),
+                    writableArrayIndex(array, index, frame,
+                            inliningTarget, errorProfile),
                     ProtosNumericValueSupport.guestValue(value));
             return value;
         }
@@ -2484,14 +2519,19 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 long index,
                 Object value,
                 @Bind VirtualFrame frame,
-                @Shared("selection") @Cached StandardIndexedSelectionNode selection) {
+                @Shared("selection") @Cached StandardIndexedSelectionNode selection,
+                @Bind Node inliningTarget,
+                @Shared("indexError") @Cached InlinedBranchProfile errorProfile) {
             if (bytes.isFrozen()) {
+                errorProfile.enter(inliningTarget);
                 throw indexedError(frame);
             }
-            int hostIndex = existingBytesIndex(bytes, index, frame);
+            int hostIndex = existingBytesIndex(bytes, index, frame,
+                    inliningTarget, errorProfile);
             Object octet = ProtosNumericValueSupport.guestValue(value);
             if (!ProtosNumericValueSupport.isUnsignedIntegerWithin(
                     octet, Byte.SIZE)) {
+                errorProfile.enter(inliningTarget);
                 throw indexedError(frame);
             }
             bytes.indexedPut(hostIndex, octet);
@@ -2668,9 +2708,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 guards = {
                     "factory == cachedFactory",
                     "callSelection != null",
-                    "callSelection.isValid()",
+                    "frozen || callSelection.isValid()",
                     "constructSelection != null",
-                    "constructSelection.isValid()"
+                    "frozen || constructSelection.isValid()"
                 },
                 limit = "3",
                 excludeForUncached = true)

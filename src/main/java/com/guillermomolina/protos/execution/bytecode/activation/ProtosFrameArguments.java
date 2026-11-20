@@ -1212,23 +1212,20 @@ final class ProtosFrameArguments {
     }
 
     /**
-     * The Prelude captured by the running compact invocation's own Closure,
-     * or {@code null} when the arguments are not a B5 header, the invocation
-     * already published its activation, or the Closure captured no Prelude.
-     * A non-null answer is exactly what {@link #admittedPreludeOrNull} answers
-     * for the same arguments; a null answer leaves the Prelude to that general
-     * resolution, which keeps caller inheritance. Reads only the Closure's
-     * final field: nothing is published, materialized or sent.
+     * The running compact invocation's own Closure, or {@code null} when the
+     * arguments are not a B5 header or the invocation already published its
+     * activation. Callers that cache this identity may derive the Closure's
+     * captured Prelude once from its final field; a null answer leaves the
+     * Prelude to {@link #admittedPreludeOrNull}, which keeps caller
+     * inheritance. Nothing is published, materialized or sent.
      */
-    static ProtosPrelude capturedClosurePreludeOrNull(Object[] arguments) {
+    static ProtosClosureValue capturedClosureForSelectionOrNull(
+            Object[] arguments) {
         if (arguments.length < HEADER_LENGTH) {
             return null;
         }
         Object first = arguments[CLOSURE_INDEX];
-        if (first instanceof ProtosClosureValue closure) {
-            return closure.preludeOrNullForRuntime();
-        }
-        return null;
+        return first instanceof ProtosClosureValue closure ? closure : null;
     }
 
     /**

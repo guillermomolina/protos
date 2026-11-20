@@ -602,6 +602,16 @@ class ProtosLexicalSelectionNodeTest {
                 assertSame(ProtosNullValue.INSTANCE, selection.execute(readerState, "probe", false));
                 assertSame(context, scope.context());
                 assertNull(readerState.materializedContextOrNullForRuntime());
+                assertFalse(context.usesObjectStorageForRuntime());
+                context.freeze();
+                assertTrue(context.isFrozen());
+                for (int repeat = 0; repeat < 8; repeat++) {
+                    assertSame(ProtosNullValue.INSTANCE, selection.execute(readerState, "probe", false));
+                }
+                readerState.context().createLocalSlot("probe", replacement);
+                assertSame(replacement, selection.execute(readerState, "probe", false));
+                readerState.context().removeLocalSlot("probe");
+                assertSame(ProtosNullValue.INSTANCE, selection.execute(readerState, "probe", false));
             } finally {
                 entered.leave();
             }
@@ -724,6 +734,267 @@ class ProtosLexicalSelectionNodeTest {
         assertSame(outside, inner.readLocalSlot("liveWrite").orElseThrow());
         assertSame(assigned, outer.readLocalSlot("liveWrite").orElseThrow());
         assertNull(activation.materializedContextOrNullForRuntime());
+    }
+
+    @Test
+    void frozenOwnerValueIsStableAcrossReads() {
+        ProtosObjectValue root = ProtosObjectValue.rootObject();
+        for (Object value : new Object[] {
+                4096L, 1.25d, Boolean.FALSE, new ProtosObjectValue(root), ProtosNullValue.INSTANCE}) {
+            ProtosObjectValue owner = new ProtosObjectValue(root);
+            owner.createLocalSlot("frozenValue", value);
+            owner.freeze();
+            ProtosActivation activation = deferredSelectionActivation(
+                    List.of(owner), new ProtosObjectValue(root));
+            ProtosLexicalSelectionNode selection = ProtosLexicalSelectionNodeGen.create();
+            for (int repeat = 0; repeat < 8; repeat++) {
+                Object selected = selection.execute(activation, "frozenValue", false);
+                assertEquals(value.getClass(), selected.getClass());
+                if (value instanceof Long || value instanceof Double || value instanceof Boolean) {
+                    assertEquals(value, selected);
+                } else {
+                    assertSame(value, selected);
+                }
+                assertEquals(selected, read(activation, "frozenValue"));
+            }
+            assertSame(owner, activation.capturedLexicalEnvironmentForRuntime()
+                    .materializedContextOrNullForRuntime());
+            assertThrows(IllegalStateException.class,
+                    () -> owner.assignLocalSlot("frozenValue", Boolean.TRUE));
+            assertThrows(IllegalStateException.class,
+                    () -> owner.createLocalSlot("other", Boolean.TRUE));
+            assertThrows(IllegalStateException.class, () -> owner.removeLocalSlot("frozenValue"));
+            assertNull(activation.materializedContextOrNullForRuntime());
+        }
+    }
+
+    @Test
+    void frozenOwnerIdentitySeparatesValues() {
+        ProtosObjectValue root = ProtosObjectValue.rootObject();
+        ProtosObjectValue first = new ProtosObjectValue(root);
+        ProtosObjectValue second = new ProtosObjectValue(root);
+        Object firstValue = new ProtosObjectValue(root);
+        Object secondValue = new ProtosObjectValue(root);
+        first.createLocalSlot("frozenValue", firstValue);
+        second.createLocalSlot("frozenValue", secondValue);
+        first.freeze();
+        second.freeze();
+        ProtosActivation firstReader = deferredSelectionActivation(List.of(first), root);
+        ProtosActivation secondReader = deferredSelectionActivation(List.of(second), root);
+        ProtosLexicalSelectionNode selection = ProtosLexicalSelectionNodeGen.create();
+        for (int repeat = 0; repeat < 8; repeat++) {
+            assertSame(firstValue, selection.execute(firstReader, "frozenValue", false));
+            assertSame(secondValue, selection.execute(secondReader, "frozenValue", false));
+        }
+    }
+
+    @Test
+    void frozenOwnerStillYieldsToNearerShadowing() {
+        ProtosObjectValue root = ProtosObjectValue.rootObject();
+        ProtosObjectValue owner = new ProtosObjectValue(root);
+        ProtosObjectValue nearer = new ProtosObjectValue(root);
+        Object value = new ProtosObjectValue(root);
+        owner.createLocalSlot("frozenValue", value);
+        owner.freeze();
+        ProtosActivation activation = deferredSelectionActivation(List.of(nearer, owner), root);
+        ProtosLexicalSelectionNode selection = ProtosLexicalSelectionNodeGen.create();
+        for (int repeat = 0; repeat < 8; repeat++) {
+            assertSame(value, selection.execute(activation, "frozenValue", false));
+            nearer.createLocalSlot("frozenValue", ProtosNullValue.INSTANCE);
+            assertSame(ProtosNullValue.INSTANCE, selection.execute(activation, "frozenValue", false));
+            assertSame(ProtosNullValue.INSTANCE, read(activation, "frozenValue"));
+            nearer.removeLocalSlot("frozenValue");
+            assertSame(value, selection.execute(activation, "frozenValue", false));
+        }
+    }
+
+    @Test
+    void mutableAndDeferredOwnersRetainLiveSelection() {
+        ProtosObjectValue root = ProtosObjectValue.rootObject();
+        ProtosObjectValue referenced = new ProtosObjectValue(root);
+        referenced.createLocalSlot("state", Boolean.FALSE);
+        ProtosObjectValue frozen = new ProtosObjectValue(root);
+        frozen.createLocalSlot("frozenValue", referenced);
+        frozen.freeze();
+        ProtosActivation owner = deferredSelectionActivation(List.of(frozen), root);
+        ProtosLexicalEnvironment scope = owner.lexicalEnvironmentForClosureCapture();
+        assertNull(ProtosLexicalSelectionNode.absentScopeLocationOrNull(scope, 1, "frozenValue"));
+        ProtosClosureValue closure = new ProtosClosureValue(
+                null, scope, root, null, null, owner.prelude().orElseThrow(), null);
+        Object[] arguments = ProtosFrameArguments.compactDirectClosureCall(
+                closure, owner, null, new Object[0]);
+        ProtosLexicalSelectionNode selection = ProtosLexicalSelectionNodeGen.create();
+        for (int repeat = 0; repeat < 8; repeat++) {
+            assertSame(referenced, selection.execute(arguments, "frozenValue", false,
+                    ProtosBytecodeRootNode.EMPTY_LEXICAL_FRAME_LAYOUT));
+            assertTrue(scope.isDeferredForRuntime());
+            assertNull(owner.materializedContextOrNullForRuntime());
+            assertSame(closure, arguments[0]);
+        }
+        referenced.assignLocalSlot("state", Boolean.TRUE);
+        assertFalse(referenced.isFrozen());
+        assertSame(Boolean.TRUE, referenced.readLocalSlot("state").orElseThrow());
+        ProtosActivation reader = ProtosFrameArguments.activation(arguments);
+        assertSame(referenced, selection.execute(arguments, "frozenValue", false));
+        assertSame(reader, ProtosFrameArguments.publishedActivation(arguments));
+        ProtosObjectValue mutable = owner.context();
+        for (int repeat = 0; repeat < 4; repeat++) {
+            mutable.createLocalSlot("frozenValue", Boolean.FALSE);
+            assertSame(Boolean.FALSE, selection.execute(arguments, "frozenValue", false));
+            mutable.assignLocalSlot("frozenValue", ProtosNullValue.INSTANCE);
+            assertSame(ProtosNullValue.INSTANCE, selection.execute(arguments, "frozenValue", false));
+            mutable.removeLocalSlot("frozenValue");
+            assertSame(referenced, selection.execute(arguments, "frozenValue", false));
+        }
+        assertSame(mutable, scope.context());
+        assertSame(mutable, scope.materializedContextOrNullForRuntime());
+        assertNull(reader.materializedContextOrNullForRuntime());
+    }
+
+    @Test
+    void negativeArraySelectionTracksPhysicalStorageShapeAndFixedWriteDestination() {
+        ProtosObjectValue root = ProtosObjectValue.rootObject();
+        ProtosExecutionContextValue nearer = new ProtosExecutionContextValue(root);
+        ProtosObjectValue outer = new ProtosObjectValue(root);
+        Object outside = new ProtosStringValue("outside");
+        Object inside = new ProtosStringValue("inside");
+        outer.createLocalSlot("Array", outside);
+        ProtosActivation reader = deferredSelectionActivation(List.of(nearer, outer), root);
+        ProtosLexicalEnvironment scope = reader.capturedLexicalEnvironmentForRuntime();
+        ProtosModuleBindingLocation absence = assertInstanceOf(ProtosModuleBindingLocation.class,
+                ProtosLexicalSelectionNode.absentScopeLocationOrNull(scope, 1, "Array"));
+        var missingShape = absence.storageShapeIfMissing();
+        var contextShape = nearer.getShape();
+        assertNotSame(nearer.getShape(), missingShape);
+        assertTrue(absence.hasCurrentStorage());
+        assertTrue(absence.hasStorageShape(missingShape));
+        assertNull(ProtosLexicalSelectionNode.absentScopeLocationOrNull(scope, 2, "Array"));
+        ProtosLexicalSelectionNode selection = ProtosLexicalSelectionNodeGen.create();
+        for (int round = 0; round < 8; round++) {
+            assertSame(outside, selection.execute(reader, "Array", false));
+            var destination = assertInstanceOf(ResolvedLexicalWriteTarget.class,
+                    selection.execute(reader, "Array", true));
+            var beforeCreation = absence.storageShapeIfMissing();
+            assertTrue(absence.hasStorageShape(beforeCreation));
+            nearer.createLocalSlot("Array", inside);
+            assertSame(contextShape, nearer.getShape());
+            assertFalse(absence.hasStorageShape(beforeCreation));
+            assertNull(absence.storageShapeIfMissing());
+            assertSame(inside, selection.execute(reader, "Array", false));
+            assertSame(inside, read(reader, "Array"));
+            // An intervening nearer creation never redirects an already selected write.
+            ProtosFrameLocalBindings.assignResolvedLexicalTarget(reader, destination, "Array", outside);
+            assertSame(inside, nearer.readLocalSlot("Array").orElseThrow());
+            nearer.assignLocalSlot("Array", ProtosNullValue.INSTANCE);
+            assertNull(absence.storageShapeIfMissing());
+            assertSame(ProtosNullValue.INSTANCE, selection.execute(reader, "Array", false));
+            assertSame(ProtosNullValue.INSTANCE, read(reader, "Array"));
+            nearer.removeLocalSlot("Array");
+            assertTrue(absence.hasStorageShape(absence.storageShapeIfMissing()));
+            assertSame(outside, selection.execute(reader, "Array", false));
+            assertSame(outside, read(reader, "Array"));
+        }
+        var beforeUnrelatedCreation = absence.storageShapeIfMissing();
+        nearer.createLocalSlot("unrelated", inside);
+        assertFalse(absence.hasStorageShape(beforeUnrelatedCreation));
+        assertSame(outside, selection.execute(reader, "Array", false));
+        nearer.removeLocalSlot("unrelated");
+        assertSame(outside, selection.execute(reader, "Array", false));
+        assertSame(nearer, scope.materializedContextOrNullForRuntime());
+        assertNull(reader.materializedContextOrNullForRuntime());
+    }
+
+    @Test
+    void negativeArraySelectionSeparatesNearerStorageIdentitiesAndObservesPublication() {
+        ProtosObjectValue root = ProtosObjectValue.rootObject();
+        ProtosExecutionContextValue first = new ProtosExecutionContextValue(root);
+        ProtosExecutionContextValue second = new ProtosExecutionContextValue(root);
+        ProtosObjectValue outer = new ProtosObjectValue(root);
+        Object outside = new ProtosStringValue("outside");
+        outer.createLocalSlot("Array", outside);
+        ProtosActivation firstReader = deferredSelectionActivation(List.of(first, outer), root);
+        ProtosActivation secondReader = deferredSelectionActivation(List.of(second, outer), root);
+        ProtosLexicalSelectionNode selection = ProtosLexicalSelectionNodeGen.create();
+        ProtosModuleBindingLocation firstLocation = ProtosModuleBindingLocation.storageLocationOrNull(first, "Array");
+        var firstShape = firstLocation.storageShapeIfMissing();
+        for (int round = 0; round < 8; round++) {
+            assertSame(outside, selection.execute(firstReader, "Array", false));
+            assertSame(outside, selection.execute(secondReader, "Array", false));
+            second.createLocalSlot("Array", ProtosNullValue.INSTANCE);
+            assertTrue(firstLocation.hasStorageShape(firstShape));
+            assertSame(outside, selection.execute(firstReader, "Array", false));
+            assertSame(ProtosNullValue.INSTANCE, selection.execute(secondReader, "Array", false));
+            second.removeLocalSlot("Array");
+        }
+        var closure = new ProtosClosureValue(null,
+                firstReader.capturedLexicalEnvironmentForRuntime(), root, null, null,
+                firstReader.prelude().orElseThrow(), null);
+        Object[] arguments = ProtosFrameArguments.compactDirectClosureCall(
+                closure, firstReader, null, new Object[0]);
+        var compactSelection = ProtosLexicalSelectionNodeGen.create();
+        assertSame(outside, compactSelection.execute(arguments, "Array", false,
+                ProtosBytecodeRootNode.EMPTY_LEXICAL_FRAME_LAYOUT));
+        assertSame(closure, arguments[0]);
+        ProtosActivation published = ProtosFrameArguments.activation(arguments);
+        assertSame(outside, compactSelection.execute(arguments, "Array", false));
+        published.context().createLocalSlot("Array", ProtosNullValue.INSTANCE);
+        assertSame(ProtosNullValue.INSTANCE, compactSelection.execute(arguments, "Array", false));
+        published.context().removeLocalSlot("Array");
+        assertSame(outside, compactSelection.execute(arguments, "Array", false));
+    }
+
+    @Test
+    void negativeArraySelectionFollowsAuthorityHandoffAndGuestRedefinition() throws Exception {
+        try (org.graalvm.polyglot.Context entered = org.graalvm.polyglot.Context
+                .newBuilder(ProtosLanguage.ID).build()) {
+            entered.initialize(ProtosLanguage.ID);
+            entered.enter();
+            try {
+                var prelude = new ProtosCoreBootstrap().bootstrap(java.nio.file.Path.of("protos", "lib", "core"));
+                ProtosActivation module = prelude.newModuleActivation();
+                var source = com.oracle.truffle.api.source.Source.newBuilder(ProtosLanguage.ID,
+                        "() => { probe: null\n context }", "negative-array-handoff.protos").build();
+                ProtosClosureValue ownerClosure = assertInstanceOf(ProtosClosureValue.class,
+                        ProtosLanguageContext.current().parsePublic(source).call(module));
+                ProtosActivation owner = ProtosActivation.forClosureInvocation(
+                        ownerClosure, List.of(), prelude, module.actorModuleState(),
+                        module.currentModuleKey().orElse(null), module.executionDomain());
+                ProtosExecutionContextValue nearer = assertInstanceOf(ProtosExecutionContextValue.class, owner.context());
+                ProtosActivation reader = deferredSelectionActivation(
+                        List.of(nearer, module.capturedLexicalEnvironmentForRuntime().context()),
+                        assertInstanceOf(ProtosObjectValue.class, module.receiver()));
+                ProtosLexicalSelectionNode selection = ProtosLexicalSelectionNodeGen.create();
+                ProtosModuleBindingLocation absence = ProtosModuleBindingLocation.storageLocationOrNull(nearer, "Array");
+                var missingShape = absence.storageShapeIfMissing();
+                Object arrayFactory = selection.execute(reader, "Array", false);
+                assertSame(prelude.bindings().readLocalSlot("Array").orElseThrow(), arrayFactory);
+                assertSame(nearer, ownerClosure.executionPlan().orElseThrow().executeBytecodeActivationForTesting(owner));
+                assertFalse(absence.hasCurrentStorage());
+                // The retired store retains its Shape; authority identity must still reject it.
+                assertTrue(absence.hasStorageShape(missingShape));
+                assertNull(ProtosModuleBindingLocation.storageLocationOrNull(nearer, "Array"));
+                assertSame(arrayFactory, selection.execute(reader, "Array", false));
+                nearer.createLocalSlot("Array", ProtosNullValue.INSTANCE);
+                assertSame(ProtosNullValue.INSTANCE, selection.execute(reader, "Array", false));
+                nearer.removeLocalSlot("Array");
+                assertSame(arrayFactory, selection.execute(reader, "Array", false));
+
+                var readerSource = com.oracle.truffle.api.source.Source.newBuilder(ProtosLanguage.ID,
+                        "() => Array", "negative-array-dynamic-read.protos").build();
+                ProtosClosureValue guestReader = assertInstanceOf(ProtosClosureValue.class,
+                        ProtosLanguageContext.current().parsePublic(readerSource).call(module));
+                for (int round = 0; round < 8; round++) {
+                    assertSame(arrayFactory, ProtosDispatchTestSupport.enter(ProtosDispatchTestSupport.direct(guestReader, module)));
+                }
+                module.context().createLocalSlot("Array", ProtosNullValue.INSTANCE);
+                assertSame(ProtosNullValue.INSTANCE,
+                        ProtosDispatchTestSupport.enter(ProtosDispatchTestSupport.direct(guestReader, module)));
+                module.context().removeLocalSlot("Array");
+                assertSame(arrayFactory, ProtosDispatchTestSupport.enter(ProtosDispatchTestSupport.direct(guestReader, module)));
+            } finally {
+                entered.leave();
+            }
+        }
     }
 
     private static ProtosActivation deferredSelectionActivation(

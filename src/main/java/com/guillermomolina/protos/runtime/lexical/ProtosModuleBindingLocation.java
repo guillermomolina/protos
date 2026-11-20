@@ -17,22 +17,28 @@
 
 package com.guillermomolina.protos.runtime;
 
+import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+import com.oracle.truffle.api.dsl.NonIdempotent;
 import com.oracle.truffle.api.object.DynamicObject;
+import com.oracle.truffle.api.object.Shape;
 import java.util.Objects;
 
 /**
  * I115 (ReadGlobal/WriteGlobal over the module binding storage): the
- * stable physical location of one NAME binding in a module execution
- * context, resolved once when a ReadGlobal or WriteGlobal site specializes.
+ * physical location of one NAME binding in a map-backed execution context,
+ * resolved once when a read or write site specializes. A lexical read can
+ * also use the location's storage Shape to prove a nearer name absent.
  *
- * <p>It is only an address: the module context, the single storage of its
- * independent durable authority and the binding's interned key. No value is copied here, so every legal
- * assignment stays observable. The store instance is fixed for the lifetime
- * of the context (I115 installs no other authority), so the address stays
- * valid across removal and recreation of the binding: a removed binding reads
+ * <p>It is only an address: the execution context, the single storage of its
+ * independent durable authority and the binding's interned key. No value is
+ * copied here, so every legal assignment stays observable. A module's store
+ * instance is fixed for the lifetime of the context, so its address stays valid
+ * across removal and recreation of the binding: a removed binding reads
  * as absent ({@code null}), and the caller then takes its unspecialized NAME
- * access over the same storage.
+ * access over the same storage. Other execution contexts can hand authority
+ * to a frame; callers must validate {@link #hasCurrentStorage()} before using
+ * a cached location for selection.
  */
 public final class ProtosModuleBindingLocation {
     /* Private absence marker of a store read; never a stored value. */
@@ -66,7 +72,41 @@ public final class ProtosModuleBindingLocation {
                 : null;
     }
 
+    /**
+     * An address in the existing map-backed store, even when the name is absent.
+     * Specialization time only; frame-backed authorities are never admitted.
+     * This address alone proves no absence: callers must cache a missing-property
+     * Shape and validate both that Shape and {@link #hasCurrentStorage()}.
+     */
+    public static ProtosModuleBindingLocation storageLocationOrNull(ProtosObjectValue context, String name) {
+        CompilerAsserts.neverPartOfCompilation();
+        if (!(context instanceof ProtosExecutionContextValue executionContext)
+                || !(executionContext.lexicalBindingAuthorityForRuntime()
+                        instanceof ProtosMapBackedLexicalBindingAuthority mapBacked)) {
+            return null;
+        }
+        return new ProtosModuleBindingLocation(context, mapBacked.storage(), name.intern());
+    }
+
+    /**
+     * GraalPy ReadGlobalOrBuiltinNode.getGlobalsStorageShapeIfPropMissing:
+     * prove absence on the physical binding store, never on the Context container.
+     * Specialization time only; a non-null result must be guarded at execution.
+     */
+    public Shape storageShapeIfMissing() {
+        CompilerAsserts.neverPartOfCompilation();
+        Shape shape = store.getShape();
+        return shape.hasProperty(key) ? null : shape;
+    }
+
+    /** Live Shape identity check on this address's physical store. */
+    @NonIdempotent
+    public boolean hasStorageShape(Shape shape) {
+        return store.getShape() == shape;
+    }
+
     /** Whether this location's physical store is still authoritative for its context. */
+    @NonIdempotent
     public boolean hasCurrentStorage() {
         return context instanceof ProtosExecutionContextValue executionContext
                 && executionContext.lexicalBindingAuthorityForRuntime()

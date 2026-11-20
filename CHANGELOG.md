@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.186-SNAPSHOT
+
+- **I115.** Cache captured Preludes by Closure identity, frozen lexical binding values and missing bindings in a nearer scope guarded by current storage and Shape. Skip redundant selection validity checks for frozen owners and profile indexed Array/Bytes error paths. Extend lexical selection, numeric and String operation, indexed operation and compact lowering regressions, and refresh the generated-bytecode BCI partial-evaluation baseline for the shorter indexed instructions.
+
 ## 0.4.185-SNAPSHOT
 
 - **I115.** Cache constant primitive Array operands per site while each Array still receives a private copy, and make the Closure lexical frame layout compilation-final with an exploded name lookup. Read module bindings through a cached location only while its storage is still the context's current authority, otherwise fall back to the owner. Refresh the generated-bytecode BCI partial-evaluation baseline for the wider constant Array instructions and extend Array, lexical selection, lexical storage, compact lowering and compact callee regressions.

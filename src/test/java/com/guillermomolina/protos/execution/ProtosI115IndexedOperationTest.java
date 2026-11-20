@@ -202,6 +202,85 @@ final class ProtosI115IndexedOperationTest {
         }
     }
 
+    /*
+     * Array bounds over signed long indexes: 0..size-1 is accepted, every
+     * negative index and every index at or above the size signals the
+     * guest Error without normalization or truncation, and a handled Error
+     * leaves the original elements in place; an empty Array rejects all.
+     */
+    @Test
+    void unsignedArrayBoundsPreserveLongIndexSemantics() {
+        assertEquals(10L, evalLong("a: [10, 20, 30]\na[0]"));
+        assertEquals(20L, evalLong("a: [10, 20, 30]\na[1]"));
+        assertEquals(30L, evalLong("a: [10, 20, 30]\na[2]"));
+        assertEquals(7L, evalLong("a: [10, 20, 30]\na[0] = 7\na[0]"));
+        assertEquals(8L, evalLong("a: [10, 20, 30]\na[2] = 8\na[2]"));
+        for (String index : List.of(
+                "0 - 1",
+                "0 - 3",
+                "0 - 9223372036854775807 - 1",
+                "3",
+                "4",
+                "2147483647",
+                "2147483648",
+                "4294967296",
+                "9223372036854775807")) {
+            assertTrue(signals("a: [10, 20, 30]\na[" + index + "]"), index);
+            assertTrue(signals("a: [10, 20, 30]\na[" + index + "] = 1"), index);
+            assertTrue(evalBoolean("a: [10, 20, 30]\n"
+                    + "Error.handle(() => { a[" + index + "] }, (caught) => null)\n"
+                    + "Error.handle(() => { a[" + index + "] = 99 }, (caught) => null)\n"
+                    + "(a.size() == 3) && (a[0] == 10) && (a[1] == 20) && (a[2] == 30)"),
+                    index);
+        }
+        for (String index : List.of(
+                "0", "1", "0 - 1", "2147483648", "9223372036854775807",
+                "0 - 9223372036854775807 - 1")) {
+            assertTrue(signals("a: []\na[" + index + "]"), index);
+            assertTrue(signals("a: []\na[" + index + "] = 1"), index);
+        }
+        assertTrue(evalBoolean("a: []\n"
+                + "Error.handle(() => { a[0] = 1 }, (caught) => null)\na.size() == 0"));
+    }
+
+    /*
+     * One read site and one write site alternate valid, negative, size and
+     * extremely large indexes: each failure leaves the storage untouched,
+     * each valid write answers the assigned value, and receiver, index and
+     * value are evaluated once per execution.
+     */
+    @Test
+    void unsignedArrayBoundsRemainCorrectAtOneSite() {
+        assertTrue(evalBoolean(TRACE + """
+                count: { value: 0 }
+                once: (v) => { count.value = count.value + 1; v }
+                read: (r, i) => { r[i] }
+                write: (r, i, v) => { once(r)[once(i)] = once(v) }
+                failed: (f) => { Error.handle(() => { f(); false }, (caught) => true) }
+                a: [10, 20, 30]
+                ok: true
+                k: 0
+                while(k < 12) {
+                    ok = ok && (read(a, 0) == 10) && (write(a, 1, k) == k)
+                    ok = ok && failed(() => { read(a, 0 - 1) }) && failed(() => { write(a, 0 - 1, 5) })
+                    ok = ok && (read(a, 2) == 30) && (a[1] == k)
+                    ok = ok && failed(() => { read(a, 3) }) && failed(() => { write(a, 3, 5) })
+                    ok = ok && (read(a, 1) == k)
+                    ok = ok && failed(() => { read(a, 9223372036854775807) })
+                    ok = ok && failed(() => { write(a, 4294967296, 5) })
+                    ok = ok && (a.size() == 3) && (a[0] == 10) && (a[2] == 30)
+                    k = k + 1
+                }
+                ok && (count.value == 12 * 4 * 3) && (a[1] == 11)
+                """));
+        assertEquals(1237L, evalLong(TRACE
+                + "a: [1, 2, 3]\n"
+                + "write: (r, i, v) => { step(1, r)[step(2, i)] = step(3, v) }\n"
+                + "write(a, 1, 7)\ntrace.value = 0\n"
+                + "result: write(a, 0, 7)\n"
+                + "trace.value * 10 + result"));
+    }
+
     @Test
     void bytesReadWriteOctetRangeBoundsAndFrozenState() {
         assertEquals(107L, evalLong(BYTES + "source[0] = 107\nsource[0]"));
@@ -267,6 +346,52 @@ final class ProtosI115IndexedOperationTest {
         assertEquals(5L, evalLong(special + "(s[0] = 5)"));
         // The plain Array keeps its standard behavior in the same program.
         assertEquals(3L, evalLong(special + "plain: [1, 2, 3]\nplain[0] = 3\nplain[0]"));
+    }
+
+    /*
+     * The inherited Array chain of these sites is FROZEN, so their cached
+     * selections skip structural revalidation; the receiver Shape guard still
+     * observes every receiver-local override and its removal at the same
+     * read, write and size sites, without leaking to another Array.
+     */
+    @Test
+    void frozenInheritedIndexedSelectionStillObservesReceiverOverrides() {
+        assertTrue(evalBoolean(TRACE + WARMED_SITES + """
+                count: (r) => { r.size() }
+                traced: (r, i, v) => { step(1, r)[step(2, i)] = step(3, v) }
+                a: [1, 2, 3]
+                b: [4, 5, 6]
+                ok: true
+                k: 0
+                while(k < 20) {
+                    ok = ok && (read(a, 1) == 2) && (write(a, 0, 1) == 1)
+                    ok = ok && (put(a, 2, 3) == 3) && (count(a) == 3)
+                    k = k + 1
+                }
+                a.at: (index) => { index + 100 }
+                ok = ok && (read(a, 1) == 101) && (read(a, 9) == 109) && (read(b, 1) == 5)
+                a.removeSlot("at")
+                ok = ok && (read(a, 1) == 2)
+                ok = ok && Error.handle(() => { read(a, 3); false }, (caught) => isError(caught))
+                a.atPut: (index, value) => { 77 }
+                ok = ok && (put(a, 9, 8) == 77) && (write(a, 9, 8) == 8) && (a[0] == 1)
+                ok = ok && (put(b, 0, 40) == 40) && (b[0] == 40)
+                a.removeSlot("atPut")
+                ok = ok && (put(a, 0, 6) == 6) && (read(a, 0) == 6)
+                ok = ok && Error.handle(() => { write(a, 3, 1); false }, (caught) => isError(caught))
+                a.size: () => { 99 }
+                ok = ok && (count(a) == 99) && (count(b) == 3)
+                a.removeSlot("size")
+                ok = ok && (count(a) == 3)
+                trace.value = 0
+                rhsCount.value = 0
+                ok = ok && (traced(a, 1, 7) == 7) && (trace.value == 123) && (a[1] == 7)
+                trace.value = 0
+                ok = ok && Error.handle(() => { traced(a, 5, 7); false }, (caught) => isError(caught))
+                ok = ok && (trace.value == 123)
+                ok = ok && (write(a, 2, 9) == 9) && (rhsCount.value == 1)
+                ok && (read(b, 2) == 6) && (count(b) == 3)
+                """));
     }
 
     @Test
@@ -1909,6 +2034,190 @@ final class ProtosI115IndexedOperationTest {
                 booleans: [true]
                 custom: { at: (index) => { 5 } }
                 (read(doubles) == 1.5) && (read(booleans) === true) && (read(custom) == 5) && (read(doubles) == 1.5) && (read(booleans) === true)
+                """));
+    }
+
+    private static final List<String> INVALID_INDEXES = List.of(
+            "0 - 1",
+            "3",
+            "4",
+            "2147483648",
+            "9223372036854775807",
+            "0 - 9223372036854775807 - 1");
+
+    private static final String WARMED_SITES = """
+            isError: (e) => { e.parent() === Error }
+            read: (r, i) => { r[i] }
+            rhsCount: { value: 0 }
+            rhs: (v) => { rhsCount.value = rhsCount.value + 1; v }
+            write: (r, i, v) => { r[i] = rhs(v) }
+            put: (r, i, v) => { r.atPut(i, v) }
+            """;
+
+    /*
+     * One read site warmed with valid indexes signals the standard guest
+     * Error for every invalid signed long index, and the same site keeps
+     * answering valid reads after each Error.
+     */
+    @Test
+    void warmedReadSiteSignalsEveryInvalidIndexAndKeepsReading() {
+        StringBuilder body = new StringBuilder(WARMED_SITES + """
+                a: [10, 20, 30]
+                ok: true
+                k: 0
+                while(k < 20) {
+                    ok = ok && (read(a, 0) == 10) && (read(a, 2) == 30)
+                    k = k + 1
+                }
+                """);
+        for (String index : INVALID_INDEXES) {
+            body.append("ok = ok && Error.handle(() => { read(a, ").append(index)
+                    .append("); false }, (caught) => isError(caught))\n")
+                    .append("ok = ok && (read(a, 1) == 20)\n");
+        }
+        body.append("ok && (a.size() == 3)");
+        assertTrue(evalBoolean(body.toString()));
+    }
+
+    /*
+     * One write site warmed with valid writes rejects invalid indexes
+     * without changing content or size, evaluates its RHS once per
+     * execution, answers the RHS, and still writes after the Errors; a
+     * promotion through the same site keeps an earlier snapshot intact.
+     */
+    @Test
+    void warmedWriteSiteRejectsInvalidIndexesAndKeepsWriting() {
+        StringBuilder body = new StringBuilder(WARMED_SITES + """
+                a: [1, 2, 3]
+                ok: true
+                k: 0
+                while(k < 20) {
+                    ok = ok && (write(a, 1, k) == k)
+                    k = k + 1
+                }
+                ok = ok && (a[1] == 19) && (rhsCount.value == 20)
+                """);
+        int executions = 20;
+        for (String index : INVALID_INDEXES) {
+            executions++;
+            body.append("ok = ok && Error.handle(() => { write(a, ").append(index)
+                    .append(", 99); false }, (caught) => isError(caught))\n")
+                    .append("ok = ok && (a[0] == 1) && (a[1] == 19) && (a[2] == 3)")
+                    .append(" && (a.size() == 3) && (rhsCount.value == ")
+                    .append(executions).append(")\n");
+        }
+        body.append("""
+                ok = ok && (write(a, 2, 30) == 30) && (a[2] == 30) && (a[0] == 1)
+                seen: [null, null, null]
+                position: { value: 0 }
+                a.each((e) => {
+                    write(a, 2, "x")
+                    seen[position.value] = e
+                    position.value = position.value + 1
+                })
+                ok && (seen[2] == 30) && (a[2] == "x") && (a[0] == 1) && (a.size() == 3)
+                """);
+        assertTrue(evalBoolean(body.toString()));
+    }
+
+    /*
+     * A write site warmed on a mutable Array rejects a FROZEN receiver
+     * (valid or invalid index) without changes, and on a CLOSED receiver
+     * replaces existing elements but rejects indexes outside its size.
+     */
+    @Test
+    void warmedWriteSiteObservesFrozenAndClosedReceivers() {
+        assertTrue(evalBoolean(WARMED_SITES + """
+                m: [1, 2, 3]
+                ok: true
+                k: 0
+                while(k < 20) {
+                    ok = ok && (write(m, 0, k) == k)
+                    k = k + 1
+                }
+                f: [4.5, 5.5]
+                f.freeze()
+                ok = ok && Error.handle(() => { write(f, 0, 1.5); false }, (caught) => isError(caught))
+                ok = ok && Error.handle(() => { write(f, 9, 1.5); false }, (caught) => isError(caught))
+                ok = ok && Error.handle(() => { write(f, 0, "x"); false }, (caught) => isError(caught))
+                ok = ok && (f[0] == 4.5) && (f[1] == 5.5) && (f.size() == 2)
+                c: [7, 8, 9]
+                c.close()
+                ok = ok && (write(c, 1, 80) == 80) && (c[1] == 80)
+                ok = ok && Error.handle(() => { write(c, 3, 1); false }, (caught) => isError(caught))
+                ok = ok && Error.handle(() => { write(c, 0 - 1, 1); false }, (caught) => isError(caught))
+                ok = ok && (c[0] == 7) && (c[1] == 80) && (c[2] == 9) && (c.size() == 3)
+                ok && (write(m, 2, 33) == 33) && (m[2] == 33)
+                """));
+    }
+
+    /*
+     * After warm-up, each indexed failure reaches Error.handle as its own
+     * guest Error occurrence, unwrapped, and execution continues normally.
+     */
+    @Test
+    void warmedIndexedErrorsReachTheHandlerAsDistinctOccurrences() {
+        assertTrue(evalBoolean(WARMED_SITES + """
+                a: [1, 2, 3]
+                k: 0
+                while(k < 20) {
+                    read(a, 1)
+                    write(a, 1, 2)
+                    k = k + 1
+                }
+                seen: { value: null }
+                first: Error.handle(() => { read(a, 3) }, (caught) => { seen.value = caught; caught })
+                firstSeen: seen.value
+                second: Error.handle(() => { write(a, 5, 1) }, (caught) => { seen.value = caught; caught })
+                third: Error.handle(() => { read(a, 3) }, (caught) => caught)
+                distinct: (first !== second) && (first !== third) && (second !== third)
+                unwrapped: (firstSeen === first) && (seen.value === second)
+                kinds: isError(first) && isError(second) && isError(third)
+                distinct && unwrapped && kinds && (read(a, 2) == 3) && (write(a, 0, 5) == 5) && (a[0] == 5)
+                """));
+    }
+
+    /*
+     * Warmed standard sites still select a redefined at/atPut installed
+     * afterwards, return to the standard behavior once the redefinitions
+     * are removed, and the same sites compose a suspending selected at and
+     * a non-local return from a selected at before signaling a standard
+     * indexed Error again.
+     */
+    @Test
+    void warmedSitesSelectOverridesSuspensionAndReturnHomeAroundErrors() {
+        assertTrue(evalBoolean(WARMED_SITES + """
+                a: [1, 2, 3]
+                ok: true
+                k: 0
+                while(k < 20) {
+                    ok = ok && (read(a, 1) == 2) && (write(a, 0, 1) == 1) && (put(a, 2, 3) == 3)
+                    k = k + 1
+                }
+                ok = ok && Error.handle(() => { read(a, 3); false }, (caught) => isError(caught))
+                a.at: (index) => { index + 100 }
+                ok = ok && (read(a, 1) == 101) && (read(a, 7) == 107)
+                a.atPut: (index, value) => { 77 }
+                ok = ok && (put(a, 0, 9) == 77) && (write(a, 0, 9) == 9)
+                a.removeSlot("at")
+                a.removeSlot("atPut")
+                ok = ok && (a[0] == 1) && (read(a, 1) == 2)
+                ok = ok && (write(a, 0, 6) == 6) && (put(a, 1, 8) == 8) && (read(a, 0) == 6) && (read(a, 1) == 8)
+                ok = ok && Error.handle(() => { read(a, 3); false }, (caught) => isError(caught))
+                ok = ok && Error.handle(() => { write(a, 3, 1); false }, (caught) => isError(caught))
+                Lazy: Array {
+                    at: (index) => { (() => { 40 + index }).future().value() }
+                }
+                lazy: Lazy(1, 2, 3)
+                suspended: (() => { read(lazy, 2) }).future().value()
+                home: () => {
+                    Box: Array { at: (index) => { ^42 } }
+                    read(Box(1), 0)
+                    0
+                }
+                ok = ok && (suspended == 42) && (home() == 42)
+                ok = ok && Error.handle(() => { read(a, 0 - 1); false }, (caught) => isError(caught))
+                ok && (read(a, 2) == 3) && (a.size() == 3)
                 """));
     }
 

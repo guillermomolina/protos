@@ -21,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -762,6 +763,534 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
             }
         });
         System.out.println("PERF040_E1_REPLACEMENT_INVALIDATION=PASS");
+    }
+
+    /**
+     * A Closure that captured its Prelude selects the standard operators
+     * through the single family of numeric entries, for {@code long} and
+     * {@code double} receivers, with exact guest results past warm-up.
+     */
+    @Test
+    void capturedPreludeSelectsStandardOperators() throws Exception {
+        withCore(module -> {
+            ProtosPrelude prelude = module.preludeOrNullForRuntime();
+            ProtosClosureValue add = closure("(x, y) => x + y", module);
+            ProtosClosureValue subtract = closure("(x, y) => x - y", module);
+            ProtosClosureValue multiply = closure("(x, y) => x * y", module);
+            ProtosClosureValue less = closure("(x, y) => x < y", module);
+            ProtosClosureValue greater = closure("(x, y) => x > y", module);
+            for (ProtosClosureValue site : List.of(add, subtract, multiply, less, greater)) {
+                assertSame(prelude, site.preludeOrNullForRuntime(), "the Closure captured its Prelude");
+            }
+            for (long round = 0; round < 20; round++) {
+                assertEquals(round + 3L, normalized(call(add, module, round, 3L)));
+                assertEquals(round - 3L, normalized(call(subtract, module, round, 3L)));
+                assertEquals(round * 3L, normalized(call(multiply, module, round, 3L)));
+                assertSame(round < 3L, call(less, module, round, 3L));
+                assertSame(round > 3L, call(greater, module, round, 3L));
+                double x = round + 0.5d;
+                assertEquals(x + 1.25d, call(add, module, x, 1.25d));
+                assertEquals(x - 1.25d, call(subtract, module, x, 1.25d));
+                assertEquals(x * 1.25d, call(multiply, module, x, 1.25d));
+                assertSame(x < 3.0d, call(less, module, x, 3.0d));
+                assertSame(x > 3.0d, call(greater, module, x, 3.0d));
+            }
+        });
+        System.out.println("PERF040_E1_CAPTURED_PRELUDE_STANDARD=PASS");
+    }
+
+    /**
+     * A Closure without its own Prelude inherits the caller's: one site
+     * alternates between callers of a canonical Prelude and of a Prelude
+     * whose Integer {@code +} is redefined, and each invocation selects
+     * under its own caller's Prelude without contaminating the other.
+     */
+    @Test
+    void inheritedPreludeSelectsPerCaller() throws Exception {
+        withCanonicalPrelude(canonical -> {
+            AlternativeIntegers alternative = alternativeIntegers(
+                    canonical, answering(ALTERNATIVE_PLUS_RESULT), true);
+            ProtosActivation canonicalModule = canonical.newModuleActivation();
+            ProtosActivation alternativeModule = alternative.prelude().newModuleActivation();
+            assertSame(canonical, canonicalModule.preludeOrNullForRuntime());
+            assertSame(alternative.prelude(), alternativeModule.preludeOrNullForRuntime());
+            ProtosClosureValue inherited = withoutPrelude(
+                    closure("(x, y) => x + y", canonicalModule));
+            assertNull(inherited.preludeOrNullForRuntime(), "the Closure owns no Prelude");
+            for (int round = 0; round < 12; round++) {
+                assertEquals(3L, normalized(call(inherited, canonicalModule, 1L, 2L)),
+                        "canonical caller, round " + round);
+                assertEquals(ALTERNATIVE_PLUS_RESULT,
+                        normalized(call(inherited, alternativeModule, 1L, 2L)),
+                        "alternative caller, round " + round);
+                assertEquals(2.5d, call(inherited, alternativeModule, 1.5d, 1.0d),
+                        "the alternative Float + stays standard");
+            }
+            assertTrue(ProtosNumericValueSupport.isLargeInteger(
+                    call(inherited, canonicalModule, Long.MAX_VALUE, 1L)));
+            assertEquals(ALTERNATIVE_PLUS_RESULT,
+                    normalized(call(inherited, alternativeModule, Long.MAX_VALUE, 1L)));
+        });
+        System.out.println("PERF040_E1_INHERITED_PRELUDE=PASS");
+    }
+
+    /**
+     * One compiled site alternates the standard selection, a redefined
+     * {@code +}, the restored standard and a second redefinition. Each state
+     * evaluates both operands exactly once per execution and runs only the
+     * method actually selected.
+     */
+    @Test
+    void sameSiteAlternatesStandardAndRedefinedSelections() throws Exception {
+        withCanonicalPrelude(canonical -> {
+            Object standardPlus =
+                    canonical.integerPrototype().readLocalSlot("+").orElseThrow();
+            AlternativeIntegers alternative =
+                    alternativeIntegers(canonical, standardPlus, false);
+            ProtosActivation module = alternative.prelude().newModuleActivation();
+            int[] operands = new int[1];
+            int[] firstCalls = new int[1];
+            int[] secondCalls = new int[1];
+            ProtosClosureValue next = ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> {
+                        operands[0]++;
+                        return Long.valueOf(operands[0] % 2 == 1 ? 1L : 2L);
+                    });
+            ProtosClosureValue first = ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> {
+                        firstCalls[0]++;
+                        return Long.valueOf(11L);
+                    });
+            ProtosClosureValue second = ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> {
+                        secondCalls[0]++;
+                        return Long.valueOf(22L);
+                    });
+            ProtosClosureValue site = closure("(next) => next() + next()", module);
+            for (int round = 0; round < 4; round++) {
+                operands[0] = 0;
+                firstCalls[0] = 0;
+                secondCalls[0] = 0;
+
+                alternative.integer().assignLocalSlot("+", standardPlus);
+                assertEquals(3L, normalized(call(site, module, next)), "standard");
+                assertEquals(2, operands[0], "standard operands");
+
+                alternative.integer().assignLocalSlot("+", first);
+                assertSame(first, alternative.integer().readLocalSlot("+").orElseThrow());
+                assertEquals(11L, normalized(call(site, module, next)), "first redefinition");
+                assertEquals(4, operands[0], "first redefinition operands");
+                assertEquals(1, firstCalls[0], "the first redefinition runs once");
+
+                alternative.integer().assignLocalSlot("+", standardPlus);
+                assertEquals(3L, normalized(call(site, module, next)), "restored");
+                assertEquals(6, operands[0], "restored operands");
+                assertEquals(1, firstCalls[0], "no redefinition after restore");
+
+                alternative.integer().assignLocalSlot("+", second);
+                assertSame(second, alternative.integer().readLocalSlot("+").orElseThrow());
+                assertEquals(22L, normalized(call(site, module, next)), "second redefinition");
+                assertEquals(8, operands[0], "second redefinition operands");
+                assertEquals(1, firstCalls[0], "the first redefinition is not selected again");
+                assertEquals(1, secondCalls[0], "the second redefinition runs once");
+            }
+            alternative.integer().assignLocalSlot("+", standardPlus);
+            assertEquals(3L, normalized(call(site, module, next)));
+        });
+        System.out.println("PERF040_E1_SAME_SITE_ALTERNATION=PASS");
+    }
+
+    /**
+     * Two Closures of one definition differ only in identity and captured
+     * Prelude: one captures the canonical Prelude, the other a Prelude whose
+     * SmallInteger {@code +} is redefined, restored and redefined again.
+     * Alternating them at the same site with the same selector and operands
+     * keeps each selection under its own Closure, and every execution
+     * evaluates both operands exactly once.
+     */
+    @Test
+    void capturedClosureIdentitySeparatesPreludes() throws Exception {
+        withCanonicalPrelude(canonical -> {
+            Object standardPlus =
+                    canonical.integerPrototype().readLocalSlot("+").orElseThrow();
+            AlternativeIntegers alternative =
+                    alternativeIntegers(canonical, standardPlus, false);
+            ProtosActivation canonicalModule = canonical.newModuleActivation();
+            ProtosActivation alternativeModule = alternative.prelude().newModuleActivation();
+            ProtosClosureValue template =
+                    closure("(next) => next() + next()", canonicalModule);
+            ProtosClosureValue canonicalSite = capturing(template, canonical);
+            ProtosClosureValue alternativeSite = capturing(template, alternative.prelude());
+            assertNotSame(canonicalSite, alternativeSite);
+            assertSame(canonicalSite.definition(), alternativeSite.definition());
+            assertSame(canonical, canonicalSite.preludeOrNullForRuntime());
+            assertSame(alternative.prelude(), alternativeSite.preludeOrNullForRuntime());
+            int[] operands = new int[1];
+            int[] firstCalls = new int[1];
+            int[] secondCalls = new int[1];
+            ProtosClosureValue next = ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> {
+                        operands[0]++;
+                        return Long.valueOf(operands[0] % 2 == 1 ? 1L : 2L);
+                    });
+            ProtosClosureValue first = ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> {
+                        firstCalls[0]++;
+                        return Long.valueOf(11L);
+                    });
+            ProtosClosureValue second = ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> {
+                        secondCalls[0]++;
+                        return Long.valueOf(22L);
+                    });
+            for (int round = 0; round < 6; round++) {
+                String label = " in round " + round;
+                operands[0] = 0;
+                firstCalls[0] = 0;
+                secondCalls[0] = 0;
+
+                alternative.integer().assignLocalSlot("+", first);
+                assertEquals(3L, normalized(call(canonicalSite, canonicalModule, next)),
+                        "canonical Closure" + label);
+                assertEquals(2, operands[0], "canonical operands" + label);
+                assertEquals(11L, normalized(call(alternativeSite, alternativeModule, next)),
+                        "redefined Closure" + label);
+                assertEquals(4, operands[0], "redefined operands" + label);
+                assertEquals(1, firstCalls[0], "the redefinition runs once" + label);
+                assertEquals(3L, normalized(call(canonicalSite, canonicalModule, next)),
+                        "canonical Closure again" + label);
+                assertEquals(6, operands[0], "canonical operands again" + label);
+                assertEquals(1, firstCalls[0], "the canonical Closure runs no redefinition" + label);
+
+                alternative.integer().assignLocalSlot("+", standardPlus);
+                assertEquals(3L, normalized(call(alternativeSite, alternativeModule, next)),
+                        "restored Closure" + label);
+                assertEquals(8, operands[0], "restored operands" + label);
+                assertEquals(3L, normalized(call(canonicalSite, canonicalModule, next)),
+                        "canonical Closure after restore" + label);
+                assertEquals(10, operands[0], "canonical operands after restore" + label);
+
+                alternative.integer().assignLocalSlot("+", second);
+                assertEquals(22L, normalized(call(alternativeSite, alternativeModule, next)),
+                        "second redefinition" + label);
+                assertEquals(12, operands[0], "second redefinition operands" + label);
+                assertEquals(1, secondCalls[0], "the second redefinition runs once" + label);
+                assertEquals(3L, normalized(call(canonicalSite, canonicalModule, next)),
+                        "canonical Closure after the second redefinition" + label);
+                assertEquals(14, operands[0], "final canonical operands" + label);
+                assertEquals(1, firstCalls[0], "the first redefinition is not selected again" + label);
+                assertEquals(1, secondCalls[0], "the canonical Closure runs no redefinition" + label);
+            }
+            alternative.integer().assignLocalSlot("+", standardPlus);
+            assertEquals(3L, normalized(call(alternativeSite, alternativeModule, next)));
+        });
+        System.out.println("PERF040_E1_CAPTURED_CLOSURE_IDENTITY=PASS");
+    }
+
+    /**
+     * The selection follows the invocation's Prelude across the change from
+     * compact invocation to published activation: a Closure owning its
+     * Prelude keeps it, and a Closure owning none keeps inheriting the
+     * caller's, both before and after a nested capturing Closure publishes
+     * the activation that runs the operation.
+     */
+    @Test
+    void capturedClosureIdentitySurvivesPublication() throws Exception {
+        withCanonicalPrelude(canonical -> {
+            AlternativeIntegers alternative = alternativeIntegers(
+                    canonical, answering(ALTERNATIVE_PLUS_RESULT), true);
+            ProtosActivation canonicalModule = canonical.newModuleActivation();
+            ProtosActivation alternativeModule = alternative.prelude().newModuleActivation();
+            ProtosClosureValue compact = closure("(x, y) => x + y", alternativeModule);
+            ProtosClosureValue published = closure(
+                    "(x, y) => {\n"
+                            + "    read: () => y\n"
+                            + "    r: x + read()\n"
+                            + "    r\n"
+                            + "}", alternativeModule);
+            ProtosClosureValue inheritedCompact = withoutPrelude(compact);
+            ProtosClosureValue inheritedPublished = withoutPrelude(published);
+            assertSame(alternative.prelude(), compact.preludeOrNullForRuntime());
+            assertSame(alternative.prelude(), published.preludeOrNullForRuntime());
+            assertNull(inheritedCompact.preludeOrNullForRuntime());
+            assertNull(inheritedPublished.preludeOrNullForRuntime());
+            for (int round = 0; round < 12; round++) {
+                String label = " in round " + round;
+                for (ProtosClosureValue owning : List.of(compact, published)) {
+                    assertEquals(ALTERNATIVE_PLUS_RESULT,
+                            normalized(call(owning, canonicalModule, 1L, 2L)),
+                            "own Prelude under a canonical caller" + label);
+                    assertEquals(ALTERNATIVE_PLUS_RESULT,
+                            normalized(call(owning, alternativeModule, 1L, 2L)),
+                            "own Prelude under its own module" + label);
+                    assertEquals(2.5d, call(owning, canonicalModule, 1.5d, 1.0d),
+                            "own Prelude keeps the standard Float +" + label);
+                }
+                for (ProtosClosureValue inherited : List.of(inheritedCompact, inheritedPublished)) {
+                    assertEquals(3L, normalized(call(inherited, canonicalModule, 1L, 2L)),
+                            "inherited canonical caller" + label);
+                    assertEquals(ALTERNATIVE_PLUS_RESULT,
+                            normalized(call(inherited, alternativeModule, 1L, 2L)),
+                            "inherited alternative caller" + label);
+                }
+            }
+            assertTrue(ProtosNumericValueSupport.isLargeInteger(
+                    call(inheritedPublished, canonicalModule, Long.MAX_VALUE, 1L)));
+            assertEquals(ALTERNATIVE_PLUS_RESULT,
+                    normalized(call(published, canonicalModule, Long.MAX_VALUE, 1L)));
+        });
+        System.out.println("PERF040_E1_CAPTURED_CLOSURE_PUBLICATION=PASS");
+    }
+
+    /**
+     * Rewriting the selected slot of a mutable prototype keeps every Shape:
+     * the structural selection stays valid while its final-value assumption
+     * is invalidated, so the site observes the new behavior and recovers
+     * the standard operation after the slot is restored.
+     */
+    @Test
+    void shapePreservingRewriteIsObservedAndRestored() throws Exception {
+        withCanonicalPrelude(canonical -> {
+            Object standardPlus =
+                    canonical.integerPrototype().readLocalSlot("+").orElseThrow();
+            AlternativeIntegers alternative =
+                    alternativeIntegers(canonical, standardPlus, false);
+            ProtosActivation module = alternative.prelude().newModuleActivation();
+            ProtosClosureValue add = closure("(x, y) => x + y", module);
+            ProtosValueLookup.StructuralSelection selection =
+                    ProtosValueLookup.selectStructural(alternative.smallInteger(), "+");
+            assertSame(alternative.integer(), selection.home());
+            assertFalse(selection.allOwnersFrozen(), "the chain is mutable");
+            for (int warm = 0; warm < 10; warm++) {
+                assertEquals(3L, normalized(call(add, module, 1L, 2L)));
+            }
+
+            alternative.integer().assignLocalSlot("+", answering(5L));
+            assertTrue(selection.isValid(), "the rewrite keeps every Shape");
+            assertFalse(selection.finalAssumption().isValid(),
+                    "the rewrite invalidates the final-value assumption");
+            assertEquals(5L, normalized(call(add, module, 1L, 2L)),
+                    "Shape identity alone does not keep the old selection");
+
+            alternative.integer().assignLocalSlot("+", standardPlus);
+            assertTrue(selection.isValid(), "the restoration keeps every Shape");
+            for (int round = 0; round < 10; round++) {
+                assertEquals(3L, normalized(call(add, module, 1L, 2L)), "restored");
+            }
+            assertTrue(ProtosNumericValueSupport.isLargeInteger(
+                    call(add, module, Long.MAX_VALUE, 1L)), "the restored + promotes exactly");
+        });
+        System.out.println("PERF040_E1_SHAPE_PRESERVING_REWRITE=PASS");
+    }
+
+    /**
+     * A chain FROZEN from installation is proven FROZEN; a chain observed
+     * while mutable is never reused as FROZEN, its rewrites are observed,
+     * and only a selection taken after freezing is FROZEN.
+     */
+    @Test
+    void freezingTransitionNeedsANewSelection() throws Exception {
+        withCanonicalPrelude(canonical -> {
+            Object standardPlus =
+                    canonical.integerPrototype().readLocalSlot("+").orElseThrow();
+            AlternativeIntegers frozen = alternativeIntegers(canonical, standardPlus, true);
+            ProtosActivation frozenModule = frozen.prelude().newModuleActivation();
+            assertTrue(ProtosValueLookup.selectStructural(frozen.smallInteger(), "+")
+                    .allOwnersFrozen(), "FROZEN from installation");
+            ProtosClosureValue frozenAdd = closure("(x, y) => x + y", frozenModule);
+            for (int round = 0; round < 10; round++) {
+                assertEquals(3L, normalized(call(frozenAdd, frozenModule, 1L, 2L)));
+            }
+
+            AlternativeIntegers mutable = alternativeIntegers(canonical, standardPlus, false);
+            ProtosActivation module = mutable.prelude().newModuleActivation();
+            ProtosClosureValue add = closure("(x, y) => x + y", module);
+            ProtosValueLookup.StructuralSelection before =
+                    ProtosValueLookup.selectStructural(mutable.smallInteger(), "+");
+            assertFalse(before.allOwnersFrozen(), "observed while mutable");
+            for (int round = 0; round < 10; round++) {
+                assertEquals(3L, normalized(call(add, module, 1L, 2L)));
+            }
+            mutable.integer().assignLocalSlot("+", answering(5L));
+            assertEquals(5L, normalized(call(add, module, 1L, 2L)),
+                    "a mutable classification is not reused as FROZEN");
+            mutable.integer().assignLocalSlot("+", standardPlus);
+            assertEquals(3L, normalized(call(add, module, 1L, 2L)));
+
+            mutable.integer().freeze();
+            mutable.smallInteger().freeze();
+            mutable.bigInteger().freeze();
+            assertFalse(before.allOwnersFrozen(),
+                    "freezing grants no retroactive FROZEN status");
+            ProtosValueLookup.StructuralSelection after =
+                    ProtosValueLookup.selectStructural(mutable.smallInteger(), "+");
+            assertTrue(after.allOwnersFrozen(), "a selection taken after freezing is FROZEN");
+            for (int round = 0; round < 10; round++) {
+                assertEquals(3L, normalized(call(add, module, 1L, 2L)), "after freezing");
+            }
+            assertTrue(ProtosNumericValueSupport.isLargeInteger(
+                    call(add, module, Long.MAX_VALUE, 1L)));
+        });
+        System.out.println("PERF040_E1_FREEZING_TRANSITION=PASS");
+    }
+
+    /**
+     * Signed-64 overflow promotes to the existing large Integer
+     * representation, mixed {@code long}/{@code double} operands answer
+     * Floats, and each site continues with exact SmallInteger results after
+     * its specialization generalized.
+     */
+    @Test
+    void overflowAndMixedOperandsKeepTheirRepresentation() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue add = closure("(x, y) => x + y", module);
+            ProtosClosureValue subtract = closure("(x, y) => x - y", module);
+            ProtosClosureValue multiply = closure("(x, y) => x * y", module);
+            for (int round = 0; round < 3; round++) {
+                assertEquals(3L, normalized(call(add, module, 1L, 2L)));
+                assertTrue(ProtosNumericValueSupport.isLargeInteger(
+                        call(add, module, Long.MAX_VALUE, 1L)), "MAX + 1");
+                assertEquals(7L, normalized(call(add, module, 3L, 4L)));
+                assertInstanceOf(Long.class, call(add, module, 3L, 4L));
+
+                assertEquals(-1L, normalized(call(subtract, module, 2L, 3L)));
+                assertTrue(ProtosNumericValueSupport.isLargeInteger(
+                        call(subtract, module, Long.MIN_VALUE, 1L)), "MIN - 1");
+                assertEquals(1L, normalized(call(subtract, module, 3L, 2L)));
+                assertInstanceOf(Long.class, call(subtract, module, 3L, 2L));
+
+                assertEquals(6L, normalized(call(multiply, module, 2L, 3L)));
+                assertTrue(ProtosNumericValueSupport.isLargeInteger(
+                        call(multiply, module, Long.MAX_VALUE, 2L)), "MAX * 2");
+                assertTrue(ProtosNumericValueSupport.isLargeInteger(
+                        call(multiply, module, Long.MIN_VALUE, -1L)), "MIN * -1");
+                assertEquals(20L, normalized(call(multiply, module, 4L, 5L)));
+                assertInstanceOf(Long.class, call(multiply, module, 4L, 5L));
+
+                assertEquals(2.5d, call(add, module, 1L, 1.5d));
+                assertEquals(2.5d, call(add, module, 1.5d, 1L));
+                assertEquals(-0.5d, call(subtract, module, 1L, 1.5d));
+                assertEquals(3.0d, call(multiply, module, 2L, 1.5d));
+                assertEquals(3.0d, call(multiply, module, 1.5d, 2L));
+            }
+        });
+        System.out.println("PERF040_E1_OVERFLOW_AND_MIXED=PASS");
+    }
+
+    /**
+     * A dynamically selected {@code +} that suspends inside a Task resumes
+     * once, with its operands evaluated once and its method run once, and
+     * answers the final guest result; a site of a different Prelude in the
+     * same Process keeps its standard selection meanwhile. Each embedding
+     * stays live: no guest Error escapes.
+     */
+    @Test
+    void suspendingRedefinedSelectionResumesUnderItsOwnPrelude() throws Exception {
+        withCanonicalPrelude(canonical -> {
+            int[] operands = new int[1];
+            int[] selected = new int[1];
+            ProtosClosureValue next = ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> {
+                        operands[0]++;
+                        return Long.valueOf(operands[0] % 2 == 1 ? 1L : 2L);
+                    });
+            ProtosClosureValue mark = ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> {
+                        selected[0]++;
+                        return Long.valueOf(selected[0]);
+                    });
+            ProtosEmbeddedProcess embedding =
+                    ProtosLanguageContext.current().embeddedProcessForHostEntry();
+            ProtosActorExecutionDomain rootDomain = embedding.rootExecutionDomain();
+            ProtosActivation canonicalModule = canonical.newModuleActivation(
+                    new ProtosActorModuleState(), null,
+                    canonical.newExecutionContext(), rootDomain);
+            Object standardPlus =
+                    canonical.integerPrototype().readLocalSlot("+").orElseThrow();
+            Object suspendingPlus = call(
+                    closure("(mark) => (other) => {\n    mark()\n"
+                            + "    (() => { 42 }).future().value()\n}", canonicalModule),
+                    canonicalModule,
+                    mark);
+            AlternativeIntegers alternative =
+                    alternativeIntegers(canonical, standardPlus, false);
+            ProtosActivation module = alternative.prelude().newModuleActivation(
+                    new ProtosActorModuleState(), null,
+                    alternative.prelude().newExecutionContext(), rootDomain);
+            String source = "(next) => {\n"
+                    + "    (() => {\n"
+                    + "        sum: next() + next()\n"
+                    + "        sum * 1\n"
+                    + "    }).future().value()\n"
+                    + "}";
+            ProtosHostExecutableClosure alternativeEntry =
+                    ProtosHostExecutableClosure.prepareForEmbeddingRuntime(
+                            closure(source, module), module, embedding);
+            ProtosHostExecutableClosure canonicalEntry =
+                    ProtosHostExecutableClosure.prepareForEmbeddingRuntime(
+                            closure(source, canonicalModule), canonicalModule, embedding);
+            java.util.function.Function<ProtosHostExecutableClosure, Object> run = entry -> {
+                try {
+                    return InteropLibrary.getUncached().execute(entry, next);
+                } catch (com.oracle.truffle.api.interop.InteropException e) {
+                    throw new AssertionError(e);
+                }
+            };
+            java.util.concurrent.atomic.AtomicInteger hostSuspensions =
+                    new java.util.concurrent.atomic.AtomicInteger();
+            java.util.function.Consumer<com.guillermomolina.protos.runtime.ProtosFutureValue>
+                    previous = ProtosHostEntrySuspension.suspendedForTesting;
+            ProtosHostEntrySuspension.suspendedForTesting =
+                    future -> hostSuspensions.incrementAndGet();
+            try {
+                for (int round = 0; round < 3; round++) {
+                    operands[0] = 0;
+                    selected[0] = 0;
+                    assertEquals(3L, normalized(run.apply(alternativeEntry)), "standard");
+                    assertEquals(2, operands[0], "standard operands");
+
+                    alternative.integer().assignLocalSlot("+", suspendingPlus);
+                    assertEquals(42L, normalized(run.apply(alternativeEntry)), "suspending +");
+                    assertEquals(4, operands[0], "suspending + operands");
+                    assertEquals(1, selected[0], "the suspending + runs once");
+
+                    assertEquals(3L, normalized(run.apply(canonicalEntry)),
+                            "the canonical Prelude keeps its standard +");
+                    assertEquals(6, operands[0], "canonical operands");
+                    assertEquals(1, selected[0], "the canonical site selects no redefinition");
+
+                    alternative.integer().assignLocalSlot("+", standardPlus);
+                    assertEquals(3L, normalized(run.apply(alternativeEntry)), "restored");
+                    assertEquals(8, operands[0], "restored operands");
+                    assertEquals(1, selected[0], "no selected method after restore");
+                }
+                assertTrue(hostSuspensions.get() >= 1,
+                        "the host entry really suspended at least once");
+                assertTrue(embedding.isLive(), "the Process stays live");
+            } finally {
+                ProtosHostEntrySuspension.suspendedForTesting = previous;
+            }
+        });
+        System.out.println("PERF040_E1_SUSPENDING_REDEFINED_SELECTION=PASS");
+    }
+
+    /* The same compiled Closure, owning no Prelude: it inherits its caller's. */
+    private static ProtosClosureValue withoutPrelude(ProtosClosureValue closure) {
+        return ProtosClosureValue.experimentalNonCapturing(
+                closure.definition(),
+                closure.executionPlan().orElseThrow(),
+                closure.definingModuleKeyOrNullForRuntime(),
+                null);
+    }
+
+    /* The same compiled Closure as {@code closure}, owning {@code prelude}. */
+    private static ProtosClosureValue capturing(
+            ProtosClosureValue closure, ProtosPrelude prelude) {
+        return ProtosClosureValue.experimentalNonCapturing(
+                closure.definition(),
+                closure.executionPlan().orElseThrow(),
+                closure.definingModuleKeyOrNullForRuntime(),
+                prelude);
     }
 
     /*

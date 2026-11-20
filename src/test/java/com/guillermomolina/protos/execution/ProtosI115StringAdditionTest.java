@@ -19,13 +19,26 @@ package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
+import com.guillermomolina.protos.runtime.ProtosActorModuleState;
+import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
+import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosStringValue;
+import com.oracle.truffle.api.CallTarget;
+import com.oracle.truffle.api.interop.InteropLibrary;
+import com.oracle.truffle.api.source.Source;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.PolyglotException;
 import org.junit.jupiter.api.Test;
@@ -483,6 +496,299 @@ final class ProtosI115StringAdditionTest {
             assertFalse(root(session, "add").hasCallerNeed(
                     ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION));
         }
+    }
+
+    /**
+     * A Closure that captured its Prelude concatenates Strings through the
+     * standard selection; a redefined {@code +} present in the same Prelude
+     * receives no invocation from the standard concatenations.
+     */
+    @Test
+    void capturedPreludeConcatenatesWithoutGuestInvocation() {
+        String source = LOGGING_PLUS
+                + "custom: (String) { ...behavior.alias(\"plus\", \"+\") }\n"
+                + "add: (x, y) => { x + y }\n"
+                + "r: \"\"\n"
+                + "r = add(\"a\", \"b\")\n".repeat(20);
+        assertTrue(evalBoolean(source + "(r == \"ab\") && (log.calls == 0)"));
+        assertTrue(evalBoolean(source
+                + "(add(custom, \"x\") == \"custom\") && (log.calls == 1)"
+                + " && (add(\"c\", \"d\") == \"cd\") && (log.calls == 1)"));
+    }
+
+    /**
+     * A Closure owning no Prelude inherits its caller's: one site alternates
+     * callers of two independent Preludes and concatenates under each, and
+     * a receiver with its own {@code +} reaches its method exactly once.
+     */
+    @Test
+    void inheritedPreludeConcatenatesUnderTheEffectiveCaller() throws Exception {
+        withEnteredContext(() -> {
+            ProtosPrelude first = new ProtosCoreBootstrap().bootstrap(CORE);
+            ProtosPrelude second = new ProtosCoreBootstrap().bootstrap(CORE);
+            ProtosActivation firstModule = first.newModuleActivation();
+            ProtosActivation secondModule = second.newModuleActivation();
+            ProtosClosureValue inherited = withoutPrelude(
+                    closure("(x, y) => x + y", firstModule));
+            assertSame(null, inherited.preludeOrNullForRuntime());
+            int[] calls = new int[1];
+            Object[] seen = new Object[2];
+            ProtosObjectValue custom = new ProtosObjectValue(ProtosObjectValue.rootObject());
+            custom.createLocalSlot("+", ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> {
+                        calls[0]++;
+                        seen[0] = supplied.isEmpty() ? null : supplied.get(supplied.size() - 1);
+                        return Long.valueOf(7L);
+                    }));
+            for (int round = 0; round < 12; round++) {
+                assertEquals("ab", stringOf(call(inherited, firstModule, text("a"), text("b"))));
+                assertEquals("cd", stringOf(call(inherited, secondModule, text("c"), text("d"))));
+            }
+            assertEquals(7L, call(inherited, secondModule, custom, text("z")));
+            assertEquals(1, calls[0], "the receiver's own + runs once");
+            assertEquals("ef", stringOf(call(inherited, firstModule, text("e"), text("f"))));
+            assertEquals(1, calls[0], "standard concatenation invokes nothing");
+        });
+    }
+
+    /**
+     * One site alternates the standard concatenation, a redefined {@code +},
+     * the restored standard and a second redefined receiver; each redefined
+     * send sees the original receiver and argument exactly once.
+     */
+    @Test
+    void sameSiteAlternatesStandardAndRedefinedStringPlus() {
+        String source = LOGGING_PLUS
+                + "first: (String) { ...behavior.alias(\"plus\", \"+\") }\n"
+                + "second: (String) { ...behavior.alias(\"plus\", \"+\") }\n"
+                + "add: (x, y) => { x + y }\n";
+        StringBuilder program = new StringBuilder(source);
+        StringBuilder checks = new StringBuilder("true");
+        for (int round = 0; round < 4; round++) {
+            int before = 2 * round;
+            program.append("s").append(round).append(": add(\"s\", \"").append(round).append("\")\n")
+                    .append("k").append(round).append(": log.calls\n")
+                    .append("f").append(round).append(": add(first, \"f").append(round).append("\")\n")
+                    .append("fr").append(round).append(": log.receiver === first\n")
+                    .append("fa").append(round).append(": log.argument == \"f").append(round).append("\"\n")
+                    .append("t").append(round).append(": add(\"t\", \"").append(round).append("\")\n")
+                    .append("g").append(round).append(": add(second, \"g").append(round).append("\")\n")
+                    .append("gr").append(round).append(": log.receiver === second\n")
+                    .append("ga").append(round).append(": log.argument == \"g").append(round).append("\"\n")
+                    .append("n").append(round).append(": log.calls\n");
+            checks.append(" && (s").append(round).append(" == \"s").append(round).append("\")")
+                    .append(" && (k").append(round).append(" == ").append(before).append(")")
+                    .append(" && (f").append(round).append(" == \"custom\")")
+                    .append(" && fr").append(round).append(" && fa").append(round)
+                    .append(" && (t").append(round).append(" == \"t").append(round).append("\")")
+                    .append(" && (g").append(round).append(" == \"custom\")")
+                    .append(" && gr").append(round).append(" && ga").append(round)
+                    .append(" && (n").append(round).append(" == ").append(before + 2).append(")");
+        }
+        assertTrue(evalBoolean(program + checks.toString()
+                + " && (add(\"x\", \"y\") == \"xy\") && (log.calls == 8)"));
+    }
+
+    /**
+     * Two Closures of one definition differ only in identity and captured
+     * Prelude: one captures the canonical Prelude, the other a Prelude whose
+     * String {@code +} is redefined, restored and redefined again. Alternating
+     * them at the same site concatenates under the canonical Prelude, runs
+     * the redefinition exactly once per redefined send, and continues with
+     * the work after the operation.
+     */
+    @Test
+    void capturedClosureIdentitySeparatesStringSelection() throws Exception {
+        withEnteredContext(() -> {
+            ProtosPrelude canonical = new ProtosCoreBootstrap().bootstrap(CORE);
+            ProtosObjectValue standardString = canonical.stringPrototype();
+            Object standardPlus = standardString.readLocalSlot("+").orElseThrow();
+            ProtosObjectValue string = new ProtosObjectValue(
+                    standardString.parent().orElseThrow());
+            for (Map.Entry<String, Object> slot :
+                    standardString.localSlotsSnapshot().entrySet()) {
+                string.createLocalSlot(slot.getKey(), slot.getValue());
+            }
+            ProtosObjectValue bindings = new ProtosObjectValue(canonical.contextPrototype());
+            for (Map.Entry<String, Object> binding :
+                    canonical.bindings().localSlotsSnapshot().entrySet()) {
+                bindings.createLocalSlot(binding.getKey(),
+                        binding.getKey().equals("String") ? string : binding.getValue());
+            }
+            bindings.freeze();
+            ProtosPrelude redefined = new ProtosPrelude(bindings, canonical.contextPrototype());
+            ProtosActivation canonicalModule = canonical.newModuleActivation();
+            ProtosActivation redefinedModule = redefined.newModuleActivation();
+
+            ProtosClosureValue template = closure(
+                    "(x, y, after) => {\n"
+                            + "    r: x + y\n"
+                            + "    after(r)\n"
+                            + "}", canonicalModule);
+            ProtosClosureValue canonicalSite = capturing(template, canonical);
+            ProtosClosureValue redefinedSite = capturing(template, redefined);
+            assertNotSame(canonicalSite, redefinedSite);
+            assertSame(canonicalSite.definition(), redefinedSite.definition());
+            assertSame(canonical, canonicalSite.preludeOrNullForRuntime());
+            assertSame(redefined, redefinedSite.preludeOrNullForRuntime());
+
+            int[] calls = new int[1];
+            Object[] seen = new Object[1];
+            ProtosClosureValue plus = ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> {
+                        calls[0]++;
+                        seen[0] = supplied.isEmpty() ? null : supplied.get(supplied.size() - 1);
+                        return text("custom");
+                    });
+            int[] afters = new int[1];
+            Object[] observed = new Object[1];
+            ProtosClosureValue after = ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> {
+                        afters[0]++;
+                        observed[0] = supplied.get(supplied.size() - 1);
+                        return Long.valueOf(afters[0]);
+                    });
+            for (int round = 0; round < 6; round++) {
+                String label = " in round " + round;
+                calls[0] = 0;
+                afters[0] = 0;
+
+                string.assignLocalSlot("+", plus);
+                assertEquals(1L, call(canonicalSite, canonicalModule, text("a"), text("b"), after));
+                assertEquals("ab", stringOf(observed[0]), "canonical concatenation" + label);
+                assertEquals(0, calls[0], "the canonical Closure invokes nothing" + label);
+                assertEquals(2L, call(redefinedSite, redefinedModule, text("c"), text("d"), after));
+                assertEquals("custom", stringOf(observed[0]), "redefined +" + label);
+                assertEquals(1, calls[0], "the redefinition runs once" + label);
+                assertEquals("d", stringOf(seen[0]), "the redefinition sees the argument" + label);
+                assertEquals(3L, call(canonicalSite, canonicalModule, text("e"), text("f"), after));
+                assertEquals("ef", stringOf(observed[0]), "canonical again" + label);
+                assertEquals(1, calls[0], "the canonical Closure stays standard" + label);
+
+                string.assignLocalSlot("+", standardPlus);
+                assertEquals(4L, call(redefinedSite, redefinedModule, text("g"), text("h"), after));
+                assertEquals("gh", stringOf(observed[0]), "restored concatenation" + label);
+                assertEquals(1, calls[0], "no redefinition after restore" + label);
+
+                string.assignLocalSlot("+", plus);
+                assertEquals(5L, call(redefinedSite, redefinedModule, text("i"), text("j"), after));
+                assertEquals("custom", stringOf(observed[0]), "redefined again" + label);
+                assertEquals(2, calls[0], "the second redefined send runs once" + label);
+                assertEquals(6L, call(canonicalSite, canonicalModule, text("k"), text("l"), after));
+                assertEquals("kl", stringOf(observed[0]), "canonical after redefinition" + label);
+                assertEquals(6, afters[0], "the work after each operation runs once" + label);
+            }
+            string.assignLocalSlot("+", standardPlus);
+        });
+    }
+
+    /**
+     * A suspending redefined {@code +} at a site of a Closure that inherits
+     * its caller's Prelude completes before the following work runs, and
+     * its resumption evaluates neither operand again.
+     */
+    @Test
+    void suspendingCustomPlusUnderInheritedPrelude() throws Exception {
+        withEnteredContext(() -> {
+            ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
+            ProtosEmbeddedProcess embedding =
+                    ProtosLanguageContext.current().embeddedProcessForHostEntry();
+            ProtosActorExecutionDomain rootDomain = embedding.rootExecutionDomain();
+            ProtosActivation module = prelude.newModuleActivation(
+                    new ProtosActorModuleState(), null,
+                    prelude.newExecutionContext(), rootDomain);
+            Object box = call(closure("() => {\n"
+                    + "    gate: (() => 5).future()\n"
+                    + "    behavior: { plus: (other) => { gate.value() + other } }\n"
+                    + "    { ...behavior.alias(\"plus\", \"+\") }\n"
+                    + "}", module), module);
+            ProtosClosureValue inherited = withoutPrelude(closure(
+                    "(box, step, after) => {\n"
+                            + "    r: step(box) + step(10)\n"
+                            + "    after(r)\n"
+                            + "}", module));
+            assertSame(null, inherited.preludeOrNullForRuntime());
+            int[] steps = new int[1];
+            Object[] observed = new Object[1];
+            int[] afters = new int[1];
+            ProtosClosureValue step = ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> {
+                        steps[0]++;
+                        return supplied.get(supplied.size() - 1);
+                    });
+            ProtosClosureValue after = ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> {
+                        afters[0]++;
+                        observed[0] = ProtosNumericValueSupport.guestValue(
+                                supplied.get(supplied.size() - 1));
+                        return Long.valueOf(2L * steps[0]);
+                    });
+            ProtosHostExecutableClosure entry =
+                    ProtosHostExecutableClosure.prepareForEmbeddingRuntime(
+                            inherited, module, embedding);
+            Object result = InteropLibrary.getUncached().execute(entry, box, step, after);
+            assertEquals(2, steps[0], "each operand is evaluated once");
+            assertEquals(1, afters[0], "the later work runs once");
+            assertEquals(15L, observed[0], "the later work sees the final result");
+            assertEquals(4L, ProtosNumericValueSupport.guestValue(result));
+        });
+    }
+
+    private interface ContextTest {
+        void run() throws Exception;
+    }
+
+    private static void withEnteredContext(ContextTest test) throws Exception {
+        try (Context context = context()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                test.run();
+            } finally {
+                context.leave();
+            }
+        }
+    }
+
+    private static ProtosClosureValue closure(String characters, ProtosActivation activation) {
+        Source source = Source.newBuilder(ProtosLanguage.ID, characters, "string-addition.protos")
+                .mimeType(ProtosLanguage.MIME_TYPE)
+                .build();
+        CallTarget target = ProtosLanguageContext.current().parsePublic(source);
+        return (ProtosClosureValue) target.call(activation);
+    }
+
+    /* The same compiled Closure, owning no Prelude: it inherits its caller's. */
+    private static ProtosClosureValue withoutPrelude(ProtosClosureValue closure) {
+        return ProtosClosureValue.experimentalNonCapturing(
+                closure.definition(),
+                closure.executionPlan().orElseThrow(),
+                closure.definingModuleKeyOrNullForRuntime(),
+                null);
+    }
+
+    /* The same compiled Closure as {@code closure}, owning {@code prelude}. */
+    private static ProtosClosureValue capturing(
+            ProtosClosureValue closure, ProtosPrelude prelude) {
+        return ProtosClosureValue.experimentalNonCapturing(
+                closure.definition(),
+                closure.executionPlan().orElseThrow(),
+                closure.definingModuleKeyOrNullForRuntime(),
+                prelude);
+    }
+
+    private static Object call(
+            ProtosClosureValue closure, ProtosActivation caller, Object... supplied) {
+        return ProtosNumericValueSupport.guestValue(
+                ProtosCallRequest.call(closure, supplied, caller).callUncached());
+    }
+
+    private static ProtosStringValue text(String value) {
+        return new ProtosStringValue(value);
+    }
+
+    private static String stringOf(Object value) {
+        return ((ProtosStringValue) value).value();
     }
 
     /* No separate selection, lookup or dispatched call precedes NumberAdd. */

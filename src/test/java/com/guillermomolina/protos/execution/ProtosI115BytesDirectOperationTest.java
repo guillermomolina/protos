@@ -20,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Path;
+import java.util.List;
 import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.Test;
 
@@ -167,6 +168,145 @@ final class ProtosI115BytesDirectOperationTest {
                 source.removeSlot("atPut")
                 source.removeSlot("size")
                 ok && (read(source, 1) == 111) && (length(source) == 4) && (write(source, 3, 115) == 115) && (read(source, 3) == 115)
+                """));
+    }
+
+    /*
+     * Bytes bounds over signed long indexes: 0..size-1 is accepted, every
+     * negative index and every index at or above the size signals the
+     * guest Error without normalization or truncation, and a handled Error
+     * leaves the octets intact.
+     */
+    @Test
+    void unsignedBytesBoundsPreserveLongIndexSemantics() {
+        assertEquals(106L, evalLong(SOURCE + "source[0]"));
+        assertEquals(115L, evalLong(SOURCE + "source[3]"));
+        assertEquals(1L, evalLong(SOURCE + "source[0] = 1\nsource[0]"));
+        assertEquals(255L, evalLong(SOURCE + "source[3] = 255\nsource[3]"));
+        for (String index : List.of(
+                "0 - 1",
+                "0 - 9223372036854775807 - 1",
+                "4",
+                "5",
+                "2147483648",
+                "4294967296",
+                "9223372036854775807")) {
+            assertTrue(signals(SOURCE + "source[" + index + "]"), index);
+            assertTrue(signals(SOURCE + "source[" + index + "] = 1"), index);
+            assertTrue(evalBoolean(SOURCE
+                    + "Error.handle(() => { source[" + index + "] }, (caught) => null)\n"
+                    + "Error.handle(() => { source[" + index + "] = 7 }, (caught) => null)\n"
+                    + "(source.size() == 4) && (source[0] == 106) && (source[1] == 111)"
+                    + " && (source[2] == 98) && (source[3] == 115)"), index);
+        }
+    }
+
+    /*
+     * The unsigned bound applies only to the standard Bytes behavior: a
+     * redefined at or atPut is still selected for an index the standard
+     * behavior would reject, the standard bound returns once the
+     * redefinitions are removed, FROZEN still precedes index and octet
+     * checks, and indexed assignment still answers its right-hand side.
+     */
+    @Test
+    void unsignedBytesBoundsPreserveSelectionAndFreeze() {
+        assertTrue(evalBoolean(SOURCE + """
+                read: (b, i) => { b[i] }
+                write: (b, i, v) => { b[i] = v }
+                put: (b, i, v) => { b.atPut(i, v) }
+                failed: (f) => { Error.handle(() => { f(); false }, (caught) => true) }
+                ok: true
+                k: 0
+                while(k < 12) {
+                    ok = ok && (read(source, 0) == 106) && (write(source, 1, 111) == 111)
+                    ok = ok && failed(() => { read(source, 4) }) && failed(() => { read(source, 0 - 1) })
+                    ok = ok && failed(() => { write(source, 4294967296, 1) })
+                    k = k + 1
+                }
+                source.at: (index) => { 1 }
+                source.atPut: (index, value) => { 2 }
+                ok = ok && (read(source, 4) == 1) && (read(source, 0 - 1) == 1)
+                ok = ok && (read(source, 9223372036854775807) == 1)
+                ok = ok && (put(source, 4294967296, 7) == 2) && (put(source, 0 - 1, 7) == 2)
+                ok = ok && (write(source, 4, 120) == 120)
+                source.removeSlot("at")
+                source.removeSlot("atPut")
+                ok = ok && failed(() => { read(source, 4) }) && failed(() => { write(source, 0 - 1, 1) })
+                ok = ok && (read(source, 0) == 106) && (read(source, 1) == 111)
+                ok = ok && (read(source, 2) == 98) && (read(source, 3) == 115)
+                ok = ok && (write(source, 3, 120) == 120) && (read(source, 3) == 120)
+                source.freeze()
+                ok = ok && failed(() => { write(source, 0, 1) })
+                ok = ok && failed(() => { write(source, 4294967296, 300) })
+                ok && (read(source, 0) == 106) && (source.size() == 4)
+                """));
+    }
+
+    private static final String WARMED_SITES = """
+            isError: (e) => { e.parent() === Error }
+            read: (b, i) => { b[i] }
+            write: (b, i, v) => { b[i] = v }
+            unchanged: (b) => { (b[0] == 106) && (b[1] == 111) && (b[2] == 98) && (b[3] == 115) && (b.size() == 4) }
+            """;
+
+    /*
+     * A Bytes read site warmed with valid indexes signals the guest Error
+     * for every invalid signed long index and keeps answering valid reads.
+     */
+    @Test
+    void warmedBytesReadSiteSignalsInvalidIndexesAndKeepsReading() {
+        StringBuilder body = new StringBuilder(SOURCE + WARMED_SITES + """
+                ok: true
+                k: 0
+                while(k < 20) {
+                    ok = ok && (read(source, 0) == 106) && (read(source, 3) == 115)
+                    k = k + 1
+                }
+                """);
+        for (String index : List.of("0 - 1", "4", "5", "2147483648",
+                "9223372036854775807", "0 - 9223372036854775807 - 1")) {
+            body.append("ok = ok && Error.handle(() => { read(source, ").append(index)
+                    .append("); false }, (caught) => isError(caught))\n")
+                    .append("ok = ok && (read(source, 1) == 111)\n");
+        }
+        body.append("ok && unchanged(source)");
+        assertTrue(evalBoolean(body.toString()));
+    }
+
+    /*
+     * A Bytes write site warmed with valid octets rejects invalid indexes,
+     * octets outside 0..255 and FROZEN receivers (also with an invalid
+     * index) without changing the content, and keeps writing afterwards.
+     */
+    @Test
+    void warmedBytesWriteSiteRejectsInvalidWritesWithoutChanges() {
+        assertTrue(evalBoolean(SOURCE + WARMED_SITES + """
+                ok: true
+                k: 0
+                while(k < 20) {
+                    ok = ok && (write(source, 1, 111) == 111)
+                    k = k + 1
+                }
+                ok = ok && Error.handle(() => { write(source, 4, 1); false }, (caught) => isError(caught))
+                ok = ok && Error.handle(() => { write(source, 0 - 1, 1); false }, (caught) => isError(caught))
+                ok = ok && Error.handle(() => { write(source, 9223372036854775807, 1); false }, (caught) => isError(caught))
+                ok = ok && Error.handle(() => { write(source, 0, 0 - 1); false }, (caught) => isError(caught))
+                ok = ok && Error.handle(() => { write(source, 0, 256); false }, (caught) => isError(caught))
+                ok = ok && unchanged(source) && (write(source, 2, 98) == 98)
+                first: Error.handle(() => { write(source, 0, 256) }, (caught) => caught)
+                second: Error.handle(() => { read(source, 4) }, (caught) => caught)
+                ok = ok && (first !== second) && isError(first) && isError(second)
+                frozen: Encoding.UTF8.encode("jobs")
+                k = 0
+                while(k < 5) {
+                    ok = ok && (write(frozen, 0, 106) == 106)
+                    k = k + 1
+                }
+                frozen.freeze()
+                ok = ok && Error.handle(() => { write(frozen, 0, 1); false }, (caught) => isError(caught))
+                ok = ok && Error.handle(() => { write(frozen, 9, 1); false }, (caught) => isError(caught))
+                ok = ok && Error.handle(() => { write(frozen, 0, 300); false }, (caught) => isError(caught))
+                ok && unchanged(frozen) && (read(frozen, 3) == 115) && unchanged(source)
                 """));
     }
 

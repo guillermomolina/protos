@@ -64,6 +64,16 @@ import com.oracle.truffle.api.nodes.Node;
  * behavior could have changed. When that assumption is no longer valid the
  * typed entry is not installed and the general entries apply.
  *
+ * <p>Each receiver type has two families of entries with the same guards and
+ * invalidation. The captured family binds the running compact invocation's
+ * own Closure and caches its identity, deriving the Prelude once from the
+ * Closure's final field when the entry is installed; it binds null once the
+ * invocation published its activation, and never applies when the Closure
+ * captured no Prelude. The general family
+ * binds the Prelude admitted by the invocation's arguments, which keeps
+ * caller inheritance, and serves every invocation the captured family does
+ * not.
+ *
  * <p>A receiver that is neither a real Number nor a String, or a frame
  * without an admitted Prelude, is never standard.
  */
@@ -87,9 +97,10 @@ abstract class ProtosNumericSelectionNode extends Node {
     @Specialization(
             excludeForUncached = true,
             guards = {
-                "prelude != null",
+                "closure != null",
                 "selector == cachedSelector",
-                "prelude == cachedPrelude",
+                "closure == cachedClosure",
+                "cachedPrelude != null",
                 "frozen"
             },
             limit = "3")
@@ -97,9 +108,13 @@ abstract class ProtosNumericSelectionNode extends Node {
             VirtualFrame frame,
             String selector,
             long receiver,
-            @Bind("capturedPrelude(frame)") ProtosPrelude prelude,
+            @Bind("capturedClosure(frame)")
+                    ProtosClosureValue closure,
             @Cached("selector") String cachedSelector,
-            @Cached("prelude") ProtosPrelude cachedPrelude,
+            @Cached("closure")
+                    ProtosClosureValue cachedClosure,
+            @Cached("cachedClosure.preludeOrNullForRuntime()")
+                    ProtosPrelude cachedPrelude,
             @Cached("selectNumeric(frozenBoundPrototype(selectBinding(cachedPrelude, SMALL_INTEGER_BINDING)), cachedSelector)")
                     ProtosValueLookup.StructuralSelection selection,
             @Cached(value = "allOwnersFrozen(selection)") boolean frozen,
@@ -117,9 +132,10 @@ abstract class ProtosNumericSelectionNode extends Node {
     @Specialization(
             excludeForUncached = true,
             guards = {
-                "prelude != null",
+                "closure != null",
                 "selector == cachedSelector",
-                "prelude == cachedPrelude",
+                "closure == cachedClosure",
+                "cachedPrelude != null",
                 "selection != null",
                 "selection.isValid()"
             },
@@ -129,9 +145,13 @@ abstract class ProtosNumericSelectionNode extends Node {
             VirtualFrame frame,
             String selector,
             long receiver,
-            @Bind("capturedPrelude(frame)") ProtosPrelude prelude,
+            @Bind("capturedClosure(frame)")
+                    ProtosClosureValue closure,
             @Cached("selector") String cachedSelector,
-            @Cached("prelude") ProtosPrelude cachedPrelude,
+            @Cached("closure")
+                    ProtosClosureValue cachedClosure,
+            @Cached("cachedClosure.preludeOrNullForRuntime()")
+                    ProtosPrelude cachedPrelude,
             @Cached("selectNumeric(frozenBoundPrototype(selectBinding(cachedPrelude, SMALL_INTEGER_BINDING)), cachedSelector)")
                     ProtosValueLookup.StructuralSelection selection,
             @Cached("finalAssumption(selection)") Assumption selectionAssumption,
@@ -210,9 +230,10 @@ abstract class ProtosNumericSelectionNode extends Node {
     @Specialization(
             excludeForUncached = true,
             guards = {
-                "prelude != null",
+                "closure != null",
                 "selector == cachedSelector",
-                "prelude == cachedPrelude",
+                "closure == cachedClosure",
+                "cachedPrelude != null",
                 "frozen"
             },
             limit = "3")
@@ -220,9 +241,13 @@ abstract class ProtosNumericSelectionNode extends Node {
             VirtualFrame frame,
             String selector,
             double receiver,
-            @Bind("capturedPrelude(frame)") ProtosPrelude prelude,
+            @Bind("capturedClosure(frame)")
+                    ProtosClosureValue closure,
             @Cached("selector") String cachedSelector,
-            @Cached("prelude") ProtosPrelude cachedPrelude,
+            @Cached("closure")
+                    ProtosClosureValue cachedClosure,
+            @Cached("cachedClosure.preludeOrNullForRuntime()")
+                    ProtosPrelude cachedPrelude,
             @Cached("selectNumeric(frozenBoundPrototype(selectBinding(cachedPrelude, FLOAT_BINDING)), cachedSelector)")
                     ProtosValueLookup.StructuralSelection selection,
             @Cached(value = "allOwnersFrozen(selection)") boolean frozen,
@@ -240,9 +265,10 @@ abstract class ProtosNumericSelectionNode extends Node {
     @Specialization(
             excludeForUncached = true,
             guards = {
-                "prelude != null",
+                "closure != null",
                 "selector == cachedSelector",
-                "prelude == cachedPrelude",
+                "closure == cachedClosure",
+                "cachedPrelude != null",
                 "selection != null",
                 "selection.isValid()"
             },
@@ -252,9 +278,13 @@ abstract class ProtosNumericSelectionNode extends Node {
             VirtualFrame frame,
             String selector,
             double receiver,
-            @Bind("capturedPrelude(frame)") ProtosPrelude prelude,
+            @Bind("capturedClosure(frame)")
+                    ProtosClosureValue closure,
             @Cached("selector") String cachedSelector,
-            @Cached("prelude") ProtosPrelude cachedPrelude,
+            @Cached("closure")
+                    ProtosClosureValue cachedClosure,
+            @Cached("cachedClosure.preludeOrNullForRuntime()")
+                    ProtosPrelude cachedPrelude,
             @Cached("selectNumeric(frozenBoundPrototype(selectBinding(cachedPrelude, FLOAT_BINDING)), cachedSelector)")
                     ProtosValueLookup.StructuralSelection selection,
             @Cached("finalAssumption(selection)") Assumption selectionAssumption,
@@ -332,10 +362,11 @@ abstract class ProtosNumericSelectionNode extends Node {
     @Specialization(
             excludeForUncached = true,
             guards = {
-                "prelude != null",
-                "prototype != null",
+                "closure != null",
                 "selector == cachedSelector",
-                "prelude == cachedPrelude",
+                "closure == cachedClosure",
+                "cachedPrelude != null",
+                "prototype != null",
                 "prototype == cachedPrototype",
                 "selection != null",
                 "selection.isValid()"
@@ -345,10 +376,14 @@ abstract class ProtosNumericSelectionNode extends Node {
             VirtualFrame frame,
             String selector,
             Object receiver,
-            @Bind("capturedPrelude(frame)") ProtosPrelude prelude,
-            @Bind("prototype(receiver, prelude)") ProtosObjectValue prototype,
+            @Bind("capturedClosure(frame)")
+                    ProtosClosureValue closure,
             @Cached("selector") String cachedSelector,
-            @Cached("prelude") ProtosPrelude cachedPrelude,
+            @Cached("closure")
+                    ProtosClosureValue cachedClosure,
+            @Cached("cachedClosure.preludeOrNullForRuntime()")
+                    ProtosPrelude cachedPrelude,
+            @Bind("prototype(receiver, cachedPrelude)") ProtosObjectValue prototype,
             @Cached("prototype") ProtosObjectValue cachedPrototype,
             @Cached("selectNumeric(cachedPrototype, cachedSelector)")
                     ProtosValueLookup.StructuralSelection selection,
@@ -421,12 +456,12 @@ abstract class ProtosNumericSelectionNode extends Node {
     }
 
     /*
-     * The Prelude captured by the compact invocation's own Closure, or null.
+     * The compact invocation's own Closure, or null.
      * Argument zero changes when the invocation publishes its activation.
      */
     @NonIdempotent
-    static ProtosPrelude capturedPrelude(VirtualFrame frame) {
-        return ProtosFrameArguments.capturedClosurePreludeOrNull(
+    static ProtosClosureValue capturedClosure(VirtualFrame frame) {
+        return ProtosFrameArguments.capturedClosureForSelectionOrNull(
                 frame.getArguments());
     }
 

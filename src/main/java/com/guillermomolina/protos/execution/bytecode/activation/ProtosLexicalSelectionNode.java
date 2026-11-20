@@ -27,6 +27,7 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
+import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.GenerateInline;
@@ -36,6 +37,7 @@ import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.nodes.ExplodeLoop;
 import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.object.DynamicObject;
+import com.oracle.truffle.api.object.Shape;
 import java.util.Optional;
 
 /**
@@ -68,6 +70,9 @@ import java.util.Optional;
  * through it without selecting again.
  *
  * <p>Selection is specialized:
+ * {@link #readCachedAbsentScope} replaces a single nearer materialized
+ * map-backed scope's membership query with its actual storage identity and
+ * missing-property Shape guards; its owner read is still {@link #readCachedOwner}.
  * {@link #readCachedOwner} and {@link #selectWriteCachedOwner} cache the
  * captured lexical chain's identity and the exact owning scope node found when
  * they specialized (with its module {@link ProtosModuleBindingLocation} when
@@ -101,6 +106,45 @@ abstract class ProtosLexicalSelectionNode extends Node {
     abstract Object execute(
             Object activation, String name, boolean write, LexicalFrameLayout currentLayout);
 
+    /*
+     * GraalPy ReadGlobalOrBuiltinNode.readBuiltinFastPath/readBuiltinFromStorage:
+     * cache a missing property's physical storage Shape, then guard storage
+     * identity and Shape before continuing the existing outer-owner read.
+     * Only one materialized, map-backed nearer scope is admitted.
+     */
+    @Specialization(
+            guards = {
+                "!write",
+                "name == cachedName",
+                "capturedEnvironment(activation) == cachedEnvironment",
+                "cachedDepth == 1",
+                "absence != null",
+                "missingShape != null",
+                "hasNoCurrentScopeStorage(activation, name, currentLayout)",
+                "absence.hasCurrentStorage()",
+                "absence.hasStorageShape(missingShape)"
+            },
+            excludeForUncached = true,
+            limit = "3")
+    static Object readCachedAbsentScope(
+            Object activation,
+            String name,
+            boolean write,
+            LexicalFrameLayout currentLayout,
+            @Cached("name") String cachedName,
+            @Cached("capturedEnvironment(activation)") ProtosLexicalEnvironment cachedEnvironment,
+            @Cached("ownerDepth(cachedEnvironment, cachedName)") int cachedDepth,
+            @Cached("absentScopeLocationOrNull(cachedEnvironment, cachedDepth, cachedName)")
+                    ProtosModuleBindingLocation absence,
+            @Cached("missingShapeOrNull(absence)") Shape missingShape,
+            @Cached("ownerOrNull(cachedEnvironment, cachedDepth)") ProtosLexicalEnvironment cachedOwner,
+            @Cached("frozenOwnerValueOrNull(cachedOwner, cachedName)") Object cachedFrozenValue,
+            @Cached("moduleLocationOrNull(cachedOwner, cachedName)") ProtosModuleBindingLocation location,
+            @Cached DynamicObject.GetNode getNode) {
+        return readCachedOwner(activation, name, write, currentLayout, cachedName,
+                cachedEnvironment, cachedDepth, cachedOwner, cachedFrozenValue, location, getNode);
+    }
+
     @Specialization(
             guards = {
                 "!write",
@@ -123,9 +167,14 @@ abstract class ProtosLexicalSelectionNode extends Node {
                     int cachedDepth,
             @Cached(value = "ownerOrNull(cachedEnvironment, cachedDepth)", uncached = "ownerOrNull(cachedEnvironment, cachedDepth)")
                     ProtosLexicalEnvironment cachedOwner,
+            @Cached(value = "frozenOwnerValueOrNull(cachedOwner, cachedName)", uncached = "null")
+                    Object cachedFrozenValue,
             @Cached(value = "moduleLocationOrNull(cachedOwner, cachedName)", uncached = "moduleLocationOrNull(cachedOwner, cachedName)")
                     ProtosModuleBindingLocation location,
             @Cached DynamicObject.GetNode getNode) {
+        if (cachedFrozenValue != null) {
+            return cachedFrozenValue;
+        }
         Object value = location != null && location.hasCurrentStorage()
                 ? location.readOrNull(getNode)
                 : readOwnerOrNull(cachedOwner, cachedName);
@@ -162,7 +211,7 @@ abstract class ProtosLexicalSelectionNode extends Node {
         return readReceiverOrThrow(activation, name);
     }
 
-    @Specialization(guards = "!write", replaces = {"readCachedOwner", "readCachedReceiver"})
+    @Specialization(guards = "!write", replaces = {"readCachedAbsentScope", "readCachedOwner", "readCachedReceiver"})
     static Object read(
             Object activation, String name, boolean write, LexicalFrameLayout currentLayout) {
         ProtosActivation published = publishedActivationOrNull(activation);
@@ -207,6 +256,21 @@ abstract class ProtosLexicalSelectionNode extends Node {
     }
 
     // ---- Guards and specialization-time helpers ----------------------------------
+
+    static ProtosModuleBindingLocation absentScopeLocationOrNull(
+            ProtosLexicalEnvironment environment, int depth, String name) {
+        CompilerAsserts.neverPartOfCompilation();
+        if (depth != 1 || environment == null) {
+            return null;
+        }
+        ProtosObjectValue context = environment.materializedContextOrNullForRuntime();
+        return context == null ? null : ProtosModuleBindingLocation.storageLocationOrNull(context, name);
+    }
+
+    static Shape missingShapeOrNull(ProtosModuleBindingLocation location) {
+        CompilerAsserts.neverPartOfCompilation();
+        return location == null ? null : location.storageShapeIfMissing();
+    }
 
     /*
      * An unpublished invocation can still own LOCAL/CELL bindings. Only its
@@ -307,6 +371,23 @@ abstract class ProtosLexicalSelectionNode extends Node {
 
     static ProtosLexicalEnvironment ownerOrNull(ProtosLexicalEnvironment environment, int depth) {
         return depth < 0 ? null : ProtosLexicalEnvironment.at(environment, depth);
+    }
+
+    /*
+     * Specialization time only: an ordinary frozen owner's local binding cannot
+     * change authority or value. Freezing is shallow: retain the stored reference.
+     */
+    static Object frozenOwnerValueOrNull(ProtosLexicalEnvironment owner, String name) {
+        CompilerAsserts.neverPartOfCompilation();
+        if (owner == null) {
+            return null;
+        }
+        ProtosObjectValue context = owner.materializedContextOrNullForRuntime();
+        if (context == null || context.getClass() != ProtosObjectValue.class
+                || !context.isFrozen() || !context.usesObjectStorageForRuntime()) {
+            return null;
+        }
+        return context.readLocalSlot(name).orElse(null);
     }
 
     /*

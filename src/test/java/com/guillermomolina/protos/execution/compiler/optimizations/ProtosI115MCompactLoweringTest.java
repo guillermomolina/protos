@@ -122,6 +122,89 @@ final class ProtosI115MCompactLoweringTest {
         }
     }
 
+    /*
+     * One construction site (a parameter named Array keeps the construction
+     * lowering) receives the FROZEN standard Array, an alternative factory
+     * and a mutable factory whose construct is redefined and then restored.
+     * Factory identity, single argument evaluation, fresh results and the
+     * agreement of the compact and the publishing body are observed; a
+     * second session owns another Prelude.
+     */
+    @Test
+    void frozenArrayConstructionSelectionKeepsDynamicFactoryDispatch() throws Exception {
+        String source = """
+                trace: { value: 0 }
+                step: (digit, value) => {
+                    trace.value = trace.value * 10 + digit
+                    value
+                }
+                build: (Array) => Array(step(1, 10), step(2, 20))
+                Other: { call: (a, b) => a + b }
+                Mine: Array {}
+                last: { value: null }
+                standard: () => {
+                    trace.value = 0
+                    first: build(Array)
+                    second: build(Array)
+                    second[0] = 99
+                    last.value = second
+                    ok: (first.size() == 2) && (first[0] == 10) && (first[1] == 20)
+                    ok = ok && (second[0] == 99) && !(first === second)
+                    ok && (first.parent() === Array) && (trace.value == 1212)
+                }
+                alternative: () => {
+                    trace.value = 0
+                    (build(Other) == 30) && (trace.value == 12)
+                }
+                redefine: () => { Mine.construct: (a, b) => a * b }
+                restore: () => { Mine.removeSlot("construct") }
+                mine: () => {
+                    trace.value = 0
+                    value: build(Mine)
+                    value.size() + value[0] + value[1] + trace.value
+                }
+                redefined: () => {
+                    trace.value = 0
+                    (build(Mine) == 200) && (trace.value == 12)
+                }
+                compact: () => Array(1, 2).size() * 10 + Array(3, 4)[1]
+                published: () => {
+                    k: 4
+                    g: () => k
+                    Array(1, 2).size() * 10 + Array(3, g())[1]
+                }
+                """;
+        try (ProtosStandaloneHostedSession session = openSession(
+                "frozen-array-construction-selection", source)) {
+            for (int round = 0; round < 10; round++) {
+                assertTrue(session.prepareTopLevel("standard").executable().execute().asBoolean());
+            }
+            assertTrue(session.prepareTopLevel("alternative").executable().execute().asBoolean());
+            assertTrue(session.prepareTopLevel("standard").executable().execute().asBoolean());
+            assertEquals(44L, session.prepareTopLevel("mine").executable().execute().asLong());
+            session.prepareTopLevel("redefine").executable().execute();
+            for (int round = 0; round < 3; round++) {
+                assertTrue(session.prepareTopLevel("redefined").executable().execute().asBoolean());
+            }
+            session.prepareTopLevel("restore").executable().execute();
+            assertEquals(44L, session.prepareTopLevel("mine").executable().execute().asLong());
+            assertTrue(session.prepareTopLevel("alternative").executable().execute().asBoolean());
+            assertTrue(session.prepareTopLevel("standard").executable().execute().asBoolean());
+            for (int round = 0; round < 4; round++) {
+                assertEquals(24L, session.prepareTopLevel("compact").executable().execute().asLong());
+                assertEquals(24L, session.prepareTopLevel("published").executable().execute().asLong());
+            }
+            try (ProtosStandaloneHostedSession other = openSession(
+                    "frozen-array-construction-selection-other", source)) {
+                for (int round = 0; round < 3; round++) {
+                    assertTrue(other.prepareTopLevel("standard").executable().execute().asBoolean());
+                    assertTrue(other.prepareTopLevel("alternative").executable().execute().asBoolean());
+                    assertTrue(session.prepareTopLevel("standard").executable().execute().asBoolean());
+                }
+            }
+        }
+    }
+
     @Test
     void standardArrayConstructionRetainsTypedAndGeneralOperations() throws Exception {
         try (ProtosStandaloneHostedSession session = openSession(
@@ -649,6 +732,82 @@ final class ProtosI115MCompactLoweringTest {
         }
     }
 
+    /*
+     * Bounds, FROZEN and octet checks stay inside the standard indexed
+     * operations: each admitted expression emits exactly its own operation,
+     * after its operands, with no message send for the checks and no Error
+     * construction or handler preparation in the normal body, also after the
+     * sites have executed both valid accesses and indexed Errors.
+     */
+    @Test
+    void indexedChecksAddNoGuestOperations() throws Exception {
+        try (ProtosStandaloneHostedSession session = openSession(
+                "indexed-checks", """
+                read: (a, i) => { a[i] }
+                write: (a, i, v) => { a[i] = v }
+                length: (a) => { a.size() }
+                exercise: () => {
+                    a: [1, 2, 3]
+                    b: Encoding.UTF8.encode("jobs")
+                    ok: true
+                    k: 0
+                    while(k < 20) {
+                        ok = ok && (read(a, 1) == 2) && (write(a, 0, 1) == 1) && (length(a) == 3)
+                        ok = ok && (read(b, 0) == 106) && (write(b, 1, 111) == 111) && (length(b) == 4)
+                        k = k + 1
+                    }
+                    ok = ok && Error.handle(() => { read(a, 3); false }, (caught) => true)
+                    ok = ok && Error.handle(() => { write(a, 0 - 1, 1); false }, (caught) => true)
+                    ok = ok && Error.handle(() => { write(b, 0, 256); false }, (caught) => true)
+                    ok && (read(a, 2) == 3) && (write(b, 3, 115) == 115)
+                }
+                """)) {
+            assertTrue(session.prepareTopLevel("exercise").executable().execute().asBoolean());
+            for (var entry : java.util.Map.of(
+                    "read", "c.BinarySubscript",
+                    "write", "c.SetItem",
+                    "length", "c.GetLen").entrySet()) {
+                ProtosBytecodeRootNode root = selectedRoot(
+                        session.prepareTopLevel(entry.getKey()));
+                List<Instruction> instructions = root.getBytecodeNode().getInstructionsAsList();
+                List<String> names = instructions.stream()
+                        .map(ProtosInstructionNames::of).toList();
+                List<Integer> operations = new java.util.ArrayList<>();
+                for (int i = 0; i < names.size(); i++) {
+                    String name = names.get(i);
+                    if (name.startsWith("c.BinarySubscript") || name.startsWith("c.SetItem")
+                            || name.startsWith("c.GetLen")) {
+                        operations.add(i);
+                    }
+                }
+                assertEquals(1, operations.size(), entry.getKey() + ": " + names);
+                int operation = operations.get(0);
+                assertTrue(names.get(operation).startsWith(entry.getValue()),
+                        entry.getKey() + ": " + names);
+                int arity = entry.getKey().equals("write") ? 3
+                        : entry.getKey().equals("read") ? 2 : 1;
+                for (int operand = operation - arity; operand < operation; operand++) {
+                    assertTrue(operand >= 0 && !names.get(operand).startsWith("store.")
+                                    && !names.get(operand).startsWith("clear.")
+                                    && !names.get(operand).startsWith("c.Call"),
+                            entry.getKey() + " operand order: " + names);
+                }
+                for (String absent : List.of(
+                        "c.GetMethod", "c.CallNilaryMethod", "c.CallUnaryMethod",
+                        "c.CallBinaryMethod", "c.CallRequest", "c.PrepareSendOne",
+                        "c.IsStandardIndexedSelection", "c.IsStructuredErrorHandler",
+                        "c.PrepareStructuredErrorHandler",
+                        "c.PrepareSelectedStructuredErrorHandlerCall")) {
+                    assertTrue(names.stream().noneMatch(name -> name.startsWith(absent)),
+                            entry.getKey() + " emits " + absent + ": " + names);
+                }
+                assertTrue(names.stream().noneMatch(name -> name.contains("Error")
+                                || name.contains("Signal") || name.contains("Profile")),
+                        entry.getKey() + " emits a check operation: " + names);
+            }
+        }
+    }
+
     @Test
     void constantArrayOperationsKeepPrimitiveConstantOperands() throws Exception {
         try (ProtosStandaloneHostedSession session = openSession(
@@ -697,6 +856,8 @@ final class ProtosI115MCompactLoweringTest {
             throws Exception {
         try (ProtosStandaloneHostedSession session = openSession(
                 "sixty-four-integer-literal", """
+                previous: { value: null; independent: false }
+                independent: () => previous.independent
                 run: () => {
                     values: [
                         13, 18, 6, 42, 43, 1, 58, 4,
@@ -708,6 +869,8 @@ final class ProtosI115MCompactLoweringTest {
                         60, 53, 57, 36, 5, 45, 14, 16,
                         20, 39, 47, 10, 3, 52, 29, 49
                     ]
+                    previous.independent = !(values === previous.value)
+                    previous.value = values
                     values[0] = values[0] + values[63] * 1000
                     values[0] * 100 + values.size()
                 }
@@ -743,9 +906,12 @@ final class ProtosI115MCompactLoweringTest {
                         forbidden + ": " + names);
             }
             long expected = (13L + 49L * 1000L) * 100L + 64L;
+            var independent = session.prepareTopLevel("independent");
             for (int round = 0; round < 4; round++) {
                 assertEquals(expected, prepared.executable().execute().asLong(),
                         "Every evaluation starts from the original literal");
+                assertTrue(independent.executable().execute().asBoolean(),
+                        "Successive invocations construct independent Arrays");
             }
             assertEquals(3L, session.prepareTopLevel("shadowed").executable().execute().asLong(),
                     "An unadmitted factory keeps its dynamic selection");
