@@ -772,6 +772,7 @@ caller-held reference:
 -   Process, Node, Cluster, placement, lifecycle, or administrative authority
 -   open filesystem, network, process, terminal, or other I/O capabilities
 -   a concrete Entropy grant; completed `Bytes` are ordinary isolated value data, not authority
+-   an external execution grant, child capability or child endpoint (`../io/EXTERNAL_PROCESS.md` §9)
 -   any capability whose operation would use the caller Actor's identity or
     mutate/observe caller-local mutable runtime state
 
@@ -1067,3 +1068,13 @@ Live FFI sessions, resources and bindings capturing native authority follow
 `std:ffi` does not inherit or delegate host authority. A native call creates no
 implicit P execution or suspension; existing non-transferable-value rejection
 continues to apply to payloads containing native authority.
+
+## D229-B1 external execution P boundary
+
+An external execution grant, a child capability and a child endpoint
+(`../io/EXTERNAL_PROCESS.md`) are not P-transferable. Capturing, supplying or
+returning them, including through local slots or delegation ancestry, fails
+with `NonParallelValue`; creating a parallel computation does not inherit a
+caller Actor's `execution` slot. Authority-free results, such as an
+`ExitStatus`, Bytes read from an endpoint and Integers, keep their ordinary P
+value rules.

@@ -205,6 +205,9 @@ Domain owners:
   semantics.
 - spec/io/PROCESS_IO.md — Process I/O bootstrap, environment/arguments,
   standard streams, Process-local I/O authority.
+- spec/io/EXTERNAL_PROCESS.md — independently granted external OS
+  execution capability, direct child launch, byte endpoints,
+  child lifecycle, cancellation, custody and cleanup semantics.
 - spec/io/NETWORK.md — network I/O semantics.
 - spec/io/ENTROPY.md — independently granted secure Entropy capability,
   operation, security and transfer-boundary semantics.

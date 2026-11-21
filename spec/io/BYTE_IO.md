@@ -6,7 +6,7 @@ Last updated: 2026-09-04
 
 This document is the primary normative owner of Bytes-facing binary I/O protocols, reading, writing, flushing, seeking, sizing, truncation, durability, and directional shutdown.
 
-The modular I/O specification consists of `IO_CORE.md`, `BYTE_IO.md`, `TEXT_IO.md`, `FILESYSTEM.md`, and `PROCESS_IO.md`. Legacy section numbers from `IO_CORE.md` and the applicable sibling I/O module are intentionally retained so historical citations remain understandable. Normative ownership now belongs to these modules; the former monolithic file is removed by revision 326.
+The modular I/O specification consists of `IO_CORE.md`, `BYTE_IO.md`, `TEXT_IO.md`, `FILESYSTEM.md`, `PROCESS_IO.md`, and `EXTERNAL_PROCESS.md`. Legacy section numbers from `IO_CORE.md` and the applicable sibling I/O module are intentionally retained so historical citations remain understandable. Normative ownership now belongs to these modules; the former monolithic file is removed by revision 326.
 
 ## 3. Bytes Used by I/O
 
@@ -658,5 +658,33 @@ Output capability and output lifecycle remain unaffected except where a stronger
 `close()` closes the whole resource according to its lifecycle contract. It is not normatively defined as the composition `shutdownRead()` plus `shutdownWrite()`.
 
 Core v0.1 defines no separate universal `shutdownBoth()` operation.
+
+---
+## External child endpoints
+
+The standard endpoints of an external OS child (`EXTERNAL_PROCESS.md` §6)
+apply the protocols of this document without a universal pipe API:
+
+- child stdin is `ByteWritable` (§6) and `Closable` (`IO_CORE.md` §8). Its
+  writes are ordered and committed under §6. `close()` prevents later writes
+  and, after already committed output, requests EOF to the child. When the
+  child's reading side is closed, a write may fail as broken pipe with a fresh
+  `IOError`, under the ordinary §6 failure rules.
+- child stdout and child stderr are each independently `ByteReadable` (§5) and
+  `Closable`. Reads return Bytes in native order without loss of bytes produced
+  before the read. A read returns `null` at EOF, which is reached only when
+  every native writer of that endpoint has closed, not merely when the direct
+  child exits. `close()` releases the logical reader; it is not a child
+  termination operation and does not itself submit a request equivalent to
+  `terminate()`. Closing the reading side may nevertheless cause indirect
+  native consequences for the child (for example broken pipe, a write error or
+  a host-delivered signal), which may end the child
+  (`EXTERNAL_PROCESS.md` §6).
+
+Host buffering for each endpoint is finite and applies backpressure; no
+endpoint is drained automatically, merged with another, transcoded, or retained
+without bound. These endpoints expose no `Flushable`, `ByteSeekable`,
+`ByteSized`, `Truncatable`, `Syncable`, `ReadShutdown` or `WriteShutdown`
+capability unless a later normative rule adds it.
 
 ---

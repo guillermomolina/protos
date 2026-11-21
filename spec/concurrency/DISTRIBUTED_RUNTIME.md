@@ -2014,3 +2014,11 @@ mechanism, or implementation detail that still requires design.
 -   Code identity for remote Actor bootstrap
 -   Code availability and versioning across Nodes
 -   Hot code update
+
+## D229-B1 external OS children are not distributed-runtime members
+
+An external OS child created under `../io/EXTERNAL_PROCESS.md` is neither a
+Protos Process, an Actor, a Node, a Cluster member nor a Group member, and it
+is not addressable through an `ActorRef` or `GroupRef`. External execution
+authority and child custody belong to one Protos Process; no remote execution,
+cross-Process child authority or distributed custody transfer is defined.

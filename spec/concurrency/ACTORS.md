@@ -688,6 +688,7 @@ Transferability currently follows these rules:
 -   Network: not transferable
 -   Resolver: not transferable and not delegable (`../io/NETWORK.md` §14.9); resolved `IpAddress` values remain ordinary transferable data
 -   Entropy: a live grant is neither transferable nor delegable (`../io/ENTROPY.md` §4); completed `Bytes` are ordinary value-copy data
+-   External execution grant: transferable only through explicit Actor delegation (`../io/EXTERNAL_PROCESS.md` §9); child capabilities and child endpoints: not transferable
 -   TcpListener: not transferable
 -   TcpConnection: not transferable
 -   TcpAcceptor: explicitly delegable only for same-Process `Actor.spawn` initialization arguments, through the contract owned by `../io/NETWORK.md` §11; not transferable through `send()`/`request()` payloads or replies, and its delegation authorizes no transfer of any other resource
@@ -2508,3 +2509,25 @@ of `std:ffi`. Live native resources and library/session authority have no
 automatic Actor transfer contract. An Actor neither inherits nor automatically
 delegates FFI authority by importing this ordinary MODULE. Native invocation
 is synchronous; it adds no implicit suspension or parallel execution.
+
+## D229-B1 external execution delegation and Actor death
+
+An external execution grant (`../io/EXTERNAL_PROCESS.md`) is a RootActor-local
+bootstrap capability (`../io/PROCESS_IO.md`). It is transferable only through
+explicit delegation: when a message, request, reply or `Actor.spawn`
+initialization explicitly supplies it, the destination receives a
+non-amplifying Actor-local proxy sharing the same logical authorization within
+the same Process (`EXTERNAL_PROCESS.md` §9). This is distinct from, and does not
+merge with, the Process capability delegation contract. No Actor, including
+one created by `Actor.spawn`, inherits the grant implicitly. `ChildProcess`
+capabilities and their live endpoints are not transferable; a graph reaching
+them fails atomically with `NonTransferableValue`. No endpoint delegation and no
+general proxy mechanism is defined.
+
+Termination of an Actor requests cancellation of its uncommitted pending
+external-execution operations under the existing Future rules. It does not
+terminate existing children, undo a committed start, or invalidate grant
+proxies delegated to live Actors. Committed operations whose results can no
+longer be published remain under Process custody (`EXTERNAL_PROCESS.md` §8);
+custody of every child belongs to the Process, not to any Actor.
+No guest code or callback executes inside a terminated Actor.

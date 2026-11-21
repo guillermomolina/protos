@@ -6,7 +6,7 @@ Last updated: 2026-09-04
 
 This document is the primary normative owner of cross-cutting I/O capability, asynchronous-operation, commitment, lifecycle, wrapper-ownership, concrete-capability-shape, and pay-as-you-grow rules.
 
-The modular I/O specification consists of `IO_CORE.md`, `BYTE_IO.md`, `TEXT_IO.md`, `FILESYSTEM.md`, `PROCESS_IO.md`, `NETWORK.md`, `ENTROPY.md`, and `CLOCK.md`. Legacy section numbers from `IO_CORE.md` and the applicable sibling I/O module are intentionally retained so historical citations remain understandable. Normative ownership now belongs to these modules; the former monolithic file is removed by revision 326.
+The modular I/O specification consists of `IO_CORE.md`, `BYTE_IO.md`, `TEXT_IO.md`, `FILESYSTEM.md`, `PROCESS_IO.md`, `NETWORK.md`, `ENTROPY.md`, `CLOCK.md`, and `EXTERNAL_PROCESS.md`. Legacy section numbers from `IO_CORE.md` and the applicable sibling I/O module are intentionally retained so historical citations remain understandable. Normative ownership now belongs to these modules; the former monolithic file is removed by revision 326.
 
 ## 1. Scope
 
@@ -32,7 +32,7 @@ This document defines:
 
 The following are intentionally outside this I/O model:
 
-- external-process creation and control;
+- external-process creation and control, except the separately granted external OS execution capability owned by `EXTERNAL_PROCESS.md`;
 - process identifiers and host-process inspection;
 - portable or POSIX signal APIs;
 - process groups and sessions;
@@ -42,7 +42,7 @@ The following are intentionally outside this I/O model:
 - DNS/name resolution and resolver authority beyond the numeric-IP TCP model in `NETWORK.md`;
 - UDP/datagram addressing and semantics;
 - generic/raw socket creation and transport-configuration APIs beyond operations explicitly standardized by `NETWORK.md`;
-- pipe creation/pairing and pipe-specific cross-endpoint semantics, including writer-close-to-reader-EOF behavior, reader-close/broken-pipe behavior, pipe buffering/capacity, and any pipe-specific readiness or atomic-write guarantee;
+- general pipe creation/pairing and pipe-specific cross-endpoint semantics (the standard endpoints of an external OS child are specialized only by `EXTERNAL_PROCESS.md` §6 and `BYTE_IO.md`), including writer-close-to-reader-EOF behavior, reader-close/broken-pipe behavior, pipe buffering/capacity, and any pipe-specific readiness or atomic-write guarantee;
 - a general incremental encoder/decoder feed/reset API;
 - `print` and the exact object textual-representation protocol.
 
@@ -98,6 +98,15 @@ These share the ordinary asynchronous I/O, `IOError`, `InvalidIOArgument`,
 fresh-Future rules defined here. `ENTROPY.md` specifies only the
 capability-specific admission, completed Bytes and security semantics; no
 second I/O lifecycle model is introduced.
+
+`EXTERNAL_PROCESS.md` defines the separately granted external OS execution
+capability, its `start`, `wait` and `terminate` operations and the standard
+endpoints of launched children. They share the ordinary asynchronous I/O,
+`IOError`, `InvalidIOArgument`, `IOLifecycleError`, cancellation, commitment
+(§4), `Closable`, termination and fresh-Future rules defined here. The launch
+commitment frontier is an instance of §4 operation commitment, not a second
+commitment model or Future state; a nonzero child exit is not an I/O failure.
+No new Error category is introduced.
 
 ### Portable I/O Error categories
 

@@ -6,7 +6,7 @@ Last updated: 2026-09-04
 
 This document is the primary normative owner of Protos Process I/O bootstrap, arguments, environment, standard streams, Actor delegation of Process-local I/O authority, and Process-termination I/O boundaries.
 
-The modular I/O specification consists of `IO_CORE.md`, `BYTE_IO.md`, `TEXT_IO.md`, `FILESYSTEM.md`, `PROCESS_IO.md`, `ENTROPY.md`, and `CLOCK.md`. Legacy section numbers from `IO_CORE.md` and the applicable sibling I/O module are intentionally retained so historical citations remain understandable. Normative ownership now belongs to these modules; the former monolithic file is removed by revision 326.
+The modular I/O specification consists of `IO_CORE.md`, `BYTE_IO.md`, `TEXT_IO.md`, `FILESYSTEM.md`, `PROCESS_IO.md`, `ENTROPY.md`, `CLOCK.md`, and `EXTERNAL_PROCESS.md`. Legacy section numbers from `IO_CORE.md` and the applicable sibling I/O module are intentionally retained so historical citations remain understandable. Normative ownership now belongs to these modules; the former monolithic file is removed by revision 326.
 
 ## 22. Protos Process and I/O Bootstrap
 
@@ -148,10 +148,10 @@ evaluation initializes the Process and its RootActor and executes the
 RootActor's initial module.
 
 Only that initial module receives the bootstrap-local slots defined in this
-section: `process` always, and `filesystem`, `network`, `resolver`, `entropy` and `clock` only
+section: `process` always, and `filesystem`, `network`, `resolver`, `entropy`, `clock` and `execution` only
 when the corresponding independent authority is granted, under Root filesystem
 capability provisioning, Root network capability provisioning and Root resolver
-capability provisioning, Root entropy capability provisioning and Root Clock capability provisioning. Later host entries do not receive implicit duplicates
+capability provisioning, Root entropy capability provisioning, Root Clock capability provisioning and Root external execution capability provisioning. Later host entries do not receive implicit duplicates
 of those slots.
 
 Process arguments, environment, and standard streams are derived from the
@@ -168,7 +168,10 @@ one, so an embedded Process's initial `resolver` slot is absent (Root resolver
 capability provisioning). Entropy is independently controlled by the explicit
 `protos.AllowEntropy` option, defaulting to `false` (Root entropy capability
 provisioning). Clock is independently controlled by `protos.AllowClock`,
-default `false` (Root Clock capability provisioning).
+default `false` (Root Clock capability provisioning). External execution is
+independently controlled by `protos.AllowExecution`, default `false`; no other
+Context permission, including permission to create host processes, confers it
+(Root external execution capability provisioning).
 
 The Process persists across host evaluations in the same Context; evaluations
 do not repeat bootstrap. Concurrent host entries that would execute unsafely in
@@ -522,9 +525,9 @@ This ordering does not impose a global scheduler order between Actors and does n
 ---
 ## 28. Process-Control Boundary
 
-This I/O model does not define external-process creation, host-process control, process IDs, `kill`, POSIX signals, process groups, or sessions.
+The Protos Process I/O and bootstrap model owned by this document does not itself define the creation or control of external operating-system children. Those operations belong exclusively to the separately granted external execution capability specified in `EXTERNAL_PROCESS.md` (Root external execution capability provisioning).
 
-Those facilities belong to a separate process/host-execution domain model.
+An external OS child is not a Protos Process, and launching one creates no Protos execution domain. Process IDs, `kill`, POSIX signals, process groups and sessions remain outside portable Protos.
 
 The separation is semantic:
 
@@ -547,7 +550,7 @@ A backend resource deliberately shared independently of the terminating Process 
 
 Exact physical-release timing and backend consequences after custody has transferred to the host/runtime are outside portable Protos semantics, just as failed-close residual cleanup state is. A standalone operating-system process may obtain stronger automatic reclamation from its host; a managed runtime must provide the same Protos-level authority revocation without relying on whole-OS-process exit.
 
-A future external-process facility may expose stdin/stdout/stderr pipes or other streams. Such streams use the I/O protocols defined here.
+External OS children created under `EXTERNAL_PROCESS.md` expose stdin/stdout/stderr endpoints that use the I/O protocols defined here and in `BYTE_IO.md`. Live children and endpoints held exclusively on behalf of a terminating Process are resources in the sense of this section: termination revokes guest access and transfers them to host-only cleanup custody, including the best-effort termination and reap obligation of `EXTERNAL_PROCESS.md` §8. A Filesystem capability, including a confined or virtual one, does not confine an external OS child.
 
 A future host-signal facility must integrate with the Actor/concurrency model rather than asynchronously executing arbitrary Protos code inside an Actor turn. The exact signal API is outside this document.
 
@@ -658,6 +661,41 @@ not imply it. Clock grants none of those permissions. Later host evaluations,
 imports and spawned Actors receive no automatic `clock` slot. Service READY
 preserves the grant; Process/Context termination or host revocation retires it.
 
+### Root external execution capability provisioning (D229-B1)
+
+`EXTERNAL_PROCESS.md` owns the independently host-granted external OS execution
+capability. Only when the host explicitly grants it to the initial RootActor,
+the host installs the genuine grant as the local slot `execution` before the
+first expression of the initial RootActor SOURCE or MODULE. In a MODULE it
+belongs to the private initializer context, never implicitly to the public
+module object. This applies to both direct-entry and message-service bootstrap.
+Without the grant the slot is absent, not bound to `null`.
+
+The slot is bootstrap-local, not a prelude/global binding, import effect,
+service locator, public module export or recoverable Process operation.
+Imported modules, later host-initiated entries and Actors created from the
+RootActor do not inherit it; explicit Actor delegation is governed by
+`EXTERNAL_PROCESS.md` §9. Process, Filesystem, Network, Resolver, Entropy and
+Clock authority, socket/file/thread or host-process-creation permission,
+import authority, foreign interop and inspection do not imply it, and it
+implies none of them.
+
+The standalone CLI selects the grant with `--allow-execution`. Standard
+Polyglot embedding selects it with the explicit option `protos.AllowExecution`.
+Both default to `false`. No generic host permission suffices: in particular
+`allowCreateProcess`, `allowAllAccess`, `allowIO`, native access, FFM,
+`protos.AllowEntropy`, `protos.AllowClock` and the Filesystem, Network and
+Resolver selections do not imply it. Selecting it never widens the native
+permissions the host actually confers, and a host that cannot sustain the
+custody and cleanup obligations of `EXTERNAL_PROCESS.md` §8 does not provision
+it. Later host evaluations, imports and spawned Actors receive no automatic
+`execution` slot. Launch, custody and `ExitStatus` semantics are owned by
+`EXTERNAL_PROCESS.md`.
+
+Process termination revokes the grant and every child and endpoint access
+derived from it, under §28 and `EXTERNAL_PROCESS.md` §8. Revocation affects no
+independent grant of another Process or Context.
+
 
 ### RootActor message-service bootstrap entry authority (D225-B1)
 
@@ -665,13 +703,13 @@ When the host explicitly selects the optional RootActor message-service bootstra
 entry (`../concurrency/ACTORS.md` §32), the RootActor's initial module receives
 exactly the bootstrap-local capabilities that an ordinary initial RootActor
 module receives under the same host grants: `process` always, and each of
-`filesystem`, `network`, `resolver`, `entropy`, `clock` and, where applicable, `resources` only when
+`filesystem`, `network`, `resolver`, `entropy`, `clock`, `execution` and, where applicable, `resources` only when
 the existing host policy provisions it, under Root bootstrap acquisition, Root
 filesystem capability provisioning, Root network capability provisioning, Root
-resolver capability provisioning, Root entropy capability provisioning and Root Clock capability provisioning. These grants remain independent of one another.
+resolver capability provisioning, Root entropy capability provisioning, Root Clock capability provisioning and Root external execution capability provisioning. These grants remain independent of one another.
 
 Selecting the message-service entry is not itself a grant. In particular it is
-not authorization to grant Network, Resolver, Entropy or Clock, it creates no capability that the
+not authorization to grant Network, Resolver, Entropy, Clock or external execution, it creates no capability that the
 host policy would not otherwise provision, and it does not imply any other grant.
 Module source that the host makes resolvable for the Process, such as an
 embedding's application module catalog, is code, not authority: modules loaded

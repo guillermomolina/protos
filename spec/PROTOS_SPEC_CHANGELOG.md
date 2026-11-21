@@ -23,6 +23,54 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.505] - 2026-11-21
+
+### D229-B1 / I166 — Explicit external OS execution capability (normative integration)
+
+- `io/EXTERNAL_PROCESS.md` (new primary owner): optional host-granted
+  bootstrap-local `execution` capability, independent of every other grant,
+  selected only by default-off `--allow-execution` (standalone CLI) or
+  `protos.AllowExecution` (Polyglot embedding); no other host permission
+  implies it and it widens no host permission. Definitive public API:
+  `execution.start(executable, arguments, environment, workingDirectory)` with
+  exactly four arguments (`String`, `Array` of `String`, complete `Map` of
+  `String` to `String`, `String | null` where `null` selects the grant
+  default), returning `Future<ChildProcess>`; `stdin()`, `stdout()`,
+  `stderr()`, `wait()` and `terminate()`. Invocation snapshot; validation
+  before any effect with `InvalidIOArgument`, denial and creation failures as
+  `IOError`. Zero-child commitment frontier, cancellation precedence and
+  custody of uncertain launches; PID-independent child identity. `ExitStatus`
+  selectors `exited()`, `exitCode()` and `signaled()` with exactly two
+  verified variants (normal exit with Integer code; signal termination with
+  `null` code), no public signal number, and conservative classification: no
+  numeric inference of signals, and `wait()` fails with `IOError` when the
+  terminal category cannot be reliably established. Fresh-Future `wait`
+  observing one stable terminal content; independent binary
+  stdin/stdout/stderr endpoints with finite buffering and no automatic drain;
+  endpoint closure is not termination but may have indirect native effects;
+  best-effort `terminate`; Process custody, Actor death, Process termination
+  cutover, host cleanup and reap obligation. Explicit same-Process Actor
+  delegation of the grant as a non-amplifying local view, no `Actor.spawn`
+  inheritance, `ChildProcess` and endpoints non-transferable
+  (`NonTransferableValue`) and excluded from P (`NonParallelValue`), no
+  cross-Process or cross-Context authority; conservative portability limits.
+  No executable implementation is introduced.
+- `AGENTS.md`: canonical specification map lists `io/EXTERNAL_PROCESS.md` as
+  the owner of external OS execution.
+- `io/PROCESS_IO.md`: Root external execution capability provisioning with
+  `--allow-execution` and `protos.AllowExecution`, embedding and
+  message-service slot lists, §28 boundary and custody of
+  children, and Filesystem non-confinement of OS children.
+- `io/IO_CORE.md`, `io/BYTE_IO.md`: module lists, scope, shared Future/error
+  and commitment rules, and external child endpoint specialization.
+- `concurrency/FUTURES_AND_TASKS.md`, `concurrency/ACTORS.md`,
+  `concurrency/PARALLEL_EXECUTION.md`, `concurrency/DISTRIBUTED_RUNTIME.md`,
+  `semantics/MODULES.md`, `semantics/ERRORS.md`: launch/wait Future
+  relationships, delegation and Actor death, P rejection, distributed
+  separation, import non-authority and existing Error categories, including
+  `IOError` for a `wait()` whose terminal category cannot be reliably
+  established.
+
 ## [0.1.504] - 2026-11-19
 
 ### D252-C1 / I162 — Standard String, Vector and Matrix traversal

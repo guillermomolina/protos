@@ -1169,6 +1169,27 @@ alone does not manufacture a portable total order between independent producers.
 This closure preserves scheduler independence: concurrency may affect when an
 answer becomes available, but generic Core Future coordination does not expose
 implementation-selected timing as which answer is observed.
+
+## External OS launch and wait Futures (D229-B1)
+
+The `start`, `wait` and `terminate` Futures of `../io/EXTERNAL_PROCESS.md` are
+ordinary Actor-originated non-task-backed I/O-operation Futures; none is an
+implicit Protos Task. The launch commitment frontier is an internal operation
+frontier under `../io/IO_CORE.md` §4, not an additional public Future state.
+Cancellation of a start Future that loses to commitment does not produce a
+`cancelled` outcome that hides a possibly created child; the Future instead
+resolves or fails as `EXTERNAL_PROCESS.md` §4 requires.
+
+The terminal exit outcome of a child is retained by the child's runtime
+custody independently of any Future or active observer; the child's lifecycle
+does not depend on the existence of waiters. Each `wait()` returns a fresh Future observing
+that retained outcome; cancelling one such Future affects only that Future,
+never the child, its retained outcome or other waiters. Future cancellation
+never terminates a child. When the backend cannot reliably establish the exit
+outcome or its terminal category, the wait Future fails through the ordinary
+failed-Future mechanism with a fresh `IOError`; no additional Future state
+exists.
+
 ## 24G. Future Ownership and Actor Lifecycle Matrix
 
 **CLOSED**

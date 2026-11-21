@@ -497,3 +497,16 @@ attempt.
 entry are ordinary Errors, while failures of entered foreign operations are
 `ForeignError`. Native status codes are data. No additional Error prototype
 is introduced by `std:ffi`.
+
+## External OS execution failures (D229-B1)
+
+`../io/EXTERNAL_PROCESS.md` uses only existing categories through
+`../io/IO_CORE.md` (Portable I/O Error categories): ordinary lookup and arity
+failures remain ordinary language Errors; semantically invalid launch values
+are `InvalidIOArgument`; denied, unresolvable or failed launches, failed
+termination submission, broken pipes, and a `wait()` whose exit outcome or
+terminal category (normal exit versus signal termination) the backend cannot
+reliably establish are `IOError`; use after closure is `IOLifecycleError`. A nonzero exit or a
+verified signal termination is an `ExitStatus` value, not an Error. No
+additional Error prototype is introduced, and host or implementation-language
+exceptions are not exposed as public Errors.

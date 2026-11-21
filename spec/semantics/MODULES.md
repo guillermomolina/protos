@@ -589,13 +589,18 @@ Actor initial modules do not receive it implicitly.
 
 The same lifecycle placement applies to every other optional bootstrap-local
 grant of the RootActor initial module, including the D253-C1 `clock` slot
-(`../io/CLOCK.md`) and the D223-A1 `resolver` slot
+(`../io/CLOCK.md`), the D229-B1 `execution` slot
+(`../io/EXTERNAL_PROCESS.md`) and the D223-A1 `resolver` slot
 (`../io/PROCESS_IO.md`, Root resolver capability provisioning). The
 `std:network/resolvers` module (`../io/NETWORK.md` §14.1) and its grant are
 separate: importing that module yields only the authority-free `Resolver`
 protocol prototype and the `ResolutionError` prototype, installs no `resolver`
 slot, creates no Resolver capability, and initializes no name-service
 machinery. Neither member is a standard-prelude binding.
+
+Importing or loading SOURCE or MODULE code, including code from the
+distribution, a package or an embedding catalog, never grants external OS
+execution. No module exports the `execution` slot implicitly.
 
 ### Initial Modules Without an Importable Canonical Identity
 
