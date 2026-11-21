@@ -3359,7 +3359,8 @@ specification, project version or changelog was changed.
 | Protocol v4 acceptance | Pending |
 | Fourth campaign, protocol/helper group (9 tests) | Owner-reported 8 PASS, 1 FAIL (fixture comparison defect, corrected; re-run of that method PASS) |
 | Fourth campaign, both 16 MiB tests | FAIL: 120 s timeout during the first STEP |
-| v4 transport cost diagnostic (below) | Added; NOT RUN; results pending |
+| v4 transport cost diagnostic (below) | Owner-run: 64 KiB and 256 KiB, 2 warm-up + 3 measured repetitions, PASS (integrity) |
+| Canonical data-line reader and single-pass Base64url decode (below) | NOT RUN |
 
 The integration is **not accepted**.
 
@@ -3403,7 +3404,58 @@ production `IsolatedProtocol.protos`, without SQLite, FFM or Landlock. It
 measures separately the fragment range copy, Base64url encode and decode, JSON
 encode and parse of data lines, reassembly, strict UTF-8 decoding, and the
 complete v4 row write and read, for 64 KiB to 4 MiB (16 MiB optional), with
-warm-up and measured repetitions. Results: NOT RUN, pending.
+warm-up and measured repetitions. Results below.
+
+#### Measured v4 transport costs (owner-run, before the corrections)
+
+Sizes 64 KiB and 256 KiB; two warm-up and three measured repetitions; medians
+at 256 KiB, in µs per value octet:
+
+| Operation | µs/octet | Side |
+| --- | --- | --- |
+| `JSON.parse` of data lines | 6.45 | reader |
+| `Base64url.decode` | 5.05 | reader |
+| reassembly (`received.add`) | 0.20 | reader |
+| strict UTF-8 decode | 0.017 | reader |
+| complete v4 read | 11.8 | client |
+| `JSON.encode` of data lines | 1.77 | writer |
+| `Base64url.encode` | 1.72 | writer |
+| fragment copy | 0.31 | writer |
+| complete v4 write | 4.05 | helper |
+
+The complete read is the sum of its parts within measurement noise: JSON
+parsing is about 55 % of it and Base64url decoding about 43 %. Growth between
+the two sizes is close to linear (time ratio over size ratio 0.71 to 0.98) and
+measured GC pauses are small. A linear extrapolation to 16 MiB gives roughly
+200 s of reader CPU against the 120 s limit, consistent with the observed
+timeouts; it is an estimate, uncertain for GC and warm-up at that size.
+
+#### Corrections: canonical data-line reader and single-pass decode (NOT RUN)
+
+- `std:text/base64url` `decode` now makes one pass: each quartet is read once
+  and translated through a 256-entry Bytes table built once at module
+  initialization (alphabet octets to 0..63, every other octet to an invalid
+  marker). Length, alphabet, padding, whitespace, non-ASCII and trailing-bit
+  rules are unchanged; the result is fresh Bytes. `encode` is unchanged (it is
+  already one pass over an independent snapshot of its input). The public API
+  is unchanged.
+- `readColumns` takes every fragment after the first of a value without a
+  JSON tree when the line is byte for byte the canonical line the writer emits
+  for the expected version, sequence, session, correlation, value index, type,
+  total, fragment index and count; the expected line is built by the writer's
+  own line function with an empty payload. The payload is then validated by
+  canonical Base64url decoding, which also rejects any quote or backslash. Any
+  other line gets the previous full JSON schema validation. STEP, BIND and
+  APPLY_ONCE share this one reader. Writers, frames, limits, atomicity and the
+  admission/uncertainty contracts are unchanged.
+- Tests: new Base64url regressions (lengths and remainders, all non-alphabet
+  ASCII octets in every quartet position, non-ASCII input, both non-canonical
+  trailing forms, independence of results, a full 2304-octet fragment and
+  consecutive fragments); the two streamed protocol tests now also cover
+  duplicate, unknown and omitted members, malformed escapes, altered numbers,
+  truncated payloads, reordered or escaped schema-valid lines (accepted only
+  through full validation, and refused with another correlation) and a
+  fragment after the terminator.
 
 
 ### First integration campaign and corrections (NOT RUN)

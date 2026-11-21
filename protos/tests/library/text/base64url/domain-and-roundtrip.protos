@@ -124,7 +124,43 @@ tests: [
         Assertions.require(restored[0] == 255)
         Assertions.require(restored[1] == 255)
         Assertions.require(restored !== source)
+    }),
+    Test("invalid lengths are rejected", () => {
+        for(text in Array("A", "AAAAA", "AAAAAAAAA")) {
+            Assertions.signals(Error, () => { Base64url.decode(text) })
+        }
+        Assertions.require(Base64url.decode("").size() == 0)
+    }),
+    Test("decoded and encoded Bytes stay independent of their sources", () => {
+        source: bytes(7, 5)
+        encoded: Base64url.encode(source)
+        source[0] = 8
+        Assertions.require(Base64url.encode(bytes(7, 5)) == encoded)
+        first: Base64url.decode(encoded)
+        second: Base64url.decode(encoded)
+        first[0] = 9
+        Assertions.require((second[0] == 7) && (first !== second))
+    }),
+    Test("a full 2304-octet fragment and consecutive fragments roundtrip", () => {
+        whole: Encoding.Latin1.encode("")
+        index: 0
+        while(index < (3 * 2304 + 5)) { whole.add((index * 31 + index.div(256)) % 256); index = index + 1 }
+        restored: Encoding.Latin1.encode("")
+        start: 0
+        while(start < whole.size()) {
+            end: start + 2304
+            if(end > whole.size()) { end = whole.size() }
+            fragment: Encoding.Latin1.encode("")
+            position: start
+            while(position < end) { fragment.add(whole[position]); position = position + 1 }
+            encoded: Base64url.encode(fragment)
+            if((end - start) == 2304) { Assertions.require(Encoding.UTF8.encode(encoded).size() == 3072) }
+            decoded: Base64url.decode(encoded)
+            Assertions.require(decoded.size() == fragment.size())
+            for(octet in decoded) { restored.add(octet) }
+            start = end
+        }
+        Assertions.require(Encoding.Latin1.decode(restored) == Encoding.Latin1.decode(whole))
     })
-
 ]
 tests.freeze()

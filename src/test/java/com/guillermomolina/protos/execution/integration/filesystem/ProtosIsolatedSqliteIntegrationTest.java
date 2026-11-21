@@ -908,6 +908,36 @@ final class ProtosIsolatedSqliteIntegrationTest {
                     copy[index] = line
                     copy
                 }
+                // Raw-line edits of canonical frames (fast-path bypass attempts).
+                afterOctets: (line, start) => {
+                    octets: Encoding.UTF8.encode(line)
+                    rest: Encoding.Latin1.encode("")
+                    position: start
+                    while(position < octets.size()) { rest.add(octets[position]); position = position + 1 }
+                    Encoding.UTF8.decode(rest)
+                }
+                inserted: (line, text) => "{" + text + afterOctets(line, 1)
+                omitted: (line, name) => {
+                    pairs: Array()
+                    JSON.parse(line).value.each((key, value) => { if(key != name) { pairs = Arrays.append(Arrays.append(pairs, key), value) } })
+                    JSON.encode(JSON.object(...pairs))
+                }
+                payloadFirst: (line) => {
+                    members: JSON.parse(line).value
+                    pairs: Array("d", members["d"])
+                    members.each((key, value) => { if(key != "d") { pairs = Arrays.append(Arrays.append(pairs, key), value) } })
+                    JSON.encode(JSON.object(...pairs))
+                }
+                hexDigits: Encoding.UTF8.encode("0123456789abcdef")
+                // The same JSON value with its first payload character as a \u escape.
+                escapedPayload: (line) => {
+                    first: payloadFirst(line)
+                    code: Encoding.UTF8.encode(first)[6]
+                    escape: Encoding.Latin1.encode("")
+                    escape.add(hexDigits[code.div(16)])
+                    escape.add(hexDigits[code % 16])
+                    "{\\"d\\":\\"\\\\u00" + Encoding.Latin1.decode(escape) + afterOctets(first, 7)
+                }
                 // TEXT whose UTF-8 is split inside a 2-octet scalar at the first
                 // fragment boundary and inside a 4-octet scalar at the second.
                 text: ""
@@ -974,6 +1004,27 @@ final class ProtosIsolatedSqliteIntegrationTest {
                 // TEXT/BLOB values never travel as a single cell line.
                 expectFailure(() => capture((sink) => Protocol.writeRow(sink, 2, 7, 1,
                     Array(Protocol.rowColumn(Protocol.encodeValue("x"), false, null)))))
+                // Canonical fast path versus full validation of a later fragment (frames[7]).
+                expectFailure(() => read(replaced(frames, 7, inserted(frames[7], "\\"i\\":1,")), 2, 7, 1))
+                expectFailure(() => read(replaced(frames, 7, inserted(frames[7], "\\"x\\":0,")), 2, 7, 1))
+                expectFailure(() => read(replaced(frames, 7, omitted(frames[7], "n")), 2, 7, 1))
+                expectFailure(() => read(replaced(frames, 7, omitted(frames[7], "re")), 2, 7, 1))
+                expectFailure(() => read(replaced(frames, 7, inserted(frames[7], "\\"q\\":\\"\\\\q\\",")), 2, 7, 1))
+                expectFailure(() => read(replaced(frames, 7, edit(frames[7], "i", JSON.number(2, 0))), 2, 7, 1))
+                expectFailure(() => read(replaced(frames, 7, edit(frames[7], "c", JSON.number(2, 0))), 2, 7, 1))
+                expectFailure(() => read(replaced(frames, 7, edit(frames[7], "s", JSON.number(3, 0))), 2, 7, 1))
+                expectFailure(() => read(replaced(frames, 7, edit(frames[7], "d", JSON.string("AAAA"))), 2, 7, 1))
+                // A reordered or escaped but schema-valid line takes the full
+                // validation path: still accepted with exact values, while a
+                // reordered line with another correlation is still refused.
+                Assertions.require(read(replaced(frames, 7, payloadFirst(frames[7])), 2, 7, 1).columns[3].value.size() == 5000)
+                Assertions.require(read(replaced(frames, 7, escapedPayload(frames[7])), 2, 7, 1).columns[3].value.size() == 5000)
+                expectFailure(() => read(replaced(frames, 7, payloadFirst(edit(frames[7], "re", JSON.number(2, 0)))), 2, 7, 1))
+                expectFailure(() => read(replaced(frames, 7, payloadFirst(edit(frames[7], "session", JSON.number(8, 0)))), 2, 7, 1))
+                // A fragment after the terminator is not part of the completed row.
+                late: read(Arrays.concat(frames, Arrays.slice(frames, 7, 8)), 2, 7, 1)
+                Assertions.require((late.columns.size() == 5) && (late.columns[3].value.size() == 5000))
+                Assertions.require(late.columns[2].value == text)
                 // A later small reply of a new session uses the ordinary message path.
                 small: Protocol.encodeResponse(8, 1, "STEP", Array(JSON.number(101, 0), JSON.nullValue()))
                 ordinary: read(capture((sink) => Protocol.writeMessage(sink, 2, small)), 2, 8, 1)
@@ -1030,6 +1081,36 @@ final class ProtosIsolatedSqliteIntegrationTest {
                     copy: Array()
                     for(line in lines) { copy = Arrays.append(copy, edit(line, name, node)) }
                     copy
+                }
+                // Raw-line edits of canonical frames (fast-path bypass attempts).
+                afterOctets: (line, start) => {
+                    octets: Encoding.UTF8.encode(line)
+                    rest: Encoding.Latin1.encode("")
+                    position: start
+                    while(position < octets.size()) { rest.add(octets[position]); position = position + 1 }
+                    Encoding.UTF8.decode(rest)
+                }
+                inserted: (line, text) => "{" + text + afterOctets(line, 1)
+                omitted: (line, name) => {
+                    pairs: Array()
+                    JSON.parse(line).value.each((key, value) => { if(key != name) { pairs = Arrays.append(Arrays.append(pairs, key), value) } })
+                    JSON.encode(JSON.object(...pairs))
+                }
+                payloadFirst: (line) => {
+                    members: JSON.parse(line).value
+                    pairs: Array("d", members["d"])
+                    members.each((key, value) => { if(key != "d") { pairs = Arrays.append(Arrays.append(pairs, key), value) } })
+                    JSON.encode(JSON.object(...pairs))
+                }
+                hexDigits: Encoding.UTF8.encode("0123456789abcdef")
+                // The same JSON value with its first payload character as a \u escape.
+                escapedPayload: (line) => {
+                    first: payloadFirst(line)
+                    code: Encoding.UTF8.encode(first)[6]
+                    escape: Encoding.Latin1.encode("")
+                    escape.add(hexDigits[code.div(16)])
+                    escape.add(hexDigits[code % 16])
+                    "{\\"d\\":\\"\\\\u00" + Encoding.Latin1.decode(escape) + afterOctets(first, 7)
                 }
                 // TEXT of 131072 octets: NUL and multi-octet scalars cross fragment boundaries.
                 text: "a\\u{0}\\u{E9}\\u{1F642}"
@@ -1090,6 +1171,15 @@ final class ProtosIsolatedSqliteIntegrationTest {
                 expectFailure(() => read(replaced(frames, 9, extended(frames[9], "statement", JSON.number(4, 0))), 4))
                 expectFailure(() => read(replaced(frames, 9, edit(frames[9], "c", JSON.number(1, 0))), 4))
                 expectFailure(() => read(replaced(frames, 32, extended(frames[32], "index", JSON.number(2, 0))), 4))
+                // Raw-line bypass attempts on a later fragment (frames[9]).
+                expectFailure(() => read(replaced(frames, 9, inserted(frames[9], "\\"i\\":8,")), 4))
+                expectFailure(() => read(replaced(frames, 9, inserted(frames[9], "\\"x\\":0,")), 4))
+                expectFailure(() => read(replaced(frames, 9, omitted(frames[9], "id")), 4))
+                expectFailure(() => read(replaced(frames, 9, inserted(frames[9], "\\"q\\":\\"\\\\q\\",")), 4))
+                expectFailure(() => read(replaced(frames, 9, edit(frames[9], "d", JSON.string("AAAA"))), 4))
+                Assertions.require(read(replaced(frames, 9, payloadFirst(frames[9])), 4).values[0].size() == 70000)
+                Assertions.require(read(replaced(frames, 9, escapedPayload(frames[9])), 4).values[0].size() == 70000)
+                expectFailure(() => read(replaced(frames, 9, payloadFirst(edit(frames[9], "id", JSON.number(5, 0)))), 4))
                 // Incorrect declared total and type, and a value beyond 16 MiB.
                 expectFailure(() => read(replaced(frames, 1, edit(frames[1], "o", JSON.number(70001, 0))), 4))
                 expectFailure(() => read(replaced(frames, 9, edit(frames[9], "t", JSON.string("text"))), 4))

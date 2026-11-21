@@ -699,13 +699,50 @@ _isolatedProtocol: (() => {
         members
     }
 
+    // The payload text of `line` when it is byte for byte the canonical data
+    // line `expected`, as the writer encodes it, with that payload in place of
+    // the empty "d" string; otherwise null. `expected` ends with `"d":""}`, so
+    // every member other than the payload, their order, the correlation and the
+    // closing brace are fixed by it. The payload is only located here: it is
+    // validated as canonical Base64url by its decoding, which also rejects any
+    // quote, backslash or non-alphabet octet, so it cannot change the framing.
+    canonicalPayload: (line, expected) => {
+        octets: Encoding.UTF8.encode(line)
+        pattern: Encoding.UTF8.encode(expected)
+        // The pattern up to and including the payload's opening quote.
+        prefix: pattern.size() - 2
+        result: null
+        if(octets.size() >= pattern.size()) {
+            last: octets.size() - 1
+            matches: (octets[last - 1] == 34) && (octets[last] == 125)
+            index: 0
+            while(matches && (index < prefix)) {
+                matches = octets[index] == pattern[index]
+                index = index + 1
+            }
+            if(matches) {
+                payload: Encoding.Latin1.encode("")
+                while(index < (last - 1)) {
+                    payload.add(octets[index])
+                    index = index + 1
+                }
+                result = Encoding.Latin1.decode(payload)
+            }
+        }
+        result
+    }
+
     // The `count` cell/data values following a stream header, each {node, value,
     // size}: a cell node carrying one of `tags`, or the decoded TEXT String or
     // fresh BLOB Bytes of `size` octets. Answers null when the channel ended
     // first; nothing partial is answered. membersOf(node, kind, names) checks
-    // the shared line prefix. Every line is counted in the logical aggregate,
-    // and a value's declared size is bounded before any fragment is accepted.
-    readColumns: (reader, count, membersOf, tags) => {
+    // the shared line prefix and lineFor(kind, pairs) builds the canonical line
+    // the writer emits for this stream. Every line is counted in the logical
+    // aggregate, and a value's declared size is bounded before any fragment is
+    // accepted. A later fragment that is exactly its canonical line is taken
+    // without building a JSON tree; any other line gets the full JSON schema
+    // validation, so no line is accepted that the schema would reject.
+    readColumns: (reader, count, membersOf, lineFor, tags) => {
         dataNames: Array("c", "t", "o", "i", "n", "d")
         columns: Array()
         aggregate: 0
@@ -737,7 +774,9 @@ _isolatedProtocol: (() => {
                     (fragments == fragmentCount(total)).ifFalse(() => { fail() })
                     aggregate = aggregate + dataCost(tag, total)
                     (aggregate <= MESSAGE_LIMIT).ifFalse(() => { fail() })
+                    (i64(members["i"]) == 0).ifFalse(() => { fail() })
                     received: Encoding.Latin1.encode("")
+                    encoded: string(members["d"])
                     fragment: 0
                     while(!ended && (fragment < fragments)) {
                         if(fragment > 0) {
@@ -745,14 +784,20 @@ _isolatedProtocol: (() => {
                             if(line === null) {
                                 ended = true
                             } else {
-                                members = membersOf(JSON.parse(line), "data", dataNames)
-                                ((i64(members["c"]) == index) && (string(members["t"]) == tag) &&
-                                    (i64(members["o"]) == total) && (i64(members["n"]) == fragments)).ifFalse(() => { fail() })
+                                encoded = canonicalPayload(line, lineFor("data", Array(
+                                    "c", integerNode(index), "t", JSON.string(tag), "o", integerNode(total),
+                                    "i", integerNode(fragment), "n", integerNode(fragments), "d", JSON.string(""))))
+                                if(encoded === null) {
+                                    members = membersOf(JSON.parse(line), "data", dataNames)
+                                    ((i64(members["c"]) == index) && (string(members["t"]) == tag) &&
+                                        (i64(members["o"]) == total) && (i64(members["n"]) == fragments) &&
+                                        (i64(members["i"]) == fragment)).ifFalse(() => { fail() })
+                                    encoded = string(members["d"])
+                                }
                             }
                         }
                         if(!ended) {
-                            (i64(members["i"]) == fragment).ifFalse(() => { fail() })
-                            for(octet in fragmentOctets(string(members["d"]), fragment, fragments, total)) {
+                            for(octet in fragmentOctets(encoded, fragment, fragments, total)) {
                                 received.add(octet)
                             }
                             fragment = fragment + 1
@@ -780,11 +825,12 @@ _isolatedProtocol: (() => {
     // Answers the remaining streamed row after its header line, or null at EOF.
     readRowFrom: (reader, headerNode, seq, session, re) => {
         membersOf: (node, kind, names) => streamMembers(node, rowFields, "re", kind, names, seq, session, re)
+        lineFor: (kind, pairs) => streamLine("re", seq, session, re, kind, pairs)
         header: membersOf(headerNode, "row", Array("code", "columns"))
         (i64(header["code"]) == ROW_CODE).ifFalse(() => { fail() })
         count: i64(header["columns"])
         ((count >= 1) && (count <= MAX_COLUMNS)).ifFalse(() => { fail() })
-        columns: readColumns(reader, count, membersOf, scalarTags)
+        columns: readColumns(reader, count, membersOf, lineFor, scalarTags)
         row: null
         if(columns !== null) {
             line: readFrameLine(reader)
@@ -904,10 +950,11 @@ _isolatedProtocol: (() => {
         requestId: id(prefix["id"])
         membersOf: (node, kind, lineNames) => streamMembers(node, requestFields, "id", kind, lineNames,
             seq, session, requestId)
+        lineFor: (kind, pairs) => streamLine("id", seq, session, requestId, kind, pairs)
         header: membersOf(headerNode, "bind", names)
         count: i64(header["values"])
         ((count >= 1) && (count <= MAX_COLUMNS)).ifFalse(() => { fail() })
-        columns: readColumns(reader, count, membersOf, parameterTags)
+        columns: readColumns(reader, count, membersOf, lineFor, parameterTags)
         admitted: null
         if(columns !== null) {
             line: readFrameLine(reader)

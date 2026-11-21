@@ -22,27 +22,24 @@ alphabet: Encoding.Latin1.encode(
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
 )
 
-digit: (octet) => {
-    value: -1
-
-    if((octet >= 65) && (octet <= 90)) {
-        value = octet - 65
+// Decoding table built once at module initialization: entry o is the 6-bit
+// value of alphabet octet o (0..63), and INVALID for every other octet,
+// including '=', '+', '/', whitespace and all non-ASCII octets.
+INVALID: 255
+values: (() => {
+    table: Encoding.Latin1.encode("")
+    octet: 0
+    while(octet < 256) {
+        table.add(INVALID)
+        octet = octet + 1
     }
-    if((octet >= 97) && (octet <= 122)) {
-        value = octet - 97 + 26
+    index: 0
+    while(index < 64) {
+        table[alphabet[index]] = index
+        index = index + 1
     }
-    if((octet >= 48) && (octet <= 57)) {
-        value = octet - 48 + 52
-    }
-    if(octet == 45) {
-        value = 62
-    }
-    if(octet == 95) {
-        value = 63
-    }
-
-    value
-}
+    table
+})()
 
 snapshot: (value) => {
     copy: null
@@ -117,22 +114,20 @@ decode: (text) => {
         Error().signal()
     })
 
+    // One pass: each quartet is read once and translated through the table.
+    // An INVALID entry makes the OR of the four values exceed 63.
+    output: Encoding.Latin1.encode("")
     index: 0
-    while(index < count) {
-        (digit(source[index]) < 0).ifTrue(() => {
-            Error().signal()
-        })
-        index = index + 1
-    }
-
-    output: Encoding.UTF8.encode("")
-    index = 0
 
     while((index + 4) <= count) {
-        a: digit(source[index])
-        b: digit(source[index + 1])
-        c: digit(source[index + 2])
-        d: digit(source[index + 3])
+        a: values[source[index]]
+        b: values[source[index + 1]]
+        c: values[source[index + 2]]
+        d: values[source[index + 3]]
+
+        ((a | b | c | d) > 63).ifTrue(() => {
+            Error().signal()
+        })
 
         output.add((a << 2) | (b >> 4))
         output.add(((b & 15) << 4) | (c >> 2))
@@ -144,10 +139,10 @@ decode: (text) => {
     remaining: count - index
 
     if(remaining == 2) {
-        a: digit(source[index])
-        b: digit(source[index + 1])
+        a: values[source[index]]
+        b: values[source[index + 1]]
 
-        ((b & 15) != 0).ifTrue(() => {
+        (((a | b) > 63) || ((b & 15) != 0)).ifTrue(() => {
             Error().signal()
         })
 
@@ -155,11 +150,11 @@ decode: (text) => {
     }
 
     if(remaining == 3) {
-        a: digit(source[index])
-        b: digit(source[index + 1])
-        c: digit(source[index + 2])
+        a: values[source[index]]
+        b: values[source[index + 1]]
+        c: values[source[index + 2]]
 
-        ((c & 3) != 0).ifTrue(() => {
+        (((a | b | c) > 63) || ((c & 3) != 0)).ifTrue(() => {
             Error().signal()
         })
 

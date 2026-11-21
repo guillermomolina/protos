@@ -75,6 +75,58 @@ tests: [
         Assertions.signals(Error, () => { Base64url.decode("Zm9") })
         Assertions.require(Base64url.encode(Base64url.decode("Zg")) == "Zg")
         Assertions.require(Base64url.encode(Base64url.decode("Zm8")) == "Zm8")
+    }),
+    Test("one, two and three octets and every length remainder", () => {
+        Assertions.require(Base64url.encode(octets(Array(0))) == "AA")
+        Assertions.require(Base64url.encode(octets(Array(0, 0))) == "AAA")
+        Assertions.require(Base64url.encode(octets(Array(0, 0, 0))) == "AAAA")
+        Assertions.require(Base64url.encode(octets(Array(255))) == "_w")
+        Assertions.require(Base64url.encode(octets(Array(255, 255))) == "__8")
+        Assertions.require(Base64url.encode(octets(Array(255, 255, 255))) == "____")
+        size: 0
+        while(size < 10) {
+            source: octets(Array())
+            index: 0
+            while(index < size) { source.add((index * 37 + 200) % 256); index = index + 1 }
+            encoded: Base64url.encode(source)
+            Assertions.require(Encoding.UTF8.encode(encoded).size() == ((size.div(3) * 4) + Array(0, 2, 3)[size % 3]))
+            Assertions.require(same(Base64url.decode(encoded), source))
+            size = size + 1
+        }
+    }),
+    Test("NUL and high octets keep their exact values", () => {
+        source: octets(Array(0, 0, 127, 128, 0, 255, 0))
+        Assertions.require(same(Base64url.decode(Base64url.encode(source)), source))
+    }),
+    Test("every non-alphabet octet is rejected in every quartet position", () => {
+        valid: Encoding.UTF8.encode("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_")
+        octet: 0
+        while(octet < 128) {
+            member: false
+            for(candidate in valid) { if(candidate == octet) { member = true } }
+            if(!member) {
+                position: 0
+                while(position < 4) {
+                    quartet: octets(Array(65, 65, 65, 65))
+                    quartet[position] = octet
+                    Assertions.signals(Error, () => { Base64url.decode(Encoding.Latin1.decode(quartet)) })
+                    position = position + 1
+                }
+            }
+            octet = octet + 1
+        }
+        Assertions.signals(Error, () => { Base64url.decode("AA\u{E9}A") })
+        Assertions.signals(Error, () => { Base64url.decode("\u{1F642}") })
+        Assertions.signals(Error, () => { Base64url.decode("AAAA\u{0}AAA") })
+    }),
+    Test("non-canonical trailing bits in both partial quartet forms", () => {
+        Assertions.signals(Error, () => { Base64url.decode("AB") })
+        Assertions.signals(Error, () => { Base64url.decode("_x") })
+        Assertions.signals(Error, () => { Base64url.decode("AAB") })
+        Assertions.signals(Error, () => { Base64url.decode("__9") })
+        Assertions.signals(Error, () => { Base64url.decode("AAAAAB") })
+        Assertions.signals(Error, () => { Base64url.decode("AAAAAAB") })
+        Assertions.require(same(Base64url.decode("AAAAAQ"), octets(Array(0, 0, 0, 1))))
     })
 ]
 tests.freeze()
