@@ -32,12 +32,52 @@
 //! mantissa and binary exponent, or a named special value), String (TEXT, as a
 //! strict UTF-8 Base64url string, preserving NUL and non-ASCII scalars) and
 //! Bytes (BLOB, as canonical Base64url text). No lossy encoding is used.
+//!
+//! Streamed STEP rows: a STEP row holding a TEXT/BLOB value larger than
+//! STREAM_THRESHOLD octets is not one logical message. It travels as the frame
+//! lines of one reply sequence, so no value is encoded, serialized or copied
+//! as a whole before the first line is written. Every such line is an exact
+//! object {"v","s","k","session","re", ...}: protocol version, the reply
+//! sequence (shared by every line of the reply), line kind, session and the
+//! correlated request id, followed by the members of its kind:
+//!   "row":  {"code","columns"}: SQLITE_ROW and the column count;
+//!   "cell": {"c","value"}: column c as a null, integer, float or failure node;
+//!   "data": {"c","t","o","i","n","d"}: fragment i of n of column c, a "text" or
+//!           "blob" value of o octets in total;
+//!   "end":  {"columns"}: the row is complete.
+//! Each column appears once, in ascending order; a TEXT/BLOB column is exactly
+//! its n consecutive fragments, n = max(1, ceil(o / CHUNK_OCTETS)). Fragment i
+//! holds octets [i * CHUNK_OCTETS, min(o, (i + 1) * CHUNK_OCTETS)) and d is the
+//! canonical Base64url of that fragment alone: fragments are decoded one by
+//! one, never by concatenating their text. TEXT is decoded as strict UTF-8 only
+//! after its last fragment, since a fragment may split a multi-octet sequence.
+//! A row is answered only after its terminator; a missing, repeated, reordered,
+//! foreign, oversized or trailing line rejects it, and EOF discards it.
+//!
+//! Streamed SQL parameters: a BIND or APPLY_ONCE request carrying a TEXT/BLOB
+//! parameter larger than STREAM_THRESHOLD octets is not one logical message
+//! either. It travels as the lines of its request sequence, each an exact object
+//! {"v","s","k","session","id", ...} shared by every line of the request:
+//!   "bind": {"op", <scalar arguments>, "values"}: the operation, its scalar
+//!           arguments ("statement","index" for BIND; "client","operation" for
+//!           APPLY_ONCE) and the number of values that follow;
+//!   "cell" and "data": exactly as in a streamed row, value c taking the place
+//!           of column c; a cell carries only a null, integer or float node;
+//!   "end":  {"values"}: the request is complete.
+//! BIND carries exactly its one value; APPLY_ONCE carries its SQL as TEXT value
+//! 0 followed by its parameters. TEXT/BLOB values always travel as data
+//! fragments, and the streamed form is used exactly when a parameter exceeds
+//! STREAM_THRESHOLD octets, so no request has two encodings. A request is
+//! admitted only after its terminator and the validation of every line.
+//!
+//! Streamed lines are flushed every FLUSH_LINES lines and after the terminator,
+//! so a large row or request advances on the channel with bounded buffering.
 JSON: import("std:json/json")
 Base64url: import("std:text/base64url")
 Arrays: import("std:collections/array")
 
 _isolatedProtocol: (() => {
-    version: 3
+    version: 4
     LINE_LIMIT: 4096
     // 2304 octets encode to exactly 3072 Base64url characters, leaving room for
     // the fixed frame fields below LINE_LIMIT.
@@ -45,6 +85,23 @@ _isolatedProtocol: (() => {
     // One logical message: enough for two maximal (16 MiB) values after the
     // 4/3 Base64url expansion of TEXT/BLOBs plus JSON structure.
     MESSAGE_LIMIT: 50331648
+    // The public per-value limit: one TEXT (UTF-8 octets) or BLOB value.
+    VALUE_LIMIT: 16777216
+    // Internal transport choice only: a row with a larger TEXT/BLOB is streamed.
+    STREAM_THRESHOLD: 65536
+    // SQLite's hard upper bound on the columns of a result row.
+    MAX_COLUMNS: 32767
+    // SQLITE_ROW: the only status a streamed row carries.
+    ROW_CODE: 100
+    // Upper bound of the metadata of one data line (every member but the
+    // payload text), counted per fragment in the logical aggregate.
+    FRAGMENT_OVERHEAD: 256
+    // Streamed lines between flushes: at most 256 KiB of buffered lines.
+    FLUSH_LINES: 64
+    rowFields: Array("v", "s", "k", "session", "re")
+    requestFields: Array("v", "s", "k", "session", "id")
+    scalarTags: Array("null", "integer", "float", "failure")
+    parameterTags: Array("null", "integer", "float")
     maxInteger: 9223372036854775807
     minInteger: 0 - 9223372036854775807 - 1
     frameFields: Array("v", "s", "i", "n", "o", "d")
@@ -270,6 +327,18 @@ _isolatedProtocol: (() => {
         node
     }
 
+    /// Strict UTF-8 TEXT of complete `octets`.
+    decodeText: (octets) => {
+        result: Encoding.UTF8.decode(octets)
+        // A leading BOM is TEXT data, not an IPC encoding marker.
+        if(octets.size() >= 3) {
+            if((octets[0] == 239) && (octets[1] == 187) && (octets[2] == 191)) {
+                result = "\u{FEFF}" + result
+            }
+        }
+        result
+    }
+
     /// The fresh value of one value node. Signals for any other shape.
     decodeValue: (node) => {
         (node.kind === "object").ifFalse(() => { fail() })
@@ -289,14 +358,7 @@ _isolatedProtocol: (() => {
                     result = i64(members["v"])
                 } else {
                     if(tag == "text") {
-                        octets: Base64url.decode(string(members["v"]))
-                        result = Encoding.UTF8.decode(octets)
-                        // A leading BOM is TEXT data, not an IPC encoding marker.
-                        if(octets.size() >= 3) {
-                            if((octets[0] == 239) && (octets[1] == 187) && (octets[2] == 191)) {
-                                result = "\u{FEFF}" + result
-                            }
-                        }
+                        result = decodeText(Base64url.decode(string(members["v"])))
                     } else {
                         (tag == "blob").ifFalse(() => { fail() })
                         result = Base64url.decode(string(members["v"]))
@@ -309,40 +371,93 @@ _isolatedProtocol: (() => {
 
     // ---- framing ------------------------------------------------------------
 
-    /// Writes one logical message `text` with sequence `seq` as bounded frames.
-    writeMessage: (writer, seq, text) => {
-        isId(seq).ifFalse(() => { fail() })
-        octets: Encoding.UTF8.encode(text)
-        total: octets.size()
-        (total <= MESSAGE_LIMIT).ifFalse(() => { fail() })
+    // Streamed line output over `writer`: every line is bounded, lines are
+    // flushed every FLUSH_LINES lines, and finish() flushes the remainder.
+    lineSink: (writer) => {
+        pending: 0
+        sink: {
+            write: (line) => {
+                (Encoding.UTF8.encode(line).size() <= LINE_LIMIT).ifFalse(() => { fail() })
+                writer.writeLine(line).value()
+                pending = pending + 1
+                if(pending >= FLUSH_LINES) {
+                    writer.flush().value()
+                    pending = 0
+                }
+            }
+            finish: () => {
+                writer.flush().value()
+                pending = 0
+            }
+        }
+        sink
+    }
+
+    fragmentCount: (total) => {
         count: (total + CHUNK_OCTETS - 1).div(CHUNK_OCTETS)
         if(count == 0) { count = 1 }
-        index: 0
-        while(index < count) {
-            chunk: Encoding.UTF8.encode("")
-            position: index * CHUNK_OCTETS
+        count
+    }
+
+    // Writes `octets` as consecutive fragments: fragment i of n holds octets
+    // [i * CHUNK_OCTETS, min(total, (i + 1) * CHUNK_OCTETS)) and its line is
+    // lineFor(i, n, canonical Base64url of that fragment alone).
+    writeFragments: (sink, octets, lineFor) => {
+        total: octets.size()
+        fragments: fragmentCount(total)
+        fragment: 0
+        while(fragment < fragments) {
+            chunk: Encoding.Latin1.encode("")
+            position: fragment * CHUNK_OCTETS
             end: position + CHUNK_OCTETS
             if(end > total) { end = total }
             while(position < end) {
                 chunk.add(octets[position])
                 position = position + 1
             }
-            line: JSON.encode(JSON.object("v", integerNode(version), "s", integerNode(seq),
-                "i", integerNode(index), "n", integerNode(count), "o", integerNode(total),
-                "d", JSON.string(Base64url.encode(chunk))))
-            (Encoding.UTF8.encode(line).size() <= LINE_LIMIT).ifFalse(() => { fail() })
-            writer.writeLine(line).value()
-            index = index + 1
+            sink.write(lineFor(fragment, fragments, Base64url.encode(chunk)))
+            fragment = fragment + 1
         }
-        writer.flush().value()
+    }
+
+    // The fresh octets of fragment `fragment` of `fragments` of a `total`-octet
+    // value from its canonical Base64url `encoded`; any other size signals.
+    fragmentOctets: (encoded, fragment, fragments, total) => {
+        chunk: Base64url.decode(encoded)
+        expectedSize: CHUNK_OCTETS
+        if(fragment == (fragments - 1)) {
+            expectedSize = total - (CHUNK_OCTETS * (fragments - 1))
+        }
+        (chunk.size() == expectedSize).ifFalse(() => { fail() })
+        chunk
+    }
+
+    /// Writes one logical message `text` with sequence `seq` as bounded frames.
+    writeMessage: (writer, seq, text) => {
+        isId(seq).ifFalse(() => { fail() })
+        octets: Encoding.UTF8.encode(text)
+        total: octets.size()
+        (total <= MESSAGE_LIMIT).ifFalse(() => { fail() })
+        sink: lineSink(writer)
+        writeFragments(sink, octets, (index, count, encoded) => JSON.encode(JSON.object(
+            "v", integerNode(version), "s", integerNode(seq),
+            "i", integerNode(index), "n", integerNode(count), "o", integerNode(total),
+            "d", JSON.string(encoded))))
+        sink.finish()
         null
     }
 
-    /// Reads the logical message with sequence `seq`. Answers its text, or null
-    /// when the channel ended (EOF or a broken stream) before the message was
-    /// complete; a partial message is discarded, never admitted. Any frame that
-    /// violates the transport contract signals an Error.
-    readMessage: (reader, seq) => {
+    // One bounded frame line, or null at the end of the channel.
+    readFrameLine: (reader) => {
+        line: reader.readLine(LINE_LIMIT).value()
+        if(line !== null) {
+            (Encoding.UTF8.encode(line).size() <= LINE_LIMIT).ifFalse(() => { fail() })
+        }
+        line
+    }
+
+    // readMessage whose first frame line, when not null, was already read.
+    readMessageFrom: (reader, seq, firstLine) => {
         isId(seq).ifFalse(() => { fail() })
         received: Encoding.UTF8.encode("")
         expectedIndex: 0
@@ -350,13 +465,14 @@ _isolatedProtocol: (() => {
         total: null
         complete: false
         ended: false
+        pending: firstLine
         while(!complete && !ended) {
-            line: null
-            line = reader.readLine(LINE_LIMIT).value()
+            line: pending
+            pending = null
+            if(line === null) { line = readFrameLine(reader) }
             if(line === null) {
                 ended = true
             } else {
-                (Encoding.UTF8.encode(line).size() <= LINE_LIMIT).ifFalse(() => { fail() })
                 members: requireExactObject(JSON.parse(line), frameFields)
                 (i64(members["v"]) == version).ifFalse(() => { fail() })
                 (i64(members["s"]) == seq).ifFalse(() => { fail() })
@@ -366,20 +482,13 @@ _isolatedProtocol: (() => {
                 if(count === null) {
                     // Bounded before any chunk is accepted.
                     ((frameTotal >= 0) && (frameTotal <= MESSAGE_LIMIT)).ifFalse(() => { fail() })
-                    expectedCount: (frameTotal + CHUNK_OCTETS - 1).div(CHUNK_OCTETS)
-                    if(expectedCount == 0) { expectedCount = 1 }
-                    (frameCount == expectedCount).ifFalse(() => { fail() })
+                    (frameCount == fragmentCount(frameTotal)).ifFalse(() => { fail() })
                     count = frameCount
                     total = frameTotal
                 } else {
                     ((frameCount == count) && (frameTotal == total)).ifFalse(() => { fail() })
                 }
-                chunk: Base64url.decode(string(members["d"]))
-                expectedSize: CHUNK_OCTETS
-                if(expectedIndex == (count - 1)) {
-                    expectedSize = total - (CHUNK_OCTETS * (count - 1))
-                }
-                (chunk.size() == expectedSize).ifFalse(() => { fail() })
+                chunk: fragmentOctets(string(members["d"]), expectedIndex, count, total)
                 for(octet in chunk) {
                     received.add(octet)
                 }
@@ -393,6 +502,461 @@ _isolatedProtocol: (() => {
             text = Encoding.UTF8.decode(received)
         }
         text
+    }
+
+    /// Reads the logical message with sequence `seq`. Answers its text, or null
+    /// when the channel ended (EOF or a broken stream) before the message was
+    /// complete; a partial message is discarded, never admitted. Any frame that
+    /// violates the transport contract signals an Error.
+    readMessage: (reader, seq) => readMessageFrom(reader, seq, null)
+
+    // ---- streamed rows and requests ---------------------------------------------
+
+    base64Length: (octets) => {
+        length: octets.div(3) * 4
+        rest: octets % 3
+        if(rest == 1) { length = length + 2 }
+        if(rest == 2) { length = length + 3 }
+        length
+    }
+
+    hasTag: (node, tags) => {
+        result: false
+        if(node.kind === "object") {
+            if(node.value.containsKey("t")) {
+                tag: node.value["t"]
+                if(tag.kind === "string") {
+                    for(name in tags) { if(tag.value == name) { result = true } }
+                }
+            }
+        }
+        result
+    }
+
+    dataTag: (column) => {
+        tag: "blob"
+        if(column.text) { tag = "text" }
+        tag
+    }
+
+    /// One row column for the helper, or one request value for the client: a
+    /// scalar or failure value `node`, or the copied `octets` of a TEXT (`text`
+    /// true, UTF-8) or BLOB value.
+    rowColumn: (node, text, octets) => {
+        column: {
+            node: node
+            text: text
+            octets: octets
+        }
+        column
+    }
+
+    // Logical cost of a `tag` value of `total` octets streamed as fragments: its
+    // value node with an empty payload, the exact Base64url length and the
+    // bounded metadata of each fragment line. Writer and reader use the same sum.
+    dataCost: (tag, total) => Encoding.UTF8.encode(JSON.encode(JSON.object("t", JSON.string(tag),
+        "v", JSON.string("")))).size() + base64Length(total) + (fragmentCount(total) * FRAGMENT_OVERHEAD)
+
+    cellCost: (node) => Encoding.UTF8.encode(JSON.encode(node)).size() + 1
+
+    /// Logical octets of `column` within one row or request, computed without
+    /// encoding a TEXT/BLOB value.
+    columnSize: (column) => {
+        size: 0
+        if(column.octets === null) {
+            size = cellCost(column.node)
+        } else {
+            size = dataCost(dataTag(column), column.octets.size())
+        }
+        size
+    }
+
+    /// The canonical value node of `column`, as encodeValue answers it.
+    columnNode: (column) => {
+        node: column.node
+        if(column.octets !== null) {
+            node = JSON.object("t", JSON.string(dataTag(column)), "v", JSON.string(Base64url.encode(column.octets)))
+        }
+        node
+    }
+
+    /// The request value column of an SQL parameter `value`: TEXT as its strict
+    /// UTF-8 octets, BLOB as a private copy of its octets (later mutation of the
+    /// caller's Bytes cannot reach the wire), any other value as its node.
+    /// Signals beyond the public per-value limit, before any frame is written.
+    requestColumn: (value) => {
+        column: null
+        if(String.recognizes(value)) {
+            column = rowColumn(null, true, Encoding.UTF8.encode(value))
+        } else {
+            if(isBytes(value)) {
+                column = rowColumn(null, false, Encoding.Latin1.encode(Encoding.Latin1.decode(value)))
+            } else {
+                column = rowColumn(encodeValue(value), false, null)
+            }
+        }
+        if(column.octets !== null) {
+            (column.octets.size() <= VALUE_LIMIT).ifFalse(() => { fail() })
+        }
+        column
+    }
+
+    /// true when a value of `columns` from index `first` on exceeds the
+    /// internal transport threshold: the request must then be streamed.
+    streams: (columns, first) => {
+        result: false
+        index: first
+        while(index < columns.size()) {
+            column: columns[index]
+            if(column.octets !== null) {
+                if(column.octets.size() > STREAM_THRESHOLD) { result = true }
+            }
+            index = index + 1
+        }
+        result
+    }
+
+    // Validates `columns` (rowColumn entries whose cells carry one of `tags`)
+    // and their logical aggregate, before the first line is written.
+    checkColumns: (columns, tags) => {
+        count: columns.size()
+        ((count >= 1) && (count <= MAX_COLUMNS)).ifFalse(() => { fail() })
+        aggregate: 0
+        for(column in columns) {
+            if(column.octets === null) {
+                hasTag(column.node, tags).ifFalse(() => { fail() })
+            } else {
+                ((column.text === true) || (column.text === false)).ifFalse(() => { fail() })
+                isBytes(column.octets).ifFalse(() => { fail() })
+                (column.octets.size() <= VALUE_LIMIT).ifFalse(() => { fail() })
+            }
+            aggregate = aggregate + columnSize(column)
+            (aggregate <= MESSAGE_LIMIT).ifFalse(() => { fail() })
+        }
+        null
+    }
+
+    // One streamed line: the shared prefix (version, sequence, kind, session and
+    // the `correlation` member) followed by the alternating `pairs`.
+    streamLine: (correlation, seq, session, value, kind, pairs) => JSON.encode(JSON.object(...Arrays.concat(Array(
+        "v", integerNode(version), "s", integerNode(seq), "k", JSON.string(kind),
+        "session", integerNode(session), correlation, integerNode(value)), pairs)))
+
+    // Writes `columns` as consecutive "cell" and "data" lines built by line(kind, pairs).
+    writeColumns: (sink, columns, line) => {
+        index: 0
+        while(index < columns.size()) {
+            column: columns[index]
+            c: index
+            if(column.octets === null) {
+                sink.write(line("cell", Array("c", integerNode(c), "value", column.node)))
+            } else {
+                total: column.octets.size()
+                tag: dataTag(column)
+                writeFragments(sink, column.octets, (fragment, fragments, encoded) => line("data", Array(
+                    "c", integerNode(c), "t", JSON.string(tag), "o", integerNode(total),
+                    "i", integerNode(fragment), "n", integerNode(fragments), "d", JSON.string(encoded))))
+            }
+            index = index + 1
+        }
+    }
+
+    /// Writes the STEP row `columns` (rowColumn entries) answering request `re`
+    /// as the streamed reply with sequence `seq`. Every bound is checked before
+    /// the first line; each value travels as bounded, independently encoded
+    /// fragments and the terminator follows the last one. A failure after the
+    /// first line signals and leaves the reply incomplete, never replaced.
+    writeRow: (writer, seq, session, re, columns) => {
+        isId(seq).ifFalse(() => { fail() })
+        isI64(session).ifFalse(() => { fail() })
+        isId(re).ifFalse(() => { fail() })
+        checkColumns(columns, scalarTags)
+        count: columns.size()
+        line: (kind, pairs) => streamLine("re", seq, session, re, kind, pairs)
+        sink: lineSink(writer)
+        sink.write(line("row", Array("code", integerNode(ROW_CODE), "columns", integerNode(count))))
+        writeColumns(sink, columns, line)
+        sink.write(line("end", Array("columns", integerNode(count))))
+        sink.finish()
+        null
+    }
+
+    lineKind: (node) => {
+        (node.kind === "object").ifFalse(() => { fail() })
+        node.value.containsKey("k").ifFalse(() => { fail() })
+        string(node.value["k"])
+    }
+
+    // The exact members of one streamed line of `kind`: the shared prefix with
+    // `correlation` equal to `value`, followed by `names`.
+    streamMembers: (node, fields, correlation, kind, names, seq, session, value) => {
+        members: requireExactObject(node, Arrays.concat(fields, names))
+        (i64(members["v"]) == version).ifFalse(() => { fail() })
+        (i64(members["s"]) == seq).ifFalse(() => { fail() })
+        (string(members["k"]) == kind).ifFalse(() => { fail() })
+        (i64(members["session"]) == session).ifFalse(() => { fail() })
+        (id(members[correlation]) == value).ifFalse(() => { fail() })
+        members
+    }
+
+    // The `count` cell/data values following a stream header, each {node, value,
+    // size}: a cell node carrying one of `tags`, or the decoded TEXT String or
+    // fresh BLOB Bytes of `size` octets. Answers null when the channel ended
+    // first; nothing partial is answered. membersOf(node, kind, names) checks
+    // the shared line prefix. Every line is counted in the logical aggregate,
+    // and a value's declared size is bounded before any fragment is accepted.
+    readColumns: (reader, count, membersOf, tags) => {
+        dataNames: Array("c", "t", "o", "i", "n", "d")
+        columns: Array()
+        aggregate: 0
+        ended: false
+        index: 0
+        while(!ended && (index < count)) {
+            line: readFrameLine(reader)
+            if(line === null) {
+                ended = true
+            } else {
+                node: JSON.parse(line)
+                if(lineKind(node) == "cell") {
+                    members: membersOf(node, "cell", Array("c", "value"))
+                    (i64(members["c"]) == index).ifFalse(() => { fail() })
+                    hasTag(members["value"], tags).ifFalse(() => { fail() })
+                    aggregate = aggregate + cellCost(members["value"])
+                    (aggregate <= MESSAGE_LIMIT).ifFalse(() => { fail() })
+                    columns = Arrays.append(columns, { node: members["value"]; value: null; size: null })
+                } else {
+                    // Any other kind, a premature terminator included, is rejected here.
+                    members: membersOf(node, "data", dataNames)
+                    (i64(members["c"]) == index).ifFalse(() => { fail() })
+                    tag: string(members["t"])
+                    ((tag == "text") || (tag == "blob")).ifFalse(() => { fail() })
+                    total: i64(members["o"])
+                    fragments: i64(members["n"])
+                    // Bounded before any fragment is accepted.
+                    ((total >= 0) && (total <= VALUE_LIMIT)).ifFalse(() => { fail() })
+                    (fragments == fragmentCount(total)).ifFalse(() => { fail() })
+                    aggregate = aggregate + dataCost(tag, total)
+                    (aggregate <= MESSAGE_LIMIT).ifFalse(() => { fail() })
+                    received: Encoding.Latin1.encode("")
+                    fragment: 0
+                    while(!ended && (fragment < fragments)) {
+                        if(fragment > 0) {
+                            line = readFrameLine(reader)
+                            if(line === null) {
+                                ended = true
+                            } else {
+                                members = membersOf(JSON.parse(line), "data", dataNames)
+                                ((i64(members["c"]) == index) && (string(members["t"]) == tag) &&
+                                    (i64(members["o"]) == total) && (i64(members["n"]) == fragments)).ifFalse(() => { fail() })
+                            }
+                        }
+                        if(!ended) {
+                            (i64(members["i"]) == fragment).ifFalse(() => { fail() })
+                            for(octet in fragmentOctets(string(members["d"]), fragment, fragments, total)) {
+                                received.add(octet)
+                            }
+                            fragment = fragment + 1
+                        }
+                    }
+                    if(!ended) {
+                        (received.size() == total).ifFalse(() => { fail() })
+                        value: received
+                        // Strict UTF-8 only after the last fragment.
+                        if(tag == "text") { value = decodeText(received) }
+                        columns = Arrays.append(columns, { node: null; value: value; size: total })
+                    }
+                }
+                index = index + 1
+            }
+        }
+        result: null
+        if(!ended) {
+            (columns.size() == count).ifFalse(() => { fail() })
+            result = columns
+        }
+        result
+    }
+
+    // Answers the remaining streamed row after its header line, or null at EOF.
+    readRowFrom: (reader, headerNode, seq, session, re) => {
+        membersOf: (node, kind, names) => streamMembers(node, rowFields, "re", kind, names, seq, session, re)
+        header: membersOf(headerNode, "row", Array("code", "columns"))
+        (i64(header["code"]) == ROW_CODE).ifFalse(() => { fail() })
+        count: i64(header["columns"])
+        ((count >= 1) && (count <= MAX_COLUMNS)).ifFalse(() => { fail() })
+        columns: readColumns(reader, count, membersOf, scalarTags)
+        row: null
+        if(columns !== null) {
+            line: readFrameLine(reader)
+            if(line !== null) {
+                terminator: membersOf(JSON.parse(line), "end", Array("columns"))
+                (i64(terminator["columns"]) == count).ifFalse(() => { fail() })
+                row = {
+                    code: ROW_CODE
+                    columns: columns
+                }
+                row.freeze()
+            }
+        }
+        row
+    }
+
+    /// Reads the reply with sequence `seq` to STEP request `re` of `session`.
+    /// Answers the text of an ordinary message, a complete streamed row
+    /// {code, columns} (each column {node, value}: a scalar value node, or the
+    /// decoded TEXT String or fresh BLOB Bytes), or null when the channel ended
+    /// first. Nothing partial is answered; any violation signals an Error.
+    readStepReply: (reader, seq, session, re) => {
+        isId(seq).ifFalse(() => { fail() })
+        isI64(session).ifFalse(() => { fail() })
+        isId(re).ifFalse(() => { fail() })
+        first: readFrameLine(reader)
+        result: null
+        if(first !== null) {
+            node: JSON.parse(first)
+            (node.kind === "object").ifFalse(() => { fail() })
+            if(node.value.containsKey("k")) {
+                result = readRowFrom(reader, node, seq, session, re)
+            } else {
+                result = readMessageFrom(reader, seq, first)
+            }
+        }
+        result
+    }
+
+    // Scalar header arguments of a streamed request, exactly, per operation.
+    streamedArguments: Map()
+    streamedArguments["BIND"] = Array("statement", "index")
+    streamedArguments["APPLY_ONCE"] = Array("client", "operation")
+
+    // Checks the values of a streamed `operation`: BIND exactly one value;
+    // APPLY_ONCE its TEXT SQL then its parameters. `sizes` answers the octet
+    // size of a TEXT/BLOB value, or null for a scalar; `text` whether it is TEXT.
+    // A parameter must exceed STREAM_THRESHOLD, so the request has one encoding.
+    checkStreamedValues: (operation, count, sizes, text) => {
+        first: 0
+        if(operation == "BIND") {
+            (count == 1).ifFalse(() => { fail() })
+        } else {
+            ((count >= 1) && (count <= MAX_COLUMNS)).ifFalse(() => { fail() })
+            ((sizes(0) !== null) && text(0)).ifFalse(() => { fail() })
+            first = 1
+        }
+        large: false
+        index: first
+        while(index < count) {
+            size: sizes(index)
+            if(size !== null) {
+                if(size > STREAM_THRESHOLD) { large = true }
+            }
+            index = index + 1
+        }
+        large.ifFalse(() => { fail() })
+        null
+    }
+
+    /// Complete local admission of the streamed `operation` request: `nodes`
+    /// are its scalar header arguments in streamed schema order and `columns`
+    /// its request values (requestColumn entries; APPLY_ONCE starts with its
+    /// SQL as TEXT). Signals before any frame can be written.
+    admitStreamedRequest: (id, session, operation, nodes, columns) => {
+        isId(id).ifFalse(() => { fail() })
+        isI64(session).ifFalse(() => { fail() })
+        (namesOf(streamedArguments, operation).size() == nodes.size()).ifFalse(() => { fail() })
+        checkColumns(columns, parameterTags)
+        checkStreamedValues(operation, columns.size(), (index) => {
+            size: null
+            if(columns[index].octets !== null) { size = columns[index].octets.size() }
+            size
+        }, (index) => columns[index].text)
+        null
+    }
+
+    /// Writes request `id` of `session` with sequence `seq` as a streamed
+    /// request. Every bound is checked before the first line; TEXT is sent as
+    /// its UTF-8 octets and BLOB as its exact octets, fragment by fragment, so
+    /// neither the whole Base64url text nor a whole JSON request is built.
+    writeRequest: (writer, seq, session, id, operation, nodes, columns) => {
+        isId(seq).ifFalse(() => { fail() })
+        admitStreamedRequest(id, session, operation, nodes, columns)
+        count: columns.size()
+        line: (kind, pairs) => streamLine("id", seq, session, id, kind, pairs)
+        sink: lineSink(writer)
+        sink.write(line("bind", withPairs(Array("op", JSON.string(operation)),
+            Arrays.concat(namesOf(streamedArguments, operation), Array("values")),
+            Arrays.concat(nodes, Array(integerNode(count))))))
+        writeColumns(sink, columns, line)
+        sink.write(line("end", Array("values", integerNode(count))))
+        sink.finish()
+        null
+    }
+
+    // Answers the admitted streamed request after its header line, or null
+    // when the channel ended first. Its session and id are those of the header
+    // and every later line must repeat them.
+    readStreamedRequestFrom: (reader, headerNode, seq) => {
+        (headerNode.kind === "object").ifFalse(() => { fail() })
+        headerNode.value.containsKey("op").ifFalse(() => { fail() })
+        operation: string(headerNode.value["op"])
+        names: Arrays.concat(Array("op"), Arrays.concat(namesOf(streamedArguments, operation), Array("values")))
+        prefix: requireExactObject(headerNode, Arrays.concat(requestFields, names))
+        session: i64(prefix["session"])
+        requestId: id(prefix["id"])
+        membersOf: (node, kind, lineNames) => streamMembers(node, requestFields, "id", kind, lineNames,
+            seq, session, requestId)
+        header: membersOf(headerNode, "bind", names)
+        count: i64(header["values"])
+        ((count >= 1) && (count <= MAX_COLUMNS)).ifFalse(() => { fail() })
+        columns: readColumns(reader, count, membersOf, parameterTags)
+        admitted: null
+        if(columns !== null) {
+            line: readFrameLine(reader)
+            if(line !== null) {
+                terminator: membersOf(JSON.parse(line), "end", Array("values"))
+                (i64(terminator["values"]) == count).ifFalse(() => { fail() })
+                checkStreamedValues(operation, count, (index) => columns[index].size,
+                    (index) => String.recognizes(columns[index].value))
+                values: Array()
+                for(column in columns) {
+                    value: column.value
+                    if(column.node !== null) { value = decodeValue(column.node) }
+                    values = Arrays.append(values, value)
+                }
+                arguments: Map()
+                for(name in namesOf(streamedArguments, operation)) { arguments[name] = header[name] }
+                admitted = {
+                    id: requestId
+                    session: session
+                    operation: operation
+                    members: arguments
+                    values: values
+                }
+                admitted.freeze()
+            }
+        }
+        admitted
+    }
+
+    /// Reads the request with sequence `seq`. Answers the text of an ordinary
+    /// message (for decodeRequest), a complete admitted streamed request
+    /// {id, session, operation, members, values} (members holding its scalar
+    /// argument nodes and values its fresh decoded values), or null when the
+    /// channel ended first. Nothing partial is answered: a streamed request is
+    /// returned only after its terminator. Any violation signals an Error.
+    readRequest: (reader, seq) => {
+        isId(seq).ifFalse(() => { fail() })
+        first: readFrameLine(reader)
+        result: null
+        if(first !== null) {
+            node: JSON.parse(first)
+            (node.kind === "object").ifFalse(() => { fail() })
+            if(node.value.containsKey("k")) {
+                result = readStreamedRequestFrom(reader, node, seq)
+            } else {
+                result = readMessageFrom(reader, seq, first)
+            }
+        }
+        result
     }
 
     // ---- messages -------------------------------------------------------------
@@ -457,8 +1021,21 @@ _isolatedProtocol: (() => {
             "op", JSON.string(operation)), names, nodes)))
     }
 
-    /// Admitted request: {id, session, operation, members}. Signals for any
-    /// request outside the exact schema.
+    // An ordinary request never carries a TEXT/BLOB value that must be
+    // streamed: its Base64url text is at most that of STREAM_THRESHOLD octets.
+    // Other value shapes are left to decodeValue.
+    requireOrdinaryValue: (node) => {
+        if(hasTag(node, Array("text", "blob")) && node.value.containsKey("v")) {
+            payload: node.value["v"]
+            if(payload.kind === "string") {
+                (Encoding.UTF8.encode(payload.value).size() <= base64Length(STREAM_THRESHOLD)).ifFalse(() => { fail() })
+            }
+        }
+    }
+
+    /// Admitted request: {id, session, operation, members, values: null}.
+    /// Signals for any request outside the exact schema, including one whose
+    /// value had to travel as a streamed request.
     decodeRequest: (text) => {
         node: JSON.parse(text)
         (node.kind === "object").ifFalse(() => { fail() })
@@ -466,11 +1043,18 @@ _isolatedProtocol: (() => {
         operation: string(node.value["op"])
         names: Arrays.concat(Array("id", "session", "op"), namesOf(requestArguments, operation))
         members: requireExactObject(node, names)
+        if(operation == "BIND") { requireOrdinaryValue(members["value"]) }
+        if(operation == "APPLY_ONCE") {
+            if(members["parameters"].kind === "array") {
+                for(parameter in members["parameters"].value) { requireOrdinaryValue(parameter) }
+            }
+        }
         admitted: {
             id: id(members["id"])
             session: i64(members["session"])
             operation: operation
             members: members
+            values: null
         }
         admitted.freeze()
         admitted
@@ -570,6 +1154,17 @@ _isolatedProtocol: (() => {
         decodeValue: decodeValue
         writeMessage: writeMessage
         readMessage: readMessage
+        STREAM_THRESHOLD: STREAM_THRESHOLD
+        rowColumn: rowColumn
+        columnSize: columnSize
+        columnNode: columnNode
+        writeRow: writeRow
+        readStepReply: readStepReply
+        requestColumn: requestColumn
+        streams: streams
+        admitStreamedRequest: admitStreamedRequest
+        writeRequest: writeRequest
+        readRequest: readRequest
         encodeRequest: encodeRequest
         decodeRequest: decodeRequest
         encodeResponse: encodeResponse
@@ -601,6 +1196,17 @@ encodeValue: _isolatedProtocol.encodeValue
 decodeValue: _isolatedProtocol.decodeValue
 writeMessage: _isolatedProtocol.writeMessage
 readMessage: _isolatedProtocol.readMessage
+STREAM_THRESHOLD: _isolatedProtocol.STREAM_THRESHOLD
+rowColumn: _isolatedProtocol.rowColumn
+columnSize: _isolatedProtocol.columnSize
+columnNode: _isolatedProtocol.columnNode
+writeRow: _isolatedProtocol.writeRow
+readStepReply: _isolatedProtocol.readStepReply
+requestColumn: _isolatedProtocol.requestColumn
+streams: _isolatedProtocol.streams
+admitStreamedRequest: _isolatedProtocol.admitStreamedRequest
+writeRequest: _isolatedProtocol.writeRequest
+readRequest: _isolatedProtocol.readRequest
 encodeRequest: _isolatedProtocol.encodeRequest
 decodeRequest: _isolatedProtocol.decodeRequest
 encodeResponse: _isolatedProtocol.encodeResponse

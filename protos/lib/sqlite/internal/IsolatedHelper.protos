@@ -132,6 +132,20 @@ _isolatedHelper: (() => {
             Protocol.writeMessage(writer, sent, text)
         }
 
+        // A streamed row consumes one reply sequence. Answers false when its
+        // emission failed: no other reply may follow that could read as this
+        // STEP, so the caller ends admission and the client's outcome stays
+        // uncertain. The statement is not stepped again.
+        sendRow: (request, columns) => {
+            sent = sent + 1
+            emitted: false
+            Error.handle(() => {
+                Protocol.writeRow(writer, sent, session, request.id, columns)
+                emitted = true
+            }, (error) => null)
+            emitted
+        }
+
         // Executes one fixed or admitted SQL text to completion; answers the
         // step status (SQLITE_DONE on success) and always finalizes.
         execute: (sql) => {
@@ -252,11 +266,15 @@ _isolatedHelper: (() => {
             code
         }
 
-        // One copied cell, or a failure cell with the SQLite status (null for
-        // an encoding failure) that the client reports exactly like column().
-        cell: (handle, index) => {
+        // One copied column: a scalar value node, a failure node with the SQLite
+        // status (null for an encoding failure) that the client reports exactly
+        // like column(), or the copied octets of a TEXT/BLOB value. A TEXT/BLOB
+        // value is never encoded here; the selected transport encodes it once.
+        column: (handle, index) => {
             kind: ABI.columnType(handle, index)
             node: null
+            text: false
+            octets: null
             if(kind == ABI.SQLITE_INTEGER) { node = Protocol.encodeValue(ABI.columnInteger(handle, index)) }
             if(kind == ABI.SQLITE_FLOAT) { node = Protocol.encodeValue(ABI.columnFloat(handle, index)) }
             if(kind == ABI.SQLITE_NULL) { node = Protocol.encodeValue(null) }
@@ -272,49 +290,73 @@ _isolatedHelper: (() => {
                     ok = true
                 }, (error) => null)
                 if(ok) {
-                    node = Protocol.encodeValue(copied)
+                    if(String.recognizes(copied)) {
+                        text = true
+                        octets = Encoding.UTF8.encode(copied)
+                    } else {
+                        isBytes(copied).ifFalse(() => { fail() })
+                        octets = copied
+                    }
                 } else {
                     node = JSON.object("t", JSON.string("failure"), "v", Protocol.nullableIntegerNode(failedCode))
                 }
             }
-            if(node === null) {
+            if((node === null) && (octets === null)) {
                 node = JSON.object("t", JSON.string("failure"), "v", Protocol.integerNode(kind))
             }
-            node
+            Protocol.rowColumn(node, text, octets)
         }
 
+        // Answers the reply text, or a streamed row {columns} when a TEXT/BLOB
+        // value exceeds the internal transport threshold. The choice is made
+        // before any value is encoded; the statement is stepped exactly once.
         step: (request) => {
             handle: statementOf(request.members)
             code: ABI.step(handle)
+            reply: null
             rowNode: JSON.nullValue()
             if(code == ABI.SQLITE_ROW) {
                 count: ABI.columnCount(handle)
-                cells: Array()
+                columns: Array()
                 index: 0
                 encodedSize: 0
+                streamed: false
                 while((index < count) && (code == ABI.SQLITE_ROW)) {
-                    node: cell(handle, index)
-                    encodedSize = encodedSize + Encoding.UTF8.encode(JSON.encode(node)).size() + 1
+                    copied: column(handle, index)
+                    encodedSize = encodedSize + Protocol.columnSize(copied) + 1
                     // Leave room for the fixed response envelope before retaining
                     // another value; an arbitrarily wide row cannot accumulate
                     // an unbounded aggregate before the transport check.
                     if(encodedSize > (Protocol.MESSAGE_LIMIT - 1024)) {
                         code = SQLITE_TOOBIG
                     } else {
-                        cells = Arrays.append(cells, node)
+                        columns = Arrays.append(columns, copied)
+                        if(copied.octets !== null) {
+                            if(copied.octets.size() > Protocol.STREAM_THRESHOLD) { streamed = true }
+                        }
                     }
                     index = index + 1
                 }
-                if(code == ABI.SQLITE_ROW) { rowNode = JSON.array(...cells) }
+                if(code == ABI.SQLITE_ROW) {
+                    if(streamed) {
+                        reply = { columns: columns }
+                    } else {
+                        nodes: Array()
+                        for(copied in columns) { nodes = Arrays.append(nodes, Protocol.columnNode(copied)) }
+                        rowNode = JSON.array(...nodes)
+                    }
+                }
             }
-            text: Protocol.encodeResponse(session, request.id, "STEP", Array(Protocol.integerNode(code), rowNode))
-            if(Encoding.UTF8.encode(text).size() > Protocol.MESSAGE_LIMIT) {
-                // The row cannot be transported; the statement position is not
-                // replayed and the client reports the step as failed.
-                text = Protocol.encodeResponse(session, request.id, "STEP",
-                    Array(Protocol.integerNode(SQLITE_TOOBIG), JSON.nullValue()))
+            if(reply === null) {
+                reply = Protocol.encodeResponse(session, request.id, "STEP", Array(Protocol.integerNode(code), rowNode))
+                if(Encoding.UTF8.encode(reply).size() > Protocol.MESSAGE_LIMIT) {
+                    // The row cannot be transported; the statement position is not
+                    // replayed and the client reports the step as failed.
+                    reply = Protocol.encodeResponse(session, request.id, "STEP",
+                        Array(Protocol.integerNode(SQLITE_TOOBIG), JSON.nullValue()))
+                }
             }
-            text
+            reply
         }
 
         prepare: (request) => {
@@ -332,11 +374,19 @@ _isolatedHelper: (() => {
                 statementNode, Protocol.nullableIntegerNode(prepared[2])))
         }
 
+        // A streamed BIND arrives already complete and validated, with its one
+        // decoded value; it binds exactly once, like an ordinary BIND.
         bind: (request) => {
             handle: statementOf(request.members)
             index: Protocol.i64(request.members["index"])
             ((index >= 1) && (index <= maxIndex)).ifFalse(() => { fail() })
-            codeReply(request, bindValue(handle, index, Protocol.decodeValue(request.members["value"])))
+            value: null
+            if(request.values === null) {
+                value = Protocol.decodeValue(request.members["value"])
+            } else {
+                value = request.values[0]
+            }
+            codeReply(request, bindValue(handle, index, value))
         }
 
         finalize: (request) => {
@@ -445,12 +495,32 @@ _isolatedHelper: (() => {
         applyOnce: (request) => {
             client: Protocol.id(request.members["client"])
             operation: Protocol.id(request.members["operation"])
-            sql: Protocol.string(request.members["sql"])
-            parameterNodes: request.members["parameters"]
-            (parameterNodes.kind === "array").ifFalse(() => { fail() })
+            sql: null
+            parameterNodes: null
             parameters: Array()
-            for(node in parameterNodes.value) {
-                parameters = Arrays.append(parameters, Protocol.decodeValue(node))
+            if(request.values === null) {
+                sql = Protocol.string(request.members["sql"])
+                parameterNodes = request.members["parameters"]
+                (parameterNodes.kind === "array").ifFalse(() => { fail() })
+                for(node in parameterNodes.value) {
+                    parameters = Arrays.append(parameters, Protocol.decodeValue(node))
+                }
+            } else {
+                // A streamed request is complete and validated before this point:
+                // value 0 is its SQL, the rest its parameters. Their canonical
+                // nodes equal the ordinary request's, so the receipt text, and
+                // therefore replay and conflict detection, do not depend on the
+                // transport that carried the request.
+                sql = request.values[0]
+                String.recognizes(sql).ifFalse(() => { fail() })
+                nodes: Array()
+                index: 1
+                while(index < request.values.size()) {
+                    parameters = Arrays.append(parameters, request.values[index])
+                    nodes = Arrays.append(nodes, Protocol.encodeValue(request.values[index]))
+                    index = index + 1
+                }
+                parameterNodes = JSON.array(...nodes)
             }
             // The canonical request text recorded with the receipt.
             requestText: JSON.encode(JSON.array(JSON.string(sql), parameterNodes))
@@ -644,8 +714,10 @@ _isolatedHelper: (() => {
                 text: null
                 admitted: null
                 rejected: null
+                // An ordinary message, or a streamed request answered only once
+                // complete and validated: nothing is dispatched before then.
                 Error.handle(() => {
-                    text = Protocol.readMessage(reader, lastId + 1)
+                    text = Protocol.readRequest(reader, lastId + 1)
                 }, (error) => {
                     rejected = "MALFORMED_FRAME"
                 })
@@ -655,11 +727,15 @@ _isolatedHelper: (() => {
                     running = false
                 } else {
                     if(rejected === null) {
-                        Error.handle(() => {
-                            admitted = Protocol.decodeRequest(text)
-                        }, (error) => {
-                            rejected = "MALFORMED_REQUEST"
-                        })
+                        if(String.recognizes(text)) {
+                            Error.handle(() => {
+                                admitted = Protocol.decodeRequest(text)
+                            }, (error) => {
+                                rejected = "MALFORMED_REQUEST"
+                            })
+                        } else {
+                            admitted = text
+                        }
                     }
                     if(rejected === null) {
                         if(admitted.id != (lastId + 1)) { rejected = "NON_CONSECUTIVE_ID" }
@@ -691,7 +767,15 @@ _isolatedHelper: (() => {
                             clean = false
                             running = false
                         } else {
-                            send(reply)
+                            if(String.recognizes(reply)) {
+                                send(reply)
+                            } else {
+                                if(!sendRow(admitted, reply.columns)) {
+                                    diagnose("HELPER_ROW_STREAM_FAILED")
+                                    clean = false
+                                    running = false
+                                }
+                            }
                             if(hazard) {
                                 diagnose("HELPER_RECONCILE_REQUIRED")
                                 running = false

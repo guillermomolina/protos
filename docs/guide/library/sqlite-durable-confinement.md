@@ -3320,7 +3320,7 @@ State: **PLAT074 OPEN; D256 pending; LIB031 BLOCKED; D-10 not fully resolved;
 D3-T1–T16 NOT RUN.**
 
 
-## 28. PLAT074-FINAL — Production integration candidate (first campaign failed; not accepted)
+## 28. PLAT074-FINAL — Production integration candidate (second campaign failed; not accepted)
 
 Architecture D and the bounded manifest integration are owner-authorized in the
 continuation request. This section records the candidate code, not validation,
@@ -3341,10 +3341,70 @@ specification, project version or changelog was changed.
 | Portable build | Owner-reported PASS |
 | Distribution checks (CRC, layout, runtime, source identity) | Owner-reported PASS |
 | `ProtosIsolatedSqliteIntegrationTest`, first campaign | Owner-reported 61 run: 24 PASS, 35 FAIL, 2 ERROR |
-| Corrections below, re-run of the focal class | NOT RUN |
+| Second campaign (2026-11-20): Maven package | Owner-reported BUILD SUCCESS |
+| Second campaign: lint of `IsolatedConnection.protos` | Owner-reported PASS |
+| Second campaign: portable build and distribution checks (CRC, layout, runtime projection, source identity, launcher mode) | Owner-reported PASS |
+| Second campaign: `ProtosLib029SqliteLifecycleTest` | Owner-reported 2/2 PASS |
+| Second campaign: `ProtosIsolatedSqliteIntegrationTest` | Owner-reported 61 run: 32 PASS, 29 FAIL, 0 ERROR, 0 SKIPPED |
+| Third run, with the second-campaign corrections (2026-11-20) | Owner-reported LIB029 2/2 PASS; integration 62 run: 59 PASS, 3 FAIL, 0 ERROR (new test PASS) |
+| Corrections after the third run, including the lost-COMMIT harness correction | NOT RUN |
+| Streamed STEP rows (protocol v4) and their new tests | NOT RUN |
+| Streamed BIND parameters (protocol v4) | Implemented; NOT RUN |
+| Streamed APPLY_ONCE parameters (protocol v4) | Implemented; NOT RUN |
+| New streamed-parameter, real-helper session and admission-model tests; strengthened 16 MiB tests | NOT RUN |
 | General regression | NOT RUN |
+| Fourth (focal) campaign: `ProtosLib029SqliteLifecycleTest` | Owner-reported log: 2/2 PASS |
+| Fourth campaign: `ProtosIsolatedSqliteIntegrationTest` | Started; no further Surefire output after `Running ...`; final result unknown |
+| Diagnostic harness instrumentation (below) | NOT RUN |
+| Protocol v4 acceptance | Pending |
+| Fourth campaign, protocol/helper group (9 tests) | Owner-reported 8 PASS, 1 FAIL (fixture comparison defect, corrected; re-run of that method PASS) |
+| Fourth campaign, both 16 MiB tests | FAIL: 120 s timeout during the first STEP |
+| v4 transport cost diagnostic (below) | Added; NOT RUN; results pending |
 
 The integration is **not accepted**.
+
+#### Fourth campaign: diagnostic instrumentation (NOT RUN)
+
+The focal run produced no output after the integration class started. That is
+not evidence of a deadlock, of a particular operation or of the v4 transport.
+The harness now reports, on standard error with explicit flushes:
+`PLAT074_TEST_START` / `PLAT074_TEST_END` (method, monotonic time, JUnit
+thread, duration, live child processes), `PLAT074_CHILD_START` /
+`PLAT074_CHILD_END` (owning test, PID, category, exit code, duration, live
+descendants) and, at the unchanged 120 s limit, `PLAT074_CHILD_TIMEOUT` (PIDs,
+liveness and CPU time of the child and its descendants when the platform
+exposes it, the bounded last 40 lines of output and the last guest stage). The
+two 16 MiB tests print `PLAT074_STAGE` markers only after each stage has
+happened (STEP started/completed, value received, BIND started/completed,
+check query, close completed). No SQL, value or database content is printed.
+
+One harness defect was found by reading the code. In the Actor-local admission
+models and the lifecycle tests, a 60 s wait timeout left the reading thread
+blocked inside `readLine()` while the try-with-resources block closed the same
+reader. `BufferedReader.close()` waits for the lock held by that thread, so the
+`finally` that kills the child was never reached and the test method could
+block indefinitely. The child is now reported and killed before the reader is
+closed. Whether this caused the observed stall is not shown.
+
+#### Fourth campaign: 16 MiB STEP timeouts
+
+Both 16 MiB tests reached `step:started` and never `step:completed`. At the
+120 s limit the client and the confined helper had both been consuming CPU
+continuously (client about 3 min, helper about 2 min of CPU time in each test).
+Sampling showed helper RSS peaking near 6.2 GB and then falling, which
+indicates heavy allocation and collection. There is no evidence of a deadlock
+in these two tests. Which operation dominates is not measured yet; it is not
+claimed that Base64url is the bottleneck.
+
+`ProtosIsolatedSqliteCodecDiagnostic` (opt-in, outside the general regression)
+runs `protos/tests/foreign-provider/isolated/codec-diagnostic.protos` through
+the installed CLI, with the real `std:text/base64url`, `std:json/json` and the
+production `IsolatedProtocol.protos`, without SQLite, FFM or Landlock. It
+measures separately the fragment range copy, Base64url encode and decode, JSON
+encode and parse of data lines, reassembly, strict UTF-8 decoding, and the
+complete v4 row write and read, for 64 KiB to 4 MiB (16 MiB optional), with
+warm-up and measured repetitions. Results: NOT RUN, pending.
+
 
 ### First integration campaign and corrections (NOT RUN)
 
@@ -3369,6 +3429,154 @@ parameterization of the earlier `openMemory`.
 The historical experiments were preserved. Their PASS results do not extend to
 production code merely because that code uses the same architecture.
 
+### Second integration campaign and corrections (NOT RUN)
+
+The second campaign fixed eight of the first campaign's failures. The 29 that
+remain have one cause that the evidence shows.
+
+| Observed | Cause | Corrected in |
+| --- | --- | --- |
+| `Error: Object {}` at four recurring guest positions. Each one is the cleanup `statement.close().value()` / `query.close().value()` of the harness `exec`, `scalar` or test body. Also seen in the public example (`create.close().value()`), the exterior controls, the concurrency models (`finish` reports the STEP failure), the launch drivers (`FAILED`) and the lost-COMMIT driver (`FAILED`). | Shown by the code: `remote.step`, `remote.reset` and `remote.finalize` called `rows.remove(handle)` unconditionally. Core `Map.remove` signals a plain `Error` (no slots) for an absent key. A statement has no copied row before its first STEP, after DONE or after a failed STEP. The first STEP therefore failed locally before any IPC. Its FINALIZE then failed the same way and replaced the primary error during cleanup. The STEP concurrency models never reached the gate, so the monitor never sent `probeBusy`. The COMMIT and CLOSE models passed because they make no STEP. | `IsolatedConnection.protos`: the absent row is now dropped only when present (`forgetRow`) |
+| Classification by walking the delegation chain (`isKind`) | Replaced by native ERRORS handler selection. A new `handleNotCancelled` runs `Cancelled.handle` inside `Error.handle` and re-signals the same Cancelled object. Channel failures use `IOError.handle`. The transaction and applyOnce paths use `SQLiteUncertainError.handle`, so other errors propagate unchanged. | `IsolatedConnection.protos` |
+| No stage information on failure | Harness only. A trail of the last three stage names (open, PREPARE, STEP, FINALIZE, close, and exterior-control steps) is printed only when a program fails. The original Error is never handled. The concurrency models report ordered stages through the monitor, including whether `probeBusy` was sent and the owner was suspended at the gate. The launch driver reports the failure category: unexpected host exception, guest failure (state, safe category slots and guest frames), custody assertion, or secondary Context close. A secondary close failure no longer replaces the primary failure. The lost-COMMIT driver prints each stage only after the fact it names. | `ProtosIsolatedSqliteIntegrationTest.java` |
+
+The exterior positive control already completed in the second campaign: the
+hardlink test failed in its third program, after the control program. Nothing
+has re-run it since the stage trail was added. The lost-COMMIT probe does not
+use `LOOKUP` or `applyOnce`, so it makes no claim about receipts. It
+establishes the COMMIT only by reading the row back through a second helper.
+
+A new test, `errorCategoriesKeepIdentityAndCleanupNeverReplacesPrimary`, uses
+real signaling and handling. It checks that Cancelled is selected as Cancelled
+and that SQLiteError and SQLiteUncertainError keep their identity. It checks
+that a generic Error is not reinterpreted, and that the production
+`handleNotCancelled` behaves as described. Finally, it closes the production
+client over a lost channel whose helper release also fails, and checks that
+the primary uncertain CLOSE outcome is kept. NOT RUN.
+
+#### Third run: remaining failures
+
+| Test | Finding | State |
+| --- | --- | --- |
+| `realHelperCommitPersistsEvenWhenItsAcknowledgementIsLostToClient` | Harness defect: the diagnostic `print` belongs to the CLI only. The hosted child driver has no `print`, so the guest failed before COMMIT. | Removed; NOT RUN |
+| `fragmentedMessagesAndPublicValueBoundary`, `maximumNulTextDoesNotAcquireAnEscapedJsonSizeLimit` | 120 s process timeout on the first execution past the first STEP. Sampled during a single-test run: the client guest thread waits for the reply and uses no CPU. The confined helper runs at about 2 CPUs with 1.2 GB RSS and writes no octet for more than 15 s, before the first frame of the 16 MiB response. This is CPU-bound response construction, not an IPC deadlock. The JVM attach is refused inside the confinement, so which function dominates is not measured. | Structural cause and correction below; NOT RUN |
+
+The last single run of `maximumNulTextDoesNotAcquireAnEscapedJsonSizeLimit`
+ended with exit code 1; its final cause was not captured.
+
+#### Structural cause of the 16 MiB timeouts
+
+Before the first frame, the helper's STEP built a 16 MiB value several times
+over. It copied the column, encoded the whole value as Base64url inside a JSON
+node, serialized that node only to measure it, serialized the complete response
+again, converted the response to UTF-8 octets and finally copied and re-encoded
+it fragment by fragment. The client then reassembled the complete message and
+parsed and decoded it in one piece. Raising the timeout or the memory would
+hide this; neither was changed.
+
+#### Correction: streamed STEP rows (NOT RUN)
+
+Private protocol v4 adds one STEP-only transport, specified in the header of
+`IsolatedProtocol.protos`. It is not a general streaming API. A row with a TEXT
+or BLOB value above an internal 64 KiB threshold travels as `row`, `cell`,
+`data` and `end` frame lines. All lines of the reply share one reply sequence
+and carry the session and the request id. Smaller rows and every other reply
+keep the v3 message format unchanged.
+
+- The helper copies each column once and keeps the TEXT (as UTF-8) or BLOB
+  octets unencoded. It computes the aggregate bound from the exact Base64url
+  length, without encoding or serializing anything. It chooses the transport
+  only then, and steps the statement exactly once.
+- Each fragment holds at most 2304 octets and is encoded independently as
+  canonical Base64url, so the complete Base64url text never exists. Fragments
+  are decoded one by one, never concatenated as text.
+- All bounds are checked before the first line: at most 16 MiB per value, the
+  48 MiB aggregate and 4096 octets per line. A failure after the first line
+  ends the helper's admission. No other reply follows that could read as that
+  STEP.
+- The client checks the header, then each column in order: index, type, the
+  declared total against the 16 MiB bound before accumulation, the fragment
+  count, consecutive fragment indexes, the exact fragment size, canonical
+  Base64url, sequence, session and correlation. A missing, repeated, reordered,
+  trailing or foreign line is rejected, and so is a premature terminator. EOF
+  discards the row. TEXT is decoded as strict UTF-8 only after its last
+  fragment. The row is stored only after the terminator, inside the existing
+  `call` reservation, so `CONNECTION_BUSY`, cancellation (`RECONCILE_REQUIRED`)
+  and the channel-uncertainty rules are unchanged.
+
+The lost-COMMIT probe now loses the first successful COMMIT reply, which it
+recognizes by its content instead of a fixed sequence number. A second,
+independent JVM then checks that exactly one row was committed.
+
+New tests, all NOT RUN:
+`streamedStepRowsAreBoundedOrderedCorrelatedAndAtomic` (protocol level),
+`partiallyReceivedStreamedRowKeepsConnectionBusyAndPublishesOnlyWhenComplete`
+and `cancelledPartiallyReceivedStreamedRowRequiresReconciliation` (Connection
+level). The two 16 MiB tests were strengthened: distinct first and last
+octets, a single STEP, and SQLite-side equality after BIND.
+
+#### Correction: streamed BIND and APPLY_ONCE parameters (NOT RUN)
+
+The client direction had the same monolithic construction: `bindRemote`
+encoded the whole value as Base64url inside a JSON request before the first
+frame. Protocol v4 now streams SQL parameters with the same fragment writer,
+fragment reader, codec and bounds as STEP rows. It is not a general IPC.
+
+- Format: a `bind` header line (operation, scalar arguments, value count), the
+  values as `cell` (null, integer, float) or `data` lines, and an `end`
+  terminator. Every line repeats version, request sequence, session and request
+  id; fragments consume no request id. BIND carries its one value; APPLY_ONCE
+  carries its SQL as TEXT value 0, then its parameters.
+- One encoding per request: the streamed form is used exactly when a parameter
+  exceeds the internal 64 KiB threshold. The helper refuses a streamed request
+  without such a parameter and an ordinary request carrying one.
+- Client: the value is admitted locally (strict UTF-8 for TEXT, a private copy
+  of BLOB octets, the 16 MiB bound) before the `CONNECTION_BUSY` check, the
+  reservation and the id. 16 MiB + 1 is refused before any frame. The request is
+  written inside the existing `call` reservation (`exchange`), so admission,
+  correlation, uncertainty and cancellation rules are unchanged. Cancellation
+  after the first line leaves the framing incomplete: `RECONCILE_REQUIRED`, the
+  helper is retired and nothing is retried.
+- Helper: the request is read completely and every line validated (version,
+  sequence, session, id, operation, arguments, type, declared length bounded
+  before accumulation, fragment count and order, exact fragment size, canonical
+  Base64url, terminator, logical aggregate). TEXT is decoded as strict UTF-8
+  only after its last fragment. Only then is BIND dispatched, calling the
+  existing binding once, or APPLY_ONCE, beginning its transaction. EOF discards
+  the request; a malformed request is rejected before dispatch. A streamed
+  APPLY_ONCE records the same canonical receipt text as the ordinary form, so
+  replay, conflict and `RECONCILE_REQUIRED` behave the same.
+- Streamed rows, streamed requests and ordinary messages are flushed every 64
+  lines and after their last line, so a large value advances on the channel
+  with bounded buffering. The client channel already flushes every write; the
+  helper's standard output did not guarantee this.
+- The logical 48 MiB aggregate now counts, for each value, its Base64url length
+  plus bounded per-fragment metadata (256 octets), identically on both sides.
+  A row of values at or below the threshold whose total is close to 48 MiB can
+  therefore be refused as `SQLITE_TOOBIG` slightly earlier than before.
+
+New tests, all NOT RUN:
+`streamedParameterRequestsAreCompleteCorrelatedAndUnambiguous` (protocol level),
+`helperDispatchesStreamedBindOnlyAfterCompleteValidRequest` and
+`helperAppliesStreamedApplyOnceOnlyWhenCompleteAndReplaysByReceipt` (the
+production helper module serving scripted frames in one guest process, against
+real SQLite through the explicit provider; a refused request is answered only
+by its rejection, which shows that it was never dispatched),
+`streamedBindAndApplyOnceThroughRealHelper`,
+`failedLargeBindIsKnownAndAnIndependentSessionReopens` (confined helper), and
+`pendingStreamedBindKeepsConnectionBusyWithoutConsumingIds` and
+`cancelledPartiallySentStreamedBindRequiresReconciliation` (Connection level).
+The 16 MiB tests now also check that a refused 16 MiB + 1 BIND leaves the
+earlier binding in place and that a small query follows the maximum TEXT.
+
+Not yet shown: that the 16 MiB tests finish within the existing timeout, in
+either direction. The interpreted per-octet copy and Base64url loops remain,
+with the same total count, but no value is encoded or serialized as a whole
+for transport. The `16 MiB`, `CONNECTION_BUSY` and `RECONCILE_REQUIRED`
+contracts are unchanged. No production Java was added.
+
+PLAT074 remains OPEN. D256 is pending ratification. LIB031 remains BLOCKED.
+
 ### Candidate implementation
 
 `std:sqlite` captures and removes both private facilities. Import loads neither
@@ -3381,7 +3589,7 @@ session **and expected identity** before publishing a Connection. It reuses
 The helper uses the existing ABI and real SQLite, READWRITE plus NOFOLLOW (no
 CREATE during reopen), synchronous FULL, bounded busy timeout, native autocommit,
 private native statements and sequential dispatch. Client and helper use private
-protocol v3: structured JSON, strict UTF-8, canonical Base64url, bounded ordered
+protocol v4: structured JSON, strict UTF-8, canonical Base64url, bounded ordered
 fragmentation, 4096-octet frames and a 48 MiB logical-message ceiling. This does
 not lower the 16 MiB per-value public bound. Binary64 transport uses at most 971
 initial halvings, 1074 doublings and 52 significand reductions; decode bounds
@@ -3679,7 +3887,7 @@ bin/protos lint --fail-on-warning protos/examples/ffi/sqlite-durable-confined.pr
 bin/protos lint --fail-on-warning protos/examples/ffi/sqlite-durable-reopen.protos
 python3 dist/build_portable.py --allow-dirty --skip-project-build
 python3 dist/verify_portable.py --allow-dirty-source
-export PROTOS_SQLITE_DISTRIBUTION=/workspaces/protos/target/distributions/protos-0.4.184-SNAPSHOT
+export PROTOS_SQLITE_DISTRIBUTION=/workspaces/protos/target/distributions/protos-0.4.186-SNAPSHOT
 python3 -m unittest discover -s dist/tests/runtime -p test_sqlite_packaging.py
 mvn -Dprotos.sqlite.distribution="$PROTOS_SQLITE_DISTRIBUTION" -Dtest=ProtosIsolatedSqliteIntegrationTest,ProtosLib029SqliteLifecycleTest test
 make test MVN_FLAGS="-Dprotos.sqlite.distribution=$PROTOS_SQLITE_DISTRIBUTION"

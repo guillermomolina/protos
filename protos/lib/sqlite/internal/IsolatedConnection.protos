@@ -111,17 +111,15 @@ admitKey: (key) => {
     key
 }
 
-// Handler-style category test: the error itself or any delegation parent is
-// `prototype`. Error prototypes define no `recognizes`; sending it would signal
-// SlotNotFound and replace the error under inspection.
-isKind: (error, prototype) => {
-    found: false
-    current: error
-    while(!found && (current !== Object)) {
-        found = current === prototype
-        current = current.parent()
-    }
-    found
+// Runs `body` with `handler` selected for every Error except Cancelled. A
+// Cancelled is selected by its own prototype handler and re-signaled as the
+// exact same object after `handler` can no longer observe it.
+handleNotCancelled: (body, handler) => {
+    cancelled: null
+    Error.handle(() => {
+        Cancelled.handle(body, (error) => { cancelled = error })
+    }, handler)
+    if(cancelled !== null) { cancelled.signal() }
 }
 
 /// Opens the durable database `databaseName` of `authority` through `bridge`.
@@ -207,7 +205,11 @@ open: (bridge, authority, databaseName, terminal, SQLiteError, SQLiteUncertainEr
     }
 
     // One request and its correlated reply; answers the exact value members.
-    call: (operation, nodes) => {
+    // `columns` is null for an ordinary request whose argument `nodes` form one
+    // message; otherwise the request is streamed (Protocol.writeRequest) with
+    // `nodes` as its scalar header arguments and `columns` as its values. Both
+    // forms share this one admission, reservation, id and reply path.
+    exchange: (operation, nodes, columns) => {
         if(inFlight) { busyError(operation).signal() }
         if(!bridge.owns(session)) { IOLifecycleError().signal() }
         if(broken) {
@@ -219,9 +221,14 @@ open: (bridge, authority, databaseName, terminal, SQLiteError, SQLiteUncertainEr
         }
         (lastId < 9223372036854775806).ifFalse(() => { Error().signal() })
         id: lastId + 1
-        text: Protocol.encodeRequest(id, session, operation, nodes)
+        text: null
         // Complete local admission before any frame can become committed output.
-        (Encoding.UTF8.encode(text).size() <= Protocol.MESSAGE_LIMIT).ifFalse(() => { Error().signal() })
+        if(columns === null) {
+            text = Protocol.encodeRequest(id, session, operation, nodes)
+            (Encoding.UTF8.encode(text).size() <= Protocol.MESSAGE_LIMIT).ifFalse(() => { Error().signal() })
+        } else {
+            Protocol.admitStreamedRequest(id, session, operation, nodes, columns)
+        }
         // Reservation and sequence commitment precede every suspension. No
         // ensure/finally path releases this reservation after an unknown result.
         inFlight = true
@@ -230,14 +237,26 @@ open: (bridge, authority, databaseName, terminal, SQLiteError, SQLiteUncertainEr
         (() => {
             reply: null
             channelReason: "CONNECTION_LOST"
-            Error.handle(() => {
-                Protocol.writeMessage(writer, id, text)
-                reply = Protocol.readMessage(reader, id + 1)
+            handleNotCancelled(() => {
+                IOError.handle(() => {
+                    // A streamed request interrupted after its first line leaves
+                    // the framing incomplete: the outcome is unknown, the helper
+                    // is retired below and no later request uses this channel.
+                    if(columns === null) {
+                        Protocol.writeMessage(writer, id, text)
+                    } else {
+                        Protocol.writeRequest(writer, id, session, id, operation, nodes, columns)
+                    }
+                    // A STEP reply may be a streamed row under the same reply
+                    // sequence; it is answered only once complete.
+                    if(operation == "STEP") {
+                        reply = Protocol.readStepReply(reader, id + 1, session, id)
+                    } else {
+                        reply = Protocol.readMessage(reader, id + 1)
+                    }
+                }, (error) => { reply = null })
             }, (error) => {
-                if(isKind(error, Cancelled)) { error.signal() }
-                if(!isKind(error, IOError)) {
-                    channelReason = "PROTOCOL_VIOLATION"
-                }
+                channelReason = "PROTOCOL_VIOLATION"
                 reply = null
             })
             if(reply === null) {
@@ -252,14 +271,20 @@ open: (bridge, authority, databaseName, terminal, SQLiteError, SQLiteUncertainEr
             members: null
             rejection: null
             sqliteFailure: null
-            Error.handle(() => {
-                rejection = Protocol.decodeRejection(reply, session, id)
-                if(rejection === null) { sqliteFailure = Protocol.decodeSqliteFailure(reply, session, id) }
-                if((rejection === null) && (sqliteFailure === null)) { members = Protocol.decodeResponse(reply, session, id, operation) }
-            }, (error) => {
-                if(isKind(error, Cancelled)) { error.signal() }
-                members = null
-            })
+            streamed: null
+            if(!String.recognizes(reply)) { streamed = reply }
+            handleNotCancelled(() => {
+                if(streamed === null) {
+                    rejection = Protocol.decodeRejection(reply, session, id)
+                    if(rejection === null) { sqliteFailure = Protocol.decodeSqliteFailure(reply, session, id) }
+                    if((rejection === null) && (sqliteFailure === null)) { members = Protocol.decodeResponse(reply, session, id, operation) }
+                } else {
+                    // Already complete and correlated by the protocol reader.
+                    members = Map()
+                    members["code"] = Protocol.integerNode(streamed.code)
+                    members["row"] = JSON.nullValue()
+                }
+            }, (error) => { members = null })
             if(sqliteFailure !== null) {
                 // COMMIT and APPLY_ONCE answer their failures as values. A native
                 // failure escaping either one leaves the transaction outcome
@@ -317,7 +342,7 @@ open: (bridge, authority, databaseName, terminal, SQLiteError, SQLiteUncertainEr
             // Decode response scalars and rows before releasing admission. The
             // copied row is stored once; native/JSON buffers never escape.
             valid: false
-            Error.handle(() => {
+            handleNotCancelled(() => {
                 if(members.containsKey("code")) {
                     if(operation == "APPLY_ONCE") { Protocol.nullOrI64(members["code"]) } else { Protocol.i64(members["code"]) }
                 }
@@ -339,19 +364,24 @@ open: (bridge, authority, databaseName, terminal, SQLiteError, SQLiteUncertainEr
                 }
                 if(operation == "STEP") {
                     rowNode: members["row"]
-                    if(Protocol.i64(members["code"]) == SQLITE_ROW) {
-                        (rowNode.kind === "array").ifFalse(() => { Error().signal() })
+                    if(streamed !== null) {
+                        (Protocol.i64(members["code"]) == SQLITE_ROW).ifFalse(() => { Error().signal() })
                         cells: Array()
-                        for(node in rowNode.value) { cells = Arrays.append(cells, decodeCell(node)) }
+                        for(column in streamed.columns) { cells = Arrays.append(cells, streamedCell(column)) }
                         rows[Protocol.id(nodes[0])] = cells
                     } else {
-                        (rowNode.kind === "null").ifFalse(() => { Error().signal() })
+                        if(Protocol.i64(members["code"]) == SQLITE_ROW) {
+                            (rowNode.kind === "array").ifFalse(() => { Error().signal() })
+                            cells: Array()
+                            for(node in rowNode.value) { cells = Arrays.append(cells, decodeCell(node)) }
+                            rows[Protocol.id(nodes[0])] = cells
+                        } else {
+                            (rowNode.kind === "null").ifFalse(() => { Error().signal() })
+                        }
                     }
                 }
                 valid = true
-            }, (error) => {
-                if(isKind(error, Cancelled)) { error.signal() }
-            })
+            }, (error) => null)
             if(!valid) {
                 (SQLiteUncertainError {
                     operation: operation
@@ -373,6 +403,8 @@ open: (bridge, authority, databaseName, terminal, SQLiteError, SQLiteUncertainEr
             }
         })
     }
+
+    call: (operation, nodes) => exchange(operation, nodes, null)
 
     code: (members) => Protocol.i64(members["code"])
 
@@ -409,6 +441,26 @@ open: (bridge, authority, databaseName, terminal, SQLiteError, SQLiteUncertainEr
         cell
     }
 
+    // One cell of a complete streamed row: a scalar or failure node, or an
+    // already decoded TEXT String or fresh BLOB Bytes.
+    streamedCell: (column) => {
+        cell: null
+        if(column.node !== null) {
+            cell = decodeCell(column.node)
+        } else {
+            kind: SQLITE_BLOB
+            if(String.recognizes(column.value)) { kind = SQLITE_TEXT }
+            cell = {
+                failed: false
+                failureCode: null
+                kind: kind
+                value: column.value
+            }
+            cell.freeze()
+        }
+        cell
+    }
+
     cellOf: (handle, index) => {
         rows.containsKey(handle).ifFalse(() => { Error().signal() })
         row: rows[handle]
@@ -418,9 +470,25 @@ open: (bridge, authority, databaseName, terminal, SQLiteError, SQLiteUncertainEr
 
     statementNode: (handle) => Protocol.integerNode(handle)
 
+    // Map.remove signals for an absent key. A statement has no copied row
+    // before its first STEP, after DONE, or after a failed STEP; dropping
+    // that absent row must not replace the native result with a local Error.
+    forgetRow: (handle) => {
+        if(rows.containsKey(handle)) { rows.remove(handle) }
+    }
+
+    // A TEXT/BLOB value beyond the internal threshold is streamed fragment by
+    // fragment; no whole Base64url text or JSON request is built for it.
     bindRemote: (handle, index, value) => {
-        code(call("BIND", Array(statementNode(handle), Protocol.integerNode(index),
-            Protocol.encodeValue(value))))
+        column: Protocol.requestColumn(value)
+        members: null
+        if(Protocol.streams(Array(column), 0)) {
+            members = exchange("BIND", Array(statementNode(handle), Protocol.integerNode(index)), Array(column))
+        } else {
+            members = call("BIND", Array(statementNode(handle), Protocol.integerNode(index),
+                Protocol.columnNode(column)))
+        }
+        code(members)
     }
 
     // The private remote ABI consumed by Resources.openConnection.
@@ -438,16 +506,17 @@ open: (bridge, authority, databaseName, terminal, SQLiteError, SQLiteUncertainEr
         open: (location, flags, vfs) => {
             (((location === null) && (flags === null)) && (vfs === null)).ifFalse(() => { Error().signal() })
             ready: null
+            cancelled: null
             Error.handle(() => {
-                text: Protocol.readMessage(reader, 1)
-                if(text !== null) { ready = Protocol.decodeReady(text) }
-            }, (error) => {
-                if(isKind(error, Cancelled)) {
-                    retireHelper()
-                    error.signal()
-                }
-                ready = null
-            })
+                Cancelled.handle(() => {
+                    text: Protocol.readMessage(reader, 1)
+                    if(text !== null) { ready = Protocol.decodeReady(text) }
+                }, (error) => { cancelled = error })
+            }, (error) => { ready = null })
+            if(cancelled !== null) {
+                retireHelper()
+                cancelled.signal()
+            }
             if(ready !== null) {
                 if((ready.session != session) || (ready.identityHi != launched.identityHi) ||
                     (ready.identityLo != launched.identityLo)) { ready = null }
@@ -471,11 +540,11 @@ open: (bridge, authority, databaseName, terminal, SQLiteError, SQLiteUncertainEr
         bindText: (handle, index, value) => bindRemote(handle, index, value)
         bindBlob: (handle, index, value) => bindRemote(handle, index, value)
         step: (handle) => {
-            rows.remove(handle)
+            forgetRow(handle)
             code(call("STEP", Array(statementNode(handle))))
         }
         reset: (handle) => {
-            rows.remove(handle)
+            forgetRow(handle)
             code(call("RESET", Array(statementNode(handle))))
         }
         clearBindings: (handle) => code(call("CLEAR_BINDINGS", Array(statementNode(handle))))
@@ -500,7 +569,7 @@ open: (bridge, authority, databaseName, terminal, SQLiteError, SQLiteUncertainEr
         // A confirmed dead helper owns no remaining native statement. Otherwise
         // an unconfirmed FINALIZE must remain a failed terminal close.
         finalize: (handle) => {
-            rows.remove(handle)
+            forgetRow(handle)
             status: SQLITE_OK
             if(broken) {
                 if(!helperTerminated) {
@@ -534,19 +603,17 @@ open: (bridge, authority, databaseName, terminal, SQLiteError, SQLiteUncertainEr
     transaction: (operation, publicName) => {
         requireAdmission(publicName)
         members: null
-        Error.handle(() => {
+        // A lost COMMIT keeps its specific operation name. Every other error,
+        // Cancelled included, propagates unchanged.
+        SQLiteUncertainError.handle(() => {
             members = call(operation, Array())
         }, (error) => {
-            // A lost COMMIT keeps its specific operation name.
-            if(isKind(error, SQLiteUncertainError)) {
-                (SQLiteUncertainError {
-                    operation: publicName
-                    code: error.code
-                    outcome: "UNCERTAIN"
-                    reason: error.reason
-                }).signal()
-            }
-            error.signal()
+            (SQLiteUncertainError {
+                operation: publicName
+                code: error.code
+                outcome: "UNCERTAIN"
+                reason: error.reason
+            }).signal()
         })
         status: code(members)
         if(status != SQLITE_OK) {
@@ -578,25 +645,31 @@ open: (bridge, authority, databaseName, terminal, SQLiteError, SQLiteUncertainEr
         requireAdmission("applyOnce")
         admitKey(key)
         Resources.admitSql(sql)
-        nodes: Array()
+        columns: Array()
         for(parameter in parameters) {
-            nodes = Arrays.append(nodes, Protocol.encodeValue(admitValue(parameter)))
+            columns = Arrays.append(columns, Protocol.requestColumn(admitValue(parameter)))
         }
         members: null
-        Error.handle(() => {
-            members = call("APPLY_ONCE", Array(Protocol.integerNode(key[0]), Protocol.integerNode(key[1]),
-                JSON.string(sql), JSON.array(...nodes)))
-        }, (error) => {
-            // An unestablished APPLY_ONCE keeps its public operation name, code and reason.
-            if(isKind(error, SQLiteUncertainError)) {
-                (SQLiteUncertainError {
-                    operation: "applyOnce"
-                    code: error.code
-                    outcome: "UNCERTAIN"
-                    reason: error.reason
-                }).signal()
+        // An unestablished APPLY_ONCE keeps its public operation name, code and
+        // reason. Every other error propagates unchanged. A large parameter
+        // streams the whole request (SQL first) through the same exchange.
+        SQLiteUncertainError.handle(() => {
+            if(Protocol.streams(columns, 0)) {
+                members = exchange("APPLY_ONCE", Array(Protocol.integerNode(key[0]), Protocol.integerNode(key[1])),
+                    Arrays.concat(Array(Protocol.requestColumn(sql)), columns))
+            } else {
+                nodes: Array()
+                for(column in columns) { nodes = Arrays.append(nodes, Protocol.columnNode(column)) }
+                members = call("APPLY_ONCE", Array(Protocol.integerNode(key[0]), Protocol.integerNode(key[1]),
+                    JSON.string(sql), JSON.array(...nodes)))
             }
-            error.signal()
+        }, (error) => {
+            (SQLiteUncertainError {
+                operation: "applyOnce"
+                code: error.code
+                outcome: "UNCERTAIN"
+                reason: error.reason
+            }).signal()
         })
         outcome: Protocol.string(members["outcome"])
         changed: Protocol.nullOrI64(members["changes"])
@@ -663,7 +736,7 @@ open: (bridge, authority, databaseName, terminal, SQLiteError, SQLiteUncertainEr
                     } else {
                         finished: false
                         (() => {
-                            Error.handle(() => {
+                            handleNotCancelled(() => {
                                 statement.close().value()
                                 if(reconcileRequired && !helperTerminated) {
                                     if(cleanupError !== null) { cleanupError.signal() }
@@ -676,7 +749,6 @@ open: (bridge, authority, databaseName, terminal, SQLiteError, SQLiteUncertainEr
                                 }
                                 result = terminal.resolved(exposed)
                             }, (error) => {
-                                if(isKind(error, Cancelled)) { error.signal() }
                                 statementFailure = error
                                 result = terminal.failed(error)
                             })
@@ -718,11 +790,10 @@ open: (bridge, authority, databaseName, terminal, SQLiteError, SQLiteUncertainEr
                         closing = true
                         finished: false
                         (() => {
-                            Error.handle(() => {
+                            handleNotCancelled(() => {
                                 connection.close().value()
                                 result = terminal.resolved(durable)
                             }, (error) => {
-                                if(isKind(error, Cancelled)) { error.signal() }
                                 closeFailure = error
                                 result = terminal.failed(error)
                             })
