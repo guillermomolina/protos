@@ -15,7 +15,7 @@
 
 // Tutorial: public std:ffi output positions and owned SQLite handles.
 // Authorize the external FFM provider explicitly:
-// bin/protos --foreign-provider-path /path/to/protos-ffm-provider.jar \
+// bin/protos --foreign-provider-path /path/to/protos-ffm-provider.jar --allow-library sqlite3=libsqlite3.so.0 \
 //     protos/tutorials/12-system-resources/05-public-ffi-owned-out.protos
 // Requires the portable JVM, Linux x86-64, Java 25 and shared libsqlite3.so.0.
 // Success is an empty output stream and exit status 0.

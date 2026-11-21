@@ -65,20 +65,22 @@ Optional FFM provider JAR (I144)
 Java 25 Foreign Function & Memory API
     |
     v
-Host-authorized libsqlite3.so.0
+Host-authorized native libraries (for example libsqlite3.so.0)
 ```
 
 - The provider is **external and optional**. It is not part of
   `lib/protos.jar` and is not shipped in the distribution; you build it
   separately against the distribution's public SPI.
 - The JAR carries **no embedded authorization**. Whether it runs at all, and
-  which library it may load, is decided by the host at start-up.
-- The distributable provider accepts exactly one target, `ffi:sqlite3`. Any
-  other alias, file name, or path is refused.
-- The CLI currently has **no option channel** for providers. The absolute
-  library path option `sqlite3.path` can only be supplied by a Java host
-  through `ProtosForeignProviderConfiguration.withProviderOptions`. Without
-  it, the provider loads the library by its loader name `libsqlite3.so.0`.
+  which libraries it may load, is decided by the host at start-up.
+- The distributable provider accepts any logical alias matching
+  `[A-Za-z_][A-Za-z0-9_]{0,127}`, but **no library is authorized by
+  default**, `sqlite3` included. The host maps each alias to one native
+  target with `--allow-library alias=target` (CLI) or the provider option
+  `library.<alias>` (embedding). A target is an exact load name such as
+  `libsqlite3.so.0` or an absolute path; both are passed unchanged to the
+  operating-system loader. File names and paths in an import are refused by
+  ordinary import resolution.
 - `std:ffi` is the public Protos layer. Importing it grants no authority;
   the members of `ffi:sqlite3` remain provider-private operations.
 
@@ -88,8 +90,9 @@ Host-authorized libsqlite3.so.0
 - JDK 25 (to build the JAR and to run the portable CLI);
 - the portable JVM distribution — the provider is **not** available in
   Native Image, which cannot load providers dynamically;
-- a shared SQLite library reachable by the native loader as
-  `libsqlite3.so.0`.
+- for the SQLite examples, a shared SQLite library reachable by the native
+  loader as `libsqlite3.so.0` and authorized with
+  `--allow-library sqlite3=libsqlite3.so.0`.
 
 ## Build the provider JAR
 
@@ -121,15 +124,96 @@ Host-authorized libsqlite3.so.0
 
 ## Authorize and run
 
-Building the JAR authorizes nothing. Each run authorizes it explicitly:
+Building the JAR authorizes nothing. Each run authorizes, separately, the
+provider and each native library it may load:
 
 ```sh
-bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar program.protos
+bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar \
+    --allow-library sqlite3=libsqlite3.so.0 \
+    program.protos
 ```
+
+Several libraries use distinct aliases under the same provider:
+
+```sh
+bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar \
+    --allow-library sqlite3=libsqlite3.so.0 \
+    --allow-library zlib=/usr/lib/x86_64-linux-gnu/libz.so.1 \
+    program.protos
+```
+
+```protos
+sqlite: import("ffi:sqlite3")
+zlib: import("ffi:zlib")
+```
+
+`--allow-library` is repeatable and must precede the file, `-e`, REPL input,
+or the `run`/`debug` entry; after the input it is an ordinary
+`process.args()` element. Duplicate aliases, relative paths and malformed
+assignments are usage errors (exit 2). It is not available to bundled Tools.
+
+Workspace applications (`protos run`) and debugged files (`protos debug`)
+select the provider and libraries the same way:
+
+```sh
+protos run --foreign-provider-path provider.jar \
+  --allow-library sqlite3=libsqlite3.so.0 Main
+
+protos debug --foreign-provider-path provider.jar \
+  --allow-library sqlite3=libsqlite3.so.0 app.protos
+
+protos --foreign-provider-path provider.jar \
+  --allow-library sqlite3=libsqlite3.so.0 run Main
+
+protos --foreign-provider-path provider.jar \
+  --allow-library sqlite3=libsqlite3.so.0 debug app.protos
+```
+
+- Both options may precede the subcommand or follow it, but always before the
+  `run` entry or the `debug` file; the two positions are combined, and an
+  alias may still be given only once. After the entry or file the same
+  spellings are ordinary `process.args()` elements.
+- Authorizing a library is independent of trusting the provider JAR: the JAR
+  is trusted by `--foreign-provider-path`, each library by its own
+  `--allow-library`, and neither implies the other or any Protos capability.
+- `TRUSTED_IN_PROCESS` provides no confinement: the provider and every
+  authorized library run with the full authority of the operating-system
+  process.
+- `run` and `debug` create no new class of guest permission: the options only
+  select the application RuntimeHost. Package preflight and external package
+  materialization keep their existing mechanisms and never receive provider
+  or library authority.
+- Bundled CLI Tools (`test`, `package`, `format`, `lint`, `language-server`)
+  never receive these options; giving them is a usage error (exit 2).
+- `--inspect` remains limited to file, `-e`, and REPL execution.
+
+ An embedding host supplies the same
+table through `ProtosForeignProviderConfiguration.trustedInProcess(paths)
+.withProviderOptions("protos-ffm", Map.of("library.sqlite3",
+"libsqlite3.so.0"))`.
+
+Three decisions stay separate: `--foreign-provider-path` trusts the provider's
+Java code; `--allow-library` authorizes one native library; Protos capability
+grants (`--allow-filesystem`, `--allow-network`, ...) enable guest APIs. None
+implies another.
 
 A JAR on `CLASSPATH`, in the working directory, or inside the installation is
 never discovered. Without `--foreign-provider-path`, `import("ffi:sqlite3")`
-fails with an ordinary resolution Error.
+fails with an ordinary resolution Error; with the provider but without
+`--allow-library sqlite3=...`, it fails with `ForeignError`
+(`foreignCategory` `unauthorized-library`).
+
+### Trusted in-process native code
+
+An authorized library runs `TRUSTED_IN_PROCESS`. The host accepts every
+effect native code can have inside the operating-system process: native file
+and network access regardless of Protos capabilities, transitive dependencies
+and their symbols, native initializers run by the loader, global state
+observable across Actors, indefinite blocking, memory corruption from a wrong
+ABI signature, and process termination. `--allow-library` is an
+authorization, **not a sandbox**. Authorizing a C++ library does not make
+Protos implement the C++ ABI, Qt, Boost, callbacks, arbitrary structs or
+virtual methods.
 
 ## Protos-first flow
 
@@ -254,7 +338,7 @@ Assertions.require(version() >= 3000000)
 ```
 
 ```sh
-bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar \
+bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar --allow-library sqlite3=libsqlite3.so.0 \
     protos/examples/ffi/sqlite-version.protos
 ```
 
@@ -404,7 +488,9 @@ instead rejects every semicolon and never reads `pzTail`.
 | Situation | Result |
 |---|---|
 | Provider not authorized (no `--foreign-provider-path`) | ordinary resolution Error at `import` |
-| Unknown alias, file name, or path (`ffi:libc`, `ffi:/lib/...`) | ordinary Error |
+| Valid alias not authorized by the host (`ffi:libc` without `--allow-library libc=...`) | `ForeignError`, `foreignCategory` `unauthorized-library` |
+| Authorized target that cannot be loaded | `ForeignError`, `foreignCategory` `library-unavailable` |
+| File name or path instead of an alias (`ffi:libc.so.6`, `ffi:/lib/...`) | ordinary Error |
 | Wrong arity | ordinary Error, before entry |
 | Wrong kind (for example an Integer for `utf8z`) | ordinary Error, before entry |
 | Integer out of the declared range | ordinary Error, before entry |
@@ -424,11 +510,13 @@ process.
 The provider implements `ProtosForeignProviderPlugin` with id `protos-ffm` and
 scheme `ffi`, listed in its own `META-INF/services` file. It uses only the
 public SPI and JDK APIs. Discovery happens only on explicitly configured
-provider paths. Its only target is `sqlite3`; library authorization comes
-exclusively from the host (`--foreign-provider-path` and provider options such
-as `sqlite3.path` received through `ProtosForeignPluginEnvironment.options()`),
-never from guest code and never from content packaged in the JAR, so one JAR
-serves every host. The CLI supplies no provider options.
+provider paths. It accepts any valid logical alias; library authorization
+comes exclusively from the host (`--foreign-provider-path` plus
+`--allow-library`, which the CLI turns into the `library.<alias>` provider
+options received through `ProtosForeignPluginEnvironment.options()`), never
+from guest code and never from content packaged in the JAR, so one JAR serves
+every host. The provider checks the alias against those options before it
+creates any Linker or Arena for the acquisition.
 
 The SQLite-independent ABI fixture runs under a test-only registration
 (`ffi-test:ffi_test`) of the same backend, hosted by the Java test

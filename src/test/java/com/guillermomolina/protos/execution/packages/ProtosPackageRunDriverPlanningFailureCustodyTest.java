@@ -22,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.ResourceLock;
@@ -60,6 +61,41 @@ final class ProtosPackageRunDriverPlanningFailureCustodyTest
 
         assertEquals("forced planning failure", failure.getMessage());
         assertEquals(1, stages.planCalls);
+        assertAllClosed(stages.verified, 4);
+        assertTrue(stages.hosted.isEmpty());
+    }
+
+    /** I169: a planning failure never acquires a RuntimeHost from the selected factory. */
+    @Test
+    void planningFailureAcquiresNoHostFromTheSelectedFactory() throws Exception {
+        Path project = project("planning-factory");
+        RecordingProvider provider = new RecordingProvider(materializations("planning-factory"));
+        RecordingStages stages =
+                new RecordingStages() {
+                    @Override
+                    public Object plan(
+                            ProtosWorkspaceRunDriver.Request request,
+                            List<ProtosExternalPackagePlanningPreflight.VerifiedExternalPackage>
+                                    inputs)
+                            throws IOException {
+                        planCalls++;
+                        throw new IOException("forced planning failure");
+                    }
+                };
+        List<ProtosPolyglotRuntimeHost> acquired = new ArrayList<>();
+
+        assertThrows(
+                IOException.class,
+                () -> ProtosPackageRunDriver.execute(
+                        request(project, null), provider,
+                        ProtosWorkspacePackageApplicationExecution.NetworkGrant.NONE,
+                        ProtosStandaloneHostedExecution.ResolverGrant.NONE,
+                        ProtosStandaloneHostedExecution.EntropyGrant.NONE,
+                        ProtosStandaloneHostedExecution.ClockGrant.NONE,
+                        stages,
+                        ProtosPackageRunDriverTest.recordingHostFactory(acquired)));
+
+        assertEquals(List.of(), acquired);
         assertAllClosed(stages.verified, 4);
         assertTrue(stages.hosted.isEmpty());
     }

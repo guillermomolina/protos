@@ -13,25 +13,36 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-// I144: denial paths of the external FFM provider. The provider is
-// configured, but only the host-authorized libraries exist: no file name,
-// path, or unknown alias reaches the native loader, and every rejected call
-// fails before entry with the ordinary Error.
+// Denial paths of the external FFM provider. The provider is configured and
+// only sqlite3 is authorized by the host (--allow-library). Valid but
+// unauthorized aliases fail with ForeignError unauthorized-library; file
+// names and paths are not aliases and fail by ordinary import resolution, so
+// they never reach the native loader; every rejected call fails before entry
+// with the ordinary Error.
 // Run by dist/test_external_foreign_providers.py.
 
 Assertions: import("std:test/assertions")
 
-// ---- unknown aliases, file names and paths are not targets
+unauthorized: (body) => {
+    error: Assertions.signals(ForeignError, body)
+    Assertions.require(error.foreignCategory == "unauthorized-library")
+}
 
-Assertions.signals(Error, () => import("ffi:libc"))
-Assertions.signals(Error, () => import("ffi:libsqlite3.so.0"))
-Assertions.signals(Error, () => import("ffi:/lib/x86_64-linux-gnu/libc.so.6"))
-Assertions.signals(Error, () => import("ffi:../ffi_test"))
-Assertions.signals(Error, () => import("ffi:"))
+// ---- valid aliases are not authorized merely because the provider is installed
 
-// ---- the fixture alias is test-only: without its host option it never loads
+unauthorized(() => import("ffi:libc"))
+fixtureDenied: unauthorized(() => import("ffi:ffi_test"))
 
-fixtureDenied: Assertions.signals(Error, () => import("ffi:ffi_test"))
+// ---- file names and paths are not aliases
+
+invalidImport: (body) => {
+    error: Assertions.signals(Error, body)
+    Assertions.require(error.parent() !== ForeignError)
+}
+invalidImport(() => import("ffi:libsqlite3.so.0"))
+invalidImport(() => import("ffi:/lib/x86_64-linux-gnu/libc.so.6"))
+invalidImport(() => import("ffi:../ffi_test"))
+invalidImport(() => import("ffi:"))
 
 ffi: import("ffi:sqlite3")
 

@@ -14,7 +14,8 @@
 // the specific language governing rights and limitations under the License.
 
 // I144: the generic FFM provider against the real shared SQLite library
-// (libsqlite3.so.0). Every SQLite symbol is declared here, in Protos, by name
+// (libsqlite3.so.0, authorized by the host with --allow-library
+// sqlite3=libsqlite3.so.0). Every SQLite symbol is declared here, in Protos, by name
 // and signature; the provider has no SQLite-specific Java. This proves only
 // the provider and its ABI: it is not the LIB029 SQLite library. No TEXT/BLOB
 // input binding, SQLITE_TRANSIENT, or native callback is used.

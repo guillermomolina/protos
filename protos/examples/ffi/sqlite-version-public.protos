@@ -14,7 +14,7 @@
 // the specific language governing rights and limitations under the License.
 
 // LIB028 public API example. Authorize the optional provider explicitly:
-// bin/protos --foreign-provider-path /path/to/protos-ffm-provider.jar \
+// bin/protos --foreign-provider-path /path/to/protos-ffm-provider.jar --allow-library sqlite3=libsqlite3.so.0 \
 //     protos/examples/ffi/sqlite-version-public.protos
 // Trusted Linux x86-64 native code, portable JVM with JDK 25 only.
 

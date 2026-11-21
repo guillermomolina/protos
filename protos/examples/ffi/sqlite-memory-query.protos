@@ -23,7 +23,7 @@
 // sqlite.md). This sample stays useful for studying FFM ABI declarations
 // and borrowed-memory copying.
 //
-//   bin/protos --foreign-provider-path /path/to/protos-ffm-provider.jar \
+//   bin/protos --foreign-provider-path /path/to/protos-ffm-provider.jar --allow-library sqlite3=libsqlite3.so.0 \
 //       protos/examples/ffi/sqlite-memory-query.protos
 //
 // Success: no standard output, exit status 0. `:memory:` keeps the example

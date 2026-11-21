@@ -79,6 +79,8 @@ final class FfmSession implements ProtosForeignPluginSession {
     public Object acquireModule(String canonicalTarget) {
         beginCall();
         try {
+            // Host authorization precedes every native resource of this acquisition.
+            FfmLibraries.Location location = authorization.resolve(canonicalTarget);
             synchronized (lifecycle) {
                 FfmLibraryModule existing = modules.get(canonicalTarget);
                 if (existing != null) {
@@ -93,7 +95,7 @@ final class FfmSession implements ProtosForeignPluginSession {
             }
             // The loader (and the library's own initializers) run outside the monitor; the
             // active-call count keeps the arena open meanwhile.
-            SymbolLookup lookup = load(authorization.resolve(canonicalTarget));
+            SymbolLookup lookup = load(location);
             synchronized (lifecycle) {
                 FfmLibraryModule raced = modules.get(canonicalTarget);
                 if (raced != null) {

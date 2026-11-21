@@ -66,7 +66,7 @@ import org.junit.jupiter.api.io.TempDir;
  * defined in the JAR, neither a Polyglot {@code Value} nor a {@code TruffleObject}, and every
  * operation on it is supplied by the plugin's value operations.
  */
-class ProtosExternalForeignProviderTest {
+public class ProtosExternalForeignProviderTest {
     private static final String SERVICE =
             "META-INF/services/" + ProtosForeignProviderPlugin.class.getName();
     private static final String DEMO = "lib: import(\"inventado:demo\")\n";
@@ -315,27 +315,7 @@ class ProtosExternalForeignProviderTest {
      */
     @Test
     void ffmProviderUsesOnlyThePublicSpiAndExplicitRegistration() throws Exception {
-        Path root = Path.of("providers", "ffm", "src", "main").toAbsolutePath();
-        Path ffmClasses = Files.createDirectories(work.resolve("ffm-classes"));
-        List<String> arguments =
-                new ArrayList<>(
-                        List.of("--release", "25", "-proc:none", "-classpath", publicClassPath(),
-                                "-d", ffmClasses.toString()));
-        try (Stream<Path> sources = Files.walk(root.resolve("java"))) {
-            sources.filter(path -> path.toString().endsWith(".java"))
-                    .map(Path::toString)
-                    .forEach(arguments::add);
-        }
-        ByteArrayOutputStream diagnostics = new ByteArrayOutputStream();
-        assertEquals(
-                0,
-                ToolProvider.getSystemJavaCompiler()
-                        .run(null, diagnostics, diagnostics, arguments.toArray(String[]::new)),
-                diagnostics::toString);
-        String service =
-                Files.readString(root.resolve("resources").resolve(SERVICE)).strip();
-        assertEquals("com.guillermomolina.protos.ffm.FfmForeignProvider", service);
-        Path ffm = jar(work, ffmClasses, "com.guillermomolina.protos.ffm", service);
+        Path ffm = ffmProviderJar();
 
         // Not configured: no ffi scheme exists, whatever JARs are around.
         try (Fixture fixture = new Fixture(invented)) {
@@ -357,17 +337,189 @@ class ProtosExternalForeignProviderTest {
                     descriptor.profile());
             assertInstanceOf(ProtosForeignPluginValueAdapter.class, descriptor.values());
             assertEquals("42", integer(fixture.eval(DEMO + "lib.double(21)")));
+            // Syntactically invalid aliases are rejected by ordinary resolution: no ffi session.
             for (String rejected :
                     List.of(
                             "import(\"ffi:libsqlite3.so.0\")",
                             "import(\"ffi:/usr/lib/libsqlite3.so.0\")",
+                            "import(\"ffi:../ffi_test\")")) {
+                ProtosExecutionOutcome outcome = fixture.run(rejected);
+                assertEquals(ProtosExecutionOutcome.State.FAILED, outcome.state(), rejected);
+                assertTrue(
+                        outcome.error() == null
+                                || outcome.error().parent().orElse(null)
+                                        != fixture.standardError("ForeignError"),
+                        rejected);
+            }
+            // Only the invented provider opened a session so far.
+            assertEquals(1, fixture.context.foreignProviderSessionCountForTesting());
+            // Valid aliases reach the provider's logical session and are refused on acquisition:
+            // registration and presence authorize no library, sqlite3 included.
+            for (String rejected :
+                    List.of(
+                            "import(\"ffi:sqlite3\")",
                             "import(\"ffi:ffi_test\")",
                             "import(\"ffi:libc\")")) {
+                ProtosExecutionOutcome outcome = fixture.run(rejected);
+                assertEquals(ProtosExecutionOutcome.State.FAILED, outcome.state(), rejected);
+                assertSame(
+                        fixture.standardError("ForeignError"),
+                        outcome.error().parent().orElseThrow(),
+                        rejected);
                 assertEquals(
-                        ProtosExecutionOutcome.State.FAILED, fixture.run(rejected).state(), rejected);
+                        "unauthorized-library",
+                        ((com.guillermomolina.protos.runtime.ProtosStringValue)
+                                        outcome.error().localSlotsSnapshot().get("foreignCategory"))
+                                .value(),
+                        rejected);
             }
-            // Only the invented provider opened a session; the ffi provider never did.
-            assertEquals(1, fixture.context.foreignProviderSessionCountForTesting());
+        }
+    }
+
+    private static Path ffmProvider;
+
+    /**
+     * Compiles the FFM provider sources against the SPI-only class path and packages them, once
+     * per test class, as the distributable provider JAR.
+     */
+    private static synchronized Path ffmProviderJar() throws Exception {
+        if (ffmProvider == null) {
+            ffmProvider = distributableFfmProviderJar(work);
+        }
+        return ffmProvider;
+    }
+
+    /**
+     * Compiles the distributable FFM provider sources under {@code root} against the SPI-only
+     * class path and packages them as the {@code protos-ffm} provider JAR. Shared with the I169
+     * CLI tests, which select it exactly as an operator would with --foreign-provider-path.
+     */
+    public static Path distributableFfmProviderJar(Path root) throws Exception {
+        Path sourceRoot = Path.of("providers", "ffm", "src", "main").toAbsolutePath();
+        Path ffmClasses = Files.createDirectories(root.resolve("ffm-classes"));
+        List<String> arguments =
+                new ArrayList<>(
+                        List.of("--release", "25", "-proc:none", "-classpath",
+                                publicClassPath(root), "-d", ffmClasses.toString()));
+        try (Stream<Path> sources = Files.walk(sourceRoot.resolve("java"))) {
+            sources.filter(path -> path.toString().endsWith(".java"))
+                    .map(Path::toString)
+                    .forEach(arguments::add);
+        }
+        ByteArrayOutputStream diagnostics = new ByteArrayOutputStream();
+        assertEquals(
+                0,
+                ToolProvider.getSystemJavaCompiler()
+                        .run(null, diagnostics, diagnostics, arguments.toArray(String[]::new)),
+                diagnostics::toString);
+        String service =
+                Files.readString(sourceRoot.resolve("resources").resolve(SERVICE)).strip();
+        assertEquals("com.guillermomolina.protos.ffm.FfmForeignProvider", service);
+        return jar(root, ffmClasses, "com.guillermomolina.protos.ffm", service);
+    }
+
+    /**
+     * Compiles the SQLite-independent {@code native/ffi_test.c} fixture into {@code root} with the
+     * same compiler discovery and flags as the I144 host, or returns {@code null} off Linux x86-64
+     * or without a C compiler so that callers skip rather than pass.
+     */
+    public static Path ffiTestLibrary(Path root) throws Exception {
+        String arch = System.getProperty("os.arch", "").toLowerCase(java.util.Locale.ROOT);
+        if (!System.getProperty("os.name", "").equalsIgnoreCase("linux")
+                || !(arch.equals("amd64") || arch.equals("x86_64"))) {
+            return null;
+        }
+        Path compiler = ProtosI144FfmFixtureAbiTest.findCompiler();
+        if (compiler == null) {
+            return null;
+        }
+        Path library = root.resolve("libffi_test.so");
+        Process cc =
+                new ProcessBuilder(
+                                compiler.toString(), "-shared", "-fPIC", "-O2", "-std=c11",
+                                "-Wall", "-Werror", "-o", library.toString(),
+                                Path.of("protos", "tests", "foreign-provider", "native",
+                                                "ffi_test.c")
+                                        .toString())
+                        .redirectErrorStream(true)
+                        .start();
+        String ccOutput = new String(cc.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        assertTrue(cc.waitFor(60, java.util.concurrent.TimeUnit.SECONDS), "cc timed out");
+        assertEquals(0, cc.exitValue(), ccOutput);
+        return library;
+    }
+
+    /**
+     * I169: the debug RuntimeHost composes the real DAP Engine with exactly the explicit provider
+     * configuration. Building it registers providers without opening a foreign session or loading
+     * a library; the provider class loader belongs to the host and closes with it.
+     */
+    @Test
+    void debugHostWithEmptyConfigurationHasDapAndNoProviders() throws Exception {
+        ByteArrayOutputStream diagnostics = new ByteArrayOutputStream();
+        try (ProtosPolyglotRuntimeHost host =
+                ProtosPolyglotRuntimeHost.openDebug(
+                        diagnostics,
+                        ProtosForeignProviderConfiguration.trustedInProcess(List.of()))) {
+            assertTrue(host.isDebugMode());
+            assertTrue(java.net.InetAddress.getByName(host.debugEndpoint().host())
+                    .isLoopbackAddress());
+            assertTrue(host.debugEndpoint().port() > 0);
+            assertSame(ProtosForeignProviderRegistry.EMPTY, host.foreignProvidersForRuntime());
+            assertNull(host.foreignProviderLoaderForTesting());
+        }
+    }
+
+    @Test
+    void debugHostRegistersTheExplicitFfmProviderWithoutLoadingNativeCode() throws Exception {
+        Path ffm = ffmProviderJar();
+        ByteArrayOutputStream diagnostics = new ByteArrayOutputStream();
+        java.net.URLClassLoader loader;
+        try (ProtosPolyglotRuntimeHost host =
+                ProtosPolyglotRuntimeHost.openDebug(
+                        diagnostics,
+                        ProtosForeignProviderConfiguration.trustedInProcess(List.of(ffm))
+                                .withProviderOptions(
+                                        "protos-ffm",
+                                        java.util.Map.of("library.sqlite3", "libsqlite3.so.0")))) {
+            assertTrue(host.isDebugMode());
+            assertTrue(host.debugEndpoint().port() > 0);
+            ProtosForeignProviderDescriptor descriptor =
+                    host.foreignProvidersForRuntime().lookupImportScheme("ffi").orElseThrow();
+            assertEquals(
+                    ProtosForeignProviderExecutionProfile.TRUSTED_IN_PROCESS,
+                    descriptor.profile());
+            loader =
+                    assertInstanceOf(
+                            java.net.URLClassLoader.class, host.foreignProviderLoaderForTesting());
+            assertTrue(loader.findResource("com/guillermomolina/protos/ffm/FfmSession.class")
+                    != null);
+            // No Process Context exists on this host, so no FFM session can have been opened and
+            // the authorized library was not loaded: sessions are per Actor and created lazily.
+        }
+        // Closing the host closed the provider class loader it owned.
+        assertNull(loader.findResource("com/guillermomolina/protos/ffm/FfmSession.class"));
+    }
+
+    @Test
+    void invalidDebugProviderPathFailsBeforeAnyDebugHostExists() throws Exception {
+        Path empty = Files.createDirectories(work.resolve("debug-empty"));
+        for (List<Path> paths :
+                List.of(
+                        List.of(work.resolve("absent-debug.jar")),
+                        List.of(empty),
+                        List.of(invented, duplicateScheme))) {
+            ByteArrayOutputStream diagnostics = new ByteArrayOutputStream();
+            assertThrows(
+                    IllegalArgumentException.class,
+                    () ->
+                            ProtosPolyglotRuntimeHost.openDebug(
+                                    new PrintStream(diagnostics, true, StandardCharsets.UTF_8),
+                                    ProtosForeignProviderConfiguration.trustedInProcess(paths)),
+                    paths::toString);
+            assertFalse(
+                    diagnostics.toString(StandardCharsets.UTF_8).contains("PROTOS_DEBUG_READY"),
+                    paths::toString);
         }
     }
 

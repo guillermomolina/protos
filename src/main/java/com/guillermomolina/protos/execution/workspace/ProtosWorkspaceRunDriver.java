@@ -199,36 +199,62 @@ public final class ProtosWorkspaceRunDriver {
         Objects.requireNonNull(serviceBinding, "serviceBinding");
 
         try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open()) {
-            ProtosPackageExecutionPlan plan =
-                    ProtosWorkspacePackagePreflight.build(
-                            request.coreRoot(),
-                            request.packageToolRoot(),
-                            request.projectRoot(),
-                            request.standardLibraryResolver(),
-                            runtimeHost);
-
-            ProtosWorkspacePackageApplicationExecution.Request application =
-                    new ProtosWorkspacePackageApplicationExecution.Request(
-                            request.coreRoot(),
-                            request.projectRoot(),
-                            plan,
-                            request.standardLibraryResolver(),
-                            request.entryLogicalModule(),
-                            request.applicationArguments(),
-                            request.environmentNameDomain(),
-                            request.environmentEntries(),
-                            request.stdinBackend(),
-                            request.stdoutBackend(),
-                            request.stderrBackend(),
-                            request.stdinEncodingBinding(),
-                            request.stdoutEncodingBinding(),
-                            request.stderrEncodingBinding(),
-                            request.filesystemGrant());
-
-            return ProtosWorkspacePackageApplicationExecution.executeService(
-                    application, networkGrant, resolverGrant, entropyGrant, clockGrant,
+            return executeService(
+                    request, networkGrant, resolverGrant, entropyGrant, clockGrant,
                     serviceBinding, runtimeHost);
         }
+    }
+
+    /**
+     * Workspace-only RootActor service over a caller-supplied RuntimeHost. Preflight and the
+     * service application share that host; the caller that opened it owns and closes it.
+     */
+    static boolean executeService(
+            Request request,
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
+            ResolverGrant resolverGrant,
+            EntropyGrant entropyGrant,
+            ClockGrant clockGrant,
+            String serviceBinding,
+            ProtosPolyglotRuntimeHost runtimeHost)
+            throws IOException {
+        Objects.requireNonNull(resolverGrant, "resolverGrant");
+        Objects.requireNonNull(entropyGrant, "entropyGrant");
+        Objects.requireNonNull(clockGrant, "clockGrant");
+        Objects.requireNonNull(request, "request");
+        Objects.requireNonNull(networkGrant, "networkGrant");
+        Objects.requireNonNull(serviceBinding, "serviceBinding");
+        Objects.requireNonNull(runtimeHost, "runtimeHost");
+
+        ProtosPackageExecutionPlan plan =
+                ProtosWorkspacePackagePreflight.build(
+                        request.coreRoot(),
+                        request.packageToolRoot(),
+                        request.projectRoot(),
+                        request.standardLibraryResolver(),
+                        runtimeHost);
+
+        ProtosWorkspacePackageApplicationExecution.Request application =
+                new ProtosWorkspacePackageApplicationExecution.Request(
+                        request.coreRoot(),
+                        request.projectRoot(),
+                        plan,
+                        request.standardLibraryResolver(),
+                        request.entryLogicalModule(),
+                        request.applicationArguments(),
+                        request.environmentNameDomain(),
+                        request.environmentEntries(),
+                        request.stdinBackend(),
+                        request.stdoutBackend(),
+                        request.stderrBackend(),
+                        request.stdinEncodingBinding(),
+                        request.stdoutEncodingBinding(),
+                        request.stderrEncodingBinding(),
+                        request.filesystemGrant());
+
+        return ProtosWorkspacePackageApplicationExecution.executeService(
+                application, networkGrant, resolverGrant, entropyGrant, clockGrant,
+                serviceBinding, runtimeHost);
     }
 
     static ProtosExecutionOutcome execute(

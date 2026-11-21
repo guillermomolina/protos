@@ -28,6 +28,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -145,6 +146,41 @@ final class ProtosPackageRunDriverMixedApplicationTest extends ProtosPackageRunD
                         stages);
 
         assertEquals(ProtosExecutionOutcome.State.FAILED, outcome.state());
+        assertMixedLifecycleUnchanged(provider, stages);
+    }
+
+    /**
+     * I169: the external-package route acquires exactly one RuntimeHost from the selected
+     * factory, only for the final application, after reconciliation; the host is closed after the
+     * Process terminated and the scope closes afterwards, exactly as with the default host.
+     */
+    @Test
+    void mixedApplicationAcquiresOneHostFromTheSelectedFactoryAfterReconciliation()
+            throws Exception {
+        Path project = project("mixed-factory");
+        RecordingProvider provider = new RecordingProvider(materializations("mixed-factory"));
+        List<ProtosPolyglotRuntimeHost> acquired = new ArrayList<>();
+        RecordingStages stages = new RecordingStages();
+        CapturingWritableBackend stdout = new CapturingWritableBackend();
+
+        ProtosExecutionOutcome outcome =
+                ProtosPackageRunDriver.execute(
+                        request(project, stdout), provider,
+                        ProtosWorkspacePackageApplicationExecution.NetworkGrant.NONE,
+                        ProtosStandaloneHostedExecution.ResolverGrant.NONE,
+                        ProtosStandaloneHostedExecution.EntropyGrant.NONE,
+                        ProtosStandaloneHostedExecution.ClockGrant.NONE,
+                        stages,
+                        () -> {
+                            // Requested only once every custody is owned by the reconciled scope.
+                            assertTrue(stages.scope != null && stages.scope.contains(a1));
+                            return ProtosPackageRunDriverTest.recordingHostFactory(acquired).get();
+                        });
+
+        assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
+        assertEquals("argument-value\n", stdout.utf8());
+        assertEquals(1, acquired.size());
+        ProtosPackageRunDriverTest.assertHostClosed(acquired.get(0));
         assertMixedLifecycleUnchanged(provider, stages);
     }
 }

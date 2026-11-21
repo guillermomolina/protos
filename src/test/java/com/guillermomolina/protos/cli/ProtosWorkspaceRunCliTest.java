@@ -25,6 +25,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.guillermomolina.protos.execution.ProtosExactExternalPackageIdentity;
 import com.guillermomolina.protos.execution.ProtosExecutionOutcome;
+import com.guillermomolina.protos.execution.ProtosExternalForeignProviderTest;
 import com.guillermomolina.protos.execution.ProtosNioReadOnlyTreeFilesystemBackend;
 import com.guillermomolina.protos.execution.ProtosPackageContentIdentity;
 import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.FilesystemGrant;
@@ -646,6 +647,233 @@ final class ProtosWorkspaceRunCliTest {
         assertEquals("external-module\n", result.stdout());
     }
 
+    /** I169: a root-package MODULE that calls one authorized C function through protos-ffm. */
+    private static final String FFI_MAIN =
+            "ffi: import(\"ffi:first\")\n"
+                    + "identity: ffi.bind(\"ffi_test_i32_identity\","
+                    + " ffi.param(ffi.signature(ffi.i32), ffi.i32))\n"
+                    + "if(!(identity(7) == 7)) { Error().signal() }\n"
+                    + "writer: TextWriter(process.stdout(), process.stdoutEncoding())\n"
+                    + "writer.writeLine(\"ffi-identity-7\").value()\n"
+                    + "null\n";
+
+    @Test
+    void i169RunAcceptsProviderAndLibraryOptionsInBothPositions() throws Exception {
+        Path provider = Files.writeString(temp.resolve("provider.jar"), "");
+        for (String[] args :
+                List.of(
+                        new String[] {"run", "--foreign-provider-path", provider.toString(),
+                                "--allow-library", "sqlite3=libsqlite3.so.0", "Main"},
+                        new String[] {"--foreign-provider-path", provider.toString(),
+                                "--allow-library", "sqlite3=libsqlite3.so.0", "run", "Main"},
+                        new String[] {"--foreign-provider-path", provider.toString(), "run",
+                                "--allow-library", "sqlite3=libsqlite3.so.0", "Main"})) {
+            ProtosCli cli = new ProtosCli();
+            Result result = runPublic(cli, args);
+            // Parsing succeeded; the later workspace failure (no package in this directory) is
+            // not a usage error.
+            assertNotEquals(2, result.code(), () -> List.of(args) + ": " + result.stderr());
+            assertEquals(Map.of("sqlite3", "libsqlite3.so.0"), cli.allowedLibraries());
+            assertEquals(List.of(provider.toAbsolutePath().normalize()), providerPaths(cli));
+        }
+
+        ProtosCli several = new ProtosCli();
+        Result many =
+                runPublic(several,
+                        "--allow-library", "first=libfirst.so.1",
+                        "run",
+                        "--allow-library", "second=/opt/lib/libsecond.so",
+                        "--allow-library", "third=libthird.so",
+                        "Main");
+        assertNotEquals(2, many.code(), many.stderr());
+        assertEquals(
+                Map.of(
+                        "first", "libfirst.so.1",
+                        "second", "/opt/lib/libsecond.so",
+                        "third", "libthird.so"),
+                several.allowedLibraries());
+    }
+
+    @Test
+    void i169RunRejectsMalformedProviderAndLibraryOptionsAsUsageErrors() throws Exception {
+        Path provider = Files.writeString(temp.resolve("provider.jar"), "");
+        for (List<String> args :
+                List.of(
+                        List.of("--allow-library", "a=liba.so", "run",
+                                "--allow-library", "a=libother.so", "Main"),
+                        List.of("run", "--allow-library", "a=liba.so",
+                                "--allow-library", "a=liba.so", "Main"),
+                        List.of("run", "--foreign-provider-path",
+                                temp.resolve("absent.jar").toString(), "Main"),
+                        List.of("--foreign-provider-path",
+                                temp.resolve("absent.jar").toString(), "run", "Main"),
+                        List.of("run", "--foreign-provider-path"),
+                        List.of("run", "--allow-library"),
+                        List.of("run", "--foreign-provider-path", provider.toString()),
+                        List.of("run", "--allow-library", "a=liba.so"),
+                        List.of("run", "--allow-library", "sqlite3=lib/libsqlite3.so.0", "Main"),
+                        List.of("run", "--allow-library", "sqlite3=./libsqlite3.so.0", "Main"),
+                        List.of("run", "--allow-library", "lib.sqlite3=libsqlite3.so.0", "Main"),
+                        List.of("run", "--allow-library", "9lib=libsqlite3.so.0", "Main"),
+                        List.of("run", "--allow-library", "sqlite3", "Main"),
+                        List.of("--inspect", "run", "Main"))) {
+            Result result = runPublic(args.toArray(String[]::new));
+            assertEquals(2, result.code(), () -> args + ": " + result.stderr());
+            assertEquals("", result.stdout(), args::toString);
+        }
+    }
+
+    @Test
+    void i169AllowLibraryAfterTheRunEntryIsAnApplicationArgument() throws Exception {
+        Path project = materializeProject();
+        assumeSecureConfinement(project);
+        Files.writeString(project.resolve("Main/module.protos"), """
+                writer: TextWriter(process.stdout(), process.stdoutEncoding())
+                writer.writeLine(process.args().at(0)).value()
+                writer.writeLine(process.args().at(1)).value()
+                null
+                """);
+        // Public parsing: after the entry the spelling is not an option, so no usage error and
+        // no authorization is recorded.
+        ProtosCli parsed = new ProtosCli();
+        Result trailing = runPublic(parsed, "run", "Main", "--allow-library", "a/b");
+        assertNotEquals(2, trailing.code(), trailing.stderr());
+        assertEquals(Map.of(), parsed.allowedLibraries());
+        // The post-admission seam passes both spellings unchanged to process.args().
+        Result result = runWorkspace(project, "Main", "--allow-library", "a/b");
+        assertEquals(0, result.code(), result.stderr());
+        assertEquals("--allow-library\na/b\n", result.stdout());
+    }
+
+    @Test
+    void i169WorkspaceRunReachesTheSelectedFfmRuntimeHost() throws Exception {
+        Path library = ProtosExternalForeignProviderTest.ffiTestLibrary(temp);
+        assumeTrue(library != null, "FFM fixture requires Linux x86-64 and a C compiler");
+        Path provider = ProtosExternalForeignProviderTest.distributableFfmProviderJar(temp);
+        Path project = materializeProject();
+        assumeSecureConfinement(project);
+        Files.writeString(project.resolve("Main/module.protos"), FFI_MAIN);
+
+        ProtosCli authorized = new ProtosCli();
+        selectForeignAuthority(authorized, List.of(provider), Map.of("first", library.toString()));
+        Result granted = runWorkspace(authorized, project, "Main");
+        assertEquals(0, granted.code(), granted.stderr());
+        assertEquals("ffi-identity-7\n", granted.stdout());
+
+        // The provider without the library authorization: the import is refused.
+        ProtosCli unauthorized = new ProtosCli();
+        selectForeignAuthority(unauthorized, List.of(provider), Map.of());
+        Result denied = runWorkspace(unauthorized, project, "Main");
+        assertEquals(1, denied.code(), denied.stderr());
+        assertEquals("", denied.stdout());
+
+        // The authorization without the provider: no ffi scheme exists.
+        ProtosCli providerless = new ProtosCli();
+        selectForeignAuthority(providerless, List.of(), Map.of("first", library.toString()));
+        Result missing = runWorkspace(providerless, project, "Main");
+        assertEquals(1, missing.code(), missing.stderr());
+        assertEquals("", missing.stdout());
+    }
+
+    @Test
+    void i169WorkspaceServiceReachesTheSelectedFfmRuntimeHost() throws Exception {
+        Path library = ProtosExternalForeignProviderTest.ffiTestLibrary(temp);
+        assumeTrue(library != null, "FFM fixture requires Linux x86-64 and a C compiler");
+        Path provider = ProtosExternalForeignProviderTest.distributableFfmProviderJar(temp);
+        Path project = materializeProject();
+        assumeSecureConfinement(project);
+        Files.writeString(project.resolve("Main/module.protos"), """
+                this.service: () => {
+                    behavior: {
+                        finish: () => {
+                            ffi: import("ffi:first")
+                            identity: ffi.bind("ffi_test_i32_identity",
+                                ffi.param(ffi.signature(ffi.i32), ffi.i32))
+                            if(!(identity(9) == 9)) { Error().signal() }
+                            writer: TextWriter(process.stdout(), process.stdoutEncoding())
+                            writer.writeLine("ffi-service-9").value()
+                            Actor.current().stop()
+                            null
+                        }
+                    }
+                    Actor.current().send("finish")
+                    behavior
+                }
+                """);
+        ProtosCli cli = new ProtosCli();
+        selectForeignAuthority(cli, List.of(provider), Map.of("first", library.toString()));
+        Result result = runWorkspaceService(cli, project, "Main", "service");
+        assertEquals(0, result.code(), result.stderr());
+        assertEquals("ffi-service-9\n", result.stdout());
+
+        ProtosCli unauthorized = new ProtosCli();
+        selectForeignAuthority(unauthorized, List.of(provider), Map.of());
+        Result denied = runWorkspaceService(unauthorized, project, "Main", "service");
+        assertEquals(1, denied.code(), denied.stderr());
+    }
+
+    @Test
+    void i169ExternalPackageRunReachesTheSelectedFfmRuntimeHost() throws Exception {
+        Path library = ProtosExternalForeignProviderTest.ffiTestLibrary(temp);
+        assumeTrue(library != null, "FFM fixture requires Linux x86-64 and a C compiler");
+        Path provider = ProtosExternalForeignProviderTest.distributableFfmProviderJar(temp);
+        MixedProject mixed = materializeMixedProject("i169-mixed-ffm");
+        ProtosLocalExactPackageMaterializationProvider materialization =
+                new ProtosLocalExactPackageMaterializationProvider(temp.resolve("i169-ffm-store"));
+        Path selectedRoot = materialization.locationFor(mixed.identity());
+        copyTree(mixed.externalSource(), selectedRoot);
+        assumeSecureConfinement(selectedRoot);
+        Files.writeString(
+                mixed.project().resolve("Main/module.protos"),
+                "Api: import(\"dep:reg/Api\")\n" + FFI_MAIN);
+
+        ProtosCli authorized = new ProtosCli(ignored -> materialization);
+        selectForeignAuthority(authorized, List.of(provider), Map.of("first", library.toString()));
+        Result granted = runWorkspace(authorized, mixed.project(), "Main");
+        assertEquals(0, granted.code(), granted.stderr());
+        assertEquals("ffi-identity-7\n", granted.stdout());
+
+        ProtosCli unauthorized = new ProtosCli(ignored -> materialization);
+        selectForeignAuthority(unauthorized, List.of(provider), Map.of());
+        Result denied = runWorkspace(unauthorized, mixed.project(), "Main");
+        assertEquals(1, denied.code(), denied.stderr());
+        assertEquals("", denied.stdout());
+    }
+
+    @Test
+    void i169FfmOptionsAreNotAvailableToBundledTools() throws Exception {
+        Path provider = Files.writeString(temp.resolve("provider.jar"), "");
+        for (String tool : List.of("test", "package", "format", "lint", "language-server")) {
+            for (List<String> args :
+                    List.of(
+                            List.of("--allow-library", "sqlite3=libsqlite3.so.0", tool),
+                            List.of("--foreign-provider-path", provider.toString(), tool))) {
+                Result result = runPublic(args.toArray(String[]::new));
+                assertEquals(2, result.code(), () -> args + ": " + result.stderr());
+                assertEquals("", result.stdout(), args::toString);
+            }
+        }
+    }
+
+    /** Selects foreign authority for the post-admission run seam exactly as CLI dispatch does. */
+    private static void selectForeignAuthority(
+            ProtosCli cli, List<Path> providerPaths, Map<String, String> libraries)
+            throws Exception {
+        java.lang.reflect.Field paths = ProtosCli.class.getDeclaredField("foreignProviderPaths");
+        paths.setAccessible(true);
+        paths.set(cli, List.copyOf(providerPaths));
+        java.lang.reflect.Field allowed = ProtosCli.class.getDeclaredField("allowedLibraries");
+        allowed.setAccessible(true);
+        allowed.set(cli, Map.copyOf(libraries));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Path> providerPaths(ProtosCli cli) throws Exception {
+        java.lang.reflect.Field paths = ProtosCli.class.getDeclaredField("foreignProviderPaths");
+        paths.setAccessible(true);
+        return (List<Path>) paths.get(cli);
+    }
+
     private Result runWorkspaceService(
             ProtosCli cli,
             Path project,
@@ -668,10 +896,14 @@ final class ProtosWorkspaceRunCliTest {
     }
 
     private Result runPublic(String... args) {
+        return runPublic(new ProtosCli(), args);
+    }
+
+    private Result runPublic(ProtosCli cli, String... args) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         ByteArrayOutputStream err = new ByteArrayOutputStream();
         int code =
-                new ProtosCli()
+                cli
                         .run(
                                 args,
                                 InputStream.nullInputStream(),

@@ -17,12 +17,16 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.Map;
+import java.util.function.Supplier;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.ResourceLock;
 
@@ -99,5 +103,97 @@ final class ProtosPackageRunDriverTest extends ProtosPackageRunDriverTestSupport
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
         assertEquals(Boolean.TRUE, outcome.value());
         assertEquals(List.of(), provider.calls);
+    }
+
+    /**
+     * I169: the workspace-only route acquires exactly one RuntimeHost from the selected factory,
+     * shares it between preflight and the application, and closes it before returning.
+     */
+    @Test
+    void workspaceOnlyRouteAcquiresOneHostFromTheSelectedFactory() throws Exception {
+        Path project = workspaceProject("workspace-factory", "42\n");
+        RecordingProvider provider = new RecordingProvider(Map.of());
+        List<ProtosPolyglotRuntimeHost> acquired = new ArrayList<>();
+
+        ProtosExecutionOutcome outcome =
+                ProtosPackageRunDriver.execute(
+                        request(project, null), provider,
+                        ProtosWorkspacePackageApplicationExecution.NetworkGrant.NONE,
+                        ProtosStandaloneHostedExecution.ResolverGrant.NONE,
+                        ProtosStandaloneHostedExecution.EntropyGrant.NONE,
+                        ProtosStandaloneHostedExecution.ClockGrant.NONE,
+                        generationOneOnlyStages(),
+                        recordingHostFactory(acquired));
+
+        assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
+        assertEquals(1, acquired.size());
+        assertHostClosed(acquired.get(0));
+        assertEquals(List.of(), provider.calls);
+    }
+
+    @Test
+    void workspaceOnlyServiceAcquiresOneHostAndClosesItAfterTermination() throws Exception {
+        Path project =
+                workspaceProject(
+                        "workspace-service-factory",
+                        "this.service: () => {\n"
+                                + "    behavior: { finish: () => { Actor.current().stop()\n null } }\n"
+                                + "    Actor.current().send(\"finish\")\n"
+                                + "    behavior\n"
+                                + "}\n");
+        RecordingProvider provider = new RecordingProvider(Map.of());
+        List<ProtosPolyglotRuntimeHost> acquired = new ArrayList<>();
+
+        boolean normal =
+                ProtosPackageRunDriver.executeService(
+                        request(project, null), provider,
+                        ProtosWorkspacePackageApplicationExecution.NetworkGrant.NONE,
+                        ProtosStandaloneHostedExecution.ResolverGrant.NONE,
+                        ProtosStandaloneHostedExecution.EntropyGrant.NONE,
+                        ProtosStandaloneHostedExecution.ClockGrant.NONE,
+                        "service",
+                        recordingHostFactory(acquired));
+
+        assertTrue(normal);
+        assertEquals(1, acquired.size());
+        assertHostClosed(acquired.get(0));
+        assertEquals(List.of(), provider.calls);
+    }
+
+    @Test
+    void failedRequirementDerivationAcquiresNoHost() throws Exception {
+        Path project = workspaceProject("workspace-broken-lock", "42\n");
+        Files.writeString(project.resolve("protos.lock"), "not a lockfile\n");
+        RecordingProvider provider = new RecordingProvider(Map.of());
+        List<ProtosPolyglotRuntimeHost> acquired = new ArrayList<>();
+
+        assertThrows(
+                Exception.class,
+                () -> ProtosPackageRunDriver.execute(
+                        request(project, null), provider,
+                        ProtosWorkspacePackageApplicationExecution.NetworkGrant.NONE,
+                        ProtosStandaloneHostedExecution.ResolverGrant.NONE,
+                        ProtosStandaloneHostedExecution.EntropyGrant.NONE,
+                        ProtosStandaloneHostedExecution.ClockGrant.NONE,
+                        generationOneOnlyStages(),
+                        recordingHostFactory(acquired)));
+
+        assertEquals(List.of(), acquired);
+        assertEquals(List.of(), provider.calls);
+    }
+
+    /** A RuntimeHost factory that opens ordinary hosts and records every acquisition. */
+    static Supplier<ProtosPolyglotRuntimeHost> recordingHostFactory(
+            List<ProtosPolyglotRuntimeHost> acquired) {
+        return () -> {
+            ProtosPolyglotRuntimeHost host = ProtosPolyglotRuntimeHost.open();
+            acquired.add(host);
+            return host;
+        };
+    }
+
+    /** A closed RuntimeHost has closed its Engine. */
+    static void assertHostClosed(ProtosPolyglotRuntimeHost host) {
+        assertThrows(IllegalStateException.class, () -> host.engineForTesting().getLanguages());
     }
 }

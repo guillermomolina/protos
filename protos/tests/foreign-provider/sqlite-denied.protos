@@ -13,13 +13,14 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-// Run with the real provider: an unauthorized alternative FFI alias is rejected,
+// Run with the real provider and only sqlite3 authorized by --allow-library:
+// a valid but unauthorized alias fails with ForeignError unauthorized-library,
 // while the separately authorized ffi:sqlite3 alias remains available.
 // This does not test denial of the authorized SQLite alias.
 Assertions: import("std:test/assertions")
 SQLite: import("std:sqlite")
-denied: Assertions.signals(Error, () => import("ffi:unauthorized_sqlite"))
-Assertions.require(denied.parent() === Error)
+denied: Assertions.signals(ForeignError, () => import("ffi:unauthorized_sqlite"))
+Assertions.require(denied.foreignCategory == "unauthorized-library")
 db: SQLite.openMemory()
 Assertions.require(db.close().value() === db)
 print("LIB029-DENIED-PASS")

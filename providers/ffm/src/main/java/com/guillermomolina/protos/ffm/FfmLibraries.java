@@ -23,16 +23,16 @@ import java.util.Objects;
 /**
  * Host authorization of the logical libraries one provider registration may load.
  *
- * <p>A {@link Policy} fixes, in code, which logical targets a provider class accepts; the only
- * runtime input is the host configuration received through {@link
- * com.guillermomolina.protos.spi.foreign.ProtosForeignPluginEnvironment#options()} (set with
- * {@code ProtosForeignProviderConfiguration.withProviderOptions}). Nothing packaged inside the
- * provider JAR authorizes a library, so the same JAR serves every host unchanged. A Protos
- * program can never name a file, a path, or an additional library.
+ * <p>The distributable policy accepts syntactically valid logical library aliases. The host
+ * selects exactly which aliases are authorized through {@code library.<alias>} options, each
+ * mapping an alias to an exact native load name or an absolute path. A Protos program may
+ * import any authorized alias, but cannot directly supply a path or native load name as
+ * authority. The provider JAR contains no implicit library authorizations. Host authorization
+ * and native library loading are independent of all other Protos capabilities.
  */
 final class FfmLibraries {
-    static final String SQLITE3 = "sqlite3";
-    static final String SQLITE3_SONAME = "libsqlite3.so.0";
+    /** Prefix of the host options that authorize one logical library alias each. */
+    static final String LIBRARY_OPTION_PREFIX = "library.";
 
     private FfmLibraries() {}
 
@@ -49,14 +49,16 @@ final class FfmLibraries {
     }
 
     /**
-     * The distributable provider: only {@code sqlite3}, by the fixed loader name {@code
-     * libsqlite3.so.0}, or by the absolute path in host option {@code sqlite3.path}.
+     * The distributable provider: any syntactically valid logical alias, authorized only by the
+     * host option {@code library.<alias>}. The option value is passed unchanged to the operating
+     * system loader, either as an exact load name or as an absolute path. No library is
+     * authorized by default, and no name, suffix, directory, or version is ever derived.
      */
     static final Policy DISTRIBUTABLE =
             new Policy() {
                 @Override
                 public boolean isTarget(String target) {
-                    return SQLITE3.equals(target);
+                    return FfmTypes.isIdentifier(target);
                 }
 
                 @Override
@@ -64,10 +66,12 @@ final class FfmLibraries {
                     if (!isTarget(target)) {
                         throw unauthorized();
                     }
-                    String path = options.get("sqlite3.path");
-                    return path == null
-                            ? new Location(SQLITE3_SONAME, null)
-                            : new Location(null, requireAbsolute(path));
+                    requireWellFormedLibraryOptions(options);
+                    String value = options.get(LIBRARY_OPTION_PREFIX + target);
+                    if (value == null) {
+                        throw unauthorized();
+                    }
+                    return nativeTarget(value);
                 }
             };
 
@@ -110,8 +114,39 @@ final class FfmLibraries {
         return new FfmFailure("unauthorized-library", "the library is not authorized by the host");
     }
 
+    /**
+     * Rejects, before any native acquisition, a host table whose {@code library.<alias>} keys do
+     * not use the import alias form or whose targets are malformed.
+     */
+    private static void requireWellFormedLibraryOptions(Map<String, String> options) {
+        for (Map.Entry<String, String> entry : options.entrySet()) {
+            String key = entry.getKey();
+            if (key.startsWith(LIBRARY_OPTION_PREFIX)) {
+                if (!FfmTypes.isIdentifier(key.substring(LIBRARY_OPTION_PREFIX.length()))) {
+                    throw invalidOption();
+                }
+                nativeTarget(entry.getValue());
+            }
+        }
+    }
+
+    /** An exact load name without separators, or an absolute path, both passed unchanged. */
+    private static Location nativeTarget(String value) {
+        if (value.isEmpty() || value.indexOf('\0') >= 0) {
+            throw invalidOption();
+        }
+        if (value.indexOf('/') < 0) {
+            return new Location(value, null);
+        }
+        return new Location(null, requireAbsolute(value));
+    }
+
+    private static FfmFailure invalidOption() {
+        return new FfmFailure("invalid-host-option", "a library authorization option is malformed");
+    }
+
     private static String requireAbsolute(String path) {
-        if (!Path.of(path).isAbsolute()) {
+        if (path.indexOf('\0') >= 0 || !path.startsWith("/") || !Path.of(path).isAbsolute()) {
             throw new FfmFailure("invalid-host-option", "a library path option must be absolute");
         }
         return path;

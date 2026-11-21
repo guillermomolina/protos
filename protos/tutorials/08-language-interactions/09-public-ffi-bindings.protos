@@ -15,7 +15,7 @@
 
 // Tutorial: bind C functions through the public std:ffi MODULE.
 // Authorize the optional provider explicitly on the portable JVM CLI:
-// bin/protos --foreign-provider-path /path/to/protos-ffm-provider.jar \
+// bin/protos --foreign-provider-path /path/to/protos-ffm-provider.jar --allow-library sqlite3=libsqlite3.so.0 \
 //     protos/tutorials/08-language-interactions/09-public-ffi-bindings.protos
 // Requires Linux x86-64, Java 25/GraalVM 25.5 and shared libsqlite3.so.0.
 // Success is an empty output stream and exit status 0.

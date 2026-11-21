@@ -25,9 +25,49 @@ The dispatch code is
 | `protos -h`, `protos --help` | Prints usage | |
 | `protos -v`, `protos --version` | Prints `Protos <version>` | |
 
-`--foreign-provider-path <paths>` may precede `<file>`, `-e`, or the REPL; see
-[Foreign interoperability](../interop/README.md). `--inspect` may precede the
-same three forms; see [Inspection](#inspection) below.
+`--foreign-provider-path <paths>` may precede `<file>`, `-e`, the REPL, or the
+`run`/`debug` entry; see [Foreign interoperability](../interop/README.md).
+`--allow-library <alias>=<target>` (repeatable) may precede the same forms and
+authorizes one native library for the `protos-ffm` provider; no library is
+authorized by default, and it neither loads the provider nor grants Protos
+capabilities; see the [FFM provider guide](../interop/ffm-provider.md).
+`--inspect` may precede only `<file>`, `-e`, or the REPL; see
+[Inspection](#inspection) below.
+
+### Foreign providers with `run` and `debug`
+
+```sh
+protos run --foreign-provider-path provider.jar \
+  --allow-library sqlite3=libsqlite3.so.0 Main
+
+protos debug --foreign-provider-path provider.jar \
+  --allow-library sqlite3=libsqlite3.so.0 app.protos
+
+protos --foreign-provider-path provider.jar \
+  --allow-library sqlite3=libsqlite3.so.0 run Main
+
+protos --foreign-provider-path provider.jar \
+  --allow-library sqlite3=libsqlite3.so.0 debug app.protos
+```
+
+- Both options may precede the subcommand or follow it, but always before the
+  `run` entry or the `debug` file; the two positions are combined, and an
+  alias may still be given only once. After the entry or file the same
+  spellings are ordinary `process.args()` elements.
+- Authorizing a library is independent of trusting the provider JAR: the JAR
+  is trusted by `--foreign-provider-path`, each library by its own
+  `--allow-library`, and neither implies the other or any Protos capability.
+- `TRUSTED_IN_PROCESS` provides no confinement: the provider and every
+  authorized library run with the full authority of the operating-system
+  process.
+- `run` and `debug` create no new class of guest permission: the options only
+  select the application RuntimeHost. Package preflight and external package
+  materialization keep their existing mechanisms and never receive provider
+  or library authority.
+- Bundled CLI Tools (`test`, `package`, `format`, `lint`, `language-server`)
+  never receive these options; giving them is a usage error (exit 2).
+- `--inspect` remains limited to file, `-e`, and REPL execution.
+
 
 ## Running programs
 

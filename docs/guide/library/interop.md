@@ -98,7 +98,7 @@ grants no authority.
 Run the program by explicitly authorizing the provider on the portable JVM CLI:
 
 ```sh
-bin/protos --foreign-provider-path /path/to/protos-ffm-provider.jar \
+bin/protos --foreign-provider-path /path/to/protos-ffm-provider.jar --allow-library sqlite3=libsqlite3.so.0 \
   protos/examples/ffi/sqlite-version-public.protos
 ```
 

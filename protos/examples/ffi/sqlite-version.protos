@@ -16,7 +16,7 @@
 // Smoke test for the optional FFM provider (I144): call one C function of
 // the host-authorized SQLite library, declared here in Protos.
 //
-//   bin/protos --foreign-provider-path /path/to/protos-ffm-provider.jar \
+//   bin/protos --foreign-provider-path /path/to/protos-ffm-provider.jar --allow-library sqlite3=libsqlite3.so.0 \
 //       protos/examples/ffi/sqlite-version.protos
 //
 // Success: no standard output, exit status 0. Without the provider JAR the

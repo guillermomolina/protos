@@ -19,7 +19,7 @@
 // table/insert/query/cleanup sequence.
 //
 // The host must explicitly authorize the optional FFM provider, for example:
-//   bin/protos --foreign-provider-path <protos-ffm-provider.jar> <this file>
+//   bin/protos --foreign-provider-path <protos-ffm-provider.jar> --allow-library sqlite3=libsqlite3.so.0 <this file>
 // Importing std:sqlite alone loads no native library. Behavior without the
 // provider is exercised separately by protos/tests/foreign-provider/
 // sqlite-missing.protos, which runs with no provider at all; this lesson

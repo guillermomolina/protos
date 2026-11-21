@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.187-SNAPSHOT
+
+- **I169 / D259-B2+A.** Implement the default-off host-authorized native library allowlist for the external FFM provider. Accept generic logical library aliases mapped to exact load names or absolute paths through immutable `library.<alias>` provider options and the repeatable `--allow-library` CLI option. Support direct file, expression, REPL, workspace/package `run`, RootActor services and DAP `debug` using the existing RuntimeHost and foreign provider infrastructure. Authorize each library before native resource acquisition, preserve Actor-local sessions, ABI R1, existing resource custody and ordinary Protos execution semantics, and keep bundled Tool commands and guest capabilities independent of native authorization. Extend CLI, embedding, package-run, DAP, FFM, SQLite and distribution regressions, including default denial and two independent native libraries; update the operational guides and examples. Explicitly document `TRUSTED_IN_PROCESS` risks without claiming native confinement.
+
 ## 0.4.186-SNAPSHOT
 
 - **I115.** Cache captured Preludes by Closure identity, frozen lexical binding values and missing bindings in a nearer scope guarded by current storage and Shape. Skip redundant selection validity checks for frozen owners and profile indexed Array/Bytes error paths. Extend lexical selection, numeric and String operation, indexed operation and compact lowering regressions, and refresh the generated-bytecode BCI partial-evaluation baseline for the shorter indexed instructions.

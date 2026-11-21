@@ -142,7 +142,7 @@ data, pre-entry rejection) and
 (public `std:sqlite`, numeric/NULL binding, copied rows and Closable cleanup).
 All three need
 the provider JAR authorized explicitly with
-`bin/protos --foreign-provider-path <protos-ffm-provider.jar> <file>`, on
+`bin/protos --foreign-provider-path <protos-ffm-provider.jar> --allow-library sqlite3=libsqlite3.so.0 <file>`, on
 Linux x86-64 with JDK 25. They validate with assertions and contain no `print`
 call, so the ordinary tutorial sweep, which runs without any provider, skips
 them; `dist/test_external_foreign_providers.py` runs them instead. See the
@@ -174,7 +174,7 @@ shows one prepared query with copied rows. The DOC024 practical lesson
 introduces no new API: it combines the same operations into a table, numeric
 inserts with fresh Statements, ordered `each` traversal, bounded error cases
 and Statement/Connection close semantics. Both require explicit provider
-authorization (`bin/protos --foreign-provider-path <protos-ffm-provider.jar> <file>`),
+authorization (`bin/protos --foreign-provider-path <protos-ffm-provider.jar> --allow-library sqlite3=libsqlite3.so.0 <file>`),
 contain no `print` call, and are run by
 `dist/test_external_foreign_providers.py` rather than the ordinary
 provider-free tutorial sweep. See the

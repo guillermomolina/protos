@@ -28,8 +28,10 @@ authority.
 
 The current external FFM provider supports the **portable JVM CLI** on **Linux
 x86-64 LP64**, with **Java 25** and the supported **GraalVM 25.5** toolchain. It
-requires an external FFM provider JAR and a shared SQLite library available to
-the native loader as `libsqlite3.so.0`. It is not available in Native Image:
+requires an external FFM provider JAR and, for each native library a program
+uses, an explicit host authorization (`--allow-library alias=target`). The
+SQLite examples need a shared SQLite library available to the native loader as
+`libsqlite3.so.0`. It is not available in Native Image:
 Native Image cannot load external provider plugins.
 
 Build the portable distribution and inspect its actual versioned archive:
@@ -56,8 +58,9 @@ python3 dist/build_ffm_provider.py \
 ```
 
 Use the archive name actually present in `target/distributions/`. Building the
-JAR grants nothing. Each run must explicitly authorize it with
-`--foreign-provider-path`.
+JAR grants nothing. Each run must explicitly load it with
+`--foreign-provider-path` and, separately, authorize each native library with
+`--allow-library alias=target`. No library is authorized by default.
 
 ## Imports and authority
 
@@ -74,15 +77,51 @@ authority.
 sqlite: import("ffi:sqlite3")
 ```
 
-This is a distinct foreign import. It succeeds only when the host explicitly
-loads the external provider, and its logical alias is authorized by that
-provider. The application passes the resulting library facade to `FFI`;
+This is a distinct foreign import of the logical alias `sqlite3`. It succeeds
+only when the host explicitly loads the external provider **and** authorizes
+that alias with `--allow-library sqlite3=<target>` (or the embedding provider
+option `library.sqlite3`). The target is an exact load name such as
+`libsqlite3.so.0` or an absolute path, passed unchanged to the operating-system
+loader. The provider's presence alone authorizes no library. The application passes the resulting library facade to `FFI`;
 `FFI.bind` never accepts a path or a library name String as authority.
 
 ```sh
-bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar \
+bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar --allow-library sqlite3=libsqlite3.so.0 \
     protos/examples/ffi/sqlite-version-public.protos
 ```
+
+Two libraries use two aliases under the same provider:
+
+```sh
+bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar \
+    --allow-library sqlite3=libsqlite3.so.0 \
+    --allow-library zlib=/usr/lib/x86_64-linux-gnu/libz.so.1 \
+    program.protos
+```
+
+A workspace application or a debugged file uses the same options, before the
+entry or file:
+
+```sh
+protos run --foreign-provider-path provider.jar \
+  --allow-library sqlite3=libsqlite3.so.0 Main
+
+protos debug --foreign-provider-path provider.jar \
+  --allow-library sqlite3=libsqlite3.so.0 app.protos
+```
+
+See the [FFM provider guide](../interop/ffm-provider.md) for both option
+positions and their limits.
+
+Loading the provider (`--foreign-provider-path`), authorizing a native library
+(`--allow-library`), and granting Protos capabilities (`--allow-filesystem`,
+`--allow-network`, ...) are independent decisions. An authorized library runs
+`TRUSTED_IN_PROCESS`: it can use native file and network access, load
+transitive dependencies and run their initializers, keep global state shared
+by all Actors, block indefinitely, corrupt memory through a wrong ABI
+signature, or terminate the process. `--allow-library` is not a sandbox, and
+authorizing a C++ library adds no C++ ABI, Qt, Boost, callback, struct or
+virtual-method support.
 
 The public sample is
 [`sqlite-version-public.protos`](../../../protos/examples/ffi/sqlite-version-public.protos).
@@ -271,7 +310,9 @@ synchronous and do not implicitly schedule parallel work.
 | Symptom | Likely cause |
 |---|---|
 | `import("ffi:sqlite3")` reports an ordinary resolution Error | The host did not pass the external JAR with `--foreign-provider-path`, or provider registration failed. Importing `std:ffi` alone is not authorization. |
-| An alias is denied | The distributable I144 provider authorizes `ffi:sqlite3`, not an arbitrary scheme, filename or path. |
+| `import("ffi:<alias>")` signals `ForeignError` with `foreignCategory` `unauthorized-library` | The host loaded the provider but did not pass `--allow-library <alias>=<target>`. No library is authorized by default. |
+| `import("ffi:<alias>")` signals `ForeignError` with `foreignCategory` `library-unavailable` | The alias is authorized but the operating-system loader cannot load its target. |
+| A filename or path import is rejected | Imports name logical aliases only (`[A-Za-z_][A-Za-z0-9_]{0,127}`), never files or paths. |
 | Binding a symbol signals `ForeignError` | The symbol may not exist in the authorized library or its searched dependencies; check the C symbol spelling and library available to the loader. |
 | A call signals ordinary `Error` before C entry | Check argument count, exact descriptor kinds and ranges, `utf8z` interior NUL, nullability, handle type and handle liveness. |
 | A released resource is rejected | Release is one-way. Do not retry its destructor or pass that handle to another binding. |

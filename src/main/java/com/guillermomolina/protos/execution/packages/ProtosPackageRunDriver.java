@@ -26,6 +26,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Supplier;
 
 /**
  * CLI-neutral host driver for one package-backed application run with external package support
@@ -104,7 +105,27 @@ public final class ProtosPackageRunDriver {
             throws IOException {
         return execute(
                 request, provider, networkGrant, resolverGrant, entropyGrant, clockGrant,
-                PRODUCTION_STAGES);
+                ProtosPolyglotRuntimeHost::open);
+    }
+
+    /**
+     * Ordinary run whose application RuntimeHost is acquired from {@code runtimeHostFactory}
+     * exactly once: for the workspace-only route it hosts preflight and the application, for the
+     * external-package route it hosts only the final application Process. The driver owns and
+     * closes the acquired host; the factory is never invoked before requirement derivation or
+     * after a failed materialization.
+     */
+    public static ProtosExecutionOutcome execute(
+            ProtosWorkspaceRunDriver.Request request,
+            ProtosExactPackageMaterializationProvider provider,
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
+            ResolverGrant resolverGrant,
+            EntropyGrant entropyGrant, ClockGrant clockGrant,
+            Supplier<ProtosPolyglotRuntimeHost> runtimeHostFactory)
+            throws IOException {
+        return execute(
+                request, provider, networkGrant, resolverGrant, entropyGrant, clockGrant,
+                PRODUCTION_STAGES, runtimeHostFactory);
     }
 
     static ProtosExecutionOutcome execute(
@@ -160,6 +181,21 @@ public final class ProtosPackageRunDriver {
             ClockGrant clockGrant,
             Stages stages)
             throws IOException {
+        return execute(
+                request, provider, networkGrant, resolverGrant, entropyGrant, clockGrant, stages,
+                ProtosPolyglotRuntimeHost::open);
+    }
+
+    static ProtosExecutionOutcome execute(
+            ProtosWorkspaceRunDriver.Request request,
+            ProtosExactPackageMaterializationProvider provider,
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
+            ResolverGrant resolverGrant,
+            EntropyGrant entropyGrant,
+            ClockGrant clockGrant,
+            Stages stages,
+            Supplier<ProtosPolyglotRuntimeHost> runtimeHostFactory)
+            throws IOException {
         Objects.requireNonNull(resolverGrant, "resolverGrant");
         Objects.requireNonNull(entropyGrant, "entropyGrant");
         Objects.requireNonNull(clockGrant, "clockGrant");
@@ -167,6 +203,7 @@ public final class ProtosPackageRunDriver {
         Objects.requireNonNull(provider, "provider");
         Objects.requireNonNull(networkGrant, "networkGrant");
         Objects.requireNonNull(stages, "stages");
+        Objects.requireNonNull(runtimeHostFactory, "runtimeHostFactory");
 
         List<ProtosExactExternalPackageIdentity> requirements =
                 ProtosExactExternalRequirementsPreflight.derive(
@@ -175,8 +212,11 @@ public final class ProtosPackageRunDriver {
                         request.projectRoot(),
                         request.standardLibraryResolver());
         if (requirements.isEmpty()) {
-            return ProtosWorkspaceRunDriver.execute(
-                    request, networkGrant, resolverGrant, entropyGrant, clockGrant);
+            try (ProtosPolyglotRuntimeHost runtimeHost = runtimeHostFactory.get()) {
+                return ProtosWorkspaceRunDriver.execute(
+                        request, networkGrant, resolverGrant, entropyGrant, clockGrant,
+                        runtimeHost);
+            }
         }
 
         ProtosPackageExecutionPlanV2 plan;
@@ -209,7 +249,8 @@ public final class ProtosPackageRunDriver {
 
         try (scope) {
             return executeApplication(
-                    request, plan, scope, networkGrant, resolverGrant, entropyGrant, clockGrant, stages);
+                    request, plan, scope, networkGrant, resolverGrant, entropyGrant, clockGrant,
+                    stages, runtimeHostFactory);
         }
     }
 
@@ -266,6 +307,26 @@ public final class ProtosPackageRunDriver {
             ClockGrant clockGrant,
             String serviceBinding)
             throws IOException {
+        return executeService(
+                request, provider, networkGrant, resolverGrant, entropyGrant, clockGrant,
+                serviceBinding, ProtosPolyglotRuntimeHost::open);
+    }
+
+    /**
+     * Service counterpart of the factory-selected {@code execute}: the service RuntimeHost is
+     * acquired from {@code runtimeHostFactory} exactly once and closed by this driver after the
+     * service Process has terminated and before any external resource scope is closed.
+     */
+    public static boolean executeService(
+            ProtosWorkspaceRunDriver.Request request,
+            ProtosExactPackageMaterializationProvider provider,
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
+            ResolverGrant resolverGrant,
+            EntropyGrant entropyGrant,
+            ClockGrant clockGrant,
+            String serviceBinding,
+            Supplier<ProtosPolyglotRuntimeHost> runtimeHostFactory)
+            throws IOException {
         Objects.requireNonNull(resolverGrant, "resolverGrant");
         Objects.requireNonNull(entropyGrant, "entropyGrant");
         Objects.requireNonNull(clockGrant, "clockGrant");
@@ -273,6 +334,7 @@ public final class ProtosPackageRunDriver {
         Objects.requireNonNull(provider, "provider");
         Objects.requireNonNull(networkGrant, "networkGrant");
         Objects.requireNonNull(serviceBinding, "serviceBinding");
+        Objects.requireNonNull(runtimeHostFactory, "runtimeHostFactory");
 
         List<ProtosExactExternalPackageIdentity> requirements =
                 ProtosExactExternalRequirementsPreflight.derive(
@@ -282,8 +344,11 @@ public final class ProtosPackageRunDriver {
                         request.standardLibraryResolver());
 
         if (requirements.isEmpty()) {
-            return ProtosWorkspaceRunDriver.executeService(
-                    request, networkGrant, resolverGrant, entropyGrant, clockGrant, serviceBinding);
+            try (ProtosPolyglotRuntimeHost runtimeHost = runtimeHostFactory.get()) {
+                return ProtosWorkspaceRunDriver.executeService(
+                        request, networkGrant, resolverGrant, entropyGrant, clockGrant,
+                        serviceBinding, runtimeHost);
+            }
         }
 
         Stages stages = PRODUCTION_STAGES;
@@ -330,8 +395,7 @@ public final class ProtosPackageRunDriver {
             ProtosModuleKey entryKey =
                     resolver.entryModule(request.entryLogicalModule());
 
-            try (ProtosPolyglotRuntimeHost runtimeHost =
-                    ProtosPolyglotRuntimeHost.open()) {
+            try (ProtosPolyglotRuntimeHost runtimeHost = runtimeHostFactory.get()) {
                 return ProtosWorkspacePackageApplicationExecution.executeServiceEntry(
                         request.coreRoot(),
                         resolver,
@@ -378,7 +442,8 @@ public final class ProtosPackageRunDriver {
             Stages stages)
             throws IOException {
         return executeApplication(
-                request, plan, scope, networkGrant, ResolverGrant.NONE, entropyGrant, clockGrant, stages);
+                request, plan, scope, networkGrant, ResolverGrant.NONE, entropyGrant, clockGrant,
+                stages, ProtosPolyglotRuntimeHost::open);
     }
 
     private static ProtosExecutionOutcome executeApplication(
@@ -389,14 +454,15 @@ public final class ProtosPackageRunDriver {
             ResolverGrant resolverGrant,
             EntropyGrant entropyGrant,
             ClockGrant clockGrant,
-            Stages stages)
+            Stages stages,
+            Supplier<ProtosPolyglotRuntimeHost> runtimeHostFactory)
             throws IOException {
         ProtosPackageExecutionPlanV2ModuleResolver resolver =
                 new ProtosPackageExecutionPlanV2ModuleResolver(
                         request.projectRoot(), plan, scope, request.standardLibraryResolver());
         ProtosModuleKey entryKey = resolver.entryModule(request.entryLogicalModule());
 
-        try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open()) {
+        try (ProtosPolyglotRuntimeHost runtimeHost = runtimeHostFactory.get()) {
             // Termination is awaited, not only requested: hosted Actors may still be loading
             // external modules through the scope while the Process unwinds (PLAT012).
             return ProtosWorkspacePackageApplicationExecution.executeEntry(

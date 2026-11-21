@@ -54,26 +54,28 @@ backend implementation and native lifetime details see the advanced
        --output target/ffm-provider
    ```
 
-3. Authorize the provider explicitly on every run with
-   `--foreign-provider-path`. Building the JAR authorizes nothing, and
+3. Load the provider explicitly on every run with
+   `--foreign-provider-path`, and authorize SQLite separately with
+   `--allow-library sqlite3=libsqlite3.so.0`; the provider authorizes no
+   library by default. Building the JAR authorizes nothing, and
    `import("std:sqlite")` alone loads no SQLite library: only `openMemory()`
    reaches the authorized `ffi:sqlite3` provider.
 
 4. Run the introductory example:
 
    ```sh
-   bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar \
+   bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar --allow-library sqlite3=libsqlite3.so.0 \
        protos/examples/ffi/sqlite-library.protos
    ```
 
 5. Run the DOC024 tutorial and cookbook programs:
 
    ```sh
-   bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar \
+   bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar --allow-library sqlite3=libsqlite3.so.0 \
        protos/tutorials/12-system-resources/06-sqlite-query-lifecycle.protos
-   bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar \
+   bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar --allow-library sqlite3=libsqlite3.so.0 \
        protos/examples/ffi/sqlite-prepared-numeric.protos
-   bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar \
+   bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar --allow-library sqlite3=libsqlite3.so.0 \
        protos/examples/ffi/sqlite-copied-values.protos
    ```
 
@@ -211,7 +213,7 @@ and the supported GraalVM 25.5 toolchain, with `libsqlite3.so.0` installed and
 the optional FFM provider built and explicitly supplied by the host:
 
 ```sh
-bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar \
+bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar --allow-library sqlite3=libsqlite3.so.0 \
     protos/examples/ffi/sqlite-library.protos
 ```
 

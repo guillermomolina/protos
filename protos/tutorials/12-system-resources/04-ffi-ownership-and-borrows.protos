@@ -24,11 +24,13 @@
 // provider-private borrowed/preserving/copy machinery taught here stays
 // private and is not part of any public API.
 //
-//   bin/protos --foreign-provider-path /path/to/protos-ffm-provider.jar \
+//   bin/protos --foreign-provider-path /path/to/protos-ffm-provider.jar --allow-library sqlite3=libsqlite3.so.0 \
 //       protos/tutorials/12-system-resources/04-ffi-ownership-and-borrows.protos
 //
 // Requires the portable JVM CLI on Linux x86-64, JDK 25, and a shared
-// libsqlite3.so.0. A successful run writes nothing to standard output and
+// libsqlite3.so.0 explicitly authorized with --allow-library (no native
+// library is authorized by default; the authorization is not a sandbox and
+// grants no Protos capability). A successful run writes nothing to standard output and
 // exits with status 0. The database lives only in memory (`:memory:`).
 
 Assertions: import("std:test/assertions")

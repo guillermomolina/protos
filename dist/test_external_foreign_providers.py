@@ -27,14 +27,25 @@ I144 extends the same run with the optional external FFM provider
 (``providers/ffm``), built by ``dist/build_ffm_provider.py`` against the same
 extracted ``lib/protos.jar`` and passed only with ``--foreign-provider-path``:
 real shared SQLite when present, the denial cases, and the absence of implicit
-authorization. The CLI has no provider-option channel, so the SQLite-
-independent ABI fixture (``native/ffi_test.c`` through ``ffm-abi.protos``) is
-run by the Java test host ``ProtosI144FfmFixtureAbiTest``, which selects the
-fixture library with ``withProviderOptions``. Missing platform support or
+authorization. Native library authorization is default-off: every case that
+loads a library also passes exactly the ``--allow-library alias=target``
+options it needs (``sqlite3=libsqlite3.so.0`` for SQLite), and the negative
+cases prove that provider presence alone authorizes nothing. The two-library
+case compiles ``native/ffi_test.c`` and ``native/ffi_second.c`` under the
+runner's work directory and authorizes both by absolute path under the same
+distributable JAR. The ``ffi-test`` ABI fixture (``ffm-abi.protos``) is run by
+the Java test host ``ProtosI144FfmFixtureAbiTest``. Missing platform support or
 shared SQLite is reported as UNSUPPORTED, never as PASS. The I144 tutorials
 and examples (``protos/tutorials``, ``protos/examples/ffi``) run from their
 real paths against the same JAR; they validate by assertion and must exit 0
 with empty stdout and stderr.
+
+Before any I144/I169 case, two minimal launcher invocations (no provider, no
+library) confirm that the extracted archive implements the I169 option
+contract; a stale archive is an explicit I169_DISTRIBUTION_BASELINE failure
+and no native case is attempted. Launcher parsing and rejection cases need no
+native support and are never UNSUPPORTED for platform reasons; they run under
+a shorter timeout, and a timeout is reported as FAIL for that command.
 """
 
 from __future__ import annotations
@@ -108,6 +119,11 @@ OPAQUE = "i085b-opaque"
 LIBC = "i085b-libc"
 JAVA = "i085b-java"
 TIMEOUT = 120
+# CLI usage errors are rejected before any program or Tool runs; they get a shorter bound.
+USAGE_TIMEOUT = 30
+# Exact load name the host authorizes for SQLite cases; passed unchanged to the loader.
+SQLITE_GRANT = ("sqlite3=libsqlite3.so.0",)
+SECOND_MARKER_TEXT = "PROTOS-FFI-SECOND-MARKER\n"
 
 PASS, FAIL, UNSUPPORTED = "PASS", "FAIL", "UNSUPPORTED"
 RESULT_KEYS = (
@@ -139,6 +155,14 @@ RESULT_KEYS = (
     "I144_EXAMPLE_VERSION",
     "I144_EXAMPLE_QUERY",
     "LIB029_MISSING",
+    "I169_DISTRIBUTION_BASELINE",
+    "I169_PROVIDER_ABSENT",
+    "I169_ALLOWLIST_DENIED",
+    "I169_UNAUTHORIZED_ALIAS",
+    "I169_LIBRARY_UNAVAILABLE",
+    "I169_CLI_INVALID_OPTIONS",
+    "I169_TOOLS_DENIED",
+    "I169_TWO_LIBRARIES",
     *(key for key, _, _ in LIB029_CASES),
     *(key for key, _, _ in LIB030_CASES),
     *(key for key, _ in LIB029_LEARNING),
@@ -184,10 +208,18 @@ class Runner:
         env.update(extra or {})
         return env
 
-    def run(self, label: str, command: list[str], cwd: Path, env: dict[str, str]):
-        completed = subprocess.run(
-            command, cwd=cwd, env=env, capture_output=True, text=True, timeout=TIMEOUT
-        )
+    def run(self, label: str, command: list[str], cwd: Path, env: dict[str, str],
+            timeout: int = TIMEOUT):
+        try:
+            completed = subprocess.run(
+                command, cwd=cwd, env=env, capture_output=True, text=True, timeout=timeout
+            )
+        except subprocess.TimeoutExpired as expired:
+            (self.evidence / f"{label}.log").write_text(
+                f"$ {' '.join(command)}\ntimeout after {timeout}s\n",
+                encoding="utf-8",
+            )
+            raise expired
         log = self.evidence / f"{label}.log"
         log.write_text(
             f"$ {' '.join(command)}\nexit={completed.returncode}\n"
@@ -317,14 +349,27 @@ def check_ffm_program(
     program: str,
     jar: Path,
     marker: str,
+    libraries: tuple[str, ...] = (),
+    arguments: tuple[str, ...] = (),
 ) -> None:
-    """Runs one I144 program with exactly the FFM provider JAR configured."""
-    check_program(runner, key, install, program, [jar], marker, [])
+    """Runs one program with exactly the FFM provider JAR and the given library grants."""
+    check_program(runner, key, install, program, [jar], marker, [],
+                  library_options(libraries), list(arguments))
 
 
-def check_ffm_silent(runner: Runner, key: str, install: Path, source: Path, jar: Path) -> None:
-    """Runs one assertion-validated I144 program: exit 0, no stdout, no stderr."""
-    command = [str(install / "bin" / "protos"), "--foreign-provider-path", str(jar), str(source)]
+def library_options(libraries: tuple[str, ...]) -> list[str]:
+    """Explicit ``--allow-library`` options, one per ``alias=target`` grant."""
+    options: list[str] = []
+    for grant in libraries:
+        options += ["--allow-library", grant]
+    return options
+
+
+def check_ffm_silent(runner: Runner, key: str, install: Path, source: Path, jar: Path,
+                     libraries: tuple[str, ...] = ()) -> None:
+    """Runs one assertion-validated program: exit 0, no stdout, no stderr."""
+    command = [str(install / "bin" / "protos"), "--foreign-provider-path", str(jar),
+               *library_options(libraries), str(source)]
     label = f"{key.lower()}-{source.stem}"
     completed = runner.run(label, command, runner.work, runner.environment())
     problems = []
@@ -347,13 +392,56 @@ def shared_sqlite() -> str | None:
     return None
 
 
+# I169 cases that only exercise launcher parsing and rejection: no provider, library,
+# Linux, JDK 25 or C compiler is needed, so they never become UNSUPPORTED for those reasons.
+I169_PARSE_KEYS = ("I169_DISTRIBUTION_BASELINE", "I169_CLI_INVALID_OPTIONS", "I169_TOOLS_DENIED")
+
+
+def native_keys() -> list[str]:
+    """Result keys that need the native FFM provider (Linux x86_64, JDK 25)."""
+    return [key for key in RESULT_KEYS
+            if (key.startswith(("I144_", "I169_", "DOC024_", "LIB030_"))
+                or (key.startswith("LIB029_") and key != "LIB029_MISSING"))
+            and key not in I169_PARSE_KEYS]
+
+
+def check_i169_baseline(runner: Runner, install: Path) -> bool:
+    """Fail closed unless the extracted launcher implements the I169 option contract.
+
+    Two minimal invocations load no provider and no library: a library grant before -e
+    is accepted and the program runs, and a grant after 'run' is parsed as a run option
+    (so the missing entry is reported) rather than rejected as an unknown option. A
+    launcher built before I169 fails one of them; no version heuristic is used.
+    """
+    protos = str(install / "bin" / "protos")
+    problems = []
+    try:
+        accepted = runner.run(
+            "i169-baseline-file", [protos, "--allow-library", "probe=libprotos_i169_probe.so",
+                                   "-e", 'print("I169-BASELINE")'],
+            runner.work, runner.environment(), USAGE_TIMEOUT)
+        if accepted.returncode != 0 or accepted.stdout != "I169-BASELINE\n":
+            problems.append(f"--allow-library before -e: exit {accepted.returncode}, "
+                            f"stdout {accepted.stdout!r}")
+        run_option = runner.run(
+            "i169-baseline-run", [protos, "run", "--allow-library", "probe=libprotos_i169_probe.so"],
+            runner.work, runner.environment(), USAGE_TIMEOUT)
+        if (run_option.returncode != 2
+                or "run requires a root-package logical entry" not in run_option.stderr):
+            problems.append(f"--allow-library after run: exit {run_option.returncode}, "
+                            f"stderr {run_option.stderr.strip()!r}")
+    except subprocess.TimeoutExpired as expired:
+        problems.append(f"timeout after {expired.timeout}s: {' '.join(expired.cmd)}")
+    report("I169 distribution baseline", [], problems)
+    runner.record("I169_DISTRIBUTION_BASELINE", FAIL if problems else PASS,
+                  "archive does not contain the I169 launcher: " + "; ".join(problems)
+                  if problems else None)
+    return not problems
+
+
 def plan_i144(runner: Runner, install: Path, protos_jar: Path, plugins: Path,
               native_supported: bool, native_reason: str, plan: list) -> None:
-    plan.append(lambda: check_program(runner, "LIB029_MISSING", install, "sqlite-missing.protos",
-                                     [], "LIB029-MISSING-PASS", []))
-    keys = [key for key in RESULT_KEYS
-            if key.startswith(("I144_", "DOC024_"))
-            or (key.startswith("LIB029_") and key != "LIB029_MISSING")]
+    keys = native_keys()
     if not native_supported:
         for key in keys:
             runner.record(key, UNSUPPORTED, native_reason)
@@ -379,39 +467,180 @@ def plan_i144(runner: Runner, install: Path, protos_jar: Path, plugins: Path,
             runner.record(key, UNSUPPORTED, f"no shared libsqlite3.so.0 in {SQLITE_CANDIDATES}")
     else:
         plan.append(lambda: check_ffm_program(runner, "I144_FFM_SQLITE", install, "ffm-sqlite.protos",
-                      provider, "I144-FFM-SQLITE-PASS"))
+                      provider, "I144-FFM-SQLITE-PASS", SQLITE_GRANT))
         plan.append(lambda: check_ffm_program(runner, "I144_FFM_DENIED", install, "ffm-denied.protos",
-                      provider, "I144-FFM-DENIED-PASS"))
+                      provider, "I144-FFM-DENIED-PASS", SQLITE_GRANT))
         for key, source in I144_LEARNING:
-            plan.append(lambda key=key, source=source: check_ffm_silent(runner, key, install, source, provider))
+            plan.append(lambda key=key, source=source: check_ffm_silent(
+                runner, key, install, source, provider, SQLITE_GRANT))
 
         for key, program, marker in LIB029_CASES:
             plan.append(lambda key=key, program=program, marker=marker: check_ffm_program(
-                runner, key, install, program, provider, marker))
+                runner, key, install, program, provider, marker, SQLITE_GRANT))
         for key, program, marker in LIB030_CASES:
             plan.append(lambda key=key, program=program, marker=marker: check_ffm_program(
-                runner, key, install, program, provider, marker))
+                runner, key, install, program, provider, marker, SQLITE_GRANT))
         for key, source in LIB029_LEARNING:
             plan.append(lambda key=key, source=source: check_ffm_silent(
-                runner, key, install, source, provider))
+                runner, key, install, source, provider, SQLITE_GRANT))
         for key, source in DOC024_LEARNING:
             plan.append(lambda key=key, source=source: check_ffm_silent(
-                runner, key, install, source, provider))
+                runner, key, install, source, provider, SQLITE_GRANT))
 
-    # The distributable provider knows only ffi:sqlite3: the fixture program
-    # (ffi-test scheme, ffi_test alias) must fail without any native access.
+    # The distributable provider never registers the ffi-test scheme: the fixture
+    # program must fail without any native access.
     plan.append(lambda: check_failure(runner, "I144_ARBITRARY_ALIAS_DENIED", install,
                   ["--foreign-provider-path", str(provider), str(CASES / "ffm-abi.protos")],
                   "i144-alias-denied", "I144-FFM-ABI-PASS", []))
     # Configured but never imported: the program runs and nothing else happens.
     plan.append(lambda: check_program(runner, "I144_UNUSED_NO_SESSION", install, "unused-provider.protos",
                   [provider], "I085-B-UNUSED-PASS", []))
-    # Presence on CLASSPATH or in the working directory authorizes nothing.
+    # Presence on CLASSPATH or in the working directory authorizes nothing, not even
+    # together with a library grant: the provider itself was never loaded.
     shutil.copy2(provider, runner.work / provider.name)
     exposed = runner.environment({"CLASSPATH": str(provider)})
     plan.append(lambda: check_failure(runner, "I144_NO_IMPLICIT_AUTHORIZATION", install,
-                  [str(CASES / "ffm-denied.protos")], "i144-zero-discovery",
-                  "I144-FFM-DENIED-PASS", [], exposed))
+                  [*library_options(SQLITE_GRANT), str(CASES / "ffm-denied.protos")],
+                  "i144-zero-discovery", "I144-FFM-DENIED-PASS", [], exposed))
+
+    plan_i169(runner, install, provider, plan)
+
+
+def plan_i169(runner: Runner, install: Path, provider: Path, plan: list) -> None:
+    """Default-off native library allowlist: denial, CLI validation, and two libraries."""
+    sqlite_program = str(CASES / "ffm-sqlite.protos")
+    # No provider: a library grant alone discovers and enables nothing.
+    plan.append(lambda: check_failure(runner, "I169_PROVIDER_ABSENT", install,
+                  [*library_options(SQLITE_GRANT), sqlite_program],
+                  "i169-provider-absent", "I144-FFM-SQLITE-PASS", []))
+    # Provider present, empty allowlist: nothing is authorized, sqlite3 included.
+    plan.append(lambda: check_ffm_program(runner, "I169_ALLOWLIST_DENIED", install,
+                  "ffm-allowlist-denied.protos", provider, "FFM-ALLOWLIST-DENIED-PASS"))
+    plan.append(lambda: check_failure(runner, "I169_ALLOWLIST_DENIED", install,
+                  ["--foreign-provider-path", str(provider), sqlite_program],
+                  "i169-empty-allowlist", "I144-FFM-SQLITE-PASS", []))
+    # A different valid alias does not authorize sqlite3.
+    plan.append(lambda: check_failure(runner, "I169_UNAUTHORIZED_ALIAS", install,
+                  ["--foreign-provider-path", str(provider),
+                   *library_options(("other=libsqlite3.so.0",)), sqlite_program],
+                  "i169-unauthorized-alias", "I144-FFM-SQLITE-PASS", []))
+    # An authorized target that does not exist is unavailable, never PASS.
+    missing = runner.work / "absent" / "libsqlite3.so.0"
+    plan.append(lambda: check_failure(runner, "I169_LIBRARY_UNAVAILABLE", install,
+                  ["--foreign-provider-path", str(provider),
+                   *library_options((f"sqlite3={missing}",)), sqlite_program],
+                  "i169-library-unavailable", "I144-FFM-SQLITE-PASS", []))
+
+    compiler = next((found for found in (shutil.which(name) for name in ("cc", "gcc", "clang"))
+                     if found is not None), None)
+    if compiler is None:
+        runner.record("I169_TWO_LIBRARIES", UNSUPPORTED, "no C compiler (cc, gcc, or clang) on PATH")
+        return
+    native = runner.work / "i169-native"
+    native.mkdir()
+    libraries = {}
+    for alias, source in (("first", "ffi_test.c"), ("second", "ffi_second.c")):
+        target = native / f"lib{Path(source).stem}.so"
+        completed = runner.run(
+            f"i169-cc-{alias}",
+            [compiler, "-shared", "-fPIC", "-O2", "-std=c11", "-Wall", "-Werror",
+             "-o", str(target), str(CASES / "native" / source)],
+            runner.work, runner.environment())
+        if completed.returncode != 0:
+            runner.record("I169_TWO_LIBRARIES", FAIL, f"{source} did not compile")
+            return
+        libraries[alias] = target
+    marker_file = native / "second-marker.txt"
+    grants = tuple(f"{alias}={path}" for alias, path in libraries.items())
+
+    def two_libraries() -> None:
+        check_ffm_program(runner, "I169_TWO_LIBRARIES", install, "ffm-library-allowlist.protos",
+                          provider, "FFM-LIBRARY-ALLOWLIST-PASS", grants, (str(marker_file),))
+        # The native write happened under OS process authority only; verified by the host.
+        try:
+            written = marker_file.read_text(encoding="utf-8")
+        except OSError:
+            written = None
+        if written != SECOND_MARKER_TEXT:
+            runner.record("I169_TWO_LIBRARIES", FAIL, f"native marker file content {written!r}")
+
+    plan.append(two_libraries)
+
+
+def plan_i169_cli(runner: Runner, install: Path, plan: list) -> None:
+    """I169 launcher parsing and early rejection; no provider is loaded and no library opened."""
+    sqlite_program = str(CASES / "ffm-sqlite.protos")
+    # The parser only checks that a provider path exists; it is never loaded here.
+    placeholder = runner.work / "i169-placeholder-provider.jar"
+    placeholder.write_bytes(b"")
+    provider = str(placeholder)
+    # Malformed, relative, invalid-alias and duplicate grants are usage errors (exit 2),
+    # for file execution and for run/debug in both option positions.
+    for index, grants in enumerate((
+        ("--allow-library",),
+        ("--allow-library", "sqlite3"),
+        ("--allow-library", "=libsqlite3.so.0"),
+        ("--allow-library", "sqlite3="),
+        ("--allow-library", "libsqlite3.so.0=libsqlite3.so.0"),
+        ("--allow-library", "lib/sqlite3=libsqlite3.so.0"),
+        ("--allow-library", "sqlite3=lib/libsqlite3.so.0"),
+        ("--allow-library", "sqlite3=libsqlite3.so.0", "--allow-library", "sqlite3=libsqlite3.so.0"),
+    )):
+        plan.append(lambda index=index, grants=grants: check_usage(
+            runner, "I169_CLI_INVALID_OPTIONS", install,
+            ["--foreign-provider-path", provider, *grants, sqlite_program],
+            f"i169-cli-invalid-{index}"))
+        if grants != ("--allow-library",):
+            plan.append(lambda index=index, grants=grants: check_usage(
+                runner, "I169_CLI_INVALID_OPTIONS", install,
+                ["run", "--foreign-provider-path", provider, *grants, "Main"],
+                f"i169-cli-invalid-run-{index}"))
+            plan.append(lambda index=index, grants=grants: check_usage(
+                runner, "I169_CLI_INVALID_OPTIONS", install,
+                ["--foreign-provider-path", provider, *grants, "debug", sqlite_program],
+                f"i169-cli-invalid-debug-{index}"))
+    # A duplicate alias split across the two run/debug option positions.
+    for index, subcommand, entry in ((0, "run", "Main"), (1, "debug", sqlite_program)):
+        plan.append(lambda index=index, subcommand=subcommand, entry=entry: check_usage(
+            runner, "I169_CLI_INVALID_OPTIONS", install,
+            ["--allow-library", "sqlite3=libsqlite3.so.0", subcommand,
+             "--allow-library", "sqlite3=/usr/lib/libsqlite3.so.0", entry],
+            f"i169-cli-invalid-split-{index}"))
+    # A nonexistent provider path is rejected before any host exists.
+    plan.append(lambda: check_usage(
+        runner, "I169_CLI_INVALID_OPTIONS", install,
+        ["run", "--foreign-provider-path", str(runner.work / "absent-provider.jar"), "Main"],
+        "i169-cli-invalid-provider-path"))
+    # Bundled Tools never receive native library authority: an authorization before the
+    # subcommand is rejected by the outer launcher parser, before any Tool starts.
+    for tool in ("test", "package", "format", "lint", "language-server"):
+        plan.append(lambda tool=tool: check_usage(
+            runner, "I169_TOOLS_DENIED", install,
+            ["--allow-library", "sqlite3=libsqlite3.so.0", tool], f"i169-tools-denied-{tool}"))
+
+
+def check_usage(runner: Runner, key: str, install: Path, command_tail: list[str], label: str) -> None:
+    """A CLI usage error: exit 2, nothing on stdout, a diagnostic on stderr.
+
+    A timeout is a FAIL naming the command, never a PASS and never an aborted campaign.
+    """
+    command = [str(install / "bin" / "protos"), *command_tail]
+    try:
+        completed = runner.run(label, command, runner.work, runner.environment(), USAGE_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        problem = f"timeout after {USAGE_TIMEOUT}s: {' '.join(command_tail)}"
+        report(label, [], [problem])
+        runner.record(key, FAIL, f"{label}: {problem}")
+        return
+    problems = []
+    if completed.returncode != 2:
+        problems.append(f"exit {completed.returncode}, expected 2")
+    if completed.stdout:
+        problems.append(f"stdout {completed.stdout!r}")
+    if not completed.stderr.strip():
+        problems.append("no diagnostic on stderr")
+    report(label, [], problems)
+    runner.record(key, FAIL if problems else PASS, f"{label}: {'; '.join(problems)}" if problems else None)
 
 
 class Progress:
@@ -461,11 +690,15 @@ def check_program(
     jars: list[Path],
     marker: str,
     expected_traces: list[str],
+    options: list[str] | None = None,
+    arguments: list[str] | None = None,
 ) -> None:
     command = [str(install / "bin" / "protos")]
     if jars:
         command += ["--foreign-provider-path", os.pathsep.join(str(j) for j in jars)]
+    command += options or []
     command.append(str(CASES / program))
+    command += arguments or []
     label = f"{key.lower()}-{Path(program).stem}"
     completed = runner.run(label, command, runner.work, runner.environment())
     problems = []
@@ -644,7 +877,16 @@ def main() -> int:
         runner.record("DEFAULT_ZERO_DISCOVERY", FAIL, "no plugin JAR built")
         runner.record("UNUSED_PROVIDER_NO_SESSION", FAIL, "no plugin JAR built")
 
-    plan_i144(runner, install, protos_jar, plugins, native_supported, native_reason, plan)
+    # LIB029_MISSING loads no provider or library and does not depend on the I169 launcher.
+    plan.append(lambda: check_program(runner, "LIB029_MISSING", install, "sqlite-missing.protos",
+                                     [], "LIB029-MISSING-PASS", []))
+    if check_i169_baseline(runner, install):
+        plan_i169_cli(runner, install, plan)
+        plan_i144(runner, install, protos_jar, plugins, native_supported, native_reason, plan)
+    else:
+        # A stale archive cannot validate the current launcher: nothing native is attempted.
+        for key in (*native_keys(), "I169_CLI_INVALID_OPTIONS", "I169_TOOLS_DENIED"):
+            runner.record(key, FAIL, "not run: I169 distribution baseline failed")
 
     global PROGRESS
     PROGRESS = Progress("foreign-provider", len(plan))

@@ -794,5 +794,153 @@ final class ProtosCliTest {
                 process.lifecycleState());
     }
 
+    private static R runOn(ProtosCli cli, String... args) {
+        var out = new ByteArrayOutputStream();
+        var err = new ByteArrayOutputStream();
+        int code =
+                cli.run(
+                        args,
+                        new ByteArrayInputStream(new byte[0]),
+                        new PrintStream(out),
+                        new PrintStream(err));
+        return new R(
+                code,
+                out.toString(StandardCharsets.UTF_8),
+                err.toString(StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void allowLibraryRecordsExactRepeatableAliasTargets() {
+        ProtosCli cli = new ProtosCli();
+        assertEquals(java.util.Map.of(), cli.allowedLibraries());
+
+        R one = runOn(cli, "--allow-library", "sqlite3=libsqlite3.so.0", "-e", "1");
+        assertEquals(0, one.c, one.e);
+        assertEquals(java.util.Map.of("sqlite3", "libsqlite3.so.0"), cli.allowedLibraries());
+
+        R several =
+                runOn(cli,
+                        "--allow-library", "sqlite3=libsqlite3.so.0",
+                        "--allow-library", "zlib=/usr/lib/x86_64-linux-gnu/libz.so.1",
+                        "--allow-library", "SQLite3=libsqlite3.so.0",
+                        "-e", "1");
+        assertEquals(0, several.c, several.e);
+        assertEquals(
+                java.util.Map.of(
+                        "sqlite3", "libsqlite3.so.0",
+                        "zlib", "/usr/lib/x86_64-linux-gnu/libz.so.1",
+                        "SQLite3", "libsqlite3.so.0"),
+                cli.allowedLibraries());
+
+        // The authorization never outlives its invocation on the same CLI object.
+        R plain = runOn(cli, "-e", "1");
+        assertEquals(0, plain.c, plain.e);
+        assertEquals(java.util.Map.of(), cli.allowedLibraries());
+
+        // Any order with --inspect.
+        R inspected =
+                runOn(cli,
+                        "--allow-library", "first=/opt/lib/libfirst.so",
+                        "--inspect",
+                        "-e", "import(\"std:inspect\")");
+        assertEquals(0, inspected.c, inspected.e);
+        assertEquals(java.util.Map.of("first", "/opt/lib/libfirst.so"), cli.allowedLibraries());
+
+        // A library authorization implies no Filesystem or Network binding.
+        for (String binding : List.of("filesystem", "network")) {
+            R denied = runOn(cli, "--allow-library", "first=libfirst.so", "-e", binding);
+            assertEquals(1, denied.c, binding);
+            assertTrue(denied.e.startsWith("Error:"), denied.e);
+        }
+    }
+
+    @Test
+    void allowLibraryCombinesWithProviderPathsInEitherOrder(@TempDir Path providers)
+            throws Exception {
+        Path provider = Files.createDirectories(providers.resolve("empty-provider"));
+        ProtosCli cli = new ProtosCli();
+        for (String[] args :
+                List.of(
+                        new String[] {"--foreign-provider-path", provider.toString(),
+                                "--allow-library", "sqlite3=libsqlite3.so.0", "-e", "1"},
+                        new String[] {"--allow-library", "sqlite3=libsqlite3.so.0",
+                                "--foreign-provider-path", provider.toString(), "-e", "1"})) {
+            runOn(cli, args);
+            // Parsing accepted both orders and recorded the grant before host opening.
+            assertEquals(java.util.Map.of("sqlite3", "libsqlite3.so.0"), cli.allowedLibraries());
+        }
+    }
+
+    @Test
+    void malformedAllowLibraryAssignmentsAreUsageErrors() {
+        for (List<String> args :
+                List.of(
+                        List.of("--allow-library"),
+                        List.of("--allow-library", "sqlite3"),
+                        List.of("--allow-library", "=libsqlite3.so.0"),
+                        List.of("--allow-library", "sqlite3="),
+                        List.of("--allow-library", "lib.sqlite3=libsqlite3.so.0"),
+                        List.of("--allow-library", "a/b=libsqlite3.so.0"),
+                        List.of("--allow-library", "9lib=libsqlite3.so.0"),
+                        List.of("--allow-library", "x".repeat(129) + "=libx.so"),
+                        List.of("--allow-library", "sqlite3=lib/libsqlite3.so.0"),
+                        List.of("--allow-library", "sqlite3=./libsqlite3.so.0"),
+                        List.of("--allow-library", "sqlite3=libsqlite3.so.0",
+                                "--allow-library", "sqlite3=libsqlite3.so.0"),
+                        List.of("--allow-library", "sqlite3=libsqlite3.so.0",
+                                "--allow-library", "sqlite3=/usr/lib/libsqlite3.so.0"))) {
+            List<String> full = new java.util.ArrayList<>(args);
+            full.add("-e");
+            full.add("1");
+            R result = run(full.toArray(String[]::new));
+            assertEquals(2, result.c, () -> args + ": " + result.e);
+            assertTrue(result.e.contains("--allow-library"), result.e);
+            assertEquals("", result.o);
+        }
+    }
+
+    @Test
+    void allowLibraryAfterTheEntryIsAnOrdinaryApplicationArgument(@TempDir Path dir)
+            throws Exception {
+        Path source = dir.resolve("args.protos");
+        Files.writeString(source, "print(process.args())\n");
+        ProtosCli cli = new ProtosCli();
+        R file = runOn(cli, source.toString(), "--allow-library", "a=b");
+        assertEquals(0, file.c, file.e);
+        assertTrue(file.o.contains("--allow-library"), file.o);
+        assertTrue(file.o.contains("a=b"), file.o);
+        assertEquals(java.util.Map.of(), cli.allowedLibraries());
+
+        R eval = runOn(cli, "-e", "print(process.args())", "--allow-library", "a/b");
+        assertEquals(0, eval.c, eval.e);
+        assertTrue(eval.o.contains("a/b"), eval.o);
+        assertEquals(java.util.Map.of(), cli.allowedLibraries());
+    }
+
+    @Test
+    void allowLibraryIsNotAvailableToBundledToolsOrHelp() {
+        for (List<String> args :
+                List.of(
+                        List.of("lint", "--allow-library", "a=liba.so"),
+                        List.of("format", "--allow-library", "a=liba.so"),
+                        List.of("test", "--allow-library", "a=liba.so"),
+                        List.of("package", "--allow-library", "a=liba.so"),
+                        List.of("--allow-library", "a=liba.so", "format"),
+                        List.of("--allow-library", "a=liba.so", "lint"),
+                        List.of("--allow-library", "a=liba.so", "language-server"),
+                        List.of("--allow-library", "a=liba.so", "--help"),
+                        List.of("--allow-library", "a=liba.so", "--version"))) {
+            R result = run(args.toArray(String[]::new));
+            assertEquals(2, result.c, () -> args + ": " + result.e);
+            assertEquals("", result.o, args::toString);
+        }
+        R help = run("--help");
+        assertEquals(0, help.c);
+        assertTrue(help.o.contains("--allow-library <alias>=<target>"), help.o);
+        assertTrue(help.o.contains("No library is authorized by default"), help.o);
+        assertTrue(help.o.contains("not a sandbox"), help.o);
+        assertTrue(help.o.contains("--foreign-provider-path"), help.o);
+    }
+
     private record R(int c, String o, String e) {}
 }

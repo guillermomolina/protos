@@ -42,11 +42,13 @@ import org.junit.jupiter.api.io.TempDir;
 /**
  * I144 Java test host of the SQLite-independent ABI fixture.
  *
- * <p>The CLI has no provider-option channel, so this host builds the test-only registration
+ * <p>This host builds the test-only registration
  * {@code ffi-test:} ({@code plugins/ffm-fixture}, the generic FFM backend under a fixture-only
  * target policy) against the SPI-only class path, compiles {@code native/ffi_test.c}, and selects
  * that library exclusively through {@code ProtosForeignProviderConfiguration.withProviderOptions}.
- * Nothing in the JAR authorizes a library. Skipped (not passed) off Linux x86-64 or without a C
+ * Nothing in the JAR authorizes a library. The same classes are also packaged under the
+ * distributable {@code protos-ffm} registration to cover its {@code library.<alias>} host
+ * authorization table. Skipped (not passed) off Linux x86-64 or without a C
  * compiler.
  */
 class ProtosI144FfmFixtureAbiTest {
@@ -56,6 +58,7 @@ class ProtosI144FfmFixtureAbiTest {
 
     @TempDir static Path work;
     static Path jar;
+    static Path distributable;
     static Path library;
 
     @BeforeAll
@@ -108,6 +111,12 @@ class ProtosI144FfmFixtureAbiTest {
                         classes,
                         "com.guillermomolina.protos.ffm",
                         "com.guillermomolina.protos.ffm.FfmFixtureProvider");
+        distributable =
+                ProtosExternalForeignProviderTest.jar(
+                        Files.createDirectories(work.resolve("distributable")),
+                        classes,
+                        "com.guillermomolina.protos.ffm",
+                        "com.guillermomolina.protos.ffm.FfmForeignProvider");
     }
 
     @Test
@@ -289,7 +298,150 @@ class ProtosI144FfmFixtureAbiTest {
         }
     }
 
+    @Test
+    void distributableProviderAuthorizesNoLibraryByDefault() throws Exception {
+        for (Map<String, String> options :
+                List.of(
+                        Map.<String, String>of(),
+                        Map.of("sqlite3.path", library.toAbsolutePath().toString()),
+                        Map.of("library.first", library.toAbsolutePath().toString()))) {
+            try (ProtosExternalForeignProviderTest.Fixture fixture = distributable(options)) {
+                for (String alias : List.of("sqlite3", "ffi_test", "libc", "undeclared")) {
+                    assertForeign(
+                            fixture,
+                            fixture.run("import(\"ffi:" + alias + "\")"),
+                            "unauthorized-library");
+                }
+            }
+        }
+    }
+
+    @Test
+    void distributableProviderLoadsExactlyTheAuthorizedTargets() throws Exception {
+        String path = library.toAbsolutePath().toString();
+        Map<String, String> options =
+                Map.of(
+                        "library.first", path,
+                        "library.other", path,
+                        "library.sqlite3", path,
+                        "library.missing", work.resolve("absent").resolve("libnone.so").toString(),
+                        "library.unloadable", "libprotos_no_such_library.so.0");
+        try (ProtosExternalForeignProviderTest.Fixture fixture = distributable(options)) {
+            // Importing std:ffi acquires no library and opens no provider session.
+            assertEquals(ProtosExecutionOutcome.State.COMPLETED,
+                    fixture.run("FFI: import(\"std:ffi\")\nFFI.out(FFI.i32)").state());
+            assertEquals(0, fixture.context.foreignProviderSessionCountForTesting());
+
+            // Several aliases under one provider; sqlite3 loads only the host's exact target.
+            for (String alias : List.of("first", "other", "sqlite3")) {
+                assertEquals("7", integer(fixture.eval(identity(alias, 7))), alias);
+            }
+            assertForeign(fixture, fixture.run("import(\"ffi:third\")"), "unauthorized-library");
+            assertForeign(fixture, fixture.run("import(\"ffi:missing\")"), "library-unavailable");
+            assertForeign(
+                    fixture, fixture.run("import(\"ffi:unloadable\")"), "library-unavailable");
+
+            // Syntactically invalid aliases follow ordinary import resolution.
+            for (String rejected :
+                    List.of("ffi:libffi_test.so", "ffi:" + path, "ffi:../first", "ffi:first.x")) {
+                ProtosExecutionOutcome outcome =
+                        fixture.run("import(\"" + rejected + "\")");
+                assertEquals(ProtosExecutionOutcome.State.FAILED, outcome.state(), rejected);
+                assertTrue(
+                        outcome.error() == null
+                                || outcome.error().parent().orElse(null)
+                                        != fixture.standardError("ForeignError"),
+                        () -> rejected + ": " + describe(fixture, outcome.error()));
+            }
+        }
+    }
+
+    @Test
+    void distributableResourcesKeepTheirActorLocalSessionCustody() throws Exception {
+        String path = library.toAbsolutePath().toString();
+        try (ProtosExternalForeignProviderTest.Fixture fixture =
+                distributable(Map.of("library.first", path))) {
+            ProtosActivation observer = fixture.newActorActivation();
+            assertEquals("3", integer(fixture.eval(identity("first", 3))));
+            assertEquals("4", integer(fixture.eval(observer, identity("first", 4))));
+            ProtosForeignModuleFacadeValue rootFacade =
+                    (ProtosForeignModuleFacadeValue)
+                            fixture.eval("ffi: import(\"ffi:first\")\nffi");
+            ProtosForeignModuleFacadeValue observerFacade =
+                    (ProtosForeignModuleFacadeValue)
+                            fixture.eval(observer, "ffi: import(\"ffi:first\")\nffi");
+            // Each Actor holds its own session; nothing is transferred between them.
+            assertTrue(
+                    rootFacade.attachmentForRuntime().orElseThrow().session()
+                            != observerFacade.attachmentForRuntime().orElseThrow().session());
+            Object held =
+                    fixture.eval("ffi: import(\"ffi:first\")\n"
+                            + "ffi.bind(\"ffi_test_i32_identity\","
+                            + " ffi.param(ffi.signature(ffi.i32), ffi.i32))");
+            ProtosForeignProviderSessionBinding session =
+                    rootFacade.attachmentForRuntime().orElseThrow().session();
+            session.closeForRuntime();
+            session.closeForRuntime();
+            assertOrdinary(fixture, invoke(fixture, held, 1));
+            // The other Actor's session is unaffected by the root session's close.
+            assertEquals("5", integer(fixture.eval(observer, identity("first", 5))));
+        }
+    }
+
+    @Test
+    void malformedLibraryOptionsFailBeforeAnyNativeAcquisition() throws Exception {
+        String path = library.toAbsolutePath().toString();
+        for (Map<String, String> options :
+                List.of(
+                        Map.of("library.first", path, "library.bad.alias", path),
+                        Map.of("library.first", path, "library.", path),
+                        Map.of("library.first", "relative/libffi_test.so"),
+                        Map.of("library.first", ""),
+                        Map.of("library.first", "lib\0ffi_test.so"))) {
+            try (ProtosExternalForeignProviderTest.Fixture fixture = distributable(options)) {
+                assertForeign(
+                        fixture, fixture.run("import(\"ffi:first\")"), "invalid-host-option");
+            }
+        }
+    }
+
     // ---- helpers
+
+    private static ProtosExternalForeignProviderTest.Fixture distributable(
+            Map<String, String> options) throws Exception {
+        return new ProtosExternalForeignProviderTest.Fixture(
+                ProtosPolyglotRuntimeHost.openWithForeignProviders(
+                        ProtosForeignProviderConfiguration.trustedInProcess(List.of(distributable))
+                                .withProviderOptions("protos-ffm", options)),
+                true);
+    }
+
+    private static String identity(String alias, int value) {
+        return "ffi: import(\"ffi:" + alias + "\")\n"
+                + "ffi.bind(\"ffi_test_i32_identity\","
+                + " ffi.param(ffi.signature(ffi.i32), ffi.i32))(" + value + ")";
+    }
+
+    private static String integer(Object value) {
+        return com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(
+                value);
+    }
+
+    /** A failed outcome whose error is a ForeignError whose provider category is {@code category}. */
+    private static void assertForeign(
+            ProtosExternalForeignProviderTest.Fixture fixture,
+            ProtosExecutionOutcome outcome,
+            String category) {
+        assertEquals(ProtosExecutionOutcome.State.FAILED, outcome.state());
+        ProtosObjectValue error = outcome.error();
+        assertSame(fixture.standardError("ForeignError"), error.parent().orElseThrow(),
+                () -> describe(fixture, error));
+        Object actual = error.localSlotsSnapshot().get("foreignCategory");
+        assertTrue(
+                actual instanceof com.guillermomolina.protos.runtime.ProtosStringValue string
+                        && string.value().equals(category),
+                () -> category + " expected: " + describe(fixture, error));
+    }
 
     private static Map<String, String> authorized() {
         return Map.of("ffi_test.path", library.toAbsolutePath().toString());
@@ -384,7 +536,7 @@ class ProtosI144FfmFixtureAbiTest {
         return text.append(" }").toString();
     }
 
-    private static Path findCompiler() {
+    static Path findCompiler() {
         String path = System.getenv("PATH");
         if (path == null) {
             return null;

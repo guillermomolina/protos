@@ -41,14 +41,20 @@ not the public application learning path:
 | [`sqlite-memory-query.protos`](sqlite-memory-query.protos) | Low-level in-memory query, including the historical borrowed TEXT/BLOB copying path. |
 
 Unlike most examples in this tree, they do **not** run with a plain
-`bin/protos <file>`: the provider must be passed explicitly.
+`bin/protos <file>`: the provider must be passed explicitly with
+`--foreign-provider-path`, and SQLite must be authorized separately with
+`--allow-library sqlite3=libsqlite3.so.0`. No native library is authorized by
+default, and the library authorization grants no Protos capability.
 
 ## Requirements
 
 - Linux x86-64 (LP64) and JDK 25;
 - the portable JVM distribution (Native Image is not supported);
 - a shared SQLite library that the native loader finds as
-  `libsqlite3.so.0`.
+  `libsqlite3.so.0`, authorized with `--allow-library sqlite3=libsqlite3.so.0`
+  (an absolute path such as
+  `--allow-library sqlite3=/usr/lib/x86_64-linux-gnu/libsqlite3.so.0` also
+  works). The library runs trusted in process; this is not a sandbox.
 
 ## Build the provider
 
@@ -67,19 +73,19 @@ Details: [Build the provider JAR](../../../docs/guide/interop/ffm-provider.md#bu
 ## Run
 
 ```sh
-bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar \
+bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar --allow-library sqlite3=libsqlite3.so.0 \
     protos/examples/ffi/sqlite-library.protos
-bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar \
+bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar --allow-library sqlite3=libsqlite3.so.0 \
     protos/examples/ffi/sqlite-prepared-numeric.protos
-bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar \
+bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar --allow-library sqlite3=libsqlite3.so.0 \
     protos/examples/ffi/sqlite-copied-values.protos
-bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar \
+bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar --allow-library sqlite3=libsqlite3.so.0 \
     protos/examples/ffi/sqlite-version-public.protos
-bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar \
+bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar --allow-library sqlite3=libsqlite3.so.0 \
     protos/examples/ffi/sqlite-complete-public.protos
-bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar \
+bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar --allow-library sqlite3=libsqlite3.so.0 \
     protos/examples/ffi/sqlite-numeric-query-public.protos
-bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar \
+bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar --allow-library sqlite3=libsqlite3.so.0 \
     protos/examples/ffi/sqlite-memory-query.protos
 ```
 
@@ -89,8 +95,10 @@ assertion and exits non-zero with a diagnostic on standard error.
 
 Without `--foreign-provider-path` (or with the JAR only on `CLASSPATH`), no
 provider owns the `ffi` scheme: `import("ffi:sqlite3")` fails with an
-ordinary resolution Error and the exit status is non-zero. Nothing native is
-loaded.
+ordinary resolution Error and the exit status is non-zero. With the provider
+but without `--allow-library sqlite3=...`, the import fails with
+`ForeignError` (`foreignCategory` `unauthorized-library`). In both cases
+nothing native is loaded.
 
 ## Why `:memory:`
 

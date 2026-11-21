@@ -22,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -56,6 +57,61 @@ final class ProtosPackageRunDriverFailureCustodyTest extends ProtosPackageRunDri
         assertAllClosed(stages.verified, 1);
         assertTrue(stages.hosted.isEmpty());
         assertEquals(0, stages.planCalls);
+    }
+
+    /** I169: a materialization failure never acquires a RuntimeHost from the selected factory. */
+    @Test
+    void providerMissAcquiresNoHostFromTheSelectedFactory() throws Exception {
+        Path project = project("miss-factory");
+        Map<ProtosExactExternalPackageIdentity, Path> materializations =
+                new HashMap<>(materializations("miss-factory"));
+        materializations.remove(a2);
+        RecordingProvider provider = new RecordingProvider(materializations);
+        RecordingStages stages = new RecordingStages();
+        List<ProtosPolyglotRuntimeHost> acquired = new ArrayList<>();
+
+        assertThrows(
+                IOException.class,
+                () -> ProtosPackageRunDriver.execute(request(project, null), provider,
+                        ProtosWorkspacePackageApplicationExecution.NetworkGrant.NONE,
+                        ProtosStandaloneHostedExecution.ResolverGrant.NONE,
+                        ProtosStandaloneHostedExecution.EntropyGrant.NONE,
+                        ProtosStandaloneHostedExecution.ClockGrant.NONE, stages,
+                        ProtosPackageRunDriverTest.recordingHostFactory(acquired)));
+
+        assertEquals(List.of(), acquired);
+        assertAllClosed(stages.verified, 1);
+        assertTrue(stages.hosted.isEmpty());
+    }
+
+    /**
+     * I169: when the selected factory fails to open the application host, the reconciled scope
+     * and every verified custody are still closed and no application Process exists.
+     */
+    @Test
+    void hostOpeningFailureLeavesNoMaterializationResourceOpen() throws Exception {
+        Path project = project("host-failure");
+        RecordingProvider provider = new RecordingProvider(materializations("host-failure"));
+        RecordingStages stages = new RecordingStages();
+        IllegalStateException opening = new IllegalStateException("forced host opening failure");
+
+        IllegalStateException failure =
+                assertThrows(
+                        IllegalStateException.class,
+                        () -> ProtosPackageRunDriver.execute(request(project, null), provider,
+                                ProtosWorkspacePackageApplicationExecution.NetworkGrant.NONE,
+                                ProtosStandaloneHostedExecution.ResolverGrant.NONE,
+                                ProtosStandaloneHostedExecution.EntropyGrant.NONE,
+                                ProtosStandaloneHostedExecution.ClockGrant.NONE, stages,
+                                () -> {
+                                    throw opening;
+                                }));
+
+        assertTrue(failure == opening);
+        assertEquals(1, stages.planCalls);
+        assertTrue(stages.hosted.isEmpty());
+        assertThrows(IllegalStateException.class, () -> stages.scope.contains(a1));
+        assertAllClosed(stages.verified, 4);
     }
 
     @Test

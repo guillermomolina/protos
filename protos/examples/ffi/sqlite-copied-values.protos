@@ -14,7 +14,7 @@
 // the specific language governing rights and limitations under the License.
 
 // DOC024 cookbook: read independent SQLite TEXT/BLOB results safely.
-// Host: --foreign-provider-path <protos-ffm-provider.jar>; Linux x86-64 JVM/JDK25.
+// Host: --foreign-provider-path <protos-ffm-provider.jar> --allow-library sqlite3=libsqlite3.so.0; Linux x86-64 JVM/JDK25.
 // All TEXT/BLOB data comes from SQL literals: std:sqlite binds only Integer,
 // Float and null. Results are copied before the row is published, so no
 // borrowed native memory is ever visible to this program.

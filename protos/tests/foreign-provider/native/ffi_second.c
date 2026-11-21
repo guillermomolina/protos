@@ -1,0 +1,54 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
+
+/*
+ * Second, independent C library for the native library allowlist test. It
+ * depends on nothing beyond the C runtime and is compiled only by
+ * dist/test_external_foreign_providers.py. Its symbols never overlap with
+ * native/ffi_test.c, so each authorized alias proves its own exact target.
+ */
+
+#include <stdint.h>
+#include <stdio.h>
+
+/* ---- deterministic integer function */
+
+int32_t ffi_second_triple(int32_t value) { return value * 3; }
+
+/* ---- native global state, observable through two functions */
+
+static int64_t ffi_second_state;
+
+void ffi_second_store(int64_t value) { ffi_second_state = value; }
+
+int64_t ffi_second_load(void) { return ffi_second_state; }
+
+/*
+ * ---- native write to a caller-selected file
+ *
+ * Writes one fixed line to path and answers 0, or -1 when the file cannot be
+ * written. The effect uses only operating-system process authority.
+ */
+int32_t ffi_second_write_marker(const char *path) {
+    FILE *file = fopen(path, "w");
+    if (file == NULL) {
+        return -1;
+    }
+    int written = fputs("PROTOS-FFI-SECOND-MARKER\n", file);
+    int closed = fclose(file);
+    return written < 0 || closed != 0 ? -1 : 0;
+}

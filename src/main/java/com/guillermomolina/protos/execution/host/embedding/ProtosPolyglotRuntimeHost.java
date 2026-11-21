@@ -186,12 +186,30 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
                     loaded.classLoader(),
                     inspectionAuthorized);
         } catch (RuntimeException | Error failure) {
+            closeAfterFailedOpen(null, loaded.classLoader(), failure);
+            throw failure;
+        }
+    }
+
+    /**
+     * Releases what a failed host construction already acquired, recording every release failure
+     * as suppressed by the original {@code failure}.
+     */
+    private static void closeAfterFailedOpen(
+            Engine engine, URLClassLoader foreignProviderLoader, Throwable failure) {
+        if (engine != null) {
             try {
-                loaded.classLoader().close();
+                engine.close();
+            } catch (RuntimeException closeFailure) {
+                failure.addSuppressed(closeFailure);
+            }
+        }
+        if (foreignProviderLoader != null) {
+            try {
+                foreignProviderLoader.close();
             } catch (IOException closeFailure) {
                 failure.addSuppressed(closeFailure);
             }
-            throw failure;
         }
     }
 
@@ -217,19 +235,53 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
      */
     @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
     public static ProtosPolyglotRuntimeHost openDebug(OutputStream diagnostics) {
+        return openDebug(diagnostics, ProtosForeignProviderConfiguration.trustedInProcess(List.of()));
+    }
+
+    /**
+     * Debug variant of {@link #openWithForeignProviders(ProtosForeignProviderConfiguration)}: the
+     * same real DAP Engine as {@link #openDebug(OutputStream)}, owning exactly the external
+     * plugins of {@code configuration}. An empty configuration registers no provider and creates
+     * no class loader. Plugins are loaded before the Engine starts and registered without
+     * initializing any foreign runtime, session or native library; when loading or construction
+     * fails, the Engine and class loader acquired so far are closed and no debug host exists whose
+     * readiness could be published.
+     *
+     * @throws IllegalArgumentException when a path, plugin, identity, or scheme is invalid or
+     *     duplicated
+     */
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
+    public static ProtosPolyglotRuntimeHost openDebug(
+            OutputStream diagnostics, ProtosForeignProviderConfiguration configuration) {
         Objects.requireNonNull(diagnostics, "diagnostics");
-        ProtosGraalDapReadinessAdapter readiness =
-                new ProtosGraalDapReadinessAdapter(diagnostics);
-        Engine engine =
-                Engine.newBuilder(ProtosLanguage.ID)
-                        .option("dap", "127.0.0.1:0")
-                        .option("dap.Suspend", "false")
-                        .option("dap.WaitAttached", "true")
-                        .out(readiness)
-                        .err(diagnostics)
-                        .build();
-        return new ProtosPolyglotRuntimeHost(
-                engine, readiness, ProtosForeignProviderRegistry.EMPTY);
+        Objects.requireNonNull(configuration, "configuration");
+        ProtosExternalProviderPluginLoader.Loaded loaded =
+                configuration.providerPaths().isEmpty()
+                        ? null
+                        : ProtosExternalProviderPluginLoader.load(configuration);
+        URLClassLoader foreignProviderLoader = loaded == null ? null : loaded.classLoader();
+        Engine engine = null;
+        try {
+            ProtosForeignProviderRegistry foreignProviders =
+                    loaded == null
+                            ? ProtosForeignProviderRegistry.EMPTY
+                            : ProtosForeignProviderRegistry.of(loaded.descriptors());
+            ProtosGraalDapReadinessAdapter readiness =
+                    new ProtosGraalDapReadinessAdapter(diagnostics);
+            engine =
+                    Engine.newBuilder(ProtosLanguage.ID)
+                            .option("dap", "127.0.0.1:0")
+                            .option("dap.Suspend", "false")
+                            .option("dap.WaitAttached", "true")
+                            .out(readiness)
+                            .err(diagnostics)
+                            .build();
+            return new ProtosPolyglotRuntimeHost(
+                    engine, readiness, foreignProviders, foreignProviderLoader);
+        } catch (RuntimeException | Error failure) {
+            closeAfterFailedOpen(engine, foreignProviderLoader, failure);
+            throw failure;
+        }
     }
 
     /**

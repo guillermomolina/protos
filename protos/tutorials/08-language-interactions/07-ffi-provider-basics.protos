@@ -21,10 +21,13 @@
 // lesson intentionally teaches the private I144 provider layer. Every C
 // declaration and every decision below is ordinary Protos code.
 //
-// The provider must be authorized explicitly by the host (portable JVM CLI,
-// Linux x86-64, JDK 25, shared libsqlite3.so.0):
+// The host must load the provider and, separately, authorize the native
+// library: the provider authorizes no library by default, and
+// --allow-library grants no Protos capability. The authorized library runs
+// trusted in process; this is not a sandbox (portable JVM CLI, Linux x86-64,
+// JDK 25, shared libsqlite3.so.0):
 //
-//   bin/protos --foreign-provider-path /path/to/protos-ffm-provider.jar \
+//   bin/protos --foreign-provider-path /path/to/protos-ffm-provider.jar --allow-library sqlite3=libsqlite3.so.0 \
 //       protos/tutorials/08-language-interactions/07-ffi-provider-basics.protos
 //
 // See docs/guide/interop/ffm-provider.md for building the JAR. A successful
@@ -34,7 +37,9 @@
 Assertions: import("std:test/assertions")
 
 // Importing the scheme opens this Actor's provider session and loads the
-// host-authorized SQLite library. Without the provider JAR this import fails.
+// host-authorized SQLite library. Without the provider JAR this import fails;
+// with the provider but without --allow-library sqlite3=... it signals
+// ForeignError (foreignCategory "unauthorized-library").
 sqlite: import("ffi:sqlite3")
 
 // ---- 1. A signature without parameters

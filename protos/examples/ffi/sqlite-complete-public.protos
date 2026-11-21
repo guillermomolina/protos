@@ -15,7 +15,7 @@
 
 // Check complete versus incomplete SQL through the public FFI declarations.
 // Run with an explicitly authorized external provider:
-// bin/protos --foreign-provider-path /path/to/protos-ffm-provider.jar \
+// bin/protos --foreign-provider-path /path/to/protos-ffm-provider.jar --allow-library sqlite3=libsqlite3.so.0 \
 //     protos/examples/ffi/sqlite-complete-public.protos
 
 FFI: import("std:ffi")

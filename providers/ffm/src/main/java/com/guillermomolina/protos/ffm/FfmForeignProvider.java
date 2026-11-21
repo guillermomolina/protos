@@ -23,16 +23,22 @@ import com.guillermomolina.protos.spi.foreign.ProtosForeignValueOperations;
 import java.util.Objects;
 
 /**
- * I144 optional external provider: generic C downcalls through the Java 25 Foreign Function and
- * Memory API, reached as {@code import("ffi:sqlite3")}.
+ * Optional external provider: generic C downcalls through the Java 25 Foreign Function and Memory
+ * API, reached as {@code import("ffi:<alias>")}.
  *
- * <p>The distributable provider accepts exactly one logical library, {@code sqlite3}; its
- * location may be overridden only by the host option {@code sqlite3.path} received through
- * {@link ProtosForeignPluginEnvironment#options()}. Program-supplied file names and paths are
- * never targets, and nothing packaged in the JAR authorizes a library. An authorized library is
- * trusted in-process native code: Protos {@code Filesystem} does not confine it, symbol lookup on
- * its handle may also find symbols of its dependencies, and the provider does not make C
- * memory-safe.
+ * <p>The distributable provider accepts any syntactically valid logical alias, but authorizes no
+ * library by default: an alias is usable only when the host supplies the option {@code
+ * library.<alias>} through {@link ProtosForeignPluginEnvironment#options()}, whose value is an
+ * exact load name or an absolute path passed unchanged to the operating-system loader. A valid
+ * alias without that option fails on acquisition with {@code unauthorized-library}. Program
+ * imports never name a file, path, or native name, and nothing packaged in the JAR authorizes a
+ * library.
+ *
+ * <p>An authorized library runs {@code TRUSTED_IN_PROCESS}: it may produce every effect the
+ * operating-system process can, including file and network access, transitive dependency
+ * loading, native initializers, global state shared among Actors, indefinite blocking, memory
+ * corruption, and process termination. Protos capabilities do not confine it, symbol lookup on
+ * its handle may also find symbols of its dependencies, and there is no native sandbox.
  *
  * <p>Construction, {@link #providerId()}, and {@link #scheme()} load no library, create no
  * {@code Linker}, resolve no symbol, and open no session.

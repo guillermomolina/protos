@@ -42,10 +42,12 @@ import java.nio.file.*;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.regex.Pattern;
 import org.jline.reader.*;
 import org.jline.reader.impl.history.DefaultHistory;
 import org.jline.terminal.*;
@@ -83,6 +85,12 @@ public final class ProtosCli {
      * execution.
      */
     private List<Path> foreignProviderPaths = List.of();
+    /**
+     * Native libraries the host explicitly authorized for this invocation, as logical alias to
+     * exact load name or absolute path; empty unless {@code --allow-library} preceded a file,
+     * {@code -e}, or REPL execution. It is handed only to the {@code protos-ffm} provider.
+     */
+    private Map<String, String> allowedLibraries = Map.of();
     /**
      * Whether this invocation explicitly authorized {@code std:inspect} (CLI010); {@code false}
      * unless {@code --inspect} preceded a file, {@code -e}, or REPL execution.
@@ -130,6 +138,11 @@ public final class ProtosCli {
     static final long GUEST_CALL_STACK_SIZE_BYTES =
             ProtosStandaloneHostedExecution.GUEST_CALL_STACK_SIZE_BYTES;
 
+    static final String ALLOW_LIBRARY_OPTION = "--allow-library";
+    private static final String FFM_PROVIDER_ID = "protos-ffm";
+    private static final Pattern LIBRARY_ALIAS =
+            Pattern.compile("[A-Za-z_][A-Za-z0-9_]{0,127}");
+
     public static void main(String[] args) {
         int code = new ProtosCli().run(args, System.in, System.out, System.err);
         if (code != 0) System.exit(code);
@@ -143,6 +156,7 @@ public final class ProtosCli {
                             || value.startsWith("--allow-resolver=")
                             || value.equals("--allow-entropy")
                             || value.equals("--allow-clock")
+                            || value.equals(ALLOW_LIBRARY_OPTION)
                             || isFilesystemGrantOption(value)
                             || value.equals("--service")
                             || value.startsWith("--service="))) {
@@ -185,6 +199,7 @@ public final class ProtosCli {
 
     private int dispatchCommand(String[] args, InputStream in, PrintStream out, PrintStream err) {
         foreignProviderPaths = List.of();
+        allowedLibraries = Map.of();
         inspectionAuthorized = false;
         networkAuthorized = false;
         resolverAuthorized = false;
@@ -196,6 +211,7 @@ public final class ProtosCli {
             Path invocationDirectory = Path.of("").toAbsolutePath();
             List<Path> providerPaths = new ArrayList<>();
             boolean providerPathsRequested = false;
+            Map<String, String> libraries = new LinkedHashMap<>();
             boolean inspect = false;
             boolean allowNetwork = false;
             boolean allowResolver = false;
@@ -206,6 +222,7 @@ public final class ProtosCli {
             int first = 0;
             while (first < args.length
                     && (args[first].equals("--foreign-provider-path")
+                            || args[first].equals(ALLOW_LIBRARY_OPTION)
                             || args[first].equals("--inspect")
                             || args[first].equals("--allow-network")
                             || args[first].equals("--allow-resolver")
@@ -279,6 +296,17 @@ public final class ProtosCli {
                     first++;
                     continue;
                 }
+                if (args[first].equals(ALLOW_LIBRARY_OPTION)) {
+                    if (first + 1 >= args.length) {
+                        return usage(err, ALLOW_LIBRARY_OPTION + " requires alias=target");
+                    }
+                    String invalid = addLibraryGrant(libraries, args[first + 1]);
+                    if (invalid != null) {
+                        return usage(err, invalid);
+                    }
+                    first += 2;
+                    continue;
+                }
                 if (args[first].equals("--inspect")) {
                     if (inspect) {
                         return usage(err, "--inspect may be given only once");
@@ -288,40 +316,44 @@ public final class ProtosCli {
                     continue;
                 }
                 providerPathsRequested = true;
-                if (first + 1 >= args.length) {
-                    return usage(err, "--foreign-provider-path requires a path list");
-                }
-                for (String entry : args[first + 1].split(File.pathSeparator, -1)) {
-                    Path path;
-                    try {
-                        path = Path.of(entry).toAbsolutePath().normalize();
-                    } catch (InvalidPathException invalid) {
-                        path = null;
-                    }
-                    if (entry.isEmpty() || path == null || !Files.exists(path)) {
-                        return usage(err, "no such foreign provider path: " + entry);
-                    }
-                    providerPaths.add(path);
+                String invalidProviderPath = addProviderPaths(providerPaths, args, first);
+                if (invalidProviderPath != null) {
+                    return usage(err, invalidProviderPath);
                 }
                 first += 2;
             }
             if (first > 0) {
                 args = Arrays.copyOfRange(args, first, args.length);
-                if ((inspect || providerPathsRequested)
-                        && args.length > 0
-                        && !args[0].equals("-e")
-                        && (args[0].startsWith("-") || SUBCOMMANDS.contains(args[0]))) {
+                boolean notFileExecution =
+                        args.length > 0
+                                && !args[0].equals("-e")
+                                && (args[0].startsWith("-") || SUBCOMMANDS.contains(args[0]));
+                // Foreign provider paths and library authorizations also select the application
+                // RuntimeHost of run and debug; --inspect does not.
+                boolean applicationSubcommand =
+                        args.length > 0 && (args[0].equals("run") || args[0].equals("debug"));
+                boolean providerPathsRejected =
+                        providerPathsRequested && notFileExecution && !applicationSubcommand;
+                if ((inspect || providerPathsRejected) && notFileExecution) {
                     return usage(
                             err,
-                            (inspect && !providerPathsRequested
+                            (inspect && !providerPathsRejected
                                             ? "--inspect"
-                                            : providerPathsRequested && !inspect
+                                            : providerPathsRejected && !inspect
                                                     ? "--foreign-provider-path"
                                                     : "--inspect and --foreign-provider-path")
-                                    + " applies only to file, -e, or REPL execution");
+                                    + " applies only to file, -e, or REPL execution"
+                                    + (providerPathsRejected && !inspect ? ", run or debug" : ""));
+                }
+                if (!libraries.isEmpty() && notFileExecution && !applicationSubcommand) {
+                    return usage(
+                            err,
+                            ALLOW_LIBRARY_OPTION
+                                    + " applies only to file, -e, REPL, run or debug execution");
                 }
             }
             foreignProviderPaths = List.copyOf(providerPaths);
+            allowedLibraries = Map.copyOf(libraries);
             inspectionAuthorized = inspect;
             networkAuthorized = allowNetwork;
             resolverAuthorized = allowResolver;
@@ -343,6 +375,7 @@ public final class ProtosCli {
                                             || value.startsWith("--allow-resolver=")
                                             || value.equals("--allow-entropy")
                                             || value.equals("--allow-clock")
+                                            || value.equals(ALLOW_LIBRARY_OPTION)
                                             || isFilesystemGrantOption(value)
                                             || value.equals("--service")
                                             || value.startsWith("--service=")))) {
@@ -389,7 +422,9 @@ public final class ProtosCli {
             if (args[0].equals("debug") || args[0].equals("run")) {
                 int entry = 1;
                 while (entry < args.length
-                        && (args[entry].equals("--allow-network")
+                        && (args[entry].equals("--foreign-provider-path")
+                                || args[entry].equals(ALLOW_LIBRARY_OPTION)
+                                || args[entry].equals("--allow-network")
                                 || args[entry].equals("--allow-resolver")
                                 || args[entry].startsWith("--allow-resolver=")
                                 || args[entry].equals("--allow-entropy")
@@ -397,7 +432,22 @@ public final class ProtosCli {
                                 || isFilesystemGrantOption(args[entry])
                                 || args[entry].equals("--service")
                                 || args[entry].startsWith("--service="))) {
-                    if (isFilesystemGrantOption(args[entry])) {
+                    if (args[entry].equals("--foreign-provider-path")) {
+                        String invalidProviderPath = addProviderPaths(providerPaths, args, entry);
+                        if (invalidProviderPath != null) {
+                            return usage(err, invalidProviderPath);
+                        }
+                        entry++;
+                    } else if (args[entry].equals(ALLOW_LIBRARY_OPTION)) {
+                        if (entry + 1 >= args.length) {
+                            return usage(err, ALLOW_LIBRARY_OPTION + " requires alias=target");
+                        }
+                        String invalid = addLibraryGrant(libraries, args[entry + 1]);
+                        if (invalid != null) {
+                            return usage(err, invalid);
+                        }
+                        entry++;
+                    } else if (isFilesystemGrantOption(args[entry])) {
                         if (grantedFilesystemRoot != null) {
                             return usage(err, "--allow-filesystem may be given only once");
                         }
@@ -456,6 +506,9 @@ public final class ProtosCli {
                     return usage(err, "unknown option: " + args[entry]);
                 }
 
+                // Both option positions are merged before any RuntimeHost is opened.
+                foreignProviderPaths = List.copyOf(providerPaths);
+                allowedLibraries = Map.copyOf(libraries);
                 networkAuthorized = allowNetwork;
                 resolverAuthorized = allowResolver;
                 entropyAuthorized = allowEntropy;
@@ -864,7 +917,8 @@ public final class ProtosCli {
                                 applicationResolverGrant(),
                                 applicationEntropyGrant(),
                                 applicationClockGrant(),
-                                serviceBinding);
+                                serviceBinding,
+                                this::openApplicationRuntimeHost);
                 if (!normal) {
                     err.println(
                             "Error: RootActor package service failed during bootstrap "
@@ -878,7 +932,8 @@ public final class ProtosCli {
                     ProtosPackageRunDriver.execute(
                             request, provider, applicationNetworkGrant(),
                             applicationResolverGrant(),
-                            applicationEntropyGrant(), applicationClockGrant());
+                            applicationEntropyGrant(), applicationClockGrant(),
+                            this::openApplicationRuntimeHost);
 
             return workspaceOutcomeExitCode(outcome, err);
         } catch (IOException failure) {
@@ -2025,18 +2080,89 @@ public final class ProtosCli {
                     foreignProviderPaths.isEmpty()
                             ? ProtosPolyglotRuntimeHost.open()
                             : ProtosPolyglotRuntimeHost.openWithForeignProviders(
-                                    ProtosForeignProviderConfiguration.trustedInProcess(
-                                            foreignProviderPaths));
+                                    foreignProviderConfiguration());
         } else {
             runtimeHost =
                     foreignProviderPaths.isEmpty()
                             ? ProtosPolyglotRuntimeHost.openWithInspection()
                             : ProtosPolyglotRuntimeHost.openWithForeignProviders(
-                                    ProtosForeignProviderConfiguration.trustedInProcess(
-                                            foreignProviderPaths),
-                                    true);
+                                    foreignProviderConfiguration(), true);
         }
         return runtimeHost;
+    }
+
+    /**
+     * The explicitly loaded provider paths plus, only for {@code protos-ffm} and only when
+     * {@code --allow-library} was given, the immutable {@code library.<alias>} options.
+     */
+    ProtosForeignProviderConfiguration foreignProviderConfiguration() {
+        ProtosForeignProviderConfiguration configuration =
+                ProtosForeignProviderConfiguration.trustedInProcess(foreignProviderPaths);
+        if (allowedLibraries.isEmpty()) {
+            return configuration;
+        }
+        Map<String, String> providerOptions = new LinkedHashMap<>();
+        allowedLibraries.forEach(
+                (alias, target) -> providerOptions.put("library." + alias, target));
+        return configuration.withProviderOptions(FFM_PROVIDER_ID, Map.copyOf(providerOptions));
+    }
+
+    /** Current invocation's native library authorization, alias to exact target. */
+    Map<String, String> allowedLibraries() {
+        return allowedLibraries;
+    }
+
+    /**
+     * Parses the platform-path-separated provider path list following the {@code
+     * --foreign-provider-path} at {@code optionIndex} into {@code providerPaths}; returns a usage
+     * message when the list is missing or names a nonexistent path, otherwise {@code null}.
+     */
+    private static String addProviderPaths(
+            List<Path> providerPaths, String[] args, int optionIndex) {
+        if (optionIndex + 1 >= args.length) {
+            return "--foreign-provider-path requires a path list";
+        }
+        for (String entry : args[optionIndex + 1].split(File.pathSeparator, -1)) {
+            Path path;
+            try {
+                path = Path.of(entry).toAbsolutePath().normalize();
+            } catch (InvalidPathException invalid) {
+                path = null;
+            }
+            if (entry.isEmpty() || path == null || !Files.exists(path)) {
+                return "no such foreign provider path: " + entry;
+            }
+            providerPaths.add(path);
+        }
+        return null;
+    }
+
+    /**
+     * Parses one {@code alias=target} assignment into {@code libraries}; returns a usage message
+     * when it is malformed, relative, or a duplicate alias, otherwise {@code null}.
+     */
+    static String addLibraryGrant(Map<String, String> libraries, String assignment) {
+        int separator = assignment.indexOf('=');
+        if (separator < 0) {
+            return ALLOW_LIBRARY_OPTION + " requires alias=target";
+        }
+        String alias = assignment.substring(0, separator);
+        String target = assignment.substring(separator + 1);
+        if (!LIBRARY_ALIAS.matcher(alias).matches()) {
+            return ALLOW_LIBRARY_OPTION + " requires an alias matching [A-Za-z_][A-Za-z0-9_]{0,127}";
+        }
+        if (target.isEmpty() || target.indexOf('\0') >= 0) {
+            return ALLOW_LIBRARY_OPTION + " requires a non-empty target";
+        }
+        if (target.indexOf('/') >= 0 && !target.startsWith("/")) {
+            return ALLOW_LIBRARY_OPTION
+                    + " target must be an exact load name or an absolute path";
+        }
+        if (libraries.containsKey(alias)) {
+            return ALLOW_LIBRARY_OPTION + " alias may be given only once: " + alias;
+        }
+        libraries.put(alias, target);
+        return null;
     }
 
     /** Debug session seam without a Filesystem grant. */
@@ -2154,7 +2280,8 @@ public final class ProtosCli {
             FilesystemGrant filesystemGrant)
             throws IOException {
         ProtosPolyglotRuntimeHost runtimeHost =
-                ProtosPolyglotRuntimeHost.openDebug(diagnostics);
+                ProtosPolyglotRuntimeHost.openDebug(
+                        diagnostics, foreignProviderConfiguration());
         ProtosStandaloneProcessBootstrap.Result bootstrap = null;
         boolean handedToBinding = false;
         try {
@@ -2365,10 +2492,14 @@ public final class ProtosCli {
                         + "  protos --allow-filesystem=<dir> -e <source> [args...]\n"
                         + "  protos --allow-filesystem=<dir>\n"
                         + "  protos run --allow-filesystem=<dir> <entry> [args...]\n"
-                        + "  protos debug --allow-filesystem=<dir> <file> [args...]\n\n"
+                        + "  protos debug --allow-filesystem=<dir> <file> [args...]\n"
+                        + "  protos run [--foreign-provider-path <paths>] [--allow-library <alias>=<target>] <entry> [args...]\n"
+                        + "  protos debug [--foreign-provider-path <paths>] [--allow-library <alias>=<target>] <file> [args...]\n"
+                        + "  protos [--foreign-provider-path <paths>] [--allow-library <alias>=<target>] run|debug ...\n\n"
                         + "Options:\n"
                         + "  -e <source> [args...]\n"
-                        + "  --foreign-provider-path <paths> (before <file>, -e, or REPL)\n"
+                        + "  --foreign-provider-path <paths> (before <file>, -e, REPL, or the run/debug entry)\n"
+                        + "  --allow-library <alias>=<target> (repeatable; before <file>, -e, REPL, or the run/debug entry)\n"
                         + "  --inspect (before <file>, -e, or REPL)\n"
                         + "  --allow-resolver (initial application RootActor module only; name resolution, no TCP)\n"
                         + "  --allow-network (application RootActor only; no DNS or filesystem)\n"
@@ -2408,6 +2539,27 @@ public final class ProtosCli {
                         + "--foreign-provider-path loads external foreign provider plugins "
                         + "from exactly the listed JARs or directories (separated by the "
                         + "platform path separator; repeatable); they run trusted in process.\n"
+                        + "--allow-library <alias>=<target> authorizes one native library for "
+                        + "the protos-ffm provider: import(\"ffi:<alias>\") then loads exactly "
+                        + "<target>, an exact load name (such as libsqlite3.so.0) or an absolute "
+                        + "path, passed unchanged to the operating-system loader. It is "
+                        + "repeatable with distinct case-sensitive aliases; duplicate aliases, "
+                        + "relative paths and malformed assignments are usage errors. No "
+                        + "library is authorized by default, and the provider itself must still "
+                        + "be loaded with --foreign-provider-path. An authorized library runs "
+                        + "trusted in process with every effect the operating-system process "
+                        + "may produce (native file and network access, transitive "
+                        + "dependencies and initializers, global state shared among Actors, "
+                        + "blocking, memory corruption, process termination); it is not a "
+                        + "sandbox and grants no Filesystem, Network or other Protos "
+                        + "capability. It is not available to bundled Tools.\n"
+                        + "For run and debug, --foreign-provider-path and --allow-library may "
+                        + "precede the subcommand or follow it before the <entry> or <file>; "
+                        + "both positions are combined and an alias may still be given only "
+                        + "once. They select only the application RuntimeHost; after the entry "
+                        + "they are ordinary process.args() elements. Package preflight and "
+                        + "materialization are unchanged, and --inspect stays limited to file, "
+                        + "-e, or REPL execution.\n"
                         + "--inspect is opt-in: it authorizes only the std:inspect module for "
                         + "this file, -e, or REPL invocation, which is denied by default; it "
                         + "may be given once and combined with --foreign-provider-path in any "

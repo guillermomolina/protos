@@ -19,7 +19,9 @@ package com.guillermomolina.protos.cli;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import com.guillermomolina.protos.execution.ProtosExternalForeignProviderTest;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.ByteArrayOutputStream;
@@ -37,10 +39,12 @@ import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.Iterator;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -289,6 +293,144 @@ final class ProtosLm009DPublicDebugCliTest {
         } finally {
             Files.deleteIfExists(source);
             Files.deleteIfExists(root);
+        }
+    }
+
+    /**
+     * I169: a program that calls one authorized C function through protos-ffm. It prints its
+     * first application argument so that argument isolation after {@code <file>} is observable.
+     */
+    private static final String FFI_DEBUG_MAIN =
+            "ffi: import(\"ffi:first\")\n"
+                    + "identity: ffi.bind(\"ffi_test_i32_identity\","
+                    + " ffi.param(ffi.signature(ffi.i32), ffi.i32))\n"
+                    + "if(!(identity(5) == 5)) { Error().signal() }\n"
+                    + "print(\"ffi-debug-5\")\n"
+                    + "print(process.args().at(0))\n"
+                    + "print(process.args().size())\n";
+
+    @Test
+    void i169DebugReachesTheSelectedFfmHostInBothOptionPositions(@TempDir Path work)
+            throws Exception {
+        Path library = ProtosExternalForeignProviderTest.ffiTestLibrary(work);
+        assumeTrue(library != null, "FFM fixture requires Linux x86-64 and a C compiler");
+        Path provider = ProtosExternalForeignProviderTest.distributableFfmProviderJar(work);
+        Path source = Files.writeString(work.resolve("ffi.protos"), FFI_DEBUG_MAIN);
+        String grant = "first=" + library;
+        for (List<String> arguments :
+                List.of(
+                        List.of("debug", "--foreign-provider-path", provider.toString(),
+                                "--allow-library", grant, source.toString(),
+                                "--allow-library", "x=y"),
+                        List.of("--foreign-provider-path", provider.toString(),
+                                "--allow-library", grant, "debug", source.toString(),
+                                "--allow-library", "x=y"))) {
+            // Only the two spellings after <file> reach process.args().
+            DebugRun run =
+                    debugToTermination(arguments, List.of("ffi-debug-5", "--allow-library", "2"));
+            assertEquals(0, run.exitCode(), () -> arguments + ": " + run.diagnostics());
+        }
+    }
+
+    @Test
+    void i169DebugWithoutAuthorizationOrProviderFailsTheGuestImportOnly(@TempDir Path work)
+            throws Exception {
+        Path library = ProtosExternalForeignProviderTest.ffiTestLibrary(work);
+        assumeTrue(library != null, "FFM fixture requires Linux x86-64 and a C compiler");
+        Path provider = ProtosExternalForeignProviderTest.distributableFfmProviderJar(work);
+        Path source = Files.writeString(work.resolve("ffi.protos"), FFI_DEBUG_MAIN);
+        for (List<String> arguments :
+                List.of(
+                        // The alias the program imports is not authorized.
+                        List.of("debug", "--foreign-provider-path", provider.toString(),
+                                "--allow-library", "other=" + library, source.toString(), "a"),
+                        // The library is authorized but no provider is loaded.
+                        List.of("debug", "--allow-library", "first=" + library,
+                                source.toString(), "a"))) {
+            // The host itself is valid, so readiness is published and the DAP protocol holds;
+            // only the guest import fails.
+            DebugRun run = debugToTermination(arguments, List.of());
+            assertEquals(1, run.exitCode(), () -> arguments + ": " + run.diagnostics());
+        }
+    }
+
+    @Test
+    void i169InvalidProviderConfigurationNeverPublishesReadiness(@TempDir Path work)
+            throws Exception {
+        Path source = Files.writeString(work.resolve("main.protos"), "print(\"ran\")\n");
+        Path empty = Files.createDirectories(work.resolve("no-plugins"));
+        for (List<String> arguments :
+                List.of(
+                        List.of("debug", "--foreign-provider-path", empty.toString(),
+                                source.toString()),
+                        List.of("--foreign-provider-path", empty.toString(), "debug",
+                                source.toString()),
+                        List.of("debug", "--foreign-provider-path",
+                                work.resolve("absent.jar").toString(), source.toString()),
+                        List.of("debug", "--allow-library", "first=lib/relative.so",
+                                source.toString()),
+                        List.of("--allow-library", "a=liba.so", "debug",
+                                "--allow-library", "a=libb.so", source.toString()))) {
+            ByteArrayOutputStream controlOut = new ByteArrayOutputStream();
+            ByteArrayOutputStream diagnostics = new ByteArrayOutputStream();
+            AtomicInteger exitCode = new AtomicInteger(Integer.MIN_VALUE);
+            Thread cliThread =
+                    startDebug(controlOut, diagnostics, exitCode, arguments.toArray(String[]::new));
+            cliThread.join(TIMEOUT.toMillis());
+            assertFalse(cliThread.isAlive(), arguments::toString);
+            // Usage errors exit 2; a plugin-less provider path fails host construction (exit 1).
+            assertTrue(exitCode.get() == 1 || exitCode.get() == 2, arguments::toString);
+            assertEquals("", controlOut.toString(StandardCharsets.UTF_8), arguments::toString);
+            assertFalse(
+                    diagnostics.toString(StandardCharsets.UTF_8).contains("PROTOS_DEBUG_READY"),
+                    arguments::toString);
+        }
+    }
+
+    private record DebugRun(int exitCode, String diagnostics) {}
+
+    /**
+     * Runs one public debug invocation through the real DAP client until termination, asserting
+     * the exact readiness record and that each of {@code expectedStdout}, in order, travelled
+     * through DAP as guest stdout.
+     */
+    private static DebugRun debugToTermination(
+            List<String> arguments, List<String> expectedStdout)
+            throws Exception {
+        ByteArrayOutputStream controlOut = new ByteArrayOutputStream();
+        ByteArrayOutputStream diagnostics = new ByteArrayOutputStream();
+        AtomicInteger exitCode = new AtomicInteger(Integer.MIN_VALUE);
+        Thread cliThread =
+                startDebug(controlOut, diagnostics, exitCode, arguments.toArray(String[]::new));
+        DapClient client = null;
+        try {
+            String readiness = awaitReadinessLine(controlOut);
+            Matcher match = READINESS.matcher(readiness);
+            assertTrue(match.matches(), () -> "Unexpected readiness: " + readiness);
+            client = DapClient.connect(match.group(1), Integer.parseInt(match.group(2)), TIMEOUT);
+            driveToTermination(client);
+            for (String expected : expectedStdout) {
+                String stdoutEvent = client.awaitOutputContaining("stdout", expected, TIMEOUT);
+                assertTrue(stdoutEvent.contains(expected), stdoutEvent);
+            }
+            client.awaitEvent("terminated", TIMEOUT);
+            client.close();
+            client = null;
+            cliThread.join(TIMEOUT.toMillis());
+            assertFalse(cliThread.isAlive(), arguments::toString);
+            assertEquals(
+                    readiness + System.lineSeparator(),
+                    controlOut.toString(StandardCharsets.UTF_8),
+                    arguments::toString);
+            return new DebugRun(exitCode.get(), diagnostics.toString(StandardCharsets.UTF_8));
+        } finally {
+            if (client != null) {
+                client.close();
+            }
+            if (cliThread.isAlive()) {
+                cliThread.interrupt();
+                cliThread.join(TIMEOUT.toMillis());
+            }
         }
     }
 
