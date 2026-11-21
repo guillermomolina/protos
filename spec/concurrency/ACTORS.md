@@ -1718,6 +1718,27 @@ A bridge must not choose at runtime between copying and shared mutable aliasing 
 a way that changes Protos-observable behavior. Any sharing policy that is
 observable must be part of the explicit interoperability contract.
 
+### 24K.1 Trusted in-process native code (D259-B2+A)
+
+The rules above are delimited by exactly one explicit exception: native code
+that the host has explicitly authorized for trusted execution inside the
+operating-system process (`../semantics/FFI.md`, Host native library
+authorization). Such a library may hold mutable global state and produce
+effects observable from several Actors. Protos guarantees neither isolation
+nor coordination of that library-internal state; accepting that is part of the
+host's explicit authorization.
+
+The exception does not extend to:
+
+- Protos-managed objects and slots, which keep full Actor isolation;
+- native handles and managed foreign resources, which remain non-transferable
+  unless their owning contract says otherwise;
+- Actor-local MODULE semantics;
+- the Task, Future, and synchronous-execution rules of §24J; or
+- any other foreign provider, Java/host state, or native code not explicitly
+  authorized by the host as trusted in-process, for which the general
+  prohibition on accidental shared foreign state applies unchanged.
+
 The same boundary applies to P. A host/global capability is not P-transferable
 merely because it is thread-safe or process-global. P crossing requires an
 explicit P-safe contract consistent with `PARALLEL_EXECUTION.md` §71.

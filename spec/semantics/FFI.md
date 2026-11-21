@@ -23,6 +23,88 @@ An incorrect ABI signature can corrupt memory or terminate the process.
 A C library is not confined by Protos `Filesystem` authority. No recovery from
 arbitrary native faults, memory corruption, or process termination is promised.
 
+### Host native library authorization (D259-B2+A)
+
+Native library authorization is a host-supplied table mapping logical library
+aliases to native targets. Only the host supplies it; no Protos program,
+import, descriptor, or module can create, read, or widen it. The empty table
+authorizes no library. The presence of a native foreign provider never
+authorizes any library by itself; in particular, it does not authorize
+`sqlite3`.
+
+`import("ffi:sqlite3")` names the logical alias `sqlite3`. An import never
+selects a file, a path, or a native name, and never widens authorization.
+
+A library alias:
+
+- is case-sensitive;
+- matches `[A-Za-z_][A-Za-z0-9_]{0,127}`; and
+- authorizes nothing unless the host table explicitly contains it.
+
+An alias is a logical identifier only. It is never interpreted as a file
+path or as a native load name.
+
+An import of a syntactically valid alias that is not in the table fails with
+`ForeignError` category `unauthorized-library`. A syntactically invalid alias
+never reaches native acquisition; it follows ordinary import resolution
+(`MODULES.md`). An import of an authorized alias whose target cannot be loaded
+fails with `ForeignError` category `library-unavailable`.
+
+For the acquisition of that library by `protos-ffm`, alias authorization is
+checked before the FFM provider creates any Linker or Arena for that
+acquisition and before that library is loaded. This rule does not guarantee
+that no other provider, Actor, or trusted Java code has previously executed
+native code. A logical provider session may exist
+without constituting a native load; this contract does not promise that a
+denied import creates no logical provider session.
+
+A native target is exactly one of:
+
+- an exact load name, such as `libsqlite3.so.0`, which Protos passes unchanged
+  to the operating-system library loader; or
+- an absolute path supplied by the host, which Protos passes unchanged as an
+  absolute path.
+
+Protos searches no additional directories, derives no library names, adds no
+prefixes or suffixes, and selects no alternative versions. Protos constructs
+no relative paths and performs no fallback search; relative paths are not
+valid targets. The operating-system loader may apply its own search rules,
+dependency loading, symbolic-link resolution, and native initializers; those
+effects are part of the risk the host accepts by authorizing the library. An
+authorized target is not promised to identify cryptographically, or otherwise,
+one immutable file.
+
+Ordinary Protos permissions (`Filesystem`, `Network`, `Resolver`, `Entropy`,
+`Clock`, external execution) remain independent of the table: authorizing a
+library grants none of them, and none of them authorizes a library.
+
+An explicitly authorized native library executes `TRUSTED_IN_PROCESS`: it may
+produce every effect the operating-system process may produce, including I/O,
+blocking, faults, and process termination. Protos MODULEs, descriptors, and
+managed foreign resources keep their existing identity, custody, and transfer
+rules. The internal global state of a trusted C library receives no isolation
+guarantee among Actors, Contexts, or Protos Processes that share one
+operating-system process (`../concurrency/ACTORS.md` §24K).
+
+Library loading remains lazy, importing `std:ffi` still acquires no native
+resource, and the R1 ABI, existing error categories, and synchronous call
+semantics are unchanged. This contract adds no public `std:ffi` API.
+
+#### Embedding configuration
+
+An embedding host supplies the table through the existing `protos-ffm`
+foreign provider, as immutable provider options of the form
+`library.<alias> = <target>`. For example:
+
+```text
+library.sqlite3 = libsqlite3.so.0
+library.zlib    = /usr/lib/x86_64-linux-gnu/libz.so.1
+```
+
+authorizes exactly the aliases `sqlite3` and `zlib`. Without such options the
+table is empty and no library is authorized. This adds no SPI and no public
+Protos API.
+
 ## Public declarations
 
 The MODULE exports exactly six scalar descriptors (`void`, `i32`, `i64`,

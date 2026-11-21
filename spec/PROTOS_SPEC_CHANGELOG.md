@@ -23,6 +23,42 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.506] - 2026-11-21
+
+### D259-B2+A / I169 — Trusted native FFM library allowlist
+
+- `semantics/FFI.md`: host-supplied table of logical library aliases to native
+  targets (exact load name passed unchanged to the operating-system loader, or
+  host-supplied absolute path passed unchanged), empty by default; provider
+  presence authorizes nothing, including `sqlite3`; case-sensitive aliases
+  matching `[A-Za-z_][A-Za-z0-9_]{0,127}`; `import("ffi:<alias>")` names an
+  alias, never a file, and never widens authorization; Protos performs no
+  additional directory search, name derivation, prefix/suffix or version
+  selection, while the OS loader's own search, dependency and initializer
+  effects are accepted risks; valid unauthorized aliases fail with
+  `unauthorized-library` before `protos-ffm` creates any Linker or Arena for,
+  or loads, that library (no guarantee that no other provider, Actor or
+  trusted Java code previously executed native code); the alias is a logical
+  identifier never interpreted as a file path or native load name; invalid
+  aliases follow ordinary import resolution, and unloadable authorized targets
+  fail with `library-unavailable`; embedding authorization through immutable
+  `protos-ffm` options `library.<alias> = <target>`; Protos permissions remain
+  independent; authorized libraries run `TRUSTED_IN_PROCESS` with no isolation
+  guarantee for library-internal global state; lazy loading, R1 ABI, errors
+  and synchronous calls unchanged; no new `std:ffi` API or SPI.
+- `concurrency/ACTORS.md` §24K.1: explicit, narrow exception to the foreign
+  mutable state rule for host-authorized trusted in-process native library
+  global state only; managed object isolation, handle non-transferability,
+  Actor-local MODULEs, §24J and the general prohibition for all other foreign
+  providers and Java/host state are preserved.
+- `io/PROCESS_IO.md`: capability grants govern Protos APIs but do not confine
+  a trusted in-process C library; Protos Process distinguished from the
+  operating-system process; repeatable CLI option `--allow-library
+  alias=target` before the application entry for file, `-e`, REPL, `run` and
+  `debug` (not bundled tools); duplicate, malformed or relative assignments
+  are configuration errors; the option does not grant FFM provider JAR trust;
+  no new Core capability or bootstrap slot.
+
 ## [0.1.505] - 2026-11-21
 
 ### D229-B1 / I166 — Explicit external OS execution capability (normative integration)

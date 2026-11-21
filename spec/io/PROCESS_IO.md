@@ -696,6 +696,26 @@ Process termination revokes the grant and every child and endpoint access
 derived from it, under §28 and `EXTERNAL_PROCESS.md` §8. Revocation affects no
 independent grant of another Process or Context.
 
+### Host grants and trusted native libraries (D259-B2+A)
+
+Filesystem, Network, Resolver, Entropy, Clock, external execution, and other
+capability grants govern the corresponding Protos APIs of a Protos Process.
+They do not confine a C library the host explicitly authorized as
+`TRUSTED_IN_PROCESS` (`../semantics/FFI.md`): such a library runs with the
+authority of the operating-system process that hosts the Protos Process, which
+may host other Protos Processes. Library authorization introduces no Core
+capability and no bootstrap slot.
+
+The `protos` command line authorizes libraries with the repeatable option
+`--allow-library alias=target`, which must appear before the application
+entry. The target is an exact load name or an absolute path, with the meaning
+of `../semantics/FFI.md`. The option is accepted for file, `-e`, and REPL
+entries and for the `run` and `debug` application modes; it is not offered by
+the bundled `test`, `package`, `lint`, `format`, or `language-server` tools.
+A duplicate alias, a malformed assignment, or a relative target is a
+configuration error. The option does not by itself grant the trust required to
+load the FFM provider JAR. It changes no existing grant and does not affect
+`process.args()`.
 
 ### RootActor message-service bootstrap entry authority (D225-B1)
 
