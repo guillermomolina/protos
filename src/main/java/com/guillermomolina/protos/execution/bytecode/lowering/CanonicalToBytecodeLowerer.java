@@ -10711,9 +10711,7 @@ final class CanonicalToBytecodeLowerer {
         BytecodeLocal element = builder.createLocal(
                 NORMAL_INLINE_CALLBACK_BINDING_LOCAL_PREFIX + parameter, nextInlineCallbackRegion + 1);
         builder.beginWhile();
-        builder.beginIterationNext(element);
-        builder.emitLoadLocal(iteration);
-        builder.endIterationNext();
+        builder.emitIterationNext(element, iteration);
         emitInlineControlClosureBody(
                 builder, callback, InlineBodyResult.DISCARD, null,
                 scratch, childResult, resumeValue, false,
@@ -10893,9 +10891,7 @@ final class CanonicalToBytecodeLowerer {
                     NORMAL_INLINE_CALLBACK_BINDING_LOCAL_PREFIX + parameter,
                     nextInlineCallbackRegion + 1);
             builder.beginWhile();
-            builder.beginIterationNext(element);
-            builder.emitLoadLocal(state);
-            builder.endIterationNext();
+            builder.emitIterationNext(element, state);
             emitInlineControlClosureBody(
                     builder, inlineCallback, InlineBodyResult.DISCARD, null,
                     scratch, childResult, resumeValue, false,
@@ -10904,9 +10900,7 @@ final class CanonicalToBytecodeLowerer {
         } else {
             BytecodeLocal element = builder.createLocal("rangeElement", null);
             builder.beginWhile();
-            builder.beginIterationNext(element);
-            builder.emitLoadLocal(state);
-            builder.endIterationNext();
+            builder.emitIterationNext(element, state);
             builder.beginBlock();
             emitDispatchedCall(
                     builder, callbackValue, java.util.List.of(element), null,

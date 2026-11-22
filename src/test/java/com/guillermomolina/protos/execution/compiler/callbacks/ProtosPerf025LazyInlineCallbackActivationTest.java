@@ -178,9 +178,16 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
                         run()
                         """);
         List<String> names = instructions.stream().map(ProtosInstructionNames::of).toList();
-        List<Object> parameter = constantLocals(instructions, "IterationNext");
+        // IterationNext constant operands follow declaration order: the
+        // element target (the callback formal), then the iteration cursor.
+        List<Object> iteration = constantLocals(instructions, "IterationNext");
+        assertEquals(2, iteration.size(), () -> "element and cursor: " + names);
+        List<Object> parameter = iteration.subList(0, 1);
+        Object cursor = iteration.get(1);
         List<Object> creations = constantLocals(instructions, "ResetInlineCallbackLocal");
         assertEquals(1, parameter.size(), () -> "one formal: " + names);
+        assertFalse(parameter.contains(cursor) || creations.contains(cursor),
+                () -> "the cursor is not a callback binding: " + names);
         assertEquals(3, creations.size(), () -> "copy, first and second: " + names);
         assertEquals(4L,
                 java.util.stream.Stream.concat(parameter.stream(), creations.stream()).distinct().count(),

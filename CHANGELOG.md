@@ -8,6 +8,11 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.197-SNAPSHOT
+
+- **PERF045.** Restore constant local cursors for Array and Range iteration.
+- Read iteration state through a constant cursor local instead of a separate operand load, and update Array and Range cursor structure regressions.
+
 ## 0.4.196-SNAPSHOT
 
 - **PERF045.** Restore operand-based iteration and direct terminal expression returns.

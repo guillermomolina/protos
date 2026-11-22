@@ -18,6 +18,7 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
@@ -1876,11 +1877,16 @@ final class ProtosPerf045RangeEachInlineTest {
         assertEquals(1, prepare.size(), () -> instructions.toString());
         int advance = next.get(0).getBytecodeIndex();
         assertTrue(advance < enter, "the iterator advances before the callback body");
-        assertEquals(1, next.get(0).getArguments().stream()
+        // Constant operands follow declaration order: element, then cursor.
+        List<Object> accessors = next.get(0).getArguments().stream()
                 .filter(argument -> argument.getKind() == Instruction.Argument.Kind.CONSTANT)
                 .map(Instruction.Argument::asConstant)
-                .filter(LocalAccessor.class::isInstance).count(),
-                "the iterator writes the element through its constant LocalAccessor");
+                .filter(LocalAccessor.class::isInstance)
+                .toList();
+        assertEquals(2, accessors.size(),
+                "the iterator writes the element and reads its cursor through constant LocalAccessors");
+        assertNotEquals(accessors.get(0), accessors.get(1),
+                "the element target and the iteration cursor are distinct locals");
 
         int prepared = Math.max(snapshot.get(0).getBytecodeIndex(), prepare.get(0).getBytecodeIndex());
         // Continuation composition has its own back edges. Only an edge
