@@ -24,6 +24,17 @@ model: () => {
     releases: Array()
     openCode: 0
     openNull: false
+    expectedName: ":memory:"
+    expectedFlags: 134
+    events: Array()
+    autocommit: 1
+    readonly: 0
+    readonlyError: null
+    timeoutCode: 0
+    timeoutError: null
+    timeouts: Array()
+    finalizeCode: 0
+    finalizeError: null
     prepareCode: 0
     prepareNull: false
     prepareRest: 0
@@ -48,6 +59,7 @@ model: () => {
     // only after the operation was entered.
     answer: (name, code, error) => {
         calls = Array(...calls, name)
+        events = Array(...events, name)
         if(error !== null) { error.signal() }
         code
     }
@@ -62,20 +74,25 @@ model: () => {
     }
     abi: {
         SQLITE_OK: 0
+        SQLITE_ERROR: 1
+        SQLITE_READONLY: 8
         SQLITE_ROW: 100
         SQLITE_DONE: 101
         SQLITE_OPEN_READWRITE: 2
+        SQLITE_OPEN_READONLY: 1
         SQLITE_OPEN_CREATE: 4
         SQLITE_OPEN_MEMORY: 128
         open: (name, flags, vfs) => {
-            Assertions.require(name == ":memory:")
-            Assertions.require(flags == 134)
+            events = Array(...events, "open")
+            Assertions.require(name == expectedName)
+            Assertions.require(flags == expectedFlags)
             Assertions.require(vfs === null)
             token: dbToken
             if(openNull) { token = null }
             Array(openCode, token)
         }
         prepare: (db, sql) => {
+            events = Array(...events, "prepare")
             Assertions.require(db === dbToken)
             sqls = Array(...sqls, sql)
             plan: Array(prepareCode, !prepareNull, prepareRest)
@@ -101,13 +118,31 @@ model: () => {
         step: (handle) => answer("step", stepCode, stepError)
         reset: (handle) => answer("reset", resetCode, resetError)
         clearBindings: (handle) => answer("clearBindings", clearCode, clearError)
+        getAutocommit: (db) => {
+            Assertions.require(db === dbToken)
+            answer("getAutocommit", autocommit, null)
+        }
+        dbReadonly: (db, schema) => {
+            Assertions.require((db === dbToken) && (schema == "main"))
+            answer("dbReadonly", readonly, readonlyError)
+        }
+        busyTimeout: (db, milliseconds) => {
+            Assertions.require(db === dbToken)
+            timeouts = Array(...timeouts, milliseconds)
+            answer("busyTimeout", timeoutCode, timeoutError)
+        }
         release: (token) => {
+            events = Array(...events, "release")
             Assertions.require(token === dbToken)
             destroy(token)
         }
         finalize: (token) => {
+            events = Array(...events, "finalize")
             Assertions.require(token !== dbToken)
-            destroy(token)
+            code: destroy(token)
+            if(finalizeError !== null) { finalizeError.signal() }
+            if(code == 0) { code = finalizeCode }
+            code
         }
     }
     {
@@ -125,6 +160,25 @@ model: () => {
         }
         sqls: () => sqls
         calls: () => calls
+        events: () => events
+        expectOpen: (name, flags) => {
+            expectedName = name
+            expectedFlags = flags
+        }
+        autocommit: (value) => { autocommit = value }
+        readonly: (value, error) => {
+            readonly = value
+            readonlyError = error
+        }
+        timeoutResult: (code, error) => {
+            timeoutCode = code
+            timeoutError = error
+        }
+        timeouts: () => timeouts
+        finalizeResult: (code, error) => {
+            finalizeCode = code
+            finalizeError = error
+        }
         prepareRest: (rest) => { prepareRest = rest }
         script: (plans) => {
             script = plans
@@ -484,3 +538,164 @@ Assertions.require(binding.releases()[1] === reusedToken)
 Assertions.require(binding.releases()[2] === binding.database)
 Assertions.signals(IOLifecycleError, () => reused.reset())
 Assertions.require(binding.releases().size() == 3)
+
+// Persistent acquisition uses the same resource implementation and custody.
+for(entry in Array(Array("readOnly", 1), Array("readWrite", 2), Array("readWriteCreate", 6))) {
+    disk: model()
+    disk.expectOpen("data.sqlite", entry[1])
+    diskDb: openFile(disk.abi, terminal, SQLiteError, "data.sqlite", entry[0])
+    Assertions.require(disk.events()[0] == "open")
+    if(entry[0] != "readOnly") { Assertions.require(disk.events()[1] == "dbReadonly") }
+    diskDb.close().value()
+    Assertions.require(disk.releases().size() == 1)
+}
+for(code in Array(0, 14)) {
+    disk: model()
+    disk.expectOpen("failed.sqlite", 6)
+    disk.openResult(code, code == 0)
+    disk.failRelease(disk.database, 7)
+    caught: Assertions.signals(SQLiteError,
+        () => openFile(disk.abi, terminal, SQLiteError, "failed.sqlite", "readWriteCreate"))
+    Assertions.require((caught.operation == "open") && (caught.code == code))
+    expected: 1
+    if(code == 0) { expected = 0 }
+    Assertions.require(disk.releases().size() == expected)
+}
+for(readonly in Array(1, -1)) {
+    disk: model()
+    disk.expectOpen("readonly.sqlite", 2)
+    disk.readonly(readonly, null)
+    disk.failRelease(disk.database, 7)
+    caught: Assertions.signals(SQLiteError,
+        () => openFile(disk.abi, terminal, SQLiteError, "readonly.sqlite", "readWrite"))
+    expected: 8
+    if(readonly == -1) { expected = 1 }
+    Assertions.require((caught.operation == "open") && (caught.code == expected))
+    Assertions.require(disk.releases().size() == 1)
+    Assertions.require(disk.events()[2] == "release")
+}
+providerOpen: model()
+providerOpen.expectOpen("provider.sqlite", 6)
+providerFailure: ForeignError()
+providerOpen.readonly(0, providerFailure)
+providerOpen.signalRelease(providerOpen.database, Error())
+Assertions.require(Assertions.signals(Error, () => openFile(providerOpen.abi, terminal,
+    SQLiteError, "provider.sqlite", "readWriteCreate")) === providerFailure)
+Assertions.require(providerOpen.releases().size() == 1)
+
+invalidFiles: model()
+for(path in Array(null, 7, true, "", ":memory:", "file:data.sqlite", "file:", "a\u{0}b")) {
+    ordinary(() => openFile(invalidFiles.abi, terminal, SQLiteError, path, "readWriteCreate"))
+}
+for(mode in Array(null, 7, true, "", "readonly", "create")) {
+    ordinary(() => openFile(invalidFiles.abi, terminal, SQLiteError, "data.sqlite", mode))
+}
+Assertions.require(invalidFiles.events().size() == 0)
+
+transactions: model()
+transactionDb: openMemory(transactions.abi, terminal, SQLiteError)
+Assertions.require(!transactionDb.inTransaction())
+Assertions.require(transactionDb.begin() === transactionDb)
+transactions.autocommit(0)
+Assertions.require(transactionDb.inTransaction())
+Assertions.require(transactionDb.commit() === transactionDb)
+transactions.autocommit(1)
+Assertions.require(!transactionDb.inTransaction())
+Assertions.require(transactionDb.begin() === transactionDb)
+Assertions.require(transactionDb.rollback() === transactionDb)
+Assertions.require(transactions.sqls().size() == 4)
+for(index in Array(0, 1, 2, 3)) {
+    Assertions.require(transactions.sqls()[index] == Array("BEGIN", "COMMIT", "BEGIN", "ROLLBACK")[index])
+    Assertions.require(transactions.releases()[index] === transactions.statements()[index])
+}
+// Every observation enters SQLite; state is never a wrapper-maintained flag.
+before: transactions.calls().size()
+transactions.autocommit(0)
+Assertions.require(transactionDb.inTransaction())
+transactions.autocommit(1)
+Assertions.require(!transactionDb.inTransaction())
+Assertions.require(transactions.calls().size() == (before + 2))
+
+for(milliseconds in Array(0, 1, 2147483647)) {
+    Assertions.require(transactionDb.busyTimeout(milliseconds) === transactionDb)
+}
+before = transactions.calls().size()
+for(milliseconds in Array(-1, 2147483648, 0.5, true, null, "10")) {
+    ordinary(() => transactionDb.busyTimeout(milliseconds))
+}
+Assertions.require(transactions.calls().size() == before)
+Assertions.require(transactions.timeouts().size() == 3)
+transactions.timeoutResult(7, null)
+timeoutFailure: Assertions.signals(SQLiteError, () => transactionDb.busyTimeout(10))
+Assertions.require((timeoutFailure.operation == "busyTimeout") && (timeoutFailure.code == 7))
+transactions.timeoutResult(0, providerFailure)
+Assertions.require(Assertions.signals(Error, () => transactionDb.busyTimeout(10)) === providerFailure)
+transactionDb.close().value()
+before = transactions.calls().size()
+for(operation in Array(transactionDb.begin, transactionDb.commit, transactionDb.rollback,
+    transactionDb.inTransaction, () => transactionDb.busyTimeout(0))) {
+    Assertions.signals(IOLifecycleError, operation)
+}
+Assertions.require(transactions.calls().size() == before)
+
+// A failed COMMIT can leave SQLite active or cause SQLite to roll back.
+// Both outcomes are injected as native observations, not inferred by the model.
+for(autocommit in Array(0, 1)) {
+    commitModel: model()
+    commitDb: openMemory(commitModel.abi, terminal, SQLiteError)
+    commitDb.begin()
+    commitModel.stepResult(5, null)
+    commitModel.finalizeResult(19, null)
+    commitFailure: Assertions.signals(SQLiteError, () => commitDb.commit())
+    Assertions.require((commitFailure.operation == "step") && (commitFailure.code == 5))
+    commitModel.autocommit(autocommit)
+    Assertions.require(commitDb.inTransaction() == (autocommit == 0))
+    Assertions.require(commitModel.sqls().size() == 2)
+    Assertions.require(commitModel.sqls()[1] == "COMMIT")
+    Assertions.require(commitModel.releases().size() == 2)
+    // Finalize followed step, with no retry, reset or implicit rollback.
+    events: commitModel.events()
+    Assertions.require(events[events.size() - 4] == "prepare")
+    Assertions.require(events[events.size() - 3] == "step")
+    Assertions.require(events[events.size() - 2] == "finalize")
+    commitDb.close().value()
+    Assertions.require(commitModel.releases().size() == 3)
+}
+
+controlProvider: model()
+controlDb: openMemory(controlProvider.abi, terminal, SQLiteError)
+controlProvider.stepResult(101, providerFailure)
+controlProvider.finalizeResult(0, Error())
+Assertions.require(Assertions.signals(Error, () => controlDb.begin()) === providerFailure)
+Assertions.require(controlProvider.releases().size() == 1)
+controlDb.close().value()
+
+finalizeOnly: model()
+finalizeDb: openMemory(finalizeOnly.abi, terminal, SQLiteError)
+finalizeOnly.finalizeResult(19, null)
+finalizeFailure: Assertions.signals(SQLiteError, () => finalizeDb.rollback())
+Assertions.require((finalizeFailure.operation == "finalize") && (finalizeFailure.code == 19))
+Assertions.require(finalizeOnly.releases().size() == 1)
+finalizeDb.close().value()
+
+// A transaction-control prepare failure retires a partial Statement once.
+controlPrepare: model()
+controlPrepareDb: openMemory(controlPrepare.abi, terminal, SQLiteError)
+controlPrepare.prepareResult(1, false)
+controlPrepare.finalizeResult(19, null)
+prepareFailure: Assertions.signals(SQLiteError, () => controlPrepareDb.begin())
+Assertions.require((prepareFailure.operation == "prepare") && (prepareFailure.code == 1))
+Assertions.require(controlPrepare.releases().size() == 1)
+controlPrepareDb.close().value()
+
+diskCleanup: model()
+diskCleanup.expectOpen("cleanup.sqlite", 6)
+diskParent: openFile(diskCleanup.abi, terminal, SQLiteError, "cleanup.sqlite", "readWriteCreate")
+diskChild: diskParent.prepare("SELECT 1")
+diskCleanup.failRelease(diskCleanup.database, 5)
+diskCloseError: Assertions.signals(SQLiteError, () => diskParent.close().value())
+Assertions.require(diskCleanup.releases()[0] === diskCleanup.statements()[0])
+Assertions.require(diskCleanup.releases()[1] === diskCleanup.database)
+Assertions.require(Assertions.signals(SQLiteError, () => diskParent.close().value()) === diskCloseError)
+Assertions.require(diskCleanup.releases().size() == 2)
+Assertions.signals(IOLifecycleError, () => diskChild.step())

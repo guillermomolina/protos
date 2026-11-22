@@ -51,7 +51,11 @@ Next steps:
 
 - the [Protos-first SQLite library](../../docs/guide/library/sqlite.md) and its
   [public example](../../protos/examples/ffi/sqlite-library.protos):
-  `std:sqlite` owns connections, statements, numeric binds and copied rows;
+  `std:sqlite` owns memory/file connections, statements, typed parameters,
+  copied rows and manual transactions. The [durable example](../../protos/examples/ffi/sqlite-durable.protos)
+  accepts a filename argument and verifies commit, rollback and reopen. Native
+  SQLite uses OS process authority under D259, outside guest Filesystem
+  confinement; library loading remains explicitly authorized and calls synchronous;
 
 - tutorials [`07-ffi-provider-basics.protos`](../../protos/tutorials/08-language-interactions/07-ffi-provider-basics.protos)
   (signatures, scalar calls, pre-entry validation) and

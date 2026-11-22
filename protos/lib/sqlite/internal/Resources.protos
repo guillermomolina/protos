@@ -76,7 +76,7 @@ isBytes: (value) => {
 
 // The ABI and terminal-Future facility are injected privately. This also lets
 // deterministic Protos fixtures exercise acquisition and destructor failures.
-openMemory: (abi, terminal, SQLiteError) => {
+acquire: (abi, terminal, SQLiteError, name, flags, requireWritable) => {
     failure: (operation, code) => SQLiteError {
         operation: operation
         code: code
@@ -90,7 +90,7 @@ openMemory: (abi, terminal, SQLiteError) => {
             Error.handle(() => release(handle), (error) => null)
         }
     }
-    opened: abi.open(":memory:", abi.SQLITE_OPEN_READWRITE + abi.SQLITE_OPEN_CREATE + abi.SQLITE_OPEN_MEMORY, null)
+    opened: abi.open(name, flags, null)
     native: opened[1]
     published: false
     (() => {
@@ -99,6 +99,11 @@ openMemory: (abi, terminal, SQLiteError) => {
             primary.signal()
         }
         if(native === null) { failure("open", abi.SQLITE_OK).signal() }
+        if(requireWritable) {
+            readonly: abi.dbReadonly(native, "main")
+            if(readonly == 1) { failure("open", abi.SQLITE_READONLY).signal() }
+            if(readonly != 0) { failure("open", abi.SQLITE_ERROR).signal() }
+        }
 
         closing: false
         closeError: null
@@ -339,10 +344,48 @@ openMemory: (abi, terminal, SQLiteError) => {
                 if(!admitted) { discard(handle, abi.finalize) }
             })
         }
+        // Control SQL has no rows. Always observe finalization, preserving an
+        // execution failure if SQLite repeats it from sqlite3_finalize.
+        control: (sql) => {
+            statement: prepare(sql)
+            primary: null
+            (() => {
+                Error.handle(() => {
+                    if(statement.step()) { Error().signal() }
+                }, (error) => {
+                    primary = error
+                    error.signal()
+                })
+                connection
+            }).ensure(() => {
+                Error.handle(() => statement.close().value(), (error) => {
+                    if(primary === null) { error.signal() }
+                })
+            })
+        }
         connection = {
             /// Prepares exactly one SQL statement, optionally terminated by semicolons
             /// and followed by comments; blank/comment SQL yields null.
             prepare: prepare
+            /// Starts an explicit SQLite transaction; nested BEGIN fails.
+            begin: () => control("BEGIN")
+            /// Commits once; failure does not imply rollback or invite a retry.
+            commit: () => control("COMMIT")
+            /// Rolls back explicitly; no transaction is an SQLite error.
+            rollback: () => control("ROLLBACK")
+            /// Queries SQLite now, including after failed COMMIT or automatic rollback.
+            inTransaction: () => {
+                requireOpen()
+                abi.getAutocommit(native) == 0
+            }
+            /// Configures qualifying native lock waits, not a query deadline.
+            busyTimeout: (milliseconds) => {
+                requireOpen()
+                Integer.recognizes(milliseconds).ifFalse(() => Error().signal())
+                if((milliseconds < 0) || (milliseconds > 2147483647)) { Error().signal() }
+                check("busyTimeout", abi.busyTimeout(native, milliseconds))
+                connection
+            }
             /// Closes every child and then the database, preserving the first failure.
             close: () => {
                 if(!closing && !terminal.closeAllowed()) {
@@ -370,4 +413,32 @@ openMemory: (abi, terminal, SQLiteError) => {
     }).ensure(() => {
         if(!published) { discard(native, abi.release) }
     })
+}
+
+// Memory acquisition deliberately needs none of the new ABI operations, so
+// existing independently injected lifecycle/borrow fixtures remain compatible.
+openMemory: (abi, terminal, SQLiteError) => acquire(abi, terminal, SQLiteError,
+    ":memory:", abi.SQLITE_OPEN_READWRITE + abi.SQLITE_OPEN_CREATE + abi.SQLITE_OPEN_MEMORY, false)
+
+// Runs before provider acquisition as well as at the private resource entry.
+admitFile: (path, mode) => {
+    octets: admitSql(path)
+    if(octets.size() == 0) { Error().signal() }
+    if(path == ":memory:") { Error().signal() }
+    if(octets.size() >= 5) {
+        if((octets[0] == 102) && (octets[1] == 105) && (octets[2] == 108) &&
+            (octets[3] == 101) && (octets[4] == 58)) { Error().signal() }
+    }
+    String.recognizes(mode).ifFalse(() => Error().signal())
+    if((mode != "readOnly") && (mode != "readWrite") && (mode != "readWriteCreate")) {
+        Error().signal()
+    }
+}
+
+openFile: (abi, terminal, SQLiteError, path, mode) => {
+    admitFile(path, mode)
+    flags: abi.SQLITE_OPEN_READONLY
+    if(mode == "readWrite") { flags = abi.SQLITE_OPEN_READWRITE }
+    if(mode == "readWriteCreate") { flags = abi.SQLITE_OPEN_READWRITE + abi.SQLITE_OPEN_CREATE }
+    acquire(abi, terminal, SQLiteError, path, flags, mode != "readOnly")
 }

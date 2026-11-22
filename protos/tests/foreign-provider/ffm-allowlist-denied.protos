@@ -47,5 +47,12 @@ invalidImport(() => import("ffi:./libsqlite3.so.0"))
 // The Standard Library facade over SQLite cannot use it either.
 SQLite: import("std:sqlite")
 Assertions.signals(Error, () => SQLite.openMemory())
+deniedFile: Assertions.signals(Error, () => SQLite.openFile("unauthorized.sqlite"))
+// Module resolution may fail before alias acquisition reaches the provider.
+if(deniedFile.parent() === ForeignError) {
+    Assertions.require(deniedFile.foreignCategory == "unauthorized-library")
+} else {
+    Assertions.require(deniedFile.parent() === Error)
+}
 
 print("FFM-ALLOWLIST-DENIED-PASS")

@@ -1,9 +1,11 @@
-# In-memory SQLite: `std:sqlite`
+# SQLite: `std:sqlite`
 
-This guide describes the bounded LIB029 source implementation and its LIB030
-extension (TEXT/BLOB input, complete single-statement SQL admission and explicit
-Statement reuse). It implements the approved wrapper scope; it does not extend
-Core or the public FFI descriptor contract.
+This guide describes the Protos-first library: LIB029 connections and copied
+rows, LIB030 TEXT/BLOB input, complete single-statement admission and Statement
+reuse, and LIB031 file-backed connections and manual transactions. Core and the
+public FFI descriptor contract are unchanged. The additional exact public
+contract is prepared for ratification in [SQLITE.md](../../../spec/semantics/SQLITE.md);
+this implementation does not declare D256 closed or claim validation.
 
 ```protos
 SQLite: import("std:sqlite")
@@ -58,8 +60,8 @@ backend implementation and native lifetime details see the advanced
    `--foreign-provider-path`, and authorize SQLite separately with
    `--allow-library sqlite3=libsqlite3.so.0`; the provider authorizes no
    library by default. Building the JAR authorizes nothing, and
-   `import("std:sqlite")` alone loads no SQLite library: only `openMemory()`
-   reaches the authorized `ffi:sqlite3` provider.
+   `import("std:sqlite")` alone loads no SQLite library: `openMemory()` and
+   `openFile()` reach the authorized `ffi:sqlite3` provider.
 
 4. Run the introductory example:
 
@@ -203,7 +205,7 @@ too. A later `reset()` that SQLite confirms with `SQLITE_OK` makes it reusable.
 ## Authority and target
 
 Importing `std:sqlite` imports ordinary Protos code and acquires no native
-library or authority. `openMemory()` imports the existing explicitly authorized
+library or authority. `openMemory()` and `openFile()` use the explicitly authorized
 `ffi:sqlite3` provider. Every Connection, Statement, binding and library session
 belongs to its originating Actor. Live resources cannot cross Actor or P
 boundaries; ordinary copied rows follow ordinary value-transfer rules.
@@ -222,17 +224,137 @@ apply unchanged. No Native Image plugin support or other platform promise is
 introduced. A missing or denied provider is a failure; an unavailable test
 platform is UNSUPPORTED, never passing SQLite acceptance.
 
-Only `:memory:` acquisition is exposed; there is no database filename API or
-implicit Protos Filesystem grant. This is not SQL sandboxing: explicitly supplied
-SQL still runs in a trusted in-process C library with process authority. Native
-faults can corrupt memory or terminate the process.
+Under D259, authorizing SQLite accepts its native effects with the operating
+system process's permissions. This includes file I/O outside any guest
+`Filesystem` capability, including SQLite sidecars, temporary files and SQL file
+operations. Guest capabilities remain independent. `std:sqlite` is not a sandbox:
+native faults can corrupt memory or terminate the process.
+
+## Persistent connections
+
+```protos
+SQLite: import("std:sqlite")
+db: SQLite.openFile(process.args()[0])  // mode defaults to "readWriteCreate"
+(() => {
+    statement: db.prepare("CREATE TABLE IF NOT EXISTS items(id INTEGER PRIMARY KEY, name TEXT)")
+    (() => { statement.step() }).ensure(() => statement.close().value())
+}).ensure(() => db.close().value())
+```
+
+`openFile(path, mode: "readWriteCreate")` has one optional parameter, using
+ordinary Protos default-parameter semantics:
+
+| Mode String | Behavior |
+| --- | --- |
+| `"readOnly"` | Opens an existing database for reading |
+| `"readWrite"` | Opens an existing database for reading and writing |
+| `"readWriteCreate"` | Opens for reading and writing, creating if absent; default |
+
+Before acquiring SQLite, the library rejects non-String/empty paths, NUL,
+`:memory:` (use `openMemory()`), `file:` URI names and any other mode with an
+ordinary `Error`. Relative paths use SQLite's OS process working directory;
+there is no guest Path conversion or Filesystem permission check. The wrapper
+adds no URI/open flags and creates no directories. SQLite performs the actual
+path opening and locking under OS authority.
+
+For requested writable modes, a successful open is followed by
+`sqlite3_db_readonly(db, "main")`. An effective read-only database is closed
+and rejected with `SQLiteError(operation: "open", code: 8)`; an unavailable
+schema result is rejected with code 1. Provider failures propagate. Any acquired
+handle is released once even if open failed or this check fails, preserving
+the primary error over cleanup. A writable open cannot guarantee future writes:
+permissions, available space, locks and device errors may change.
+
+## Manual transactions and lock waits
+
+```protos
+db.begin()
+insert: db.prepare("INSERT INTO items(name) VALUES(?1)")
+(() => {
+    insert.bind(1, "parameterized data")
+    insert.step()
+}).ensure(() => insert.close().value())
+db.commit()
+```
+
+`begin()`, `commit()` and `rollback()` prepare and execute exactly `BEGIN`,
+`COMMIT` and `ROLLBACK`, finalize the control Statement on every path and answer
+the same Connection on success. Execution failure remains primary when
+finalization also fails; a sole finalization failure propagates. There is no
+automatic retry, cached control Statement, nested-transaction emulation or
+implicit rollback after failed COMMIT. These methods work on memory connections
+too. Ordinary SQL may also issue transactions or SQLite savepoints.
+
+`inTransaction()` queries `sqlite3_get_autocommit` on every call: disabled
+autocommit means `true`. It does not inspect a wrapper-maintained Boolean.
+COMMIT can fail with `SQLITE_BUSY` or a deferred constraint while leaving the
+transaction active; other SQLite errors may cause automatic rollback. Observe
+`inTransaction()` after a failure and choose explicitly whether to retry or
+roll back. An entered foreign failure may leave effects uncertain; an error
+does not establish that no change occurred. `close()` never commits: after
+child Statements are finalized, SQLite rolls back an open transaction.
+
+`db.busyTimeout(milliseconds)` accepts an Integer in `0..2147483647`, invokes
+`sqlite3_busy_timeout`, and returns the Connection. Invalid values fail before
+native entry. Non-OK status becomes `SQLiteError(operation: "busyTimeout", code: status)`.
+Zero disables the native busy handler. Opening sets no timeout automatically.
+SQLite can still return BUSY without waiting in some lock situations. A busy
+timeout concerns qualifying lock waits; it is neither query cancellation nor
+a deadline for arbitrary C operations.
+
+Native calls occupy the invoking Actor synchronously. Task cancellation does
+not call `sqlite3_interrupt`, cancel an entered statement or automatically
+roll back/commit. There is no implicit Task, executor, Future or suspension.
+The existing terminal Future returned by `close()` retains its contract.
+
+## WAL, durability and recovery
+
+Journal and synchronous policy remain SQLite's native configuration until the
+application explicitly changes them through ordinary prepared SQL:
+
+```protos
+journal: db.prepare("PRAGMA journal_mode=WAL")
+(() => {
+    journal.step()
+    // Inspect journal.column(0) to confirm SQLite's selected mode.
+}).ensure(() => journal.close().value())
+sync: db.prepare("PRAGMA synchronous=FULL")
+(() => { sync.step() }).ensure(() => sync.close().value())
+```
+
+SQLite owns WAL/SHM/journal files, lock coordination and recovery. WAL does not
+permit simultaneous writers, and a reader can prevent COMMIT in rollback-journal
+mode. Applications must handle native failures explicitly. COMMIT durability
+depends on SQLite configuration, VFS, filesystem, storage and successful native
+I/O; the wrapper promises no universal power-loss guarantee. Connection close
+is resource cleanup, not an extra commit or storage sync.
+
+The runner checks reopen with exact typed values in independent Protos OS
+processes, external writer lock contention, and recovery after terminating a
+writer that acknowledged an uncommitted write. Its acknowledgment synchronizes
+termination; no arbitrary sleep substitutes for that signal. This tests process
+termination recovery, not physical power failure.
+
+The complete [durable example](../../../protos/examples/ffi/sqlite-durable.protos)
+creates/replaces its `durable_demo` table, commits prepared inserts using a reused
+Statement, rolls back an update, queries and reopens read-only with assertions.
+Supply a disposable filename explicitly:
+
+```sh
+bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar --allow-library sqlite3=libsqlite3.so.0 \
+    protos/examples/ffi/sqlite-durable.protos /tmp/sqlite-example.db
+```
 
 ## Connection and Statement operations
 
 | Operation | Result |
 |---|---|
 | `SQLite.openMemory()` | Fresh private in-memory Connection |
+| `SQLite.openFile(path, mode: "readWriteCreate")` | Fresh persistent Connection |
 | `db.prepare(sql)` | Statement, or `null` for empty/comment-only SQL |
+| `db.begin()` / `db.commit()` / `db.rollback()` | Same Connection after native transaction control |
+| `db.inTransaction()` | Current SQLite transaction state as Boolean |
+| `db.busyTimeout(milliseconds)` | Same Connection after configuring native lock waits |
 | `statement.bind(index, value)` | Same Statement; one-based parameter index |
 | `statement.step()` | `true` for a current row, `false` for completion |
 | `statement.reset()` | Same Statement, ready to run again with its bindings |
@@ -352,13 +474,18 @@ Not every failure is a `SQLiteError`. Argument and state errors are ordinary
 | Failure inside the generic provider after entry while reading or copying a column | may propagate as `ForeignError`; not necessarily a `SQLiteError` |
 | Malformed stored UTF-8 TEXT | standard strict-decoding `Error`, not `SQLiteError` |
 | Ordinary operations (`prepare`, `bind`, `step`, `reset`, `clearBindings`, `column`, `row`, `each`) on a closed Statement, or on a Statement or Connection after Connection close | `IOLifecycleError`; `close()` is exempt: repeated close returns a fresh terminal Future observing the previously recorded result |
-| `openMemory()` without the authorized provider | ordinary `Error` from provider resolution |
-| Unsupported execution platform or unavailable shared SQLite | `openMemory()` fails (provider refusal is an ordinary `Error`; a failure after entering the provider is `ForeignError`); test harnesses report UNSUPPORTED |
+| Invalid `openFile` path/mode or `busyTimeout` argument | ordinary `Error` before native entry |
+| File opening fails | `SQLite.SQLiteError` (`operation: "open"`, native status) |
+| Transaction control fails | `SQLite.SQLiteError` naming `prepare`, `step` or `finalize`; execution error precedes finalization error |
+| New Connection operations after close | `IOLifecycleError` before native entry |
+| Opening without a provider | ordinary resolution `Error` |
+| Unauthorized/unavailable native library | D259 `ForeignError`, categories `unauthorized-library` / `library-unavailable` |
+| Unsupported execution platform | Provider refusal; harness reports UNSUPPORTED only for genuinely absent platform dependencies |
 | Failed native finalize/close | the close Future fails with `SQLite.SQLiteError` (`operation: "finalize"` or `"close"`) |
 
 `SQLiteError` has exactly two informative slots: `operation`, a String naming
 the wrapper step (`"open"`, `"prepare"`, `"bind"`, `"step"`, `"reset"`,
-`"clearBindings"`, `"column"`, `"finalize"` or `"close"`), and `code`, the numeric SQLite status. It carries
+`"clearBindings"`, `"column"`, `"finalize"`, `"close"` or `"busyTimeout"`), and `code`, the numeric SQLite status. It carries
 no native message text, cause chain, host path, native address or Java
 exception. Missing-provider behavior is validated separately by
 [`sqlite-missing.protos`](../../../protos/tests/foreign-provider/sqlite-missing.protos),
@@ -440,19 +567,50 @@ For the published LIB029 implementation
 
 The DOC024 tutorial and cookbook programs are registered in the same harness as
 `DOC024_TUTORIAL_SQLITE_LIFECYCLE`, `DOC024_EXAMPLE_NUMERIC` and
-`DOC024_EXAMPLE_COPIED_VALUES`. Their validation is pending until the maintainer
-runs it.
+`DOC024_EXAMPLE_COPIED_VALUES`. They passed in the maintainer-reported campaign
+below.
 
 LIB030 adds the real-SQLite cases `LIB030_BIND_TEXT_BLOB`,
 `LIB030_STATEMENT_REUSE`, `LIB030_SQL_ADMISSION` and `LIB030_INPUT_LIMITS`, deterministic
 TEXT/BLOB, reset/clearBindings and trailing-SQL scenarios in the failure model,
-and the provider-level `ffm-inputs.protos` fixture program. Their validation is
-pending until the maintainer runs it.
+and the provider-level `ffm-inputs.protos` fixture program. They passed in the
+same maintainer-reported campaign.
+
+LIB031 adds `LIB031_LOCAL`, `LIB031_REOPEN`, `LIB031_READ_ONLY`,
+`LIB031_OPEN_MODES`, `LIB031_LOCKING`, `LIB031_RECOVERY` and `LIB031_EXAMPLE`
+to the same runner. The existing Java lifecycle host also loads the expanded
+Protos failure model without a Java change.
+
+The maintainer reported the following execution results on November 22, 2026,
+on Protos `0.4.189-SNAPSHOT`, using the real FFM provider and explicitly
+authorized SQLite. These are maintainer-reported results, not agent-executed
+validation:
+
+```yaml
+DIST_BUILD: PASS
+foreign-provider: 84/84 PASS
+
+LIB031_LOCAL: PASS
+LIB031_REOPEN: PASS
+LIB031_READ_ONLY: PASS
+LIB031_OPEN_MODES: PASS
+LIB031_LOCKING: PASS
+LIB031_RECOVERY: PASS
+LIB031_EXAMPLE: PASS
+```
+
+The maintainer also reported the earlier focused
+`ProtosLib029SqliteLifecycleTest` run: 2 tests PASS, 0 failures.
+The maintainer subsequently reported `make check`, `make test` and
+`make test-native` PASS for the current slice. These results were not produced
+by agent execution. Green tests establish observed implementation behavior;
+the exact public contract in
+`spec/semantics/SQLITE.md` remains pending owner ratification. D256 remains open,
+and LIB031 remains pending publication.
 
 ## Known limitations
 
-- Only in-memory connections (`openMemory()`); there is no supported
-  arbitrary database path API.
+- `openFile` accepts filename Strings; `file:` URIs and `:memory:` are rejected.
 - Exactly one SQL statement per `prepare`; no script execution.
 - Each TEXT/BLOB input and each TEXT/BLOB result value is limited to 16 MiB;
   there is no streaming or incremental BLOB API.
@@ -461,4 +619,5 @@ pending until the maintainer runs it.
 - Native authority must be granted explicitly by the host.
 - SQLite runs as trusted in-process native code: there is no native C sandbox,
   and Protos Filesystem authority does not confine it.
-- No general transaction abstraction, native callbacks, ORM or query builder.
+- Manual transactions only; no scoped transaction helper, pool, native
+  callbacks, ORM or query builder.

@@ -10,6 +10,7 @@ SQLite-specific Java.
 | Example | Purpose |
 | --- | --- |
 | [`sqlite-library.protos`](sqlite-library.protos) | Public `std:sqlite` introduction: one table, one numeric insert, one query and deterministic cleanup. |
+| [`sqlite-durable.protos`](sqlite-durable.protos) | Filename argument, persistent table, committed prepared inserts, Statement reuse, rolled-back update and verified read-only reopen; owns/replaces `durable_demo`. |
 | [`sqlite-prepared-numeric.protos`](sqlite-prepared-numeric.protos) | Query and filter numeric records: several inserts with fresh Statements, a parameterized numeric predicate and deterministic ordered `each` traversal with Float and NULL checks. |
 | [`sqlite-copied-values.protos`](sqlite-copied-values.protos) | Read independent TEXT/BLOB results: multibyte and NUL-containing TEXT, BLOB octets, empty TEXT/BLOB versus NULL, and copies that survive stepping and close. |
 
@@ -76,6 +77,8 @@ Details: [Build the provider JAR](../../../docs/guide/interop/ffm-provider.md#bu
 bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar --allow-library sqlite3=libsqlite3.so.0 \
     protos/examples/ffi/sqlite-library.protos
 bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar --allow-library sqlite3=libsqlite3.so.0 \
+    protos/examples/ffi/sqlite-durable.protos /tmp/sqlite-example.db
+bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar --allow-library sqlite3=libsqlite3.so.0 \
     protos/examples/ffi/sqlite-prepared-numeric.protos
 bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar --allow-library sqlite3=libsqlite3.so.0 \
     protos/examples/ffi/sqlite-copied-values.protos
@@ -119,8 +122,8 @@ The two original examples use the provider-private I144 operations directly: `si
   statements, parameters, copied rows and `Closable` lifecycle. With LIB030,
   `bind` also accepts String (TEXT) and Bytes (BLOB), `prepare` admits exactly
   one statement with conventional `;` terminators and trailing comments, and
-  `reset()`/`clearBindings()` reuse a Statement explicitly. Transaction
-  abstractions and file databases remain outside this bounded surface;
+  `reset()`/`clearBindings()` reuse a Statement explicitly. The durable example
+  adds file-backed open modes, manual transactions and verified persistence;
 - `sqlite-complete-public.protos` contrasts public `sqlite3_complete` with the
   single-statement admission of `std:sqlite` `prepare`.
 

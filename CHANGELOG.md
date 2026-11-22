@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.190-SNAPSHOT
+
+- **LIB031 / D256-C1R.** Extend Protos-first `std:sqlite` with file-backed connections in `readOnly`, `readWrite` and default `readWriteCreate` modes, effective writable-mode admission, manual `begin`/`commit`/`rollback`, live `inTransaction` queries and native `busyTimeout` configuration. Preserve native resource custody and first-error cleanup without Java or Truffle changes. Extend deterministic failure models, missing-provider and unauthorized-library coverage; add seven external-provider scenarios for local transactions, reopen, read-only access, open modes, locking, SIGKILL recovery and the durable example, with separate process evidence and cleanup. Add the filename-driven `durable_demo` example and update library, example and FFM documentation. Record maintainer-reported distribution, 84/84 foreign-provider, focused lifecycle, static, integrated and native test PASS evidence. Prepare the exact public contract in `spec/semantics/SQLITE.md`, explicitly pending owner ratification and normative publication; D256 and LIB031 remain open. Retain the Linux x86-64 portable-JVM scope, explicit native authorization and distinction between process-termination recovery and physical power-loss durability.
+
 ## 0.4.189-SNAPSHOT
 
 - **BUG039.** Make post-run Test Tool `INFRA` lines name a short, host-independent reason when the logical Case completion alone supports one: a Case outcome that cannot be copied into the Tool (`NonTransferableValue`), a failed Case rematerialization, or a cancelled Case execution. Other infrastructure failures keep the compact line; classification, exact Case references, completion order, progress output and exit codes are unchanged, and no host exception text or stack trace is printed. Independent host failures still surface only as a plain Error. Add non-transferable Case result and host-failure exactly-once regressions, extend the logical Case result projection test, and document FAIL versus INFRA in the Test Tool guide.

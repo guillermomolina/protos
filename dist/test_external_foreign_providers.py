@@ -56,10 +56,13 @@ import os
 from pathlib import Path
 import platform
 import re
+import selectors
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
+import time
 import zipfile
 
 import build_ffm_provider
@@ -100,6 +103,17 @@ LIB030_CASES = (
     ("LIB030_SQL_ADMISSION", "sqlite-sql-admission.protos", "LIB030-SQL-ADMISSION-PASS"),
     # Exact 16 MiB / 16 MiB + 1 input policy; separate because it builds large values.
     ("LIB030_INPUT_LIMITS", "sqlite-input-limits.protos", "LIB030-INPUT-LIMITS-PASS"),
+)
+# Each scenario owns its own SQLite file inside Runner.work. Reopen/recovery
+# phases always invoke independent Protos processes against that same file.
+LIB031_CASES = (
+    ("LIB031_LOCAL", "local"),
+    ("LIB031_REOPEN", "reopen"),
+    ("LIB031_READ_ONLY", "readOnly"),
+    ("LIB031_OPEN_MODES", "missing"),
+    ("LIB031_LOCKING", "locked"),
+    ("LIB031_RECOVERY", "recover"),
+    ("LIB031_EXAMPLE", "example"),
 )
 LIB029_LEARNING = (
     ("LIB029_EXAMPLE", ROOT / "protos/examples/ffi/sqlite-library.protos"),
@@ -165,6 +179,7 @@ RESULT_KEYS = (
     "I169_TWO_LIBRARIES",
     *(key for key, _, _ in LIB029_CASES),
     *(key for key, _, _ in LIB030_CASES),
+    *(key for key, _ in LIB031_CASES),
     *(key for key, _ in LIB029_LEARNING),
     *(key for key, _ in DOC024_LEARNING),
 )
@@ -351,10 +366,12 @@ def check_ffm_program(
     marker: str,
     libraries: tuple[str, ...] = (),
     arguments: tuple[str, ...] = (),
+    report_progress: bool = True,
+    evidence_suffix: str = "",
 ) -> None:
     """Runs one program with exactly the FFM provider JAR and the given library grants."""
     check_program(runner, key, install, program, [jar], marker, [],
-                  library_options(libraries), list(arguments))
+                  library_options(libraries), list(arguments), report_progress, evidence_suffix)
 
 
 def library_options(libraries: tuple[str, ...]) -> list[str]:
@@ -363,6 +380,147 @@ def library_options(libraries: tuple[str, ...]) -> list[str]:
     for grant in libraries:
         options += ["--allow-library", grant]
     return options
+
+
+def terminate_sqlite_writer(runner: Runner, key: str, install: Path,
+                            provider: Path, database: Path) -> None:
+    """Wait for an uncommitted-write acknowledgment, then kill and reap the JVM.
+
+    This verifies process-termination recovery, not physical power-loss safety.
+    Readiness is pipe-driven and bounded; no timing sleep stands in for a signal.
+    """
+    command = [str(install / "bin" / "protos"), "--foreign-provider-path", str(provider),
+               *library_options(SQLITE_GRANT), str(CASES / "sqlite-durable.protos"),
+               "crashWriter", str(database)]
+    log = runner.evidence / f"{key.lower()}-crash-writer.log"
+    stderr_log = runner.evidence / f"{key.lower()}-crash-writer.stderr"
+    output = bytearray()
+    child = None
+    primary_failure = None
+    cleanup_failures = []
+    try:
+        with stderr_log.open("wb") as stderr:
+            child = subprocess.Popen(command, cwd=runner.work, env=runner.environment(),
+                                     stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                     stderr=stderr, start_new_session=True)
+            try:
+                deadline = time.monotonic() + TIMEOUT
+                with selectors.DefaultSelector() as ready:
+                    ready.register(child.stdout, selectors.EVENT_READ)
+                    while b"\n" not in output:
+                        remaining = deadline - time.monotonic()
+                        if remaining <= 0 or not ready.select(remaining):
+                            raise TimeoutError("uncommitted SQLite writer did not acknowledge readiness")
+                        chunk = os.read(child.stdout.fileno(), 4096)
+                        if not chunk:
+                            raise RuntimeError("SQLite writer exited before readiness")
+                        output.extend(chunk)
+                        if len(output) > 4096:
+                            raise RuntimeError("unexpected SQLite writer output")
+                if bytes(output) != b"LIB031-UNCOMMITTED\n" or child.poll() is not None:
+                    raise RuntimeError("SQLite writer did not remain alive after its uncommitted write")
+                # Kill the launcher's entire process group, including a JVM if
+                # a launcher ever stops using exec. Always reap the direct child.
+                os.killpg(child.pid, signal.SIGKILL)
+                remainder, _ = child.communicate(timeout=USAGE_TIMEOUT)
+                output.extend(remainder)
+                if child.returncode != -signal.SIGKILL:
+                    raise RuntimeError(f"unexpected writer termination: {child.returncode}")
+                if bytes(output) != b"LIB031-UNCOMMITTED\n":
+                    raise RuntimeError("unexpected output after uncommitted-write acknowledgment")
+            except BaseException as failure:
+                primary_failure = failure
+                raise
+            finally:
+                # Attempt every cleanup step without hiding the readiness or
+                # termination failure that made this phase fail.
+                for cleanup in (
+                    lambda: os.killpg(child.pid, signal.SIGKILL),
+                    lambda: child.wait(timeout=USAGE_TIMEOUT),
+                    child.stdin.close,
+                    child.stdout.close,
+                ):
+                    try:
+                        cleanup()
+                    except ProcessLookupError:
+                        pass
+                    except Exception as failure:
+                        cleanup_failures.append(failure)
+                if cleanup_failures:
+                    if primary_failure is None:
+                        primary_failure = cleanup_failures[0]
+                        raise primary_failure
+        if stderr_log.read_bytes():
+            raise RuntimeError("unexpected SQLite crash writer stderr")
+    except BaseException as failure:
+        primary_failure = failure
+        raise
+    finally:
+        try:
+            log.write_text(f"$ {' '.join(command)}\nexit={child.returncode if child else 'not started'}\n"
+                           f"--- stdout\n{output.decode('utf-8', errors='replace')}\n"
+                           f"--- failure\n{primary_failure!r}\n"
+                           f"--- cleanup failures\n{cleanup_failures!r}\n", encoding="utf-8")
+        except Exception:
+            if primary_failure is None:
+                raise
+
+
+def check_lib031(runner: Runner, key: str, scenario: str, install: Path, provider: Path) -> None:
+    """Compose existing FFM invocations; any behavioral/harness failure is FAIL."""
+    database = runner.work / f"{key.lower()}.sqlite"
+
+    def run(mode: str) -> bool:
+        check_ffm_program(runner, key, install, "sqlite-durable.protos", provider,
+                          "LIB031-DURABLE-PASS", SQLITE_GRANT, (mode, str(database)),
+                          report_progress=False, evidence_suffix=f"-{mode}")
+        return runner.results.get(key) == PASS
+
+    try:
+        if scenario in ("local", "missing"):
+            run(scenario)
+        elif scenario == "example":
+            command = [str(install / "bin" / "protos"), "--foreign-provider-path", str(provider),
+                       *library_options(SQLITE_GRANT),
+                       str(ROOT / "protos/examples/ffi/sqlite-durable.protos"), str(database)]
+            for index in range(2):
+                completed = runner.run(f"{key.lower()}-{index}", command,
+                                       runner.work, runner.environment())
+                if completed.returncode or completed.stdout or completed.stderr:
+                    raise RuntimeError(f"durable example run {index}: exit={completed.returncode}, "
+                                       f"stdout={completed.stdout!r}, stderr={completed.stderr!r}")
+            runner.record(key, PASS)
+        elif run("seed"):
+            if scenario == "reopen":
+                run("verify")
+            elif scenario == "readOnly":
+                run("readOnly")
+            elif scenario == "locked":
+                # External instrumentation only: all round trips and recovery
+                # assertions still execute in independent Protos processes.
+                import sqlite3
+
+                lock = sqlite3.connect(database, timeout=0, isolation_level=None)
+                try:
+                    lock.execute("BEGIN IMMEDIATE")
+                    lock.execute("UPDATE samples SET n=n")
+                    if not run("locked"):
+                        return
+                finally:
+                    lock.close()
+                run("verify")
+            elif scenario == "recover":
+                terminate_sqlite_writer(runner, key, install, provider, database)
+                run("recover")
+            else:
+                raise ValueError(f"unknown SQLite scenario {scenario}")
+    except Exception as failure:
+        runner.record(key, FAIL, f"{type(failure).__name__}: {failure}")
+    finally:
+        # The plan contains one logical case even when several OS processes
+        # contribute evidence. Preserve one progress event and every phase log.
+        problems = [] if runner.results.get(key) == PASS else ["SQLite scenario failed"]
+        report(f"sqlite-{scenario}", [provider], problems)
 
 
 def check_ffm_silent(runner: Runner, key: str, install: Path, source: Path, jar: Path,
@@ -400,7 +558,7 @@ I169_PARSE_KEYS = ("I169_DISTRIBUTION_BASELINE", "I169_CLI_INVALID_OPTIONS", "I1
 def native_keys() -> list[str]:
     """Result keys that need the native FFM provider (Linux x86_64, JDK 25)."""
     return [key for key in RESULT_KEYS
-            if (key.startswith(("I144_", "I169_", "DOC024_", "LIB030_"))
+            if (key.startswith(("I144_", "I169_", "DOC024_", "LIB030_", "LIB031_"))
                 or (key.startswith("LIB029_") and key != "LIB029_MISSING"))
             and key not in I169_PARSE_KEYS]
 
@@ -462,6 +620,7 @@ def plan_i144(runner: Runner, install: Path, protos_jar: Path, plugins: Path,
     if sqlite is None:
         for key in ("I144_FFM_SQLITE", "I144_FFM_DENIED", *(key for key, _ in I144_LEARNING),
                     *(key for key, _, _ in LIB029_CASES), *(key for key, _, _ in LIB030_CASES),
+                    *(key for key, _ in LIB031_CASES),
                     *(key for key, _ in LIB029_LEARNING),
                     *(key for key, _ in DOC024_LEARNING)):
             runner.record(key, UNSUPPORTED, f"no shared libsqlite3.so.0 in {SQLITE_CANDIDATES}")
@@ -480,6 +639,9 @@ def plan_i144(runner: Runner, install: Path, protos_jar: Path, plugins: Path,
         for key, program, marker in LIB030_CASES:
             plan.append(lambda key=key, program=program, marker=marker: check_ffm_program(
                 runner, key, install, program, provider, marker, SQLITE_GRANT))
+        for key, scenario in LIB031_CASES:
+            plan.append(lambda key=key, scenario=scenario: check_lib031(
+                runner, key, scenario, install, provider))
         for key, source in LIB029_LEARNING:
             plan.append(lambda key=key, source=source: check_ffm_silent(
                 runner, key, install, source, provider, SQLITE_GRANT))
@@ -692,6 +854,8 @@ def check_program(
     expected_traces: list[str],
     options: list[str] | None = None,
     arguments: list[str] | None = None,
+    report_progress: bool = True,
+    evidence_suffix: str = "",
 ) -> None:
     command = [str(install / "bin" / "protos")]
     if jars:
@@ -699,7 +863,7 @@ def check_program(
     command += options or []
     command.append(str(CASES / program))
     command += arguments or []
-    label = f"{key.lower()}-{Path(program).stem}"
+    label = f"{key.lower()}-{Path(program).stem}{evidence_suffix}"
     completed = runner.run(label, command, runner.work, runner.environment())
     problems = []
     if completed.returncode != 0:
@@ -710,7 +874,8 @@ def check_program(
         problems.append(f"traces {traces(completed.stderr)} != {expected_traces}")
     if other_stderr(completed.stderr):
         problems.append("unexpected stderr")
-    report(program, jars, problems)
+    if report_progress:
+        report(program, jars, problems)
     runner.record(key, FAIL if problems else PASS, f"{label}: {'; '.join(problems)}" if problems else None)
 
 

@@ -19,6 +19,8 @@ sqlite: import("ffi:sqlite3")
 Borrowed: import("./internal/Borrowed.protos")
 
 SQLITE_OK: 0
+SQLITE_ERROR: 1
+SQLITE_READONLY: 8
 SQLITE_ROW: 100
 SQLITE_DONE: 101
 SQLITE_INTEGER: 1
@@ -39,6 +41,9 @@ vfs: FFI.nullable(FFI.opaque(sqlite, "sqlite3_vfs_name"))
 bind: (symbol, returns, parameters) => FFI.bind(sqlite, symbol, returns, parameters)
 libversion: bind("sqlite3_libversion_number", FFI.i32, Array())
 open: bind("sqlite3_open_v2", FFI.i32, Array(FFI.utf8z, FFI.out(ownedDatabase), FFI.i32, vfs))
+getAutocommit: bind("sqlite3_get_autocommit", FFI.i32, Array(database))
+busyTimeout: bind("sqlite3_busy_timeout", FFI.i32, Array(database, FFI.i32))
+dbReadonly: bind("sqlite3_db_readonly", FFI.i32, Array(database, FFI.utf8z))
 bindInteger: bind("sqlite3_bind_int64", FFI.i32, Array(statement, FFI.i32, FFI.i64))
 bindFloat: bind("sqlite3_bind_double", FFI.i32, Array(statement, FFI.i32, FFI.f64))
 bindNull: bind("sqlite3_bind_null", FFI.i32, Array(statement, FFI.i32))

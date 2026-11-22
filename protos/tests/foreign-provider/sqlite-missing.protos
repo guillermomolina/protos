@@ -22,4 +22,8 @@ for(attempt in Array(1, 2)) {
     missing: Assertions.signals(Error, () => SQLite.openMemory())
     Assertions.require(missing.parent() === Error)
 }
+for(attempt in Array(1, 2)) {
+    missing: Assertions.signals(Error, () => SQLite.openFile("missing-provider.sqlite"))
+    Assertions.require(missing.parent() === Error)
+}
 print("LIB029-MISSING-PASS")

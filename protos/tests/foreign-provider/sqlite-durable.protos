@@ -1,0 +1,270 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// Real FFM SQLite. Each mode is a separate runner-owned OS process; only
+// crashWriter waits for host termination. No private ABI is used here.
+Assertions: import("std:test/assertions")
+SQLite: import("std:sqlite")
+args: process.args()
+Assertions.require(args.size() == 2)
+mode: args[0]
+path: args[1]
+recognized: false
+text: "durable \u{E9}\u{1F642}\u{0}text"
+blob: Encoding.Latin1.encode("\u{0}\u{FF}\u{80}\u{0}")
+
+// Finalize on both paths; sqlite3_finalize may repeat a failed step status.
+execute: (db, sql) => {
+    statement: db.prepare(sql)
+    primary: null
+    (() => {
+        Error.handle(() => {
+            while(statement.step()) { statement.row() }
+        }, (error) => { primary = error })
+        if(primary !== null) { primary.signal() }
+    }).ensure(() => {
+        Error.handle(() => statement.close().value(), (error) => {
+            if(primary === null) { error.signal() }
+        })
+    })
+}
+scalar: (db, sql) => {
+    query: db.prepare(sql)
+    (() => {
+        Assertions.require(query.step())
+        value: query.column(0)
+        Assertions.require(query.step() === false)
+        value
+    }).ensure(() => query.close().value())
+}
+verify: (db) => {
+    query: db.prepare("SELECT n, f, t, b, z, typeof(n), typeof(f), typeof(t), typeof(b), typeof(z) FROM samples")
+    (() => {
+        Assertions.require(query.step())
+        row: query.row()
+        Assertions.require(Integer.recognizes(row[0]) && (row[0] == 9223372036854775807))
+        Assertions.require(Float.recognizes(row[1]) && (row[1] == 1.5))
+        Assertions.require(String.recognizes(row[2]) && (row[2] == text))
+        Assertions.require(Encoding.Latin1.decode(row[3]) == Encoding.Latin1.decode(blob))
+        Assertions.require(row[4] === null)
+        for(index in Array(0, 1, 2, 3, 4)) {
+            Assertions.require(row[index + 5] == Array("integer", "real", "text", "blob", "null")[index])
+        }
+        Assertions.require(query.step() === false)
+    }).ensure(() => query.close().value())
+}
+
+if(mode == "seed") {
+    recognized = true
+    db: SQLite.openFile(path)
+    (() => {
+        Assertions.require(!db.inTransaction())
+        execute(db, "CREATE TABLE samples(n INTEGER, f REAL, t TEXT, b BLOB, z)")
+        db.begin()
+        Assertions.require(db.inTransaction())
+        insert: db.prepare("INSERT INTO samples VALUES (?1, ?2, ?3, ?4, ?5)")
+        (() => {
+            insert.bind(1, 9223372036854775807).bind(2, 1.5).bind(3, text).bind(4, blob).bind(5, null)
+            Assertions.require(insert.step() === false)
+        }).ensure(() => insert.close().value())
+        Assertions.require(db.commit() === db)
+        Assertions.require(!db.inTransaction())
+    }).ensure(() => db.close().value())
+}
+if(mode == "verify") {
+    recognized = true
+    db: SQLite.openFile(path, "readWrite")
+    (() => { verify(db) }).ensure(() => db.close().value())
+}
+if(mode == "readOnly") {
+    recognized = true
+    db: SQLite.openFile(path, "readOnly")
+    (() => {
+        verify(db)
+        error: Assertions.signals(SQLite.SQLiteError, () => execute(db, "DELETE FROM samples"))
+        Assertions.require(error.code == 8)
+        verify(db)
+    }).ensure(() => db.close().value())
+}
+if(mode == "missing") {
+    recognized = true
+    for(access in Array("readOnly", "readWrite")) {
+        error: Assertions.signals(SQLite.SQLiteError, () => SQLite.openFile(path, access))
+        Assertions.require((error.operation == "open") && (error.code != 0))
+    }
+    db: SQLite.openFile(path, "readWriteCreate")
+    (() => {
+        execute(db, "CREATE TABLE created(n INTEGER)")
+    }).ensure(() => db.close().value())
+}
+if(mode == "local") {
+    recognized = true
+    for(invalid in Array(null, 7, true, "", ":memory:", "file:", "file:db", "a\u{0}b")) {
+        Assertions.signals(Error, () => SQLite.openFile(invalid))
+    }
+    for(access in Array(null, 7, true, "", "readonly", "create")) {
+        Assertions.signals(Error, () => SQLite.openFile(path, access))
+    }
+    db: SQLite.openFile(path)
+    (() => {
+        execute(db, "CREATE TABLE items(n INTEGER)")
+        Assertions.require(!db.inTransaction())
+        Assertions.require(db.begin() === db)
+        execute(db, "INSERT INTO items VALUES(1)")
+        Assertions.require(db.inTransaction())
+        db.rollback()
+        Assertions.require(!db.inTransaction())
+        Assertions.require(scalar(db, "SELECT count(*) FROM items") == 0)
+        db.begin()
+        execute(db, "INSERT INTO items VALUES(2)")
+        db.commit()
+        Assertions.require(scalar(db, "SELECT n FROM items") == 2)
+        Assertions.signals(SQLite.SQLiteError, () => db.commit())
+        Assertions.signals(SQLite.SQLiteError, () => db.rollback())
+        db.begin()
+        Assertions.signals(SQLite.SQLiteError, () => db.begin())
+        Assertions.require(db.inTransaction())
+        db.rollback()
+
+        // Deferred foreign-key failure is reported by COMMIT, which leaves
+        // the transaction active. The wrapper must not roll it back for us.
+        execute(db, "PRAGMA foreign_keys=ON")
+        execute(db, "CREATE TABLE parent(id INTEGER PRIMARY KEY)")
+        execute(db, "CREATE TABLE child(id INTEGER REFERENCES parent(id) DEFERRABLE INITIALLY DEFERRED)")
+        db.begin()
+        execute(db, "INSERT INTO child VALUES(1)")
+        failure: Assertions.signals(SQLite.SQLiteError, () => db.commit())
+        Assertions.require((failure.operation == "step") && (failure.code == 19))
+        Assertions.require(db.inTransaction())
+        db.rollback()
+        Assertions.require(scalar(db, "SELECT count(*) FROM child") == 0)
+
+        // SQLite itself rolls this transaction back; no Protos state is toggled.
+        execute(db, "CREATE TRIGGER abort_insert BEFORE INSERT ON items BEGIN SELECT RAISE(ROLLBACK, 'stop'); END")
+        db.begin()
+        Assertions.signals(SQLite.SQLiteError, () => execute(db, "INSERT INTO items VALUES(3)"))
+        Assertions.require(!db.inTransaction())
+        execute(db, "DROP TRIGGER abort_insert")
+
+        for(milliseconds in Array(0, 10, 2147483647)) {
+            Assertions.require(db.busyTimeout(milliseconds) === db)
+        }
+        for(milliseconds in Array(-1, 2147483648, 0.5, true, null, "10")) {
+            Assertions.signals(Error, () => db.busyTimeout(milliseconds))
+        }
+        db.busyTimeout(0)
+
+        // Rollback-journal reader prevents a writer's COMMIT, not its UPDATE.
+        Assertions.require(scalar(db, "PRAGMA journal_mode=DELETE") == "delete")
+        reader: SQLite.openFile(path, "readWrite")
+        (() => {
+            reader.begin()
+            held: reader.prepare("SELECT n FROM items")
+            (() => {
+                Assertions.require(held.step())
+                db.begin()
+                execute(db, "UPDATE items SET n=4")
+                busy: Assertions.signals(SQLite.SQLiteError, () => db.commit())
+                Assertions.require((busy.operation == "step") && (busy.code == 5))
+                Assertions.require(db.inTransaction())
+                db.rollback()
+            }).ensure(() => held.close().value())
+            reader.rollback()
+        }).ensure(() => reader.close().value())
+        Assertions.require(scalar(db, "SELECT n FROM items") == 2)
+
+        // WAL is explicitly selected by SQL; a held writer deterministically
+        // prevents another writer regardless of checkpoint/read timing.
+        Assertions.require(scalar(db, "PRAGMA journal_mode=WAL") == "wal")
+        other: SQLite.openFile(path, "readWrite")
+        (() => {
+            other.busyTimeout(1)
+            execute(db, "BEGIN IMMEDIATE")
+            execute(db, "UPDATE items SET n=5")
+            busy: Assertions.signals(SQLite.SQLiteError, () => execute(other, "UPDATE items SET n=6"))
+            Assertions.require(busy.code == 5)
+            Assertions.require(db.inTransaction())
+            db.rollback()
+            execute(other, "UPDATE items SET n=7")
+        }).ensure(() => other.close().value())
+        Assertions.require(scalar(db, "SELECT n FROM items") == 7)
+
+        // Connection close finalizes a live row before SQLite rolls back the
+        // uncommitted update. No explicit COMMIT/ROLLBACK is requested here.
+        db.begin()
+        execute(db, "UPDATE items SET n=99")
+        pending: db.prepare("SELECT n FROM items")
+        Assertions.require(pending.step())
+        Assertions.require(db.close().value() === db)
+        Assertions.signals(IOLifecycleError, () => pending.step())
+        Assertions.require(pending.close().value() === pending)
+        for(operation in Array(db.begin, db.commit, db.rollback, db.inTransaction,
+            () => db.busyTimeout(0))) { Assertions.signals(IOLifecycleError, operation) }
+    }).ensure(() => db.close().value())
+    reopened: SQLite.openFile(path, "readOnly")
+    (() => {
+        Assertions.require(scalar(reopened, "SELECT n FROM items") == 7)
+    }).ensure(() => reopened.close().value())
+}
+if(mode == "locked") {
+    recognized = true
+    db: SQLite.openFile(path, "readWrite")
+    (() => {
+        db.busyTimeout(10)
+        busy: Assertions.signals(SQLite.SQLiteError, () => execute(db, "DELETE FROM samples"))
+        Assertions.require(busy.code == 5)
+        Assertions.require(!db.inTransaction())
+        verify(db)
+    }).ensure(() => db.close().value())
+}
+if(mode == "crashWriter") {
+    recognized = true
+    db: SQLite.openFile(path, "readWrite")
+    (() => {
+        // WAL and FULL are explicit test configuration, never library defaults.
+        Assertions.require(scalar(db, "PRAGMA journal_mode=WAL") == "wal")
+        execute(db, "PRAGMA synchronous=FULL")
+        db.begin()
+        execute(db, "DELETE FROM samples")
+        Assertions.require(scalar(db, "SELECT count(*) FROM samples") == 0)
+        // Spill enough uncommitted pages to exercise WAL recovery too.
+        execute(db, "PRAGMA cache_size=10")
+        execute(db, "CREATE TABLE uncommitted(payload BLOB)")
+        execute(db, "INSERT INTO uncommitted VALUES(zeroblob(1048576))")
+        output: process.stdout()
+        output.write(Encoding.UTF8.encode("LIB031-UNCOMMITTED\n")).value()
+        // The runner keeps this pipe open until SIGKILL. EOF or a byte means
+        // the synchronization protocol failed, and must fail the test.
+        process.stdin().read(1).value()
+        Assertions.require(false)
+    }).ensure(() => db.close().value())
+}
+if(mode == "recover") {
+    recognized = true
+    db: SQLite.openFile(path, "readWrite")
+    (() => {
+        Assertions.require(!db.inTransaction())
+        verify(db)
+        Assertions.require(scalar(db, "PRAGMA integrity_check") == "ok")
+        Assertions.require(scalar(db, "SELECT count(*) FROM sqlite_master WHERE name='uncommitted'") == 0)
+        // Recovery also leaves the database writable and transactions usable.
+        db.begin()
+        execute(db, "DELETE FROM samples")
+        db.rollback()
+        verify(db)
+    }).ensure(() => db.close().value())
+}
+Assertions.require(recognized)
+print("LIB031-DURABLE-PASS")
