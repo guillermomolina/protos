@@ -706,6 +706,10 @@ final class ProtosI115IndexedOperationTest {
                     c: chain(a, 1)
                     (r == 20) && (w == 8) && (a[1] == 8) && (c == 40)
                 }
+                accumulate: (a, k, s) => { s + a[k] }
+                runAccumulate: () => {
+                    accumulate([10, 20, 30], 1, 5) == 25
+                }
                 """;
         try (ProtosStandaloneHostedSession session = open(source)) {
             IndexedCensus read = IndexedCensus.of(root(session, "read"));
@@ -725,8 +729,14 @@ final class ProtosI115IndexedOperationTest {
             assertIndexOperandInside(chain, 0, 1);
             assertIndexOperandInside(chain, 2, 3);
             assertConsumerCovers(chain, 4, 1, 3);
+            assertDirectIndexedOperands(chain, "chain", List.of(1, 3), 4);
 
-            for (IndexedCensus census : List.of(read, write, chain)) {
+            IndexedCensus accumulate = IndexedCensus.of(root(session, "accumulate"));
+            assertProducers(accumulate, List.of("c.BinarySubscript", "c.NumberAdd"));
+            assertConsumerCovers(accumulate, 1, 0, 0);
+            assertDirectIndexedOperands(accumulate, "accumulate", List.of(0), 1);
+
+            for (IndexedCensus census : List.of(read, write, chain, accumulate)) {
                 assertEquals(0L, census.count(name -> name.startsWith("c.IsStandardIndexedSelection")),
                         "external indexed selector: " + census.names);
                 assertEquals(0L, census.count(IndexedCensus::isExternalDispatch),
@@ -746,7 +756,34 @@ final class ProtosI115IndexedOperationTest {
                 assertTrue(census.cleanupInsideComposition() == 0, census.names.toString());
             }
             assertTrue(session.prepareTopLevel("runNested").executable().execute().asBoolean());
+            assertTrue(session.prepareTopLevel("runAccumulate").executable().execute().asBoolean());
         }
+    }
+
+    /*
+     * Each indexed operand (by producer ordinal) reaches its numeric
+     * consumer directly: one guarded continuation per operation, one
+     * release of the indexed outcome as the consumer's operand, and no
+     * intermediate operand-local copy.
+     */
+    private static void assertDirectIndexedOperands(
+            IndexedCensus census, String label, List<Integer> indexedOrdinals,
+            int consumerOrdinal) {
+        List<Integer> producers = census.positions(ProtosI115IndexedOperationTest::isProducer);
+        int consumer = producers.get(consumerOrdinal);
+        assertTrue(census.names.get(consumer).startsWith("c.Number"),
+                label + ": consumer is not a numeric operation: " + census.names);
+        assertTrue(census.names.get(consumer + 1).startsWith("c.StoreAndTestContinuation")
+                        || census.names.get(consumer + 1).startsWith("return"),
+                label + ": numeric consumer lacks its own result guard: " + census.names);
+        for (int ordinal : indexedOrdinals) {
+            int indexed = producers.get(ordinal);
+            assertTrue(isIndexedOperation(census.names.get(indexed)),
+                    label + ": producer " + ordinal + " is not indexed: " + census.names);
+            census.assertDirectlyConsumed(indexed, consumer, label);
+        }
+        assertEquals(0L, census.count(IndexedCensus::isExternalDispatch),
+                label + ": ordinary indexed path uses an external dispatcher: " + census.names);
     }
 
     private static void assertProducers(IndexedCensus census, List<String> expected) {
@@ -893,15 +930,6 @@ final class ProtosI115IndexedOperationTest {
         }
 
         /*
-         * Local offsets accessed: LOCAL_OFFSET arguments, and the constant
-         * LocalAccessor of LoadAndClearTempLocal, which publishes its offset
-         * only through toString.
-         */
-        private List<Integer> locals(int position) {
-            return localRefs(position).stream().map(LocalRef::offset).toList();
-        }
-
-        /*
          * Locals accessed, with their identity: the offset, plus the local
          * index when the instruction publishes it (a LocalAccessor does, as
          * "LocalAccessor[localOffset=N, localIndex=M]"; LOCAL_OFFSET
@@ -945,11 +973,6 @@ final class ProtosI115IndexedOperationTest {
         }
 
         /* The local the producer's result is stored into, or null. */
-        private Integer resultLocal(int producer) {
-            LocalRef ref = resultLocalRef(producer);
-            return ref == null ? null : ref.offset();
-        }
-
         private LocalRef resultLocalRef(int producer) {
             if (producer + 1 < names.size()
                     && (names.get(producer + 1).startsWith("store.local")
@@ -984,7 +1007,7 @@ final class ProtosI115IndexedOperationTest {
                     continue;
                 }
                 String name = names.get(i);
-                if (name.startsWith("store.local")) {
+                if (isResultWrite(i)) {
                     return;
                 }
                 assertTrue(!name.startsWith("c.LoadAndClearTempLocal"), label + " releases local "
@@ -994,33 +1017,106 @@ final class ProtosI115IndexedOperationTest {
             }
         }
 
+        /*
+         * A composition is owned by producer when its IsContinuation consumes
+         * the producer's stack result directly, or when it consumes a
+         * load.local whose local is, by LocalRef identity, the local of the
+         * nearest preceding producer-result write (a store.local or
+         * StoreAndTestContinuation immediately following a producer). The
+         * nearest such write is unique, so one composition never has two
+         * owners, and a logical local that only reuses the same physical
+         * offset under a different published index never takes ownership.
+         */
         List<Integer> ownedCompositions(int producer) {
             List<Integer> owned = new java.util.ArrayList<>();
-            Integer local = resultLocal(producer);
             for (int j = producer + 1; j < names.size(); j++) {
                 if (!names.get(j).startsWith("c.IsContinuation")) {
                     continue;
                 }
-                if (j == producer + 1) {
-                    owned.add(j);
-                    continue;
-                }
-                if (local == null || !names.get(j - 1).startsWith("load.local")
-                        || !locals(j - 1).contains(local)) {
-                    continue;
-                }
-                boolean overwritten = false;
-                for (int k = producer + 2; k < j - 1 && !overwritten; k++) {
-                    overwritten = (names.get(k).startsWith("store.local")
-                                    || names.get(k).startsWith("c.StoreAndTestContinuation"))
-                            && locals(k).contains(local)
-                            && isProducer(names.get(k - 1));
-                }
-                if (!overwritten) {
+                if (compositionOwner(j) == producer) {
                     owned.add(j);
                 }
             }
             return owned;
+        }
+
+        /* The producer owning the composition at isContinuation, or -1. */
+        private int compositionOwner(int isContinuation) {
+            if (isContinuation < 1) {
+                return -1;
+            }
+            if (isProducer(names.get(isContinuation - 1))) {
+                return isContinuation - 1;
+            }
+            if (!names.get(isContinuation - 1).startsWith("load.local")) {
+                return -1;
+            }
+            List<LocalRef> read = localRefs(isContinuation - 1);
+            if (read.isEmpty()) {
+                return -1;
+            }
+            for (int k = isContinuation - 2; k >= 1; k--) {
+                if (!isResultWrite(k) || !isProducer(names.get(k - 1))) {
+                    continue;
+                }
+                LocalRef written = resultLocalRef(k - 1);
+                if (written != null && written.sameAs(read.get(0))) {
+                    return k - 1;
+                }
+            }
+            return -1;
+        }
+
+        /* A write of an operation result into its destination local. */
+        private boolean isResultWrite(int position) {
+            String name = names.get(position);
+            return name.startsWith("store.local")
+                    || name.startsWith("c.StoreAndTestContinuation");
+        }
+
+        /*
+         * The indexed producer's result is written by its continuation guard,
+         * guarded by the following branch.false, released exactly once
+         * outside its composition before any new write of its local, and the
+         * instruction after that release is not a further store.local copy:
+         * the release is itself the consumer's operand. Neither read nor
+         * release follows it in the linear run without a new write.
+         */
+        void assertDirectlyConsumed(int producer, int consumer, String label) {
+            assertTrue(names.get(producer + 1).startsWith("c.StoreAndTestContinuation"),
+                    label + " lacks the continuation guard of its result: " + names);
+            assertTrue(names.get(producer + 2).startsWith("branch.false"),
+                    label + " does not guard its composition: " + names);
+            LocalRef local = resultLocalRef(producer);
+            assertTrue(local != null, label + " has no result destination: " + names);
+            boolean[] inside = compositionMask();
+            int release = -1;
+            for (int i = producer + 2; i < consumer; i++) {
+                // The composition's own read of the outcome belongs to it.
+                if (inside[i] || names.get(i + 1).startsWith("c.IsContinuation")) {
+                    continue;
+                }
+                LocalRef hit = matching(i, local);
+                if (hit == null) {
+                    continue;
+                }
+                if (isResultWrite(i)) {
+                    break;
+                }
+                String name = names.get(i);
+                assertTrue(!name.startsWith("load.local") && !name.startsWith("clear.local"),
+                        label + " copies or clears its result separately: " + names);
+                if (name.startsWith("c.LoadAndClearTempLocal")) {
+                    assertTrue(release < 0, label + " releases its result twice: " + names);
+                    release = i;
+                    local = local.refinedBy(hit);
+                }
+            }
+            assertTrue(release > 0, label + " does not release its result before "
+                    + names.get(consumer) + ": " + names);
+            assertTrue(!names.get(release + 1).startsWith("store.local"),
+                    label + " copies its result into another local: " + names);
+            assertNotUsedInLinearRunAfter(release, local, label);
         }
 
         long compositionCount() {
@@ -1051,7 +1147,7 @@ final class ProtosI115IndexedOperationTest {
             boolean[] inside = compositionMask();
             long stores = 0;
             for (int i = operation + 1; i < names.size() && !isProducer(names.get(i)); i++) {
-                if (!inside[i] && names.get(i).startsWith("store.local")) {
+                if (!inside[i] && isResultWrite(i)) {
                     stores++;
                 }
             }
@@ -1098,7 +1194,7 @@ final class ProtosI115IndexedOperationTest {
                 }
                 local = local.refinedBy(hit);
                 String name = names.get(i);
-                if (name.startsWith("store.local")) {
+                if (isResultWrite(i)) {
                     cleared = false;
                 } else if (name.startsWith("clear.local")) {
                     assertTrue(!cleared, label + " clears the result local " + local

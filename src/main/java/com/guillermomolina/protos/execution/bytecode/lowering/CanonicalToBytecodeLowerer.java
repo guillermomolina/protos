@@ -3697,6 +3697,30 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal resumeValue,
             OperandStager stager,
             boolean primitiveCarrierResult) {
+        emitIndexedSend(
+                builder, send, result, scratch, childResult, resumeValue,
+                stager, primitiveCarrierResult, false);
+    }
+
+    /**
+     * As above; when {@code stackResult} is set, {@code result} must be null
+     * and the completed outcome is left on the operand stack as the value of
+     * the emitted block, read and cleared once, for its consuming operation.
+     */
+    private void emitIndexedSend(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalSend send,
+            BytecodeLocal result,
+            BytecodeLocal scratch,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue,
+            OperandStager stager,
+            boolean primitiveCarrierResult,
+            boolean stackResult) {
+        if (stackResult && result != null) {
+            throw new AssertionError(
+                    "A stack-valued indexed send has no result local");
+        }
         if (scratch == null || childResult == null || resumeValue == null) {
             throw new AssertionError(
                     "Indexed send scratch locals were not allocated");
@@ -3713,7 +3737,7 @@ final class CanonicalToBytecodeLowerer {
                     emitExpressionValue(
                             builder, argument, scratch, childResult, resumeValue, false);
                 }
-            }, result, childResult, resumeValue, primitiveCarrierResult);
+            }, result, childResult, resumeValue, primitiveCarrierResult, stackResult);
             noteIndexedOutcomeReleased(send, childResult);
             builder.endBlock();
             builder.endSourceSection();
@@ -3736,7 +3760,7 @@ final class CanonicalToBytecodeLowerer {
         }
         emitIndexedOperation(builder, send.message(),
                 () -> emitStagedIndexedOperands(builder, receiver, operands, null),
-                result, childResult, resumeValue, primitiveCarrierResult);
+                result, childResult, resumeValue, primitiveCarrierResult, stackResult);
         noteIndexedOutcomeReleased(send, childResult);
         builder.endBlock();
         builder.endSourceSection();
@@ -3829,6 +3853,23 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal outcome,
             BytecodeLocal resumeValue,
             boolean primitiveCarrierResult) {
+        emitIndexedOperation(builder, selector, operands, result, outcome,
+                resumeValue, primitiveCarrierResult, false);
+    }
+
+    /**
+     * As above; when {@code stackResult} is set, the completed outcome is
+     * left on the operand stack instead of being stored or discarded.
+     */
+    private void emitIndexedOperation(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            String selector,
+            Runnable operands,
+            BytecodeLocal result,
+            BytecodeLocal outcome,
+            BytecodeLocal resumeValue,
+            boolean primitiveCarrierResult,
+            boolean stackResult) {
         noteDynamicInvocation();
 
         builder.beginIfThen();
@@ -3858,7 +3899,16 @@ final class CanonicalToBytecodeLowerer {
         builder.endBlock();
         builder.endIfThen();
 
-        if (result == null) {
+        if (stackResult) {
+            // The completed outcome is read and cleared once, as the consumer's operand.
+            if (primitiveCarrierResult) {
+                builder.emitLoadAndClearTempLocal(outcome);
+            } else {
+                builder.beginMaterializePrimitiveNumericCarrier(true);
+                builder.emitLoadAndClearTempLocal(outcome);
+                builder.endMaterializePrimitiveNumericCarrier();
+            }
+        } else if (result == null) {
             builder.emitClearLocal(outcome);
         } else if (primitiveCarrierResult) {
             builder.beginStoreLocal(result);
@@ -5884,6 +5934,24 @@ final class CanonicalToBytecodeLowerer {
         if (storage == null) {
             return false;
         }
+        if (storage.cell() != null
+                && result == null
+                && value instanceof CanonicalSend numeric
+                && directCellNumericValue(numeric)) {
+            /*
+             * The cell is a constant operand of StoreCell, so no cell
+             * reference is pending while the numeric operation may suspend;
+             * StoreCell executes only after that operation has completed.
+             */
+            builder.beginStoreCell(storage.cell());
+            builder.beginSourceSection(
+                    numeric.span().startOffset(), numeric.span().length());
+            emitDirectNumericOperation(
+                    builder, numeric, preparedCall, childResult, resumeValue);
+            builder.endSourceSection();
+            builder.endStoreCell();
+            return true;
+        }
         boolean carrier =
                 carrierPermitted
                         && storage.local() != null
@@ -5895,6 +5963,19 @@ final class CanonicalToBytecodeLowerer {
                         builder, value, carrier, preparedCall, childResult, resumeValue),
                 result);
         return true;
+    }
+
+    /**
+     * Whether a discarded CELL write may take {@code send} as the direct
+     * operand of StoreCell: exactly the sends the staged form lowers as a
+     * direct numeric operation stored unchanged into its target.
+     */
+    private boolean directCellNumericValue(CanonicalSend send) {
+        return !send.contextual()
+                && primitiveNumericSendCandidate(send)
+                && !isEliminableControl(send)
+                && !isDirectUnaryCall(send)
+                && requiresContinuationScratch(send);
     }
 
     /**
@@ -9663,6 +9744,23 @@ final class CanonicalToBytecodeLowerer {
                     nested.span().startOffset(), nested.span().length());
             emitDirectNumericOperation(
                     builder, nested, preparedCall, childResult, resumeValue);
+            builder.endSourceSection();
+            return;
+        }
+        if (expression instanceof CanonicalSend indexed
+                && (indexedProtocolSend(indexed) || isIndexedSizeSend(indexed))
+                && !isEliminableControl(indexed)
+                && preparedCall != null && childResult != null && resumeValue != null) {
+            /*
+             * The indexed operation owns its completion and continuation
+             * composition; its completed outcome is this operand, with the
+             * same representation the staged form would have stored.
+             */
+            builder.beginSourceSection(
+                    indexed.span().startOffset(), indexed.span().length());
+            emitIndexedSend(
+                    builder, indexed, null, preparedCall, childResult, resumeValue,
+                    this::emitBodyExpressionToLocal, primitiveResultSend(indexed), true);
             builder.endSourceSection();
             return;
         }

@@ -2043,6 +2043,10 @@ final class ProtosPerf045RangeEachInlineTest {
             }
             assertEquals(1, count(names, "c.IsStandardRangeIterationSelection"),
                     "numeric for retains ordinary Range.each selection");
+            List<Instruction> listed = module.runRoot().getBytecodeNode().getInstructionsAsList();
+            // The indexed outcome is the addition's operand; the sum is the cell write's value.
+            assertCompletedResultConsumedBy(listed, "BinarySubscript", "NumberAdd");
+            assertCompletedResultConsumedBy(listed, "NumberAdd", "StoreCell");
         });
     }
 
@@ -2156,37 +2160,148 @@ final class ProtosPerf045RangeEachInlineTest {
      * loop, so a completed result never executes IsContinuation, Yield or
      * ResumeDispatchedContinuation. The loop stays physically emitted as the
      * cold branch for results that are suspensions.
+     *
+     * The logical view drops only trace.* and tag.* rows; every row is the
+     * original Instruction, with its own bytecode index and source section.
+     * The guarded composition must be this producer's own: no other
+     * producer lies between the guard and its IsContinuation, which reads
+     * the producer's outcome local, and its ResumeDispatchedContinuation
+     * writes the same local back, all before the skip target.
      */
     private static void assertCompositionGuardedByCompletion(
             List<Instruction> listed, String operation) {
-        List<Instruction> instructions = listed.stream()
-                .filter(instruction -> !instruction.getName().startsWith("trace.")
-                        && !instruction.getName().startsWith("tag."))
-                .toList();
+        guardedComposition(listed, operation);
+    }
+
+    /*
+     * One producer's guarded composition in the logical view: the producer,
+     * its outcome LocalAccessor, and the first logical row at or after the
+     * skip target (the completed path).
+     */
+    private record GuardedComposition(
+            List<Instruction> instructions,
+            List<String> names,
+            int producer,
+            LocalAccessor outcome,
+            int completion) {
+    }
+
+    private static GuardedComposition guardedComposition(
+            List<Instruction> listed, String operation) {
+        List<Instruction> instructions = logicalInstructions(listed);
         List<String> names = instructions.stream().map(ProtosInstructionNames::of).toList();
         int producer = indexAfter(names, "c." + operation, -1);
         assertTrue(producer >= 0, () -> names.toString());
         assertTrue(names.get(producer + 1).startsWith("c.StoreAndTestContinuation"),
                 () -> operation + " feeds StoreAndTestContinuation directly: " + names);
-        List<Object> outcome = instructions.get(producer + 1).getArguments().stream()
-                .filter(argument -> argument.getKind() == Instruction.Argument.Kind.CONSTANT)
-                .map(Instruction.Argument::asConstant)
-                .filter(LocalAccessor.class::isInstance)
-                .toList();
-        assertEquals(1, outcome.size(), "the outcome local is one constant LocalAccessor");
+        List<LocalAccessor> outcomes = localAccessors(instructions.get(producer + 1));
+        assertEquals(1, outcomes.size(), "the outcome local is one constant LocalAccessor");
+        LocalAccessor outcome = outcomes.get(0);
+        int outcomeOffset = localOffset(outcome);
         Instruction test = instructions.get(producer + 2);
         assertTrue(test.getName().contains("branch.false"),
                 () -> operation + " completion answers the guarding branch: " + names);
         int skip = test.getArguments().stream()
                 .filter(argument -> argument.getKind() == Instruction.Argument.Kind.BYTECODE_INDEX)
                 .findFirst().orElseThrow().asBytecodeIndex();
+        assertTrue(instructions.get(producer).getBytecodeIndex()
+                        < instructions.get(producer + 1).getBytecodeIndex()
+                        && instructions.get(producer + 1).getBytecodeIndex() < test.getBytecodeIndex()
+                        && test.getBytecodeIndex() < skip,
+                () -> operation + " producer, guard and branch precede the skip target: " + names);
         int composition = indexAfter(names, "c.IsContinuation", producer);
         assertTrue(composition > producer + 2, () -> "the cold composition remains emitted: " + names);
+        for (int index = producer + 3; index < composition; index++) {
+            String name = names.get(index);
+            assertFalse(isGuardedProducer(name),
+                    () -> operation + " guard reaches another producer's composition: " + names);
+        }
+        assertTrue(names.get(composition - 1).startsWith("load.local")
+                        && readsOffset(instructions.get(composition - 1), outcomeOffset),
+                () -> operation + " composition tests its own outcome local: " + names);
         assertTrue(instructions.get(composition).getBytecodeIndex() < skip,
                 () -> operation + " skips its composition on completion: " + names);
         int resume = indexAfter(names, "c.ResumeDispatchedContinuation", composition);
         assertTrue(resume > composition && instructions.get(resume).getBytecodeIndex() < skip,
                 () -> operation + " keeps the whole loop on the suspended branch: " + names);
+        assertTrue(names.get(resume + 1).startsWith("store.local")
+                        && readsOffset(instructions.get(resume + 1), outcomeOffset),
+                () -> operation + " resumption writes back its own outcome local: " + names);
+        int completion = -1;
+        for (int index = composition + 1; index < instructions.size(); index++) {
+            if (instructions.get(index).getBytecodeIndex() >= skip) {
+                completion = index;
+                break;
+            }
+        }
+        assertTrue(completion > resume, () -> operation + " has a completed path: " + names);
+        return new GuardedComposition(instructions, names, producer, outcome, completion);
+    }
+
+    /* Original instructions, without trace.* and tag.* rows. */
+    private static List<Instruction> logicalInstructions(List<Instruction> listed) {
+        return listed.stream()
+                .filter(instruction -> !instruction.getName().startsWith("trace.")
+                        && !instruction.getName().startsWith("tag."))
+                .toList();
+    }
+
+    private static boolean isGuardedProducer(String name) {
+        return name.startsWith("c.Number") || name.startsWith("c.BinarySubscript")
+                || name.startsWith("c.SetItem") || name.startsWith("c.GetLen")
+                || name.startsWith("c.Call");
+    }
+
+    private static List<LocalAccessor> localAccessors(Instruction instruction) {
+        return instruction.getArguments().stream()
+                .filter(argument -> argument.getKind() == Instruction.Argument.Kind.CONSTANT)
+                .map(Instruction.Argument::asConstant)
+                .filter(LocalAccessor.class::isInstance)
+                .map(LocalAccessor.class::cast)
+                .toList();
+    }
+
+    /* The offset a LocalAccessor publishes, only through its string form. */
+    private static int localOffset(LocalAccessor accessor) {
+        java.util.regex.Matcher offset = java.util.regex.Pattern
+                .compile("localOffset=(-?\\d+)").matcher(accessor.toString());
+        assertTrue(offset.find(), () -> "unexpected LocalAccessor form: " + accessor);
+        return Integer.parseInt(offset.group(1));
+    }
+
+    /*
+     * Logical identity of a constant local operand: its offset and, when
+     * published, its local index, both carried by the accessor's string form.
+     */
+    private static boolean sameLocal(LocalAccessor left, LocalAccessor right) {
+        return left.toString().equals(right.toString());
+    }
+
+    private static boolean readsOffset(Instruction instruction, int offset) {
+        return instruction.getArguments().stream()
+                .anyMatch(argument -> argument.getKind() == Instruction.Argument.Kind.LOCAL_OFFSET
+                        && argument.asLocalOffset() == offset);
+    }
+
+    /*
+     * The completed path of the operation's guarded composition reads and
+     * clears its own outcome (same LocalAccessor identity) exactly once, and
+     * that value is consumed directly by the next logical instruction, with
+     * no intermediate operand-local store/load/clear cycle.
+     */
+    private static void assertCompletedResultConsumedBy(
+            List<Instruction> listed, String operation, String consumer) {
+        GuardedComposition guarded = guardedComposition(listed, operation);
+        List<String> names = guarded.names();
+        int completion = guarded.completion();
+        assertTrue(names.get(completion).startsWith("c.LoadAndClearTempLocal"),
+                () -> operation + " completed path releases its outcome first: " + names);
+        List<LocalAccessor> read = localAccessors(guarded.instructions().get(completion));
+        assertTrue(read.size() == 1 && sameLocal(read.get(0), guarded.outcome()),
+                () -> operation + " completed path reads its own outcome local: " + names);
+        assertTrue(names.get(completion + 1).startsWith("c." + consumer),
+                () -> operation + " result reaches " + consumer
+                        + " without an intermediate copy: " + names);
     }
 
     /* Static instruction rows only: these are never execution counts. */

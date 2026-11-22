@@ -6114,10 +6114,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
-     * I115: whether one result value is a continuation or suspension the
-     * caller must compose.
-     */
-    /**
      * Stores an already-produced operation result into {@code outcome} and
      * answers whether it must be composed as a continuation. Primitive
      * results are ordinary completions; every other result is written
@@ -6167,6 +6163,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
+    /**
+     * Whether one result value is a continuation or suspension the caller
+     * must compose.
+     */
     @Operation(storeBytecodeIndex = false)
     public static final class IsContinuation {
         /*

@@ -8,6 +8,11 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.199-SNAPSHOT
+
+- **PERF045.** Consume completed indexed results directly in numeric operations and captured cell writes.
+- Read and clear completed indexed outcomes once as consumer operands, avoiding intermediate local traffic while retaining guarded continuation composition and source locations.
+
 ## 0.4.198-SNAPSHOT
 
 - **PERF045.** Read captured cells through constant locals and fuse continuation storage and classification.
