@@ -29,8 +29,11 @@ The dispatch code is
 `run`/`debug` entry; see [Foreign interoperability](../interop/README.md).
 `--allow-library <alias>=<target>` (repeatable) may precede the same forms and
 authorizes one native library for the `protos-ffm` provider; no library is
-authorized by default, and it neither loads the provider nor grants Protos
-capabilities; see the [FFM provider guide](../interop/ffm-provider.md).
+authorized by default, and it grants no Protos capability. On the portable JVM
+it never loads a provider by itself. The installed Native executable integrates
+the generic provider, so there `--allow-library` alone registers it, loading
+the library only when the program imports `ffi:<alias>`; see the
+[FFM provider guide](../interop/ffm-provider.md#native-image-integrated-provider).
 `--inspect` may precede only `<file>`, `-e`, or the REPL; see
 [Inspection](#inspection) below.
 
@@ -546,6 +549,7 @@ protos lint --fail-on-warning src/main.protos
 | Guest execution | Interpreter-only; guest JIT disabled (PLAT045) | Optimizing runtime with guest JIT |
 | Commands on this page | All available | All available |
 | `--foreign-provider-path` | Not available: no dynamic plugin loading | Available |
+| `--allow-library` | Available: integrated generic FFM provider, finite C signature set; OS-provided libraries | Available with an explicit provider JAR |
 | `--inspect` | Available | Available |
 | `--allow-network`, `--allow-resolver`, `--allow-entropy`, `--allow-clock`, `--allow-filesystem=<dir>`, `--service` | Available | Available |
 | `--allow-execution` | Accepted; child launch not yet verified on the Native executable | Available; `wait()` returns an `ExitStatus` (see below) |

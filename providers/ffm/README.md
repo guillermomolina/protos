@@ -4,8 +4,8 @@ Optional, external foreign provider (I144, decision D238-B1-SQL-R1) that lets
 Protos code declare and call C functions of a **host-authorized** shared
 library through the Java 25 Foreign Function and Memory API
 (`java.lang.foreign`). It is built separately from Protos, against the public
-I085 SPI (`com.guillermomolina.protos.spi.foreign`) only, and is never part of
-`lib/protos.jar`.
+I085 SPI (`com.guillermomolina.protos.spi.foreign`) and the GraalVM Native
+Image SDK API (compile time only), and is never part of `lib/protos.jar`.
 
 ```text
 Ordinary Protos application
@@ -86,9 +86,41 @@ with the Actor or Process, releasing any owned resources it still holds.
 
 - Portable JVM CLI, Java 25 (GraalVM 25), Linux x86-64 (LP64) only. Other
   platforms are rejected on first use.
-- Not available: Native Image (no dynamic provider loading), Windows, macOS,
+- Native Image: integrated into the installed executable, without dynamic
+  provider loading and with a finite signature set; see
+  [Native Image: integrated provider](#native-image-integrated-provider).
+- Not available: Windows, macOS,
   C structs, callbacks/upcalls, variadic functions, C++ ABI, arbitrary
   allocators, unbounded native memory, and any sandboxing of native code.
+
+## Native Image: integrated provider
+
+The installed Native Image `protos` executable contains this same generic
+provider; no provider JAR is loaded or needed:
+
+```sh
+protos --allow-library sqlite3=libsqlite3.so.0 app.protos
+```
+
+- The operating system must provide `libsqlite3.so.0` (or whichever library is
+  authorized). Java, GraalVM and a separate Protos FFM provider JAR are not
+  needed. No third-party C library is bundled into or linked by `protos`.
+- Without `--allow-library` no `ffi:` provider is registered. Authorization
+  alone loads nothing: a library is loaded only when the program first imports
+  its `ffi:<alias>` module, and only from the exact authorized target.
+- `--foreign-provider-path` is refused by the Native executable: it never loads
+  Java code dynamically and never falls back to the JVM.
+- The Native executable links only a finite, registered set of physical C
+  signatures. Letters name the carrier: `I` 32-bit int, `L` 64-bit integer
+  (`i64`, `sizeT`), `D` double, `P` address (`utf8z`, opaque, owned, borrowed,
+  `out`, private inputs), `V` void return. The set is:
+  `I()`, `I(I)`, `I(I,I)`, `I(P)`, `I(P,I)`, `I(P,P)`, `I(P,I,L)`, `I(P,I,D)`, `I(P,I,P)`, `I(P,P,L)`, `I(L,I,P)`, `I(I,I,P,P)`, `I(P,P,I,P)`, `I(P,P,I,P,P)`, `I(P,I,P,I,P)`, `L()`, `L(L)`, `L(P)`, `L(P,I)`, `D(P,I)`, `D(D,D)`, `P(I)`, `P(L)`, `P(P,I)`, `V()`, `V(L)`, `V(P)`.
+  It covers every current `std:sqlite` declaration and owned destructor. Any
+  other exact signature is valid on the portable JVM but is refused on the
+  Native executable with an ordinary `Error` before linking, so C is never
+  entered.
+- Linux x86-64 LP64 only. No callbacks, structs by value, variadic functions,
+  C++ ABI, platform portability or native sandboxing.
 
 ## Build and load
 
@@ -98,7 +130,10 @@ protos --foreign-provider-path /path/to/out/protos-ffm-provider.jar --allow-libr
 ```
 
 The tool compiles `src/main/java` with `javac --release 25` against the
-distribution's `lib/protos.jar`, adds the provider's `META-INF/services`
+distribution's `lib/protos.jar` and the official GraalVM Native Image SDK API JAR of the same distribution's
+`lib/runtime/` (the single JAR containing `org.graalvm.nativeimage.ImageInfo`).
+That JAR is a compile-time dependency only: the provider JAR contains no GraalVM
+class, and the installed Native executable requires neither Java nor GraalVM. It adds the provider's `META-INF/services`
 descriptor, and writes only into `--output`. Nothing is discovered unless the
 host passes the JAR with `--foreign-provider-path`; a JAR on `CLASSPATH` or in
 the working directory authorizes nothing.

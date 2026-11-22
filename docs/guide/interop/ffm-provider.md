@@ -88,11 +88,41 @@ Host-authorized native libraries (for example libsqlite3.so.0)
 
 - Linux x86-64 (LP64); other platforms are rejected on first use;
 - JDK 25 (to build the JAR and to run the portable CLI);
-- the portable JVM distribution — the provider is **not** available in
-  Native Image, which cannot load providers dynamically;
+- the portable JVM distribution with the provider JAR, or the installed
+  Native Image executable, which integrates the same provider (see
+  [Native Image: integrated provider](#native-image-integrated-provider));
 - for the SQLite examples, a shared SQLite library reachable by the native
   loader as `libsqlite3.so.0` and authorized with
   `--allow-library sqlite3=libsqlite3.so.0`.
+
+## Native Image: integrated provider
+
+The installed Native Image `protos` executable contains this same generic
+provider; no provider JAR is loaded or needed:
+
+```sh
+protos --allow-library sqlite3=libsqlite3.so.0 app.protos
+```
+
+- The operating system must provide `libsqlite3.so.0` (or whichever library is
+  authorized). Java, GraalVM and a separate Protos FFM provider JAR are not
+  needed. No third-party C library is bundled into or linked by `protos`.
+- Without `--allow-library` no `ffi:` provider is registered. Authorization
+  alone loads nothing: a library is loaded only when the program first imports
+  its `ffi:<alias>` module, and only from the exact authorized target.
+- `--foreign-provider-path` is refused by the Native executable: it never loads
+  Java code dynamically and never falls back to the JVM.
+- The Native executable links only a finite, registered set of physical C
+  signatures. Letters name the carrier: `I` 32-bit int, `L` 64-bit integer
+  (`i64`, `sizeT`), `D` double, `P` address (`utf8z`, opaque, owned, borrowed,
+  `out`, private inputs), `V` void return. The set is:
+  `I()`, `I(I)`, `I(I,I)`, `I(P)`, `I(P,I)`, `I(P,P)`, `I(P,I,L)`, `I(P,I,D)`, `I(P,I,P)`, `I(P,P,L)`, `I(L,I,P)`, `I(I,I,P,P)`, `I(P,P,I,P)`, `I(P,P,I,P,P)`, `I(P,I,P,I,P)`, `L()`, `L(L)`, `L(P)`, `L(P,I)`, `D(P,I)`, `D(D,D)`, `P(I)`, `P(L)`, `P(P,I)`, `V()`, `V(L)`, `V(P)`.
+  It covers every current `std:sqlite` declaration and owned destructor. Any
+  other exact signature is valid on the portable JVM but is refused on the
+  Native executable with an ordinary `Error` before linking, so C is never
+  entered.
+- Linux x86-64 LP64 only. No callbacks, structs by value, variadic functions,
+  C++ ABI, platform portability or native sandboxing.
 
 ## Build the provider JAR
 
@@ -118,7 +148,10 @@ Host-authorized native libraries (for example libsqlite3.so.0)
    [`dist/build_ffm_provider.py`](../../../dist/build_ffm_provider.py)
    accepts the ZIP or an extracted installation directory, compiles
    `providers/ffm/src/main/java` with `javac --release 25` against the
-   distribution's `lib/protos.jar`, adds the provider's `META-INF/services`
+   distribution's `lib/protos.jar` and the official GraalVM Native Image SDK API JAR of the same distribution's
+   `lib/runtime/` (the single JAR containing `org.graalvm.nativeimage.ImageInfo`).
+   That JAR is a compile-time dependency only: the provider JAR contains no GraalVM
+   class, and the installed Native executable requires neither Java nor GraalVM. It adds the provider's `META-INF/services`
    descriptor, and writes only `protos-ffm-provider.jar` into `--output`. The
    distribution is never modified.
 

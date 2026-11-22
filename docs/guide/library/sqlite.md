@@ -242,7 +242,18 @@ bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar -
 ```
 
 [Provider build instructions](../interop/ffm-provider.md#build-the-provider-jar)
-apply unchanged. Native Image plugin loading is not supported.
+apply unchanged.
+
+With the installed Native Image executable no provider JAR is needed; install
+`libsqlite3.so.0` from the operating system and authorize it:
+
+```sh
+protos --allow-library sqlite3=libsqlite3.so.0 app.protos
+```
+
+Java, GraalVM and a separate Protos FFM provider JAR are not needed. SQLite is
+neither bundled nor linked into `protos`; it is loaded only when a program first
+opens a connection. Native Image does not load provider plugins dynamically.
 A missing or denied provider is a failure.
 
 Under D259, authorizing SQLite accepts its native effects with the operating

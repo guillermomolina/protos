@@ -472,6 +472,231 @@ def validate_filesystem_grant(
     print("NATIVE_DIST_FILESYSTEM_BIND_MOUNT=NOT_EXECUTED_IN_DIST_CHECK")
 
 
+# I170 / PLAT077-A: the generic FFM provider integrated in the installed
+# Native executable. Every case below runs the extracted launcher without a
+# JDK, Maven, GraalVM or an external provider JAR on the consumer path.
+FFM_SQLITE_TARGET = "libsqlite3.so.0"
+FFM_LIBC_TARGET = "libc.so.6"
+FFM_UNEXPECTED_MARKERS = (
+    "Internal error",
+    "MissingForeignRegistrationError",
+    "UnsatisfiedLinkError",
+    "NoClassDefFoundError",
+)
+FFM_DEFAULT_OFF = (
+    'Error.handle(() => import("ffi:sqlite3"), (error) => { print("ffm-default-off") })\n'
+)
+FFM_AUTHORIZED_NO_IMPORT = 'print("ffm-authorized-no-import")\n'
+FFM_SQLITE_MEMORY = (
+    'SQLite: import("std:sqlite")\n'
+    "db: SQLite.openMemory()\n"
+    'query: db.prepare("SELECT 40 + 2")\n'
+    "query.step()\n"
+    '(query.column(0) == 42).ifTrue(() => { print("ffm-sqlite=true") })\n'
+    "query.close().value()\n"
+    "db.close().value()\n"
+)
+FFM_LIBC = (
+    'FFI: import("std:ffi")\n'
+    'libc: import("ffi:libc")\n'
+    'getpid: FFI.bind(libc, "getpid", FFI.i32, Array())\n'
+    '(getpid() > 0).ifTrue(() => { print("ffm-libc") })\n'
+)
+# An exact but unregistered physical shape, D(D,D,D): it must be refused
+# before linking, so the C function is never entered.
+FFM_UNSUPPORTED_SIGNATURE = (
+    'FFI: import("std:ffi")\n'
+    'sqlite: import("ffi:sqlite3")\n'
+    "Error.handle(\n"
+    '    () => FFI.bind(sqlite, "sqlite3_libversion_number", FFI.f64,'
+    " Array(FFI.f64, FFI.f64, FFI.f64)),\n"
+    '    (error) => { print("ffm-unsupported-refused") })\n'
+)
+FFM_UNAUTHORIZED = (
+    "error: null\n"
+    'ForeignError.handle(() => import("ffi:sqlite3"), (e) => { error = e })\n'
+    "print(error.foreignCategory)\n"
+)
+FFM_MISSING_LIBRARY = (
+    "error: null\n"
+    'ForeignError.handle(() => import("ffi:missing"), (e) => { error = e })\n'
+    "print(error.foreignCategory)\n"
+)
+
+
+def classify_ffm_case(
+    returncode: int,
+    stdout: str,
+    stderr: str,
+    *,
+    expected_status: int,
+    expected_stdout: str | None,
+) -> tuple[str, str]:
+    """Classify one Native-FFM case as ("PASS", "") or ("FAIL", reason).
+
+    A pass needs the exact status, the expected marker and no uncontrolled
+    host failure; anything else is a failure, never a pass.
+    """
+    for marker in FFM_UNEXPECTED_MARKERS:
+        if marker in stdout or marker in stderr:
+            return "FAIL", "uncontrolled host failure: " + marker
+    if returncode != expected_status:
+        return "FAIL", (
+            "exited with " + str(returncode) + " instead of " + str(expected_status)
+        )
+    if expected_stdout is not None and expected_stdout not in stdout:
+        return "FAIL", "output is missing " + repr(expected_stdout)
+    if expected_status != 0 and "ran" in stdout:
+        return "FAIL", "refused case ran guest code"
+    return "PASS", ""
+
+
+def run_ffm_case(
+    label: str,
+    command: list[str],
+    *,
+    cwd: Path,
+    env: dict[str, str],
+    expected_status: int = 0,
+    expected_stdout: str | None = None,
+) -> None:
+    result = subprocess.run(
+        command, cwd=cwd, env=env, text=True, capture_output=True, check=False
+    )
+    verdict, reason = classify_ffm_case(
+        result.returncode,
+        result.stdout,
+        result.stderr,
+        expected_status=expected_status,
+        expected_stdout=expected_stdout,
+    )
+    if verdict != "PASS":
+        fail(
+            label
+            + " "
+            + reason
+            + "\nstdout:\n"
+            + result.stdout
+            + "\nstderr:\n"
+            + result.stderr
+        )
+    print("NATIVE_DIST_" + label + "_CHECK: PASS")
+
+
+def bundled_shared_objects(dist: Path, stem: str) -> list[Path]:
+    """Every file of the distribution whose name starts with ``stem``."""
+    return sorted(path for path in dist.rglob(stem + "*") if path.is_file())
+
+
+def os_library_available(target: str, ldconfig: str | None) -> bool:
+    """Whether the host dynamic loader cache lists ``target``."""
+    if ldconfig is None:
+        return False
+    result = subprocess.run(
+        [ldconfig, "-p"], text=True, capture_output=True, check=False
+    )
+    return result.returncode == 0 and target in result.stdout
+
+
+def validate_native_ffm(
+    launcher: Path,
+    dist: Path,
+    dt_needed: str,
+    temp: Path,
+    cwd: Path,
+    env: dict[str, str],
+    ldconfig: str | None,
+) -> None:
+    """I170: the installed executable integrates the generic FFM provider.
+
+    No provider JAR is passed or bundled, no third-party C library is bundled
+    or linked, authorization is default-off, loading is lazy and uses the
+    OS-provided shared object, and an unregistered physical signature fails
+    cleanly before native entry.
+    """
+    bundled = bundled_shared_objects(dist, "libsqlite3")
+    if bundled:
+        fail("the Native distribution bundles SQLite: " + ", ".join(map(str, bundled)))
+    print("NATIVE_DIST_FFM_NO_BUNDLED_SQLITE_CHECK: PASS")
+    if "sqlite" in dt_needed.lower():
+        fail("the Native executable has a DT_NEEDED SQLite dependency: " + dt_needed)
+    print("NATIVE_DIST_FFM_NO_SQLITE_DT_NEEDED_CHECK: PASS")
+
+    run_ffm_case(
+        "FFM_DEFAULT_OFF",
+        [str(launcher), "-e", FFM_DEFAULT_OFF],
+        cwd=cwd,
+        env=env,
+        expected_stdout="ffm-default-off",
+    )
+    run_ffm_case(
+        "FFM_AUTHORIZED_NO_IMPORT",
+        [
+            str(launcher),
+            "--allow-library",
+            "sqlite3=" + str(temp / "absent" / FFM_SQLITE_TARGET),
+            "-e",
+            FFM_AUTHORIZED_NO_IMPORT,
+        ],
+        cwd=cwd,
+        env=env,
+        expected_stdout="ffm-authorized-no-import",
+    )
+    run_ffm_case(
+        "FFM_ALLOW_LIBRARY_REQUIRES_TARGET",
+        [str(launcher), "--allow-library", "sqlite3", "-e", 'print("ran")'],
+        cwd=cwd,
+        env=env,
+        expected_status=2,
+    )
+    run_ffm_case(
+        "FFM_MISSING_LIBRARY",
+        [
+            str(launcher),
+            "--allow-library",
+            "missing=" + str(temp / "absent" / "libnone.so"),
+            "-e",
+            FFM_MISSING_LIBRARY,
+        ],
+        cwd=cwd,
+        env=env,
+        expected_stdout="library-unavailable",
+    )
+    run_ffm_case(
+        "FFM_LIBC",
+        [str(launcher), "--allow-library", "libc=" + FFM_LIBC_TARGET, "-e", FFM_LIBC],
+        cwd=cwd,
+        env=env,
+        expected_stdout="ffm-libc",
+    )
+
+    if not os_library_available(FFM_SQLITE_TARGET, ldconfig):
+        fail("the validation host provides no OS " + FFM_SQLITE_TARGET)
+    sqlite_grant = ["--allow-library", "sqlite3=" + FFM_SQLITE_TARGET]
+    run_ffm_case(
+        "FFM_SQLITE_MEMORY",
+        [str(launcher), *sqlite_grant, "-e", FFM_SQLITE_MEMORY],
+        cwd=cwd,
+        env=env,
+        expected_stdout="ffm-sqlite=true",
+    )
+    run_ffm_case(
+        "FFM_UNAUTHORIZED",
+        [str(launcher), "--allow-library", "other=" + FFM_SQLITE_TARGET, "-e", FFM_UNAUTHORIZED],
+        cwd=cwd,
+        env=env,
+        expected_stdout="unauthorized-library",
+    )
+    run_ffm_case(
+        "FFM_UNSUPPORTED_SIGNATURE",
+        [str(launcher), *sqlite_grant, "-e", FFM_UNSUPPORTED_SIGNATURE],
+        cwd=cwd,
+        env=env,
+        expected_stdout="ffm-unsupported-refused",
+    )
+    print("NATIVE_DIST_FFM=PASS")
+
+
 def normalized_terminal_text(data: bytes) -> str:
     data = ANSI_TERMINAL_RE.sub(b"", data)
 
@@ -1924,13 +2149,15 @@ def validate(archive: Path) -> None:
             dist / "RUNTIME.txt",
             "Native RUNTIME.txt",
         )
-        validate_native_elf_metadata(native, runtime)
+        elf_observation = validate_native_elf_metadata(native, runtime)
 
         if dist.resolve() == checkout.resolve():
             fail("extracted distribution root equals repository checkout")
 
         print("NATIVE_DIST_RELOCATED_ROOT_CHECK: PASS")
 
+        # Resolved before PATH isolation: only the validator consults it.
+        ldconfig = shutil.which("ldconfig") or shutil.which("ldconfig", path="/sbin:/usr/sbin")
         proof_path = isolated_path(temp)
         print("NATIVE_DIST_NO_JAVA_PATH_CHECK: PASS")
         print("NATIVE_DIST_NO_MAVEN_PATH_CHECK: PASS")
@@ -2014,6 +2241,15 @@ def validate(archive: Path) -> None:
         print("NATIVE_DIST_PROTOS_HOME_DERIVATION_CHECK: PASS")
 
         validate_filesystem_grant(launcher, temp, unrelated_cwd, env)
+        validate_native_ffm(
+            launcher,
+            dist,
+            elf_observation["dt_needed"],
+            temp,
+            unrelated_cwd,
+            env,
+            ldconfig,
+        )
 
         workspace_fixture = (
             dist

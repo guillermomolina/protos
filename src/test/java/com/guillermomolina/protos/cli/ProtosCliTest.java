@@ -854,6 +854,24 @@ final class ProtosCliTest {
         }
     }
 
+    /**
+     * I170: on the JVM, --allow-library alone carries the host configuration but discovers no
+     * provider; the generic provider is integrated only into the Native Image executable.
+     */
+    @Test
+    void allowLibraryAloneGrantsNoImplicitJvmProvider() {
+        ProtosCli cli = new ProtosCli();
+        R result =
+                runOn(cli,
+                        "--allow-library", "sqlite3=libsqlite3.so.0",
+                        "-e", "Error.handle(() => import(\"ffi:sqlite3\"),"
+                                + " (error) => { print(\"no-route\") })");
+        assertEquals(0, result.c, result.e);
+        assertEquals("no-route\n", result.o);
+        assertEquals(java.util.Map.of("sqlite3", "libsqlite3.so.0"), cli.allowedLibraries());
+        assertTrue(cli.foreignProviderConfiguration().providerPaths().isEmpty());
+    }
+
     @Test
     void allowLibraryCombinesWithProviderPathsInEitherOrder(@TempDir Path providers)
             throws Exception {

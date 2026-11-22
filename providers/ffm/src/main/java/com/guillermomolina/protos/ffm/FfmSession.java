@@ -161,6 +161,9 @@ final class FfmSession implements ProtosForeignPluginSession {
         if (module.session() != this || !signature.belongsTo(module.library())) {
             throw new FfmFailure("invalid-declaration", "the declaration belongs to another library");
         }
+        if (!signature.isLinkable()) {
+            throw new FfmFailure("invalid-declaration", "the native signature cannot be linked here");
+        }
         beginCall();
         try {
             BindingKey key = new BindingKey(module.library(), symbol, signature);

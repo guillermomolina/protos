@@ -31,8 +31,21 @@ x86-64 LP64**, with **Java 25** and the supported **GraalVM 25.5** toolchain. It
 requires an external FFM provider JAR and, for each native library a program
 uses, an explicit host authorization (`--allow-library alias=target`). The
 SQLite examples need a shared SQLite library available to the native loader as
-`libsqlite3.so.0`. It is not available in Native Image:
-Native Image cannot load external provider plugins.
+`libsqlite3.so.0`.
+
+The installed **Native Image** executable integrates the same generic provider,
+so no provider JAR is needed there; only the host authorization is:
+
+```sh
+protos --allow-library sqlite3=libsqlite3.so.0 app.protos
+```
+
+The operating system must provide the authorized library; Java, GraalVM and a
+provider JAR are not needed. A library is loaded only when the program imports
+its `ffi:<alias>`. The Native executable links a finite set of physical
+signatures that covers `std:sqlite`; any other signature is refused with an
+ordinary `Error` before C is entered. See
+[Native Image: integrated provider](../interop/ffm-provider.md#native-image-integrated-provider).
 
 Build the portable distribution and inspect its actual versioned archive:
 
@@ -296,9 +309,10 @@ memory or terminate the process. There is no sandbox, and Protos `Filesystem`
 authority does not confine C code. The provider accepts only host-authorized
 logical library aliases, not paths supplied to `FFI.bind`.
 
-This FFM profile is not a Native Image portability promise. Native Image cannot
-load this external provider JAR. Platform support is limited to the portable
-JVM, Java 25, supported GraalVM 25.5 and Linux x86-64 LP64.
+This FFM profile is not a platform portability promise. The portable JVM loads
+the external provider JAR; the installed Native Image executable integrates the
+same provider with a finite set of physical signatures. Platform support is
+limited to Linux x86-64 LP64.
 
 ## Actors and isolated parallel execution
 
@@ -319,7 +333,8 @@ synchronous and do not implicitly schedule parallel work.
 | Binding a symbol signals `ForeignError` | The symbol may not exist in the authorized library or its searched dependencies; check the C symbol spelling and library available to the loader. |
 | A call signals ordinary `Error` before C entry | Check argument count, exact descriptor kinds and ranges, `utf8z` interior NUL, nullability, handle type and handle liveness. |
 | A released resource is rejected | Release is one-way. Do not retry its destructor or pass that handle to another binding. |
-| The provider reports an unsupported platform | Use the supported portable JVM on Linux x86-64 LP64 with Java 25/GraalVM 25.5; Native Image and other platforms are outside this profile. |
+| The provider reports an unsupported platform | Use Linux x86-64 LP64: the portable JVM with Java 25/GraalVM 25.5 and the provider JAR, or the installed Native executable. Other platforms are outside this profile. |
+| On the Native executable, a declaration signals `Error` although it works on the JVM | Its physical C signature is outside the Native executable's registered set; see [Native Image: integrated provider](../interop/ffm-provider.md#native-image-integrated-provider). |
 
 Further runnable programs: the existing
 [SQLite version example](../../../protos/examples/ffi/sqlite-version-public.protos),

@@ -29,6 +29,8 @@ import java.lang.invoke.MethodType;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
+import org.graalvm.nativeimage.ImageInfo;
 
 /**
  * Generic downcall binding of one symbol of one authorized library to one declared signature.
@@ -40,6 +42,19 @@ import java.util.Objects;
  * failure: it is returned as data.
  */
 final class FfmBinding {
+    /**
+     * Physical downcall shapes registered for a Native Image executable, one letter per carrier:
+     * {@code I} int, {@code L} long, {@code D} double, {@code P} address and {@code V} void return.
+     * The image metadata registers exactly these shapes; a declaration of any other shape is
+     * refused before linking there. A JVM links every valid declaration.
+     */
+    static final Set<String> NATIVE_SHAPES =
+            Set.of(
+                    "I()", "I(I)", "I(I,I)", "I(P)", "I(P,I)", "I(P,P)", "I(P,I,L)", "I(P,I,D)",
+                    "I(P,I,P)", "I(P,P,L)", "I(L,I,P)", "I(I,I,P,P)", "I(P,P,I,P)",
+                    "I(P,P,I,P,P)", "I(P,I,P,I,P)", "L()", "L(L)", "L(P)", "L(P,I)", "D(P,I)",
+                    "D(D,D)", "P(I)", "P(L)", "P(P,I)", "V()", "V(L)", "V(P)");
+
     /**
      * Immutable declared signature: return descriptor, ordered parameters, borrow policy.
      *
@@ -126,6 +141,46 @@ final class FfmBinding {
             return returns == FfmTypes.Scalar.VOID
                     ? FunctionDescriptor.ofVoid(layouts)
                     : FunctionDescriptor.of(FfmTypes.layout(returns), layouts);
+        }
+
+        /** The physical carrier shape of {@link #descriptor()}, for example {@code I(P,I)}. */
+        String physicalShape() {
+            FunctionDescriptor descriptor = descriptor();
+            StringBuilder shape = new StringBuilder();
+            shape.append(descriptor.returnLayout().map(Signature::carrier).orElse('V')).append('(');
+            List<MemoryLayout> arguments = descriptor.argumentLayouts();
+            for (int index = 0; index < arguments.size(); index++) {
+                if (index > 0) {
+                    shape.append(',');
+                }
+                shape.append(carrier(arguments.get(index)));
+            }
+            return shape.append(')').toString();
+        }
+
+        private static char carrier(MemoryLayout layout) {
+            if (layout.equals(ValueLayout.JAVA_INT)) {
+                return 'I';
+            }
+            if (layout.equals(ValueLayout.JAVA_LONG)) {
+                return 'L';
+            }
+            if (layout.equals(ValueLayout.JAVA_DOUBLE)) {
+                return 'D';
+            }
+            if (layout.equals(ValueLayout.ADDRESS)) {
+                return 'P';
+            }
+            throw new IllegalArgumentException("unsupported carrier layout");
+        }
+
+        /**
+         * Whether this executable can link the signature: always on a JVM, and in a Native Image
+         * only when its exact physical shape is registered.
+         */
+        boolean isLinkable() {
+            return !ImageInfo.inImageRuntimeCode()
+                    || NATIVE_SHAPES.contains(physicalShape());
         }
 
         /** Whether every library-bound descriptor belongs to {@code library}. */

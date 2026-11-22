@@ -17,6 +17,7 @@
 package com.guillermomolina.protos.runtime;
 
 import com.guillermomolina.protos.runtime.lookup.ProtosSlotLookupResult;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.interop.InteropLibrary;
 import com.oracle.truffle.api.library.ExportLibrary;
 import com.oracle.truffle.api.library.ExportMessage;
@@ -80,6 +81,7 @@ public final class ProtosRawForeignValue
         return handle;
     }
 
+    @TruffleBoundary
     boolean sameForeignIdentity(ProtosRawForeignValue other) {
         if (this == other) {
             return true;

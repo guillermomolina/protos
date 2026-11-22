@@ -87,8 +87,10 @@ class ProtosI144FfmFixtureAbiTest {
         List<String> arguments =
                 new ArrayList<>(
                         List.of("--release", "25", "-proc:none", "-classpath",
-                                ProtosExternalForeignProviderTest.publicClassPath(work), "-d",
-                                classes.toString()));
+                                ProtosExternalForeignProviderTest.publicClassPath(work)
+                                        + File.pathSeparator
+                                        + ProtosExternalForeignProviderTest.imageInfoJar(),
+                                "-d", classes.toString()));
         for (Path root :
                 List.of(
                         Path.of("providers", "ffm", "src", "main", "java"),
@@ -420,6 +422,139 @@ class ProtosI144FfmFixtureAbiTest {
         return "ffi: import(\"ffi:" + alias + "\")\n"
                 + "ffi.bind(\"ffi_test_i32_identity\","
                 + " ffi.param(ffi.signature(ffi.i32), ffi.i32))(" + value + ")";
+    }
+
+    /** Shapes owned by the confined Filesystem downcalls, not by the generic FFM provider. */
+    private static final java.util.Set<String> FILESYSTEM_SHAPES =
+            java.util.Set.of("P(P,P,P,P,P)", "L(P,I,P,L)", "L(P,P,L)");
+
+    private static final Path METADATA =
+            Path.of("src", "main", "resources", "META-INF", "native-image", "com.guillermomolina",
+                    "protos", "reachability-metadata.json");
+
+    /** Loads one compiled provider class of the fixture build, isolated from the test classes. */
+    private static Class<?> providerClass(java.net.URLClassLoader loader, String simpleName)
+            throws Exception {
+        return Class.forName("com.guillermomolina.protos.ffm." + simpleName, true, loader);
+    }
+
+    private static java.net.URLClassLoader providerLoader() throws Exception {
+        return new java.net.URLClassLoader(
+                new java.net.URL[] {work.resolve("classes").toUri().toURL()},
+                ProtosI144FfmFixtureAbiTest.class.getClassLoader());
+    }
+
+    /** Non-variadic downcall shapes of the image metadata, in the same letter notation. */
+    private static java.util.Set<String> metadataShapes() throws Exception {
+        Map<String, String> letters =
+                Map.of("jint", "I", "jlong", "L", "jdouble", "D", "void*", "P", "void", "V");
+        java.util.Set<String> shapes = new java.util.TreeSet<>();
+        java.util.regex.Matcher entry =
+                java.util.regex.Pattern.compile(
+                                "\\{\\s*\"returnType\":\\s*\"([^\"]+)\",\\s*"
+                                        + "\"parameterTypes\":\\s*\\[([^\\]]*)\\]\\s*\\}")
+                        .matcher(Files.readString(METADATA));
+        while (entry.find()) {
+            StringBuilder shape = new StringBuilder(letters.get(entry.group(1))).append('(');
+            java.util.regex.Matcher parameter =
+                    java.util.regex.Pattern.compile("\"([^\"]+)\"").matcher(entry.group(2));
+            boolean first = true;
+            while (parameter.find()) {
+                shape.append(first ? "" : ",").append(letters.get(parameter.group(1)));
+                first = false;
+            }
+            shapes.add(shape.append(')').toString());
+        }
+        return shapes;
+    }
+
+    /**
+     * I170: the provider's registered Native shapes and the image metadata are one inventory.
+     * Variadic downcalls carry options and are not matched by the plain-entry pattern.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void nativeShapeInventoryMatchesTheReachabilityMetadata() throws Exception {
+        try (java.net.URLClassLoader loader = providerLoader()) {
+            java.lang.reflect.Field field =
+                    providerClass(loader, "FfmBinding").getDeclaredField("NATIVE_SHAPES");
+            field.setAccessible(true);
+            java.util.Set<String> registered =
+                    new java.util.TreeSet<>((java.util.Set<String>) field.get(null));
+            java.util.Set<String> metadata = metadataShapes();
+            java.util.Set<String> missing = new java.util.TreeSet<>(registered);
+            missing.removeAll(metadata);
+            assertTrue(missing.isEmpty(), () -> "missing from metadata: " + missing);
+            java.util.Set<String> extra = new java.util.TreeSet<>(metadata);
+            extra.removeAll(registered);
+            extra.removeAll(FILESYSTEM_SHAPES);
+            assertTrue(extra.isEmpty(), () -> "missing from the provider inventory: " + extra);
+            // Every physical shape of the current std:sqlite declarations is registered.
+            for (String shape :
+                    List.of("I()", "I(P)", "I(P,I)", "I(P,P)", "I(P,I,L)", "I(P,I,D)", "L(P,I)",
+                            "D(P,I)", "I(P,P,I,P)", "I(P,P,I,P,P)", "I(P,I,P,I,P)", "P(P,I)")) {
+                assertTrue(registered.contains(shape), shape);
+            }
+        }
+    }
+
+    /**
+     * I170: physical shapes derive from the existing carrier layouts, owned destructors and out
+     * slots are addresses, and an unregistered shape stays linkable on the JVM only.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void physicalShapesFollowTheCarrierLayouts() throws Exception {
+        try (java.net.URLClassLoader loader = providerLoader()) {
+            Class<?> type = providerClass(loader, "FfmTypes$Type");
+            Class<?> scalar = providerClass(loader, "FfmTypes$Scalar");
+            Class<?> opaque = providerClass(loader, "FfmTypes$OpaqueType");
+            Class<?> out = providerClass(loader, "FfmTypes$OutType");
+            Class<?> signature = providerClass(loader, "FfmBinding$Signature");
+            java.lang.reflect.Constructor<?> create =
+                    signature.getDeclaredConstructor(type, List.class, boolean.class);
+            create.setAccessible(true);
+            java.lang.reflect.Method shape = signature.getDeclaredMethod("physicalShape");
+            shape.setAccessible(true);
+            java.lang.reflect.Method linkable = signature.getDeclaredMethod("isLinkable");
+            linkable.setAccessible(true);
+            java.util.function.Function<String, Object> s =
+                    name -> Enum.valueOf((Class) scalar, name);
+            java.lang.reflect.Constructor<?> newOpaque =
+                    opaque.getDeclaredConstructor(String.class, String.class, boolean.class);
+            newOpaque.setAccessible(true);
+            Object handle = newOpaque.newInstance("handle", "fixture", false);
+            java.lang.reflect.Constructor<?> newOut = out.getDeclaredConstructor(type);
+            newOut.setAccessible(true);
+            Object outI32 = newOut.newInstance(s.apply("I32"));
+
+            Object[][] cases = {
+                {s.apply("I32"), List.of(s.apply("I32"), s.apply("I32")), "I(I,I)"},
+                {s.apply("I64"), List.of(s.apply("SIZE_T")), "L(L)"},
+                {s.apply("F64"), List.of(s.apply("F64"), s.apply("F64")), "D(D,D)"},
+                {s.apply("VOID"), List.of(), "V()"},
+                {s.apply("I32"), List.of(handle), "I(P)"},
+                {s.apply("VOID"), List.of(handle), "V(P)"},
+                {s.apply("I32"), List.of(s.apply("UTF8Z"), s.apply("I32"), outI32), "I(P,I,P)"},
+            };
+            for (Object[] c : cases) {
+                Object value = create.newInstance(c[0], c[1], false);
+                assertEquals(c[2], shape.invoke(value));
+                assertEquals(true, linkable.invoke(value));
+            }
+            // An exact but unregistered shape: valid on the JVM, refused by a Native Image.
+            Object unregistered =
+                    create.newInstance(
+                            s.apply("F64"),
+                            List.of(s.apply("F64"), s.apply("F64"), s.apply("F64")),
+                            false);
+            assertEquals("D(D,D,D)", shape.invoke(unregistered));
+            java.lang.reflect.Field field =
+                    providerClass(loader, "FfmBinding").getDeclaredField("NATIVE_SHAPES");
+            field.setAccessible(true);
+            assertTrue(!((java.util.Set<String>) field.get(null)).contains("D(D,D,D)"));
+            assertEquals(true, linkable.invoke(unregistered));
+        }
     }
 
     private static String integer(Object value) {

@@ -76,9 +76,15 @@ final class ProtosPerf006C1OptimizingRuntimeClosureTest {
         assertFalse(pom.contains("UseFallbackRuntime"));
         assertFalse(pom.contains("protos.native.fallbackRuntime"));
         assertFalse(pom.contains("WarnInterpreterOnly"));
+        // I170: Native Image reads the Native-only staged classes directory (application
+        // classes plus the integrated FFM provider), never the shaded checkout JAR.
         assertTrue(
                 nativeProfile.contains(
-                        "<classesDirectory>${project.build.outputDirectory}</classesDirectory>"));
+                        "<classesDirectory>${protos.native.classes}</classesDirectory>"));
+        assertTrue(
+                nativeProfile.contains(
+                        "<protos.native.classes>${project.build.directory}/native-classes"
+                                + "</protos.native.classes>"));
         assertFalse(nativeProfile.contains("<protos.shade.skip>true</protos.shade.skip>"));
         assertFalse(launcher.contains("WarnInterpreterOnly=false"));
         assertFalse(launcher.contains("UseFallbackRuntime=true"));

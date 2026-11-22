@@ -59,6 +59,14 @@ main() {
         fi
     done
 
+    # The generic FFM provider, staged only into Native Image classes, is
+    # initialized at run time: no Linker, Arena, loaded library or bound native
+    # address may be created while the image is generated.
+    ffm_provider_package='com.guillermomolina.protos.ffm'
+    if [[ -d "${classes_dir}/${ffm_provider_package//./\/}" ]]; then
+        run_time_classes+=("${ffm_provider_package}")
+    fi
+
     mkdir -p "$(dirname "${output}")"
 
     joined="$(IFS=,; printf '%s' "${build_time_packages[*]}")"

@@ -18,8 +18,11 @@
 Takes an already built portable JVM distribution (its ZIP or an extracted
 installation), compiles ``providers/ffm/src/main/java`` with
 ``javac --release 25`` against the public SPI of that distribution's
-``lib/protos.jar``, and writes ``protos-ffm-provider.jar`` (classes plus the
-provider's ``META-INF/services`` descriptor) into ``--output`` only. The
+``lib/protos.jar`` plus the single GraalVM Native Image SDK API JAR of its
+``lib/runtime/`` (the one containing ``org/graalvm/nativeimage/ImageInfo.class``,
+a compile-time dependency only), and writes ``protos-ffm-provider.jar`` (classes plus the
+provider's ``META-INF/services`` descriptor) into ``--output`` only; no
+GraalVM SDK class is packaged. The
 distribution is read, never modified, and no provider class is added to
 ``lib/protos.jar``. Nothing is downloaded.
 
@@ -31,6 +34,7 @@ the same JAR is reusable between hosts unchanged.
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 import re
 import shutil
@@ -45,6 +49,7 @@ SERVICE = "META-INF/services/com.guillermomolina.protos.spi.foreign.ProtosForeig
 JAR_NAME = "protos-ffm-provider.jar"
 RELEASE = 25
 CLASSFILE_MAJOR = RELEASE + 44
+IMAGE_INFO = "org/graalvm/nativeimage/ImageInfo.class"
 
 
 class BuildError(Exception):
@@ -78,6 +83,55 @@ def protos_jar_from(distribution: Path, scratch: Path) -> Path:
         return target
 
 
+def _contains_image_info(jar: Path) -> bool:
+    try:
+        with zipfile.ZipFile(jar) as archive:
+            return IMAGE_INFO in archive.namelist()
+    except (OSError, zipfile.BadZipFile):
+        return False
+
+
+def _single_sdk_api(candidates: list[str], where: object) -> str:
+    if not candidates:
+        raise BuildError(f"no Native Image SDK API JAR containing {IMAGE_INFO} in {where}")
+    if len(candidates) != 1:
+        raise BuildError(
+            f"ambiguous Native Image SDK API JARs in {where}: {', '.join(sorted(candidates))}")
+    return candidates[0]
+
+
+def sdk_api_jar_from(distribution: Path, scratch: Path) -> Path:
+    """Answers the distribution's exact lib/runtime SDK API JAR containing ImageInfo.
+
+    A ZIP member is extracted into scratch, like lib/protos.jar. Nothing else
+    is consulted and no other version is ever selected.
+    """
+    if distribution.is_dir():
+        runtime = distribution / "lib" / "runtime"
+        if not runtime.is_dir():
+            raise BuildError(f"no lib/runtime in installation {distribution}")
+        found = [str(jar) for jar in sorted(runtime.glob("*.jar")) if _contains_image_info(jar)]
+        return Path(_single_sdk_api(found, runtime))
+    if not zipfile.is_zipfile(distribution):
+        raise BuildError(f"not a portable distribution ZIP or directory: {distribution}")
+    with zipfile.ZipFile(distribution) as archive:
+        members = [n for n in archive.namelist()
+                   if re.fullmatch(r"[^/]+/lib/runtime/[^/]+\.jar", n)]
+        holders = scratch / "sdk-candidates"
+        holders.mkdir(parents=True, exist_ok=True)
+        found = []
+        for index, name in enumerate(members):
+            candidate = holders / f"{index}.jar"
+            candidate.write_bytes(archive.read(name))
+            if _contains_image_info(candidate):
+                found.append(name)
+        chosen = _single_sdk_api(found, distribution)
+        target = scratch / Path(chosen).name
+        target.write_bytes(archive.read(chosen))
+        shutil.rmtree(holders)
+        return target
+
+
 def build_provider_jar(
     javac: str,
     protos_jar: Path,
@@ -86,8 +140,13 @@ def build_provider_jar(
     log: Path | None = None,
     extra_sources: list[Path] | None = None,
     service: Path | None = None,
+    sdk_jar: Path | None = None,
 ) -> Path:
     """Compiles providers/ffm against protos_jar and writes exactly output_jar.
+
+    The class path is exactly protos_jar and the SDK API JAR. Without
+    ``sdk_jar``, protos_jar must be the lib/protos.jar of an installation and
+    the SDK API JAR is resolved from that installation's lib/runtime.
 
     ``extra_sources`` and ``service`` exist only for test hosts that package a
     test-only registration of the same backend; the distributable build uses
@@ -98,12 +157,14 @@ def build_provider_jar(
     service = service or PROVIDER / "resources" / SERVICE
     if not sources or not service.is_file():
         raise BuildError(f"provider sources missing under {PROVIDER}")
+    if sdk_jar is None:
+        sdk_jar = sdk_api_jar_from(protos_jar.parent.parent, scratch)
     classes = scratch / "ffm-classes"
     if classes.exists():
         shutil.rmtree(classes)
     classes.mkdir(parents=True)
     command = [javac, "--release", str(RELEASE), "-proc:none",
-               "-classpath", str(protos_jar), "-d", str(classes), *sources]
+               "-classpath", os.pathsep.join((str(protos_jar), str(sdk_jar))), "-d", str(classes), *sources]
     completed = subprocess.run(command, capture_output=True, text=True, timeout=300)
     if log is not None:
         log.write_text(
@@ -116,6 +177,8 @@ def build_provider_jar(
     compiled = sorted(classes.rglob("*.class"))
     if not compiled:
         raise BuildError("javac produced no classfiles")
+    if any(path.relative_to(classes).as_posix().startswith("org/graalvm/") for path in compiled):
+        raise BuildError("GraalVM SDK classes must not be packaged in the provider JAR")
     for path in compiled:
         header = path.read_bytes()[:8]
         if header[:4] != bytes.fromhex("CAFEBABE") or int.from_bytes(header[6:8], "big") != CLASSFILE_MAJOR:
@@ -147,7 +210,9 @@ def main() -> int:
         with tempfile.TemporaryDirectory(prefix="protos-ffm-build-") as scratch_name:
             scratch = Path(scratch_name)
             protos_jar = protos_jar_from(distribution, scratch)
-            jar = build_provider_jar(javac, protos_jar, output / JAR_NAME, scratch)
+            sdk_jar = sdk_api_jar_from(distribution, scratch)
+            jar = build_provider_jar(javac, protos_jar, output / JAR_NAME, scratch,
+                                     sdk_jar=sdk_jar)
     except BuildError as failure:
         print(f"error: {failure}", file=sys.stderr)
         return 1
@@ -156,8 +221,6 @@ def main() -> int:
 
 
 def _java_home() -> Path | None:
-    import os
-
     home = os.environ.get("JAVA_HOME")
     return Path(home) if home else None
 

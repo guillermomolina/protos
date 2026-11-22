@@ -30,6 +30,7 @@ import java.util.Map;
 import java.util.ServiceConfigurationError;
 import java.util.ServiceLoader;
 import java.util.Set;
+import org.graalvm.nativeimage.ImageInfo;
 
 /**
  * Discovers external provider plugins from exactly the configured provider paths (I085-A).
@@ -42,14 +43,25 @@ import java.util.Set;
  * plugin classes defined by that loader, so a provider visible on the global class path is never
  * picked up. The loader is owned by the RuntimeHost and closed with it. Discovery runs only when
  * the configuration names at least one path; Native Image builds offer no such dynamic loading.
+ *
+ * <p>A Native Image executable instead registers the single generic {@code protos-ffm} provider
+ * whose service declaration was compiled into the image, and only when the host authorized at
+ * least one library for it. No class loader is created for that provider.
  */
 final class ProtosExternalProviderPluginLoader {
     private ProtosExternalProviderPluginLoader() {}
 
     record Loaded(List<ProtosForeignProviderDescriptor> descriptors, URLClassLoader classLoader) {}
 
+    static final String INTEGRATED_PROVIDER_ID = "protos-ffm";
+    static final String INTEGRATED_PROVIDER_SCHEME = "ffi";
+
     static Loaded load(ProtosForeignProviderConfiguration configuration) {
         List<Path> paths = configuration.providerPaths();
+        if (ImageInfo.inImageCode()) {
+            throw new IllegalArgumentException(
+                    "foreign provider paths are not supported by the Native Image executable");
+        }
         URL[] urls = new URL[paths.size()];
         for (int i = 0; i < urls.length; i++) {
             Path path = paths.get(i);
@@ -102,6 +114,63 @@ final class ProtosExternalProviderPluginLoader {
         } catch (RuntimeException | Error failure) {
             closeAfterFailure(loader, failure);
             throw failure;
+        }
+    }
+
+    /**
+     * Whether this executable is a Native Image and {@code configuration} authorizes at least one
+     * option for the integrated provider without naming any provider path.
+     */
+    static boolean selectsIntegrated(ProtosForeignProviderConfiguration configuration) {
+        return ImageInfo.inImageCode()
+                && configuration.providerPaths().isEmpty()
+                && !configuration
+                        .providerOptions()
+                        .getOrDefault(INTEGRATED_PROVIDER_ID, Map.of())
+                        .isEmpty();
+    }
+
+    /**
+     * Registers the generic provider compiled into the Native Image from its service declaration.
+     * Only the declaration of that image is consulted; the provider must have the integrated
+     * identity and scheme, must be unique, and no option may name another provider. Registration
+     * runs only {@code providerId()} and {@code scheme()}, so no foreign runtime is initialized.
+     */
+    static Loaded loadIntegrated(ProtosForeignProviderConfiguration configuration) {
+        if (!selectsIntegrated(configuration)) {
+            throw new IllegalArgumentException(
+                    "the integrated foreign provider is available only in the Native Image executable");
+        }
+        ClassLoader loader = ProtosForeignProviderPlugin.class.getClassLoader();
+        try {
+            List<ProtosForeignProviderDescriptor> descriptors = new ArrayList<>();
+            for (ProtosForeignProviderPlugin plugin :
+                    ServiceLoader.load(ProtosForeignProviderPlugin.class, loader)) {
+                if (!INTEGRATED_PROVIDER_ID.equals(plugin.providerId())
+                        || !INTEGRATED_PROVIDER_SCHEME.equals(plugin.scheme())) {
+                    throw new IllegalArgumentException(
+                            "unexpected foreign provider in the Native Image executable");
+                }
+                descriptors.add(
+                        ProtosForeignPluginProvider.trustedDescriptor(
+                                plugin,
+                                configuration.providerOptions().get(INTEGRATED_PROVIDER_ID)));
+            }
+            if (descriptors.size() != 1) {
+                throw new IllegalArgumentException(
+                        descriptors.isEmpty()
+                                ? "no foreign provider plugin is integrated in this executable"
+                                : "duplicate foreign provider id: " + INTEGRATED_PROVIDER_ID);
+            }
+            for (String id : configuration.providerOptions().keySet()) {
+                if (!INTEGRATED_PROVIDER_ID.equals(id)) {
+                    throw new IllegalArgumentException(
+                            "options supplied for an unknown foreign provider: " + id);
+                }
+            }
+            return new Loaded(List.copyOf(descriptors), null);
+        } catch (ServiceConfigurationError failure) {
+            throw new IllegalArgumentException("malformed foreign provider plugin", failure);
         }
     }
 

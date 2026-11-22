@@ -5,7 +5,7 @@
 
     <groupId>com.guillermomolina</groupId>
     <artifactId>protos</artifactId>
-    <version>0.4.191-SNAPSHOT</version>
+    <version>0.4.192-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <name>Protos</name>
@@ -361,12 +361,56 @@
         </profile>
         <profile>
             <id>native</id>
+            <properties>
+                <protos.native.classes>${project.build.directory}/native-classes</protos.native.classes>
+            </properties>
             <build>
                 <plugins>
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-antrun-plugin</artifactId>
                         <executions>
+                            <!--
+                                Native-only classes staging directory: the
+                                application classes and resources plus the
+                                generic FFM provider compiled from its own
+                                sources against the public SPI. target/classes
+                                and the portable JAR never contain the
+                                provider; only the Native Image consumes this
+                                directory.
+                            -->
+                            <execution>
+                                <id>stage-native-image-classes</id>
+                                <phase>prepare-package</phase>
+                                <goals>
+                                    <goal>run</goal>
+                                </goals>
+                                <configuration>
+                                    <target>
+                                        <delete dir="${protos.native.classes}" quiet="true"/>
+                                        <mkdir dir="${protos.native.classes}"/>
+                                        <copy todir="${protos.native.classes}">
+                                            <fileset dir="${project.build.outputDirectory}"/>
+                                        </copy>
+                                        <javac srcdir="${project.basedir}/providers/ffm/src/main/java"
+                                               destdir="${protos.native.classes}"
+                                               release="25"
+                                               encoding="UTF-8"
+                                               includeantruntime="false"
+                                               failonerror="true">
+                                            <classpath>
+                                                <pathelement location="${project.build.outputDirectory}"/>
+                                                <path refid="maven.compile.classpath"/>
+                                            </classpath>
+                                            <compilerarg value="-proc:none"/>
+                                        </javac>
+                                        <copy todir="${protos.native.classes}/META-INF/services">
+                                            <fileset dir="${project.basedir}/providers/ffm/src/main/resources/META-INF/services"
+                                                     includes="com.guillermomolina.protos.spi.foreign.ProtosForeignProviderPlugin"/>
+                                        </copy>
+                                    </target>
+                                </configuration>
+                            </execution>
                             <execution>
                                 <id>prepare-native-image-init-args</id>
                                 <phase>prepare-package</phase>
@@ -377,7 +421,7 @@
                                     <target>
                                         <exec executable="bash" failonerror="true">
                                             <arg value="${project.basedir}/scripts/native-generate-init-args.sh"/>
-                                            <arg value="${project.build.outputDirectory}"/>
+                                            <arg value="${protos.native.classes}"/>
                                             <arg value="${project.build.directory}/native-image-init.args"/>
                                         </exec>
                                     </target>
@@ -404,11 +448,13 @@
                             <imageName>protos</imageName>
                             <outputDirectory>${project.build.directory}/native</outputDirectory>
                             <!--
-                                Native Image consumes compiled application classes
-                                plus the resolved dependency graph directly. Keep
-                                the ordinary shaded checkout JAR intact.
+                                Native Image consumes the Native-only staged
+                                classes (application classes, resources and the
+                                generic FFM provider) plus the resolved
+                                dependency graph directly. Keep the ordinary
+                                shaded checkout JAR intact.
                             -->
-                            <classesDirectory>${project.build.outputDirectory}</classesDirectory>
+                            <classesDirectory>${protos.native.classes}</classesDirectory>
                             <!--
                                 Native guest execution keeps the optimizing
                                 Truffle runtime; implementation packages are

@@ -19,6 +19,7 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosRawForeignValue;
 import com.guillermomolina.protos.runtime.lookup.ProtosSlotLookupResult;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -104,6 +105,7 @@ final class ProtosForeignHandle implements ProtosRawForeignValue.Handle {
     }
 
     /** Pull iteration only where the provider declared it faithful; shape never implies it. */
+    @TruffleBoundary
     boolean projectsEach() {
         return descriptor.has(ProtosForeignAdmissionDescriptor.Capability.ITERABLE);
     }

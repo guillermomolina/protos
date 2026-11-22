@@ -752,6 +752,147 @@ if [[ -n "${native_private_libraries}" || -n "${native_needed_private}" ]]; then
     fs_failures=$((fs_failures + 1))
 fi
 
+# I170 / PLAT077-A: the generic FFM provider integrated in this executable.
+# Default-off: no provider without --allow-library; authorization alone loads
+# nothing; libraries load lazily when the application acquires ffi:<alias>.
+# Only OS-provided shared objects are loaded; nothing is bundled.
+ffm_failures=0
+ffm_cases=0
+ffm_cases_dir="${root}/protos/tests/foreign-provider"
+
+run_ffm_case() {
+    local name="$1"
+    local expected_status="$2"
+    local expected_output="$3"
+    shift 3
+    local case_out="${tmp_dir}/i170-${name}.out"
+    local case_err="${tmp_dir}/i170-${name}.err"
+    local case_ok=1
+
+    (cd "${tmp_dir}" && PROTOS_HOME="${root}" "${native_bin}" "$@") \
+        >"${case_out}" 2>"${case_err}"
+    local case_status=$?
+    ffm_cases=$((ffm_cases + 1))
+
+    if [[ "${expected_status}" == "nonzero" ]]; then
+        if [[ "${case_status}" -eq 0 ]] || grep -Fq 'ran' "${case_out}"; then
+            case_ok=0
+        fi
+    elif [[ "${case_status}" -ne "${expected_status}" ]]; then
+        case_ok=0
+    fi
+    if [[ "${case_ok}" -ne 1 ]]; then
+        :
+    elif [[ -n "${expected_output}" ]] && ! grep -Fq "${expected_output}" "${case_out}"; then
+        case_ok=0
+    elif grep -Eq 'Internal error|MissingForeignRegistrationError|UnsatisfiedLinkError' \
+            "${case_out}" "${case_err}"; then
+        case_ok=0
+    fi
+
+    echo "NATIVE_I170_${name}_STATUS=${case_status}"
+    if [[ "${case_ok}" -ne 1 ]]; then
+        cat "${case_out}" "${case_err}" >&2
+        echo "NATIVE_I170_CASE_FAILURE=${name}" >&2
+        ffm_failures=$((ffm_failures + 1))
+    fi
+}
+
+run_ffm_case ORDINARY 0 'i170-ordinary' -e 'print("i170-ordinary")'
+run_ffm_case AUTHORIZED_NO_IMPORT 0 'i170-no-import' \
+    --allow-library sqlite3=libsqlite3.so.0 -e 'print("i170-no-import")'
+run_ffm_case STD_FFI_NO_ACQUISITION 0 'i170-std-ffi' \
+    --allow-library sqlite3=/nonexistent/i170/libsqlite3.so.0 \
+    -e 'FFI: import("std:ffi")
+FFI.out(FFI.i32)
+print("i170-std-ffi")'
+run_ffm_case STD_SQLITE_NO_CONNECTION 0 'i170-std-sqlite' \
+    --allow-library sqlite3=/nonexistent/i170/libsqlite3.so.0 \
+    -e 'SQLite: import("std:sqlite")
+print("i170-std-sqlite")'
+run_ffm_case NO_AUTHORIZATION_NO_ROUTE 0 'i170-no-route' \
+    -e 'Error.handle(() => import("ffi:sqlite3"), (error) => { print("i170-no-route") })'
+run_ffm_case ALLOW_LIBRARY_BARE 2 '' --allow-library sqlite3 -e 'null'
+run_ffm_case ALLOW_LIBRARY_EMPTY_TARGET 2 '' --allow-library 'sqlite3=' -e 'null'
+run_ffm_case ALLOW_LIBRARY_INVALID_ALIAS 2 '' --allow-library '../x=libsqlite3.so.0' -e 'null'
+run_ffm_case ALLOW_LIBRARY_DUPLICATE 2 '' \
+    --allow-library sqlite3=libsqlite3.so.0 --allow-library sqlite3=libsqlite3.so.0 -e 'null'
+# A Native executable never loads a dynamic Java provider JAR.
+run_ffm_case PROVIDER_PATH_REFUSED 2 '' \
+    --foreign-provider-path "${tmp_dir}" -e 'print("ran")'
+run_ffm_case MISSING_LIBRARY 0 'library-unavailable' \
+    --allow-library missing=/nonexistent/i170/libnone.so \
+    -e 'error: null
+ForeignError.handle(() => import("ffi:missing"), (e) => { error = e })
+print(error.foreignCategory)'
+
+# SQLite: the OS-provided libsqlite3.so.0 only.
+ffm_sqlite_status="EXECUTED"
+if ! { ldconfig -p 2>/dev/null | grep -Fq 'libsqlite3.so.0'; }; then
+    ffm_sqlite_status="NOT_EXECUTED_NO_OS_LIBSQLITE3"
+    echo "NATIVE_I170_CASE_FAILURE=NO_OS_LIBSQLITE3" >&2
+    ffm_failures=$((ffm_failures + 1))
+else
+    ffm_db="${tmp_dir}/i170-durable.sqlite"
+    run_ffm_case SQLITE_MEMORY_QUERY 0 'LIB029-QUERY-PASS' \
+        --allow-library sqlite3=libsqlite3.so.0 "${ffm_cases_dir}/sqlite-query.protos"
+    run_ffm_case SQLITE_TEXT_BLOB 0 'LIB030-BIND-TEXT-BLOB-PASS' \
+        --allow-library sqlite3=libsqlite3.so.0 "${ffm_cases_dir}/sqlite-bind-text-blob.protos"
+    run_ffm_case SQLITE_LOCAL_TRANSACTIONS 0 'LIB031-DURABLE-PASS' \
+        --allow-library sqlite3=libsqlite3.so.0 "${ffm_cases_dir}/sqlite-durable.protos" \
+        local "${tmp_dir}/i170-local.sqlite"
+    run_ffm_case SQLITE_SEED 0 'LIB031-DURABLE-PASS' \
+        --allow-library sqlite3=libsqlite3.so.0 "${ffm_cases_dir}/sqlite-durable.protos" \
+        seed "${ffm_db}"
+    run_ffm_case SQLITE_REOPEN 0 'LIB031-DURABLE-PASS' \
+        --allow-library sqlite3=libsqlite3.so.0 "${ffm_cases_dir}/sqlite-durable.protos" \
+        verify "${ffm_db}"
+    run_ffm_case SQLITE_UNAUTHORIZED 0 'unauthorized-library' \
+        --allow-library other=libsqlite3.so.0 \
+        -e 'error: null
+ForeignError.handle(() => import("ffi:sqlite3"), (e) => { error = e })
+print(error.foreignCategory)'
+fi
+# Persistent SQLite files stay inside the temporary directory only.
+
+# Independent C fixtures, compiled into the temporary directory only.
+ffm_fixture_status="EXECUTED"
+ffm_cc="$(command -v cc || command -v gcc || command -v clang || true)"
+if [[ -z "${ffm_cc}" ]]; then
+    ffm_fixture_status="NOT_EXECUTED_NO_C_COMPILER"
+    echo "NATIVE_I170_CASE_FAILURE=NO_C_COMPILER" >&2
+    ffm_failures=$((ffm_failures + 1))
+elif ! "${ffm_cc}" -shared -fPIC -O2 -std=c11 -Wall -Werror \
+        -o "${tmp_dir}/libffi_test.so" "${ffm_cases_dir}/native/ffi_test.c" || \
+     ! "${ffm_cc}" -shared -fPIC -O2 -std=c11 -Wall -Werror \
+        -o "${tmp_dir}/libffi_second.so" "${ffm_cases_dir}/native/ffi_second.c"; then
+    ffm_fixture_status="FIXTURE_COMPILE_FAILED"
+    echo "NATIVE_I170_CASE_FAILURE=FIXTURE_COMPILE" >&2
+    ffm_failures=$((ffm_failures + 1))
+else
+    run_ffm_case TWO_LIBRARIES 0 'FFM-LIBRARY-ALLOWLIST-PASS' \
+        --allow-library "first=${tmp_dir}/libffi_test.so" \
+        --allow-library "second=${tmp_dir}/libffi_second.so" \
+        "${ffm_cases_dir}/ffm-library-allowlist.protos" "${tmp_dir}/i170-second-marker.txt"
+    run_ffm_case MISSING_SYMBOL 0 'symbol-not-found' \
+        --allow-library "first=${tmp_dir}/libffi_test.so" \
+        -e 'FFI: import("std:ffi")
+first: import("ffi:first")
+error: null
+ForeignError.handle(() => FFI.bind(first, "ffi_test_no_such_symbol", FFI.i32, Array()), (e) => { error = e })
+print(error.foreignCategory)'
+    # D(D,D,D)-shaped declaration of a void(void) counter: exact but not
+    # registered in this image, so it is refused before linking or entering C.
+    run_ffm_case UNSUPPORTED_SIGNATURE 0 'i170-unsupported-refused touched=0' \
+        --allow-library "first=${tmp_dir}/libffi_test.so" \
+        -e 'FFI: import("std:ffi")
+first: import("ffi:first")
+refused: false
+Error.handle(() => FFI.bind(first, "ffi_test_touch", FFI.f64, Array(FFI.f64, FFI.f64, FFI.f64)), (e) => { refused = true })
+count: FFI.bind(first, "ffi_test_touch_count", FFI.i32, Array())
+(refused && (count() == 0)).ifTrue(() => { print("i170-unsupported-refused touched=0") })'
+fi
+
 # Truffle's fallback-runtime warning must be absent: guest JIT is required.
 fallback_markers="$(
     grep -Eic \
@@ -1003,7 +1144,11 @@ elif [[ "${native_hmac_status}" -ne 0 ]] || \
 elif [[ "${native_caller_recovery_failures}" -ne 0 ]]; then
     echo "NATIVE_I115_CALLER_RECOVERY=FAIL" >&2
     false
+elif [[ "${ffm_failures}" -ne 0 ]]; then
+    echo "NATIVE_I170_FFM=FAIL sqlite=${ffm_sqlite_status} fixtures=${ffm_fixture_status}" >&2
+    false
 else
+    echo "NATIVE_I170_FFM=PASS cases=${ffm_cases}"
     echo "NATIVE_REGEX=PASS"
     echo "NATIVE_HMAC_SHA256=PASS"
     echo "NATIVE_I115_CALLER_RECOVERY=PASS"

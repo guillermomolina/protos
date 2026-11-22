@@ -46,6 +46,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
 import java.util.stream.Stream;
@@ -149,6 +150,58 @@ public class ProtosExternalForeignProviderTest {
                         ProtosForeignProviderConfiguration.trustedInProcess(List.of()))) {
             assertSame(ProtosForeignProviderRegistry.EMPTY, host.foreignProvidersForRuntime());
             assertNull(host.foreignProviderLoaderForTesting());
+        }
+    }
+
+    /**
+     * I170: on the JVM, host-authorized {@code protos-ffm} library options without a provider
+     * path never register the generic provider integrated only in the Native Image executable.
+     */
+    @Test
+    void hostLibraryOptionsAloneGrantNoImplicitJvmProvider() throws Exception {
+        ProtosForeignProviderConfiguration configuration =
+                ProtosForeignProviderConfiguration.trustedInProcess(List.of())
+                        .withProviderOptions(
+                                "protos-ffm", Map.of("library.sqlite3", "libsqlite3.so.0"));
+        assertTrue(!ProtosExternalProviderPluginLoader.selectsIntegrated(configuration));
+        org.junit.jupiter.api.Assertions.assertThrows(
+                IllegalArgumentException.class,
+                () -> ProtosExternalProviderPluginLoader.loadIntegrated(configuration));
+        try (Fixture fixture =
+                new Fixture(ProtosPolyglotRuntimeHost.openWithForeignProviders(configuration))) {
+            assertSame(
+                    ProtosForeignProviderRegistry.EMPTY, fixture.host.foreignProvidersForRuntime());
+            assertNull(fixture.host.foreignProviderLoaderForTesting());
+            assertEquals(
+                    ProtosExecutionOutcome.State.FAILED,
+                    fixture.run("import(\"ffi:sqlite3\")").state());
+        }
+    }
+
+    /**
+     * I170: the generic FFM provider is staged only into the Native Image classes; the ordinary
+     * Maven output (and so the portable JAR) neither contains it nor declares it as a service.
+     */
+    @Test
+    void portableClassPathCarriesNoIntegratedProvider() throws Exception {
+        ClassLoader loader = ProtosExternalForeignProviderTest.class.getClassLoader();
+        org.junit.jupiter.api.Assertions.assertThrows(
+                ClassNotFoundException.class,
+                () -> Class.forName("com.guillermomolina.protos.ffm.FfmForeignProvider", false,
+                        loader));
+        assertNull(loader.getResource("com/guillermomolina/protos/ffm/FfmBinding.class"));
+        java.util.Enumeration<java.net.URL> declarations =
+                loader.getResources(
+                        "META-INF/services/"
+                                + "com.guillermomolina.protos.spi.foreign.ProtosForeignProviderPlugin");
+        while (declarations.hasMoreElements()) {
+            java.net.URL declaration = declarations.nextElement();
+            try (InputStream content = declaration.openStream()) {
+                assertTrue(
+                        !new String(content.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)
+                                .contains("com.guillermomolina.protos.ffm."),
+                        declaration::toString);
+            }
         }
     }
 
@@ -400,7 +453,9 @@ public class ProtosExternalForeignProviderTest {
         List<String> arguments =
                 new ArrayList<>(
                         List.of("--release", "25", "-proc:none", "-classpath",
-                                publicClassPath(root), "-d", ffmClasses.toString()));
+                                publicClassPath(root) + java.io.File.pathSeparator
+                                        + imageInfoJar(),
+                                "-d", ffmClasses.toString()));
         try (Stream<Path> sources = Files.walk(sourceRoot.resolve("java"))) {
             sources.filter(path -> path.toString().endsWith(".java"))
                     .map(Path::toString)
@@ -741,6 +796,32 @@ public class ProtosExternalForeignProviderTest {
     /** Only the core public SPI classes: neither Protos internals nor Polyglot are reachable. */
     private static String publicClassPath() throws Exception {
         return publicClassPath(work);
+    }
+
+    /**
+     * I170: the exact Native Image SDK API JAR on the test runtime's class or module path that
+     * contains {@code org/graalvm/nativeimage/ImageInfo.class}. Only the generic FFM provider
+     * compiles against it; every other external provider stays SPI-only. The class itself may be
+     * served by the JDK runtime image, so the dependency JAR is located by content.
+     */
+    static String imageInfoJar() throws Exception {
+        List<String> found = new ArrayList<>();
+        for (String property : List.of("surefire.test.class.path", "java.class.path", "jdk.module.path")) {
+            String value = System.getProperty(property, "");
+            for (String entry : value.split(java.io.File.pathSeparator)) {
+                Path candidate = Path.of(entry.isEmpty() ? "." : entry);
+                if (entry.endsWith(".jar") && Files.isRegularFile(candidate)) {
+                    try (java.util.jar.JarFile jar = new java.util.jar.JarFile(candidate.toFile())) {
+                        if (jar.getJarEntry("org/graalvm/nativeimage/ImageInfo.class") != null
+                                && !found.contains(candidate.toString())) {
+                            found.add(candidate.toString());
+                        }
+                    }
+                }
+            }
+        }
+        assertEquals(1, found.size(), () -> "Native Image SDK API JARs: " + found);
+        return found.get(0);
     }
 
     /** SPI-only compilation class path materialized under {@code root} (shared with I144). */

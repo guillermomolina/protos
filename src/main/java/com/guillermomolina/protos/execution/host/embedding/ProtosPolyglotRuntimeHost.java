@@ -169,7 +169,9 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
      * Opens a normal host whose foreign providers are exactly the external plugins discovered on
      * the explicitly configured provider paths (I085-A), fixed for the life of the host. An empty
      * configuration behaves exactly like {@link #open()}: no discovery and no class loader.
-     * Plugins are registered without initializing any foreign runtime or session.
+     * Plugins are registered without initializing any foreign runtime or session. In a Native
+     * Image, host-authorized {@code protos-ffm} libraries without a path register the generic
+     * provider integrated in the image; on the JVM such options alone register nothing.
      *
      * @throws IllegalArgumentException when a path, plugin, identity, or scheme is invalid or
      *     duplicated
@@ -190,11 +192,10 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
     public static ProtosPolyglotRuntimeHost openWithForeignProviders(
             ProtosForeignProviderConfiguration configuration, boolean inspectionAuthorized) {
         Objects.requireNonNull(configuration, "configuration");
-        if (configuration.providerPaths().isEmpty()) {
+        ProtosExternalProviderPluginLoader.Loaded loaded = loadProviders(configuration);
+        if (loaded == null) {
             return inspectionAuthorized ? openWithInspection() : open();
         }
-        ProtosExternalProviderPluginLoader.Loaded loaded =
-                ProtosExternalProviderPluginLoader.load(configuration);
         try {
             return new ProtosPolyglotRuntimeHost(
                     Engine.create(ProtosLanguage.ID),
@@ -206,6 +207,22 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
             closeAfterFailedOpen(null, loaded.classLoader(), failure);
             throw failure;
         }
+    }
+
+    /**
+     * The one provider registration policy shared by normal and debug hosts: explicit provider
+     * paths load external plugins; a Native Image with host-authorized libraries and no path
+     * registers the integrated generic provider; anything else registers no provider.
+     */
+    private static ProtosExternalProviderPluginLoader.Loaded loadProviders(
+            ProtosForeignProviderConfiguration configuration) {
+        if (!configuration.providerPaths().isEmpty()) {
+            return ProtosExternalProviderPluginLoader.load(configuration);
+        }
+        if (ProtosExternalProviderPluginLoader.selectsIntegrated(configuration)) {
+            return ProtosExternalProviderPluginLoader.loadIntegrated(configuration);
+        }
+        return null;
     }
 
     /**
@@ -272,10 +289,7 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
             OutputStream diagnostics, ProtosForeignProviderConfiguration configuration) {
         Objects.requireNonNull(diagnostics, "diagnostics");
         Objects.requireNonNull(configuration, "configuration");
-        ProtosExternalProviderPluginLoader.Loaded loaded =
-                configuration.providerPaths().isEmpty()
-                        ? null
-                        : ProtosExternalProviderPluginLoader.load(configuration);
+        ProtosExternalProviderPluginLoader.Loaded loaded = loadProviders(configuration);
         URLClassLoader foreignProviderLoader = loaded == null ? null : loaded.classLoader();
         Engine engine = null;
         try {

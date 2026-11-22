@@ -49,6 +49,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Pattern;
+import org.graalvm.nativeimage.ImageInfo;
 import org.jline.reader.*;
 import org.jline.reader.impl.history.DefaultHistory;
 import org.jline.terminal.*;
@@ -2123,13 +2124,13 @@ public final class ProtosCli {
         ProtosPolyglotRuntimeHost runtimeHost;
         if (!inspectionAuthorized) {
             runtimeHost =
-                    foreignProviderPaths.isEmpty()
+                    foreignProviderPaths.isEmpty() && allowedLibraries.isEmpty()
                             ? ProtosPolyglotRuntimeHost.open()
                             : ProtosPolyglotRuntimeHost.openWithForeignProviders(
                                     foreignProviderConfiguration());
         } else {
             runtimeHost =
-                    foreignProviderPaths.isEmpty()
+                    foreignProviderPaths.isEmpty() && allowedLibraries.isEmpty()
                             ? ProtosPolyglotRuntimeHost.openWithInspection()
                             : ProtosPolyglotRuntimeHost.openWithForeignProviders(
                                     foreignProviderConfiguration(), true);
@@ -2167,6 +2168,9 @@ public final class ProtosCli {
             List<Path> providerPaths, String[] args, int optionIndex) {
         if (optionIndex + 1 >= args.length) {
             return "--foreign-provider-path requires a path list";
+        }
+        if (ImageInfo.inImageRuntimeCode()) {
+            return "--foreign-provider-path is not available in the Native executable";
         }
         for (String entry : args[optionIndex + 1].split(File.pathSeparator, -1)) {
             Path path;

@@ -183,7 +183,12 @@ final class FfmValueOperations implements ProtosForeignValueOperations {
             case OWNED ->
                     isPlainOpaque(v[0], library)
                             && FfmTypes.isIdentifier(v[1])
-                            && (v[2] == FfmTypes.Scalar.VOID || v[2] == FfmTypes.Scalar.I32);
+                            && (v[2] == FfmTypes.Scalar.VOID || v[2] == FfmTypes.Scalar.I32)
+                            && new FfmBinding.Signature(
+                                            (FfmTypes.Type) v[2],
+                                            List.of((FfmTypes.Type) v[0]),
+                                            false)
+                                    .isLinkable();
             case OUT ->
                     v[0] instanceof FfmTypes.Type type
                             && FfmTypes.isOutTarget(type)
@@ -201,7 +206,8 @@ final class FfmValueOperations implements ProtosForeignValueOperations {
             case BIND ->
                     FfmTypes.isIdentifier(v[0])
                             && v[1] instanceof FfmBinding.Signature signature
-                            && signature.belongsTo(library);
+                            && signature.belongsTo(library)
+                            && signature.isLinkable();
             case RELEASE ->
                     v[0] instanceof FfmHandles.Resource resource
                             && resource.session() == session
