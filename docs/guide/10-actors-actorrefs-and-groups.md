@@ -10,6 +10,15 @@
 > `spec/concurrency/PARALLEL_EXECUTION.md`, and
 > `spec/semantics/ERRORS.md`
 
+## Send a request to independent state
+
+Follow the [runnable learning path](#runnable-learning-path): inspect the
+current Actor, spawn a module-backed Actor and request a result, then observe
+its lifecycle. Add Groups after you understand requests to one Actor. The
+sections below explain what crosses the message boundary and who owns each state.
+
+## Understand the model
+
 Actors are Protos's persistent isolation boundary for mutable application state.
 
 The essential mental model is:
@@ -1096,24 +1105,6 @@ Actor Groups:
 3. [`11-actor-groups/03-groupref-identity.protos`](../../protos/tutorials/11-actor-groups/03-groupref-identity.protos)
    — independent Group/GroupRef identities.
 
-The current language-maturity corpus also retains Actor/Group conformance
-coverage under [`LM005`](https://github.com/guillermomolina/protos-project-docs/blob/main/docs/project/registries/IMPLEMENTATION_STATUS.md#lm005--concurrent-language-maturity).
-
-## Representative implementation evidence
-
-The current implementation ledger records `I011 — Actors` CLOSED through its
-complete incremental runtime/conformance sequence:
-
-- [`I011 — Actors`](https://github.com/guillermomolina/protos-project-docs/blob/main/docs/project/registries/IMPLEMENTATION_STATUS.md#i011--actors).
-
-That closure covers Actor incarnation identity, ActorRef transfer, module-backed
-bootstrap, value transfer, bounded mailboxes, send/request, lifecycle, GroupRef
-routing, local/cross-Process/remote uncertainty, and the final
-`Actor.group(...)` acquisition surface.
-
-This implementation record is evidence of what the reference runtime currently
-supports. It does not override the normative specifications.
-
 ## Practical rules to remember
 
 1. An Actor is a persistent isolated mutable state/execution/lifecycle domain;
@@ -1198,3 +1189,5 @@ For exact behavior, consult:
 Those documents define Protos. This chapter supplies the programmer-facing model
 for choosing Actor and Group capabilities without importing a shared-memory,
 implicit-supervision, or transparent-retry model into the language.
+
+[Back to the guide](README.md)

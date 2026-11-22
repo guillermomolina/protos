@@ -244,9 +244,8 @@ The current Test Tool reports phase progress independently from guest case
 streams. Phases use the suite-graph labels described in [First use](#first-use),
 and the progress layer can report failed cases plus phase/invocation summaries.
 
-Detailed failure classes, final diagnostics and public exit-status meaning are
-covered by the DOC005 results/diagnostics slice. The important fundamental rule
-here is simpler:
+See [Results and exit status](#results-and-exit-status) for failure classes
+and diagnostics. When choosing parallelism, keep this rule in mind:
 
 > parallel execution may change physical timing, but it must not redefine the
 > plan's logical ordering or make guest stream interleaving the reporting model.

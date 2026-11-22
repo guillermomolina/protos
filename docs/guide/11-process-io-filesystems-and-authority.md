@@ -10,6 +10,17 @@
 > `spec/concurrency/ACTORS.md`, `spec/concurrency/PARALLEL_EXECUTION.md`,
 > `spec/semantics/VALUES_AND_COLLECTIONS.md`, and `spec/semantics/ERRORS.md`
 
+## Write output and access a file
+
+Begin with the [system-resource lessons](../../protos/tutorials/12-system-resources/).
+Run the process-output lesson first; for the filesystem round trip, grant an
+existing directory explicitly as described in the
+[tutorial overview](../../protos/tutorials/README.md). Use
+[the launcher table](#what-each-launcher-grants) to check which capabilities
+your execution host supplies.
+
+## Understand the model
+
 Protos I/O is organized around explicit capabilities rather than a global
 operating-system namespace.
 
@@ -1312,16 +1323,14 @@ The existing learning material includes:
 
 which demonstrates the authority-free structural Path model.
 
-The repository does not currently have a dedicated progressive `12-io` tutorial
-series. This chapter therefore uses the already-published normative/current
-runtime surfaces and links real Protos tool consumers without creating executable
-material inside a documentation-only slice.
+Continue with the [system-resource lessons](../../protos/tutorials/12-system-resources/).
+Start with `01-process-stream-output.protos` for CLI output. For
+`02-filesystem-text-roundtrip.protos`, follow the explicit Filesystem grant
+instructions in the [tutorial overview](../../protos/tutorials/README.md).
 
-## Current implementation boundary: D046 entries, D171 host-provisioned capture
+## List a directory and use a host-provisioned captured tree
 
-D046 introduced general directory observation and a captured-tree capability,
-implemented by `I024`. D171 later removed the public `captureTree` selector
-(implemented by `I064`). The general guest surface is now:
+Use `entries` to observe a directory through a Filesystem capability:
 
 ```text
 filesystem.entries(path) -> Future<Array>
@@ -1339,37 +1348,6 @@ A captured Filesystem remains an ordinary read-only Filesystem capability with n
 standard `close()` obligation. Files opened from it retain their normal File
 lifecycle. Hosts/backends that cannot provide `entries` still fail it through the
 ordinary Future/`IOError` boundary rather than weakening confinement.
-
-## Current implementation evidence
-
-The reference implementation ledger records the core surfaces used by this
-chapter as closed:
-
-- `I013 — Standard Path`;
-- `I014 — Standard Byte I/O`;
-- `I015 — Encoding / Text I/O`;
-- `I016 — Filesystem / File`;
-- `I017 — Process I/O / bootstrap`;
-- `I021 — Filesystem namespace replacement/removal`.
-
-The durable implementation and closure record is:
-
-- [`Implementation Status`](https://github.com/guillermomolina/protos-project-docs/blob/main/docs/project/registries/IMPLEMENTATION_STATUS.md).
-
-The implementation itself reflects the capability model:
-
-- [`ProtosStandardProcessProtocol.java`](../../src/main/java/com/guillermomolina/protos/execution/protocols/io/ProtosStandardProcessProtocol.java)
-  exposes exactly the eight Process bootstrap accessors and performs no host
-  discovery;
-- [`ProtosStandardFilesystemProtocol.java`](../../src/main/java/com/guillermomolina/protos/execution/protocols/io/ProtosStandardFilesystemProtocol.java)
-  constructs explicitly provisioned Filesystem capabilities with current
-  `open`/`replace`/`remove`/`entries`;
-- [`ProtosStandardFileProtocol.java`](../../src/main/java/com/guillermomolina/protos/execution/protocols/io/ProtosStandardFileProtocol.java)
-  materializes only the File operations promised by its acquired capability
-  descriptor.
-
-These files are reference implementation evidence. The specification remains the
-authority.
 
 ## What each launcher grants
 
@@ -1951,3 +1929,5 @@ retire only the affected grant. Service READY preserves it. There is no guest
 `close()`. Invalid admission signals `InvalidIOArgument`, retirement signals
 `IOLifecycleError`, and provider failure signals `IOError` synchronously.
 See [`CLOCK.md`](../../spec/io/CLOCK.md).
+
+[Back to the guide](README.md)

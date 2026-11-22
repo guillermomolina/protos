@@ -6,6 +6,16 @@
 > `spec/semantics/VALUES_AND_COLLECTIONS.md`,
 > `spec/semantics/CALLABLES.md`, and `spec/PROTOS_GRAMMAR.md`
 
+## Choose a branch and repeat work
+
+Begin with the [conditional lesson](../../protos/tutorials/04-control-flow/01-conditionals.protos),
+then run the [for lesson](../../protos/tutorials/04-control-flow/04-contextual-for.protos).
+Change an input so a different branch runs, then change a numeric range and
+its step. For everyday source, start with `if`, `while`, and `for`; the
+protocol sections below explain the messages behind those forms.
+
+## Understand the model
+
 The previous chapter showed that Protos has one executable value kind, the
 Closure, and that method-style behavior is still ordinary Closure invocation.
 Control flow follows the same design.
@@ -1039,57 +1049,18 @@ created.
 11. Keep task/Future ownership separate from the loop's last-body-result
     rule.
 
-## Run the executable conformance examples
+## Practice decisions and loops
 
-The current conformance corpus contains direct executable evidence for both
-the D050 Boolean completion and the standard loop behavior discussed here.
+Run the lessons in order, changing one input each time:
 
-Representative Boolean cases include:
+1. [Choose a branch](../../protos/tutorials/04-control-flow/01-conditionals.protos).
+2. [Repeat while a condition holds](../../protos/tutorials/04-control-flow/02-pre-test-loops.protos).
+3. [Run a body before testing its condition](../../protos/tutorials/04-control-flow/03-post-test-loops.protos).
+4. [Traverse collections and numeric ranges](../../protos/tutorials/04-control-flow/04-contextual-for.protos).
 
-- [`../../protos/tests/conformance/boolean/negation-and-receiver.protos`](../../protos/tests/conformance/boolean/negation-and-receiver.protos)
-  demonstrates `!` through the mandatory `not()` lowering (`not operator true` case);
-- [`../../protos/tests/conformance/boolean/if-true-if-false.protos`](../../protos/tests/conformance/boolean/if-true-if-false.protos)
-  demonstrates true-branch selection and exact result propagation (`iftrueiffalse true selected`
-  case), tolerance of an unselected non-invokable value (`iftrueiffalse unselected noninvokable`
-  case), and ordinary eager evaluation of callback-producing argument expressions
-  (`iftrueiffalse argument expressions eager` case);
-- [`../../protos/tests/conformance/boolean/receiver-preserving-if-else.protos`](../../protos/tests/conformance/boolean/receiver-preserving-if-else.protos)
-  demonstrates the contextual `if` / `else` expression: exact selected results
-  and identities, `null` for an unselected single arm, one eager condition
-  evaluation, ordinary custom `ifTrue` / `ifTrueIfFalse` dispatch, and that
-  Core no longer publishes standard `Object.if` / `Object.else`;
-- [`../../protos/tests/conformance/control/control-spelling-is-ordinary.protos`](../../protos/tests/conformance/control/control-spelling-is-ordinary.protos)
-  demonstrates that grouped `(if)(...)` and member `.if(...)` spellings remain
-  ordinary calls while the exact bare form is contextual.
-
-Representative loop cases include:
-
-- [`../../protos/tests/conformance/control/while-basic-and-validation.protos`](../../protos/tests/conformance/control/while-basic-and-validation.protos)
-  demonstrates repeated pre-test iteration, zero iterations and canonical
-  `null` completion, and that a Future condition result is not implicitly
-  awaited;
-- [`../../protos/tests/conformance/control/while-future-ownership.protos`](../../protos/tests/conformance/control/while-future-ownership.protos)
-  demonstrates that the last normal body value is the `whileTrue` result;
-- [`../../protos/tests/conformance/control/while-loop-results.protos`](../../protos/tests/conformance/control/while-loop-results.protos)
-  demonstrates the standard `whileTrue` results for zero, one and many
-  iterations, Future results and adoption, and terminal-condition transfers;
-- [`../../protos/tests/conformance/control/while-binding-and-transfer.protos`](../../protos/tests/conformance/control/while-binding-and-transfer.protos)
-  demonstrates non-local return across a reached body;
-- [`../../protos/tests/conformance/control/while-suspension-and-cancellation.protos`](../../protos/tests/conformance/control/while-suspension-and-cancellation.protos)
-  demonstrates repeated condition/body suspension without duplicated completed
-  effects;
-- [`../../protos/tests/conformance/control/loop-standard-polarities.protos`](../../protos/tests/conformance/control/loop-standard-polarities.protos)
-  exercises all four standard loop selectors, receiver roles, exit polarities,
-  callback order, exact body results, and strict decisions;
-- [`../../protos/tests/conformance/control/while-contextual-syntax.protos`](../../protos/tests/conformance/control/while-contextual-syntax.protos)
-  checks the contextual pre-test spelling against `whileTrue`;
-- [`../../protos/tests/conformance/control/until-contextual-syntax.protos`](../../protos/tests/conformance/control/until-contextual-syntax.protos)
-  checks the suffix post-test spelling against `untilTrue`;
-- [`../../protos/tests/conformance/control/for-contextual-syntax.protos`](../../protos/tests/conformance/control/for-contextual-syntax.protos)
-  checks the generic and numeric `for` spellings against `each` and
-  `eachStep`.
-
-These files are conformance evidence, not additional normative authority.
+For a complete task, adapt the
+[stride-sampling example](../../protos/examples/algorithms/stride-sampling-summary.protos)
+to a different range and step.
 
 ## Normative references
 
@@ -1115,3 +1086,5 @@ For exact behavior, consult:
 
 Those documents define the language. This chapter explains how their rules fit
 together while writing control flow in Protos.
+
+[Back to the guide](README.md)

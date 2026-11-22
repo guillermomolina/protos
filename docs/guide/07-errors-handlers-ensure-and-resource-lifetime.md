@@ -6,6 +6,15 @@
 > `spec/semantics/EXECUTION_AND_CONTROL.md`,
 > `spec/semantics/CALLABLES.md`, and `spec/PROTOS_GRAMMAR.md`
 
+## Handle a failure and release a resource
+
+Start with the `handle` examples below to separate a failed operation from
+its recovery code. When an operation acquires a resource, use the
+[acquisition and cleanup pattern](#a-practical-acquisitioncleanup-pattern).
+Read the cleanup precedence sections before adding recovery that can itself fail.
+
+## Understand the model
+
 Protos treats failure and cleanup as ordinary object/protocol behavior while
 still giving their control effects precise semantics.
 
@@ -784,24 +793,6 @@ The package tool also uses dynamic handlers at ordinary language level:
 
 These are implementation/library examples, not new Error semantics.
 
-## Representative executable conformance
-
-The retained conformance suite includes focused evidence for handler and cleanup
-behavior:
-
-- [`../../protos/tests/conformance/error/handle.protos`](../../protos/tests/conformance/error/handle.protos)
-  covers normal protected completion, demonstrates that signaling does not
-  resume the body, and covers selected-handler deactivation;
-- [`../../protos/tests/conformance/control/ensure-normal-and-validation.protos`](../../protos/tests/conformance/control/ensure-normal-and-validation.protos)
-  covers body-result preservation;
-- [`../../protos/tests/conformance/control/ensure-control-transfer.protos`](../../protos/tests/conformance/control/ensure-control-transfer.protos)
-  covers nested LIFO cleanup;
-- [`../../protos/tests/conformance/control/ensure-cancellation-structure.protos`](../../protos/tests/conformance/control/ensure-cancellation-structure.protos)
-  covers cleanup during cancellation unwind.
-
-Executable tests demonstrate current behavior. The specification remains the
-normative authority.
-
 ## Practical rules to remember
 
 1. Errors are ordinary objects rooted by delegation at `Error`.
@@ -848,3 +839,5 @@ For exact behavior, consult:
 
 Those documents define the language. This chapter supplies the programmer-facing
 model for failure handling and deterministic cleanup.
+
+[Back to the guide](README.md)

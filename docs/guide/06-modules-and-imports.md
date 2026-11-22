@@ -5,6 +5,15 @@
 > **Normative owners:** `spec/semantics/MODULES.md`,
 > `spec/semantics/EXECUTION_AND_CONTROL.md`, and `spec/PROTOS_GRAMMAR.md`
 
+## Split a program into files
+
+Begin with the two-file `prices.protos` example below, then read
+[passing CLI output explicitly](#passing-cli-output-to-an-imported-source)
+before moving a printing function into an imported file. Continue with MODULE
+public objects and packages once you need an explicit public interface.
+
+## Understand the model
+
 The previous chapters showed that Protos tries to reuse the same mechanisms
 rather than creating parallel language subsystems. Modules follow that rule too.
 
@@ -761,12 +770,6 @@ available today.
   direct internal SOURCE imports for planning; this is not a public package
   install/lock command.
 
-The [runtime tests](../../src/test/java/com/guillermomolina/protos/execution/modules/ProtosModuleRuntimeTest.java)
-cover Actor caching, recursive imports, failed initialization and retry.
-The [DOC020 learning integration tests](../../src/test/java/com/guillermomolina/protos/cli/ProtosDoc020LearningMaterialsTest.java)
-exercise package entries and selected expected failures. The normative
-specification remains authoritative.
-
 ## Normative references
 
 For exact behavior, consult:
@@ -789,3 +792,5 @@ For exact behavior, consult:
 Those documents define the language. This chapter supplies the programmer-facing
 model for using modules without importing assumptions from another language's
 module system.
+
+[Back to the guide](README.md)

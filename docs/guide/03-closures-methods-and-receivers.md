@@ -5,6 +5,16 @@
 > **Normative owners:** `spec/semantics/CALLABLES.md`,
 > `spec/semantics/EXECUTION_AND_CONTROL.md`, and `spec/PROTOS_GRAMMAR.md`
 
+## Write a function and keep state
+
+Run the [function lesson](../../protos/tutorials/03-closures/01-closure.protos),
+then change its arguments. Continue with
+[captured state](../../protos/tutorials/03-closures/02-captured-state.protos)
+to keep a counter between calls. Use the argument sections below for defaults
+and named arguments, and the method sections when the function belongs to an object.
+
+## Understand the model
+
 The previous chapters separated lexical bindings from receiver state and then
 introduced delegation as ordinary object lookup. Closures are where those two
 parts of the language meet.
@@ -928,3 +938,5 @@ For exact behavior, consult:
 
 Those documents define the language. This chapter explains how their callable
 rules fit together while writing Protos programs.
+
+[Back to the guide](README.md)

@@ -95,9 +95,8 @@ The exact rules are in the normative owners listed at the top of this page.
 
 ## Availability at this revision
 
-Verified scope: the published baseline is `0.3.461-SNAPSHOT` with
-specification `0.1.502`; the DOC023 changes add learning material, not another
-implementation of `std:ffi`.
+Choose the portable JVM CLI when you need to load an external provider.
+Native Image distributions do not support dynamic provider loading.
 
 | Surface | State |
 |---|---|
@@ -113,7 +112,6 @@ implementation of `std:ffi`.
 | Any provider shipped inside the Protos distribution | None. The `java:`, `inventado:`, and `oslib:` providers are test fixtures |
 | Optional external FFM provider `ffi:` ([guide](ffm-provider.md)) | Implemented in `providers/ffm` (I144) as a separately built JAR for the portable JVM CLI on Linux x86-64; not part of the distribution |
 | Public C declaration MODULE `std:ffi` ([guide](../library/ffi.md)) | Implemented (LIB028) as Protos Standard Library source over the external provider |
-| Public `std:ffi` learning path (DOC023) | New documentation and examples for the already implemented LIB028 API; no new implementation |
 
 The practical consequence: today, the supported way for a Protos program to
 use a foreign provider is to build a provider JAR against the public SPI and

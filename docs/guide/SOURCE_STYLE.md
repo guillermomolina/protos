@@ -87,16 +87,6 @@ that region. New source should model the idiomatic language that Protos expects
 programmers to write while keeping the canonical protocol model visible where it
 is actually relevant.
 
-## Repository conformance tracking
-
-Repository-wide migration to this approved style was completed by
-[`AUD003 — Protos source-style conformance audit`](https://github.com/guillermomolina/protos-project-docs/blob/main/docs/project/work/AUD003/AUD003_PROTOS_SOURCE_STYLE_CONFORMANCE_AUDIT.md).
-
-AUD003 records bounded migrations, known debt, and deliberate canonical/protocol
-exceptions. It does not strengthen this policy into a language-wide ban on
-canonical forms and does not authorize syntactic equivalences that the
-specification has not defined.
-
 ## Repository prevention gate
 
 Repository publication validation runs `scripts/source_style_guard.py` before
@@ -113,9 +103,8 @@ already confirmed by AUD003 it rejects an *increase* in explicit canonical
 spellings: indexed `at`/`atPut`, expanded lazy Boolean `and`/`or`, parameterless
 `not`, and parameterless `negated`.
 
-Existing occurrences at the publication base are grandfathered, not newly
-approved. Keeping or reducing their count is allowed, which lets bounded audits
-such as AUD003-E continue removing historical debt.
+Existing occurrences at the publication base may remain or decrease. Their
+presence does not authorize new canonical spellings in ordinary examples.
 
 A genuinely deliberate new canonical occurrence requires an exact entry in
 `scripts/source_style_exceptions.json`: one guarded path, one family, the exact

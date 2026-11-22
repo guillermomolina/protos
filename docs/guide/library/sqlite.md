@@ -1,11 +1,12 @@
 # SQLite: `std:sqlite`
 
-This guide describes the Protos-first library: LIB029 connections and copied
-rows, LIB030 TEXT/BLOB input, complete single-statement admission and Statement
-reuse, and LIB031 file-backed connections and manual transactions. Core and the
-public FFI descriptor contract are unchanged. The additional exact public
-contract is prepared for ratification in [SQLITE.md](../../../spec/semantics/SQLITE.md);
-this implementation does not declare D256 closed or claim validation.
+Use `std:sqlite` to open a database, prepare a query, bind values, and read
+copied rows without managing native pointers. This guide also covers statement
+reuse, file-backed connections, and manual transactions.
+
+The additional public contract in [SQLITE.md](../../../spec/semantics/SQLITE.md)
+is pending owner ratification. Its presence does not make it an approved
+normative specification.
 
 ```protos
 SQLite: import("std:sqlite")
@@ -23,7 +24,7 @@ See the assertion-validated [table/insert/query example](../../../protos/example
 and [tutorial](../../../protos/tutorials/12-system-resources/05-sqlite-protos-first.protos).
 
 This page is the practical learning path for application developers. The
-DOC024 programs continue it:
+following programs continue it:
 
 - [`06-sqlite-query-lifecycle.protos`](../../../protos/tutorials/12-system-resources/06-sqlite-query-lifecycle.protos):
   table creation, numeric inserts, ordered traversal, error cases and close
@@ -35,7 +36,7 @@ DOC024 programs continue it:
 
 To declare your own C functions use the public [`std:ffi` guide](ffi.md); for
 backend implementation and native lifetime details see the advanced
-[I144 FFM provider guide](../interop/ffm-provider.md).
+[FFM provider guide](../interop/ffm-provider.md).
 
 ## Getting started
 
@@ -70,7 +71,7 @@ backend implementation and native lifetime details see the advanced
        protos/examples/ffi/sqlite-library.protos
    ```
 
-5. Run the DOC024 tutorial and cookbook programs:
+5. Run the tutorial and cookbook programs:
 
    ```sh
    bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar --allow-library sqlite3=libsqlite3.so.0 \
@@ -539,74 +540,6 @@ occurrences with safe `operation` and `code` fields. No native error text, host
 paths, native address or Java exception is included. Failed acquisition cleans up
 any non-null owned output before signaling the primary error. `sqlite3_errmsg`
 is omitted because R1 supplies no bounded C-string length operation.
-
-## Validation evidence
-
-The maintainer reports successful Java compilation and focused Java tests.
-
-`ProtosLib029SqliteLifecycleTest` executes the deterministic lifecycle and
-borrowed-memory failure models in `sqlite-failure-model.protos` and
-`sqlite-borrow-model.protos`. These exercise wrapper cleanup, first-error
-preservation, column-access/copy ordering, NULL/allocation handling and bounds
-using Protos ABI doubles. They do not prove actual SQLite native failure paths.
-Existing I144 fixtures separately cover generic native custody, borrow-epoch
-revocation and native-destructor counters.
-
-`dist/test_external_foreign_providers.py` executes the real SQLite query, row,
-lifecycle, alternative-alias rejection, example and tutorial cases through the
-explicitly authorized external FFM provider. It also runs the provider-free
-missing-provider case and retains separate PASS, FAIL and UNSUPPORTED outcomes.
-The maintainer reports **34/34 PASS** for the complete external foreign-provider
-integration, including the LIB029 real SQLite cases. The alias case rejects an
-unauthorized alternative alias while confirming that the separately authorized
-`ffi:sqlite3` alias remains available; it does not test denial of `ffi:sqlite3`.
-
-For the published LIB029 implementation
-`90fd4ece800f6d0e007aa9a2c735ee2f7659919a`, the maintainer also reports
-`make check` PASS and `make test` PASS.
-
-The DOC024 tutorial and cookbook programs are registered in the same harness as
-`DOC024_TUTORIAL_SQLITE_LIFECYCLE`, `DOC024_EXAMPLE_NUMERIC` and
-`DOC024_EXAMPLE_COPIED_VALUES`. They passed in the maintainer-reported campaign
-below.
-
-LIB030 adds the real-SQLite cases `LIB030_BIND_TEXT_BLOB`,
-`LIB030_STATEMENT_REUSE`, `LIB030_SQL_ADMISSION` and `LIB030_INPUT_LIMITS`, deterministic
-TEXT/BLOB, reset/clearBindings and trailing-SQL scenarios in the failure model,
-and the provider-level `ffm-inputs.protos` fixture program. They passed in the
-same maintainer-reported campaign.
-
-LIB031 adds `LIB031_LOCAL`, `LIB031_REOPEN`, `LIB031_READ_ONLY`,
-`LIB031_OPEN_MODES`, `LIB031_LOCKING`, `LIB031_RECOVERY` and `LIB031_EXAMPLE`
-to the same runner. The existing Java lifecycle host also loads the expanded
-Protos failure model without a Java change.
-
-The maintainer reported the following execution results on November 22, 2026,
-on Protos `0.4.189-SNAPSHOT`, using the real FFM provider and explicitly
-authorized SQLite. These are maintainer-reported results, not agent-executed
-validation:
-
-```yaml
-DIST_BUILD: PASS
-foreign-provider: 84/84 PASS
-
-LIB031_LOCAL: PASS
-LIB031_REOPEN: PASS
-LIB031_READ_ONLY: PASS
-LIB031_OPEN_MODES: PASS
-LIB031_LOCKING: PASS
-LIB031_RECOVERY: PASS
-LIB031_EXAMPLE: PASS
-```
-
-The maintainer also reported the earlier focused
-`ProtosLib029SqliteLifecycleTest` run: 2 tests PASS, 0 failures.
-The maintainer subsequently reported `make check`, `make test` and
-`make test-native` PASS for the current slice. These results were not produced
-by agent execution. Green tests establish observed implementation behavior;
-the exact public contract in
-`spec/semantics/SQLITE.md` remains pending owner ratification. D256 remains open,
-and LIB031 remains pending publication.
 
 ## Known limitations
 

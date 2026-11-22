@@ -6,6 +6,15 @@
 > `spec/semantics/OBJECT_MODEL.md`, `spec/semantics/CALLABLES.md`, and
 > `spec/PROTOS_GRAMMAR.md`
 
+## Choose a collection for your data
+
+Start with the [collection lessons](../../protos/tutorials/05-collections/)
+and work through Arrays before Maps. Practice reading and replacing an Array
+element, then storing a value under a Map key. Use the capability comparison
+below before assuming that the same operation behaves alike on every collection.
+
+## Understand the model
+
 The previous chapters established that Protos uses one object model, ordinary
 lookup, ordinary Closures, and ordinary protocols even for control flow.
 Values and collections follow the same principle.
@@ -1491,3 +1500,5 @@ For exact behavior, consult:
 
 Those documents define the language. This chapter supplies a programmer-facing
 model for choosing the right identity, equality, and collection semantics.
+
+[Back to the guide](README.md)

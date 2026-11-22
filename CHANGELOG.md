@@ -10,6 +10,8 @@ Historical implementation changelogs:
 
 ## 0.4.190-SNAPSHOT
 
+- **DOC026.** Reorganize the Programming Guide around a practical learning path, add a first-program walkthrough with expected output and exercises, and give each language chapter a task-oriented starting point. Remove project closure ledgers and historical validation reports from guide prose while retaining runtime limitations and pending specification boundaries.
+
 - **LIB031 / D256-C1R.** Extend Protos-first `std:sqlite` with file-backed connections in `readOnly`, `readWrite` and default `readWriteCreate` modes, effective writable-mode admission, manual `begin`/`commit`/`rollback`, live `inTransaction` queries and native `busyTimeout` configuration. Preserve native resource custody and first-error cleanup without Java or Truffle changes. Extend deterministic failure models, missing-provider and unauthorized-library coverage; add seven external-provider scenarios for local transactions, reopen, read-only access, open modes, locking, SIGKILL recovery and the durable example, with separate process evidence and cleanup. Add the filename-driven `durable_demo` example and update library, example and FFM documentation. Record maintainer-reported distribution, 84/84 foreign-provider, focused lifecycle, static, integrated and native test PASS evidence. Prepare the exact public contract in `spec/semantics/SQLITE.md`, explicitly pending owner ratification and normative publication; D256 and LIB031 remain open. Retain the Linux x86-64 portable-JVM scope, explicit native authorization and distinction between process-termination recovery and physical power-loss durability.
 
 ## 0.4.189-SNAPSHOT

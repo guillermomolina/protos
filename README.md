@@ -561,7 +561,9 @@ failures.
     Native release on its supported target, the Dev Container, or the portable
     JVM compatibility fallback.
 -   [Programming guide](docs/guide/README.md) — conceptual explanations and the
-    mental model behind Protos.
+    mental model behind Protos. Start with
+    [your first program](docs/guide/first-program.md), with expected output
+    and exercises.
 -   [The `protos` command line](docs/guide/tools/cli.md) and the other
     [toolchain guides](docs/guide/README.md#toolchain-guides) — program
     execution, formatter, linter, language server, Package Tool, Test Tool,

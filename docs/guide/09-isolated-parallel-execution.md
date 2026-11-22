@@ -8,6 +8,15 @@
 > `spec/concurrency/ACTORS.md`, `spec/semantics/CALLABLES.md`, and
 > `spec/semantics/VALUES_AND_COLLECTIONS.md`
 
+## Choose how computation runs
+
+Read the comparison below before replacing `future()` with `parallel()`.
+For isolated computation, start with the explicit-input examples and identify
+every value the computation needs. Continue with the Array algorithms when
+you want to transform a collection while preserving logical result order.
+
+## Understand the model
+
 Protos has more than one way to make progress concurrently, because the
 mechanisms solve different problems.
 
@@ -550,28 +559,6 @@ mailbox communication, and lifecycle.
 This choice is semantic, not a performance hint attached to otherwise identical
 execution.
 
-## Representative implementation evidence
-
-The current reference runtime implements the public isolated-parallel surface in:
-
-- [`../../src/main/java/com/guillermomolina/protos/execution/runtime/concurrency/ProtosParallelRuntime.java`](../../src/main/java/com/guillermomolina/protos/execution/runtime/concurrency/ProtosParallelRuntime.java).
-
-Its focused mechanism tests include:
-
-- [`../../src/test/java/com/guillermomolina/protos/execution/integration/process/ProtosParallelExecutionTest.java`](../../src/test/java/com/guillermomolina/protos/execution/integration/process/ProtosParallelExecutionTest.java),
-
-which guards the absence of a public `P`, presence of the closed standard
-parallel selectors, bounded implementation carriers, caller-domain Future
-results, and scheduler-independent logical failure selection.
-
-The architecture ledger classifies this machinery as a concurrency/runtime
-boundary rather than ordinary source-expressible library behavior:
-
-- [`CORE_NATIVE_BOUNDARY.md`](https://github.com/guillermomolina/protos-project-docs/blob/main/docs/project/architecture/CORE_NATIVE_BOUNDARY.md).
-
-These are current implementation evidence. The normative specification remains
-authoritative.
-
 ## Practical rules to remember
 
 1. `parallel(...)` means isolated P computation, not shared-memory execution of
@@ -635,3 +622,5 @@ For exact behavior, consult:
 Those documents define the language. This chapter supplies the programmer-facing
 model for choosing and using isolated CPU parallelism without importing a
 shared-memory thread model into Protos.
+
+[Back to the guide](README.md)

@@ -6,6 +6,16 @@
 > `spec/semantics/OBJECT_MODEL.md`, `spec/semantics/CALLABLES.md`, and
 > `spec/semantics/MODULES.md`
 
+## Create and update values
+
+Run the [slot-creation lesson](../../protos/tutorials/01-values-and-slots/02-create-slots.protos),
+then the [assignment lesson](../../protos/tutorials/01-values-and-slots/03-assignment.protos).
+Change a value and run the file again. Use `:` for the first binding and `=`
+for its later update. Read the lookup sections below when a name does not
+resolve where you expected.
+
+## Understand the model
+
 One of the first surprising things a programmer may notice in Protos is the
 absence of `var`, `let`, `const`, or a separate local-variable declaration
 construct.
@@ -425,3 +435,5 @@ For exact behavior, consult:
 
 Those documents define the language. This chapter only explains how their rules
 fit together for programmers.
+
+[Back to the guide](README.md)

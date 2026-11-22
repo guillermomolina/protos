@@ -239,7 +239,5 @@ Continue with the per-command guides:
 - [Package Tool](package-tool.md) — what `protos package` does today;
 - [Test Tool](test-tool.md) — `protos test`.
 
-Within the maintained [Test Tool guide](test-tool.md), DOC005-B covers
-current `protos test` corpus/expectation behavior, isolated execution and
-`--jobs`; later DOC005 slices add the already-published resource and final
-result/diagnostic contracts without mixing them into this Tool-model overview.
+Use the [Test Tool guide](test-tool.md) to define a test corpus, run cases
+in isolation, choose `--jobs`, and interpret results and exit codes.

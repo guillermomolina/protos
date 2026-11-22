@@ -4,8 +4,15 @@
 >
 > **Primary normative owners:** `spec/semantics/MATCHING.md` and
 > `spec/PROTOS_GRAMMAR.md`
->
-> **Current implementation track:** `I041 — D131 protocol-first matching implementation`
+
+## Compare a value and select a case
+
+Start with the `match` examples below, then continue to the `caseOf` examples
+when you need to select an action. Try changing the subject so a matcher
+returns `false`. Use structural matching only after you understand the
+matcher result and capture rules.
+
+## Understand the model
 
 Matching in current Protos is deliberately small: **matching is an ordinary
 protocol, not a dedicated language construct**.
@@ -236,12 +243,11 @@ Useful boundaries:
   protocols;
 - `caseOf` is an ordinary Object message using an ordinary Map carrier;
 - Errors, effects, control transfer, and suspension follow ordinary execution;
-- removed pre-D131 pattern syntax is not dormant compatibility syntax.
+- matching uses ordinary messages, without a dedicated pattern language.
 
-## Removed pre-D131 surface
+## Unsupported forms
 
-Older development revisions experimented with a dedicated matching language,
-including:
+Use ordinary calls rather than these unsupported forms:
 
 ```text
 subject match { ... }
@@ -256,11 +262,8 @@ OR patterns
 captures(...)
 ```
 
-Those forms are intentionally **not** part of current Core v0.1. D131/I041
-removed them rather than retaining aliases or compatibility syntax.
-
-Future syntactic sugar or higher-level matcher combinators can be considered by
-separate explicit decisions without changing the protocol foundation.
+Those forms are not supported in Core v0.1. Use ordinary `match` and `caseOf`
+messages instead.
 
 ## Practical checklist
 
@@ -276,17 +279,10 @@ separate explicit decisions without changing the protocol foundation.
 9. Remember that Map keys still follow ordinary Map `hash` / `==` semantics.
 10. Treat `caseOf` no-selection as Error unless a case explicitly succeeds.
 
-## Implementation-backed examples
+## Normative references
 
-Representative retained evidence includes:
+See [Matching](../../spec/semantics/MATCHING.md) for matcher outcomes,
+structural projection, and case selection, and the
+[grammar](../../spec/PROTOS_GRAMMAR.md) for accepted source forms.
 
-- [`ProtosObjectMatchProtocolTest`](../../src/test/java/com/guillermomolina/protos/execution/protocols/values/ProtosObjectMatchProtocolTest.java);
-- [`ProtosArrayMatchProtocolTest`](../../src/test/java/com/guillermomolina/protos/execution/protocols/values/ProtosArrayMatchProtocolTest.java);
-- [`ProtosMapMatchProtocolTest`](../../src/test/java/com/guillermomolina/protos/execution/protocols/values/ProtosMapMatchProtocolTest.java);
-- [`ProtosCaseOfProtocolTest`](../../src/test/java/com/guillermomolina/protos/execution/integration/semantics/ProtosCaseOfProtocolTest.java);
-- [`protos/tests/conformance/matching/`](../../protos/tests/conformance/matching/);
-- [`ProtosParserMatchTest`](../../src/test/java/com/guillermomolina/protos/parser/ProtosParserMatchTest.java), which retains the rejection regression for the removed dedicated syntax.
-
-These files are implementation evidence, not a second specification. If they
-disagree with the normative specification, the specification remains
-authoritative.
+[Back to the guide](README.md)

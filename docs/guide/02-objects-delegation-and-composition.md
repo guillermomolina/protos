@@ -5,6 +5,16 @@
 > **Normative owners:** `spec/semantics/OBJECT_MODEL.md` and
 > `spec/PROTOS_GRAMMAR.md`
 
+## Group data and reuse behavior
+
+Start with the [object lesson](../../protos/tutorials/02-objects/01-object-literals.protos).
+Add another field and print it. Then run the
+[delegation lesson](../../protos/tutorials/02-objects/02-delegation.protos) and
+compare a field stored on the child with one found on its parent. The sections
+below explain how reads, writes, and method receivers differ.
+
+## Understand the model
+
 The previous chapter introduced slots as the common storage idea behind lexical
 bindings and object state. This chapter focuses on ordinary objects themselves:
 how they are created, how they delegate, and how Protos separates vertical
@@ -552,3 +562,5 @@ For exact behavior, consult:
 
 Those documents define the language. This chapter only explains how to reason
 about the object model while writing Protos programs.
+
+[Back to the guide](README.md)

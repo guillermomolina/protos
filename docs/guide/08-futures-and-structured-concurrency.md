@@ -8,6 +8,16 @@
 > `spec/semantics/ERRORS.md`, `spec/semantics/EXECUTION_AND_CONTROL.md`, and
 > `spec/concurrency/ACTORS.md`
 
+## Start work and use its result
+
+Run the [asynchronous Closure lesson](../../protos/tutorials/09-futures/01-async-closure.protos).
+Change its result, then continue with
+[then](../../protos/tutorials/09-futures/02-compose-with-then.protos) and
+[several results](../../protos/tutorials/09-futures/03-wait-for-many.protos).
+Use the ownership sections below before starting child work that may outlive its caller.
+
+## Understand the model
+
 Protos separates an eventual result from the lifetime of the work that produces
 it.
 
@@ -813,17 +823,6 @@ The repository contains a focused Future tutorial:
 - [`../../protos/tutorials/09-futures/03-wait-for-many.protos`](../../protos/tutorials/09-futures/03-wait-for-many.protos)
   demonstrates deterministic `Future.all(...)` result ordering.
 
-## Representative conformance evidence
-
-The retained Future conformance suite includes focused cases such as:
-
-- [`../../protos/tests/conformance/future/construction-and-identity.protos`](../../protos/tests/conformance/future/construction-and-identity.protos);
-- [`../../protos/tests/conformance/future/cancellation-and-terminal-errors.protos`](../../protos/tests/conformance/future/cancellation-and-terminal-errors.protos);
-- [`../../protos/tests/conformance/future/all.protos`](../../protos/tests/conformance/future/all.protos).
-
-These are executable evidence for current implementation behavior. The
-specification remains authoritative.
-
 ## Practical rules to remember
 
 1. There are no `async` functions or `await` keyword in Core v0.1.
@@ -882,3 +881,5 @@ For exact behavior, consult:
 Those documents define the language. This chapter supplies the programmer-facing
 model for eventual results, cooperative cancellation, and structured task
 lifetime.
+
+[Back to the guide](README.md)
