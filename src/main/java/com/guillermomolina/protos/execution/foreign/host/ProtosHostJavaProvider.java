@@ -29,7 +29,7 @@ import java.util.Optional;
 /**
  * Restricted host-Java provider of the {@code java:} import scheme (I082-G).
  *
- * <p>The backend is the host JVM itself: no Espresso, guest JVM, Polyglot Context, class loader,
+ * <p>The backend is the host JVM itself: no guest JVM, Polyglot Context, class loader,
  * or dependency acquisition is involved. The provider reaches exactly the surface of its immutable
  * {@link ProtosHostJavaCatalogue}; target canonicalization is a pure catalogue lookup, so a denied
  * class is never loaded, initialized, or probed. Its execution profile is {@code

@@ -12,11 +12,11 @@ The dispatch code is
 
 | Command | What it does | Guide |
 |---|---|---|
-| `protos [--inspect] [--allow-network] [--allow-resolver] [--allow-entropy] [--allow-clock] [--allow-filesystem=<dir>] [--service=<binding>] <file> [args...]` | Runs one source file | below |
-| `protos [--inspect] [--allow-network] [--allow-resolver] [--allow-entropy] [--allow-clock] [--allow-filesystem=<dir>] -e <source> [args...]` | Runs one source String | below |
-| `protos [--inspect] [--allow-network] [--allow-resolver] [--allow-entropy] [--allow-clock] [--allow-filesystem=<dir>]` | Starts the interactive REPL | below |
-| `protos run [--allow-network] [--allow-resolver] [--allow-entropy] [--allow-clock] [--allow-filesystem=<dir>] [--service=<binding>] <entry> [args...]` | Runs a root-package logical entry of the project in the current directory | below |
-| `protos debug [--allow-network] [--allow-resolver] [--allow-entropy] [--allow-clock] [--allow-filesystem=<dir>] <file> [args...]` | Runs one file under the Debug Adapter Protocol | below |
+| `protos [--inspect] [--allow-network] [--allow-resolver] [--allow-entropy] [--allow-clock] [--allow-execution] [--allow-filesystem=<dir>] [--service=<binding>] <file> [args...]` | Runs one source file | below |
+| `protos [--inspect] [--allow-network] [--allow-resolver] [--allow-entropy] [--allow-clock] [--allow-execution] [--allow-filesystem=<dir>] -e <source> [args...]` | Runs one source String | below |
+| `protos [--inspect] [--allow-network] [--allow-resolver] [--allow-entropy] [--allow-clock] [--allow-execution] [--allow-filesystem=<dir>]` | Starts the interactive REPL | below |
+| `protos run [--allow-network] [--allow-resolver] [--allow-entropy] [--allow-clock] [--allow-execution] [--allow-filesystem=<dir>] [--service=<binding>] <entry> [args...]` | Runs a root-package logical entry of the project in the current directory | below |
+| `protos debug [--allow-network] [--allow-resolver] [--allow-entropy] [--allow-clock] [--allow-execution] [--allow-filesystem=<dir>] <file> [args...]` | Runs one file under the Debug Adapter Protocol | below |
 | `protos format [<file>]` | Prints the canonical formatting of one document | below |
 | `protos lint [--output text\|json] [--fail-on-warning] [<file>]` | Reports parser errors and lint warnings without running code | below |
 | `protos language-server` | Starts the Language Server Protocol service on stdin/stdout | [Language server](language-server.md) |
@@ -435,7 +435,7 @@ to the selected pre-existing directory. None affects Package Tool preflight.
 
 ### `protos debug`
 
-`protos debug [--allow-network] [--allow-resolver] [--allow-entropy] [--allow-clock] [--allow-filesystem=<dir>] <file>` runs one file through the standard Debug Adapter Protocol
+`protos debug [--allow-network] [--allow-resolver] [--allow-entropy] [--allow-clock] [--allow-execution] [--allow-filesystem=<dir>] <file>` runs one file through the standard Debug Adapter Protocol
 debugger. Before guest execution it writes exactly one `PROTOS_DEBUG_READY`
 JSON record to standard output; afterwards guest output travels over DAP. It is
 intended to be launched by an editor integration rather than by hand.
@@ -548,6 +548,7 @@ protos lint --fail-on-warning src/main.protos
 | `--foreign-provider-path` | Not available: no dynamic plugin loading | Available |
 | `--inspect` | Available | Available |
 | `--allow-network`, `--allow-resolver`, `--allow-entropy`, `--allow-clock`, `--allow-filesystem=<dir>`, `--service` | Available | Available |
+| `--allow-execution` | Accepted; child launch not yet verified on the Native executable | Available; `wait()` returns an `ExitStatus` (see below) |
 | Java embedding | Not available | Available through the standard Polyglot API ([guide](../embedding/java.md)) |
 
 Download and installation are described in [Try Protos](../00-try-protos.md).
@@ -578,3 +579,42 @@ Service mode itself grants no Clock. Package preflight and materialization
 receive no application Clock authority. Samples are wall time, not monotonic
 measurements; the [authority guide](../11-process-io-filesystems-and-authority.md)
 explains lifecycle and isolation.
+
+### Explicit external OS execution (`--allow-execution`, D229-B1 / I166)
+
+`--allow-execution` grants only the initial application RootActor module's
+private `execution` slot, absent by default. `execution.start(executable,
+arguments, environment, workingDirectory)` launches one program directly. There
+is no shell: arguments are passed exactly, and the environment `Map` is the
+whole child environment. The flag grants no Filesystem, Network, Resolver,
+Entropy, Clock or inspection authority, and none of those flags imply it. Only
+the Process Context of the authorized application may create processes. It is
+available for SOURCE, `-e`, REPL, debug, package/workspace run and services:
+
+```sh
+bin/protos --allow-execution protos/examples/io/external-execution.protos
+protos --allow-execution -e 'print(context.hasSlot("execution"))'
+protos --allow-execution
+protos debug --allow-execution entry.protos
+protos run --allow-execution Main
+protos --allow-execution --service=service server.protos
+protos run --allow-execution --service=service Server
+```
+
+Place the flag before the source, or after `debug`/`run` and before its entry.
+After the source path or expression it is an application argument, kept in
+order. Duplicates, `--allow-execution=<value>`, invalid placement and
+help/version-only requests are usage errors (exit 2). Bundled
+package/test/format/lint Tools and the Language Server reject it. Package
+resolution, preflight and materialization never receive it.
+
+The CLI host installs its native POSIX process provider for the granted
+Process, so `child.wait()` resolves to an `ExitStatus` once the child is
+reaped: a normal exit reports its real code (143 included), a signal
+termination reports `signaled()` true and a null `exitCode()`. A supervision
+failure fails `wait()` with `IOError` and keeps the child in custody. `wait()`
+never waits for EOF, and closing an endpoint never terminates the child.
+Children are reclaimed when the application Process ends: live children
+receive a termination request, then a forced termination after a bounded wait.
+The [authority guide](../11-process-io-filesystems-and-authority.md) describes
+endpoints, custody and current limitations.

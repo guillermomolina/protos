@@ -350,7 +350,14 @@ final class ProtosI156LinuxFfmAbiTest {
 
     @Test
     void i156PathHasNoJniOrPrivateNativeLibrary() throws Exception {
-        assertFalse(Files.exists(Path.of("src/main/native")), "no C sources for I156");
+        // The only C sources are the I166 external-process library; none serve I156.
+        try (Stream<Path> natives = Files.walk(Path.of("src/main/native"))) {
+            List<Path> foreign =
+                    natives.filter(Files::isRegularFile)
+                            .filter(p -> !p.startsWith(Path.of("src/main/native/process")))
+                            .toList();
+            assertTrue(foreign.isEmpty(), "no C sources for I156: " + foreign);
+        }
         for (String source :
                 List.of(
                         "ProtosLinuxConfinedFilesystemNative",

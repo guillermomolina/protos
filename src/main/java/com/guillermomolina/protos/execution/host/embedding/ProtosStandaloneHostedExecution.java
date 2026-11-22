@@ -25,6 +25,7 @@ import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosResolverCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosEntropyCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosClockCapabilityValue;
+import com.guillermomolina.protos.runtime.ProtosExternalExecutionCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.guillermomolina.protos.runtime.ProtosProcessStandardStreamBinding;
@@ -155,10 +156,35 @@ public final class ProtosStandaloneHostedExecution {
             NetworkGrant networkGrant,
             EntropyGrant entropyGrant, ClockGrant clockGrant)
             throws IOException {
+        return executeFile(
+                coreRoot,
+                sourceFile,
+                applicationArguments,
+                in,
+                out,
+                err,
+                networkGrant,
+                entropyGrant,
+                clockGrant,
+                ExecutionGrant.NONE);
+    }
+
+    /** As the overload without an execution selection, with an explicit {@link ExecutionGrant}. */
+    public static ProtosExecutionOutcome executeFile(
+            Path coreRoot,
+            Path sourceFile,
+            List<String> applicationArguments,
+            InputStream in,
+            OutputStream out,
+            OutputStream err,
+            NetworkGrant networkGrant,
+            EntropyGrant entropyGrant, ClockGrant clockGrant,
+            ExecutionGrant executionGrant)
+            throws IOException {
         try (ProtosStandaloneHostedSession session =
                 ProtosStandaloneHostedSession.open(
                         coreRoot, sourceFile, applicationArguments, in, out, err,
-                        networkGrant, entropyGrant, clockGrant)) {
+                        networkGrant, entropyGrant, clockGrant, executionGrant)) {
             return session.initialOutcome();
         }
     }
@@ -249,6 +275,16 @@ public final class ProtosStandaloneHostedExecution {
     public enum ClockGrant {
         NONE,
         HOST_CLOCK
+    }
+
+    /**
+     * Independent, explicit external OS execution authorization (EXTERNAL_PROCESS.md §1); default
+     * denial. {@link #HOST_EXECUTION} widens neither Filesystem, Network, Resolver, Entropy nor
+     * Clock authority, and every overload without this selection denies it.
+     */
+    public enum ExecutionGrant {
+        NONE,
+        HOST_EXECUTION
     }
 
     /** D243-C independent host entropy selection; existing entry points default to NONE. */
@@ -463,10 +499,43 @@ public final class ProtosStandaloneHostedExecution {
             FilesystemGrant filesystemGrant,
             ProtosPolyglotRuntimeHost runtimeHost)
             throws IOException {
+        return bootstrapProcess(
+                coreRoot,
+                moduleResolver,
+                applicationArguments,
+                stdinBackend,
+                stdoutBackend,
+                stderrBackend,
+                networkGrant,
+                resolverGrant,
+                entropyGrant,
+                clockGrant,
+                ExecutionGrant.NONE,
+                filesystemGrant,
+                runtimeHost);
+    }
+
+    /** As the overload without an execution selection, with an explicit {@link ExecutionGrant}. */
+    public static ProtosStandaloneProcessBootstrap.Result bootstrapProcess(
+            Path coreRoot,
+            ProtosModuleResolver moduleResolver,
+            List<String> applicationArguments,
+            ProtosProcessStandardStreamBinding.ReadableBackend stdinBackend,
+            ProtosProcessStandardStreamBinding.WritableBackend stdoutBackend,
+            ProtosProcessStandardStreamBinding.WritableBackend stderrBackend,
+            NetworkGrant networkGrant,
+            ResolverGrant resolverGrant,
+            EntropyGrant entropyGrant,
+            ClockGrant clockGrant,
+            ExecutionGrant executionGrant,
+            FilesystemGrant filesystemGrant,
+            ProtosPolyglotRuntimeHost runtimeHost)
+            throws IOException {
         Objects.requireNonNull(networkGrant, "networkGrant");
         Objects.requireNonNull(resolverGrant, "resolverGrant");
         Objects.requireNonNull(entropyGrant, "entropyGrant");
         Objects.requireNonNull(clockGrant, "clockGrant");
+        Objects.requireNonNull(executionGrant, "executionGrant");
         Objects.requireNonNull(filesystemGrant, "filesystemGrant");
         Objects.requireNonNull(runtimeHost, "runtimeHost");
         return bootstrapProcessWithGrant(
@@ -478,7 +547,7 @@ public final class ProtosStandaloneHostedExecution {
                 stderrBackend,
                 networkGrant,
                 resolverGrant,
-                entropyGrant, clockGrant,
+                entropyGrant, clockGrant, executionGrant,
                 filesystemGrant,
                 runtimeHost);
     }
@@ -512,9 +581,33 @@ public final class ProtosStandaloneHostedExecution {
             ProtosProcessStandardStreamBinding.WritableBackend stderrBackend,
             NetworkGrant networkGrant, ResolverGrant resolverGrant, EntropyGrant entropyGrant, ClockGrant clockGrant,
             ProtosPolyglotRuntimeHost runtimeHost) throws IOException {
+        return bootstrapProcess(
+                coreRoot,
+                moduleResolver,
+                applicationArguments,
+                stdinBackend,
+                stdoutBackend,
+                stderrBackend,
+                networkGrant,
+                resolverGrant,
+                entropyGrant,
+                clockGrant,
+                ExecutionGrant.NONE,
+                runtimeHost);
+    }
+
+    /** As the overload without an execution selection, with an explicit {@link ExecutionGrant}. */
+    public static ProtosStandaloneProcessBootstrap.Result bootstrapProcess(
+            Path coreRoot, ProtosModuleResolver moduleResolver, List<String> applicationArguments,
+            ProtosProcessStandardStreamBinding.ReadableBackend stdinBackend,
+            ProtosProcessStandardStreamBinding.WritableBackend stdoutBackend,
+            ProtosProcessStandardStreamBinding.WritableBackend stderrBackend,
+            NetworkGrant networkGrant, ResolverGrant resolverGrant, EntropyGrant entropyGrant, ClockGrant clockGrant,
+            ExecutionGrant executionGrant,
+            ProtosPolyglotRuntimeHost runtimeHost) throws IOException {
         return bootstrapProcess(coreRoot, moduleResolver, applicationArguments,
                 stdinBackend, stdoutBackend, stderrBackend, networkGrant, resolverGrant,
-                entropyGrant, clockGrant, FilesystemGrant.NONE, runtimeHost);
+                entropyGrant, clockGrant, executionGrant, FilesystemGrant.NONE, runtimeHost);
     }
 
     /** D248-B source compatibility: no Entropy grant. */
@@ -601,7 +694,7 @@ public final class ProtosStandaloneHostedExecution {
                 networkGrant,
                 resolverGrant,
                 entropyGrant,
-                ClockGrant.NONE,
+                ClockGrant.NONE, ExecutionGrant.NONE,
                 filesystemGrant,
                 runtimeHost);
     }
@@ -617,6 +710,7 @@ public final class ProtosStandaloneHostedExecution {
             ResolverGrant resolverGrant,
             EntropyGrant entropyGrant,
             ClockGrant clockGrant,
+            ExecutionGrant executionGrant,
             FilesystemGrant filesystemGrant,
             ProtosPolyglotRuntimeHost runtimeHost)
             throws IOException {
@@ -639,10 +733,16 @@ public final class ProtosStandaloneHostedExecution {
                         case HOST_ENTROPY -> runtimeHost.provisionHostEntropy(prelude);
                     };
             ProtosClockCapabilityValue clock = null;
+            ProtosExternalExecutionCapabilityValue execution = null;
             ProtosStandaloneProcessBootstrap.Result bootstrap;
             try {
                 clock = clockGrant == ClockGrant.HOST_CLOCK
                         ? runtimeHost.provisionHostClock(prelude) : null;
+                // Bound to the Process Context that later hosts this Process; never widens other
+                // authority and is withdrawn if that Context cannot create processes.
+                execution = executionGrant == ExecutionGrant.HOST_EXECUTION
+                        ? runtimeHost.provisionHostExecution(prelude, HOST_ENVIRONMENT_NAME_DOMAIN)
+                        : null;
                 bootstrap = ProtosStandaloneProcessBootstrap.create(
                         prelude,
                         applicationArguments,
@@ -657,8 +757,9 @@ public final class ProtosStandaloneHostedExecution {
                         filesystem.marker(),
                         network,
                         resolver,
-                        entropy, clock);
+                        entropy, clock, execution);
             } catch (RuntimeException | Error failure) {
+                if (execution != null) execution.retireForRuntime();
                 if (clock != null) clock.retireForRuntime();
                 if (entropy != null) {
                     entropy.retireForRuntime();

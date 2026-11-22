@@ -27,6 +27,7 @@ To supply your own Protos modules from Java, continue with
 | Default `filesystem` / `network` slots | Only when the Context grants file / socket access (PLAT054-3E3, 3E4) |
 | Explicit `clock` (`protos.AllowClock`) | Only with explicit `true`; default `false` (D253-C1 / I163) |
 | Explicit `entropy` (`protos.AllowEntropy`) | Only when the embedding Context selects `true`; default `false` (D243-C / I157) |
+| Explicit `execution` (`protos.AllowExecution`) | Only with explicit `true` **and** a host that permits process creation (`allowCreateProcess(true)`); host file access is not required and is never granted by it; default `false`. Partial: with an embedder-supplied process handler `wait()` fails with `IOError` (Protos cannot verify its provenance), and a `Context` close cannot be retried when a child, pipe or pump is still outstanding (D229-B1 / I166) |
 | Foreign providers (`java:` and other schemes) in a standard Context | Not available: no Context option or API configures them; see [Foreign interoperability](../interop/README.md) |
 | Native Image embedding hosts | Not supported. The Native CLI has no Java embedding |
 
@@ -356,3 +357,212 @@ guest `close()`. Samples are exact epoch-nanoseconds Integers, with no monotonic
 or physical-resolution promise. This Java embedding is supported on the JVM;
 Java Native Image embedding remains unsupported. The standalone Native CLI
 supports its own explicit `--allow-clock` authorization.
+
+## Explicit external execution authorization
+
+```java
+try (Context context = Context.newBuilder("protos")
+        .option("protos.AllowExecution", "true")
+        .allowCreateProcess(true)
+        .allowIO(IOAccess.NONE) // execution needs no guest file access
+        .processHandler(new com.guillermomolina.protos.execution.ProtosPosixProcessHandler())
+        .build()) {
+    context.eval("protos", "child: execution.start(\"/bin/echo\", [\"hi\"], Map(), null)\n");
+}
+```
+
+`protos.AllowExecution` defaults to `false`. It is the only selection of the
+grant: `allowCreateProcess`, `allowAllAccess`, `allowIO`, `protos.AllowEntropy`,
+`protos.AllowClock` and every other permission never imply it. Conversely, the
+selection never widens host permissions: provisioning requires only
+`allowCreateProcess(true)`, the same permission `TruffleLanguage.Env.newProcessBuilder`
+checks, and when the Context does not allow it no grant is provisioned.
+
+Four things stay distinct. *Host process-creation authorization*
+(`allowCreateProcess`) lets the Context create processes at all. *The selected
+`ProcessHandler`* decides which provider performs the creation; authorization
+does not identify it. *Guest Filesystem access* (`allowIO`, and the guest
+`filesystem` slot) is a separate grant: execution neither requires nor confers
+it, and a Context with `IOAccess.NONE` can hold `execution` and still have no
+`filesystem`. *The native working directory* of a launch is a host path, the
+Context's working directory captured once at provisioning (or the explicit
+directory of the request), passed to the provider by path; it involves no guest
+file access. Only the first initial RootActor module
+receives `execution`; later evaluations, imported MODULEs and spawned Actors
+receive none implicitly. Guest code may delegate the grant explicitly to another
+Actor of the same Process, as a message argument or an `Actor.spawn`
+initialization argument: the receiver gets a fresh Actor-local view with the
+same authority, usable only in that Actor, and revoking the grant revokes every
+view. The grant and its views never enter isolated parallel execution. Each
+child belongs to the Actor whose `start` created it: it and its endpoints are
+usable only from that Actor, even through a delegated grant, so delegating the
+grant never delegates the children the sender already started. Children and
+their endpoints never cross Actors or enter parallel execution; an `ExitStatus`
+is plain terminated data and does.
+
+`execution.start(executable, arguments, environment, workingDirectory)` takes
+exactly four arguments and launches the program directly, without a shell. The
+`Map` is the complete child environment (nothing is inherited); duplicate names
+are judged by the host's native name equivalence, the same one that governs
+`process.environment()`. `null` selects the grant's default working directory:
+the Context's current working directory, captured once when the grant is
+provisioned and applied explicitly to every such launch. Children expose
+`stdin()`, `stdout()`, `stderr()`, `wait()` and `terminate()`.
+
+**Custody.** The Process keeps each child until three things are true: the
+native supervisor confirmed that the child was reaped, the release of each of
+its three native endpoint handles was confirmed, and its pipe transport (its
+pump threads and pipes) stopped. A child that was reaped and whose handles were
+closed stays in custody while one of its pumps is still running. A termination
+request, a forced termination or a supervisor failure is never taken as proof of
+reaping, and a handle whose close failed stays in custody (it is never closed a
+second time). If a child was already created when `start` failed (for example
+its endpoints could not be connected), the `start` Future stays pending while
+that child is terminated, reaped and released, and fails with `IOError` only
+afterwards; if that cleanup cannot be confirmed (a failed supervisor or an
+uncertain handle release), the Future stays pending and the child stays in
+custody. Exit of
+the child is not EOF: an exited child whose output was not read keeps delivering
+the remaining bytes, and a descendant can keep a pipe writer open. Endpoints are
+released by `close()` or by the Process cleanup. Revoking the grant, requesting
+a close and confirming a release are distinct: revocation stops new guest
+operations; a guest `close()` of an output endpoint releases the logical reader
+and completes without blocking the Actor; the native release is confirmed only
+when the endpoint's pump closed the native handle, which it does after EOF, a
+failure or the end of its current transfer. Until then the pump may stay blocked while
+the child, or a descendant that keeps the other end of the pipe open, stays
+silent, and the child stays in custody (with its admission slot). Closing stdin completes only after the pump handed every accepted byte to
+the child, so a child that never reads its input keeps that close pending; the
+bounded worker pool does not change either case. Closing the Context or
+terminating the Process revokes guest access, requests termination of live
+children, closes every endpoint handle still owned (also of children that
+already exited), waits briefly for launches already in progress, and then
+reclaims each child with a bounded wait (about two seconds, then a forced
+termination and up to two more seconds). A child that still cannot be reclaimed
+stays tracked, and a later close retries it.
+
+**A close can refuse to complete (standalone and `protos run` hosts only).**
+This section describes Protos's own Process host
+(`ProtosPolyglotRuntimeHost`), not a `Context` that your code owns. Its refusal
+handling is a current implementation measure that is not a Truffle
+`Context.close()` behavior, and it remains a known limitation of this partial
+implementation. If a launch is still in progress when the bounded wait ends, or
+a child cannot be shown to be reaped, released and its transport stopped, the
+close goes through these distinct states:
+
+1. **Close refused.** The host keeps the Process and its custody and does not
+   call `Context.close()` at all. Waiting for the Process's terminal
+   disposition fails with `IllegalStateException`; guest access stays revoked.
+   The refusal is attributed to that Process Context only: it stays counted as
+   active by its `ProtosPolyglotRuntimeHost`, and other Contexts are not
+   affected.
+2. **Reclamation in progress.** The host's grant stays retained (with its
+   workers) while any launch, child or pipe transport is still outstanding.
+   Each retry reclaims again with the same bounded waits; it never repeats a
+   reap or closes an uncertain handle a second time.
+3. **Reclamation confirmed.** Every launch finished and every child was reaped,
+   its handles were released and its transport stopped.
+4. **Context really closed.** Only then does a retry call `Context.close()`.
+   The Context is counted as closed exactly once, after that call succeeds.
+   `ProtosPolyglotRuntimeHost.close()` performs this retry first, and
+   `retryRefusedProcessContextClosesForRuntime()` performs it on demand. A
+   retry succeeds only if the custody was discharged in the meantime; nothing
+   guarantees that it ever will (a child whose supervisor failed, or a pipe kept
+   open by a descendant, keeps it refused).
+
+The host never calls `Context.close()` while children are in custody, for a
+specific reason: on the Truffle version in use, `Context.close()` closes the
+Context first and only then reports a live sub-process, so a second call would
+prove nothing. For the same reason, if `Context.close()` itself fails after
+custody was discharged, that failure is final and is not retried.
+
+In a standard embedding, where your code owns the `Context`, Protos reclaims
+children while the Context is finalized and disposed, with the same bounded
+waits. If that cannot be established, the Process keeps custody of the
+children, and Truffle reports any child it created that is still alive. Your
+host cannot retry `Context.close()`: Truffle does not guarantee that a second
+close is meaningful, and Protos offers no API to retry the reclamation after
+your `Context` has closed. Any child, pipe or pump still outstanding at that
+point is released only when it finishes by itself. Until every resource can be
+closed safely in this case, external execution in a user-owned `Context`
+remains partial.
+
+**Resources.** Each Process admits at most 16 children at a time; a `start`
+beyond that fails with `IOCapacityExhausted` before anything is launched, and
+the slot is returned only after the child left custody and its pipe transport
+stopped. Each child uses three pump threads and three bounded pipes; one
+selector thread per grant serves all endpoint reads and writes, so a blocked
+read never holds a worker. Launches and termination requests run on at most 16
+host threads per grant, with at most 64 waiting requests; the threads start only
+on first use. Buffering per endpoint is finite (one small chunk plus the OS pipe
+capacity): a guest that stops reading stops the child's output, and nothing is
+drained in advance.
+
+**Provider selection and evidence.** Protos's standalone host installs
+`ProtosPosixProcessHandler` on its Context builder when execution is selected.
+An external embedding host must explicitly install that provider before building
+its Context, as above. A third case is a Context that allows creation but whose
+provider was not verified: `allowCreateProcess(true)` authorizes creation and
+does not identify the selected handler. `TruffleLanguage.Env` does not expose
+that identity. Such a Context cannot be declared conformant to
+`EXTERNAL_PROCESS.md` §6. No guest option or self-declared token verifies it,
+and failure to load the POSIX library never selects the JDK provider as fallback.
+
+The Linux provider implements owned pipes and a cached terminal POSIX wait
+status. Reap does not close stdout or stderr: EOF requires every writer,
+including any descendant writer, to close. The JDK provider can retire its
+process streams when the direct child exits and lose later descendant output;
+it does not establish this guarantee. Its diagnostic remains separate from the
+POSIX regressions.
+
+The supplied validation evidence reports 33 passing embedding tests on the JVM
+before this consolidation; it does not validate the final candidate or the
+complete focal suite. The embedding bootstrap no longer requires host file
+access for execution; the strict `IOAccess.NONE` regressions (grant present,
+no `filesystem`, real POSIX launch, intact arguments, complete stdout and EOF)
+remain to be run. The Native CLI case without `--allow-filesystem` is a
+separate surface and does not demonstrate the embedding case, nor the reverse.
+Native Image has not been validated, including packaged-library loading,
+FFM downcalls, and survival of EPIPE/SIGPIPE. The native regression requires a
+failed write followed by another child launch and guest arithmetic in the same
+host process; an IOError alone is insufficient evidence of survival.
+
+**Uncertain creation.** All existing Java wrappers, status storage, native
+arguments, the PID output cell and symbol bindings are prepared before calling
+the native start. The POSIX provider receives the host PID from that same
+creating call, written from the fork result before the exec handshake; there is
+no later native PID query. The PID is host-side identity for the Java `Process`
+API only and is never exposed to guest code or used as authority. Closing the
+argument arena remains a possible failure point after creation. A non-null native handle with a launch error means a child was
+created but reap was not confirmed. The launcher retains it in its existing
+reclamation loop; it cannot publish a definitive launch failure while custody
+remains. Persistent `waitpid` failure, failed signalling, or an unconfirmed
+stream close or handle release can keep that loop occupied indefinitely.
+The loop also catches `Error` during reclamation: it is a retained limitation,
+not an accredited recovery mechanism for a damaged JVM. `ProcessHandler.start`
+provides no additional public channel to return an uncertain child with an
+exception. This remains a publication blocker; no timeout abandons the handle
+and no second supervisor or process registry is introduced.
+
+The transport memoizes a failed physical close as an uncertain release and
+never calls the physical close again. The Java stream's `closed` flag records
+that a close was attempted, not confirmation of release. A failed FFM invocation
+can leave native release uncertain, retaining custody. Ordinary negative native
+read/write/close results become `IOException`; runtime exceptions and JVM errors
+now propagate out of those provider methods without conversion to IOException.
+
+**`wait()` and provider provenance.** A `Context` you build yourself carries a
+process handler Protos cannot identify through the language environment, even
+when it is `ProtosPosixProcessHandler`: the outcome stays unknown, so
+`child.wait()` fails with `IOError` and a numeric exit value never becomes a
+guest `ExitStatus`. Its completion still observes the confirmed reap,
+independently of EOF. Contexts that the Protos runtime host builds itself (the
+CLI and runtime-owned Processes) install the native POSIX provider and record
+that fact in the host configuration; there `wait()` resolves to an
+`ExitStatus` decoded from the real POSIX status (normal exit with its code, or
+signal termination with a null exit code). A supervision failure always fails
+`wait()` with `IOError` and keeps the child in custody.
+The standalone CLI selects the same grant with `--allow-execution`.
+The Context-close refusal mechanism above remains an independent unresolved
+integration limitation. See
+[`spec/io/EXTERNAL_PROCESS.md`](../../../spec/io/EXTERNAL_PROCESS.md).

@@ -19,9 +19,12 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosExternalExecutionCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.oracle.truffle.api.CallTarget;
+import com.oracle.truffle.api.TruffleLanguage;
 import com.oracle.truffle.api.source.Source;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Path;
@@ -49,16 +52,27 @@ public final class ProtosPolyglotExecutionContext implements AutoCloseable {
     private final Lock executionLock = lifecycle.readLock();
     private final Lock closeLock = lifecycle.writeLock();
     private final Runnable closedCallback;
+    /** True only when this host built the Context with its native POSIX process handler. */
+    private final boolean nativeProcessProvider;
     private volatile boolean closeRequested;
     private volatile boolean closed;
-    private boolean closeTerminal;
+    /** A close disposition exists: an attempt finished, or the close was refused before one. */
+    private volatile boolean closeTerminal;
+    /**
+     * The disposition is a refusal recorded before {@link Context#close()} was ever called, so a
+     * later attempt is a genuine first close. A failed {@link Context#close()} is never retried:
+     * the Polyglot Context may already be closed when it reports a live sub-process.
+     */
+    private boolean closeRefused;
     private Throwable closeFailure;
 
     private ProtosPolyglotExecutionContext(
             Context context,
             ProtosSourceReadabilityAuthority sourceReadability,
-            Runnable closedCallback) {
+            Runnable closedCallback,
+            boolean nativeProcessProvider) {
         this.context = Objects.requireNonNull(context, "context");
+        this.nativeProcessProvider = nativeProcessProvider;
         this.sourceReadability = Objects.requireNonNull(sourceReadability, "sourceReadability");
         this.closedCallback = Objects.requireNonNull(closedCallback, "closedCallback");
     }
@@ -91,6 +105,23 @@ public final class ProtosPolyglotExecutionContext implements AutoCloseable {
             OutputStream err,
             Runnable closedCallback,
             boolean inspectionAuthorized) {
+        return open(engine, in, out, err, closedCallback, inspectionAuthorized, false);
+    }
+
+    /**
+     * As above; {@code processCreationAuthorized} additionally permits native process creation
+     * in this Context only, for a Process that holds an explicitly selected execution grant. It
+     * does not widen the source-readability IO access, all access or any other permission.
+     */
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
+    static ProtosPolyglotExecutionContext open(
+            Engine engine,
+            InputStream in,
+            OutputStream out,
+            OutputStream err,
+            Runnable closedCallback,
+            boolean inspectionAuthorized,
+            boolean processCreationAuthorized) {
         Objects.requireNonNull(in, "in");
         Objects.requireNonNull(out, "out");
         Objects.requireNonNull(err, "err");
@@ -110,12 +141,21 @@ public final class ProtosPolyglotExecutionContext implements AutoCloseable {
         if (inspectionAuthorized) {
             builder.option("protos.Inspect", "true");
         }
+        if (processCreationAuthorized) {
+            try {
+                builder.processHandler(new ProtosPosixProcessHandler());
+            } catch (IOException unavailable) {
+                throw new IllegalStateException("the authorized Process has no native process provider", unavailable);
+            }
+            builder.allowCreateProcess(true);
+        }
         Context context = builder.build();
         boolean initialized = false;
         try {
             context.initialize(ProtosLanguage.ID);
             ProtosPolyglotExecutionContext host =
-                    new ProtosPolyglotExecutionContext(context, sourceReadability, closedCallback);
+                    new ProtosPolyglotExecutionContext(
+                            context, sourceReadability, closedCallback, processCreationAuthorized);
             /*
              * The wrapper is bound to its Context's ProtosLanguageContext once, so bounded
              * Context-local platform services such as PLAT022 admission reach this wrapper on any
@@ -326,6 +366,80 @@ public final class ProtosPolyglotExecutionContext implements AutoCloseable {
         }
     }
 
+    /**
+     * Records that the host refused to close this Context, without calling {@link
+     * Context#close()}, because resources the Context created are still in host custody. New
+     * entries fail at once and waiters observe {@code reason} as the close disposition. Never
+     * waits and takes no lifecycle lock, so an entered carrier may call it.
+     *
+     * @return false when a close disposition already existed, so nothing was refused
+     */
+    boolean refuseCloseForRuntime(Throwable reason) {
+        Objects.requireNonNull(reason, "reason");
+        synchronized (this) {
+            if (closed || closeTerminal) {
+                return false;
+            }
+            closeRequested = true;
+            closeRefused = true;
+            closeFailure = reason;
+            closeTerminal = true;
+            notifyAll();
+            return true;
+        }
+    }
+
+    /**
+     * Performs the first real close after a refusal, once the caller established that the host
+     * custody which caused the refusal is discharged. The callback runs once, only after a
+     * successful close. A failure keeps the refusal reason as a suppressed exception, so the
+     * error its waiters observed is never silently dropped, and is final.
+     *
+     * @return null when the Context is really closed, otherwise the close disposition
+     */
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
+    Throwable closeAfterRefusalForRuntime() {
+        if (lifecycle.getReadHoldCount() != 0) {
+            throw new IllegalStateException(
+                    "Polyglot Protos execution context cannot close from an executing carrier");
+        }
+        closeLock.lock();
+        try {
+            Throwable refusal;
+            synchronized (this) {
+                if (closed) {
+                    return null;
+                }
+                if (!closeRefused) {
+                    return closeFailure;
+                }
+                closeRefused = false;
+                refusal = closeFailure;
+            }
+            try {
+                context.close();
+            } catch (RuntimeException | Error failure) {
+                if (refusal != null && refusal != failure) {
+                    failure.addSuppressed(refusal);
+                }
+                synchronized (this) {
+                    closeFailure = failure;
+                    notifyAll();
+                }
+                return failure;
+            }
+            synchronized (this) {
+                closed = true;
+                closeFailure = null;
+                notifyAll();
+            }
+            closedCallback.run();
+            return null;
+        } finally {
+            closeLock.unlock();
+        }
+    }
+
     Throwable awaitCloseDispositionForRuntime() {
         boolean interrupted = false;
         Throwable failure;
@@ -345,11 +459,45 @@ public final class ProtosPolyglotExecutionContext implements AutoCloseable {
         return failure;
     }
 
+    /**
+     * Binds {@code grant}'s launcher to this Context's own process builder, capturing the
+     * Context's current working directory as the grant's stable default. This Context's
+     * source-readability file system denies that query, so the host's absolute invocation
+     * directory, captured here once, is the default instead; IO access is not widened. Runs on
+     * the host thread that hosts the Process, before any guest code of that Process.
+     *
+     * @throws IllegalStateException when this Context does not permit process creation
+     */
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
+    void bindExecutionLauncherForRuntime(ProtosExternalExecutionCapabilityValue grant) {
+        Objects.requireNonNull(grant, "grant");
+        context.enter();
+        try {
+            TruffleLanguage.Env env = ProtosLanguageContext.current().env();
+            if (!env.isCreateProcessAllowed()) {
+                throw new IllegalStateException(
+                        "Process Context does not permit native process creation");
+            }
+            grant.bindLauncherForRuntime(
+                    ProtosExternalExecutionHostFacility.hostLauncher(
+                            env,
+                            Path.of("").toAbsolutePath().toString(),
+                            nativeProcessProvider));
+        } finally {
+            context.leave();
+        }
+    }
+
     Engine engineForTesting() {
         return context.getEngine();
     }
 
     boolean isClosedForTesting() {
+        return closed;
+    }
+
+    /** True once {@link Context#close()} completed successfully. */
+    boolean closedForRuntime() {
         return closed;
     }
 

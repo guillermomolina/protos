@@ -460,6 +460,22 @@ public final class ProtosParallelRuntime {
                 ProtosPathValue y=new ProtosPathValue(a.prelude().orElseThrow().pathPrototype(),x.components());
                 memo.put(v,y);return y;
             }
+            if(v instanceof ProtosExternalChildValue.Status x){
+                // EXTERNAL_PROCESS.md §9 source stage, as for a Path: only the inert terminal data of an ExitStatus crosses.
+                if(memo.containsKey(v))return memo.get(v);
+                if(!(memo instanceof TransferMemo tracked)||tracked.materializing)throw new NonParallel();
+                ProtosExternalChildValue.TerminalOutcome y=x.outcomeForRuntime();
+                tracked.semanticRecords=true;memo.put(v,y);return y;
+            }
+            if(v instanceof ProtosExternalChildValue.TerminalOutcome x){
+                // Destination stage: one fresh, authority-free destination-Prelude ExitStatus per descriptor identity.
+                if(!(memo instanceof TransferMemo tracked)||!tracked.materializing)throw new NonParallel();
+                if(memo.containsKey(v))return memo.get(v);
+                ProtosExternalChildValue.Status y;
+                try{y=ProtosExternalChildValue.Status.materializeForRuntime(a.prelude().orElseThrow(),x);}
+                catch(IllegalArgumentException|IllegalStateException rejected){throw new NonParallel();}
+                memo.put(v,y);return y;
+            }
             if(v instanceof ProtosEncodingValue x){
                 memo.put(v,x);return x.transferForParallelRuntime();
             }
@@ -468,7 +484,7 @@ public final class ProtosParallelRuntime {
                 ProtosEnvironmentValue y=x.rematerializeForParallelTransfer();memo.put(v,y);return y;
             }
             // A Core Fraction or Complex crossed above as an inert descriptor (D197-C, I090-C1); other sealed values stay non-parallel.
-            if(v instanceof ProtosFutureValue||v instanceof ProtosTask||v instanceof ProtosFileValue||v instanceof ProtosFilesystemValue||v instanceof ProtosNetworkCapabilityValue||v instanceof ProtosResolverCapabilityValue||v instanceof ProtosClockCapabilityValue||v instanceof ProtosEntropyCapabilityValue||v instanceof ProtosTcpConnectionValue||v instanceof ProtosTcpListenerValue||v instanceof ProtosTcpAcceptorValue||v instanceof ProtosProcessStandardStreamValue||v instanceof ProtosSendOperationControl||v instanceof ProtosSealedValue||v==null)throw new NonParallel();
+            if(v instanceof ProtosFutureValue||v instanceof ProtosTask||v instanceof ProtosFileValue||v instanceof ProtosFilesystemValue||v instanceof ProtosNetworkCapabilityValue||v instanceof ProtosResolverCapabilityValue||v instanceof ProtosClockCapabilityValue||v instanceof ProtosEntropyCapabilityValue||v instanceof ProtosExternalExecutionCapabilityValue||v instanceof ProtosExternalExecutionCapabilityValue.Delegation||v instanceof ProtosExternalChildValue||v instanceof ProtosExternalChildValue.Endpoint||v instanceof ProtosTcpConnectionValue||v instanceof ProtosTcpListenerValue||v instanceof ProtosTcpAcceptorValue||v instanceof ProtosProcessStandardStreamValue||v instanceof ProtosSendOperationControl||v instanceof ProtosSealedValue||v==null)throw new NonParallel();
             if(memo.containsKey(v))return memo.get(v);
             ProtosPrelude p=a.prelude().orElseThrow();
             if(v==ProtosObjectValue.rootObject()||prelude(v,p))return v;
@@ -670,7 +686,8 @@ public final class ProtosParallelRuntime {
                     }
                     current=object.parent().orElse(null);
                 }else if(current instanceof ProtosSemanticTransferRecord
-                        || current instanceof ProtosPathComponents){
+                        || current instanceof ProtosPathComponents
+                        || current instanceof ProtosExternalChildValue.TerminalOutcome){
                     current=memo.get(current);
                 }else{
                     return false;

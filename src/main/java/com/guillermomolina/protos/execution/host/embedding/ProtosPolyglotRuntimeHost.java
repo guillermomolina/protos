@@ -23,6 +23,8 @@ import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.guillermomolina.protos.runtime.ProtosResolverCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosEntropyCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosClockCapabilityValue;
+import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
+import com.guillermomolina.protos.runtime.ProtosExternalExecutionCapabilityValue;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -59,6 +61,13 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
     private final boolean inspectionAuthorized;
     private final int actorCarrierParallelism;
     private final AtomicInteger activeProcessContexts = new AtomicInteger();
+    /**
+     * Active Process Contexts of this host whose close was refused while their external children
+     * were still in host custody; each stays counted in {@link #activeProcessContexts} until its
+     * real close. Guarded by this.
+     */
+    private final java.util.Set<ProtosPolyglotProcessContext> refusedProcessContexts =
+            new java.util.LinkedHashSet<>();
     private final AtomicInteger actorCarrierThreadSequence = new AtomicInteger();
     private final AtomicReference<Throwable> contextCloseFailure = new AtomicReference<>();
     private ExecutorService actorCarrierExecutor;
@@ -74,6 +83,14 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
     private boolean entropyRetired;
     private final List<ProtosClockCapabilityValue> clockCapabilities = new ArrayList<>();
     private boolean clockRetired;
+    /**
+     * Host custody of provisioned, not yet retired external execution grants. Each grant's
+     * launcher is bound to the one Process Context that hosts its Process; nothing is shared
+     * between Contexts.
+     */
+    private final List<ProtosExternalExecutionCapabilityValue> executionCapabilities =
+            new ArrayList<>();
+    private boolean executionRetired;
     /**
      * D248-B host custody of standalone Filesystem backends, keyed by their exact owning Process.
      * Guarded by this. A backend leaves this map exactly once: at its Process's termination or
@@ -338,6 +355,10 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
         }
 
         ProtosPolyglotExecutionContext context = null;
+        // Native process creation is enabled only in the Context of a Process that holds an
+        // execution grant; Contexts of tools and of every other Process never receive it.
+        ProtosExternalExecutionCapabilityValue execution =
+                process.rootExecutionForRuntime().orElse(null);
         try {
             context =
                     ProtosPolyglotExecutionContext.open(
@@ -346,7 +367,13 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
                             out,
                             err,
                             activeProcessContexts::decrementAndGet,
-                            inspectionAuthorized);
+                            inspectionAuthorized,
+                            execution != null);
+            if (execution != null) {
+                // Before any guest code of the Process runs; a Context that cannot create
+                // processes fails hosting, which terminates the Process and retires the grant.
+                context.bindExecutionLauncherForRuntime(execution);
+            }
             ProtosPolyglotProcessContext hosted =
                     new ProtosPolyglotProcessContext(this, process, context);
             process.bindExecutionHostForRuntime(hosted);
@@ -516,6 +543,34 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
         return capability;
     }
 
+    /**
+     * Provisions authority only after the caller explicitly selects HOST_EXECUTION
+     * (EXTERNAL_PROCESS.md §1). The grant has no launcher yet: {@link #hostProcess} binds it to
+     * the Process Context that hosts its owning Process and enables native process creation in
+     * that Context only. Until then, and if that Context cannot create processes, no launch can
+     * occur. The selection widens neither Filesystem, Network, Resolver, Entropy nor Clock
+     * authority and creates no thread.
+     */
+    public synchronized ProtosExternalExecutionCapabilityValue provisionHostExecution(
+            ProtosPrelude prelude, ProtosEnvironmentValue.NativeNameDomain environmentNameDomain) {
+        Objects.requireNonNull(prelude, "prelude");
+        Objects.requireNonNull(environmentNameDomain, "environmentNameDomain");
+        if (closed || executionRetired) {
+            throw new IllegalStateException("Polyglot runtime host is closed");
+        }
+        // Throws IllegalStateException when the Prelude does not retain the execution protocols.
+        prelude.executionProtocolsForRuntime();
+        // A retired grant is forgotten only once it no longer custodies a launch or a child.
+        executionCapabilities.removeIf(
+                capability ->
+                        capability.retiredForRuntime()
+                                && capability.hostCustodyDischargedForRuntime());
+        ProtosExternalExecutionCapabilityValue capability =
+                new ProtosExternalExecutionCapabilityValue(prelude, environmentNameDomain, null);
+        executionCapabilities.add(capability);
+        return capability;
+    }
+
     /** Number of grants still retained by this host. */
     int provisionedEntropyCountForTesting() {
         synchronized (this) {
@@ -599,6 +654,37 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
         return foreignProviderLoader;
     }
 
+    synchronized void registerRefusedProcessContextForRuntime(ProtosPolyglotProcessContext context) {
+        refusedProcessContexts.add(Objects.requireNonNull(context, "context"));
+    }
+
+    synchronized void unregisterRefusedProcessContextForRuntime(ProtosPolyglotProcessContext context) {
+        refusedProcessContexts.remove(context);
+    }
+
+    synchronized int refusedProcessContextCountForTesting() {
+        return refusedProcessContexts.size();
+    }
+
+    /**
+     * Retries the refused closes of this host's Process Contexts, each attributed to its own
+     * Context: one whose custody is discharged is really closed, the others stay active.
+     *
+     * @return the number of Process Contexts still refused
+     */
+    public int retryRefusedProcessContextClosesForRuntime() {
+        List<ProtosPolyglotProcessContext> refused;
+        synchronized (this) {
+            refused = new ArrayList<>(refusedProcessContexts);
+        }
+        for (ProtosPolyglotProcessContext context : refused) {
+            context.retryTerminalCloseForRuntime();
+        }
+        synchronized (this) {
+            return refusedProcessContexts.size();
+        }
+    }
+
     void recordContextCloseFailure(Throwable failure) {
         contextCloseFailure.compareAndSet(null, Objects.requireNonNull(failure, "failure"));
     }
@@ -612,7 +698,19 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
     }
 
     @Override
-    public synchronized void close() {
+    public void close() {
+        synchronized (this) {
+            if (closed) {
+                return;
+            }
+        }
+        // Refused Process Contexts are retried outside this monitor: reclamation waits a bounded
+        // time on the operating system and must not block other users of this host meanwhile.
+        retryRefusedProcessContextClosesForRuntime();
+        closeOwnedResources();
+    }
+
+    private synchronized void closeOwnedResources() {
         if (closed) {
             return;
         }
@@ -628,6 +726,21 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
             capability.retireForRuntime();
         }
         clockCapabilities.clear();
+        // Guest authority is revoked at once. Host custody is released afterwards: a grant whose
+        // launches or children are discharged loses its idle workers and is forgotten; one that
+        // still custodies a child is retained, with its workers, for a later reclamation.
+        executionRetired = true;
+        for (ProtosExternalExecutionCapabilityValue capability : executionCapabilities) {
+            capability.retireForRuntime();
+        }
+        executionCapabilities.removeIf(
+                capability -> {
+                    if (!capability.hostCustodyDischargedForRuntime()) {
+                        return false;
+                    }
+                    capability.retireWorkersForHostClose();
+                    return true;
+                });
 
 
         // I160: retire pending KDF admission before closing other

@@ -827,6 +827,22 @@ public final class ProtosActorBootstrap {
                             }
                             locals.put("entropy", entropy);
                         });
+        // EXTERNAL_PROCESS.md §1: only the explicitly granted initial RootActor module receives
+        // execution; spawned Actors and imported modules never inherit it.
+        process.rootExecutionForRuntime()
+                .ifPresent(
+                        execution -> {
+                            if (execution.retiredForRuntime()
+                                    || execution.ownerForRuntime().orElse(null) != process
+                                    || !prelude.retainsExecutionProtocolsForRuntime()
+                                    || execution.representedDelegationParent(prelude)
+                                            != prelude.executionProtocolsForRuntime().execution()) {
+                                throw new IllegalStateException(
+                                        "RootActor execution grant belongs to another Core prelude");
+                            }
+                            execution.bindRootActorForRuntime(process, actor.executionDomain());
+                            locals.put("execution", execution);
+                        });
         process.rootClockForRuntime()
                 .ifPresent(
                         clock -> {

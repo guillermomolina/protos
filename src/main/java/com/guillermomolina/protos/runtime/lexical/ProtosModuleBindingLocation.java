@@ -89,8 +89,7 @@ public final class ProtosModuleBindingLocation {
     }
 
     /**
-     * GraalPy ReadGlobalOrBuiltinNode.getGlobalsStorageShapeIfPropMissing:
-     * prove absence on the physical binding store, never on the Context container.
+     * Proves absence on the physical binding store, never on the Context container.
      * Specialization time only; a non-null result must be guarded at execution.
      */
     public Shape storageShapeIfMissing() {

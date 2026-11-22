@@ -1,0 +1,79 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// Manual, host-dependent launch of external programs, directly and without a shell.
+// bin/protos --allow-execution protos/examples/io/external-execution.protos
+// execution grants no Filesystem, Network or other authority. This file is outside the
+// print-example sweep because it needs the explicit grant and host programs.
+
+ProcessStreams: import("std:io/process_streams")
+out: ProcessStreams.stdoutWriter(process)
+
+// Reads one endpoint to EOF as Bytes and decodes them only for display.
+drain: (endpoint) => {
+    text: ""
+    chunk: endpoint.read(4096).value()
+    while(chunk !== null) {
+        text = text + Encoding.UTF8.decode(chunk)
+        chunk = endpoint.read(4096).value()
+    }
+    text
+}
+
+// 1. Start a program. The four arguments are the executable, the exact argv, the complete
+// environment (nothing is inherited) and the working directory (null: the grant's default).
+echo: execution.start("/bin/echo", ["argv is exact:", "$HOME", "*"], Map(), null).value()
+
+// 2. stdout is a byte endpoint; nothing is expanded by a shell.
+out.writeLine(drain(echo.stdout())).value()
+
+// 3. Feed stdin and close it so the child sees EOF.
+cat: execution.start("/bin/cat", [], Map(), null).value()
+cat.stdin().write(Encoding.UTF8.encode("sent through stdin")).value()
+cat.stdin().close().value()
+out.writeLine(drain(cat.stdout())).value()
+
+// 4. stderr is independent of stdout.
+ls: execution.start("/bin/ls", ["/nonexistent-protos-example"], Map(), null).value()
+out.writeLine("stdout: [" + drain(ls.stdout()) + "]").value()
+stderrText: drain(ls.stderr())
+if(stderrText.size() > 0) {
+    out.writeLine("stderr: diagnostic received").value()
+} else {
+    out.writeLine("stderr: empty").value()
+}
+
+// 5. wait() resolves with an ExitStatus once the child is reaped. It never waits for EOF:
+// the streams above were drained explicitly. A non-zero exit is a valid result, not an error.
+lsStatus: ls.wait().value()
+if(lsStatus.exited() && (lsStatus.exitCode() != 0)) {
+    out.writeLine("ls: exited normally with a non-zero code").value()
+} else {
+    out.writeLine("ls: unexpected status").value()
+}
+
+// 6. terminate() submits a request; it does not wait. wait() then reports the outcome:
+// a signal termination has signaled() true and no exit code.
+sleeper: execution.start("/bin/sleep", ["30"], Map(), null).value()
+sleeper.terminate().value()
+sleeperStatus: sleeper.wait().value()
+if(sleeperStatus.signaled()) {
+    out.writeLine("sleep: terminated by a signal").value()
+} else {
+    out.writeLine("sleep: exited before the request arrived").value()
+}
+
+// When Protos is embedded by a host whose process handler it cannot verify, wait() fails
+// with IOError instead of inventing an ExitStatus.

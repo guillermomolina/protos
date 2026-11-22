@@ -49,6 +49,8 @@ public final class ProtosPolyglotProcessContext implements ProtosProcessExecutio
     private final ProtosPolyglotExecutionContext context;
     private final ProtosForeignProviderProcessLifecycle foreignProviders;
     private volatile Throwable foreignCleanupFailure;
+    /** The refusal recorded while external children of the Process are still in host custody. */
+    private volatile Throwable externalCustodyRefusal;
 
     private final ProtosPasswordKdfCustody passwordKdfCustody;
 
@@ -391,6 +393,26 @@ public final class ProtosPolyglotProcessContext implements ProtosProcessExecutio
             filesystemFailure.addSuppressed(foreignFailure);
         }
         foreignCleanupFailure = filesystemFailure != null ? filesystemFailure : foreignFailure;
+        // EXTERNAL_PROCESS.md §8: the Context refuses to close while a child it created is alive.
+        // Committed launches are awaited, then every child still in custody (live, or exited
+        // with endpoint handles still owned) is reclaimed with a bounded wait on this host
+        // thread, outside every Actor turn and Process monitor. Without a grant nothing runs.
+        // When reclamation is not established (a launch still committed, a child not reaped or
+        // a handle release uncertain) the Process keeps its host custody and the Context is not
+        // closed at all: Context.close would close it before reporting a live child, so a
+        // refusal is recorded instead. Waiters observe it, the Context stays counted as active by
+        // its host, and retryTerminalCloseForRuntime performs the real close once the custody is
+        // discharged.
+        if (!externalCustodyDischarged()) {
+            IllegalStateException refusal =
+                    new IllegalStateException(
+                            "external children of the Process are still in host custody");
+            if (context.refuseCloseForRuntime(refusal)) {
+                externalCustodyRefusal = refusal;
+                runtimeHost.registerRefusedProcessContextForRuntime(this);
+                return;
+            }
+        }
         try {
             context.requestClose();
         } catch (RuntimeException | Error failure) {
@@ -398,10 +420,53 @@ public final class ProtosPolyglotProcessContext implements ProtosProcessExecutio
         }
     }
 
+    private boolean externalCustodyDischarged() {
+        return process.rootExecutionForRuntime().isEmpty()
+                || process.reclaimExternalChildrenForHostClose(
+                        ProtosProcessRuntime.HOST_CLOSE_CHILD_GRACE_MILLIS);
+    }
+
+    /**
+     * Retries a close refused because of external custody: reclaims again with a bounded wait
+     * and, only when every launch, child and transport is discharged, performs the first real
+     * close of the Context. Runs on a host closing thread, never in an Actor turn.
+     *
+     * @return true when the Context is really closed
+     */
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
+    boolean retryTerminalCloseForRuntime() {
+        if (context.closedForRuntime()) {
+            return true;
+        }
+        Throwable refusal = externalCustodyRefusal;
+        if (refusal == null || !externalCustodyDischarged()) {
+            return false;
+        }
+        Throwable failure = context.closeAfterRefusalForRuntime();
+        if (failure != null) {
+            if (failure != refusal) {
+                // Context.close itself failed after the custody was discharged: final.
+                runtimeHost.recordContextCloseFailure(failure);
+                runtimeHost.unregisterRefusedProcessContextForRuntime(this);
+            }
+            return false;
+        }
+        externalCustodyRefusal = null;
+        runtimeHost.unregisterRefusedProcessContextForRuntime(this);
+        return true;
+    }
+
+    /** True while the close is refused because external custody is outstanding. */
+    boolean closeRefusedForExternalCustodyForRuntime() {
+        return externalCustodyRefusal != null;
+    }
+
     @Override
     public void awaitTerminalDispositionForRuntime() {
         Throwable failure = context.awaitCloseDispositionForRuntime();
-        if (failure != null) {
+        // A custody refusal belongs to this Context, which stays active and retryable; it is
+        // reported to the caller but never recorded as a host-wide close failure.
+        if (failure != null && failure != externalCustodyRefusal) {
             runtimeHost.recordContextCloseFailure(failure);
         }
         Throwable foreignFailure = foreignCleanupFailure;

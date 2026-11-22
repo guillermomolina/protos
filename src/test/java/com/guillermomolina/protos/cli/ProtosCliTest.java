@@ -73,7 +73,7 @@ final class ProtosCliTest {
         assertTrue(help.o.contains("process.args()"));
         assertTrue(help.o.contains("protos package"));
         assertTrue(help.o.contains("protos test"));
-        assertTrue(help.o.contains("protos debug [--allow-network] [--allow-resolver] [--allow-entropy] [--allow-clock] <file> [args...]"));
+        assertTrue(help.o.contains("protos debug [--allow-network] [--allow-resolver] [--allow-entropy] [--allow-clock] [--allow-execution] <file> [args...]"));
         assertTrue(help.o.contains("PROTOS_DEBUG_READY"));
         assertTrue(help.o.contains("explicit program output"));
         assertTrue(help.o.contains("protos format [<file>]"));

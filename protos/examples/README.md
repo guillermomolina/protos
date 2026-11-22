@@ -89,6 +89,7 @@ instead.
 | Dispatch requests by method and path with captured parameters (`std:http/router`) | `io/http-router.protos` |
 | Make one HTTPS request to a URL (`std:http/url_client`, requires `network` and `resolver`, manual) | `io/http-url-client.protos` |
 | Resolve a hostname without TCP (`--allow-resolver`, manual) | `io/resolver-only.protos` |
+| Launch programs directly, read stdout/stderr as Bytes, feed stdin, terminate and wait (`--allow-execution`, manual) | `io/external-execution.protos` |
 | Resolve a hostname and connect to a chosen address (`std:network/resolvers`, requires `network` and `resolver`, manual) | `io/hostname-resolution.protos` |
 | Authenticate TLS over a TCP connection and send one HTTP request (`std:tls/client`, requires `network` and `resolver`, manual) | `io/tls-client-over-tcp.protos` |
 | Write, append to and list application data under an explicit directory grant (requires `--allow-filesystem`) | `filesystem/cli-confined-data.protos` |

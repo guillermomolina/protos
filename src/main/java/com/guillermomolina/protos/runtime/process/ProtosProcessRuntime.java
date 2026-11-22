@@ -76,6 +76,33 @@ public final class ProtosProcessRuntime {
     private final ProtosResolverCapabilityValue rootResolver;
     private final ProtosEntropyCapabilityValue rootEntropy;
     private final ProtosClockCapabilityValue rootClock;
+    private final ProtosExternalExecutionCapabilityValue rootExecution;
+    /**
+     * External OS children under this Process's exclusive custody: live children, exited children
+     * whose endpoint handles are still owned or whose pumps are still alive, children registered
+     * after the termination cutover and children in host-only cleanup. A child leaves only when it
+     * was reaped, every native endpoint handle was released and its transport retired; resolution
+     * of its termination stage alone never removes it.
+     */
+    private final Set<ProtosExternalChildValue> externalChildren = new LinkedHashSet<>();
+    /**
+     * Transient host custody of native children that already exist but have no custody wrapper
+     * in {@link #externalChildren} yet, or never will because building it failed. A native child
+     * enters immediately after native creation and leaves either atomically with its wrapper's
+     * registration or after its verified reap and confirmed handle releases. The value is the
+     * abandonment outcome once abandonment started, or null while the wrapper is being built.
+     * Keys are host objects, never PIDs.
+     */
+    private final java.util.Map<ProtosExternalChildValue.NativeChild,
+                    java.util.concurrent.CompletableFuture<Boolean>>
+            nativeChildren = new java.util.IdentityHashMap<>();
+    /**
+     * Discharge obligations of native children in {@link #nativeChildren}, such as returning an
+     * admission slot, retained across abandonment attempts and run once, at the verified
+     * discharge.
+     */
+    private final java.util.Map<ProtosExternalChildValue.NativeChild, Runnable>
+            nativeDischargers = new java.util.IdentityHashMap<>();
     private final Set<ProtosActor> liveActors = new LinkedHashSet<>();
     private final Set<ProtosActorGroupRuntime> ownedGroups = new LinkedHashSet<>();
     private LifecycleState lifecycle = LifecycleState.RUNNING;
@@ -197,8 +224,28 @@ public final class ProtosProcessRuntime {
             ProtosResolverCapabilityValue rootResolver,
             ProtosEntropyCapabilityValue rootEntropy,
             ProtosClockCapabilityValue rootClock) {
+        this(actorRefPrototype, rootFilesystem, rootNetwork, rootResources, rootResolver,
+                rootEntropy, rootClock, null);
+    }
+
+    /**
+     * Optional external execution grant (EXTERNAL_PROCESS.md §1). Null is denial; a grant binds
+     * to precisely this incarnation and is retired at its termination cutover.
+     */
+    public ProtosProcessRuntime(
+            ProtosObjectValue actorRefPrototype,
+            ProtosFilesystemValue rootFilesystem,
+            ProtosNetworkCapabilityValue rootNetwork,
+            ProtosMapValue rootResources,
+            ProtosResolverCapabilityValue rootResolver,
+            ProtosEntropyCapabilityValue rootEntropy,
+            ProtosClockCapabilityValue rootClock,
+            ProtosExternalExecutionCapabilityValue rootExecution) {
         try {
             Objects.requireNonNull(actorRefPrototype, "actorRefPrototype");
+            if (rootExecution != null) {
+                rootExecution.bindOwnerForRuntime(this);
+            }
             if (rootResolver != null) {
                 rootResolver.bindOwnerForRuntime(this);
             }
@@ -209,6 +256,10 @@ public final class ProtosProcessRuntime {
                 rootClock.bindOwnerForRuntime(this);
             }
         } catch (RuntimeException | Error failure) {
+            if (rootExecution != null && (rootExecution.ownerForRuntime().isEmpty()
+                    || rootExecution.ownerForRuntime().orElse(null) == this)) {
+                rootExecution.retireForRuntime();
+            }
             if (rootClock != null && (rootClock.ownerForRuntime().isEmpty()
                     || rootClock.ownerForRuntime().orElse(null) == this)) {
                 rootClock.retireForRuntime();
@@ -235,6 +286,7 @@ public final class ProtosProcessRuntime {
         this.rootResolver = rootResolver;
         this.rootEntropy = rootEntropy;
         this.rootClock = rootClock;
+        this.rootExecution = rootExecution;
         this.rootFilesystem = rootFilesystem;
         this.rootNetwork = rootNetwork;
         this.rootResources = rootResources;
@@ -242,6 +294,7 @@ public final class ProtosProcessRuntime {
         try {
             rootActor = new ProtosActor(actorRefPrototype, this, true);
         } catch (RuntimeException | Error failure) {
+            retireExecutionForRuntime();
             retireClockForRuntime();
             try {
                 retireEntropyForRuntime();
@@ -366,6 +419,232 @@ public final class ProtosProcessRuntime {
     /** Host-only, idempotent revocation independent of all other grants. */
     public void retireClockForRuntime() {
         if (rootClock != null) rootClock.retireForRuntime();
+    }
+
+    /** Optional external execution grant, absent from the public Process capability. */
+    public Optional<ProtosExternalExecutionCapabilityValue> rootExecutionForRuntime() {
+        return Optional.ofNullable(rootExecution);
+    }
+
+    /** Host-only, idempotent revocation of new launches; existing children keep custody. */
+    public void retireExecutionForRuntime() {
+        if (rootExecution != null) {
+            rootExecution.retireForRuntime();
+        }
+    }
+
+    /** Bounded per-child wait, before and after forced termination, during host close. */
+    public static final long HOST_CLOSE_CHILD_GRACE_MILLIS = 2000;
+
+    /**
+     * Takes transient custody of a native child the instant it exists, before any wrapper or
+     * transport is built for it. Admitted regardless of the lifecycle: custody never depends on
+     * whether the result can still be published.
+     */
+    public void admitNativeChildForRuntime(ProtosExternalChildValue.NativeChild nativeChild) {
+        Objects.requireNonNull(nativeChild, "nativeChild");
+        synchronized (this) {
+            nativeChildren.putIfAbsent(nativeChild, null);
+        }
+    }
+
+    /**
+     * Registers a freshly launched child under this Process's custody before guest publication.
+     * Its native child leaves transient custody in the same atomic step, so no interval exists in
+     * which neither registry owns it. The child is tracked until it was reaped and its endpoint
+     * handles were released, even if it already exited; the result reports whether guest
+     * publication is still admissible. When it is false the caller must move the child to
+     * host-only custody.
+     */
+    public boolean registerExternalChildForRuntime(ProtosExternalChildValue child) {
+        Objects.requireNonNull(child, "child");
+        synchronized (this) {
+            externalChildren.add(child);
+            nativeChildren.remove(child.nativeChildForRuntime());
+            nativeDischargers.remove(child.nativeChildForRuntime());
+            // A child discharged before registration cannot reach the release callback again.
+            if (child.custodyReleasedForRuntime()) {
+                externalChildren.remove(child);
+            }
+            return lifecycle == LifecycleState.RUNNING;
+        }
+    }
+
+    /**
+     * Reclaims a native child in transient custody whose wrapper could not be built or
+     * registered: requests forced termination and releases every handle, abandoning undelivered
+     * input. The child leaves custody, and its retained discharge obligations run once, only
+     * after the supervisor verified the reap, every handle release was confirmed and its
+     * transport retired; a forced request alone establishes nothing. Never waits.
+     *
+     * <p>An attempt still in progress is reused. An attempt that completed without discharge
+     * leaves the child in custody and may be repeated: termination is requested again, while the
+     * single supervisor outcome and each memoized handle release are only observed again, so no
+     * reap is repeated and no uncertain handle is closed twice. A failed supervisor or an
+     * uncertain release therefore keeps the obligation on every attempt.
+     *
+     * <p>The answer is the outcome of the attempt now governing the child, the same stage stored
+     * in {@link #nativeChildren}: it completes with true once the child left custody (after the
+     * retained obligations ran) and with false when this attempt ended without discharge, in
+     * which case the child and its retained obligations stay in custody for a later attempt. A
+     * child no longer in transient custody answers true at once.
+     */
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
+    public java.util.concurrent.CompletableFuture<Boolean> abandonNativeChildForRuntime(
+            ProtosExternalChildValue.NativeChild nativeChild, Runnable discharged) {
+        java.util.concurrent.CompletableFuture<Boolean> outcome =
+                new java.util.concurrent.CompletableFuture<>();
+        synchronized (this) {
+            if (!nativeChildren.containsKey(nativeChild)) {
+                return java.util.concurrent.CompletableFuture.completedFuture(true);
+            }
+            if (discharged != null) {
+                nativeDischargers.putIfAbsent(nativeChild, discharged);
+            }
+            java.util.concurrent.CompletableFuture<Boolean> previous = nativeChildren.get(nativeChild);
+            if (previous != null && !previous.isDone()) {
+                return previous;
+            }
+            nativeChildren.put(nativeChild, outcome);
+        }
+        try {
+            nativeChild.requestForcedTermination();
+        } catch (java.io.IOException | RuntimeException refused) {
+            // Custody continues; a later host close path observes the unreaped child.
+        }
+        java.util.concurrent.CompletableFuture<Boolean> released =
+                java.util.concurrent.CompletableFuture.completedFuture(true);
+        for (ProtosExternalChildValue.Stream stream : ProtosExternalChildValue.Stream.values()) {
+            java.util.concurrent.CompletableFuture<Boolean> one;
+            try {
+                one = nativeChild.release(stream, true).toCompletableFuture();
+            } catch (RuntimeException uncertain) {
+                one = java.util.concurrent.CompletableFuture.completedFuture(false);
+            }
+            released = released.thenCombine(one, (left, right) -> left && Boolean.TRUE.equals(right));
+        }
+        java.util.concurrent.CompletableFuture<Boolean> reaped =
+                nativeChild.termination().toCompletableFuture().handle(
+                        (verified, failure) -> verified != null && failure == null);
+        java.util.concurrent.CompletableFuture<Boolean> quiescent =
+                nativeChild.transportRetired().toCompletableFuture().handle(
+                        (ignored, failure) -> failure == null);
+        reaped.thenCombine(released, Boolean::logicalAnd)
+                .thenCombine(quiescent, Boolean::logicalAnd)
+                .whenComplete(
+                        (done, failure) -> {
+                            boolean discharge = failure == null && Boolean.TRUE.equals(done);
+                            Runnable obligation = null;
+                            if (discharge) {
+                                synchronized (this) {
+                                    nativeChildren.remove(nativeChild);
+                                    obligation = nativeDischargers.remove(nativeChild);
+                                }
+                            }
+                            if (obligation != null) {
+                                obligation.run();
+                            }
+                            outcome.complete(discharge);
+                        });
+        return outcome;
+    }
+
+    /**
+     * Host close: after the termination cutover, waits a bounded time for committed launches of
+     * the execution grant. If an attempt is still in flight its child may not be registered yet,
+     * so no snapshot can be definitive: nothing is reclaimed as complete, the workers that may be
+     * needed to finish it stay alive, and the result is false so the host does not consider the
+     * close successful; a later call retries. Otherwise reclaims every child still tracked (live,
+     * exited with owned endpoints, in host-only cleanup, or in transient native custody), waiting
+     * a bounded time per child. Empty registries are not enough: the grant must also hold no
+     * launch in flight and no reserved child admission, since an admission stays reserved until
+     * its child's transport retired. The grant's workers are retired only once all of that holds.
+     * Only the embedding host's closing thread calls this, never with this Process's monitor held.
+     * Idempotent; a child whose reclamation was not established stays tracked.
+     *
+     * @return true when every native child is known to be reaped, every handle released, every
+     *     transport retired and every admission of the grant returned
+     */
+    public boolean reclaimExternalChildrenForHostClose(long graceMillis) {
+        retireExecutionForRuntime();
+        if (rootExecution != null && !rootExecution.awaitLaunchesForHostClose(graceMillis)) {
+            return false;
+        }
+        List<ProtosExternalChildValue> children;
+        List<ProtosExternalChildValue.NativeChild> natives;
+        synchronized (this) {
+            children = List.copyOf(externalChildren);
+            natives = List.copyOf(nativeChildren.keySet());
+        }
+        boolean reclaimed = true;
+        for (ProtosExternalChildValue child : children) {
+            reclaimed &= child.reclaimForHostCloseRuntime(graceMillis);
+        }
+        for (ProtosExternalChildValue.NativeChild nativeChild : natives) {
+            reclaimed &= awaitDischarge(abandonNativeChildForRuntime(nativeChild, null), graceMillis);
+        }
+        // Slots are returned just after their children leave the registry, on the discharging
+        // thread, so they are awaited for a bounded time rather than sampled once.
+        reclaimed = reclaimed
+                && (rootExecution == null
+                        || rootExecution.awaitHostCustodyDischargeForHostClose(graceMillis))
+                && !externalCustodyOutstandingForRuntime();
+        if (reclaimed && rootExecution != null) {
+            rootExecution.retireWorkersForHostClose();
+        }
+        return reclaimed;
+    }
+
+    private static boolean awaitDischarge(
+            java.util.concurrent.CompletableFuture<Boolean> outcome, long graceMillis) {
+        try {
+            return Boolean.TRUE.equals(
+                    outcome.get(graceMillis, java.util.concurrent.TimeUnit.MILLISECONDS));
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            return false;
+        } catch (java.util.concurrent.ExecutionException
+                | java.util.concurrent.TimeoutException notDischarged) {
+            return false;
+        }
+    }
+
+    /**
+     * True while a native child or wrapped child is still owed supervision, release or transport
+     * retirement, or while the grant still holds a launch in flight or a reserved admission.
+     */
+    public boolean externalCustodyOutstandingForRuntime() {
+        synchronized (this) {
+            if (!externalChildren.isEmpty() || !nativeChildren.isEmpty()) {
+                return true;
+            }
+        }
+        // The grant's own monitor is never taken while holding this Process's monitor.
+        return rootExecution != null && !rootExecution.hostCustodyDischargedForRuntime();
+    }
+
+    /** Snapshot of native children in transient custody. */
+    public List<ProtosExternalChildValue.NativeChild> nativeChildrenForRuntime() {
+        synchronized (this) {
+            return List.copyOf(nativeChildren.keySet());
+        }
+    }
+
+    /** Snapshot of the children still under this Process's custody. */
+    public List<ProtosExternalChildValue> externalChildrenForRuntime() {
+        synchronized (this) {
+            return List.copyOf(externalChildren);
+        }
+    }
+
+    /**
+     * Called once per child after it was reaped, all its endpoint handles were released and its
+     * transport retired; never earlier, so the registry keeps a child whose pump is still alive.
+     */
+    void externalChildReleasedForRuntime(ProtosExternalChildValue child) {
+        synchronized (this) {
+            externalChildren.remove(child);
+        }
     }
 
     /** Optional D243-C Entropy grant, absent from the public Process capability. */
@@ -833,6 +1112,18 @@ public final class ProtosProcessRuntime {
         retireClockForRuntime();
         retireResolverForRuntime();
         retireEntropyForRuntime();
+
+        // EXTERNAL_PROCESS.md §8: revoke launches, then move every child still in custody to
+        // host-only cleanup custody. Tracking continues until each child is reaped; nothing here
+        // waits for the OS or runs guest code.
+        retireExecutionForRuntime();
+        List<ProtosExternalChildValue> children;
+        synchronized (this) {
+            children = List.copyOf(externalChildren);
+        }
+        for (ProtosExternalChildValue child : children) {
+            child.enterHostOnlyCustodyForRuntime();
+        }
 
         // Stop Group routing at the Process cutover before member-Actor termination can trigger
         // routing eligibility callbacks. Group termination itself never stops a member Actor.

@@ -27,6 +27,7 @@ import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosResolverCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosEntropyCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosClockCapabilityValue;
+import com.guillermomolina.protos.runtime.ProtosExternalExecutionCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.guillermomolina.protos.runtime.ProtosProcessStandardStreamBinding;
 import java.util.List;
@@ -202,6 +203,46 @@ public final class ProtosStandaloneProcessBootstrap {
             ProtosResolverCapabilityValue defaultResolver,
             ProtosEntropyCapabilityValue defaultEntropy,
             ProtosClockCapabilityValue defaultClock) {
+        return create(
+                prelude,
+                applicationArguments,
+                environmentNameDomain,
+                environmentEntries,
+                stdinBackend,
+                stdoutBackend,
+                stderrBackend,
+                stdinEncoding,
+                stdoutEncoding,
+                stderrEncoding,
+                defaultFilesystem,
+                defaultNetwork,
+                defaultResolver,
+                defaultEntropy,
+                defaultClock,
+                null);
+    }
+
+    /**
+     * Canonical standalone bootstrap additionally carrying an optional external execution grant,
+     * bound to the new Process before the initial RootActor Activation exists.
+     */
+    public static Result create(
+            ProtosPrelude prelude,
+            List<String> applicationArguments,
+            ProtosEnvironmentValue.NativeNameDomain environmentNameDomain,
+            List<ProtosEnvironmentValue.NativeEntry> environmentEntries,
+            ProtosProcessStandardStreamBinding.ReadableBackend stdinBackend,
+            ProtosProcessStandardStreamBinding.WritableBackend stdoutBackend,
+            ProtosProcessStandardStreamBinding.WritableBackend stderrBackend,
+            ProtosEncodingValue stdinEncoding,
+            ProtosEncodingValue stdoutEncoding,
+            ProtosEncodingValue stderrEncoding,
+            ProtosFilesystemValue defaultFilesystem,
+            ProtosNetworkCapabilityValue defaultNetwork,
+            ProtosResolverCapabilityValue defaultResolver,
+            ProtosEntropyCapabilityValue defaultEntropy,
+            ProtosClockCapabilityValue defaultClock,
+            ProtosExternalExecutionCapabilityValue defaultExecution) {
         return createInternal(
                 prelude,
                 applicationArguments,
@@ -217,7 +258,7 @@ public final class ProtosStandaloneProcessBootstrap {
                 defaultNetwork,
                 null,
                 defaultResolver,
-                defaultEntropy, defaultClock);
+                defaultEntropy, defaultClock, defaultExecution);
     }
 
     static Result createWithRootResources(
@@ -251,6 +292,7 @@ public final class ProtosStandaloneProcessBootstrap {
                 rootResources,
                 null,
                 null,
+                null,
                 null);
     }
 
@@ -270,7 +312,8 @@ public final class ProtosStandaloneProcessBootstrap {
             ProtosMapValue rootResources,
             ProtosResolverCapabilityValue defaultResolver,
             ProtosEntropyCapabilityValue defaultEntropy,
-            ProtosClockCapabilityValue defaultClock) {
+            ProtosClockCapabilityValue defaultClock,
+            ProtosExternalExecutionCapabilityValue defaultExecution) {
         ProtosProcessRuntime process;
         try {
             Objects.requireNonNull(prelude, "prelude");
@@ -283,9 +326,12 @@ public final class ProtosStandaloneProcessBootstrap {
             }
             process = new ProtosProcessRuntime(prelude.actorRefPrototypeForRuntime(),
                     defaultFilesystem, defaultNetwork, rootResources, defaultResolver,
-                    defaultEntropy, defaultClock);
+                    defaultEntropy, defaultClock, defaultExecution);
         } catch (RuntimeException | Error failure) {
             // A failed rebind must not revoke a grant already owned by another Process.
+            if (defaultExecution != null && defaultExecution.ownerForRuntime().isEmpty()) {
+                defaultExecution.retireForRuntime();
+            }
             if (defaultClock != null && defaultClock.ownerForRuntime().isEmpty()) {
                 defaultClock.retireForRuntime();
             }
@@ -332,6 +378,8 @@ public final class ProtosStandaloneProcessBootstrap {
                     ProtosActorBootstrap.newStandaloneInitialActivation(
                             process, prelude));
         } catch (RuntimeException | Error failure) {
+            // No guest code ran, so no child exists; only launch authority is withdrawn.
+            process.retireExecutionForRuntime();
             process.retireClockForRuntime();
             try {
                 process.retireResolverForRuntime();

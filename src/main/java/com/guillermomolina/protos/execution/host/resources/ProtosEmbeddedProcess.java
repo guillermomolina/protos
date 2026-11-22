@@ -27,6 +27,7 @@ import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.io.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosEntropyCapabilityValue;
+import com.guillermomolina.protos.runtime.ProtosExternalExecutionCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosClockCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -183,6 +184,25 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
         ProtosClockCapabilityValue clock = env.getOptions().get(ProtosLanguage.ALLOW_CLOCK)
                 ? new ProtosClockCapabilityValue(prelude, new ProtosHostClockBackend()) : null;
 
+        // EXTERNAL_PROCESS.md §1: provisioned only by protos.AllowExecution, and only when the
+        // host permits native process creation (Env.newProcessBuilder requires only that). Guest
+        // Filesystem authority is independent: the launcher passes an explicit working directory
+        // by path, so this grant neither requires nor confers file access. When the Context file
+        // system denies the current-directory query, the host directory captured here, before any
+        // guest code runs, is the grant's stable default. The selection never
+        // widens any permission. An unselected or unprovisionable grant creates no launcher,
+        // thread or custody state.
+        ProtosExternalExecutionCapabilityValue execution =
+                env.getOptions().get(ProtosLanguage.ALLOW_EXECUTION)
+                                && env.isCreateProcessAllowed()
+                                && prelude.retainsExecutionProtocolsForRuntime()
+                        ? new ProtosExternalExecutionCapabilityValue(
+                                prelude,
+                                ProtosStandaloneHostedExecution.HOST_ENVIRONMENT_NAME_DOMAIN,
+                                ProtosExternalExecutionHostFacility.hostLauncher(
+                                        env, Path.of("").toAbsolutePath().toString()))
+                        : null;
+
         // The marker precedes the RootActor; its operations are bound to the RootActor below.
         ProtosFilesystemValue filesystem =
                 filesystemCustody == null ? null : new ProtosFilesystemValue();
@@ -202,7 +222,7 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
                     filesystem,
                     network,
                     null,
-                    entropy, clock);
+                    entropy, clock, execution);
 
             if (filesystem != null) {
                 // No guest source has executed yet.
@@ -235,6 +255,7 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
                     failure.addSuppressed(cleanupFailure);
                 }
             }
+            if (execution != null) execution.retireForRuntime();
             if (clock != null) clock.retireForRuntime();
             if (entropy != null) {
                 try {
@@ -620,6 +641,7 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
         closeFilesystem();
         closeNetwork();
         closeEntropy();
+        process.retireExecutionForRuntime();
     }
 
     /**
@@ -646,6 +668,12 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
         closeFilesystem();
         closeNetwork();
         closeEntropy();
+        // Bounded reclamation of external children, also covering exited children whose endpoint
+        // handles are still owned or whose pumps are alive, and committed launches. An
+        // unestablished reclamation leaves the children in the Process registry, so custody is
+        // never lost; the disposal path observes the registry again. No retry of the embedding
+        // Context close is attempted. Runs on the closing host thread, never in an Actor turn.
+        reclaimExternalChildren();
         joinCarriers();
     }
 
@@ -663,7 +691,25 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
         closeFilesystem();
         closeNetwork();
         closeEntropy();
+        // Bounded reclamation of external children, also covering exited children whose endpoint
+        // handles are still owned or whose pumps are alive, and committed launches. An
+        // unestablished reclamation leaves the children in the Process registry, so custody is
+        // never lost; the disposal path observes the registry again. No retry of the embedding
+        // Context close is attempted. Runs on the closing host thread, never in an Actor turn.
+        reclaimExternalChildren();
         joinCarriers();
+    }
+
+    /**
+     * Bounded host reclamation of external children; a Process without a grant has nothing to
+     * do. Its outcome is held by the Process registry itself, which keeps every child whose
+     * reclamation was not established; guest authority stays revoked and no guest code runs.
+     */
+    private void reclaimExternalChildren() {
+        if (process.rootExecutionForRuntime().isPresent()) {
+            process.reclaimExternalChildrenForHostClose(
+                    ProtosProcessRuntime.HOST_CLOSE_CHILD_GRACE_MILLIS);
+        }
     }
 
     /**

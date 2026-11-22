@@ -6,6 +6,9 @@ BASH ?= bash
 PYTHON ?= python3
 SH ?= sh
 MVN_FLAGS ?=
+CC ?= cc
+POSIX_PROCESS_LIBRARY := target/native-libs/libprotos_posix_process.so
+
 DIST_VALIDATE_FLAGS ?= --require-clean-source
 JAVA_TEST_JOBS ?= 6
 PROTOS_TEST_JOBS ?= 8
@@ -82,7 +85,7 @@ TRUFFLE_ROOT_SELECTOR ?=
 TRUFFLE_ROOT_EXPANSION ?= method
 TRUFFLE_ROOT_DUMP_LEVEL ?= 1
 
-.PHONY: help toolchain compile build test test-java java-test-phase test-java-parallel test-java-serial test-java-confirm test-java-stress test-local-range-pe-guard check-local-range-index-pe check-local-range-operands-pe check-local-accessor-pe check-bytecode-api-pe check-generated-bytecode-bci-pe check-native-runtime-compilation check-truffle-compilation diagnose-truffle-compilation truffle-root-catalog diagnose-truffle-root test-protos test-protos-suite test-protos-foreign check verify clean artifacts artifacts-verify artifacts-publish-d064 dist dist-validate build-native test-native clean-native
+.PHONY: help toolchain compile build test test-java java-test-phase test-java-parallel test-java-serial test-java-confirm test-java-stress test-local-range-pe-guard check-local-range-index-pe check-local-range-operands-pe check-local-accessor-pe check-bytecode-api-pe check-generated-bytecode-bci-pe check-native-runtime-compilation check-truffle-compilation diagnose-truffle-compilation truffle-root-catalog diagnose-truffle-root test-protos test-protos-suite test-protos-foreign check verify clean artifacts artifacts-verify artifacts-publish-d064 dist dist-validate build-native test-native clean-native build-posix-process-library
 
 help:
 	@printf '%s\n' \
@@ -90,6 +93,7 @@ help:
 		'  make toolchain      Verify the selected development toolchain contract' \
 		'  make compile        Compile production sources only (incremental)' \
 		'  make build          Clean and package without executing tests' \
+		'  make build-posix-process-library  Build the Linux host process bridge only' \
 		'  make build-native   Build the Native Image executable (explicit)' \
 		'  make test-native    Rebuild Native and run CLI regression + Native TLS JUnit' \
 		'  make clean-native   Remove Native-specific build and test artifacts' \
@@ -162,6 +166,13 @@ compile:
 
 build:
 	$(MVN) $(MVN_FLAGS) clean package -DskipTests
+
+# Host process library, also packaged by the Linux Maven resource phase.
+build-posix-process-library: $(POSIX_PROCESS_LIBRARY)
+
+$(POSIX_PROCESS_LIBRARY): src/main/native/process/protos_posix_process.c
+	mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -std=c11 -O2 -Wall -Wextra -Werror -fPIC -shared -pthread $< $(LDFLAGS) -o $@
 
 build-native:
 	$(MVN) $(MVN_FLAGS) -Pnative -DskipTests package

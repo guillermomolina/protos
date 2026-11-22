@@ -107,8 +107,7 @@ abstract class ProtosLexicalSelectionNode extends Node {
             Object activation, String name, boolean write, LexicalFrameLayout currentLayout);
 
     /*
-     * GraalPy ReadGlobalOrBuiltinNode.readBuiltinFastPath/readBuiltinFromStorage:
-     * cache a missing property's physical storage Shape, then guard storage
+     * Caches a missing property's physical storage Shape, then guards storage
      * identity and Shape before continuing the existing outer-owner read.
      * Only one materialized, map-backed nearer scope is admitted.
      */

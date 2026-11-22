@@ -231,8 +231,9 @@ that.
 Because the grant belongs to the Process, a future Protos shell running many
 commands inside one authorized session can hand the same capability to each
 in-Process command explicitly, without prompting per operation. Child Protos
-Processes and operating-system subprocesses are separate designs that have
-not been selected; nothing about this grant implies either.
+Processes are a separate design that has not been selected, and operating-system
+child processes need their own `execution` grant (below); nothing about this
+grant implies either.
 
 In the standard Polyglot embedding, the initial module receives `filesystem`
 only when the host Context effectively allows file access. Its base is the
@@ -241,6 +242,184 @@ and every operation goes through that provider, so a virtual, restricted, or
 read-only provider keeps its restrictions. If file access is allowed but that
 working directory cannot be safely established, the first evaluation fails
 before any guest code runs instead of starting without the binding.
+
+## External OS execution is a separate authority
+
+Launching an operating-system program is not part of `process`. It needs its
+own grant, `execution`, which the host provisions only on explicit request:
+
+```sh
+protos --allow-execution app.protos
+protos run --allow-execution Main
+```
+
+In an embedding, the selection is `protos.AllowExecution` (see the Java
+embedding guide). No other option implies it, and it implies nothing else: it
+gives no Filesystem, Network, Resolver, Entropy or Clock authority, and no
+shell. Only the initial RootActor module receives `execution`; imported modules,
+spawned Actors and bundled tools do not receive it implicitly.
+
+`start` takes exactly four arguments:
+
+```protos
+child: execution.start("/bin/echo", ["hello", "$HOME"], Map(), null).value()
+```
+
+1. the executable: an absolute path, or a simple name resolved by the host's
+   fixed search policy (a relative path containing a separator is rejected);
+2. the argument Array of Strings, passed exactly as given, with no shell
+   expansion (`$HOME` above is printed literally);
+3. the environment Map from String names to String values. It is the whole
+   child environment and nothing is inherited. Duplicate names under the host's
+   native name equivalence are rejected;
+4. the working directory: an absolute String, or `null` for the grant's stable
+   default directory.
+
+Invalid arguments fail the returned Future with `InvalidIOArgument` before
+anything is launched; an unresolvable program or a denied launch fails with
+`IOError`. `start` never blocks the calling Actor: its Future resolves to a
+`ChildProcess` once the child exists and is in Process custody.
+
+A child has three independent byte endpoints. `child.stdin()` is writable and
+closable; `child.stdout()` and `child.stderr()` are readable and closable. They
+follow the ordinary byte I/O rules: reads return Bytes, `null` at EOF, or fail,
+and cancelling a read never reorders or loses bytes. There is no text decoding,
+no merging of stdout and stderr, and no automatic draining, so a child that
+fills an unread pipe can block. Buffering is finite: a few kilobytes plus the
+OS pipe per endpoint, so backpressure reaches the child instead of the host
+collecting unbounded output. Closing stdin delivers every byte already written
+and then sends EOF to the child; closing an endpoint never terminates the child.
+
+`child.wait()` returns a fresh Future for the child's exit, and
+`child.terminate()` submits a best-effort termination request. Exit is not EOF:
+output produced before the exit can still be read afterwards.
+
+**Custody.** The Process, not the guest object, owns each child. Losing the last
+reference never leaves a child unmanaged. When the Process terminates, guest
+access ends at once, live children receive a termination request, endpoint
+handles are closed, and the host keeps tracking each child until it is really
+released: the supervisor confirmed the reap, every handle release was
+confirmed, and the child's internal transfer threads and pipes stopped. A child
+that was reaped and whose handles were closed stays in custody while one of
+those threads is still running. Sending a termination request, or a supervisor
+that failed, does not count as release. A handle whose close failed is treated
+as uncertain: it is never closed a second time, and the child stays in custody.
+
+Closing stdout or stderr releases the logical reader and never blocks the Actor:
+later reads of that endpoint fail and the close Future completes. The native
+handle itself is closed later by the endpoint's transfer thread. EOF arrives
+only when every native writer of the pipe has closed it, so while the child, or
+a descendant that inherited the pipe, keeps the other end open and silent, that
+native release stays pending and the child stays in custody. Reaping the child does not close its
+pipes, and `wait()` is independent of EOF and of `close()`.
+
+**Exit status.** What `wait()` reports depends on who supplied the process
+provider:
+
+1. *Protos host (CLI and runtime-owned Contexts).* The host installs its own
+   native POSIX provider when it builds the Context of a Process that holds the
+   Execution grant, and records that fact itself. After the single confirmed
+   reap, `wait()` resolves to an `ExitStatus`: a normal exit has `exited()`
+   true and the real code (143 stays a normal exit with code 143); a signal
+   termination has `signaled()` true and `exitCode()` null.
+2. *Embedder-supplied provider.* Protos cannot verify an arbitrary embedder's
+   process handler, so `wait()` fails with `IOError` instead of inventing an
+   `ExitStatus`; its completion still marks the confirmed reap.
+3. *Supervision failure.* If the supervisor itself fails, `wait()` fails with
+   `IOError` and the child is not treated as reaped: it stays in custody.
+4. *Uncertain creation or reclamation.* A child whose creation or reap cannot be
+   confirmed is retained by the host; nothing is reported as released.
+
+Execution authority, the host's permission to create processes, and Filesystem
+access are separate: a child is never confined by Protos Filesystem authority.
+Closing stdin completes only once every written byte was handed to the
+child, so it stays pending while the child does not read its input. The bounded
+number of host workers does not make either finish sooner.
+
+The child is in custody from the instant the operating system created it,
+before its endpoints are connected. Connecting them completes only once every
+pipe is really registered with the host's I/O poller and its transfer thread
+started; a failure there is detected before anything is published. If
+connecting the endpoints fails part way, no `ChildProcess` is published and the
+child is terminated and stays in custody. The `start` Future does not fail yet:
+it stays pending until the child is reaped, its handles are released and every
+internal transfer thread it had already started has really stopped; only then is
+the admission slot returned and `start` fails with `IOError`. If that cleanup
+cannot be confirmed (a failed supervisor or an uncertain release), the Future
+stays pending and the child stays in custody. A cleanup attempt that could not
+finish is attempted again by a later close; it never repeats a reap or an
+uncertain close.
+
+**Provider and validation limits.** The standalone host selects the Linux
+POSIX provider before building its Context. An external embedding host must
+install it explicitly; authorizing process creation does not establish which
+provider is installed. An unverified embedding provider cannot be declared
+conformant to the output contract. The JDK provider may lose a descendant's
+late output when it retires streams at direct-child exit. Loading failure is
+explicit and never falls back to that provider.
+
+The supplied JVM result covers 33 embedding tests before this consolidation,
+not the final focal suite. Native Image remains unvalidated, including native
+library loading and SIGPIPE survival. Its new regression must report a broken
+pipe and then launch another child and evaluate guest arithmetic in the same
+Protos host. Execution and Filesystem never grant each other: an embedding
+Context needs only host process-creation authorization for `execution`, and it
+can hold that grant with `IOAccess.NONE` and no `filesystem` slot. The launch
+working directory is a host path passed to the provider, not guest file access.
+The embedding regressions for this, and the separate Native CLI case without a
+Filesystem grant, remain to be run; neither surface demonstrates the other.
+
+A native start can create a child yet fail to confirm its reap. In that case
+the existing launcher retains the handle and keeps reclamation pending instead
+of reporting that no child remains. A persistent supervision failure or an
+uncertain release can retain that launch indefinitely. The POSIX provider
+receives the host PID from the creating call itself, so no later identity query
+exists; the PID is never exposed to guest code. Argument-arena closure remains a
+failure point, a fatal JVM error during a committed creation is not recovered,
+typed POSIX status cannot cross Truffle's decorated Process, and the existing
+reclamation loop is not accredited recovery from a fatal JVM error. These and
+the separate Context-close integration limitation remain publication blockers.
+See [Java embedding](embedding/java.md#explicit-external-execution-authorization).
+
+**Delegation to another Actor.** The grant is never inherited, but it can be
+handed over explicitly, as a message argument or an `Actor.spawn`
+initialization argument, to another Actor of the same Process:
+
+```protos
+worker: Actor.spawn("./worker.protos", "worker")
+worker.request("build", execution).value()
+```
+
+The initial grant works only inside the exact RootActor it was installed in;
+the host binds it to that Actor once, before any guest code runs. The receiver
+of a delegation gets a fresh view that works only inside that receiving Actor,
+not in the sender and not in any third Actor, and carries exactly the same
+authority, never more. Every view shares one revocation: when
+the Process terminates, all of them stop launching together. Children started
+through a view belong to the same Process custody. Each child belongs to the
+Actor whose `start` created it, and it and its endpoints work only inside that
+Actor; delegating the grant lets the receiver start children of its own but
+gives it no control over the children the sender started. Children and their
+endpoints are never transferable between Actors; sending one fails with
+`NonTransferableValue`. Neither the grant nor its views enter parallel
+execution; an `ExitStatus`, being terminated data, does.
+
+**Current limitations.** A Process
+admits a bounded number of children at a time (16), and a `start` beyond that
+fails with `IOCapacityExhausted` before anything is launched.
+
+**Closing with children still in custody.** The CLI host closes a Process's
+Context only after every launch in progress has finished and every child has
+been reaped, released and its transport stopped. If that cannot be established
+within the bounded close wait, the close is refused: it is reported as a
+failure, the Context is not closed and stays counted by its host, and guest
+access stays revoked. The host retries the refused close once more when it is
+itself closed; that retry performs the real close only if the custody was
+discharged in the meantime, which nothing guarantees. The refusal belongs to
+that Context only and does not make other Contexts of the host fail. This
+refusal handling is a current, partial implementation measure; in a Java
+embedding that owns its `Context`, a close cannot be retried at all (see the
+Java embedding guide).
 
 ## Process authority can be delegated to another Actor
 

@@ -103,6 +103,18 @@ public final class ProtosLanguage extends TruffleLanguage<ProtosLanguageContext>
             stability = OptionStability.STABLE)
     static final OptionKey<Boolean> ALLOW_CLOCK = new OptionKey<>(false);
 
+    /**
+     * EXTERNAL_PROCESS.md §1: independent explicit embedding selection of external OS execution.
+     * allowCreateProcess, allowAllAccess, allowIO and every other permission neither imply nor
+     * replace it; the host's process-creation permission remains a separate precondition.
+     */
+    @Option(
+            name = "AllowExecution",
+            category = OptionCategory.USER,
+            stability = OptionStability.STABLE,
+            help = "Explicitly grant external OS execution to the initial RootActor of this Context.")
+    static final OptionKey<Boolean> ALLOW_EXECUTION = new OptionKey<>(false);
+
     private final ProtosSourceCompiler sourceCompiler = new ProtosSourceCompiler();
 
     /*

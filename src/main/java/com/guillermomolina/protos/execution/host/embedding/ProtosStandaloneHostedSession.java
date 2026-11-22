@@ -19,6 +19,7 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.execution.ProtosWorkspacePackageApplicationExecution.NetworkGrant;
 import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.EntropyGrant;
 import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.ClockGrant;
+import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.ExecutionGrant;
 import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.ResolverGrant;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorModuleState;
@@ -174,9 +175,34 @@ public final class ProtosStandaloneHostedSession implements AutoCloseable {
                 out,
                 err,
                 networkGrant,
+                entropyGrant,
+                clockGrant,
+                ExecutionGrant.NONE);
+    }
+
+    /** As the overload without an execution selection, with an explicit {@link ExecutionGrant}. */
+    public static ProtosStandaloneHostedSession open(
+            Path coreRoot,
+            Path sourceFile,
+            List<String> applicationArguments,
+            InputStream in,
+            OutputStream out,
+            OutputStream err,
+            NetworkGrant networkGrant,
+            EntropyGrant entropyGrant, ClockGrant clockGrant,
+            ExecutionGrant executionGrant)
+            throws IOException {
+        return open(
+                coreRoot,
+                sourceFile,
+                applicationArguments,
+                in,
+                out,
+                err,
+                networkGrant,
                 ResolverGrant.NONE,
                 entropyGrant,
-                clockGrant);
+                clockGrant, executionGrant);
     }
 
     /**
@@ -195,6 +221,33 @@ public final class ProtosStandaloneHostedSession implements AutoCloseable {
             ResolverGrant resolverGrant,
             EntropyGrant entropyGrant, ClockGrant clockGrant)
             throws IOException {
+        return open(
+                coreRoot,
+                sourceFile,
+                applicationArguments,
+                in,
+                out,
+                err,
+                networkGrant,
+                resolverGrant,
+                entropyGrant,
+                clockGrant,
+                ExecutionGrant.NONE);
+    }
+
+    /** As the overload without an execution selection, with an explicit {@link ExecutionGrant}. */
+    public static ProtosStandaloneHostedSession open(
+            Path coreRoot,
+            Path sourceFile,
+            List<String> applicationArguments,
+            InputStream in,
+            OutputStream out,
+            OutputStream err,
+            NetworkGrant networkGrant,
+            ResolverGrant resolverGrant,
+            EntropyGrant entropyGrant, ClockGrant clockGrant,
+            ExecutionGrant executionGrant)
+            throws IOException {
         Objects.requireNonNull(coreRoot, "coreRoot");
         Objects.requireNonNull(sourceFile, "sourceFile");
         Objects.requireNonNull(applicationArguments, "applicationArguments");
@@ -205,6 +258,7 @@ public final class ProtosStandaloneHostedSession implements AutoCloseable {
         Objects.requireNonNull(resolverGrant, "resolverGrant");
         Objects.requireNonNull(entropyGrant, "entropyGrant");
         Objects.requireNonNull(clockGrant, "clockGrant");
+        Objects.requireNonNull(executionGrant, "executionGrant");
 
         return openSession(
                 coreRoot,
@@ -215,7 +269,7 @@ public final class ProtosStandaloneHostedSession implements AutoCloseable {
                 err,
                 networkGrant,
                 resolverGrant,
-                entropyGrant, clockGrant);
+                entropyGrant, clockGrant, executionGrant);
     }
 
     /** Convenience form: no application arguments, empty stdin, discarded stdout and stderr. */
@@ -240,7 +294,17 @@ public final class ProtosStandaloneHostedSession implements AutoCloseable {
             NetworkGrant networkGrant,
             EntropyGrant entropyGrant)
             throws IOException {
-        return openSession(coreRoot, sourceFile, arguments, in, out, err, networkGrant, entropyGrant, ClockGrant.NONE);
+        return openSession(
+                coreRoot,
+                sourceFile,
+                arguments,
+                in,
+                out,
+                err,
+                networkGrant,
+                entropyGrant,
+                ClockGrant.NONE,
+                ExecutionGrant.NONE);
     }
 
     private static ProtosStandaloneHostedSession openSession(
@@ -251,7 +315,8 @@ public final class ProtosStandaloneHostedSession implements AutoCloseable {
             OutputStream out,
             OutputStream err,
             NetworkGrant networkGrant,
-            EntropyGrant entropyGrant, ClockGrant clockGrant)
+            EntropyGrant entropyGrant, ClockGrant clockGrant,
+            ExecutionGrant executionGrant)
             throws IOException {
         return openSession(
                 coreRoot,
@@ -263,7 +328,7 @@ public final class ProtosStandaloneHostedSession implements AutoCloseable {
                 networkGrant,
                 ResolverGrant.NONE,
                 entropyGrant,
-                clockGrant);
+                clockGrant, executionGrant);
     }
 
     private static ProtosStandaloneHostedSession openSession(
@@ -275,7 +340,8 @@ public final class ProtosStandaloneHostedSession implements AutoCloseable {
             OutputStream err,
             NetworkGrant networkGrant,
             ResolverGrant resolverGrant,
-            EntropyGrant entropyGrant, ClockGrant clockGrant)
+            EntropyGrant entropyGrant, ClockGrant clockGrant,
+            ExecutionGrant executionGrant)
             throws IOException {
         Path sourcePath = sourceFile.toAbsolutePath().normalize();
         String characters = Files.readString(sourcePath, StandardCharsets.UTF_8);
@@ -302,7 +368,7 @@ public final class ProtosStandaloneHostedSession implements AutoCloseable {
                             ProtosStandaloneHostedExecution.writableBackend(err),
                             networkGrant,
                             resolverGrant,
-                            entropyGrant, clockGrant,
+                            entropyGrant, clockGrant, executionGrant,
                             runtimeHost);
             process = bootstrap.process();
             // bindProcess terminates the Process and closes the host itself when binding fails.

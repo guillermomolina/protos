@@ -144,12 +144,14 @@ final class ProtosNativeGeneratedStructurePolicyTest {
 
         /*
          * Implementation metadata is initialized at build time by package;
-         * the run-time exceptions are exactly the class whose static
-         * initializer links native symbols through Java FFM and the class
-         * whose static initializer computes Unicode case tables through ICU4J.
+         * the run-time exceptions are exactly the classes whose static
+         * initializers link native symbols through Java FFM (I166 POSIX process
+         * handler, I156 confined Filesystem bridge) and the class whose static
+         * initializer computes Unicode case tables through ICU4J.
          */
         assertEquals(
                 "--initialize-at-run-time="
+                        + "com.guillermomolina.protos.execution.ProtosPosixProcessHandler,"
                         + "com.guillermomolina.protos.execution.ProtosLinuxConfinedFilesystemNative$Bridge,"
                         + "com.guillermomolina.protos.execution.ProtosRegexUnicodeFacility$CaseOrbits",
                 lines.get(1));

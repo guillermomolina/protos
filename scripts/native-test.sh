@@ -377,6 +377,181 @@ printf '%s\n' "${resolver_args}" >"${resolver_source}"
 run_resolver_case FILE_ARGUMENT 0 $'false\n1\n--allow-resolver' "${resolver_source}" --allow-resolver
 run_resolver_case CLEAN_ARGS 0 $'true\n1\n--allow-resolver' --allow-resolver "${resolver_source}" --allow-resolver
 
+# External OS execution (EXTERNAL_PROCESS.md): denied by default, granted only by
+# --allow-execution to the RootActor, never inherited by spawned Actors, launching
+# directly with real stream EOF, and a child left running is reclaimed at close.
+# No ExitStatus is asserted: the decorated Process exposes no verified terminal category.
+execution_failures=0
+execution_cases=0
+execution_probe='print(context.hasSlot("execution"))'
+execution_launch='child: execution.start("/bin/echo", ["native-child"], Map(), null).value()
+text: ""
+chunk: child.stdout().read(65536).value()
+while(chunk !== null) {
+    text = text + Encoding.UTF8.decode(chunk)
+    chunk = child.stdout().read(65536).value()
+}
+err: child.stderr().read(65536).value()
+print(text == "native-child\n")
+print(err === null)'
+execution_worker="${tmp_dir}/execution-worker.protos"
+printf '%s\n' 'worker: () => { { inherited: () => { context.hasSlot("execution") } } }' 'null' \
+    >"${execution_worker}"
+execution_spawn="${tmp_dir}/execution-spawn.protos"
+printf '%s\n' 'worker: Actor.spawn("./execution-worker.protos", "worker")' \
+    'print(worker.request("inherited").value())' 'worker.stop()' >"${execution_spawn}"
+
+run_execution_case() {
+    local name="$1"
+    local expected_status="$2"
+    local expected_output="$3"
+    shift 3
+    local case_out="${tmp_dir}/execution-${name}.out"
+    local case_err="${tmp_dir}/execution-${name}.err"
+    PROTOS_HOME="${root}" "${native_bin}" "$@" >"${case_out}" 2>"${case_err}"
+    local case_status=$?
+    execution_cases=$((execution_cases + 1))
+    echo "NATIVE_EXECUTION_${name}_STATUS=${case_status}"
+    if [[ "${case_status}" -ne "${expected_status}" ]] ||
+       [[ "$(cat "${case_out}")" != "${expected_output}" ]] ||
+       grep -Fq 'Internal error' "${case_err}"; then
+        cat "${case_out}" "${case_err}" >&2
+        echo "NATIVE_EXECUTION_CASE_FAILURE=${name}" >&2
+        execution_failures=$((execution_failures + 1))
+    fi
+}
+
+run_execution_case DEFAULT_DENIED 0 'false' -e "${execution_probe}"
+run_execution_case OTHERS_DENIED 0 'false' --allow-clock --allow-entropy -e "${execution_probe}"
+run_execution_case GRANTED 0 'true' --allow-execution -e "${execution_probe}"
+run_execution_case SPAWNED_NOT_INHERITED 0 'false' --allow-execution "${execution_spawn}"
+if [[ -x /bin/echo ]]; then
+    run_execution_case LAUNCH_AND_STREAMS 0 $'true\ntrue' --allow-execution -e "${execution_launch}"
+fi
+# Binary stdin: bytes written to /bin/cat return unchanged on stdout once stdin is closed.
+execution_stdin='child: execution.start("/bin/cat", [], Map(), null).value()
+child.stdin().write(Encoding.UTF8.encode("native-stdin")).value()
+child.stdin().close().value()
+text: ""
+chunk: child.stdout().read(65536).value()
+while(chunk !== null) {
+    text = text + Encoding.UTF8.decode(chunk)
+    chunk = child.stdout().read(65536).value()
+}
+print(text == "native-stdin")'
+if [[ -x /bin/cat ]]; then
+    run_execution_case STDIN_CLOSE 0 'true' --allow-execution -e "${execution_stdin}"
+fi
+# The output writer belongs to a descendant after the direct child has exited.
+execution_descendant='child: execution.start("/bin/sh",
+    ["-c", "(/bin/sleep 0.2; printf late) & printf early"], Map(), null).value()
+child.stdin().close().value()
+child.wait().value()
+text: ""
+chunk: child.stdout().read(65536).value()
+while(chunk !== null) {
+    text = text + Encoding.UTF8.decode(chunk)
+    chunk = child.stdout().read(65536).value()
+}
+print(text)'
+if [[ -x /bin/sh && -x /bin/sleep ]]; then
+    run_execution_case DESCENDANT_OUTPUT 0 'earlylate' --allow-execution -e "${execution_descendant}"
+fi
+# The Native host installs its own POSIX provider: wait() resolves to an ExitStatus
+# decoded from the real reaped status. 143 is a normal exit, never a signal guess;
+# a self-delivered SIGTERM is a signal termination without an exit code.
+execution_status='run: (script) => {
+    child: execution.start("/bin/sh", ["-c", script], Map(), null).value()
+    child.stdin().close().value()
+    child.wait().value()
+}
+zero: run("exit 0")
+print(zero.exited() && (zero.exitCode() == 0) && (zero.signaled() == false))
+normal: run("exit 143")
+print(normal.exited() && (normal.exitCode() == 143) && (normal.signaled() == false))
+killed: run("kill -TERM $$")
+print((killed.exited() == false) && (killed.exitCode() === null) && killed.signaled())'
+if [[ -x /bin/sh ]]; then
+    run_execution_case EXIT_STATUS 0 $'true\ntrue\ntrue' --allow-execution -e "${execution_status}"
+fi
+# Execution is independent of the guest Filesystem capability.
+run_execution_case NO_FILESYSTEM 0 'false' --allow-execution \
+    -e 'print(context.hasSlot("filesystem"))'
+if [[ -x /usr/bin/env ]]; then
+    run_execution_case EMPTY_ENVIRONMENT 0 'true' --allow-execution -e '
+child: execution.start("/usr/bin/env", [], Map(), null).value()
+print(child.stdout().read(65536).value() === null)'
+fi
+# Close stdout in the direct child while a descendant retains stderr. Waiting for
+# the direct child must neither close stderr nor classify its open writer as EOF.
+if [[ -x /bin/sh && -x /bin/sleep ]]; then
+    run_execution_case INDEPENDENT_STDERR_AFTER_REAP 0 $'true\nlate-error' --allow-execution -e '
+child: execution.start("/bin/sh",
+    ["-c", "exec 1>&-; (/bin/sleep 0.2; printf late-error >&2) &"], Map(), null).value()
+child.stdin().close().value()
+child.wait().value()
+print(child.stdout().read(65536).value() === null)
+text: ""
+chunk: child.stderr().read(65536).value()
+while(chunk !== null) {
+    text = text + Encoding.UTF8.decode(chunk)
+    chunk = child.stderr().read(65536).value()
+}
+print(text)'
+fi
+# Wait establishes that /bin/true has closed stdin. A 1 MiB write stays within
+# the guest admission limit and exceeds the transport pipe. Capacity refusal
+# must fail this regression rather than masquerade as EPIPE. The second child and final
+# marker execute IN THIS SAME native host: an IOError alone does not prove that
+# SIGPIPE left the Native Image process alive. No global signal policy is changed.
+if [[ -x /bin/true && -x /bin/echo ]]; then
+    run_execution_case SIGPIPE_HOST_SURVIVES 0 $'true\ntrue\n42' --allow-execution -e '
+child: execution.start("/bin/true", [], Map(), null).value()
+child.wait().value()
+payload: "x"
+index: 0
+while(index < 20) { payload = payload + payload; index = index + 1 }
+broken: IOError.handle(() => {
+    IOCapacityExhausted.handle(() => {
+        child.stdin().write(Encoding.UTF8.encode(payload)).value()
+        false
+    }, (error) => { false })
+}, (error) => { true })
+print(broken)
+next: execution.start("/bin/echo", ["survived"], Map(), null).value()
+text: ""
+chunk: next.stdout().read(65536).value()
+while(chunk !== null) {
+    text = text + Encoding.UTF8.decode(chunk)
+    chunk = next.stdout().read(65536).value()
+}
+print(text == "survived\n")
+print(40 + 2)'
+fi
+# The live child is a private copy of sleep under this run's temporary directory, so
+# its absolute command line identifies it exclusively; no PID is exposed to Protos.
+# After the CLI has exited, the harness checks with ps that no process with exactly
+# that command line is still running and fails the case if one is. It never signals a
+# PID observed through ps, whose identity may change between observation and signal;
+# the fixture's duration is finite, so a leaked fixture ends on its own.
+if [[ -x /bin/sleep ]] && command -v ps >/dev/null 2>&1; then
+    execution_fixture="${tmp_dir}/protos-execution-fixture-sleep"
+    cp /bin/sleep "${execution_fixture}"
+    chmod +x "${execution_fixture}"
+    run_execution_case LIVE_CHILD_RECLAIMED 0 'started' --allow-execution \
+        -e "execution.start(\"${execution_fixture}\", [\"30\"], Map(), null).value()
+print(\"started\")"
+    execution_fixture_pids="$(ps -A -o pid=,args= | awk -v want="${execution_fixture} 30" \
+        '{ pid = $1; $1 = ""; sub(/^ /, ""); if ($0 == want) print pid }')"
+    if [[ -n "${execution_fixture_pids}" ]]; then
+        echo "NATIVE_EXECUTION_LIVE_CHILD_RECLAIMED_ALIVE=true"
+        echo "NATIVE_EXECUTION_CASE_FAILURE=LIVE_CHILD_RECLAIMED_STILL_RUNNING" >&2
+        execution_failures=$((execution_failures + 1))
+    else
+        echo "NATIVE_EXECUTION_LIVE_CHILD_RECLAIMED_ALIVE=false"
+    fi
+fi
+
 # I155 / D248-B: the explicit --allow-filesystem=<directory> grant on the real
 # Native executable. Every case asserts its exit status; success cases also
 # assert guest output and host-side effects, failure cases assert that no guest
@@ -810,6 +985,9 @@ cat "${lsp_log}"
 if [[ "${resolver_failures}" -ne 0 ]]; then
     echo "NATIVE_RESOLVER=FAIL" >&2
     false
+elif [[ "${execution_failures}" -ne 0 ]]; then
+    echo "NATIVE_EXTERNAL_EXECUTION=FAIL" >&2
+    false
 elif [[ "${lsp_status}" -ne 0 ]]; then
     echo "NATIVE_LSP_WORKSPACE_SYMBOLS=FAIL" >&2
     false
@@ -830,5 +1008,6 @@ else
     echo "NATIVE_HMAC_SHA256=PASS"
     echo "NATIVE_I115_CALLER_RECOVERY=PASS"
     echo "NATIVE_RESOLVER=PASS"
+    echo "NATIVE_EXTERNAL_EXECUTION=PASS cases=${execution_cases}"
     echo "NATIVE_REGRESSION_SUITE=PASS"
 fi

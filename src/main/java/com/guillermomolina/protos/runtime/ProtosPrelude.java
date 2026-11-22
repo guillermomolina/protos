@@ -45,6 +45,26 @@ public final class ProtosPrelude {
     private final ProtosClosureValue runtimeFilesystemOpenMethod;
     private final ProtosObjectValue runtimeEntropyPrototype;
     private final ProtosObjectValue runtimeClockPrototype;
+    private final ExecutionProtocols runtimeExecutionProtocols;
+
+    /**
+     * Private identities of the authority-free source-backed external execution protocols. They
+     * are never Prelude bindings or module members; possession of one confers no authority.
+     */
+    public record ExecutionProtocols(
+            ProtosObjectValue execution,
+            ProtosObjectValue childProcess,
+            ProtosObjectValue exitStatus,
+            ProtosObjectValue childStdin,
+            ProtosObjectValue childOutput) {
+        public ExecutionProtocols {
+            Objects.requireNonNull(execution, "execution");
+            Objects.requireNonNull(childProcess, "childProcess");
+            Objects.requireNonNull(exitStatus, "exitStatus");
+            Objects.requireNonNull(childStdin, "childStdin");
+            Objects.requireNonNull(childOutput, "childOutput");
+        }
+    }
     private final Map<ProtosModuleKey, Map<String, ProtosObjectValue>> standardModuleMembers;
     private final Set<ProtosObjectValue> standardModuleMemberIdentities;
     private final Map<
@@ -342,6 +362,49 @@ public final class ProtosPrelude {
             ProtosClosureValue runtimeFilesystemOpenMethod,
             ProtosObjectValue runtimeEntropyPrototype,
             ProtosObjectValue runtimeClockPrototype) {
+        this(
+                bindings,
+                contextPrototype,
+                runtimeBytesPrototype,
+                runtimeActorRefPrototype,
+                runtimeTcpConnectionPrototype,
+                runtimeTcpListenerPrototype,
+                runtimeIpAddressPrototype,
+                runtimeIpEndpointPrototype,
+                standardModuleMembers,
+                semanticTransferFamilies,
+                lazyStandardModuleMembers,
+                runtimeTcpAcceptorPrototype,
+                runtimeFilesystemOpenMethod,
+                runtimeEntropyPrototype,
+                runtimeClockPrototype,
+                null);
+    }
+
+    /**
+     * Complete Prelude construction, additionally retaining the private authority-free
+     * external execution protocols (EXTERNAL_PROCESS.md §1). Null is a reduced Prelude that
+     * cannot provision an execution grant.
+     */
+    public ProtosPrelude(
+            ProtosObjectValue bindings,
+            ProtosObjectValue contextPrototype,
+            ProtosObjectValue runtimeBytesPrototype,
+            ProtosObjectValue runtimeActorRefPrototype,
+            ProtosObjectValue runtimeTcpConnectionPrototype,
+            ProtosObjectValue runtimeTcpListenerPrototype,
+            ProtosObjectValue runtimeIpAddressPrototype,
+            ProtosObjectValue runtimeIpEndpointPrototype,
+            Map<ProtosModuleKey, Map<String, ProtosObjectValue>>
+                    standardModuleMembers,
+            List<ProtosSemanticTransferFamily> semanticTransferFamilies,
+            Map<ProtosModuleKey, Map<String, Supplier<ProtosObjectValue>>>
+                    lazyStandardModuleMembers,
+            ProtosObjectValue runtimeTcpAcceptorPrototype,
+            ProtosClosureValue runtimeFilesystemOpenMethod,
+            ProtosObjectValue runtimeEntropyPrototype,
+            ProtosObjectValue runtimeClockPrototype,
+            ExecutionProtocols runtimeExecutionProtocols) {
         if (runtimeFilesystemOpenMethod != null
                 && (runtimeFilesystemOpenMethod.definition() == null
                         || runtimeFilesystemOpenMethod.nativeBody().isPresent())) {
@@ -352,6 +415,16 @@ public final class ProtosPrelude {
         this.runtimeEntropyPrototype = runtimeEntropyPrototype;
         this.runtimeClockPrototype = runtimeClockPrototype;
         requireFrozenDirectChildOfObject(runtimeClockPrototype, "Clock");
+        this.runtimeExecutionProtocols = runtimeExecutionProtocols;
+        if (runtimeExecutionProtocols != null) {
+            requireFrozenDirectChildOfObject(runtimeExecutionProtocols.execution(), "Execution");
+            requireFrozenDirectChildOfObject(
+                    runtimeExecutionProtocols.childProcess(), "ChildProcess");
+            requireFrozenDirectChildOfObject(runtimeExecutionProtocols.exitStatus(), "ExitStatus");
+            requireFrozenDirectChildOfObject(runtimeExecutionProtocols.childStdin(), "ChildStdin");
+            requireFrozenDirectChildOfObject(
+                    runtimeExecutionProtocols.childOutput(), "ChildOutput");
+        }
         this.semanticTransferFamilies = copySemanticTransferFamilies(semanticTransferFamilies);
         this.bindings = Objects.requireNonNull(bindings, "bindings");
         this.contextPrototype =
@@ -664,6 +737,20 @@ public final class ProtosPrelude {
                     "this prelude does not retain the standard runtime Bytes prototype");
         }
         return runtimeBytesPrototype;
+    }
+
+    /** Private external execution protocols; reduced Preludes cannot provision grants. */
+    public ExecutionProtocols executionProtocolsForRuntime() {
+        if (runtimeExecutionProtocols == null) {
+            throw new IllegalStateException(
+                    "this prelude does not retain the runtime execution protocols");
+        }
+        return runtimeExecutionProtocols;
+    }
+
+    /** Whether this Prelude can back an execution grant. */
+    public boolean retainsExecutionProtocolsForRuntime() {
+        return runtimeExecutionProtocols != null;
     }
 
     /** Private authority-free Clock protocol; reduced legacy fixtures cannot provision grants. */

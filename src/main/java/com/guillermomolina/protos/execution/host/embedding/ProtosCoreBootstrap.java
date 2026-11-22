@@ -263,6 +263,23 @@ public final class ProtosCoreBootstrap {
                     ProtosClockHostFacility.BOOTSTRAP_SLOT);
             throw failure;
         }
+        // EXTERNAL_PROCESS.md §1: private lexical bridge for the authority-free source-backed
+        // external execution protocols. Loading only declares them: no grant, launcher, thread
+        // or native resource exists until a host explicitly provisions a grant.
+        bootstrapContext.createLocalSlot(
+                ProtosExternalExecutionHostFacility.BOOTSTRAP_SLOT,
+                ProtosExternalExecutionHostFacility.createBridge());
+        try {
+            for (String source : EXECUTION_PROTOCOL_SOURCES) {
+                sourceLoader
+                        .load(coreDirectory.resolve("execution/" + source + ".protos"))
+                        .call(bootstrapActivation);
+            }
+        } catch (RuntimeException | Error failure) {
+            bootstrapContext.removeLocalSlot(
+                    ProtosExternalExecutionHostFacility.BOOTSTRAP_SLOT);
+            throw failure;
+        }
         sourceLoader
                 .load(coreDirectory.resolve("Future.protos"))
                 .call(bootstrapActivation);
@@ -481,6 +498,10 @@ public final class ProtosCoreBootstrap {
         bootstrapContext.removeLocalSlot("Clock");
         requireSourceBackedClosure(clockPrototype, "epochNanoseconds");
         clockPrototype.freeze();
+        // Retain the execution protocols privately, outside the public Prelude and every
+        // standard module; their selectors must stay source-backed.
+        ProtosPrelude.ExecutionProtocols executionProtocols =
+                retainExecutionProtocols(bootstrapContext);
         ProtosObjectValue networkPrototype =
                 requirePrototype(
                         bootstrapContext, "Network", ProtosObjectValue.rootObject());
@@ -616,7 +637,12 @@ public final class ProtosCoreBootstrap {
                 matrixPrototype,
                 tcpAcceptorPrototype,
                 entropyPrototype,
-                clockPrototype);
+                clockPrototype,
+                executionProtocols.execution(),
+                executionProtocols.childProcess(),
+                executionProtocols.exitStatus(),
+                executionProtocols.childStdin(),
+                executionProtocols.childOutput());
         validateFrozenStandardGraph(
                 bootstrapContext,
                 preludeBindings,
@@ -634,7 +660,12 @@ public final class ProtosCoreBootstrap {
                 matrixPrototype,
                 tcpAcceptorPrototype,
                 entropyPrototype,
-                clockPrototype);
+                clockPrototype,
+                executionProtocols.execution(),
+                executionProtocols.childProcess(),
+                executionProtocols.exitStatus(),
+                executionProtocols.childStdin(),
+                executionProtocols.childOutput());
 
         ProtosPrelude prelude = new ProtosPrelude(
                 preludeBindings,
@@ -661,7 +692,8 @@ public final class ProtosCoreBootstrap {
                 tcpAcceptorPrototype,
                 filesystemOpenMethod,
                 entropyPrototype,
-                clockPrototype);
+                clockPrototype,
+                executionProtocols);
         // The source-backed facility hides its runtime behind guest code, so the Prelude keeps
         // that identity privately for runtimeForPrelude (semantic transfer and Actor consumers).
         prelude.bindModuleRuntimeForRuntime(moduleRuntime);
@@ -1079,6 +1111,38 @@ public final class ProtosCoreBootstrap {
      * semantic captures are included because a frozen Closure must not retain mutable shared
      * Protos state behind its structural shell.
      */
+    private static final List<String> EXECUTION_PROTOCOL_SOURCES =
+            List.of("Execution", "ChildProcess", "ExitStatus", "ChildStdin", "ChildOutput");
+
+    private static final Map<String, List<String>> EXECUTION_PROTOCOL_SELECTORS =
+            Map.of(
+                    "Execution", List.of("start"),
+                    "ChildProcess", List.of("stdin", "stdout", "stderr", "wait", "terminate"),
+                    "ExitStatus", List.of("exited", "exitCode", "signaled"),
+                    "ChildStdin", List.of("write", "close"),
+                    "ChildOutput", List.of("read", "close"));
+
+    private static ProtosPrelude.ExecutionProtocols retainExecutionProtocols(
+            ProtosObjectValue bootstrapContext) {
+        Map<String, ProtosObjectValue> retained = new java.util.HashMap<>();
+        for (String name : EXECUTION_PROTOCOL_SOURCES) {
+            ProtosObjectValue prototype =
+                    requirePrototype(bootstrapContext, name, ProtosObjectValue.rootObject());
+            for (String selector : EXECUTION_PROTOCOL_SELECTORS.get(name)) {
+                requireSourceBackedClosure(prototype, selector);
+            }
+            bootstrapContext.removeLocalSlot(name);
+            prototype.freeze();
+            retained.put(name, prototype);
+        }
+        return new ProtosPrelude.ExecutionProtocols(
+                retained.get("Execution"),
+                retained.get("ChildProcess"),
+                retained.get("ExitStatus"),
+                retained.get("ChildStdin"),
+                retained.get("ChildOutput"));
+    }
+
     private static void freezeSharedStandardGraph(Object... roots) {
         Set<ProtosObjectValue> visited =
                 Collections.newSetFromMap(new IdentityHashMap<>());

@@ -61,9 +61,9 @@ public final class ProtosActorValueTransfer {
 
     /** Forms one detached Actor-boundary snapshot value or signals NonTransferableValue. */
     public static Object snapshotValue(Object value, ProtosActivation source) {
-        Copier copier = new Copier(source, false, false);
+        Copier copier = new Copier(source, false, false, false);
         Object copied = copier.copy(value);
-        return copier.semanticRecords ? new DetachedGraph(List.of(copied), false) : copied;
+        return copier.semanticRecords ? new DetachedGraph(List.of(copied), false, false) : copied;
     }
 
     /**
@@ -87,14 +87,15 @@ public final class ProtosActorValueTransfer {
     private static List<Object> snapshotArgumentVector(
             List<?> values, ProtosActivation source, boolean spawnDelegation) {
         Objects.requireNonNull(values, "values");
-        Copier copier = new Copier(source, false, spawnDelegation);
+        // Message arguments and spawn initialization are the explicit execution delegation paths.
+        Copier copier = new Copier(source, false, spawnDelegation, true);
         ArrayList<Object> result = new ArrayList<>(values.size());
         for (Object value : values) {
             result.add(copier.copy(value));
         }
         List<Object> snapshot = List.copyOf(result);
         return copier.semanticRecords
-                ? List.of(new DetachedGraph(snapshot, spawnDelegation))
+                ? List.of(new DetachedGraph(snapshot, spawnDelegation, true))
                 : snapshot;
     }
 
@@ -118,7 +119,8 @@ public final class ProtosActorValueTransfer {
             return snapshot;
         }
         DetachedGraph graph = (DetachedGraph) snapshot.get(0);
-        Copier materializer = new Copier(destination, true, graph.spawnDelegation);
+        Copier materializer =
+                new Copier(destination, true, graph.spawnDelegation, graph.executionDelegation);
         List<Object> roots = graph.roots;
         ArrayList<Object> result = new ArrayList<>(roots.size());
         for (Object root : roots) {
@@ -132,7 +134,8 @@ public final class ProtosActorValueTransfer {
         if (!(snapshot instanceof DetachedGraph graph)) {
             return snapshot;
         }
-        return new Copier(destination, true, graph.spawnDelegation).copy(graph.roots.get(0));
+        return new Copier(destination, true, graph.spawnDelegation, graph.executionDelegation)
+                .copy(graph.roots.get(0));
     }
 
     /**
@@ -183,10 +186,14 @@ public final class ProtosActorValueTransfer {
         private final List<Object> roots;
         /** Spawn scope: only such a graph may materialize TcpAcceptor delegation descriptors. */
         private final boolean spawnDelegation;
+        /** Argument scope: only such a graph may materialize execution delegation descriptors. */
+        private final boolean executionDelegation;
 
-        private DetachedGraph(List<Object> roots, boolean spawnDelegation) {
+        private DetachedGraph(
+                List<Object> roots, boolean spawnDelegation, boolean executionDelegation) {
             this.roots = roots;
             this.spawnDelegation = spawnDelegation;
+            this.executionDelegation = executionDelegation;
         }
     }
 
@@ -201,6 +208,8 @@ public final class ProtosActorValueTransfer {
         private final boolean materializing;
         /** I125-B: Actor.spawn initialization policy; ordinary boundaries never set it. */
         private final boolean spawnDelegation;
+        /** EXTERNAL_PROCESS.md §9: message argument and spawn initialization scope only. */
+        private final boolean executionDelegation;
         /** True when the snapshot needs destination materialization (records or descriptors). */
         private boolean semanticRecords;
         private final IdentityHashMap<Object, Object> memo = new IdentityHashMap<>();
@@ -209,10 +218,15 @@ public final class ProtosActorValueTransfer {
         private final Set<Object> populated =
                 Collections.newSetFromMap(new IdentityHashMap<>());
 
-        private Copier(ProtosActivation source, boolean materializing, boolean spawnDelegation) {
+        private Copier(
+                ProtosActivation source,
+                boolean materializing,
+                boolean spawnDelegation,
+                boolean executionDelegation) {
             this.source = Objects.requireNonNull(source, "source");
             this.materializing = materializing;
             this.spawnDelegation = spawnDelegation;
+            this.executionDelegation = executionDelegation;
             this.prelude =
                     source.prelude()
                             .orElseThrow(
@@ -293,6 +307,25 @@ public final class ProtosActorValueTransfer {
                 return remember(
                         value, new ProtosPathValue(prelude.pathPrototype(), descriptor.components()));
             }
+            if (value instanceof ProtosExternalChildValue.Status status) {
+                // EXTERNAL_PROCESS.md §9 source stage, as for a Path: an ExitStatus is a terminated,
+                // immutable result, so only its inert terminal data crosses; the destination
+                // Prelude's ExitStatus protocol is bound by materialization, once per identity.
+                if (materializing) {
+                    throw nonTransferable();
+                }
+                semanticRecords = true;
+                return remember(value, status.outcomeForRuntime());
+            }
+            if (materializing && value instanceof ProtosExternalChildValue.TerminalOutcome outcome) {
+                // Destination stage: one fresh status per descriptor identity, with no authority.
+                try {
+                    return remember(
+                            value, ProtosExternalChildValue.Status.materializeForRuntime(prelude, outcome));
+                } catch (IllegalArgumentException | IllegalStateException rejected) {
+                    throw nonTransferable();
+                }
+            }
             if (value instanceof ProtosEncodingValue encoding) {
                 return remember(value, encoding.transferForActorRuntime());
             }
@@ -340,6 +373,35 @@ public final class ProtosActorValueTransfer {
                                 descriptor, source));
             }
 
+            if (value instanceof ProtosExternalExecutionCapabilityValue grant) {
+                // EXTERNAL_PROCESS.md §9 source stage: an explicitly sent grant or view crosses as
+                // one inert descriptor per identity, checked against the sending Actor and its
+                // Process. Nothing is launched and no slot of the source is visited or changed.
+                if (materializing || !executionDelegation) {
+                    throw nonTransferable();
+                }
+                ProtosExternalExecutionCapabilityValue.Delegation descriptor;
+                try {
+                    descriptor = grant.prepareDelegationForRuntime(source);
+                } catch (IllegalArgumentException | IllegalStateException rejected) {
+                    throw nonTransferable();
+                }
+                semanticRecords = true;
+                return remember(value, descriptor);
+            }
+            if (value instanceof ProtosExternalExecutionCapabilityValue.Delegation descriptor) {
+                // Destination stage: one fresh Actor-local view per descriptor identity, so
+                // aliases within the transferred graph stay aliases. Outside the legitimate
+                // materialization of an argument graph a descriptor fails closed.
+                if (!materializing || !executionDelegation) {
+                    throw nonTransferable();
+                }
+                return remember(
+                        value,
+                        ProtosExternalExecutionCapabilityValue.materializeDelegationForRuntime(
+                                descriptor, source));
+            }
+
             // These are explicitly non-transferable Actor-domain/execution/resource values.
             if (value instanceof ProtosClosureValue
                     || value instanceof ProtosSendOperationControl
@@ -355,6 +417,9 @@ public final class ProtosActorValueTransfer {
                     // including nested graphs and spawn initialization.
                     || value instanceof ProtosClockCapabilityValue
                     || value instanceof ProtosEntropyCapabilityValue
+                    // EXTERNAL_PROCESS.md §9: children and endpoints never cross Actors.
+                    || value instanceof ProtosExternalChildValue
+                    || value instanceof ProtosExternalChildValue.Endpoint
                     || value instanceof ProtosTcpConnectionValue
                     || value instanceof ProtosTcpListenerValue
                     // LIB020-A sealed families are not portable; copying would drop the family.

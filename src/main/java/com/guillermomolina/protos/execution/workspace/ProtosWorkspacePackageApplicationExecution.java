@@ -23,9 +23,11 @@ import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosResolverCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosEntropyCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosClockCapabilityValue;
+import com.guillermomolina.protos.runtime.ProtosExternalExecutionCapabilityValue;
 import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.ResolverGrant;
 import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.EntropyGrant;
 import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.ClockGrant;
+import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.ExecutionGrant;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.guillermomolina.protos.runtime.ProtosProcessStandardStreamBinding;
@@ -199,9 +201,28 @@ public final class ProtosWorkspacePackageApplicationExecution {
                 request,
                 processObserver,
                 networkGrant,
-                ResolverGrant.NONE,
                 entropyGrant,
                 clockGrant,
+                ExecutionGrant.NONE,
+                runtimeHost);
+    }
+
+    /** As the overload without an execution selection, with an explicit {@link ExecutionGrant}. */
+    static ProtosExecutionOutcome execute(
+            Request request,
+            Consumer<ProtosProcessRuntime> processObserver,
+            NetworkGrant networkGrant,
+            EntropyGrant entropyGrant,
+            ClockGrant clockGrant,
+            ExecutionGrant executionGrant,
+            ProtosPolyglotRuntimeHost runtimeHost) throws IOException {
+        return execute(
+                request,
+                processObserver,
+                networkGrant,
+                ResolverGrant.NONE,
+                entropyGrant,
+                clockGrant, executionGrant,
                 runtimeHost);
     }
 
@@ -213,9 +234,31 @@ public final class ProtosWorkspacePackageApplicationExecution {
             EntropyGrant entropyGrant,
             ClockGrant clockGrant,
             ProtosPolyglotRuntimeHost runtimeHost) throws IOException {
+        return execute(
+                request,
+                processObserver,
+                networkGrant,
+                resolverGrant,
+                entropyGrant,
+                clockGrant,
+                ExecutionGrant.NONE,
+                runtimeHost);
+    }
+
+    /** As the overload without an execution selection, with an explicit {@link ExecutionGrant}. */
+    static ProtosExecutionOutcome execute(
+            Request request,
+            Consumer<ProtosProcessRuntime> processObserver,
+            NetworkGrant networkGrant,
+            ResolverGrant resolverGrant,
+            EntropyGrant entropyGrant,
+            ClockGrant clockGrant,
+            ExecutionGrant executionGrant,
+            ProtosPolyglotRuntimeHost runtimeHost) throws IOException {
         Objects.requireNonNull(resolverGrant, "resolverGrant");
         Objects.requireNonNull(entropyGrant, "entropyGrant");
         Objects.requireNonNull(clockGrant, "clockGrant");
+        Objects.requireNonNull(executionGrant, "executionGrant");
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(processObserver, "processObserver");
         Objects.requireNonNull(networkGrant, "networkGrant");
@@ -234,7 +277,7 @@ public final class ProtosWorkspacePackageApplicationExecution {
                 request.authority(),
                 networkGrant,
                 resolverGrant,
-                entropyGrant, clockGrant,
+                entropyGrant, clockGrant, executionGrant,
                 false,
                 "workspace package application Process failed",
                 processObserver,
@@ -363,9 +406,38 @@ public final class ProtosWorkspacePackageApplicationExecution {
                 entryKey,
                 authority,
                 networkGrant,
-                ResolverGrant.NONE,
                 entropyGrant,
                 clockGrant,
+                ExecutionGrant.NONE,
+                awaitTermination,
+                failureMessage,
+                processObserver,
+                runtimeHost);
+    }
+
+    /** As the overload without an execution selection, with an explicit {@link ExecutionGrant}. */
+    static ProtosExecutionOutcome executeEntry(
+            Path coreRoot,
+            ProtosModuleResolver resolver,
+            ProtosModuleKey entryKey,
+            ApplicationAuthority authority,
+            NetworkGrant networkGrant,
+            EntropyGrant entropyGrant,
+            ClockGrant clockGrant,
+            ExecutionGrant executionGrant,
+            boolean awaitTermination,
+            String failureMessage,
+            Consumer<ProtosProcessRuntime> processObserver,
+            ProtosPolyglotRuntimeHost runtimeHost) throws IOException {
+        return executeEntry(
+                coreRoot,
+                resolver,
+                entryKey,
+                authority,
+                networkGrant,
+                ResolverGrant.NONE,
+                entropyGrant,
+                clockGrant, executionGrant,
                 awaitTermination,
                 failureMessage,
                 processObserver,
@@ -385,9 +457,41 @@ public final class ProtosWorkspacePackageApplicationExecution {
             String failureMessage,
             Consumer<ProtosProcessRuntime> processObserver,
             ProtosPolyglotRuntimeHost runtimeHost) throws IOException {
+        return executeEntry(
+                coreRoot,
+                resolver,
+                entryKey,
+                authority,
+                networkGrant,
+                resolverGrant,
+                entropyGrant,
+                clockGrant,
+                ExecutionGrant.NONE,
+                awaitTermination,
+                failureMessage,
+                processObserver,
+                runtimeHost);
+    }
+
+    /** As the overload without an execution selection, with an explicit {@link ExecutionGrant}. */
+    static ProtosExecutionOutcome executeEntry(
+            Path coreRoot,
+            ProtosModuleResolver resolver,
+            ProtosModuleKey entryKey,
+            ApplicationAuthority authority,
+            NetworkGrant networkGrant,
+            ResolverGrant resolverGrant,
+            EntropyGrant entropyGrant,
+            ClockGrant clockGrant,
+            ExecutionGrant executionGrant,
+            boolean awaitTermination,
+            String failureMessage,
+            Consumer<ProtosProcessRuntime> processObserver,
+            ProtosPolyglotRuntimeHost runtimeHost) throws IOException {
         Objects.requireNonNull(resolverGrant, "resolverGrant");
         Objects.requireNonNull(entropyGrant, "entropyGrant");
         Objects.requireNonNull(clockGrant, "clockGrant");
+        Objects.requireNonNull(executionGrant, "executionGrant");
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(coreRoot, resolver);
 
         ProtosEncodingValue stdinEncoding =
@@ -418,15 +522,21 @@ public final class ProtosWorkspacePackageApplicationExecution {
                             case HOST_ENTROPY -> runtimeHost.provisionHostEntropy(prelude);
                         };
                 ProtosClockCapabilityValue clock = null;
+                ProtosExternalExecutionCapabilityValue execution = null;
                 ProtosStandaloneProcessBootstrap.Result bootstrap;
                 try {
                     clock = clockGrant == ClockGrant.HOST_CLOCK
                             ? runtimeHost.provisionHostClock(prelude) : null;
+                    execution = executionGrant == ExecutionGrant.HOST_EXECUTION
+                            ? runtimeHost.provisionHostExecution(
+                                    prelude, authority.environmentNameDomain())
+                            : null;
                     bootstrap = createApplicationProcess(
                             prelude, authority, stdinEncoding, stdoutEncoding, stderrEncoding,
-                            filesystem, network, resolverCapability, entropy, clock);
+                            filesystem, network, resolverCapability, entropy, clock, execution);
                     resolverHandedToProcess = true;
                 } catch (RuntimeException | Error failure) {
+                    if (execution != null) execution.retireForRuntime();
                     if (clock != null) clock.retireForRuntime();
                     if (entropy != null) {
                         entropy.retireForRuntime();
@@ -453,7 +563,8 @@ public final class ProtosWorkspacePackageApplicationExecution {
             ProtosStandaloneHostedExecution.FilesystemProvisioning filesystem,
             ProtosNetworkCapabilityValue network,
             ProtosResolverCapabilityValue resolverCapability,
-            ProtosEntropyCapabilityValue entropy, ProtosClockCapabilityValue clock) {
+            ProtosEntropyCapabilityValue entropy, ProtosClockCapabilityValue clock,
+            ProtosExternalExecutionCapabilityValue execution) {
         return ProtosStandaloneProcessBootstrap.create(
                 prelude,
                 authority.applicationArguments(),
@@ -468,7 +579,7 @@ public final class ProtosWorkspacePackageApplicationExecution {
                 filesystem.marker(),
                 network,
                 resolverCapability,
-                entropy, clock);
+                entropy, clock, execution);
     }
 
     private static ProtosExecutionOutcome executeBootstrappedEntry(
@@ -581,9 +692,37 @@ public final class ProtosWorkspacePackageApplicationExecution {
                 entryKey,
                 authority,
                 networkGrant,
-                ResolverGrant.NONE,
                 entropyGrant,
                 clockGrant,
+                ExecutionGrant.NONE,
+                serviceBinding,
+                processObserver,
+                runtimeHost);
+    }
+
+    /** As the overload without an execution selection, with an explicit {@link ExecutionGrant}. */
+    static boolean executeServiceEntry(
+            Path coreRoot,
+            ProtosModuleResolver resolver,
+            ProtosModuleKey entryKey,
+            ApplicationAuthority authority,
+            NetworkGrant networkGrant,
+            EntropyGrant entropyGrant,
+            ClockGrant clockGrant,
+            ExecutionGrant executionGrant,
+            String serviceBinding,
+            Consumer<ProtosProcessRuntime> processObserver,
+            ProtosPolyglotRuntimeHost runtimeHost)
+            throws IOException {
+        return executeServiceEntry(
+                coreRoot,
+                resolver,
+                entryKey,
+                authority,
+                networkGrant,
+                ResolverGrant.NONE,
+                entropyGrant,
+                clockGrant, executionGrant,
                 serviceBinding,
                 processObserver,
                 runtimeHost);
@@ -602,9 +741,40 @@ public final class ProtosWorkspacePackageApplicationExecution {
             Consumer<ProtosProcessRuntime> processObserver,
             ProtosPolyglotRuntimeHost runtimeHost)
             throws IOException {
+        return executeServiceEntry(
+                coreRoot,
+                resolver,
+                entryKey,
+                authority,
+                networkGrant,
+                resolverGrant,
+                entropyGrant,
+                clockGrant,
+                ExecutionGrant.NONE,
+                serviceBinding,
+                processObserver,
+                runtimeHost);
+    }
+
+    /** As the overload without an execution selection, with an explicit {@link ExecutionGrant}. */
+    static boolean executeServiceEntry(
+            Path coreRoot,
+            ProtosModuleResolver resolver,
+            ProtosModuleKey entryKey,
+            ApplicationAuthority authority,
+            NetworkGrant networkGrant,
+            ResolverGrant resolverGrant,
+            EntropyGrant entropyGrant,
+            ClockGrant clockGrant,
+            ExecutionGrant executionGrant,
+            String serviceBinding,
+            Consumer<ProtosProcessRuntime> processObserver,
+            ProtosPolyglotRuntimeHost runtimeHost)
+            throws IOException {
         Objects.requireNonNull(resolverGrant, "resolverGrant");
         Objects.requireNonNull(entropyGrant, "entropyGrant");
         Objects.requireNonNull(clockGrant, "clockGrant");
+        Objects.requireNonNull(executionGrant, "executionGrant");
         Objects.requireNonNull(resolver, "resolver");
         Objects.requireNonNull(entryKey, "entryKey");
         Objects.requireNonNull(authority, "authority");
@@ -647,15 +817,21 @@ public final class ProtosWorkspacePackageApplicationExecution {
                             case HOST_ENTROPY -> runtimeHost.provisionHostEntropy(prelude);
                         };
                 ProtosClockCapabilityValue clock = null;
+                ProtosExternalExecutionCapabilityValue execution = null;
                 ProtosStandaloneProcessBootstrap.Result bootstrap;
                 try {
                     clock = clockGrant == ClockGrant.HOST_CLOCK
                             ? runtimeHost.provisionHostClock(prelude) : null;
+                    execution = executionGrant == ExecutionGrant.HOST_EXECUTION
+                            ? runtimeHost.provisionHostExecution(
+                                    prelude, authority.environmentNameDomain())
+                            : null;
                     bootstrap = createApplicationProcess(
                             prelude, authority, stdinEncoding, stdoutEncoding, stderrEncoding,
-                            filesystem, network, resolverCapability, entropy, clock);
+                            filesystem, network, resolverCapability, entropy, clock, execution);
                     resolverHandedToProcess = true;
                 } catch (RuntimeException | Error failure) {
+                    if (execution != null) execution.retireForRuntime();
                     if (clock != null) clock.retireForRuntime();
                     if (entropy != null) {
                         entropy.retireForRuntime();
@@ -755,9 +931,29 @@ public final class ProtosWorkspacePackageApplicationExecution {
         return executeService(
                 request,
                 networkGrant,
-                ResolverGrant.NONE,
                 entropyGrant,
                 clockGrant,
+                ExecutionGrant.NONE,
+                serviceBinding,
+                runtimeHost);
+    }
+
+    /** As the overload without an execution selection, with an explicit {@link ExecutionGrant}. */
+    static boolean executeService(
+            Request request,
+            NetworkGrant networkGrant,
+            EntropyGrant entropyGrant,
+            ClockGrant clockGrant,
+            ExecutionGrant executionGrant,
+            String serviceBinding,
+            ProtosPolyglotRuntimeHost runtimeHost)
+            throws IOException {
+        return executeService(
+                request,
+                networkGrant,
+                ResolverGrant.NONE,
+                entropyGrant,
+                clockGrant, executionGrant,
                 serviceBinding,
                 runtimeHost);
     }
@@ -771,9 +967,32 @@ public final class ProtosWorkspacePackageApplicationExecution {
             String serviceBinding,
             ProtosPolyglotRuntimeHost runtimeHost)
             throws IOException {
+        return executeService(
+                request,
+                networkGrant,
+                resolverGrant,
+                entropyGrant,
+                clockGrant,
+                ExecutionGrant.NONE,
+                serviceBinding,
+                runtimeHost);
+    }
+
+    /** As the overload without an execution selection, with an explicit {@link ExecutionGrant}. */
+    static boolean executeService(
+            Request request,
+            NetworkGrant networkGrant,
+            ResolverGrant resolverGrant,
+            EntropyGrant entropyGrant,
+            ClockGrant clockGrant,
+            ExecutionGrant executionGrant,
+            String serviceBinding,
+            ProtosPolyglotRuntimeHost runtimeHost)
+            throws IOException {
         Objects.requireNonNull(resolverGrant, "resolverGrant");
         Objects.requireNonNull(entropyGrant, "entropyGrant");
         Objects.requireNonNull(clockGrant, "clockGrant");
+        Objects.requireNonNull(executionGrant, "executionGrant");
         ProtosWorkspacePackageModuleResolver resolver =
                 new ProtosWorkspacePackageModuleResolver(
                         request.projectRoot(),
@@ -786,7 +1005,7 @@ public final class ProtosWorkspacePackageApplicationExecution {
                 request.authority(),
                 networkGrant,
                 resolverGrant,
-                entropyGrant, clockGrant,
+                entropyGrant, clockGrant, executionGrant,
                 serviceBinding,
                 ignored -> {},
                 runtimeHost);

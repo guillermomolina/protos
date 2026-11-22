@@ -66,7 +66,20 @@ class ProtosCoreSourceNamingArchitectureTest {
                     "TextWriter.protos",
                     "Bytes.protos",
                     "Entropy.protos",
-                    "Clock.protos");
+                    "Clock.protos",
+                    "Execution.protos",
+                    "ChildProcess.protos",
+                    "ExitStatus.protos",
+                    "ChildStdin.protos",
+                    "ChildOutput.protos");
+
+    private static final Set<String> EXECUTION_SOURCE_NAMES =
+            Set.of(
+                    "Execution.protos",
+                    "ChildProcess.protos",
+                    "ExitStatus.protos",
+                    "ChildStdin.protos",
+                    "ChildOutput.protos");
 
     private static final Set<String> REVIEWED_RESPONSIBILITY_SOURCES =
             Set.of(
@@ -93,6 +106,9 @@ class ProtosCoreSourceNamingArchitectureTest {
         // D243-C: Entropy is a one-owner Core source in its own directory.
         if (name.equals("Clock.protos")) {
             return CORE.resolve("clock").resolve(name);
+        }
+        if (EXECUTION_SOURCE_NAMES.contains(name)) {
+            return CORE.resolve("execution").resolve(name);
         }
         if (name.equals("Entropy.protos")) {
             return CORE.resolve("entropy").resolve(name);

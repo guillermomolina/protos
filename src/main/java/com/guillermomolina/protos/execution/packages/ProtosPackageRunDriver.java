@@ -19,6 +19,7 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.ResolverGrant;
 import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.EntropyGrant;
 import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.ClockGrant;
+import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.ExecutionGrant;
 import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import java.io.IOException;
@@ -93,7 +94,24 @@ public final class ProtosPackageRunDriver {
             EntropyGrant entropyGrant, ClockGrant clockGrant)
             throws IOException {
         return execute(
-                request, provider, networkGrant, ResolverGrant.NONE, entropyGrant, clockGrant);
+                request,
+                provider,
+                networkGrant,
+                entropyGrant,
+                clockGrant,
+                ExecutionGrant.NONE);
+    }
+
+    /** As the overload without an execution selection, with an explicit {@link ExecutionGrant}. */
+    public static ProtosExecutionOutcome execute(
+            ProtosWorkspaceRunDriver.Request request,
+            ProtosExactPackageMaterializationProvider provider,
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
+            EntropyGrant entropyGrant, ClockGrant clockGrant,
+            ExecutionGrant executionGrant)
+            throws IOException {
+        return execute(
+                request, provider, networkGrant, ResolverGrant.NONE, entropyGrant, clockGrant, executionGrant);
     }
 
     public static ProtosExecutionOutcome execute(
@@ -104,7 +122,26 @@ public final class ProtosPackageRunDriver {
             EntropyGrant entropyGrant, ClockGrant clockGrant)
             throws IOException {
         return execute(
-                request, provider, networkGrant, resolverGrant, entropyGrant, clockGrant,
+                request,
+                provider,
+                networkGrant,
+                resolverGrant,
+                entropyGrant,
+                clockGrant,
+                ExecutionGrant.NONE);
+    }
+
+    /** As the overload without an execution selection, with an explicit {@link ExecutionGrant}. */
+    public static ProtosExecutionOutcome execute(
+            ProtosWorkspaceRunDriver.Request request,
+            ProtosExactPackageMaterializationProvider provider,
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
+            ResolverGrant resolverGrant,
+            EntropyGrant entropyGrant, ClockGrant clockGrant,
+            ExecutionGrant executionGrant)
+            throws IOException {
+        return execute(
+                request, provider, networkGrant, resolverGrant, entropyGrant, clockGrant, executionGrant,
                 ProtosPolyglotRuntimeHost::open);
     }
 
@@ -124,7 +161,28 @@ public final class ProtosPackageRunDriver {
             Supplier<ProtosPolyglotRuntimeHost> runtimeHostFactory)
             throws IOException {
         return execute(
-                request, provider, networkGrant, resolverGrant, entropyGrant, clockGrant,
+                request,
+                provider,
+                networkGrant,
+                resolverGrant,
+                entropyGrant,
+                clockGrant,
+                ExecutionGrant.NONE,
+                runtimeHostFactory);
+    }
+
+    /** As the overload without an execution selection, with an explicit {@link ExecutionGrant}. */
+    public static ProtosExecutionOutcome execute(
+            ProtosWorkspaceRunDriver.Request request,
+            ProtosExactPackageMaterializationProvider provider,
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
+            ResolverGrant resolverGrant,
+            EntropyGrant entropyGrant, ClockGrant clockGrant,
+            ExecutionGrant executionGrant,
+            Supplier<ProtosPolyglotRuntimeHost> runtimeHostFactory)
+            throws IOException {
+        return execute(
+                request, provider, networkGrant, resolverGrant, entropyGrant, clockGrant, executionGrant,
                 PRODUCTION_STAGES, runtimeHostFactory);
     }
 
@@ -169,7 +227,27 @@ public final class ProtosPackageRunDriver {
             Stages stages)
             throws IOException {
         return execute(
-                request, provider, networkGrant, ResolverGrant.NONE, entropyGrant, clockGrant, stages);
+                request,
+                provider,
+                networkGrant,
+                entropyGrant,
+                clockGrant,
+                ExecutionGrant.NONE,
+                stages);
+    }
+
+    /** As the overload without an execution selection, with an explicit {@link ExecutionGrant}. */
+    static ProtosExecutionOutcome execute(
+            ProtosWorkspaceRunDriver.Request request,
+            ProtosExactPackageMaterializationProvider provider,
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
+            EntropyGrant entropyGrant,
+            ClockGrant clockGrant,
+            ExecutionGrant executionGrant,
+            Stages stages)
+            throws IOException {
+        return execute(
+                request, provider, networkGrant, ResolverGrant.NONE, entropyGrant, clockGrant, executionGrant, stages);
     }
 
     static ProtosExecutionOutcome execute(
@@ -182,7 +260,29 @@ public final class ProtosPackageRunDriver {
             Stages stages)
             throws IOException {
         return execute(
-                request, provider, networkGrant, resolverGrant, entropyGrant, clockGrant, stages,
+                request,
+                provider,
+                networkGrant,
+                resolverGrant,
+                entropyGrant,
+                clockGrant,
+                ExecutionGrant.NONE,
+                stages);
+    }
+
+    /** As the overload without an execution selection, with an explicit {@link ExecutionGrant}. */
+    static ProtosExecutionOutcome execute(
+            ProtosWorkspaceRunDriver.Request request,
+            ProtosExactPackageMaterializationProvider provider,
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
+            ResolverGrant resolverGrant,
+            EntropyGrant entropyGrant,
+            ClockGrant clockGrant,
+            ExecutionGrant executionGrant,
+            Stages stages)
+            throws IOException {
+        return execute(
+                request, provider, networkGrant, resolverGrant, entropyGrant, clockGrant, executionGrant, stages,
                 ProtosPolyglotRuntimeHost::open);
     }
 
@@ -196,9 +296,34 @@ public final class ProtosPackageRunDriver {
             Stages stages,
             Supplier<ProtosPolyglotRuntimeHost> runtimeHostFactory)
             throws IOException {
+        return execute(
+                request,
+                provider,
+                networkGrant,
+                resolverGrant,
+                entropyGrant,
+                clockGrant,
+                ExecutionGrant.NONE,
+                stages,
+                runtimeHostFactory);
+    }
+
+    /** As the overload without an execution selection, with an explicit {@link ExecutionGrant}. */
+    static ProtosExecutionOutcome execute(
+            ProtosWorkspaceRunDriver.Request request,
+            ProtosExactPackageMaterializationProvider provider,
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
+            ResolverGrant resolverGrant,
+            EntropyGrant entropyGrant,
+            ClockGrant clockGrant,
+            ExecutionGrant executionGrant,
+            Stages stages,
+            Supplier<ProtosPolyglotRuntimeHost> runtimeHostFactory)
+            throws IOException {
         Objects.requireNonNull(resolverGrant, "resolverGrant");
         Objects.requireNonNull(entropyGrant, "entropyGrant");
         Objects.requireNonNull(clockGrant, "clockGrant");
+        Objects.requireNonNull(executionGrant, "executionGrant");
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(provider, "provider");
         Objects.requireNonNull(networkGrant, "networkGrant");
@@ -214,7 +339,7 @@ public final class ProtosPackageRunDriver {
         if (requirements.isEmpty()) {
             try (ProtosPolyglotRuntimeHost runtimeHost = runtimeHostFactory.get()) {
                 return ProtosWorkspaceRunDriver.execute(
-                        request, networkGrant, resolverGrant, entropyGrant, clockGrant,
+                        request, networkGrant, resolverGrant, entropyGrant, clockGrant, executionGrant,
                         runtimeHost);
             }
         }
@@ -249,7 +374,7 @@ public final class ProtosPackageRunDriver {
 
         try (scope) {
             return executeApplication(
-                    request, plan, scope, networkGrant, resolverGrant, entropyGrant, clockGrant,
+                    request, plan, scope, networkGrant, resolverGrant, entropyGrant, clockGrant, executionGrant,
                     stages, runtimeHostFactory);
         }
     }
@@ -292,9 +417,29 @@ public final class ProtosPackageRunDriver {
                 request,
                 provider,
                 networkGrant,
-                ResolverGrant.NONE,
                 entropyGrant,
                 clockGrant,
+                ExecutionGrant.NONE,
+                serviceBinding);
+    }
+
+    /** As the overload without an execution selection, with an explicit {@link ExecutionGrant}. */
+    public static boolean executeService(
+            ProtosWorkspaceRunDriver.Request request,
+            ProtosExactPackageMaterializationProvider provider,
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
+            EntropyGrant entropyGrant,
+            ClockGrant clockGrant,
+            ExecutionGrant executionGrant,
+            String serviceBinding)
+            throws IOException {
+        return executeService(
+                request,
+                provider,
+                networkGrant,
+                ResolverGrant.NONE,
+                entropyGrant,
+                clockGrant, executionGrant,
                 serviceBinding);
     }
 
@@ -308,7 +453,29 @@ public final class ProtosPackageRunDriver {
             String serviceBinding)
             throws IOException {
         return executeService(
-                request, provider, networkGrant, resolverGrant, entropyGrant, clockGrant,
+                request,
+                provider,
+                networkGrant,
+                resolverGrant,
+                entropyGrant,
+                clockGrant,
+                ExecutionGrant.NONE,
+                serviceBinding);
+    }
+
+    /** As the overload without an execution selection, with an explicit {@link ExecutionGrant}. */
+    public static boolean executeService(
+            ProtosWorkspaceRunDriver.Request request,
+            ProtosExactPackageMaterializationProvider provider,
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
+            ResolverGrant resolverGrant,
+            EntropyGrant entropyGrant,
+            ClockGrant clockGrant,
+            ExecutionGrant executionGrant,
+            String serviceBinding)
+            throws IOException {
+        return executeService(
+                request, provider, networkGrant, resolverGrant, entropyGrant, clockGrant, executionGrant,
                 serviceBinding, ProtosPolyglotRuntimeHost::open);
     }
 
@@ -327,9 +494,34 @@ public final class ProtosPackageRunDriver {
             String serviceBinding,
             Supplier<ProtosPolyglotRuntimeHost> runtimeHostFactory)
             throws IOException {
+        return executeService(
+                request,
+                provider,
+                networkGrant,
+                resolverGrant,
+                entropyGrant,
+                clockGrant,
+                ExecutionGrant.NONE,
+                serviceBinding,
+                runtimeHostFactory);
+    }
+
+    /** As the overload without an execution selection, with an explicit {@link ExecutionGrant}. */
+    public static boolean executeService(
+            ProtosWorkspaceRunDriver.Request request,
+            ProtosExactPackageMaterializationProvider provider,
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
+            ResolverGrant resolverGrant,
+            EntropyGrant entropyGrant,
+            ClockGrant clockGrant,
+            ExecutionGrant executionGrant,
+            String serviceBinding,
+            Supplier<ProtosPolyglotRuntimeHost> runtimeHostFactory)
+            throws IOException {
         Objects.requireNonNull(resolverGrant, "resolverGrant");
         Objects.requireNonNull(entropyGrant, "entropyGrant");
         Objects.requireNonNull(clockGrant, "clockGrant");
+        Objects.requireNonNull(executionGrant, "executionGrant");
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(provider, "provider");
         Objects.requireNonNull(networkGrant, "networkGrant");
@@ -346,7 +538,7 @@ public final class ProtosPackageRunDriver {
         if (requirements.isEmpty()) {
             try (ProtosPolyglotRuntimeHost runtimeHost = runtimeHostFactory.get()) {
                 return ProtosWorkspaceRunDriver.executeService(
-                        request, networkGrant, resolverGrant, entropyGrant, clockGrant,
+                        request, networkGrant, resolverGrant, entropyGrant, clockGrant, executionGrant,
                         serviceBinding, runtimeHost);
             }
         }
@@ -413,7 +605,7 @@ public final class ProtosPackageRunDriver {
                                 request.filesystemGrant()),
                         networkGrant,
                         resolverGrant,
-                        entropyGrant, clockGrant,
+                        entropyGrant, clockGrant, executionGrant,
                         serviceBinding,
                         stages::applicationProcessHosted,
                         runtimeHost);
@@ -429,7 +621,15 @@ public final class ProtosPackageRunDriver {
             EntropyGrant entropyGrant,
             Stages stages)
             throws IOException {
-        return executeApplication(request, plan, scope, networkGrant, entropyGrant, ClockGrant.NONE, stages);
+        return executeApplication(
+                request,
+                plan,
+                scope,
+                networkGrant,
+                entropyGrant,
+                ClockGrant.NONE,
+                ExecutionGrant.NONE,
+                stages);
     }
 
     private static ProtosExecutionOutcome executeApplication(
@@ -439,10 +639,11 @@ public final class ProtosPackageRunDriver {
             ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
             EntropyGrant entropyGrant,
             ClockGrant clockGrant,
+            ExecutionGrant executionGrant,
             Stages stages)
             throws IOException {
         return executeApplication(
-                request, plan, scope, networkGrant, ResolverGrant.NONE, entropyGrant, clockGrant,
+                request, plan, scope, networkGrant, ResolverGrant.NONE, entropyGrant, clockGrant, executionGrant,
                 stages, ProtosPolyglotRuntimeHost::open);
     }
 
@@ -454,6 +655,7 @@ public final class ProtosPackageRunDriver {
             ResolverGrant resolverGrant,
             EntropyGrant entropyGrant,
             ClockGrant clockGrant,
+            ExecutionGrant executionGrant,
             Stages stages,
             Supplier<ProtosPolyglotRuntimeHost> runtimeHostFactory)
             throws IOException {
@@ -482,7 +684,7 @@ public final class ProtosPackageRunDriver {
                             request.filesystemGrant()),
                     networkGrant,
                     resolverGrant,
-                    entropyGrant, clockGrant,
+                    entropyGrant, clockGrant, executionGrant,
                     true,
                     "package application Process failed",
                     stages::applicationProcessHosted,

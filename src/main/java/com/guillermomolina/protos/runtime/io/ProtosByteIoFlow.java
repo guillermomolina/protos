@@ -14,11 +14,19 @@ public final class ProtosByteIoFlow {
         void data(byte[] bytes);
         void eof();
         void failed();
+        /**
+         * The backend refused the read before any physical input: {@code kind} is
+         * {@code I_O_CAPACITY_EXHAUSTED} or {@code I_O_LIFECYCLE_ERROR}; any other kind is a
+         * physical failure. Backends without such a distinction report {@link #failed()}.
+         */
+        default void rejected(ProtosCoreErrors.StandardError kind) { failed(); }
     }
     public interface WriteCompletion {
         void succeeded();
         /** Number of captured bytes already irreversibly contributed before failure. */
         void failed(int contributedPrefix);
+        /** As {@link ReadCompletion#rejected}: a refusal before any byte was contributed. */
+        default void rejected(ProtosCoreErrors.StandardError kind) { failed(0); }
     }
     /**
      * Optional PLAT009 bridge for a backend whose first host output attempt may
@@ -353,6 +361,7 @@ public final class ProtosByteIoFlow {
                 public void data(byte[] b){byte[] copy=Objects.requireNonNull(b).clone();delivery.deliver(()->completeReadData(r,copy));}
                 public void eof(){delivery.deliver(()->{if(r.op.commit())r.op.resolve(ProtosNullValue.INSTANCE);finish(r);});}
                 public void failed(){delivery.deliver(()->{failIo(r);finish(r);});}
+                public void rejected(ProtosCoreErrors.StandardError kind){delivery.deliver(()->{failRejected(r,kind);finish(r);});}
             }));
         }catch(RuntimeException ex){if(delivery.claim()){failIo(r);finish(r);}}
         finally{delivery.synchronousCaller=null;}
@@ -423,6 +432,12 @@ public final class ProtosByteIoFlow {
                     if(k>0&&!r.op.committed())r.op.commit();
                     synchronized(ProtosByteIoFlow.this){precedingWriteFailed=true;}
                     failIo(r);finish(r);
+                }
+                public void rejected(ProtosCoreErrors.StandardError kind){
+                    // A refusal before the first effect contributes nothing and leaves later
+                    // writes admissible; once an attempt is in flight it is an ordinary failure.
+                    if(r.op.firstEffectAttemptInFlight()||r.op.committed()){failed(0);return;}
+                    failRejected(r,kind);finish(r);
                 }
             }));
         }catch(RuntimeException ex){failIo(r);finish(r);}
@@ -496,6 +511,14 @@ public final class ProtosByteIoFlow {
     }
     private void failIo(Request r){
         r.op.fail(ProtosCoreErrors.newOccurrence(r.op.origin(),ProtosCoreErrors.StandardError.I_O_ERROR));
+    }
+    /** Typed backend refusal before any physical effect; unknown kinds stay IOError. */
+    private void failRejected(Request r,ProtosCoreErrors.StandardError kind){
+        ProtosCoreErrors.StandardError typed=
+                kind==ProtosCoreErrors.StandardError.I_O_CAPACITY_EXHAUSTED
+                        ||kind==ProtosCoreErrors.StandardError.I_O_LIFECYCLE_ERROR
+                        ?kind:ProtosCoreErrors.StandardError.I_O_ERROR;
+        r.op.fail(ProtosCoreErrors.newOccurrence(r.op.origin(),typed));
     }
     private void releaseWriteBytes(int n){synchronized(this){retainedWriteBytes-=n;}}
     private ProtosFutureValue failedFuture(ProtosActivation a,ProtosCoreErrors.StandardError kind){

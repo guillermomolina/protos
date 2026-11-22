@@ -230,6 +230,35 @@ final class ProtosWorkspaceRunCliTest {
     }
 
     @Test
+    void workspaceRunLaunchesOnlyWithTheExplicitExecutionSelection() throws Exception {
+        assumeTrue(Files.isExecutable(Path.of("/bin/echo")), "/bin/echo is required");
+        Path project = materializeProject();
+        assumeSecureConfinement(project);
+        Files.writeString(project.resolve("Main/module.protos"), """
+                writer: TextWriter(process.stdout(), process.stdoutEncoding())
+                if(context.hasSlot("execution")) {
+                    child: execution.start("/bin/echo", ["workspace-child"], Map(), null).value()
+                    if(Encoding.UTF8.decode(child.stdout().read(64).value()) == "workspace-child\\n") {
+                        writer.writeLine("workspace-child").value()
+                    }
+                } else {
+                    writer.writeLine("false").value()
+                }
+                null
+                """);
+        Result absent = runWorkspace(project, "Main");
+        assertEquals(0, absent.code(), absent.stderr());
+        assertEquals("false\n", absent.stdout());
+        ProtosCli grantedCli = new ProtosCli();
+        java.lang.reflect.Field selection = ProtosCli.class.getDeclaredField("executionAuthorized");
+        selection.setAccessible(true);
+        selection.setBoolean(grantedCli, true);
+        Result granted = runWorkspace(grantedCli, project, "Main");
+        assertEquals(0, granted.code(), granted.stderr());
+        assertEquals("workspace-child\n", granted.stdout());
+    }
+
+    @Test
     void workspaceAndPackageServiceKeepClockAfterReady() throws Exception {
         Path project = materializeProject();
         assumeSecureConfinement(project);
@@ -285,7 +314,7 @@ final class ProtosWorkspaceRunCliTest {
         Result help = runPublic("--help");
         assertEquals(0, help.code());
         assertTrue(help.stdout().contains(
-                "protos run [--allow-network] [--allow-resolver] [--allow-entropy] [--allow-clock] [--service=<binding>] <entry> [args...]"));
+                "protos run [--allow-network] [--allow-resolver] [--allow-entropy] [--allow-clock] [--allow-execution] [--service=<binding>] <entry> [args...]"));
         assertTrue(help.stdout().contains("current directory"));
         assertTrue(help.stdout().contains("neither 'run' nor <entry>"));
     }

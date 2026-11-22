@@ -43,10 +43,10 @@ main() {
         fi
     done
 
-    # Initializers inside those packages that must run at image run time:
-    # the first links native symbols through Java FFM in its static
-    # initializer; the second computes Unicode case tables through ICU4J.
+    # Keep host native linkage and Unicode case tables out of the image heap.
+    # Process-provider instances and library loading belong to execution time.
     run_time_classes=(
+        'com.guillermomolina.protos.execution.ProtosPosixProcessHandler'
         'com.guillermomolina.protos.execution.ProtosLinuxConfinedFilesystemNative$Bridge'
         'com.guillermomolina.protos.execution.ProtosRegexUnicodeFacility$CaseOrbits'
     )

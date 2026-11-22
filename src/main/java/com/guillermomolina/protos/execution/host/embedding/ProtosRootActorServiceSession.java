@@ -20,6 +20,7 @@ import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.File
 import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.ResolverGrant;
 import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.EntropyGrant;
 import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.ClockGrant;
+import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.ExecutionGrant;
 import com.guillermomolina.protos.execution.ProtosWorkspacePackageApplicationExecution.NetworkGrant;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
@@ -164,9 +165,38 @@ public final class ProtosRootActorServiceSession implements AutoCloseable {
             EntropyGrant entropyGrant, ClockGrant clockGrant)
             throws IOException {
         return open(
+                coreRoot,
+                sourceFile,
+                bootstrapBinding,
+                applicationArguments,
+                in,
+                out,
+                err,
+                networkGrant,
+                resolverGrant,
+                entropyGrant,
+                clockGrant,
+                ExecutionGrant.NONE);
+    }
+
+    /** As the overload without an execution selection, with an explicit {@link ExecutionGrant}. */
+    public static ProtosRootActorServiceSession open(
+            Path coreRoot,
+            Path sourceFile,
+            String bootstrapBinding,
+            List<String> applicationArguments,
+            InputStream in,
+            OutputStream out,
+            OutputStream err,
+            NetworkGrant networkGrant,
+            ResolverGrant resolverGrant,
+            EntropyGrant entropyGrant, ClockGrant clockGrant,
+            ExecutionGrant executionGrant)
+            throws IOException {
+        return open(
                 coreRoot, sourceFile, bootstrapBinding,
                 applicationArguments, in, out, err,
-                networkGrant, resolverGrant, entropyGrant, clockGrant, Map.of());
+                networkGrant, resolverGrant, entropyGrant, clockGrant, executionGrant, Map.of());
     }
 
     /**
@@ -249,6 +279,38 @@ public final class ProtosRootActorServiceSession implements AutoCloseable {
             ClockGrant clockGrant,
             Map<String, String> applicationModules)
             throws IOException {
+        return open(
+                coreRoot,
+                sourceFile,
+                bootstrapBinding,
+                applicationArguments,
+                in,
+                out,
+                err,
+                networkGrant,
+                resolverGrant,
+                entropyGrant,
+                clockGrant,
+                ExecutionGrant.NONE,
+                applicationModules);
+    }
+
+    /** As the overload without an execution selection, with an explicit {@link ExecutionGrant}. */
+    public static ProtosRootActorServiceSession open(
+            Path coreRoot,
+            Path sourceFile,
+            String bootstrapBinding,
+            List<String> applicationArguments,
+            InputStream in,
+            OutputStream out,
+            OutputStream err,
+            NetworkGrant networkGrant,
+            ResolverGrant resolverGrant,
+            EntropyGrant entropyGrant,
+            ClockGrant clockGrant,
+            ExecutionGrant executionGrant,
+            Map<String, String> applicationModules)
+            throws IOException {
         return openWithHost(
                 coreRoot,
                 sourceFile,
@@ -259,7 +321,7 @@ public final class ProtosRootActorServiceSession implements AutoCloseable {
                 err,
                 networkGrant,
                 resolverGrant,
-                entropyGrant, clockGrant,
+                entropyGrant, clockGrant, executionGrant,
                 FilesystemGrant.NONE,
                 applicationModules,
                 ProtosPolyglotRuntimeHost::open,
@@ -333,8 +395,35 @@ public final class ProtosRootActorServiceSession implements AutoCloseable {
             ClockGrant clockGrant,
             FilesystemGrant filesystemGrant,
             Map<String, String> applicationModules) throws IOException {
+        return open(
+                coreRoot,
+                sourceFile,
+                bootstrapBinding,
+                applicationArguments,
+                in,
+                out,
+                err,
+                networkGrant,
+                resolverGrant,
+                entropyGrant,
+                clockGrant,
+                ExecutionGrant.NONE,
+                filesystemGrant,
+                applicationModules);
+    }
+
+    /** As the overload without an execution selection, with an explicit {@link ExecutionGrant}. */
+    public static ProtosRootActorServiceSession open(
+            Path coreRoot, Path sourceFile, String bootstrapBinding,
+            List<String> applicationArguments, InputStream in, OutputStream out, OutputStream err,
+            NetworkGrant networkGrant, ResolverGrant resolverGrant,
+            EntropyGrant entropyGrant,
+            ClockGrant clockGrant,
+            ExecutionGrant executionGrant,
+            FilesystemGrant filesystemGrant,
+            Map<String, String> applicationModules) throws IOException {
         return openWithHost(coreRoot, sourceFile, bootstrapBinding, applicationArguments,
-                in, out, err, networkGrant, resolverGrant, entropyGrant, clockGrant, filesystemGrant,
+                in, out, err, networkGrant, resolverGrant, entropyGrant, clockGrant, executionGrant, filesystemGrant,
                 applicationModules, ProtosPolyglotRuntimeHost::open,
                 (activation, process) -> {});
     }
@@ -409,8 +498,35 @@ public final class ProtosRootActorServiceSession implements AutoCloseable {
             Supplier<ProtosPolyglotRuntimeHost> runtimeHostFactory,
             BiConsumer<ProtosActivation, ProtosProcessRuntime> bootstrapHook) throws IOException {
         return openWithHost(
+                coreRoot,
+                sourceFile,
+                bootstrapBinding,
+                applicationArguments,
+                in,
+                out,
+                err,
+                networkGrant,
+                resolverGrant,
+                entropyGrant,
+                clockGrant,
+                ExecutionGrant.NONE,
+                applicationModules,
+                runtimeHostFactory,
+                bootstrapHook);
+    }
+
+    /** As the overload without an execution selection, with an explicit {@link ExecutionGrant}. */
+    public static ProtosRootActorServiceSession openWithHost(
+            Path coreRoot, Path sourceFile, String bootstrapBinding,
+            List<String> applicationArguments, InputStream in, OutputStream out, OutputStream err,
+            NetworkGrant networkGrant, ResolverGrant resolverGrant, EntropyGrant entropyGrant, ClockGrant clockGrant,
+            ExecutionGrant executionGrant,
+            Map<String, String> applicationModules,
+            Supplier<ProtosPolyglotRuntimeHost> runtimeHostFactory,
+            BiConsumer<ProtosActivation, ProtosProcessRuntime> bootstrapHook) throws IOException {
+        return openWithHost(
                 coreRoot, sourceFile, bootstrapBinding, applicationArguments, in, out, err,
-                networkGrant, resolverGrant, entropyGrant, clockGrant, FilesystemGrant.NONE,
+                networkGrant, resolverGrant, entropyGrant, clockGrant, executionGrant, FilesystemGrant.NONE,
                 applicationModules, runtimeHostFactory, bootstrapHook);
     }
 
@@ -484,6 +600,44 @@ public final class ProtosRootActorServiceSession implements AutoCloseable {
             Supplier<ProtosPolyglotRuntimeHost> runtimeHostFactory,
             BiConsumer<ProtosActivation, ProtosProcessRuntime> bootstrapHook)
             throws IOException {
+        return openWithHost(
+                coreRoot,
+                sourceFile,
+                bootstrapBinding,
+                applicationArguments,
+                in,
+                out,
+                err,
+                networkGrant,
+                resolverGrant,
+                entropyGrant,
+                clockGrant,
+                ExecutionGrant.NONE,
+                filesystemGrant,
+                applicationModules,
+                runtimeHostFactory,
+                bootstrapHook);
+    }
+
+    /** As the overload without an execution selection, with an explicit {@link ExecutionGrant}. */
+    public static ProtosRootActorServiceSession openWithHost(
+            Path coreRoot,
+            Path sourceFile,
+            String bootstrapBinding,
+            List<String> applicationArguments,
+            InputStream in,
+            OutputStream out,
+            OutputStream err,
+            NetworkGrant networkGrant,
+            ResolverGrant resolverGrant,
+            EntropyGrant entropyGrant,
+            ClockGrant clockGrant,
+            ExecutionGrant executionGrant,
+            FilesystemGrant filesystemGrant,
+            Map<String, String> applicationModules,
+            Supplier<ProtosPolyglotRuntimeHost> runtimeHostFactory,
+            BiConsumer<ProtosActivation, ProtosProcessRuntime> bootstrapHook)
+            throws IOException {
         Objects.requireNonNull(filesystemGrant, "filesystemGrant");
         Objects.requireNonNull(runtimeHostFactory, "runtimeHostFactory");
         Objects.requireNonNull(bootstrapHook, "bootstrapHook");
@@ -500,6 +654,7 @@ public final class ProtosRootActorServiceSession implements AutoCloseable {
         Objects.requireNonNull(resolverGrant, "resolverGrant");
         Objects.requireNonNull(entropyGrant, "entropyGrant");
         Objects.requireNonNull(clockGrant, "clockGrant");
+        Objects.requireNonNull(executionGrant, "executionGrant");
 
         Path sourcePath = sourceFile.toAbsolutePath().normalize();
         String characters = Files.readString(sourcePath, StandardCharsets.UTF_8);
@@ -527,7 +682,7 @@ public final class ProtosRootActorServiceSession implements AutoCloseable {
                             ProtosStandaloneHostedExecution.writableBackend(err),
                             networkGrant,
                             resolverGrant,
-                            entropyGrant, clockGrant,
+                            entropyGrant, clockGrant, executionGrant,
                             filesystemGrant,
                             runtimeHost);
             process = bootstrap.process();

@@ -11,6 +11,13 @@
   ],
   "foreign": {
     "downcalls": [
+      {"returnType": "void*", "parameterTypes": ["void*", "void*", "void*", "void*", "void*"]},
+      {"returnType": "jint", "parameterTypes": ["void*", "void*"]},
+      {"returnType": "jint", "parameterTypes": ["void*", "jint"]},
+      {"returnType": "jlong", "parameterTypes": ["void*", "jint", "void*", "jlong"]},
+      {"returnType": "jlong", "parameterTypes": ["void*", "void*", "jlong"]},
+      {"returnType": "jint", "parameterTypes": ["void*"]},
+      {"returnType": "jint", "parameterTypes": ["jint"]},
       {
         "returnType": "jlong",
         "parameterTypes": ["jlong", "jlong", "jlong", "jlong", "jlong", "jlong", "jlong"],
@@ -22,6 +29,7 @@
     ]
   },
   "resources": [
+    {"glob": "META-INF/protos/native/**"},
     {
       "glob": "com/ibm/icu/ICUConfig.properties"
     },
