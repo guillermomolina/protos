@@ -75,6 +75,53 @@ classificationForCompletion: (completion) => {
     classification
 }
 
+// True when `error` is `kind` or delegates to it, following the same
+// matching chain Error handler selection uses.
+errorDelegatesTo: (error, kind) => {
+    found: false
+    candidate: error
+
+    while(!found && !(candidate === Object)) {
+        if(candidate === kind) {
+            found = true
+        }
+
+        candidate = candidate.parent()
+    }
+
+    found
+}
+
+// A short, host-independent reason for a non-passing completion, derived
+// only from its existing phase and observation; null when the completion
+// carries no reason this projection can state safely. It never classifies.
+diagnostic: (completion) => {
+    phase: completion.phase
+    observation: completion.observation
+    state: observation.state
+    reason: null
+
+    if(phase == "rematerialization-error") {
+        reason = "case rematerialization failed"
+    }
+
+    if(phase == "case-execution") {
+        if(state == "cancelled") {
+            reason = "case execution cancelled"
+        }
+    }
+
+    if(phase == "execution-error") {
+        error: observation.error
+
+        if(errorDelegatesTo(error, NonTransferableValue)) {
+            reason = "case outcome transfer failed: NonTransferableValue"
+        }
+    }
+
+    reason
+}
+
 project: (completion) => {
     result: Array(
         classificationForCompletion(completion),

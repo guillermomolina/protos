@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.189-SNAPSHOT
+
+- **BUG039.** Make post-run Test Tool `INFRA` lines name a short, host-independent reason when the logical Case completion alone supports one: a Case outcome that cannot be copied into the Tool (`NonTransferableValue`), a failed Case rematerialization, or a cancelled Case execution. Other infrastructure failures keep the compact line; classification, exact Case references, completion order, progress output and exit codes are unchanged, and no host exception text or stack trace is printed. Independent host failures still surface only as a plain Error. Add non-transferable Case result and host-failure exactly-once regressions, extend the logical Case result projection test, and document FAIL versus INFRA in the Test Tool guide.
+
 ## 0.4.188-SNAPSHOT
 
 - **I115.** Construct direct `Range(a, b)` and `InvertedRange(a, b)` calls internally and iterate canonical `Range.each`/`eachStep` with inline callbacks in an internal bytecode loop over signed-64 and arbitrary-precision bounds. Each step is admitted only by runtime identity proofs of the canonical factory, Range, Number equality and Object `parent`/`freeze` behaviors; aliased factories, shadowed bindings, named or spread arguments and custom receivers keep ordinary dispatch, and ordinary binary calls keep their direct shape. Preserve evaluation order, normalized Integer representations, callback contexts, non-local return, escape and nesting. Unify inline callback admission, extend Range, numeric `for`, Array iteration, virtual return-home and lowering regressions, and refresh the local-accessor and generated-bytecode BCI partial-evaluation baselines.

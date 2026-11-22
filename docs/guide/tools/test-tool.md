@@ -566,6 +566,21 @@ or, for infrastructure failure:
 [main] K/N infrastructure-aborted
 ```
 
+`FAIL` means the Case itself ran and failed (a guest failure, exit 1 unless an
+infrastructure failure also occurred). `INFRA` means the Tool could not obtain
+an ordinary Case outcome (exit 3). When the Tool can state why from the Case
+completion alone, the post-run `INFRA` line adds a short reason, for example:
+
+```text
+[main] INFRA some/case.protos (case outcome transfer failed: NonTransferableValue)
+```
+
+This reason is printed when a Case returned a value that cannot be copied
+into the Tool (such as a mutable object), when the Case could not be
+rematerialized, or when its execution was cancelled. Other infrastructure
+failures keep the compact line. Host exception details and stack traces are
+never printed.
+
 The final invocation summary reports aggregate passed/failed counts for normal
 completion, or completed/failed counts plus `infrastructure-aborted` for the
 infrastructure lane.

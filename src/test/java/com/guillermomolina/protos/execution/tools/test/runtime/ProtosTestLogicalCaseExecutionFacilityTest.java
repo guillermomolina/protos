@@ -20,10 +20,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
+import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -144,6 +146,111 @@ final class ProtosTestLogicalCaseExecutionFacilityTest {
                 assertTrue(
                         activation.executionDomain().dispatchOne());
 
+                assertEquals(
+                        ProtosFutureValue.State.FAILED,
+                        future.state());
+
+                // BUG039: an independent host failure stays a plain Error, never a
+                // fabricated transfer or guest assertion failure, and completes the
+                // Future exactly once.
+                ProtosObjectValue error = future.failedError().orElseThrow();
+                assertSame(
+                        ProtosCoreErrors.prototype(
+                                activation,
+                                ProtosCoreErrors.StandardError.ERROR),
+                        error.parent().orElseThrow());
+                assertEquals(
+                        0,
+                        activation.executionDomain().runnableCount());
+                assertFalse(activation.executionDomain().dispatchOne());
+                assertSame(error, future.failedError().orElseThrow());
+            } finally {
+                closeWithinSafetyBound(facility);
+            }
+        }
+    }
+
+    @Test
+    void bug039NonTransferableCaseResultFailsWithTransferErrorExactlyOnce(
+            @TempDir Path root) throws Exception {
+        // The Case body returns normally with a value holding a mutable object
+        // created in its own fresh Context. Only a COMPLETED Case outcome reaches
+        // the value snapshot, so a NonTransferableValue failure proves the body
+        // returned and the failure belongs to copying its result.
+        String source =
+                """
+                TestValue: import("std:test/test")
+
+                tests: Array(
+                    TestValue("returnsMutable", () => {
+                        holder: { count: 0 }
+                        holder.count = 1
+                        Array(holder)
+                    })
+                )
+                """;
+
+        Files.writeString(
+                root.resolve("suite.protos"),
+                source,
+                StandardCharsets.UTF_8);
+
+        ManualSubmission submission = new ManualSubmission();
+        ProtosBundledToolModuleResolver resolver = resolver();
+        ProtosPrelude prelude =
+                new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+        ProtosActivation activation =
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport
+                        .toolHarnessActivation(prelude, "test");
+
+        try (ProtosPolyglotRuntimeHost runtimeHost =
+                     ProtosPolyglotRuntimeHost.open()) {
+            ProtosTestLogicalCaseExecutionFacility facility =
+                    ProtosTestLogicalCaseExecutionFacility.install(
+                            activation,
+                            CORE,
+                            resolver,
+                            List.of(
+                                    new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
+                                            "test-corpus", root)),
+                            runtimeHost,
+                            submission);
+            try {
+                ProtosFutureValue future =
+                        invoke(
+                                prelude,
+                                activation,
+                                source,
+                                List.of("returnsMutable"),
+                                "returnsMutable");
+
+                assertTrue(submission.runNext());
+                assertEquals(
+                        ProtosFutureValue.State.PENDING,
+                        future.state());
+                assertEquals(
+                        1,
+                        activation.executionDomain().runnableCount());
+
+                assertTrue(activation.executionDomain().dispatchOne());
+
+                assertEquals(
+                        ProtosFutureValue.State.FAILED,
+                        future.state());
+
+                ProtosObjectValue error = future.failedError().orElseThrow();
+                assertSame(
+                        ProtosCoreErrors.prototype(
+                                activation,
+                                ProtosCoreErrors.StandardError.NON_TRANSFERABLE_VALUE),
+                        error.parent().orElseThrow());
+
+                assertEquals(
+                        0,
+                        activation.executionDomain().runnableCount());
+                assertFalse(activation.executionDomain().dispatchOne());
+                assertSame(error, future.failedError().orElseThrow());
+                assertFalse(future.cancelTerminal());
                 assertEquals(
                         ProtosFutureValue.State.FAILED,
                         future.state());

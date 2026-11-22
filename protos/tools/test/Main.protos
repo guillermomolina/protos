@@ -750,10 +750,21 @@ listCases.ifFalse(() => {
                 kind = "INFRA"
             }
 
+            line: kind + " " + logicalCaseReferences[index]
+
+            // BUG039: an INFRA line names its safe completion-derived reason
+            // when one exists; otherwise it stays compact.
+            if(resultInfrastructureFailed) {
+                reason: LogicalCaseResult.diagnostic(completion)
+                (reason === null).ifFalse(() => {
+                    line = line + " (" + reason + ")"
+                })
+            }
+
             failedCaseLines =
                 Array(
                     ...failedCaseLines,
-                    kind + " " + logicalCaseReferences[index]
+                    line
                 )
         })
 

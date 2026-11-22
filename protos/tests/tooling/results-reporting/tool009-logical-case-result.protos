@@ -134,4 +134,60 @@ Assertions.require(
     ) == 3
 )
 
+// BUG039: a Case whose outcome could not be copied into the caller is an
+// execution-error tool-error carrying NonTransferableValue; an independent
+// host failure is an execution-error tool-error carrying a plain Error.
+transferCompletion:
+    completion(
+        "execution-error",
+        "failed",
+        null,
+        NonTransferableValue {}
+    )
+
+hostCompletion:
+    completion(
+        "execution-error",
+        "failed",
+        null,
+        Error {}
+    )
+
+transferResult: CaseResult.project(transferCompletion)
+hostResult: CaseResult.project(hostCompletion)
+
+Assertions.require(
+    CaseResult.classification(transferResult) == "tool-error"
+)
+Assertions.require(
+    CaseResult.classification(hostResult) == "tool-error"
+)
+
+Assertions.require(
+    CaseResult.diagnostic(transferCompletion) == "case outcome transfer failed: NonTransferableValue"
+)
+Assertions.require(
+    CaseResult.diagnostic(rematerializationCompletion) == "case rematerialization failed"
+)
+Assertions.require(
+    CaseResult.diagnostic(cancelledCompletion) == "case execution cancelled"
+)
+
+// No reason is invented when none is derivable.
+Assertions.require(CaseResult.diagnostic(hostCompletion) === null)
+Assertions.require(CaseResult.diagnostic(failCompletion) === null)
+Assertions.require(CaseResult.diagnostic(passCompletion) === null)
+
+// D155 precedence is unchanged: any tool-error wins over a guest failure.
+Assertions.require(
+    CaseResult.exitCode(
+        Array(passResult, failResult, transferResult)
+    ) == 3
+)
+Assertions.require(
+    CaseResult.exitCode(
+        Array(hostResult, passResult)
+    ) == 3
+)
+
 true
