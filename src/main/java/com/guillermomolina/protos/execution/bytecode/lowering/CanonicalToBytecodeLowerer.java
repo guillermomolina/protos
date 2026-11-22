@@ -1449,63 +1449,83 @@ final class CanonicalToBytecodeLowerer {
                         expressions.subList(0, expressions.size() - 1),
                         sharedScratch);
 
-                BytecodeLocal result =
-                        builder.createLocal("sequenceResult", null);
-
-                beginStatement(builder, last);
-                lastIndexedOutcomeReleaser = null;
-
-                boolean carrierTerminal =
-                        (last instanceof CanonicalSend terminalSend
-                                        && primitiveResultSend(terminalSend))
-                                || (last instanceof CanonicalCall terminalCall
-                                        && primitiveResultCall(terminalCall));
-                if (carrierTerminal) {
-                    // I091: the final numeric result may return as a carrier.
-                    // A synchronous numeric send with direct operands needs
-                    // no continuation scratch.
-                    emitPrimitiveNumericOperandToLocal(
-                            builder,
-                            last,
-                            result,
-                            sharedScratch == null
-                                    ? null : sharedScratch.preparedCall(),
-                            sharedScratch == null
-                                    ? null : sharedScratch.childResult(),
-                            sharedScratch == null
-                                    ? null : sharedScratch.resumeValue());
-                } else if (requiresComposedInvocation(last)) {
-                    emitBodyExpressionToLocal(
-                            builder,
-                            last,
-                            result,
-                            sharedScratch == null
-                                    ? null : sharedScratch.preparedCall(),
-                            sharedScratch == null
-                                    ? null : sharedScratch.childResult(),
-                            sharedScratch == null
-                                    ? null : sharedScratch.resumeValue());
-                } else if (last instanceof CanonicalLookup lookup
-                        && isScalarLocalRead(lookup)) {
-                    emitScalarLocalReadToResult(builder, lookup, result);
+                boolean directReturn = !requiresComposedInvocation(last)
+                        && !(last instanceof CanonicalSend directSend
+                                && primitiveResultSend(directSend))
+                        && !(last instanceof CanonicalCall directCall
+                                && primitiveResultCall(directCall));
+                if (directReturn) {
+                    // A direct terminal value invokes nothing and cannot
+                    // suspend: it is returned from the stack, with no result
+                    // local and no scratch clears.
+                    builder.beginReturn();
+                    beginStatement(builder, last);
+                    if (last instanceof CanonicalLookup lookup && isScalarLocalRead(lookup)) {
+                        builder.emitLoadLocal(currentRootFrameLocals.get(lookup.name()));
+                    } else {
+                        emitExpression(builder, last);
+                    }
+                    endStatement(builder);
+                    builder.endReturn();
                 } else {
-                    builder.beginStoreLocal(result);
-                    emitExpression(builder, last);
-                    builder.endStoreLocal();
+                    BytecodeLocal result =
+                            builder.createLocal("sequenceResult", null);
+
+                    beginStatement(builder, last);
+                    lastIndexedOutcomeReleaser = null;
+
+                    boolean carrierTerminal =
+                            (last instanceof CanonicalSend terminalSend
+                                            && primitiveResultSend(terminalSend))
+                                    || (last instanceof CanonicalCall terminalCall
+                                            && primitiveResultCall(terminalCall));
+                    if (carrierTerminal) {
+                        // I091: the final numeric result may return as a carrier.
+                        // A synchronous numeric send with direct operands needs
+                        // no continuation scratch.
+                        emitPrimitiveNumericOperandToLocal(
+                                builder,
+                                last,
+                                result,
+                                sharedScratch == null
+                                        ? null : sharedScratch.preparedCall(),
+                                sharedScratch == null
+                                        ? null : sharedScratch.childResult(),
+                                sharedScratch == null
+                                        ? null : sharedScratch.resumeValue());
+                    } else if (requiresComposedInvocation(last)) {
+                        emitBodyExpressionToLocal(
+                                builder,
+                                last,
+                                result,
+                                sharedScratch == null
+                                        ? null : sharedScratch.preparedCall(),
+                                sharedScratch == null
+                                        ? null : sharedScratch.childResult(),
+                                sharedScratch == null
+                                        ? null : sharedScratch.resumeValue());
+                    } else if (last instanceof CanonicalLookup lookup
+                            && isScalarLocalRead(lookup)) {
+                        emitScalarLocalReadToResult(builder, lookup, result);
+                    } else {
+                        builder.beginStoreLocal(result);
+                        emitExpression(builder, last);
+                        builder.endStoreLocal();
+                    }
+
+                    endStatement(builder);
+
+                    emitClearComposedSequenceScratch(
+                            builder,
+                            sharedScratch,
+                            sharedScratch != null
+                                    && releasedChildResult(
+                                            last, sharedScratch.childResult()));
+
+                    builder.beginReturn();
+                    builder.emitLoadLocal(result);
+                    builder.endReturn();
                 }
-
-                endStatement(builder);
-
-                emitClearComposedSequenceScratch(
-                        builder,
-                        sharedScratch,
-                        sharedScratch != null
-                                && releasedChildResult(
-                                        last, sharedScratch.childResult()));
-
-                builder.beginReturn();
-                builder.emitLoadLocal(result);
-                builder.endReturn();
             }
         }
         builder.endBlock();
@@ -2975,8 +2995,8 @@ final class CanonicalToBytecodeLowerer {
     /*
      * clearScratch false: the caller proves that nothing after the prefix
      * invokes or suspends before the root returns and that no frame-backed
-     * view retains the frame, so the scratch locals end with the frame and
-     * need no explicit clear.
+     * view retains the frame, so the scratch locals and the discard sink
+     * end with the frame and need no explicit clear.
      */
     private void emitDiscardedPrefix(
             ProtosBytecodeRootNodeGen.Builder builder,
@@ -2985,7 +3005,7 @@ final class CanonicalToBytecodeLowerer {
         ComposedSequenceScratch scratch =
                 createComposedSequenceScratch(builder, expressions);
         boolean childResultReleased =
-                emitDiscardedPrefix(builder, expressions, scratch);
+                emitDiscardedPrefix(builder, expressions, scratch, clearScratch);
         if (clearScratch) {
             emitClearComposedSequenceScratch(builder, scratch, childResultReleased);
         }
@@ -3045,6 +3065,14 @@ final class CanonicalToBytecodeLowerer {
             ProtosBytecodeRootNodeGen.Builder builder,
             java.util.List<CanonicalExpression> expressions,
             ComposedSequenceScratch scratch) {
+        return emitDiscardedPrefix(builder, expressions, scratch, true);
+    }
+
+    private boolean emitDiscardedPrefix(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            java.util.List<CanonicalExpression> expressions,
+            ComposedSequenceScratch scratch,
+            boolean clearSink) {
         BytecodeLocal preparedCall =
                 scratch == null ? null : scratch.preparedCall();
         BytecodeLocal childResult =
@@ -3130,7 +3158,7 @@ final class CanonicalToBytecodeLowerer {
                 endStatement(builder);
             }
         }
-        if (sink != null) {
+        if (sink != null && clearSink) {
             sink.emitClear(builder);
         }
         return lastEmitted != null && releasedChildResult(lastEmitted, childResult);
@@ -10683,7 +10711,9 @@ final class CanonicalToBytecodeLowerer {
         BytecodeLocal element = builder.createLocal(
                 NORMAL_INLINE_CALLBACK_BINDING_LOCAL_PREFIX + parameter, nextInlineCallbackRegion + 1);
         builder.beginWhile();
-        builder.emitIterationNext(element, iteration);
+        builder.beginIterationNext(element);
+        builder.emitLoadLocal(iteration);
+        builder.endIterationNext();
         emitInlineControlClosureBody(
                 builder, callback, InlineBodyResult.DISCARD, null,
                 scratch, childResult, resumeValue, false,
@@ -10863,7 +10893,9 @@ final class CanonicalToBytecodeLowerer {
                     NORMAL_INLINE_CALLBACK_BINDING_LOCAL_PREFIX + parameter,
                     nextInlineCallbackRegion + 1);
             builder.beginWhile();
-            builder.emitIterationNext(element, state);
+            builder.beginIterationNext(element);
+            builder.emitLoadLocal(state);
+            builder.endIterationNext();
             emitInlineControlClosureBody(
                     builder, inlineCallback, InlineBodyResult.DISCARD, null,
                     scratch, childResult, resumeValue, false,
@@ -10872,7 +10904,9 @@ final class CanonicalToBytecodeLowerer {
         } else {
             BytecodeLocal element = builder.createLocal("rangeElement", null);
             builder.beginWhile();
-            builder.emitIterationNext(element, state);
+            builder.beginIterationNext(element);
+            builder.emitLoadLocal(state);
+            builder.endIterationNext();
             builder.beginBlock();
             emitDispatchedCall(
                     builder, callbackValue, java.util.List.of(element), null,

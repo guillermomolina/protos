@@ -8,6 +8,11 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.196-SNAPSHOT
+
+- **PERF045.** Restore operand-based iteration and direct terminal expression returns.
+- Pass iteration state as an operation operand and return direct terminal expressions from the stack; retain composed invocation handling for suspending expressions.
+
 ## 0.4.195-SNAPSHOT
 
 - **PERF045.** Advance Array and Range iteration through local cursors and streamline terminal returns.

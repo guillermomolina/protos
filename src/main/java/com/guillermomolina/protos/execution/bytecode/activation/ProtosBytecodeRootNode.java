@@ -2292,21 +2292,18 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      */
     @Operation(storeBytecodeIndex = false)
     @ConstantOperand(type = LocalAccessor.class, name = "element")
-    @ConstantOperand(type = LocalAccessor.class, name = "cursor")
     public static final class IterationNext {
         /*
-         * The cursor is read inside the operation from its constant local, so
-         * no separate cursor load is executed per advance, and each iteration
-         * family stays an independently profiled specialization.
+         * As in a for-iterate operation, the element target is a constant
+         * local and the iteration state is the operand; each iteration family
+         * is an independently profiled specialization.
          */
-        @Specialization(guards = "isRangeLong(iteration)")
+        @Specialization(guards = "!state.isExact()")
         public static boolean doRangeLong(
                 LocalAccessor element,
-                LocalAccessor cursor,
+                RangeIterationState state,
                 @Bind VirtualFrame frame,
-                @Bind BytecodeNode bytecode,
-                @Bind("cursor.getObject(bytecode, frame)") Object iteration) {
-            RangeIterationState state = (RangeIterationState) iteration;
+                @Bind BytecodeNode bytecode) {
             if (!state.hasNext()) {
                 return false;
             }
@@ -2314,14 +2311,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return true;
         }
 
-        @Specialization(guards = "isRangeExact(iteration)")
+        @Specialization(guards = "state.isExact()")
         public static boolean doRangeExact(
                 LocalAccessor element,
-                LocalAccessor cursor,
+                RangeIterationState state,
                 @Bind VirtualFrame frame,
-                @Bind BytecodeNode bytecode,
-                @Bind("cursor.getObject(bytecode, frame)") Object iteration) {
-            Object current = ((RangeIterationState) iteration).advanceExactOrNull();
+                @Bind BytecodeNode bytecode) {
+            Object current = state.advanceExactOrNull();
             if (current == null) {
                 return false;
             }
@@ -2329,46 +2325,27 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return true;
         }
 
-        @Specialization(guards = "isArrayLong(iteration)")
+        @Specialization(guards = "snapshot.nextIsLong()")
         public static boolean doArrayLong(
                 LocalAccessor element,
-                LocalAccessor cursor,
+                ArrayEachSnapshot snapshot,
                 @Bind VirtualFrame frame,
-                @Bind BytecodeNode bytecode,
-                @Bind("cursor.getObject(bytecode, frame)") Object iteration) {
-            element.setLong(bytecode, frame, (Long) ((ArrayEachSnapshot) iteration).advance());
+                @Bind BytecodeNode bytecode) {
+            element.setLong(bytecode, frame, (Long) snapshot.advance());
             return true;
         }
 
-        @Specialization(guards = "isArrayObject(iteration)")
+        @Specialization(guards = "!snapshot.nextIsLong()")
         public static boolean doArrayObject(
                 LocalAccessor element,
-                LocalAccessor cursor,
+                ArrayEachSnapshot snapshot,
                 @Bind VirtualFrame frame,
-                @Bind BytecodeNode bytecode,
-                @Bind("cursor.getObject(bytecode, frame)") Object iteration) {
-            ArrayEachSnapshot snapshot = (ArrayEachSnapshot) iteration;
+                @Bind BytecodeNode bytecode) {
             if (!snapshot.hasNext()) {
                 return false;
             }
             element.setObject(bytecode, frame, snapshot.advance());
             return true;
-        }
-
-        static boolean isRangeLong(Object iteration) {
-            return iteration instanceof RangeIterationState state && !state.isExact();
-        }
-
-        static boolean isRangeExact(Object iteration) {
-            return iteration instanceof RangeIterationState state && state.isExact();
-        }
-
-        static boolean isArrayLong(Object iteration) {
-            return iteration instanceof ArrayEachSnapshot snapshot && snapshot.nextIsLong();
-        }
-
-        static boolean isArrayObject(Object iteration) {
-            return iteration instanceof ArrayEachSnapshot snapshot && !snapshot.nextIsLong();
         }
     }
 
