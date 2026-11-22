@@ -10,6 +10,10 @@ Normative semantic-domain ownership is modularized under `semantics/`: `OBJECT_M
 
 The independently importable Standard Library `std:auth/jwt` is normatively owned by [`auth/JWT.md`](auth/JWT.md); reusable canonical `std:text/base64url` is owned by [`encoding/BASE64URL.md`](encoding/BASE64URL.md). Neither adds Core or Prelude bindings.
 
+The ordinary Standard Library `std:sqlite` is normatively owned by
+[`semantics/SQLITE.md`](semantics/SQLITE.md); it introduces neither a new Core
+type nor a global storage capability.
+
 Normative concurrency-domain semantics are defined by the modular specifications
 under `concurrency/`. Non-normative unresolved concurrency design notes live in
 `../docs/design/CONCURRENCY_DESIGN.md` and are not a source of observable behavior.

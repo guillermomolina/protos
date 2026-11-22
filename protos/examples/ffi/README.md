@@ -5,21 +5,22 @@ Protos through the optional external FFM provider (I144). Every C declaration
 and all control flow are Protos source; the provider contains no
 SQLite-specific Java.
 
-## Public `std:sqlite` example
+## Public `std:sqlite` examples
 
 | Example | Purpose |
 | --- | --- |
 | [`sqlite-library.protos`](sqlite-library.protos) | Public `std:sqlite` introduction: one table, one numeric insert, one query and deterministic cleanup. |
+| [`sqlite-wal.protos`](sqlite-wal.protos) | WAL selection persistently changes the entire database's journal mode; synchronous FULL configures the writer connection. Verifies WAL after read-only reopen and committed prepared writes; table operations affect only `wal_demo`. |
 | [`sqlite-durable.protos`](sqlite-durable.protos) | Filename argument, persistent table, committed prepared inserts, Statement reuse, rolled-back update and verified read-only reopen; owns/replaces `durable_demo`. |
 | [`sqlite-prepared-numeric.protos`](sqlite-prepared-numeric.protos) | Query and filter numeric records: several inserts with fresh Statements, a parameterized numeric predicate and deterministic ordered `each` traversal with Float and NULL checks. |
 | [`sqlite-copied-values.protos`](sqlite-copied-values.protos) | Read independent TEXT/BLOB results: multibyte and NUL-containing TEXT, BLOB octets, empty TEXT/BLOB versus NULL, and copies that survive stepping and close. |
 
 See the [SQLite library guide](../../../docs/guide/library/sqlite.md) for the
-bounded LIB029 API and its practical learning path.
+current memory/file API and its practical learning path.
 
 ## Public `std:ffi` examples
 
-Use these programs to learn or apply the public LIB028 API:
+Use these programs to learn or apply the public `std:ffi` API:
 
 | Example | Purpose |
 | --- | --- |
@@ -75,6 +76,8 @@ Details: [Build the provider JAR](../../../docs/guide/interop/ffm-provider.md#bu
 
 ```sh
 bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar --allow-library sqlite3=libsqlite3.so.0 \
+    protos/examples/ffi/sqlite-wal.protos /tmp/sqlite-wal-example.db
+bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar --allow-library sqlite3=libsqlite3.so.0 \
     protos/examples/ffi/sqlite-library.protos
 bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar --allow-library sqlite3=libsqlite3.so.0 \
     protos/examples/ffi/sqlite-durable.protos /tmp/sqlite-example.db
@@ -91,6 +94,10 @@ bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar -
 bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar --allow-library sqlite3=libsqlite3.so.0 \
     protos/examples/ffi/sqlite-memory-query.protos
 ```
+
+Supply disposable filenames for the persistent examples.
+For the WAL example, use a disposable database, not an existing database whose
+journaling mode you want to preserve.
 
 All programs validate their results with `std:test/assertions`. Success means
 **exit status 0 and no standard output**. A broken expectation fails an
@@ -115,11 +122,11 @@ The two original examples use the provider-private I144 operations directly: `si
 `preserving`, `bind`, `opaque`, `nullable`, `owned`, `out`, `borrowed`,
 `copy` and `release`. These are support machinery, not a stable API:
 
-- `sqlite-version-public.protos` uses LIB028 `std:ffi`: ordinary frozen
+- `sqlite-version-public.protos` uses `std:ffi`: ordinary frozen
   descriptors, Closure bindings and ordinary result Arrays. Import alone
   grants no authority. R1 has no public borrowed-memory copy method;
-- `sqlite-library.protos` uses LIB029 `std:sqlite`, which owns connections,
-  statements, parameters, copied rows and `Closable` lifecycle. With LIB030,
+- `sqlite-library.protos` uses `std:sqlite`, which owns connections,
+  statements, parameters, copied rows and `Closable` lifecycle.
   `bind` also accepts String (TEXT) and Bytes (BLOB), `prepare` admits exactly
   one statement with conventional `;` terminators and trailing comments, and
   `reset()`/`clearBindings()` reuse a Statement explicitly. The durable example
@@ -128,16 +135,7 @@ The two original examples use the provider-private I144 operations directly: `si
   single-statement admission of `std:sqlite` `prepare`.
 
 Applications can use the [SQLite library](../../../docs/guide/library/sqlite.md)
-without copying low-level declarations. The maintainer reports **34/34 PASS**
-for the complete external foreign-provider integration, including the LIB029
-real SQLite cases and `sqlite-library.protos`; `make check` and `make test`
-also passed as maintainer-reported for the published LIB029 implementation
-`90fd4ece800f6d0e007aa9a2c735ee2f7659919a`. The DOC024 programs
-`sqlite-prepared-numeric.protos` and `sqlite-copied-values.protos` are
-registered in the same harness; their validation is pending until the
-maintainer runs it. The LIB030 additions to `sqlite-prepared-numeric.protos`,
-`sqlite-complete-public.protos` and the SQLite tutorials are likewise pending
-maintainer validation.
+without copying low-level native declarations.
 
 ## Limitations and security
 
@@ -146,8 +144,9 @@ maintainer validation.
 - The provider validates arity, kinds, ranges and handle state before a call,
   but cannot check that a declared signature matches the C function. A wrong
   declaration can corrupt memory or terminate the process.
-- No callbacks, structs, variadic functions, C++, TEXT/BLOB input binding, or
-  Native Image.
+- No callbacks, structs, variadic functions, C++, or Native Image.
+  Public `std:ffi` lacks specialized TEXT/BLOB input descriptors; `std:sqlite`
+  supports TEXT/BLOB parameters through its private adapter.
 - C calls are synchronous; a blocked call delays the Actor and session close.
 
 ## See also
@@ -157,5 +156,4 @@ maintainer validation.
 - Tutorials: [`07-ffi-provider-basics.protos`](../../tutorials/08-language-interactions/07-ffi-provider-basics.protos)
   and [`04-ffi-ownership-and-borrows.protos`](../../tutorials/12-system-resources/04-ffi-ownership-and-borrows.protos)
 - Regression programs: [`ffm-sqlite.protos`](../../tests/foreign-provider/ffm-sqlite.protos)
-  and [`ffm-denied.protos`](../../tests/foreign-provider/ffm-denied.protos),
-  run by [`dist/test_external_foreign_providers.py`](../../../dist/test_external_foreign_providers.py)
+  and [`ffm-denied.protos`](../../tests/foreign-provider/ffm-denied.protos)

@@ -131,7 +131,7 @@ an explicitly injected test Bytes key, an explicit Instant, structured JSON
 claims and HS256 issue/verify. Authentication does not itself grant account
 permissions. See the [strict JWT guide](../../docs/guide/library/jwt.md).
 
-Three lessons use the optional external FFM provider (I144) and the shared SQLite
+The following lessons use the optional external FFM provider (I144) and the shared SQLite
 library:
 [`08-language-interactions/07-ffi-provider-basics.protos`](08-language-interactions/07-ffi-provider-basics.protos)
 (importing `ffi:sqlite3`, building signatures, scalar C calls, C results as
@@ -139,18 +139,17 @@ data, pre-entry rejection) and
 [`12-system-resources/04-ffi-ownership-and-borrows.protos`](12-system-resources/04-ffi-ownership-and-borrows.protos)
 (owned handles, `out` parameters, borrowed memory, release order), followed by
 [`12-system-resources/05-sqlite-protos-first.protos`](12-system-resources/05-sqlite-protos-first.protos)
-(public `std:sqlite`, numeric/NULL binding, copied rows and Closable cleanup).
-All three need
+(public `std:sqlite`, typed parameters, copied rows and Closable cleanup).
+These lessons need
 the provider JAR authorized explicitly with
 `bin/protos --foreign-provider-path <protos-ffm-provider.jar> --allow-library sqlite3=libsqlite3.so.0 <file>`, on
-Linux x86-64 with JDK 25. They validate with assertions and contain no `print`
-call, so the ordinary tutorial sweep, which runs without any provider, skips
-them; `dist/test_external_foreign_providers.py` runs them instead. See the
+Linux x86-64 with JDK 25. They check their results with assertions and finish
+silently on success. See the
 [FFM provider guide](../../docs/guide/interop/ffm-provider.md).
 
-The public LIB028 path starts with
+The public `std:ffi` path starts with
 [`08-public-ffi-descriptors.protos`](08-language-interactions/08-public-ffi-descriptors.protos),
-which needs no provider and runs through the ordinary CLI tutorial path:
+which needs no provider and runs with the CLI:
 `bin/protos protos/tutorials/08-language-interactions/08-public-ffi-descriptors.protos`.
 It follows the private `07` lesson but uses only `std:ffi` descriptors and
 proves that importing the public MODULE does not grant native authority.
@@ -161,24 +160,32 @@ for explicitly authorized C calls, then
 for output Arrays and owned handles, following the private
 [`04-ffi-ownership-and-borrows.protos`](12-system-resources/04-ffi-ownership-and-borrows.protos)
 lesson. These latter two programs require the
-authorized provider JAR and are run by the FFM harness, not the ordinary
-provider-free tutorial sweep.
+authorized provider JAR and a SQLite library authorized by the host.
 
 The public SQLite path builds on `std:sqlite` and is distinct from both the
-private I144 provider lessons (`07-ffi-provider-basics`,
-`04-ffi-ownership-and-borrows`) and the DOC023 public `std:ffi` lessons
-above. The LIB029 introduction
-[`05-sqlite-protos-first.protos`](12-system-resources/05-sqlite-protos-first.protos)
-shows one prepared query with copied rows. The DOC024 practical lesson
-[`06-sqlite-query-lifecycle.protos`](12-system-resources/06-sqlite-query-lifecycle.protos)
-introduces no new API: it combines the same operations into a table, numeric
-inserts with fresh Statements, ordered `each` traversal, bounded error cases
-and Statement/Connection close semantics. Both require explicit provider
-authorization (`bin/protos --foreign-provider-path <protos-ffm-provider.jar> --allow-library sqlite3=libsqlite3.so.0 <file>`),
-contain no `print` call, and are run by
-`dist/test_external_foreign_providers.py` rather than the ordinary
-provider-free tutorial sweep. See the
-[SQLite guide](../../docs/guide/library/sqlite.md).
+private provider lessons (`07-ffi-provider-basics`,
+`04-ffi-ownership-and-borrows`) and the public `std:ffi` lessons
+above. Follow this progression:
+
+- [`05-sqlite-protos-first.protos`](12-system-resources/05-sqlite-protos-first.protos):
+  introduction to `std:sqlite` and copied results.
+- [`06-sqlite-query-lifecycle.protos`](12-system-resources/06-sqlite-query-lifecycle.protos):
+  table creation, typed parameters, Statement reuse, errors and lifecycle.
+- [`07-sqlite-durable-transactions.protos`](12-system-resources/07-sqlite-durable-transactions.protos):
+  persistence, commit, rollback, explicit close and read-only reopen.
+
+Supply a disposable SQLite filename for lesson 07:
+
+```sh
+bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar \
+  --allow-library sqlite3=libsqlite3.so.0 \
+  protos/tutorials/12-system-resources/07-sqlite-durable-transactions.protos \
+  /tmp/protos-sqlite-tutorial.db
+```
+
+These lessons need an FFM provider and a SQLite library authorized by the host.
+They finish silently on successful assertions.
+See the [SQLite guide](../../docs/guide/library/sqlite.md).
 
 After the HTTP progression, the next advanced workflow reaches real hosts and
 is not a tutorial: the manual cookbook examples

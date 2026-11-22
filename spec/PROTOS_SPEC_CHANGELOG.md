@@ -23,6 +23,32 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.507] - 2026-11-22
+
+### D256-C1R — Ratified SQLite Standard Library contract
+
+- Primary owner `semantics/SQLITE.md`: records owner ratification on
+  2026-11-22 of the ordinary `std:sqlite` contract: memory and persistent
+  acquisition, with `readOnly`, `readWrite` and default `readWriteCreate` modes.
+- Arguments are validated before native acquisition; writable acquisition
+  verifies the effective main-schema mode. Manual BEGIN/COMMIT/ROLLBACK use
+  prepared Statements; `inTransaction()` directly observes SQLite autocommit,
+  including active transactions after failed COMMIT and automatic rollback.
+- Busy timeout accepts Integer milliseconds in `0..2147483647`, with zero
+  disabling the handler; it concerns qualifying lock waits, not query deadlines
+  or cancellation. Existing single-statement SQL admission, typed bindings,
+  copied results and 16 MiB TEXT/BLOB bounds are preserved.
+- Connections and Statements remain Actor-local, synchronous resources with
+  explicit cleanup, at-most-once destruction, primary-error preservation and
+  fresh terminal close Futures. No implicit native suspension or cancellation.
+- D259 host authorization remains explicit. Trusted native SQLite executes
+  under OS process authority, without confinement by guest Filesystem grants.
+  SQLite owns locking, journals, WAL and recovery; durability depends on its
+  configuration, VFS, filesystem and storage, without universal physical
+  power-loss guarantees.
+- Navigation: `PROTOS_LANGUAGE_SPEC.md` links the SQLite domain owner. No Core
+  type, global storage capability, public `std:ffi` API or Java runtime change.
+
 ## [0.1.506] - 2026-11-21
 
 ### D259-B2+A / I169 — Trusted native FFM library allowlist

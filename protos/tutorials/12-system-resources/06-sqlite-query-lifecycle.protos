@@ -141,3 +141,5 @@ other: SQLite.openMemory()
         Assertions.require(child.close().value() === child)
     }).ensure(() => child.close().value())
 }).ensure(() => other.close().value())
+
+// Continue with 07-sqlite-durable-transactions.protos for persistent transactions.

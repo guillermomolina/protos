@@ -4,9 +4,8 @@ Use `std:sqlite` to open a database, prepare a query, bind values, and read
 copied rows without managing native pointers. This guide also covers statement
 reuse, file-backed connections, and manual transactions.
 
-The additional public contract in [SQLITE.md](../../../spec/semantics/SQLITE.md)
-is pending owner ratification. Its presence does not make it an approved
-normative specification.
+The normative authority is [SQLITE.md](../../../spec/semantics/SQLITE.md).
+This guide explains the Standard Library contract; it adds no Core storage type.
 
 ```protos
 SQLite: import("std:sqlite")
@@ -20,19 +19,23 @@ db: SQLite.openMemory()
 }).ensure(() => db.close().value())
 ```
 
-See the assertion-validated [table/insert/query example](../../../protos/examples/ffi/sqlite-library.protos)
-and [tutorial](../../../protos/tutorials/12-system-resources/05-sqlite-protos-first.protos).
+Follow these executable lessons and examples in order:
 
-This page is the practical learning path for application developers. The
-following programs continue it:
+1. [`05-sqlite-protos-first.protos`](../../../protos/tutorials/12-system-resources/05-sqlite-protos-first.protos):
+   memory connection, typed parameters and copied results.
+2. [`06-sqlite-query-lifecycle.protos`](../../../protos/tutorials/12-system-resources/06-sqlite-query-lifecycle.protos):
+   creation, queries, reuse, errors and resource lifecycle.
+3. [`07-sqlite-durable-transactions.protos`](../../../protos/tutorials/12-system-resources/07-sqlite-durable-transactions.protos):
+   persistent transactions, rollback and read-only reopen.
+4. [`sqlite-durable.protos`](../../../protos/examples/ffi/sqlite-durable.protos):
+   complete application with typed persistent data and explicit transactions.
+5. [`sqlite-wal.protos`](../../../protos/examples/ffi/sqlite-wal.protos):
+   explicit WAL and synchronous FULL policy, verified through SQLite.
 
-- [`06-sqlite-query-lifecycle.protos`](../../../protos/tutorials/12-system-resources/06-sqlite-query-lifecycle.protos):
-  table creation, numeric inserts, ordered traversal, error cases and close
-  semantics in one assertion-validated lesson;
-- [`sqlite-prepared-numeric.protos`](../../../protos/examples/ffi/sqlite-prepared-numeric.protos):
-  filtering numeric records with prepared parameters and a reused INSERT;
-- [`sqlite-copied-values.protos`](../../../protos/examples/ffi/sqlite-copied-values.protos):
-  independent TEXT/BLOB/NULL results.
+Additional focused examples cover
+[numeric filtering](../../../protos/examples/ffi/sqlite-prepared-numeric.protos),
+[copied TEXT/BLOB values](../../../protos/examples/ffi/sqlite-copied-values.protos)
+and the [first table/query](../../../protos/examples/ffi/sqlite-library.protos).
 
 To declare your own C functions use the public [`std:ffi` guide](ffi.md); for
 backend implementation and native lifetime details see the advanced
@@ -80,6 +83,24 @@ backend implementation and native lifetime details see the advanced
        protos/examples/ffi/sqlite-prepared-numeric.protos
    bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar --allow-library sqlite3=libsqlite3.so.0 \
        protos/examples/ffi/sqlite-copied-values.protos
+   ```
+
+   Continue with persistent programs, supplying disposable filenames. Each
+   program confines table creation and row changes to its documented table;
+   the WAL example also changes the journaling mode of the entire database
+   persistently. Use a disposable database, not an existing file whose
+   journaling mode must be preserved. These programs do not delete database
+   files or SQLite sidecars.
+
+   ```sh
+   bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar --allow-library sqlite3=libsqlite3.so.0 \
+       protos/tutorials/12-system-resources/05-sqlite-protos-first.protos
+   bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar --allow-library sqlite3=libsqlite3.so.0 \
+       protos/tutorials/12-system-resources/07-sqlite-durable-transactions.protos /tmp/protos-sqlite-tutorial.db
+   bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar --allow-library sqlite3=libsqlite3.so.0 \
+       protos/examples/ffi/sqlite-durable.protos /tmp/protos-sqlite-durable.db
+   bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar --allow-library sqlite3=libsqlite3.so.0 \
+       protos/examples/ffi/sqlite-wal.protos /tmp/protos-sqlite-wal.db
    ```
 
    Each program validates with assertions: success is exit status 0 with no
@@ -221,15 +242,15 @@ bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar -
 ```
 
 [Provider build instructions](../interop/ffm-provider.md#build-the-provider-jar)
-apply unchanged. No Native Image plugin support or other platform promise is
-introduced. A missing or denied provider is a failure; an unavailable test
-platform is UNSUPPORTED, never passing SQLite acceptance.
+apply unchanged. Native Image plugin loading is not supported.
+A missing or denied provider is a failure.
 
 Under D259, authorizing SQLite accepts its native effects with the operating
 system process's permissions. This includes file I/O outside any guest
 `Filesystem` capability, including SQLite sidecars, temporary files and SQL file
 operations. Guest capabilities remain independent. `std:sqlite` is not a sandbox:
-native faults can corrupt memory or terminate the process.
+native faults can corrupt memory or terminate the process. There is no SQLite
+sandbox or Landlock confinement; guest Filesystem grants do not confine C.
 
 ## Persistent connections
 
@@ -270,13 +291,29 @@ permissions, available space, locks and device errors may change.
 
 ```protos
 db.begin()
+Assertions.require(db.inTransaction())
 insert: db.prepare("INSERT INTO items(name) VALUES(?1)")
 (() => {
     insert.bind(1, "parameterized data")
     insert.step()
 }).ensure(() => insert.close().value())
 db.commit()
+Assertions.require(!db.inTransaction())
+
+// A separate transaction can explicitly undo a prepared change.
+db.begin()
+change: db.prepare("UPDATE items SET name=?1 WHERE name=?2")
+(() => {
+    change.bind(1, "temporary").bind(2, "parameterized data")
+    change.step()
+    Assertions.require(db.inTransaction())
+}).ensure(() => change.close().value())
+db.rollback()
+Assertions.require(!db.inTransaction())
 ```
+
+These snippets run within the Connection's `ensure` scope and use
+`Assertions: import("std:test/assertions")`.
 
 `begin()`, `commit()` and `rollback()` prepare and execute exactly `BEGIN`,
 `COMMIT` and `ROLLBACK`, finalize the control Statement on every path and answer
@@ -310,14 +347,31 @@ The existing terminal Future returned by `close()` retains its contract.
 
 ## WAL, durability and recovery
 
+**Journal mode**
+
+- `PRAGMA journal_mode=WAL` changes the mode of the entire database, not a table.
+- WAL persists after closing and reopening; other connections to the same file
+  use that mode.
+- `std:sqlite` never changes the journal mode automatically.
+
+**Synchronous**
+
+- `PRAGMA synchronous=FULL` configures the synchronization policy of the
+  connection executing it.
+- A new connection must configure its own policy when the application requires
+  that value explicitly; automatic inheritance must not be assumed.
+- `PRAGMA synchronous` returns the effective value; `FULL` corresponds to `2`.
+- Final durability still depends on SQLite, VFS, filesystem and storage.
+
 Journal and synchronous policy remain SQLite's native configuration until the
 application explicitly changes them through ordinary prepared SQL:
 
 ```protos
 journal: db.prepare("PRAGMA journal_mode=WAL")
 (() => {
-    journal.step()
-    // Inspect journal.column(0) to confirm SQLite's selected mode.
+    Assertions.require(journal.step())
+    Assertions.require(journal.column(0) == "wal")
+    Assertions.require(journal.step() === false)
 }).ensure(() => journal.close().value())
 sync: db.prepare("PRAGMA synchronous=FULL")
 (() => { sync.step() }).ensure(() => sync.close().value())
@@ -330,11 +384,11 @@ depends on SQLite configuration, VFS, filesystem, storage and successful native
 I/O; the wrapper promises no universal power-loss guarantee. Connection close
 is resource cleanup, not an extra commit or storage sync.
 
-The runner checks reopen with exact typed values in independent Protos OS
-processes, external writer lock contention, and recovery after terminating a
-writer that acknowledged an uncommitted write. Its acknowledgment synchronizes
-termination; no arbitrary sleep substitutes for that signal. This tests process
-termination recovery, not physical power failure.
+The [WAL example](../../../protos/examples/ffi/sqlite-wal.protos) checks the
+selected WAL mode and `synchronous == 2` on its writer connection. After closing
+that connection and reopening read-only, it queries `PRAGMA journal_mode` to
+check that WAL remains active, then verifies the committed rows. It does not
+set journal mode on the read-only connection or assume that FULL is inherited.
 
 The complete [durable example](../../../protos/examples/ffi/sqlite-durable.protos)
 creates/replaces its `durable_demo` table, commits prepared inserts using a reused
@@ -481,16 +535,14 @@ Not every failure is a `SQLiteError`. Argument and state errors are ordinary
 | New Connection operations after close | `IOLifecycleError` before native entry |
 | Opening without a provider | ordinary resolution `Error` |
 | Unauthorized/unavailable native library | D259 `ForeignError`, categories `unauthorized-library` / `library-unavailable` |
-| Unsupported execution platform | Provider refusal; harness reports UNSUPPORTED only for genuinely absent platform dependencies |
+| Unsupported execution platform | Provider refusal |
 | Failed native finalize/close | the close Future fails with `SQLite.SQLiteError` (`operation: "finalize"` or `"close"`) |
 
 `SQLiteError` has exactly two informative slots: `operation`, a String naming
 the wrapper step (`"open"`, `"prepare"`, `"bind"`, `"step"`, `"reset"`,
 `"clearBindings"`, `"column"`, `"finalize"`, `"close"` or `"busyTimeout"`), and `code`, the numeric SQLite status. It carries
 no native message text, cause chain, host path, native address or Java
-exception. Missing-provider behavior is validated separately by
-[`sqlite-missing.protos`](../../../protos/tests/foreign-provider/sqlite-missing.protos),
-which runs without any provider.
+exception.
 
 ## Ownership and cleanup
 
@@ -554,3 +606,4 @@ is omitted because R1 supplies no bounded C-string length operation.
   and Protos Filesystem authority does not confine it.
 - Manual transactions only; no scoped transaction helper, pool, native
   callbacks, ORM or query builder.
+

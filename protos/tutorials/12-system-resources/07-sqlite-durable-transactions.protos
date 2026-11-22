@@ -1,0 +1,95 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// Continue lessons 05 and 06 with a disposable filename supplied by the caller.
+// The host supplies the FFM provider and sqlite3 authorization; no guest
+// Filesystem grant confines the trusted native library.
+Assertions: import("std:test/assertions")
+SQLite: import("std:sqlite")
+args: process.args()
+Assertions.require(args.size() == 1)
+path: args[0]
+
+// Copy and check both rows, including the value that rollback must preserve.
+verify: (connection) => {
+    query: connection.prepare("SELECT id, label FROM tutorial_transactions ORDER BY id")
+    (() => {
+        Assertions.require(query.step())
+        Assertions.require(query.column(0) == 1)
+        Assertions.require(query.column(1) == "first")
+        Assertions.require(query.step())
+        Assertions.require(query.column(0) == 2)
+        Assertions.require(query.column(1) == "second")
+        Assertions.require(query.step() === false)
+    }).ensure(() => query.close().value())
+}
+
+// Step A: the default mode is "readWriteCreate". Install cleanup immediately.
+db: SQLite.openFile(path)
+(() => {
+    Assertions.require(!db.inTransaction())
+    // Step B: milliseconds for qualifying lock waits, not a query deadline.
+    db.busyTimeout(250)
+
+    // Step C: own only this table; clear it so the lesson can run again.
+    create: db.prepare("CREATE TABLE IF NOT EXISTS tutorial_transactions(id INTEGER PRIMARY KEY, label TEXT)")
+    (() => { Assertions.require(create.step() === false) }).ensure(() => create.close().value())
+    clear: db.prepare("DELETE FROM tutorial_transactions")
+    (() => { Assertions.require(clear.step() === false) }).ensure(() => clear.close().value())
+
+    // Step D: bind data, reuse the prepared INSERT, then explicitly commit.
+    db.begin()
+    Assertions.require(db.inTransaction())
+    insert: db.prepare("INSERT INTO tutorial_transactions VALUES(?1, ?2)")
+    (() => {
+        insert.bind(1, 1).bind(2, "first")
+        Assertions.require(insert.step() === false)
+        insert.reset().bind(1, 2).bind(2, "second")
+        Assertions.require(insert.step() === false)
+    }).ensure(() => insert.close().value())
+    db.commit()
+    Assertions.require(!db.inTransaction())
+
+    // Step E: undo a change and observe SQLite's actual transaction state.
+    db.begin()
+    update: db.prepare("UPDATE tutorial_transactions SET label=?1 WHERE id=?2")
+    (() => {
+        update.bind(1, "temporary").bind(2, 1)
+        Assertions.require(update.step() === false)
+        Assertions.require(db.inTransaction())
+    }).ensure(() => update.close().value())
+    db.rollback()
+    Assertions.require(!db.inTransaction())
+    verify(db)
+    // Step F: every Statement is finalized before the Connection closes.
+}).ensure(() => db.close().value())
+
+// Step G: reopen the same file read-only and verify committed data.
+reopened: SQLite.openFile(path, "readOnly")
+(() => {
+    verify(reopened)
+    write: reopened.prepare("DELETE FROM tutorial_transactions")
+    (() => {
+        failure: Assertions.signals(SQLite.SQLiteError, () => write.step())
+        Assertions.require(failure.operation == "step")
+        Assertions.require(failure.code == 8) // SQLITE_READONLY
+    }).ensure(() => {
+        // Finalize reports the last failed execution too; it still retires once.
+        failure: Assertions.signals(SQLite.SQLiteError, () => write.close().value())
+        Assertions.require(failure.operation == "finalize")
+        Assertions.require(failure.code == 8)
+    })
+    verify(reopened)
+}).ensure(() => reopened.close().value())

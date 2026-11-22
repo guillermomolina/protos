@@ -121,8 +121,9 @@ Continue with the [descriptor tutorial](../../../protos/tutorials/08-language-in
 [SQL completeness example](../../../protos/examples/ffi/sqlite-complete-public.protos)
 or [numeric query example](../../../protos/examples/ffi/sqlite-numeric-query-public.protos).
 
-For the higher-level [SQLite library](sqlite.md) (LIB029), use `std:sqlite`
-for in-memory connections, Statements, numeric/NULL binding and copied rows.
-Its borrowed-memory adaptation stays private, with a 16 MiB copy bound;
-public R1 adds no `FFI.copy`, `FFI.borrowed` or `FFI.preserving`. TEXT/BLOB
-input binding remains deferred.
+For the higher-level [SQLite library](sqlite.md), use `std:sqlite` for memory
+and file connections, prepared Integer/Float/TEXT/BLOB/null parameters, copied
+rows and manual transactions. The host must explicitly supply the FFM provider
+and authorize SQLite. Its borrowed-memory adaptation stays private, with a
+16 MiB copy bound; public R1 adds no `FFI.copy`, `FFI.borrowed` or
+`FFI.preserving`.

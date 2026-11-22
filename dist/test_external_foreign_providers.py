@@ -114,6 +114,8 @@ LIB031_CASES = (
     ("LIB031_LOCKING", "locked"),
     ("LIB031_RECOVERY", "recover"),
     ("LIB031_EXAMPLE", "example"),
+    ("LIB031_TUTORIAL", "tutorial"),
+    ("LIB031_WAL_EXAMPLE", "walExample"),
 )
 LIB029_LEARNING = (
     ("LIB029_EXAMPLE", ROOT / "protos/examples/ffi/sqlite-library.protos"),
@@ -476,18 +478,23 @@ def check_lib031(runner: Runner, key: str, scenario: str, install: Path, provide
                           report_progress=False, evidence_suffix=f"-{mode}")
         return runner.results.get(key) == PASS
 
+    programs = {
+        "example": "protos/examples/ffi/sqlite-durable.protos",
+        "tutorial": "protos/tutorials/12-system-resources/07-sqlite-durable-transactions.protos",
+        "walExample": "protos/examples/ffi/sqlite-wal.protos",
+    }
     try:
         if scenario in ("local", "missing"):
             run(scenario)
-        elif scenario == "example":
+        elif scenario in programs:
             command = [str(install / "bin" / "protos"), "--foreign-provider-path", str(provider),
                        *library_options(SQLITE_GRANT),
-                       str(ROOT / "protos/examples/ffi/sqlite-durable.protos"), str(database)]
+                       str(ROOT / programs[scenario]), str(database)]
             for index in range(2):
                 completed = runner.run(f"{key.lower()}-{index}", command,
                                        runner.work, runner.environment())
                 if completed.returncode or completed.stdout or completed.stderr:
-                    raise RuntimeError(f"durable example run {index}: exit={completed.returncode}, "
+                    raise RuntimeError(f"{scenario} run {index}: exit={completed.returncode}, "
                                        f"stdout={completed.stdout!r}, stderr={completed.stderr!r}")
             runner.record(key, PASS)
         elif run("seed"):

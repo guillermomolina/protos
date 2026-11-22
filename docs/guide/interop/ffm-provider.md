@@ -1,8 +1,8 @@
 # The optional external FFM provider (`ffi:`)
 
-> **Status:** Non-normative developer guide (I144). The provider operations
+> **Status:** Non-normative developer guide. The provider operations
 > described here are external support machinery, not the public `std:ffi`
-> library implemented in Protos by LIB028. Applications declaring C functions
+> library implemented in Protos. Applications declaring C functions
 > supported by R1 should start with the
 > [public `std:ffi` guide](../library/ffi.md). This guide remains useful for
 > authors of the generic backend and for private operations not published by R1.
@@ -36,7 +36,7 @@ Contents:
 12. [Registration (I085)](#registration-i085), [trust boundary](#trust-boundary),
     [resources and borrowed memory](#resources-and-borrowed-memory) (reference)
 13. [Security and limits](#security-and-limits)
-14. [Relationship to LIB028 and LIB029](#relationship-to-lib028-and-lib029)
+14. [Relationship to `std:ffi` and `std:sqlite`](#relationship-to-stdffi-and-stdsqlite)
 
 Executable material: the tutorials
 [`07-ffi-provider-basics.protos`](../../../protos/tutorials/08-language-interactions/07-ffi-provider-basics.protos)
@@ -269,14 +269,14 @@ returned as data.
 | `owned(opaque, destructorSymbol, destructorReturnType)` | pointer whose lifetime the session takes over; `destructorReturnType` is `void` or `i32` | owned reference |
 | `borrowed` | pointer to memory the C library still owns (return only) | borrowed region, read only with `copy` |
 | `out(type)` | `type *` output slot | no argument; value returned after the C result |
-| `text` | `const char *` length-carrying input (LIB030, private) | String, strict UTF-8, interior NUL allowed, length within the C `int` domain |
-| `octets` | `const void *` length-carrying input (LIB030, private) | String of U+0000..U+00FF, one octet per character (a private binary transport), length within the C `int` domain |
+| `text` | `const char *` length-carrying input (private) | String, strict UTF-8, interior NUL allowed, length within the C `int` domain |
+| `octets` | `const void *` length-carrying input (private) | String of U+0000..U+00FF, one octet per character (a private binary transport), length within the C `int` domain |
 | `inputLength` | `int` length of the nearest preceding `text`/`octets` | no argument; exact octet count computed by the provider |
 | `copyDestructor` | `void (*)(void *)` destructor argument | no argument; always the copy sentinel `-1` (for SQLite, `SQLITE_TRANSIENT`) |
 | `out(remainder)` | `const char **` tail into the nearest preceding `utf8z`/`text` | no argument; unconsumed octet count, `null` for a NULL tail |
 
 Integers are never truncated or wrapped, and no Integer converts to a
-pointer. The LIB030 input regions are fresh, non-NULL, NUL-guarded copies in
+pointer. The private input regions are fresh, non-NULL, NUL-guarded copies in
 the per-call arena: they exist only during the call, so the callee must copy
 them before returning (`copyDestructor`). A remainder is measured while that
 input is still alive; a tail outside the input is a `ForeignError`. These
@@ -344,7 +344,7 @@ bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar -
 
 Success is exit status 0 with no output. This is
 [`protos/examples/ffi/sqlite-version.protos`](../../../protos/examples/ffi/sqlite-version.protos).
-`FFI.bind` and the other public operations belong to LIB028; the examples
+`FFI.bind` and the other public operations belong to `std:ffi`; the examples
 below retain the private I144 contract for backend documentation.
 
 ## Output parameters
@@ -361,7 +361,7 @@ C often returns a status and writes the real result through a pointer, as in
 - a non-zero C result (for example `SQLITE_ERROR`) is ordinary information
   in `result[0]`, never an automatic `ForeignError`; checking it is the
   program's job;
-- LIB028 converts that value into a fresh ordinary public Array.
+- `std:ffi` converts that value into a fresh ordinary public Array.
 
 ## Owned resources
 
@@ -397,7 +397,7 @@ Assertions.require(sqlite.release(connection) == 0)  // sqlite3_close_v2
 
 Release dependants before what they depend on: finalize statements before
 closing their connection. This is a low-level sequence of C calls, not a
-connection library; LIB029 now provides that as
+connection library; applications can use
 [`std:sqlite`](../library/sqlite.md).
 
 `borrowed`, `preserving` and `copy` are private I144 provider machinery, not
@@ -480,7 +480,7 @@ prepared: prepare(connection, "SELECT 1", -1, null)
 ```
 
 Do not declare it as `out(borrowed)` or as an opaque `out`. Recovering the
-remaining SQL would have to copy it while `zSql` is alive; LIB029 `std:sqlite`
+remaining SQL would have to copy it while `zSql` is alive; `std:sqlite`
 instead rejects every semicolon and never reads `pzTail`.
 
 ## Errors
@@ -518,12 +518,7 @@ from guest code and never from content packaged in the JAR, so one JAR serves
 every host. The provider checks the alias against those options before it
 creates any Linker or Arena for the acquisition.
 
-The SQLite-independent ABI fixture runs under a test-only registration
-(`ffi-test:ffi_test`) of the same backend, hosted by the Java test
-`ProtosI144FfmFixtureAbiTest`, which selects the compiled fixture with
-`withProviderOptions`.
-
-The I085 SPI gained one optional hook for this provider,
+The public SPI provides one optional hook for this provider,
 `ProtosForeignValueOperations.acceptsExecution`, run before entry of
 projected `call` and `std:interop.invoke`. It lets a provider validate the
 complete argument list against a signature (arity, kinds, ranges,
@@ -568,7 +563,7 @@ symbol whitelist and none would be an isolation guarantee.
   unsafe as a wrong C signature.
 - Copies are bounded by a private 16 MiB limit; this is a provider safeguard,
   not a Protos rule.
-- `sqlite3_open_v2`'s `zVfs` is `const char *`. The tests pass `NULL` through
+- `sqlite3_open_v2`'s `zVfs` is `const char *`. To pass `NULL`, use
   a nullable opaque pointer of a private type that no binding produces, so
   only `null` is admitted: a limited NULL-pointer adaptation, not a
   `nullable(utf8z)` extension.
@@ -583,41 +578,43 @@ symbol whitelist and none would be an isolation guarantee.
   dependencies; there is no whitelist, and none would be a security
   isolation.
 - Not supported: callbacks/upcalls, general structs, variadic functions,
-  C++, Native Image, Windows, macOS, TEXT/BLOB input binding with
-  `SQLITE_TRANSIENT`, and pointers as Integers.
+  C++, Native Image, Windows, macOS, and pointers as Integers. Public
+  `std:ffi` has no TEXT/BLOB input descriptor; `std:sqlite` supports typed
+  TEXT/BLOB parameters through its private library adapter.
 - C calls are **synchronous**: they introduce no implicit suspension, and a
   blocked call holds its Actor.
 - Session close waits for admitted calls, so a blocked C call can delay it.
 - No isolation of the process from arbitrary C behavior is guaranteed.
 
-## Relationship to LIB028 and LIB029
+## Relationship to `std:ffi` and `std:sqlite`
 
-- **LIB028** (`std:ffi`) defines the public Protos API: ordinary
+- **`std:ffi`** defines the public Protos API: ordinary
   descriptor values, Array-based signatures, `FFI.bind/opaque/owned/out/release`,
   and construction of final Arrays from provider results, implemented in
   Protos over these provider operations.
-- **LIB029** (`std:sqlite`) provides the idiomatic in-memory SQLite library
-  in ordinary Protos: connections, statements, numeric/NULL parameters,
-  copied rows and `Closable` lifecycle. It has no transaction abstraction.
-  Application developers should start with the
-  [SQLite guide](../library/sqlite.md) rather than this backend reference.
+- **`std:sqlite`** provides the ordinary Protos SQLite library:
+  memory and persistent file connections, prepared Integer/Float/TEXT/BLOB/null
+  parameters, copied rows, explicit transactions, native busy timeout and
+  `Closable` lifecycle. SQLite parses one complete statement, including
+  conventional terminators and trailing comments. Application developers should
+  start with the [SQLite guide](../library/sqlite.md).
 
-LIB029 is implemented above LIB028 and this provider; its borrowed-memory
-adaptation is private to `std:sqlite`. `ffm-public-api.protos` exercises the public
-LIB028 layer with the existing I144 fixture host; `ffm-abi.protos` retains
-private backend and borrowed-memory regression coverage. Public R1 has no
+`std:sqlite` is implemented above `std:ffi` and this provider; its borrowed-memory
+adaptation is private to `std:sqlite`. Public R1 has no
 borrowed-memory descriptor or copying operation.
 
-| | I144 (implemented) | LIB028 (implemented) | LIB029 (implemented) |
+| | FFM provider | `std:ffi` | `std:sqlite` |
 |---|---|---|---|
 | Owner of | external FFM provider, bounded generic ABI, I085 integration | public `std:ffi` in Protos | idiomatic SQLite library |
 | Declarations | provider-private `signature`/`param`/`bind` | `FFI.bind`, public descriptors, Array signatures | hidden behind the library |
 | Results with `out` | provider-private indexed value | final public Arrays | library values |
 | Resources | owned/borrowed custody, `release`, session/Actor control | public owned/out/release abstractions | connections, statements, `Closable` |
-| SQL | raw C calls, synchronous | — | semicolon-free statements, numeric/NULL parameters, copied rows |
+| SQL | raw C calls, synchronous | — | one complete statement with conventional terminators, typed parameters including TEXT/BLOB, copied rows, persistent files and explicit transactions |
 
 ## Limits
 
 Linux x86-64 portable JVM only; no Native Image, Windows, macOS, structs,
-callbacks, variadic functions, C++, TEXT/BLOB input binding with
-`SQLITE_TRANSIENT`, or native sandbox.
+callbacks, variadic functions, C++, or native sandbox. Public `std:ffi` has no
+TEXT/BLOB input binding with `SQLITE_TRANSIENT`; `std:sqlite` supplies typed
+TEXT/BLOB binding through its private adapter, without additional public FFI
+API or SQLite-specific Java infrastructure.

@@ -28,6 +28,8 @@ instead.
 | Check whether a SQL statement is complete with public `std:ffi` (`--foreign-provider-path`) | `ffi/sqlite-complete-public.protos` |
 | Run a parameterized numeric SQLite query with public `std:ffi` (`--foreign-provider-path`) | `ffi/sqlite-numeric-query-public.protos` |
 | Query and filter numeric SQLite records with prepared parameters (`std:sqlite`, `--foreign-provider-path`, see the [SQLite guide](../../docs/guide/library/sqlite.md)) | `ffi/sqlite-prepared-numeric.protos` |
+| Create and reopen a persistent SQLite database (`std:sqlite`) | `ffi/sqlite-durable.protos` |
+| Configure persistent database-wide WAL and `synchronous=FULL` on the writer connection (`std:sqlite`) | `ffi/sqlite-wal.protos` |
 | Read independent SQLite TEXT/BLOB results safely (`std:sqlite`, `--foreign-provider-path`) | `ffi/sqlite-copied-values.protos` |
 | Check the I144 backend's ability to call C: the SQLite version (`--foreign-provider-path`, low-level provider example) | `ffi/sqlite-version.protos` |
 | Query SQLite through the low-level I144 backend example (`--foreign-provider-path`) | `ffi/sqlite-memory-query.protos` |
@@ -145,13 +147,16 @@ application catalog to provide `app:root-service-handler`. Ordinary file entry
 without `--service` still only evaluates its top level.
 See the [HTTP guide](../../docs/guide/library/http.md).
 
-The five `ffi/` examples are not runnable with a plain `bin/protos <file>`:
-they require the separately built FFM provider JAR (I144), passed with
-`--foreign-provider-path`, Linux x86-64, JDK 25 and a shared SQLite library.
-They signal success with exit status 0 and no output, contain no `print`
-call, and are run by `dist/test_external_foreign_providers.py`. The public
-examples use LIB028 `std:ffi`; the two original examples remain low-level I144
-backend material. See [`ffi/README.md`](ffi/README.md) and the
+The `ffi/` examples are not runnable with a plain `bin/protos <file>`:
+they require the separately built FFM provider JAR, passed with
+`--foreign-provider-path`, the portable JVM distribution on Linux x86-64,
+JDK 25 and a shared SQLite library.
+They signal success with exit status 0 and no output and contain no `print`
+call. The public
+C declaration examples use `std:ffi`; application examples use `std:sqlite`
+for prepared queries, typed data and persistent transactions. The two original
+examples remain private low-level I144 backend material. SQLite also requires
+explicit `--allow-library sqlite3=libsqlite3.so.0` authorization. See [`ffi/README.md`](ffi/README.md) and the
 [public `std:ffi` guide](../../docs/guide/library/ffi.md).
 
 D243-C / I157 adds two explicit secure-entropy examples. Direct entry:

@@ -1,11 +1,10 @@
 # Standard Library SQLite
 
-**PENDING OWNER RATIFICATION AND NORMATIVE PUBLICATION.** This document prepares
-the exact `std:sqlite` contract requested for LIB031 under the approved D256-C1R
-architecture. It is not a published specification revision and does not close
-D256. The pending catalogue is the additional exact public signatures, defaults
-and error mappings below; the architecture is already approved. No execution or
-durability acceptance is claimed by this draft.
+The project owner ratified this normative `std:sqlite` Standard Library
+contract on 2026-11-22 under D256-C1R. This document owns the public SQLite
+operations, results, admission, errors and lifecycle described below. It does
+not introduce a Core type or a global storage capability. Ratification records
+the approved contract; executable acceptance remains separate evidence.
 
 ## Scope and governing owners
 
@@ -136,8 +135,20 @@ trailing semicolons/whitespace/comments are accepted; a second executable
 statement is finalized and rejected. Invalid trailing SQL preserves SQLite's
 status. No prefix of rejected SQL is executed.
 
-Statement operations remain `bind`, `step`, `reset`, `clearBindings`, `column`,
-`row`, `each` and `close`. Binding uses one-based Integer indices and accepts
+The public Statement operations are:
+
+| Operation | Result |
+| --- | --- |
+| `bind(index, value)` | Same Statement after binding one parameter |
+| `step()` | Boolean: true for ROW, false for DONE |
+| `reset()` | Same Statement after successful reset |
+| `clearBindings()` | Same Statement after setting all bindings to SQL NULL |
+| `column(index)` | Independent value from the current row |
+| `row()` | Fresh Array of all current column values |
+| `each(callback)` | Same Statement after traversing remaining rows |
+| `close()` | Fresh terminal standard Future observing the recorded close outcome |
+
+Binding uses one-based Integer indices and accepts
 exact signed i64 Integer, Float, String, Bytes or null without coercion. String
 and Bytes inputs are independently copied by SQLite before bind returns, with
 strict UTF-8 for TEXT, exact octets for BLOB and embedded zeros retained.
@@ -152,7 +163,10 @@ to SQL NULL and neither resets nor executes.
 Zero-based column reads require a current row. INTEGER/FLOAT/TEXT/BLOB/NULL
 become ordinary Integer/Float/String/independent Bytes/null. Each row is a fresh
 Array of independent data; `each` invokes its ordinary Closure after copying
-the complete row. There are no native callbacks, Java row objects, exported
+the complete row. `each(callback)` repeatedly steps and copies each resulting
+row before invoking the callback; it does not revisit a row already obtained
+by `step()`. Callback failures and non-local returns propagate under ordinary
+language rules. There are no native callbacks, Java row objects, exported
 pointers or borrowed buffers. Existing copied-data and SQL admission contracts
 are preserved for both memory and file Connections.
 

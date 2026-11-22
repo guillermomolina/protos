@@ -93,8 +93,10 @@ specific task. These are useful next steps after the first program:
 - [TLS client](library/tls.md) — `std:tls/client`, explicit trust, and
   reference identity.
 - [SQLite](library/sqlite.md) — `std:sqlite` learning path:
-  connections, prepared parameters, copied rows, transactions, errors and
-  cleanup over the explicitly authorized FFM provider.
+  memory and persistent files, prepared Statements, typed parameters, copied
+  rows, transactions, SQLite-configured WAL and Actor-local resources over the
+  explicitly authorized FFM provider. Continue with the
+  [persistent transactions tutorial](../../protos/tutorials/12-system-resources/07-sqlite-durable-transactions.protos).
 - [Native C declarations](library/ffi.md) — optional, explicitly authorized
   `std:ffi` interoperability through an external provider.
 - [Vectors and matrices](library/linear-algebra.md) — `std:math/linear_algebra`.
@@ -120,7 +122,7 @@ specific task. These are useful next steps after the first program:
 - [The `java:` provider fixture](interop/java-provider.md) — `java:math` and
   `java:date` through the I085-B test fixture.
 - [The optional external FFM provider](interop/ffm-provider.md) — HOWTO for
-  the real `ffi:sqlite3` provider (I144): building and authorizing its JAR,
+  the real `ffi:sqlite3` provider: building and authorizing its JAR,
   native lifetime, `out` parameters, owned resources, and borrowed memory.
   For application C declarations, start with the [FFI guide](library/ffi.md).
 

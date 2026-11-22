@@ -26,7 +26,8 @@ need authority that already exists:
 - `std:tls/client` holds no network authority and has no default trust: you
   pass it a connected duplex and an explicit `Trust`; see [TLS client](tls.md).
 - `std:sqlite` acquires no authority by import; `openMemory()` and `openFile()`
-  require the host-authorized `ffi:sqlite3` provider. See [SQLite](sqlite.md).
+  require the host-authorized `ffi:sqlite3` provider. See [SQLite](sqlite.md)
+  and the [persistent transactions tutorial](../../../protos/tutorials/12-system-resources/07-sqlite-durable-transactions.protos).
   Application developers who want SQLite should use `std:sqlite`; use
   [`std:ffi`](ffi.md) only to declare your own supported C functions.
 - `std:inspect` requires authority the host must already have granted to the

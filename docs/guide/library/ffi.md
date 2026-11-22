@@ -41,8 +41,8 @@ make dist
 ls target/distributions/
 ```
 
-`make dist` normally requires a clean working tree. For pre-commit validation
-from a dirty tree, the distribution can instead be prepared with:
+`make dist` normally requires a clean working tree. To build from a dirty tree,
+the distribution can instead be prepared with:
 
 ```sh
 python3 dist/build_portable.py --allow-dirty
@@ -279,10 +279,13 @@ R1 also does not expose a SQLite connection abstraction, TEXT/BLOB input
 binding, callbacks, structs, variadic calls, C++, arbitrary allocators or
 `SQLITE_TRANSIENT`. Public `std:ffi` itself has no SQLite Connection or
 Statement objects. Those abstractions are implemented separately in ordinary
-Protos by LIB029 as [`std:sqlite`](sqlite.md), which application developers
+Protos as [`std:sqlite`](sqlite.md), which application developers
 should use for SQLite. Its SQLite-specific borrowed-memory adaptation remains
 private to that library: it adds no public `FFI.copy`, `FFI.borrowed` or
-`FFI.preserving`, and TEXT/BLOB input binding remains unsupported there too.
+`FFI.preserving`. `std:sqlite` accepts exact i64 Integer, Float,
+String/TEXT, Bytes/BLOB and null parameters, managing copies, Statements and
+resources in ordinary Protos. It also provides persistent connections and manual
+transactions; these library facilities do not extend public `std:ffi`.
 
 ## Security and limits
 

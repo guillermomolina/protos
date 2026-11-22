@@ -1,0 +1,84 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// This example creates, deletes rows from and inserts data only into wal_demo.
+// PRAGMA journal_mode=WAL changes journaling for the entire database;
+// WAL persists across connections and reopenings.
+// PRAGMA synchronous=FULL configures only the current connection;
+// future connections must not be assumed to inherit it automatically.
+// For these reasons, supply a disposable SQLite database filename.
+// WAL/FULL durability depends on SQLite, VFS, filesystem and storage;
+// this is not a universal guarantee against physical power loss.
+Assertions: import("std:test/assertions")
+SQLite: import("std:sqlite")
+args: process.args()
+Assertions.require(args.size() == 1)
+path: args[0]
+verify: (connection) => {
+    query: connection.prepare("SELECT id, label FROM wal_demo ORDER BY id")
+    (() => {
+        Assertions.require(query.step())
+        Assertions.require(query.column(0) == 1)
+        Assertions.require(query.column(1) == "committed")
+        Assertions.require(query.step() === false)
+    }).ensure(() => query.close().value())
+}
+db: SQLite.openFile(path)
+(() => {
+    db.busyTimeout(250)
+    // A PRAGMA request is not proof that SQLite selected the requested mode.
+    journal: db.prepare("PRAGMA journal_mode=WAL")
+    (() => {
+        Assertions.require(journal.step())
+        Assertions.require(journal.column(0) == "wal")
+        Assertions.require(journal.step() === false)
+    }).ensure(() => journal.close().value())
+    sync: db.prepare("PRAGMA synchronous=FULL")
+    (() => { Assertions.require(sync.step() === false) }).ensure(() => sync.close().value())
+    policy: db.prepare("PRAGMA synchronous")
+    (() => {
+        Assertions.require(policy.step())
+        Assertions.require(policy.column(0) == 2) // SQLite FULL
+        Assertions.require(policy.step() === false)
+    }).ensure(() => policy.close().value())
+    create: db.prepare("CREATE TABLE IF NOT EXISTS wal_demo(id INTEGER PRIMARY KEY, label TEXT)")
+    (() => { Assertions.require(create.step() === false) }).ensure(() => create.close().value())
+
+    // Replacing this table's rows in one transaction makes repeated runs safe.
+    db.begin()
+    clear: db.prepare("DELETE FROM wal_demo")
+    (() => { Assertions.require(clear.step() === false) }).ensure(() => clear.close().value())
+    insert: db.prepare("INSERT INTO wal_demo VALUES(?1, ?2)")
+    (() => {
+        insert.bind(1, 1).bind(2, "committed")
+        Assertions.require(insert.step() === false)
+    }).ensure(() => insert.close().value())
+    db.commit()
+    Assertions.require(!db.inTransaction())
+    verify(db)
+}).ensure(() => db.close().value())
+
+// SQLite manages its sidecars; the application never deletes them.
+reopened: SQLite.openFile(path, "readOnly")
+(() => {
+    journal: reopened.prepare("PRAGMA journal_mode")
+    (() => {
+        Assertions.require(journal.step())
+        Assertions.require(journal.column(0) == "wal")
+        Assertions.require(journal.step() === false)
+    }).ensure(() => journal.close().value())
+
+    verify(reopened)
+}).ensure(() => reopened.close().value())

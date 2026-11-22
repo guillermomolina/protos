@@ -13,12 +13,13 @@ is actually usable at the current repository revision. It is a map, not a
 tutorial. The surfaces and guides are:
 
 - **Application-level SQLite:** [`std:sqlite`](../library/sqlite.md), ordinary
-  Protos connections, numeric/NULL bindings, copied rows and Closable lifecycle
-  (LIB029). It exposes no native pointers, handles or callbacks. Start with the
+  Protos memory/file connections, Integer/Float/TEXT/BLOB/null parameters,
+  copied rows, manual transactions and Closable lifecycle.
+  It exposes no native pointers, handles or callbacks. Start with the
   practical guide and, for example,
   [`sqlite-prepared-numeric.protos`](../../../protos/examples/ffi/sqlite-prepared-numeric.protos).
 - **Protos-authored C declarations:** [`std:ffi`](../library/ffi.md), ordinary
-  Protos descriptors, Closures, output Arrays and owned resources (LIB028).
+  Protos descriptors, Closures, output Arrays and owned resources.
 - **Backend implementation and native lifetime details:** the separately built
   external I144 `ffi:` provider; its private operations are documented in the
   [FFM provider guide](ffm-provider.md).
@@ -100,18 +101,19 @@ Native Image distributions do not support dynamic provider loading.
 
 | Surface | State |
 |---|---|
-| Shared foreign substrate (facades, cache, D188 admission/identity, `ForeignError`, pull `each`, sessions) | Implemented and accepted (I080–I083); covered by Java unit tests |
+| Shared foreign substrate (facades, cache, admission/identity, `ForeignError`, pull `each`, sessions) | Available |
 | `std:interop` explicit operations | Implemented |
-| Public external provider SPI `com.guillermomolina.protos.spi.foreign` | Implemented and accepted (I085-A) |
-| Loading external providers in the **portable JVM CLI**: `protos --foreign-provider-path <jars> file.protos` | Implemented and accepted (I085-B, end-to-end harness) |
+| Public external provider SPI `com.guillermomolina.protos.spi.foreign` | Available |
+| Loading external providers in the **portable JVM CLI**: `protos --foreign-provider-path <jars> file.protos` | Available |
 | Synchronous callbacks through the **public SPI** | Not available: callbacks do not cross `spi.foreign` |
 | Foreign providers in a **standard Polyglot Context** ([embedding](../embedding/java.md)) | Not available: no Context option or public API registers providers there |
 | `ProtosPolyglotRuntimeHost.openWithForeignProviders(...)` | Public method, but it builds a Protos-owned runtime host, not a standard Context; running guest code on it requires internal bootstrap classes. Not a documented application flow |
-| Restricted host-Java catalogue provider (`ProtosHostJavaCatalogue`, `openWithHostJava`) | Implemented (I082-G) and tested in JUnit only; same limitation as the previous row |
+| Restricted host-Java catalogue provider (`ProtosHostJavaCatalogue`, `openWithHostJava`) | Requires internal bootstrap classes; same limitation as the previous row |
 | External providers in the **Native CLI** | Not available: Native Image builds offer no dynamic plugin loading |
 | Any provider shipped inside the Protos distribution | None. The `java:`, `inventado:`, and `oslib:` providers are test fixtures |
-| Optional external FFM provider `ffi:` ([guide](ffm-provider.md)) | Implemented in `providers/ffm` (I144) as a separately built JAR for the portable JVM CLI on Linux x86-64; not part of the distribution |
-| Public C declaration MODULE `std:ffi` ([guide](../library/ffi.md)) | Implemented (LIB028) as Protos Standard Library source over the external provider |
+| Optional external FFM provider `ffi:` ([guide](ffm-provider.md)) | Available in `providers/ffm` as a separately built JAR for the portable JVM CLI on Linux x86-64; not part of the distribution |
+| Application SQLite `std:sqlite` ([guide](../library/sqlite.md)) | Memory/file connections, typed parameters, copied rows and manual transactions; explicit FFM provider and SQLite authorization required |
+| Public C declaration MODULE `std:ffi` ([guide](../library/ffi.md)) | Available as Protos Standard Library source over the external provider |
 
 The practical consequence: today, the supported way for a Protos program to
 use a foreign provider is to build a provider JAR against the public SPI and
