@@ -951,7 +951,9 @@ final class ProtosI115IndexedOperationTest {
         }
 
         private LocalRef resultLocalRef(int producer) {
-            if (producer + 1 < names.size() && names.get(producer + 1).startsWith("store.local")) {
+            if (producer + 1 < names.size()
+                    && (names.get(producer + 1).startsWith("store.local")
+                            || names.get(producer + 1).startsWith("c.StoreAndTestContinuation"))) {
                 List<LocalRef> stored = localRefs(producer + 1);
                 return stored.isEmpty() ? null : stored.get(0);
             }
@@ -1009,7 +1011,8 @@ final class ProtosI115IndexedOperationTest {
                 }
                 boolean overwritten = false;
                 for (int k = producer + 2; k < j - 1 && !overwritten; k++) {
-                    overwritten = names.get(k).startsWith("store.local")
+                    overwritten = (names.get(k).startsWith("store.local")
+                                    || names.get(k).startsWith("c.StoreAndTestContinuation"))
                             && locals(k).contains(local)
                             && isProducer(names.get(k - 1));
                 }

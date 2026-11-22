@@ -1039,9 +1039,14 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * LoadLexicalCell}.
      */
     @Operation(storeBytecodeIndex = true)
+    @ConstantOperand(type = LocalAccessor.class, name = "cell")
     public static final class LoadCell {
         @Specialization
-        public static Object perform(ProtosLexicalCell cell, @Bind VirtualFrame frame) {
+        public static Object perform(
+                LocalAccessor cellLocal,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode) {
+            ProtosLexicalCell cell = (ProtosLexicalCell) cellLocal.getObject(bytecode, frame);
             Object value = cell.valueOrNullForRuntime();
             if (value == null) {
                 throw uninitializedCellError(frame.getArguments());
@@ -1057,14 +1062,17 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         ProtosFrameArguments.activation(arguments)));
     }
 
-    /** Stores the guest value {@code value} into {@code cell}. */
+    /** Stores the guest value {@code value} into the cell held by {@code cell}. */
     @Operation(storeBytecodeIndex = true)
+    @ConstantOperand(type = LocalAccessor.class, name = "cell")
     public static final class StoreCell {
         @Specialization
         public static void perform(
-                ProtosLexicalCell cell,
+                LocalAccessor cellLocal,
                 Object value,
-                @Bind VirtualFrame frame) {
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode) {
+            ProtosLexicalCell cell = (ProtosLexicalCell) cellLocal.getObject(bytecode, frame);
             if (cell.isDiscardedParallelCaptureForRuntime()) {
                 throw uninitializedCellError(frame.getArguments());
             }
@@ -6109,6 +6117,56 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * I115: whether one result value is a continuation or suspension the
      * caller must compose.
      */
+    /**
+     * Stores an already-produced operation result into {@code outcome} and
+     * answers whether it must be composed as a continuation. Primitive
+     * results are ordinary completions; every other result is written
+     * unchanged and classified exactly as {@link IsContinuation#perform}.
+     */
+    @Operation(storeBytecodeIndex = false)
+    @ConstantOperand(type = LocalAccessor.class, name = "outcome")
+    public static final class StoreAndTestContinuation {
+        @Specialization
+        public static boolean doLong(
+                LocalAccessor outcome,
+                long value,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode) {
+            outcome.setLong(bytecode, frame, value);
+            return false;
+        }
+
+        @Specialization
+        public static boolean doDouble(
+                LocalAccessor outcome,
+                double value,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode) {
+            outcome.setDouble(bytecode, frame, value);
+            return false;
+        }
+
+        @Specialization
+        public static boolean doBoolean(
+                LocalAccessor outcome,
+                boolean value,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode) {
+            outcome.setBoolean(bytecode, frame, value);
+            return false;
+        }
+
+        @Fallback
+        public static boolean doObject(
+                LocalAccessor outcome,
+                Object value,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode) {
+            outcome.setObject(bytecode, frame, value);
+            return ProtosTailCallContinuation.isSuspended(value);
+        }
+    }
+
     @Operation(storeBytecodeIndex = false)
     public static final class IsContinuation {
         /*

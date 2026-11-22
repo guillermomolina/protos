@@ -2696,8 +2696,7 @@ final class CanonicalToBytecodeLowerer {
             return;
         }
         if (cell != null) {
-            builder.beginStoreCell();
-            builder.emitLoadLocal(cell);
+            builder.beginStoreCell(cell);
             return;
         }
         builder.beginStoreLocal(parameterLocal(parameter));
@@ -3219,13 +3218,10 @@ final class CanonicalToBytecodeLowerer {
         builder.beginReturn();
         if (cell != null) {
             builder.beginBlock();
-            builder.beginStoreCell();
-            builder.emitLoadLocal(cell);
+            builder.beginStoreCell(cell);
             emitClosureCapture(builder, closure, plan);
             builder.endStoreCell();
-            builder.beginLoadCell();
-            builder.emitLoadLocal(cell);
-            builder.endLoadCell();
+            builder.emitLoadCell(cell);
             builder.endBlock();
         } else if (local != null) {
             builder.beginBlock();
@@ -3835,7 +3831,8 @@ final class CanonicalToBytecodeLowerer {
             boolean primitiveCarrierResult) {
         noteDynamicInvocation();
 
-        builder.beginStoreLocal(outcome);
+        builder.beginIfThen();
+        builder.beginStoreAndTestContinuation(outcome);
         switch (selector) {
             case "at" -> {
                 builder.beginBinarySubscript();
@@ -3855,9 +3852,11 @@ final class CanonicalToBytecodeLowerer {
             default -> throw new AssertionError(
                     "Not an indexed selector: " + selector);
         }
-        builder.endStoreLocal();
-
+        builder.endStoreAndTestContinuation();
+        builder.beginBlock();
         emitDispatchedContinuationComposition(builder, outcome, resumeValue);
+        builder.endBlock();
+        builder.endIfThen();
 
         if (result == null) {
             builder.emitClearLocal(outcome);
@@ -5923,8 +5922,7 @@ final class CanonicalToBytecodeLowerer {
         BytecodeLocal cell = storage.cell();
         if (cell != null) {
             if (!value.suspendable() && result == null) {
-                builder.beginStoreCell();
-                builder.emitLoadLocal(cell);
+                builder.beginStoreCell(cell);
                 value.direct().run();
                 builder.endStoreCell();
                 return;
@@ -5932,8 +5930,7 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal completed =
                     result != null ? result : builder.createLocal("cellStoreValue", null);
             emitBindingValueToLocal(builder, value, completed);
-            builder.beginStoreCell();
-            builder.emitLoadLocal(cell);
+            builder.beginStoreCell(cell);
             builder.emitLoadLocal(completed);
             builder.endStoreCell();
             if (result == null) {
@@ -9379,9 +9376,7 @@ final class CanonicalToBytecodeLowerer {
             if (cell != null) {
                 if (access == CanonicalBindingAnalysis.LexicalAccess.DIRECT) {
                     // load.deref of a provably PRESENT binding.
-                    builder.beginLoadCell();
-                    builder.emitLoadLocal(cell);
-                    builder.endLoadCell();
+                    builder.emitLoadCell(cell);
                     return;
                 }
                 if (access == CanonicalBindingAnalysis.LexicalAccess.PRESENCE_CHECKED) {
@@ -9750,16 +9745,19 @@ final class CanonicalToBytecodeLowerer {
 
         builder.beginBlock();
 
-        builder.beginStoreLocal(numericResult);
+        builder.beginIfThen();
+        builder.beginStoreAndTestContinuation(numericResult);
         beginNumericOperation(builder, send.message(), false);
         emitPrimitiveNumericOperandValue(
                 builder, send.receiver(), preparedCall, childResult, resumeValue);
         emitPrimitiveNumericOperandValue(
                 builder, send.arguments().get(0), preparedCall, childResult, resumeValue);
         endNumericOperation(builder, send.message());
-        builder.endStoreLocal();
-
+        builder.endStoreAndTestContinuation();
+        builder.beginBlock();
         emitDispatchedContinuationComposition(builder, numericResult, numericResume);
+        builder.endBlock();
+        builder.endIfThen();
 
         // The result local is read and cleared at its only use, the Block's value.
         if (isOrderingSelector(send.message())) {

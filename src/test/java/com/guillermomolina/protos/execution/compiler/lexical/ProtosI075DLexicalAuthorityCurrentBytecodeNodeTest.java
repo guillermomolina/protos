@@ -222,8 +222,7 @@ final class ProtosI075DLexicalAuthorityCurrentBytecodeNodeTest {
                             builder.emitCreateCell();
                             builder.endStoreLocal();
 
-                            builder.beginStoreCell();
-                            builder.emitLoadLocal(x);
+                            builder.beginStoreCell(x);
                             builder.beginYield();
                             builder.emitLoadConstant(ProtosNullValue.INSTANCE);
                             builder.endYield();
@@ -234,9 +233,7 @@ final class ProtosI075DLexicalAuthorityCurrentBytecodeNodeTest {
                             builder.endYield();
 
                             builder.beginReturn();
-                            builder.beginLoadCell();
-                            builder.emitLoadLocal(x);
-                            builder.endLoadCell();
+                            builder.emitLoadCell(x);
                             builder.endReturn();
 
                             builder.endRoot();

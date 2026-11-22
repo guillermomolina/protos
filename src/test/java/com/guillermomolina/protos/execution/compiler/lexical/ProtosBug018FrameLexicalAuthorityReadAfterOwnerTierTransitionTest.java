@@ -156,12 +156,10 @@ final class ProtosBug018FrameLexicalAuthorityReadAfterOwnerTierTransitionTest {
                             builder.beginIfThen();
                             builder.emitLoadArgument(1);
                             builder.beginBlock();
-                            builder.beginStoreCell();
-                            builder.emitLoadLocal(x);
+                            builder.beginStoreCell(x);
                             builder.emitLoadArgument(2);
                             builder.endStoreCell();
-                            builder.beginStoreCell();
-                            builder.emitLoadLocal(y);
+                            builder.beginStoreCell(y);
                             builder.emitLoadConstant(ProtosNullValue.INSTANCE);
                             builder.endStoreCell();
                             builder.endBlock();

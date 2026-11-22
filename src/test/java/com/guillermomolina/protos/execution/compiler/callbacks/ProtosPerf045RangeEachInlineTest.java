@@ -2038,6 +2038,8 @@ final class ProtosPerf045RangeEachInlineTest {
             for (String operation : List.of("NumberAdd", "BinarySubscript", "GetLen")) {
                 assertEquals(1, count(names, "c." + operation),
                         () -> "one direct operation, without a duplicated sum body: " + names);
+                assertCompositionGuardedByCompletion(
+                        module.runRoot().getBytecodeNode().getInstructionsAsList(), operation);
             }
             assertEquals(1, count(names, "c.IsStandardRangeIterationSelection"),
                     "numeric for retains ordinary Range.each selection");
@@ -2146,6 +2148,45 @@ final class ProtosPerf045RangeEachInlineTest {
         }
         assertFalse(tail.contains("clear.local"),
                 () -> "the terminal read follows no scratch clear.local: " + tail);
+    }
+
+    /*
+     * The operation's result feeds one StoreAndTestContinuation, whose answer
+     * guards the composition: the conditional branch skips the composition
+     * loop, so a completed result never executes IsContinuation, Yield or
+     * ResumeDispatchedContinuation. The loop stays physically emitted as the
+     * cold branch for results that are suspensions.
+     */
+    private static void assertCompositionGuardedByCompletion(
+            List<Instruction> listed, String operation) {
+        List<Instruction> instructions = listed.stream()
+                .filter(instruction -> !instruction.getName().startsWith("trace.")
+                        && !instruction.getName().startsWith("tag."))
+                .toList();
+        List<String> names = instructions.stream().map(ProtosInstructionNames::of).toList();
+        int producer = indexAfter(names, "c." + operation, -1);
+        assertTrue(producer >= 0, () -> names.toString());
+        assertTrue(names.get(producer + 1).startsWith("c.StoreAndTestContinuation"),
+                () -> operation + " feeds StoreAndTestContinuation directly: " + names);
+        List<Object> outcome = instructions.get(producer + 1).getArguments().stream()
+                .filter(argument -> argument.getKind() == Instruction.Argument.Kind.CONSTANT)
+                .map(Instruction.Argument::asConstant)
+                .filter(LocalAccessor.class::isInstance)
+                .toList();
+        assertEquals(1, outcome.size(), "the outcome local is one constant LocalAccessor");
+        Instruction test = instructions.get(producer + 2);
+        assertTrue(test.getName().contains("branch.false"),
+                () -> operation + " completion answers the guarding branch: " + names);
+        int skip = test.getArguments().stream()
+                .filter(argument -> argument.getKind() == Instruction.Argument.Kind.BYTECODE_INDEX)
+                .findFirst().orElseThrow().asBytecodeIndex();
+        int composition = indexAfter(names, "c.IsContinuation", producer);
+        assertTrue(composition > producer + 2, () -> "the cold composition remains emitted: " + names);
+        assertTrue(instructions.get(composition).getBytecodeIndex() < skip,
+                () -> operation + " skips its composition on completion: " + names);
+        int resume = indexAfter(names, "c.ResumeDispatchedContinuation", composition);
+        assertTrue(resume > composition && instructions.get(resume).getBytecodeIndex() < skip,
+                () -> operation + " keeps the whole loop on the suspended branch: " + names);
     }
 
     /* Static instruction rows only: these are never execution counts. */

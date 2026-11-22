@@ -8,6 +8,11 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.198-SNAPSHOT
+
+- **PERF045.** Read captured cells through constant locals and fuse continuation storage and classification.
+- Use constant LocalAccessor operands for captured-cell reads and writes. Store indexed outcomes and classify continuations in one operation, with regression coverage for lexical authority and iteration.
+
 ## 0.4.197-SNAPSHOT
 
 - **PERF045.** Restore constant local cursors for Array and Range iteration.

@@ -195,8 +195,7 @@ final class ProtosBug013FrameLexicalAuthorityMaterializationTest {
                             builder.emitCreateCell();
                             builder.endStoreLocal();
 
-                            builder.beginStoreCell();
-                            builder.emitLoadLocal(x);
+                            builder.beginStoreCell(x);
                             builder.emitLoadArgument(1);
                             builder.endStoreCell();
 
