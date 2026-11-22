@@ -1097,8 +1097,10 @@ final class CanonicalCompilationFacts {
 
     /*
      * An inline callback creates no execution context: its body runs in the
-     * region being analyzed, exactly as the storage plan walks it. Any other
-     * operand keeps its ordinary demand.
+     * region being analyzed, under the same site-aware admission the storage
+     * plan and the emission apply. When ordinary dispatch can also create the
+     * callback as a genuine Closure, that branch keeps its own demand. Any
+     * other operand keeps its ordinary demand.
      */
     private static boolean operandDemandsPersistentFrame(
             CanonicalSend send,
@@ -1111,8 +1113,7 @@ final class CanonicalCompilationFacts {
             CanonicalInlineStoragePlan.InlinePolicy inline) {
         if (inline != null
                 && operand instanceof CanonicalClosure closure
-                && inline.inlineCallbackPosition(send, position)
-                && inline.admitsInline(closure)) {
+                && inline.admitsInlineCallback(send, position, closure)) {
             return demandsPersistentFrame(
                     closure.body(), analysis, scope, ownBindingsOnly, promotable, inline)
                     || (inline.materializesInlineCallback(send, position)

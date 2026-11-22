@@ -657,6 +657,171 @@ final class ProtosArrayEachNativeIterationTest {
         });
     }
 
+    /*
+     * One each site alternates between a saved standard Array, a receiver
+     * whose own each retains its callback, and the standard Array again. The
+     * retained callback keeps run's binding of total after run returns.
+     */
+    @Test
+    void retainedArrayCallbackKeepsItsLexicalBindingAcrossSelections() throws Exception {
+        inContext(() -> {
+            Module module = new Module(null);
+            Object outcome = module.run(
+                    """
+                    store: { block: null }
+                    keeper: {
+                        each: (block) => {
+                            store.block = block
+                            store
+                        }
+                    }
+                    saved: [1, 2, 3]
+                    run: (receiver) => {
+                        frame: 0
+                        total: 100
+                        returned: receiver.each((element) => {
+                            total = total + element
+                            hook(total)
+                        })
+                        if(returned === store) {
+                            total = 1000
+                            store.block(5)
+                        }
+                        total
+                    }
+                    a: run(saved)
+                    b: run(keeper)
+                    c: run(saved)
+                    store.block(10)
+                    store.block(20)
+                    ((a == 106) && (b == 1005) && (c == 106))
+                        .ifTrueIfFalse(() => { 1 }, () => { 0 })
+                    """);
+            assertEquals("1", ProtosNumericValueSupport.integerDecimalText(outcome));
+            assertEquals(
+                    List.of(101L, 103L, 106L, 1005L, 101L, 103L, 106L, 1015L, 1035L),
+                    module.visits);
+            assertNativeLoop(module);
+        });
+    }
+
+    @Test
+    void associationCallbacksWithTwoParametersShareTheCapturedAccumulator() throws Exception {
+        inContext(() -> {
+            Module module = new Module(null);
+            Object outcome = module.run(
+                    """
+                    store: { block: null }
+                    keeper: {
+                        each: (block) => {
+                            store.block = block
+                            store
+                        }
+                    }
+                    m: Map()
+                    m[1] = 10
+                    m[2] = 20
+                    run: (receiver) => {
+                        frame: 0
+                        total: 0
+                        receiver.each((key, value) => {
+                            total = total + (key * value)
+                        })
+                        hook(total)
+                        total
+                    }
+                    a: run(m)
+                    b: run(keeper)
+                    store.block(3, 4)
+                    c: run(m)
+                    ((a == 50) && (b == 0) && (c == 50))
+                        .ifTrueIfFalse(() => { 1 }, () => { 0 })
+                    """);
+            assertEquals("1", ProtosNumericValueSupport.integerDecimalText(outcome));
+            assertEquals(List.of(50L, 0L, 50L), module.visits);
+        });
+    }
+
+    @Test
+    void nestedArrayCallbacksShareOneOuterBinding() throws Exception {
+        inContext(() -> {
+            Module module = new Module(null);
+            Object outcome = module.run(
+                    """
+                    run: () => {
+                        frame: 0
+                        total: 0
+                        [1, 2].each((outer) => {
+                            [10, 20].each((inner) => {
+                                total = total + (outer * inner)
+                            })
+                            hook(total)
+                        })
+                        total
+                    }
+                    run()
+                    """);
+            assertEquals("90", ProtosNumericValueSupport.integerDecimalText(outcome));
+            assertEquals(List.of(30L, 90L), module.visits);
+        });
+    }
+
+    /*
+     * One Array each site alternates with a receiver that retains its
+     * callback: callbacks reading their context get their own activation per
+     * visit, and the retained callback keeps the captured accumulator.
+     */
+    @Test
+    void contextObservingAndRetainedArrayCallbacksKeepTheirOwnActivations() throws Exception {
+        inContext(() -> {
+            Module module = new Module(null);
+            Object outcome = module.run(
+                    """
+                    store: {
+                        block: null
+                        seen: null
+                    }
+                    keeper: {
+                        each: (block) => {
+                            store.block = block
+                            store
+                        }
+                    }
+                    run: (receiver) => {
+                        frame: 0
+                        own: context
+                        total: 0
+                        h: {
+                            previous: null
+                            distinct: 0
+                        }
+                        receiver.each((e) => {
+                            c: context
+                            if((c !== own) && (c !== h.previous) && (c.hasSlot("e"))) {
+                                h.distinct = h.distinct + 1
+                            }
+                            h.previous = c
+                            store.seen = c
+                            total = total + e
+                            hook(total)
+                        })
+                        total = total + 100
+                        total * 10 + h.distinct
+                    }
+                    a: run([1, 2, 3])
+                    inline: store.seen
+                    b: run(keeper)
+                    store.block(4)
+                    retained: store.seen
+                    c: run([5])
+                    ((a == 1063) && (b == 1000) && (c == 1051) && (retained !== inline) && (retained !== store.seen))
+                        .ifTrueIfFalse(() => { 1 }, () => { 0 })
+                    """);
+            assertEquals("1", ProtosNumericValueSupport.integerDecimalText(outcome));
+            assertEquals(List.of(1L, 3L, 6L, 104L, 5L), module.visits);
+        });
+    }
+
     private static List<String> assertNativeLoop(Module module) {
         List<String> names = instructionNames(module.physicalRun());
         int next = indexAfter(names, "c.ArrayEachNext", -1);

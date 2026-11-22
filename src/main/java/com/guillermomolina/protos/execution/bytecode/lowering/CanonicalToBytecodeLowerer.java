@@ -298,7 +298,25 @@ final class CanonicalToBytecodeLowerer {
                 }
 
                 @Override
+                public boolean admitsInlineCallback(
+                        CanonicalSend send, int position, CanonicalClosure closure) {
+                    if (inlineCallbackPosition(send, position)) {
+                        return admitsInline(closure);
+                    }
+                    int arity = iterationCallbackArity(send, position, closure);
+                    return arity > 0 && admitsEachInlineCallback(
+                            closure,
+                            context == null ? currentControlSiteContext() : context,
+                            arity);
+                }
+
+                @Override
                 public boolean materializesInlineCallback(CanonicalSend send, int position) {
+                    if (iterationCallbackArity(send, position, null) > 0) {
+                        // The custom-selection branch evaluates the literal
+                        // callback as a genuine Closure transporting its cells.
+                        return true;
+                    }
                     if (!inlineCallbackPosition(send, position)) {
                         return false;
                     }
@@ -311,6 +329,30 @@ final class CanonicalToBytecodeLowerer {
                     return transportsSelectedCallbackCells(send.arguments());
                 }
             };
+    }
+
+    /*
+     * The ordinary parameter count of the literal callback operand at
+     * {@code position} (0: receiver) of an iteration send whose emission may
+     * run that callback inline, or 0. It follows the emission's order: the
+     * standard Array {@code each} and the Range {@code each} callback take one
+     * parameter, the association {@code each} callback two, and only the
+     * last operand of {@code eachStep(step, callback)} is a callback. A
+     * {@code null} closure asks only whether the position is such a site.
+     */
+    private static int iterationCallbackArity(
+            CanonicalSend send, int position, CanonicalClosure closure) {
+        if (!rangeIterationSend(send)
+                || position != send.arguments().size()
+                || !(send.arguments().get(position - 1) instanceof CanonicalClosure literal)
+                || (closure != null && literal != closure)) {
+            return 0;
+        }
+        int parameters = literal.parameters().size();
+        if ("eachStep".equals(send.message())) {
+            return parameters == 1 ? 1 : 0;
+        }
+        return parameters == 1 || parameters == 2 ? parameters : 0;
     }
 
     /*
@@ -3302,6 +3344,13 @@ final class CanonicalToBytecodeLowerer {
                 && isArrayConstructionCall(arrayCall.receiver(), arrayCall.arguments())
                 && !hasSpreadArgument(arrayCall.arguments())) {
             emitTerminalStandardArrayConstruction(builder, arrayCall);
+            builder.endSourceSection();
+            return;
+        }
+
+        if (expression instanceof CanonicalCall rangeCall
+                && isRangeConstructionCall(rangeCall.receiver(), rangeCall.arguments())) {
+            emitTerminalStandardRangeConstruction(builder, rangeCall);
             builder.endSourceSection();
             return;
         }
@@ -6389,6 +6438,17 @@ final class CanonicalToBytecodeLowerer {
                     stager, spreadStager, primitiveCarrierResult);
             return;
         }
+        if (shape == InvocationShape.CALL
+                && isRangeConstructionCall(receiver, arguments)
+                && result != null
+                && scratch != null
+                && childResult != null
+                && resumeValue != null) {
+            emitStandardRangeConstruction(
+                    builder, receiver, arguments, result, scratch, childResult,
+                    resumeValue, stager, primitiveCarrierResult);
+            return;
+        }
         if (admitsDirectUnaryInvocation(shape, receiver, selector, arguments)) {
             if (result == null) {
                 builder.beginDiscardValue();
@@ -8292,6 +8352,19 @@ final class CanonicalToBytecodeLowerer {
                 && !hasNamedArgument(arguments);
     }
 
+    /* Only the canonical names are staged; the runtime identity proof still
+     * admits them and any other callee keeps its ordinary direct call.
+     * Member sends have different invocation semantics and never enter here. */
+    private static boolean isRangeConstructionCall(
+            CanonicalExpression receiver,
+            java.util.List<CanonicalExpression> arguments) {
+        return receiver instanceof CanonicalLookup lookup
+                && ("Range".equals(lookup.name()) || "InvertedRange".equals(lookup.name()))
+                && arguments.size() == 2
+                && !hasNamedArgument(arguments)
+                && !hasSpreadArgument(arguments);
+    }
+
     /* Primitive storage family of a constant Array argument list. */
     private enum CollectionType {
         LONG,
@@ -8373,6 +8446,112 @@ final class CanonicalToBytecodeLowerer {
         };
     }
 
+    /* Stage all operands before selection, sharing ordinary call composition
+     * with the fallback so suspension never repeats an operand's effects. */
+    private void emitStandardRangeConstruction(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalExpression receiver,
+            java.util.List<CanonicalExpression> arguments,
+            BytecodeLocal result,
+            BytecodeLocal scratch,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue,
+            OperandStager stager,
+            boolean primitiveCarrierResult) {
+        noteDynamicInvocation();
+        builder.beginTag(StandardTags.CallTag.class);
+        builder.beginBlock();
+        BytecodeLocal factory = builder.createLocal("rangeFactory", null);
+        stageOperand(builder, receiver, factory, scratch, childResult, resumeValue, stager);
+        java.util.List<BytecodeLocal> values = new java.util.ArrayList<>(2);
+        for (CanonicalExpression argument : arguments) {
+            BytecodeLocal value = builder.createLocal("rangeBound", null);
+            stageOperand(builder, argument, value, scratch, childResult, resumeValue, stager);
+            values.add(value);
+        }
+        emitStagedRangeConstruction(
+                builder, factory, values, result, childResult, resumeValue, primitiveCarrierResult);
+        for (BytecodeLocal value : values) {
+            builder.emitClearLocal(value);
+        }
+        builder.emitClearLocal(factory);
+        builder.endBlock();
+        builder.endTag(StandardTags.CallTag.class);
+    }
+
+    private void emitStagedRangeConstruction(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            BytecodeLocal factory, java.util.List<BytecodeLocal> values,
+            BytecodeLocal result, BytecodeLocal childResult, BytecodeLocal resumeValue,
+            boolean primitiveCarrierResult) {
+        builder.beginIfThenElse();
+        emitRangeConstructionSelection(builder, factory, values);
+        builder.beginBlock();
+        builder.beginStoreLocal(result);
+        emitStandardRangeValue(builder, factory, values);
+        builder.endStoreLocal();
+        builder.endBlock();
+        builder.beginBlock();
+        emitDispatchedCall(builder, factory, values, null, childResult, result,
+                resumeValue, primitiveCarrierResult);
+        builder.endBlock();
+        builder.endIfThenElse();
+    }
+
+    /* Terminal construction uses the same selection and value operations;
+     * the unproven branch retains the existing terminal call transport. */
+    private void emitTerminalStandardRangeConstruction(
+            ProtosBytecodeRootNodeGen.Builder builder, CanonicalCall call) {
+        noteDynamicInvocation();
+        builder.beginTag(StandardTags.CallTag.class);
+        builder.beginBlock();
+        BytecodeLocal factory = builder.createLocal("terminalCallable", null);
+        builder.beginStoreLocal(factory);
+        emitTerminalCallOperand(builder, call.receiver());
+        builder.endStoreLocal();
+        java.util.List<BytecodeLocal> values = new java.util.ArrayList<>(2);
+        for (CanonicalExpression argument : call.arguments()) {
+            BytecodeLocal value = builder.createLocal("terminalArgument", null);
+            stageTerminalArgument(builder, argument, value);
+            values.add(value);
+        }
+        emitTerminalStagedRangeConstruction(builder, factory, values);
+        builder.endBlock();
+        builder.endTag(StandardTags.CallTag.class);
+    }
+
+    private void emitTerminalStagedRangeConstruction(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            BytecodeLocal factory, java.util.List<BytecodeLocal> values) {
+        builder.beginConditional();
+        emitRangeConstructionSelection(builder, factory, values);
+        emitStandardRangeValue(builder, factory, values);
+        builder.beginBlock();
+        emitCallOperation(builder, true, factory, values, null);
+        builder.endBlock();
+        builder.endConditional();
+    }
+
+    private static void emitRangeConstructionSelection(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            BytecodeLocal factory, java.util.List<BytecodeLocal> values) {
+        builder.beginIsStandardRangeConstructionSelection();
+        builder.emitLoadLocal(factory);
+        builder.emitLoadLocal(values.get(0));
+        builder.emitLoadLocal(values.get(1));
+        builder.endIsStandardRangeConstructionSelection();
+    }
+
+    private static void emitStandardRangeValue(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            BytecodeLocal factory, java.util.List<BytecodeLocal> values) {
+        builder.beginMakeRange();
+        builder.emitLoadLocal(factory);
+        builder.emitLoadLocal(values.get(0));
+        builder.emitLoadLocal(values.get(1));
+        builder.endMakeRange();
+    }
+
     /*
      * Standard Array construction (composed contexts).
      *
@@ -8452,10 +8631,18 @@ final class CanonicalToBytecodeLowerer {
                         scratch, childResult, resumeValue, stager);
             }
         }
-        emitDispatchedCall(
-                builder, factory, argumentValues, suppliedVector,
-                childResult, result, resumeValue,
-                primitiveCarrierResult);
+        // Array keeps its existing fast branch; a shadowing Range factory
+        // with the same lexical name is still eligible after Array declines.
+        if (isRangeConstructionCall(receiver, arguments)) {
+            emitStagedRangeConstruction(
+                    builder, factory, argumentValues, result, childResult,
+                    resumeValue, primitiveCarrierResult);
+        } else {
+            emitDispatchedCall(
+                    builder, factory, argumentValues, suppliedVector,
+                    childResult, result, resumeValue,
+                    primitiveCarrierResult);
+        }
         builder.endBlock();
         builder.endIfThenElse();
 
@@ -8511,8 +8698,12 @@ final class CanonicalToBytecodeLowerer {
                 stageTerminalArgument(builder, arguments.get(index), argumentValues.get(index));
             }
         }
-        // The block's value: the terminal call result or transport.
-        emitCallOperation(builder, true, factory, argumentValues, null);
+        // The block's value: a constructed Range or the terminal call transport.
+        if (isRangeConstructionCall(call.receiver(), arguments)) {
+            emitTerminalStagedRangeConstruction(builder, factory, argumentValues);
+        } else {
+            emitCallOperation(builder, true, factory, argumentValues, null);
+        }
         builder.endBlock();
         builder.endConditional();
 
@@ -10240,6 +10431,12 @@ final class CanonicalToBytecodeLowerer {
                     builder, send, associationCallback, result, scratch, childResult, resumeValue);
             return;
         }
+        if (rangeIterationSend(send)
+                && result != null && scratch != null
+                && childResult != null && resumeValue != null) {
+            emitRangeIterationSend(builder, send, result, scratch, childResult, resumeValue);
+            return;
+        }
         emitDispatchedInvocation(
                 builder, InvocationShape.SEND, send.receiver(), send.message(), send.arguments(),
                 result, scratch, childResult, resumeValue,
@@ -10379,6 +10576,13 @@ final class CanonicalToBytecodeLowerer {
      *       which stores each element into the parameter local, and runs the
      *       callback body inline with its other bindings reset to ABSENT.
      *       The result is the original receiver.
+     *   <li>When the Array selection is not admitted,
+     *       {@code IsStandardRangeIterationSelection} observes whether the
+     *       canonical {@code Range} or {@code InvertedRange} behavior is
+     *       selected over Integer bounds. If so, {@code PrepareRangeIteration}
+     *       establishes the cursor and the same While loop, advanced by
+     *       {@code RangeIterationNext}, runs the same single inline callback
+     *       body. The result is null.
      *   <li>Otherwise: the literal argument is evaluated exactly once
      *       (materializing the genuine Closure) and the selected behavior is
      *       invoked by {@code CallUnaryMethod}, composed with
@@ -10407,39 +10611,73 @@ final class CanonicalToBytecodeLowerer {
         stageOperand(builder, send.receiver(), receiver,
                 scratch, childResult, resumeValue, stager);
 
-        BytecodeLocal standard = builder.createLocal("eachStandard", null);
-        builder.beginStoreLocal(standard);
+        // Array admission first; the Range selection is observed only when
+        // the Array selection is not admitted.
+        BytecodeLocal arrayStandard = builder.createLocal("eachStandard", null);
+        builder.beginStoreLocal(arrayStandard);
         builder.beginIsStandardArrayEachSelection();
         builder.emitLoadLocal(receiver);
         builder.endIsStandardArrayEachSelection();
         builder.endStoreLocal();
 
+        BytecodeLocal iterable = builder.createLocal("eachIterable", null);
+        builder.beginStoreLocal(iterable);
+        builder.beginConditional();
+        builder.emitLoadLocal(arrayStandard);
+        builder.emitLoadConstant(Boolean.TRUE);
+        builder.beginIsStandardRangeIterationSelection(false);
+        builder.emitLoadLocal(receiver);
+        emitRangeStepOperand(builder, null);
+        builder.endIsStandardRangeIterationSelection();
+        builder.endConditional();
+        builder.endStoreLocal();
+
         builder.beginIfThenElse();
-        builder.emitLoadLocal(standard);
+        builder.emitLoadLocal(iterable);
 
         builder.beginBlock();
-        BytecodeLocal snapshot = builder.createLocal("eachSnapshot", null);
-        builder.beginStoreLocal(snapshot);
+        BytecodeLocal iteration = builder.createLocal("eachSnapshot", null);
+        builder.beginStoreLocal(iteration);
+        builder.beginConditional();
+        builder.emitLoadLocal(arrayStandard);
         builder.beginGetArrayEachSnapshot();
         builder.emitLoadLocal(receiver);
         builder.endGetArrayEachSnapshot();
+        builder.beginPrepareRangeIteration(false);
+        builder.emitLoadLocal(receiver);
+        emitRangeStepOperand(builder, null);
+        builder.endPrepareRangeIteration();
+        builder.endConditional();
         builder.endStoreLocal();
 
+        // One physical loop and one inline callback body; only the advance
+        // operation depends on the admitted receiver family.
         String parameter = callback.parameters().get(0).name();
         BytecodeLocal element = builder.createLocal(
                 NORMAL_INLINE_CALLBACK_BINDING_LOCAL_PREFIX + parameter, nextInlineCallbackRegion + 1);
         builder.beginWhile();
+        builder.beginConditional();
+        builder.emitLoadLocal(arrayStandard);
         builder.beginArrayEachNext(element);
-        builder.emitLoadLocal(snapshot);
+        builder.emitLoadLocal(iteration);
         builder.endArrayEachNext();
+        builder.beginRangeIterationNext(element);
+        builder.emitLoadLocal(iteration);
+        builder.endRangeIterationNext();
+        builder.endConditional();
         emitInlineControlClosureBody(
                 builder, callback, InlineBodyResult.DISCARD, null,
                 scratch, childResult, resumeValue, false,
                 java.util.Map.of(parameter, element));
         builder.endWhile();
 
+        // Array answers the original receiver; Range answers null.
         builder.beginStoreLocal(result);
+        builder.beginConditional();
+        builder.emitLoadLocal(arrayStandard);
         builder.emitLoadLocal(receiver);
+        builder.emitLoadConstant(ProtosNullValue.INSTANCE);
+        builder.endConditional();
         builder.endStoreLocal();
         builder.endBlock();
 
@@ -10460,6 +10698,208 @@ final class CanonicalToBytecodeLowerer {
 
         builder.endBlock();
         builder.endTag(StandardTags.CallTag.class);
+    }
+
+    /*
+     * An ordinary {@code each(callback)} or {@code eachStep(step, callback)}
+     * send that the standard Range iteration may run internally, or false.
+     * Only the shape of the site is decided here; whether the standard
+     * Range behavior is actually selected is observed at run time, after
+     * every operand has been evaluated.
+     */
+    private static boolean rangeIterationSend(CanonicalSend send) {
+        if (send.contextual()
+                || hasVectorArgument(send.arguments())
+                || hasNamedArgument(send.arguments())) {
+            return false;
+        }
+        return switch (send.message()) {
+            case "each" -> send.arguments().size() == 1;
+            case "eachStep" -> send.arguments().size() == 2;
+            default -> false;
+        };
+    }
+
+    /**
+     * An {@code each(callback)} or {@code eachStep(step, callback)} send not
+     * admitted to the native Array iteration.
+     *
+     * <ol>
+     *   <li>The receiver, then the step, then the callback are evaluated
+     *       exactly once, in source order. A literal callback whose
+     *       activation is proven unobservable is not materialized yet,
+     *       because evaluating it has no observable effect.
+     *   <li>{@link #emitRangeIterationOrDispatch} then observes the
+     *       selection over the evaluated operands and either runs the
+     *       standard Range iteration internally or invokes the selected
+     *       behavior with those same operands.
+     * </ol>
+     */
+    private void emitRangeIterationSend(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalSend send,
+            BytecodeLocal result,
+            BytecodeLocal scratch,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        OperandStager stager = this::emitBodyExpressionToLocal;
+        // The generic selection observes the Prelude, like GetMethod.
+        currentRootMayRequirePrelude = true;
+        boolean stepped = "eachStep".equals(send.message());
+
+        builder.beginTag(StandardTags.CallTag.class);
+        builder.beginBlock();
+
+        BytecodeLocal receiver = builder.createLocal("rangeReceiver", null);
+        stageOperand(builder, send.receiver(), receiver,
+                scratch, childResult, resumeValue, stager);
+
+        BytecodeLocal step = null;
+        if (stepped) {
+            step = builder.createLocal("rangeStep", null);
+            stageOperand(builder, send.arguments().get(0), step,
+                    scratch, childResult, resumeValue, stager);
+        }
+
+        CanonicalExpression callbackExpression =
+                send.arguments().get(send.arguments().size() - 1);
+        CanonicalClosure inlineCallback =
+                callbackExpression instanceof CanonicalClosure closure
+                        && admitsEachInlineCallback(closure, currentControlSiteContext(), 1)
+                        ? closure : null;
+        BytecodeLocal callbackValue = null;
+        if (inlineCallback == null) {
+            callbackValue = builder.createLocal("invocationArgument", null);
+            stageOperand(builder, callbackExpression, callbackValue,
+                    scratch, childResult, resumeValue, stager);
+        }
+
+        emitRangeIterationOrDispatch(
+                builder, send.message(), receiver, step, inlineCallback, callbackValue,
+                result, scratch, childResult, resumeValue);
+
+        builder.endBlock();
+        builder.endTag(StandardTags.CallTag.class);
+    }
+
+    /**
+     * The selection of an {@code each} or {@code eachStep} send whose
+     * receiver, step and (unless {@code inlineCallback} is given) callback
+     * are already evaluated.
+     *
+     * <ol>
+     *   <li>{@code IsStandardRangeIterationSelection} observes, invoking
+     *       nothing, whether the selected behavior is the canonical
+     *       {@code Range} or {@code InvertedRange} one over Integer bounds
+     *       with a valid Integer step.
+     *   <li>Standard: {@code PrepareRangeIteration} establishes the cursor in
+     *       a local and a While loop advances it with
+     *       {@code RangeIterationNext}, which stores each visited Integer
+     *       into the callback parameter local. A literal callback runs inline
+     *       with its other bindings reset to ABSENT before each visit; any
+     *       other callback value is invoked, only when an element is
+     *       reached, through the shared call dispatcher composed with
+     *       Yield/ResumeDispatchedContinuation. The result is null.
+     *   <li>Otherwise: a pending literal callback is evaluated exactly once
+     *       (materializing the genuine Closure), and the selected behavior is
+     *       invoked with the already evaluated operands.
+     * </ol>
+     */
+    private void emitRangeIterationOrDispatch(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            String selector,
+            BytecodeLocal receiver,
+            BytecodeLocal step,
+            CanonicalClosure inlineCallback,
+            BytecodeLocal callbackValue,
+            BytecodeLocal result,
+            BytecodeLocal scratch,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        boolean stepped = step != null;
+
+        BytecodeLocal standard = builder.createLocal("rangeStandard", null);
+        builder.beginStoreLocal(standard);
+        builder.beginIsStandardRangeIterationSelection(stepped);
+        builder.emitLoadLocal(receiver);
+        emitRangeStepOperand(builder, step);
+        builder.endIsStandardRangeIterationSelection();
+        builder.endStoreLocal();
+
+        builder.beginIfThenElse();
+        builder.emitLoadLocal(standard);
+
+        builder.beginBlock();
+        BytecodeLocal state = builder.createLocal("rangeState", null);
+        builder.beginStoreLocal(state);
+        builder.beginPrepareRangeIteration(stepped);
+        builder.emitLoadLocal(receiver);
+        emitRangeStepOperand(builder, step);
+        builder.endPrepareRangeIteration();
+        builder.endStoreLocal();
+
+        if (inlineCallback != null) {
+            String parameter = inlineCallback.parameters().get(0).name();
+            BytecodeLocal element = builder.createLocal(
+                    NORMAL_INLINE_CALLBACK_BINDING_LOCAL_PREFIX + parameter,
+                    nextInlineCallbackRegion + 1);
+            builder.beginWhile();
+            builder.beginRangeIterationNext(element);
+            builder.emitLoadLocal(state);
+            builder.endRangeIterationNext();
+            emitInlineControlClosureBody(
+                    builder, inlineCallback, InlineBodyResult.DISCARD, null,
+                    scratch, childResult, resumeValue, false,
+                    java.util.Map.of(parameter, element));
+            builder.endWhile();
+        } else {
+            BytecodeLocal element = builder.createLocal("rangeElement", null);
+            builder.beginWhile();
+            builder.beginRangeIterationNext(element);
+            builder.emitLoadLocal(state);
+            builder.endRangeIterationNext();
+            builder.beginBlock();
+            emitDispatchedCall(
+                    builder, callbackValue, java.util.List.of(element), null,
+                    childResult, null, resumeValue, false);
+            builder.endBlock();
+            builder.endWhile();
+        }
+        builder.emitClearLocal(state);
+
+        builder.beginStoreLocal(result);
+        builder.emitLoadConstant(ProtosNullValue.INSTANCE);
+        builder.endStoreLocal();
+        builder.endBlock();
+
+        builder.beginBlock();
+        BytecodeLocal argument = callbackValue;
+        if (argument == null) {
+            argument = builder.createLocal("invocationArgument", null);
+            stageOperand(builder, inlineCallback, argument,
+                    scratch, childResult, resumeValue, this::emitBodyExpressionToLocal);
+        }
+
+        // D237: form the argument packet before selecting the ordinary method.
+        BytecodeLocal callable = builder.createLocal("eachMethod", null);
+        emitGetMethod(builder, selector, receiver, callable);
+        emitDispatchedCall(
+                builder, callable,
+                stepped ? java.util.List.of(step, argument) : java.util.List.of(argument),
+                null, childResult, result, resumeValue, false);
+        builder.endBlock();
+
+        builder.endIfThenElse();
+    }
+
+    /* The explicit step operand, or an unused Integer placeholder for each. */
+    private static void emitRangeStepOperand(
+            ProtosBytecodeRootNodeGen.Builder builder, BytecodeLocal step) {
+        if (step == null) {
+            builder.emitLoadConstant(0L);
+        } else {
+            builder.emitLoadLocal(step);
+        }
     }
 
     /*

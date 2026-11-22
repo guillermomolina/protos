@@ -108,6 +108,96 @@ tests: [
         Assertions.signals(Error, () => {
             Array(1).each()
         })
+    }),
+    Test("array literal callback captures accumulator across canonical and custom selection", () => {
+        store: { block: null }
+        keeper: {
+            each: (block) => {
+                store.block = block
+                store
+            }
+            eachStep: (step, block) => {
+                store.block = block
+                store
+            }
+        }
+        saved: [1, 2, 3]
+        through: (receiver) => {
+            total: 100
+            returned: receiver.each((element) => { total = total + element })
+            if(returned === store) {
+                total = 1000
+                store.block(5)
+            }
+            total
+        }
+        Assertions.require(through(saved) == 106)
+        Assertions.require(through(keeper) == 1005)
+        Assertions.require(through(saved) == 106)
+        nested: () => {
+            total: 0
+            [1, 2].each((outer) => {
+                [10, 20].each((inner) => { total = total + (outer * inner) })
+            })
+            total
+        }
+        Assertions.require(nested() == 90)
+    }),
+    Test("array callbacks observe their own context, return, escape and nest", () => {
+        own: context
+        h: {
+            previous: null
+            count: 0
+        }
+        [0, 1, 2].each((i) => {
+            c: context
+            Assertions.require((c !== own) && (c !== h.previous) && (c.hasSlot("i")))
+            h.previous = c
+            h.count = h.count + 1
+        })
+        [4, 2].each((i) => {
+            c: context
+            Assertions.require((c !== own) && (c !== h.previous) && (c.hasSlot("i")))
+            h.previous = c
+            h.count = h.count + 1
+        })
+        Assertions.require(h.count == 5)
+        finder: () => {
+            [0, 1, 2, 3, 4].each((i) => { (i == 3).ifTrue(() => { ^(i * 7) }) })
+            -1
+        }
+        Assertions.require(finder() == 21)
+        store: { block: null }
+        keeper: {
+            each: (block) => {
+                store.block = block
+                null
+            }
+        }
+        binding: (receiver) => {
+            base: 10
+            receiver.each((i) => { base = base + i })
+            base = base + 100
+            () => { base }
+        }
+        Assertions.require(binding([0, 1])() == 111)
+        read: binding(keeper)
+        store.block(5)
+        Assertions.require(read() == 115)
+        make: (receiver) => {
+            receiver.each((i) => { ^(i + 1) })
+            0
+        }
+        Assertions.require(make(keeper) == 0)
+        Assertions.signals(InvalidReturn, () => { store.block(3) })
+        pairs: () => {
+            total: 0
+            [0, 1].each((i) => {
+                [0, 1].each((j) => { total = total * 10 + (i * 2 + j) })
+            })
+            total
+        }
+        Assertions.require(pairs() == 123)
     })
 ]
 tests.freeze()

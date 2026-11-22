@@ -77,6 +77,13 @@ final class CanonicalInlineStoragePlan {
         boolean inlineCallbackPosition(CanonicalSend send, int position);
 
         /**
+         * Whether {@code closure}, the literal operand at {@code position}
+         * (0: receiver) of {@code send}, is emitted as an inline callback
+         * body at that site, under the same admission the emission applies.
+         */
+        boolean admitsInlineCallback(CanonicalSend send, int position, CanonicalClosure closure);
+
+        /**
          * Whether the inline callback at operand {@code position} is also
          * created as a genuine Closure transporting its cells when ordinary
          * dispatch selects a custom method for the receiver.
@@ -213,8 +220,7 @@ final class CanonicalInlineStoragePlan {
             CanonicalSend send, int position, CanonicalExpression operand, boolean materialized) {
         if (!materialized
                 && operand instanceof CanonicalClosure closure
-                && policy.inlineCallbackPosition(send, position)
-                && policy.admitsInline(closure)) {
+                && policy.admitsInlineCallback(send, position, closure)) {
             if (policy.materializesInlineCallback(send, position)) {
                 // The custom-selection branch creates this callback as a
                 // genuine Closure: every cell it transports stays a cell.

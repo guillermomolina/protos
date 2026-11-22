@@ -2314,6 +2314,947 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
+    /**
+     * Admission of the internal iteration of a standard {@code Range} or
+     * {@code InvertedRange} {@code each} ({@code stepped} false) or
+     * {@code eachStep} ({@code stepped} true) send whose receiver and
+     * operands are already evaluated.
+     *
+     * <p>True only when the receiver is a FROZEN direct child of the exact
+     * {@code Range} or {@code InvertedRange} binding of the admitted Prelude,
+     * that FROZEN prototype owns the selected {@code each} and
+     * {@code eachStep} (so the {@code this.eachStep} delegation of
+     * {@code each} selects the same canonical source-backed behavior), the
+     * receiver owns neither selector, its bounds are Integers, an explicit
+     * step is an Integer of the direction of the prototype, the
+     * {@code Integer.recognizes} selection is FROZEN, the SmallInteger
+     * {@code <}, {@code >} and {@code +} selections are the standard ones
+     * and the root {@code call} selection is canonical. When a bound or the
+     * step is a large Integer, or the cursor may leave the signed-64 range,
+     * the {@code <}, {@code >} and {@code +} selections of the large Integer
+     * family must also be FROZEN and standard, because the canonical loop
+     * then compares and advances large receivers. Every other receiver,
+     * representation or step answers false, and the lowering invokes the
+     * ordinarily selected behavior with the same already evaluated operands,
+     * which signals any step Error in its source order. Nothing is invoked
+     * here.
+     */
+    @Operation(storeBytecodeIndex = false)
+    @ConstantOperand(type = boolean.class, name = "stepped")
+    public static final class IsStandardRangeIterationSelection {
+        static final String START = "start";
+        static final String STOP = "stop";
+
+        static final String LESS = "<";
+        static final String GREATER = ">";
+        static final String PLUS = "+";
+
+        /*
+         * The cached admission of a FROZEN receiver Shape that owns neither
+         * selector, whose immutable parent is the exact canonical prototype
+         * of the cached Prelude. That prototype is FROZEN and owns the
+         * canonical each and eachStep, and the Integer.recognizes selection
+         * is FROZEN, all proven when the entry is installed, so only the
+         * bounds read through the receiver Shape, the step, the root call
+         * certificate and the numeric selections are observed here.
+         * Signed-64 operands whose cursor cannot leave the signed-64 range
+         * are decided without leaving compiled code; any other operand takes
+         * the complete selection.
+         */
+        @Specialization(
+                guards = {
+                    "prelude == cachedPrelude",
+                    "receiverShape.check(receiver)",
+                    "eachSelection != null",
+                    "hasSelectionParent(receiver, eachSelection)",
+                    "callSelection != null",
+                    "callSelection.isValid()"
+                },
+                limit = "3",
+                excludeForUncached = true)
+        public static boolean doCached(
+                boolean stepped,
+                ProtosObjectValue receiver,
+                Object step,
+                @Bind VirtualFrame frame,
+                @Bind("admittedPrelude(frame)") ProtosPrelude prelude,
+                @Cached("prelude") ProtosPrelude cachedPrelude,
+                @Cached("receiver.getShape()") Shape receiverShape,
+                @Cached("selectCanonicalEach(receiver, receiverShape, cachedPrelude)")
+                        ProtosValueLookup.StructuralSelection eachSelection,
+                @Cached("isAscending(eachSelection, cachedPrelude)") boolean ascending,
+                @Cached("boundGetter(receiverShape, START)") PropertyGetter startGetter,
+                @Cached("boundGetter(receiverShape, STOP)") PropertyGetter stopGetter,
+                @Cached("rootCallSelection()")
+                        ProtosStandardObjectProtocol.CanonicalRootCallSelection callSelection,
+                @Cached ProtosNumericSelectionNode less,
+                @Cached ProtosNumericSelectionNode greater,
+                @Cached ProtosNumericSelectionNode plus) {
+            Object start = startGetter.get(receiver);
+            Object stop = stopGetter.get(receiver);
+            if (start instanceof Long && stop instanceof Long last
+                    && (!stepped || step instanceof Long)) {
+                long delta = stepped ? (Long) step : (ascending ? 1L : -1L);
+                if (ascending ? delta <= 0 : delta >= 0) {
+                    return false;
+                }
+                if (delta > 0 ? last > Long.MAX_VALUE - delta + 1 : last < Long.MIN_VALUE - delta - 1) {
+                    // The canonical loop may compare a large cursor.
+                    if (!selectsStandard(stepped, receiver, step, cachedPrelude)) {
+                        return false;
+                    }
+                }
+            } else if (!selectsStandard(stepped, receiver, step, cachedPrelude)) {
+                return false;
+            }
+            return less.execute(frame, LESS, 0L)
+                    && greater.execute(frame, GREATER, 0L)
+                    && plus.execute(frame, PLUS, 0L);
+        }
+
+        @Specialization(replaces = "doCached")
+        public static boolean doObject(
+                boolean stepped,
+                ProtosObjectValue receiver,
+                Object step,
+                @Bind VirtualFrame frame,
+                @Cached ProtosNumericSelectionNode less,
+                @Cached ProtosNumericSelectionNode greater,
+                @Cached ProtosNumericSelectionNode plus) {
+            if (!selectsStandard(
+                    stepped, receiver, step,
+                    ProtosFrameArguments.admittedPreludeOrNull(frame.getArguments()))) {
+                return false;
+            }
+            return less.execute(frame, LESS, 0L)
+                    && greater.execute(frame, GREATER, 0L)
+                    && plus.execute(frame, PLUS, 0L);
+        }
+
+        @Fallback
+        public static boolean doOther(boolean stepped, Object receiver, Object step) {
+            return false;
+        }
+
+        static ProtosPrelude admittedPrelude(VirtualFrame frame) {
+            return ProtosFrameArguments.admittedPreludeOrNull(frame.getArguments());
+        }
+
+        static boolean hasSelectionParent(
+                ProtosObjectValue receiver,
+                ProtosValueLookup.StructuralSelection selection) {
+            return ProtosValueLookup.hasSelectionParent(receiver, selection);
+        }
+
+        static ProtosStandardObjectProtocol.CanonicalRootCallSelection rootCallSelection() {
+            return ProtosStandardObjectProtocol.canonicalRootCallSelectionOrNullForRuntime();
+        }
+
+        static PropertyGetter boundGetter(Shape receiverShape, String name) {
+            return ProtosValueLookup.propertyGetterWithFinalAssumption(receiverShape, name);
+        }
+
+        /*
+         * Specialization-time only: the FROZEN structural selection of each
+         * starting at the receiver's parent, or null. Non-null only when the
+         * receiver Shape is FROZEN, describes both bounds and owns neither
+         * selector, the parent is the exact Range or InvertedRange binding of
+         * the Prelude, that FROZEN prototype owns the canonical each and
+         * eachStep, and the Integer.recognizes selection is FROZEN. A FROZEN
+         * Shape and FROZEN owners cannot change, so these facts hold for every
+         * receiver passing the Shape and parent guards.
+         */
+        @TruffleBoundary
+        static ProtosValueLookup.StructuralSelection selectCanonicalEach(
+                ProtosObjectValue receiver, Shape receiverShape, ProtosPrelude prelude) {
+            if (prelude == null
+                    || !ProtosValueLookup.isOrdinaryObject(receiver)
+                    || !receiver.usesObjectStorageForRuntime()
+                    || !ProtosObjectValue.isFrozenShape(receiverShape)
+                    || !ProtosValueLookup.hasProperty(receiverShape, "start")
+                    || !ProtosValueLookup.hasProperty(receiverShape, "stop")
+                    || ProtosValueLookup.hasProperty(receiverShape, "each")
+                    || ProtosValueLookup.hasProperty(receiverShape, "eachStep")) {
+                return null;
+            }
+            try {
+                Object parent = receiver.parent().orElse(null);
+                Object range = prelude.bindings().readLocalSlot("Range").orElse(null);
+                Object inverted = prelude.bindings().readLocalSlot("InvertedRange").orElse(null);
+                if (parent == null || (parent != range && parent != inverted)) {
+                    return null;
+                }
+                ProtosObjectValue prototype = (ProtosObjectValue) parent;
+                if (!selectsCanonicalMethod(receiver, "each", prototype)
+                        || !selectsCanonicalMethod(receiver, "eachStep", prototype)) {
+                    return null;
+                }
+                ProtosValueLookup.StructuralSelection recognizes =
+                        ProtosValueLookup.selectStructural(prelude.integerPrototype(), "recognizes");
+                if (recognizes == null || !recognizes.allOwnersFrozen()) {
+                    return null;
+                }
+                ProtosValueLookup.StructuralSelection each =
+                        ProtosValueLookup.selectStructural(prototype, "each");
+                return each != null && each.allOwnersFrozen() ? each : null;
+            } catch (IllegalStateException | UnsupportedOperationException unavailable) {
+                return null;
+            }
+        }
+
+        /* Specialization-time only: whether the selected prototype is Range. */
+        @TruffleBoundary
+        static boolean isAscending(
+                ProtosValueLookup.StructuralSelection eachSelection, ProtosPrelude prelude) {
+            return eachSelection != null
+                    && prelude != null
+                    && eachSelection.origin()
+                            == prelude.bindings().readLocalSlot("Range").orElse(null);
+        }
+
+        @TruffleBoundary
+        static boolean selectsStandard(
+                boolean stepped, ProtosObjectValue receiver, Object step, ProtosPrelude prelude) {
+            if (prelude == null
+                    || !ProtosValueLookup.isOrdinaryObject(receiver)
+                    || !receiver.isFrozen()
+                    || ProtosStandardObjectProtocol.canonicalRootCallSelectionOrNullForRuntime() == null) {
+                return false;
+            }
+            try {
+                Object parent = receiver.parent().orElse(null);
+                Object range = prelude.bindings().readLocalSlot("Range").orElse(null);
+                Object inverted = prelude.bindings().readLocalSlot("InvertedRange").orElse(null);
+                boolean ascending;
+                if (parent != null && parent == range) {
+                    ascending = true;
+                } else if (parent != null && parent == inverted) {
+                    ascending = false;
+                } else {
+                    return false;
+                }
+                ProtosObjectValue prototype = (ProtosObjectValue) parent;
+                if (!selectsCanonicalMethod(receiver, "each", prototype)
+                        || !selectsCanonicalMethod(receiver, "eachStep", prototype)) {
+                    return false;
+                }
+                Object start = receiver.readLocalSlot("start").orElse(null);
+                Object stop = receiver.readLocalSlot("stop").orElse(null);
+                if (!ProtosNumericValueSupport.isCurrentInteger(start)
+                        || !ProtosNumericValueSupport.isCurrentInteger(stop)) {
+                    return false;
+                }
+                Object increment = ascending ? 1L : -1L;
+                if (stepped) {
+                    if (!ProtosNumericValueSupport.isCurrentInteger(step)) {
+                        return false;
+                    }
+                    int sign = ProtosNumericValueSupport.integerSignum(step);
+                    if (ascending ? sign <= 0 : sign >= 0) {
+                        return false;
+                    }
+                    increment = step;
+                }
+                ProtosValueLookup.StructuralSelection recognizes =
+                        ProtosValueLookup.selectStructural(prelude.integerPrototype(), "recognizes");
+                if (recognizes == null || !recognizes.allOwnersFrozen()) {
+                    return false;
+                }
+                Object large = largeOperandOrNull(start, stop, increment, prelude);
+                return large == null || selectsStandardLargeOperators(large, prelude);
+            } catch (IllegalStateException | UnsupportedOperationException unavailable) {
+                return false;
+            }
+        }
+
+        /*
+         * A large Integer whose {@code <}, {@code >} and {@code +} selections
+         * the canonical loop observes, or null when every compared and added
+         * value stays signed-64: a large bound or step itself, or a
+         * representative large Integer when the signed-64 cursor may advance
+         * past the signed-64 range before the exclusive stop ends the loop
+         * (the canonical source then compares that large cursor). Every
+         * large Integer delegates to the same Prelude prototype, so one
+         * representative proves the selection for all of them.
+         */
+        private static Object largeOperandOrNull(
+                Object start, Object stop, Object increment, ProtosPrelude prelude) {
+            for (Object operand : new Object[] {start, stop, increment}) {
+                if (ProtosNumericValueSupport.isLargeInteger(operand)) {
+                    return operand;
+                }
+            }
+            long limit = (Long) stop;
+            long delta = (Long) increment;
+            if (delta > 0 ? limit <= Long.MAX_VALUE - delta + 1 : limit >= Long.MIN_VALUE - delta - 1) {
+                return null;
+            }
+            return ProtosNumericValueSupport.addIntegers(Long.MAX_VALUE, 1L, prelude);
+        }
+
+        /*
+         * Whether the {@code <}, {@code >} and {@code +} selections of the
+         * large Integer {@code large} are owned by FROZEN chains and are the
+         * standard Integer operations. The structural selection starts at
+         * the delegation parent, because a numeric value is never itself a
+         * structural lookup origin.
+         */
+        private static boolean selectsStandardLargeOperators(Object large, ProtosPrelude prelude) {
+            Object origin = ProtosValueLookup.delegationParent(large, prelude).orElse(null);
+            if (!(origin instanceof ProtosObjectValue)) {
+                return false;
+            }
+            for (String selector : new String[] {LESS, GREATER, PLUS}) {
+                ProtosValueLookup.StructuralSelection selection =
+                        ProtosValueLookup.selectStructural(origin, selector);
+                if (selection == null
+                        || !selection.allOwnersFrozen()
+                        || !ProtosNumericSelectionNode.standard(
+                                selector, large, selection.read(), selection.home(), prelude)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /*
+         * Whether the complete selection of {@code selector} on the receiver
+         * is owned by {@code prototype}, the exact Prelude binding, over a
+         * chain whose every examined object is FROZEN, and selects a Closure.
+         * A FROZEN chain can change neither its slots nor its parents, so the
+         * selected Closure is the one the canonical source installed in that
+         * binding. The {@code eachStep} selection is the one that the
+         * {@code this.eachStep} delegation of the canonical {@code each}
+         * observes on the same receiver.
+         */
+        private static boolean selectsCanonicalMethod(
+                ProtosObjectValue receiver, String selector, ProtosObjectValue prototype) {
+            ProtosValueLookup.StructuralSelection selection =
+                    ProtosValueLookup.selectStructural(receiver, selector);
+            return selection != null
+                    && selection.home() == prototype
+                    && selection.allOwnersFrozen()
+                    && selection.read() instanceof ProtosClosureValue;
+        }
+    }
+
+    /**
+     * Establishes the cursor of an iteration admitted by
+     * {@link IsStandardRangeIterationSelection}: the start bound, the
+     * exclusive stop bound and the step: for {@code each}, {@code +1} when
+     * the selected canonical prototype is {@code Range} and {@code -1} when it
+     * is {@code InvertedRange}, exactly as the inherited source methods
+     * delegate to {@code eachStep}; for {@code eachStep}, the explicit step
+     * whose sign was validated for that prototype. The order of the bounds
+     * never chooses the direction; it only decides whether the traversal is
+     * empty. Signed-64 operands establish the primitive cursor;
+     * any large bound or step establishes the exact cursor, which keeps the
+     * published Integer representations of every visited value.
+     */
+    @Operation(storeBytecodeIndex = false)
+    @ConstantOperand(type = boolean.class, name = "stepped")
+    public static final class PrepareRangeIteration {
+        static final String START = "start";
+        static final String STOP = "stop";
+
+        /*
+         * The cached preparation of a receiver admitted through the same
+         * Shape, parent and Prelude: signed-64 operands initialize the
+         * primitive cursor directly in compiled code; a large bound or step
+         * takes the exact preparation.
+         */
+        @Specialization(
+                guards = {
+                    "prelude == cachedPrelude",
+                    "receiverShape.check(receiver)",
+                    "eachSelection != null",
+                    "hasSelectionParent(receiver, eachSelection)"
+                },
+                limit = "3",
+                excludeForUncached = true)
+        public static RangeIterationState doCached(
+                boolean stepped, ProtosObjectValue receiver, Object step,
+                @Bind VirtualFrame frame,
+                @Bind("admittedPrelude(frame)") ProtosPrelude prelude,
+                @Cached("prelude") ProtosPrelude cachedPrelude,
+                @Cached("receiver.getShape()") Shape receiverShape,
+                @Cached("selectCanonicalEach(receiver, receiverShape, cachedPrelude)")
+                        ProtosValueLookup.StructuralSelection eachSelection,
+                @Cached("isAscending(eachSelection, cachedPrelude)") boolean ascending,
+                @Cached("boundGetter(receiverShape, START)") PropertyGetter startGetter,
+                @Cached("boundGetter(receiverShape, STOP)") PropertyGetter stopGetter) {
+            Object start = startGetter.get(receiver);
+            Object stop = stopGetter.get(receiver);
+            if (start instanceof Long first && stop instanceof Long last) {
+                if (!stepped) {
+                    return new RangeIterationState(first, last, ascending ? 1L : -1L);
+                }
+                if (step instanceof Long delta) {
+                    return new RangeIterationState(first, last, delta);
+                }
+            }
+            return prepare(stepped, receiver, step, cachedPrelude);
+        }
+
+        @Specialization(replaces = "doCached")
+        public static RangeIterationState perform(
+                boolean stepped, ProtosObjectValue receiver, Object step,
+                @Bind VirtualFrame frame) {
+            return prepare(stepped, receiver, step,
+                    ProtosFrameArguments.admittedPreludeOrNull(frame.getArguments()));
+        }
+
+        static ProtosPrelude admittedPrelude(VirtualFrame frame) {
+            return IsStandardRangeIterationSelection.admittedPrelude(frame);
+        }
+
+        static boolean hasSelectionParent(
+                ProtosObjectValue receiver,
+                ProtosValueLookup.StructuralSelection selection) {
+            return IsStandardRangeIterationSelection.hasSelectionParent(receiver, selection);
+        }
+
+        static ProtosValueLookup.StructuralSelection selectCanonicalEach(
+                ProtosObjectValue receiver, Shape receiverShape, ProtosPrelude prelude) {
+            return IsStandardRangeIterationSelection.selectCanonicalEach(
+                    receiver, receiverShape, prelude);
+        }
+
+        static boolean isAscending(
+                ProtosValueLookup.StructuralSelection eachSelection, ProtosPrelude prelude) {
+            return IsStandardRangeIterationSelection.isAscending(eachSelection, prelude);
+        }
+
+        static PropertyGetter boundGetter(Shape receiverShape, String name) {
+            return IsStandardRangeIterationSelection.boundGetter(receiverShape, name);
+        }
+
+        /* The general and exact preparation; arbitrary precision is cold. */
+
+        @TruffleBoundary
+        static RangeIterationState prepare(
+                boolean stepped, ProtosObjectValue receiver, Object step, ProtosPrelude prelude) {
+            Object start = receiver.readLocalSlot("start").orElseThrow();
+            Object stop = receiver.readLocalSlot("stop").orElseThrow();
+            Object increment = stepped
+                    ? step
+                    : (receiver.parent().orElse(null)
+                            == prelude.bindings().readLocalSlot("Range").orElse(null) ? 1L : -1L);
+            if (start instanceof Long first && stop instanceof Long last
+                    && increment instanceof Long delta) {
+                return new RangeIterationState(first, last, delta);
+            }
+            return new RangeIterationState(start, stop, increment, prelude);
+        }
+    }
+
+    /**
+     * One step of an admitted standard Range iteration: when the cursor is
+     * still before the exclusive stop bound in the iteration direction,
+     * stores it into the supplied local as a primitive {@code long}, advances
+     * it by the step and answers true; otherwise answers false without
+     * advancing. On the primitive cursor an advance beyond the signed-64
+     * range ends the iteration, because the exact next Integer is then past
+     * the signed-64 stop bound. The exact cursor compares and adds with the
+     * published Integer operations, so it crosses the signed-64 limits in
+     * either direction without truncation and stores each visited Integer
+     * in its normalized representation.
+     */
+    @Operation(storeBytecodeIndex = false)
+    @ConstantOperand(type = LocalAccessor.class, name = "element")
+    public static final class RangeIterationNext {
+        @Specialization(guards = "!state.isExact()")
+        public static boolean doLong(
+                LocalAccessor element,
+                RangeIterationState state,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode) {
+            if (!state.hasNext()) {
+                return false;
+            }
+            element.setLong(bytecode, frame, state.advance());
+            return true;
+        }
+
+        @Specialization(guards = "state.isExact()")
+        public static boolean doExact(
+                LocalAccessor element,
+                RangeIterationState state,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode) {
+            Object current = state.advanceExactOrNull();
+            if (current == null) {
+                return false;
+            }
+            element.setObject(bytecode, frame, current);
+            return true;
+        }
+    }
+
+    /**
+     * The cursor of one admitted standard Range iteration. Its direction is
+     * the sign of the step chosen from the selected canonical prototype, not
+     * the order of the bounds. Held only in a
+     * Bytecode DSL local of the iterating root, so it survives that root's
+     * suspensions and is never a guest value.
+     */
+    public static final class RangeIterationState {
+        private long next;
+        private final long stop;
+        private final long step;
+        private boolean exhausted;
+        /* The exact cursor, used only when a bound or the step is a large Integer. */
+        private final boolean exact;
+        private Object exactNext;
+        private final Object exactStop;
+        private final Object exactStep;
+        private final boolean ascending;
+        private final ProtosPrelude prelude;
+
+        RangeIterationState(long start, long stop, long step) {
+            this.next = start;
+            this.stop = stop;
+            this.step = step;
+            this.exact = false;
+            this.exactNext = null;
+            this.exactStop = null;
+            this.exactStep = null;
+            this.ascending = step > 0;
+            this.prelude = null;
+        }
+
+        RangeIterationState(Object start, Object stop, Object step, ProtosPrelude prelude) {
+            this.stop = 0L;
+            this.step = 0L;
+            this.exact = true;
+            this.exactNext = start;
+            this.exactStop = stop;
+            this.exactStep = step;
+            this.ascending = ProtosNumericValueSupport.integerSignum(step) > 0;
+            this.prelude = prelude;
+        }
+
+        boolean isExact() {
+            return exact;
+        }
+
+        /*
+         * The exact cursor before the stop bound, after advancing it by the
+         * step, or null once the stop bound is reached. Arbitrary-precision
+         * comparison and addition are cold relative to the primitive cursor.
+         */
+        @TruffleBoundary
+        Object advanceExactOrNull() {
+            int order = ProtosNumericValueSupport.compareIntegers(exactNext, exactStop);
+            if (ascending ? order >= 0 : order <= 0) {
+                return null;
+            }
+            Object current = exactNext;
+            exactNext = ProtosNumericValueSupport.addIntegers(current, exactStep, prelude);
+            return current;
+        }
+
+        boolean hasNext() {
+            return !exhausted && (step > 0 ? next < stop : next > stop);
+        }
+
+        long advance() {
+            long current = next;
+            long following = current + step;
+            if (((current ^ following) & (step ^ following)) < 0) {
+                exhausted = true;
+            } else {
+                next = following;
+            }
+            return current;
+        }
+    }
+
+    /**
+     * Admission of the internal construction of a call of the evaluated
+     * {@code factory} with the two evaluated bounds {@code start} and
+     * {@code stop}.
+     *
+     * <p>True only when the factory is exactly the {@code Range} or
+     * {@code InvertedRange} binding of the admitted Prelude and the complete
+     * source-backed construction would run, without signaling, through only
+     * standard selections: both canonical prototypes are FROZEN ordinary
+     * objects whose immediate parent is the root Object, each owns its
+     * source-backed {@code construct} and {@code init} and owns no
+     * {@code call}, {@code parent} or {@code freeze}; the root Object
+     * selects the standard {@code call}, {@code construct}, {@code parent}
+     * and {@code freeze}; the {@code Integer.recognizes} selection and the
+     * Array {@code size} and {@code at} selections over the forwarded
+     * argument Array are FROZEN standard selections; both bounds are
+     * Integers; and the SmallInteger {@code ==} and the {@code <}, {@code >},
+     * {@code <=} and {@code >=} selections of the start bound's family are
+     * the standard ones. Any other factory, bound or selection answers false
+     * and the lowering performs the ordinary call with the same evaluated
+     * operands, which produces its own result or Error in source order.
+     * Nothing is invoked here.
+     *
+     * <p>The cached entry is keyed by the exact factory identity and the
+     * Prelude identity. The FROZEN facts are proven when the entry is
+     * installed; the root selections are guarded by their structural
+     * selections, and a mutable root reads and classifies the selected
+     * slots on every execution, so a reassignment that preserves the Shape
+     * is observed.
+     */
+    @Operation(storeBytecodeIndex = false)
+    public static final class IsStandardRangeConstructionSelection {
+        static final String CALL = "call";
+        static final String CONSTRUCT = "construct";
+        static final String PARENT = "parent";
+        static final String FREEZE = "freeze";
+
+        static final String EQUAL = "==";
+        static final String LESS = "<";
+        static final String GREATER = ">";
+        static final String LESS_EQUAL = "<=";
+        static final String GREATER_EQUAL = ">=";
+
+        @Specialization(
+                guards = {
+                    "factory == cachedFactory",
+                    "prelude == cachedPrelude",
+                    "callSelection != null",
+                    "constructSelection != null",
+                    "parentSelection != null",
+                    "freezeSelection != null",
+                    "rootFrozen || callSelection.isValid()",
+                    "rootFrozen || constructSelection.isValid()",
+                    "rootFrozen || parentSelection.isValid()",
+                    "rootFrozen || freezeSelection.isValid()"
+                },
+                limit = "2",
+                excludeForUncached = true)
+        public static boolean doCached(
+                ProtosObjectValue factory,
+                Object start,
+                Object stop,
+                @Bind VirtualFrame frame,
+                @Bind("admittedPrelude(frame)") ProtosPrelude prelude,
+                @Cached("prelude") ProtosPrelude cachedPrelude,
+                @Cached("canonicalFactoryOrNull(factory, cachedPrelude)")
+                        ProtosObjectValue cachedFactory,
+                @Cached("selectRoot(cachedFactory, CALL)")
+                        ProtosValueLookup.StructuralSelection callSelection,
+                @Cached("selectRoot(cachedFactory, CONSTRUCT)")
+                        ProtosValueLookup.StructuralSelection constructSelection,
+                @Cached("selectRoot(cachedFactory, PARENT)")
+                        ProtosValueLookup.StructuralSelection parentSelection,
+                @Cached("selectRoot(cachedFactory, FREEZE)")
+                        ProtosValueLookup.StructuralSelection freezeSelection,
+                @Cached("allOwnersFrozen(callSelection, constructSelection, parentSelection, freezeSelection)")
+                        boolean rootFrozen,
+                @Cached("frozenStandard(rootFrozen, callSelection, constructSelection, parentSelection, freezeSelection)")
+                        boolean frozenStandard,
+                @Shared("less") @Cached ProtosNumericSelectionNode less,
+                @Shared("greater") @Cached ProtosNumericSelectionNode greater,
+                @Shared("lessEqual") @Cached ProtosNumericSelectionNode lessEqual,
+                @Shared("greaterEqual") @Cached ProtosNumericSelectionNode greaterEqual) {
+            if (!(start instanceof Long && stop instanceof Long)
+                    && !(ProtosNumericValueSupport.isCurrentInteger(start)
+                            && ProtosNumericValueSupport.isCurrentInteger(stop))) {
+                return false;
+            }
+            if (rootFrozen
+                    ? !frozenStandard
+                    : !standardRoot(callSelection, constructSelection, parentSelection, freezeSelection)) {
+                return false;
+            }
+            return standardComparisons(
+                    frame, start, less, greater, lessEqual, greaterEqual);
+        }
+
+        /*
+         * The generic selection. It replaces no cached entry, so a site that
+         * also sees another factory keeps its cached entries eligible. Any
+         * representation other than an exact ordinary object is declined
+         * before the complete selection is observed.
+         */
+        @Specialization
+        @InliningCutoff
+        public static boolean doGeneric(
+                Object factory,
+                Object start,
+                Object stop,
+                @Bind VirtualFrame frame,
+                @Shared("less") @Cached ProtosNumericSelectionNode less,
+                @Shared("greater") @Cached ProtosNumericSelectionNode greater,
+                @Shared("lessEqual") @Cached ProtosNumericSelectionNode lessEqual,
+                @Shared("greaterEqual") @Cached ProtosNumericSelectionNode greaterEqual) {
+            if (!ProtosValueLookup.isOrdinaryObject(factory)
+                    || !ProtosNumericValueSupport.isCurrentInteger(start)
+                    || !ProtosNumericValueSupport.isCurrentInteger(stop)) {
+                return false;
+            }
+            if (!selectsStandard((ProtosObjectValue) factory, admittedPrelude(frame))) {
+                return false;
+            }
+            return standardComparisons(
+                    frame, start, less, greater, lessEqual, greaterEqual);
+        }
+
+        static ProtosPrelude admittedPrelude(VirtualFrame frame) {
+            return ProtosFrameArguments.admittedPreludeOrNull(frame.getArguments());
+        }
+
+        /*
+         * Arity equality is proven on its frozen chain with the factory;
+         * every bound comparison has the start bound as its
+         * receiver, so the selections of its own family are the ones the
+         * source construction observes.
+         */
+        private static boolean standardComparisons(
+                VirtualFrame frame,
+                Object start,
+                ProtosNumericSelectionNode less,
+                ProtosNumericSelectionNode greater,
+                ProtosNumericSelectionNode lessEqual,
+                ProtosNumericSelectionNode greaterEqual) {
+            return less.execute(frame, LESS, start)
+                    && greater.execute(frame, GREATER, start)
+                    && lessEqual.execute(frame, LESS_EQUAL, start)
+                    && greaterEqual.execute(frame, GREATER_EQUAL, start);
+        }
+
+        static ProtosValueLookup.StructuralSelection selectRoot(
+                ProtosObjectValue factory, String selector) {
+            return factory == null
+                    ? null
+                    : ProtosValueLookup.selectStructural(ProtosObjectValue.rootObject(), selector);
+        }
+
+        static boolean allOwnersFrozen(
+                ProtosValueLookup.StructuralSelection callSelection,
+                ProtosValueLookup.StructuralSelection constructSelection,
+                ProtosValueLookup.StructuralSelection parentSelection,
+                ProtosValueLookup.StructuralSelection freezeSelection) {
+            return callSelection != null
+                    && constructSelection != null
+                    && parentSelection != null
+                    && freezeSelection != null
+                    && callSelection.allOwnersFrozen()
+                    && constructSelection.allOwnersFrozen()
+                    && parentSelection.allOwnersFrozen()
+                    && freezeSelection.allOwnersFrozen();
+        }
+
+        static boolean frozenStandard(
+                boolean frozen,
+                ProtosValueLookup.StructuralSelection callSelection,
+                ProtosValueLookup.StructuralSelection constructSelection,
+                ProtosValueLookup.StructuralSelection parentSelection,
+                ProtosValueLookup.StructuralSelection freezeSelection) {
+            return frozen && standardRoot(
+                    callSelection, constructSelection, parentSelection, freezeSelection);
+        }
+
+        /* Whether the root Object currently selects the four standard behaviors. */
+        static boolean standardRoot(
+                ProtosValueLookup.StructuralSelection callSelection,
+                ProtosValueLookup.StructuralSelection constructSelection,
+                ProtosValueLookup.StructuralSelection parentSelection,
+                ProtosValueLookup.StructuralSelection freezeSelection) {
+            return ProtosStandardObjectProtocol.isCanonicalStandardCallSelection(
+                            callSelection.read(), callSelection.home())
+                    && ProtosStandardObjectProtocol.isCanonicalStandardConstructSelection(
+                            constructSelection.read(), constructSelection.home())
+                    && ProtosStandardObjectProtocol.isCanonicalStandardParentSelection(
+                            parentSelection.read(), parentSelection.home())
+                    && ProtosStandardObjectProtocol.isCanonicalStandardFreezeSelection(
+                            freezeSelection.read(), freezeSelection.home());
+        }
+
+        /*
+         * Specialization-time only: the factory when it is the exact Range or
+         * InvertedRange binding of the Prelude and every FROZEN fact of the
+         * canonical construction holds, or null. FROZEN objects can change
+         * neither their slots nor their parents, so a proven fact holds for
+         * as long as the identity is cached.
+         */
+        @TruffleBoundary
+        static ProtosObjectValue canonicalFactoryOrNull(
+                ProtosObjectValue factory, ProtosPrelude prelude) {
+            if (prelude == null || !ProtosValueLookup.isOrdinaryObject(factory)) {
+                return null;
+            }
+            try {
+                Object range = prelude.bindings().readLocalSlot("Range").orElse(null);
+                Object inverted = prelude.bindings().readLocalSlot("InvertedRange").orElse(null);
+                if (factory != range && factory != inverted) {
+                    return null;
+                }
+                if (!isCanonicalPrototype(range) || !isCanonicalPrototype(inverted)) {
+                    return null;
+                }
+                ProtosValueLookup.StructuralSelection recognizes =
+                        ProtosValueLookup.selectStructural(prelude.integerPrototype(), "recognizes");
+                if (recognizes == null || !recognizes.allOwnersFrozen()) {
+                    return null;
+                }
+                // The source compares args.size() with 2 using Number equality,
+                // which is distinct from the arithmetic and ordering protocol.
+                Object smallInteger = ProtosValueLookup.delegationParent(0L, prelude).orElse(null);
+                ProtosValueLookup.StructuralSelection equality =
+                        ProtosValueLookup.selectStructural(smallInteger, EQUAL);
+                if (equality == null
+                        || !equality.allOwnersFrozen()
+                        || !ProtosStandardNumberEqualityProtocol.isCanonicalStandardEqualitySelection(
+                                equality.read(), equality.home(), prelude)) {
+                    return null;
+                }
+                for (String selector : new String[] {"size", "at"}) {
+                    ProtosValueLookup.StructuralSelection indexed =
+                            ProtosValueLookup.selectStructural(prelude.arrayPrototype(), selector);
+                    if (indexed == null
+                            || !indexed.allOwnersFrozen()
+                            || !ProtosStandardArrayProtocol.isStandardIndexedBehavior(
+                                    selector, indexed.read())) {
+                        return null;
+                    }
+                }
+                return factory;
+            } catch (IllegalStateException
+                    | UnsupportedOperationException
+                    | java.util.NoSuchElementException unavailable) {
+                return null;
+            }
+        }
+
+        /*
+         * A FROZEN ordinary prototype whose immediate parent is the root
+         * Object, which owns its source-backed construct and init, and which
+         * owns no call, parent or freeze, so those are selected from the root.
+         */
+        private static boolean isCanonicalPrototype(Object candidate) {
+            if (!ProtosValueLookup.isOrdinaryObject(candidate)) {
+                return false;
+            }
+            ProtosObjectValue prototype = (ProtosObjectValue) candidate;
+            Shape shape = prototype.getShape();
+            if (!prototype.usesObjectStorageForRuntime()
+                    || !ProtosObjectValue.isFrozenShape(shape)
+                    || !(prototype.parent().orElse(null) instanceof ProtosObjectValue parent)
+                    || !parent.isRootObject()
+                    || ProtosValueLookup.hasProperty(shape, "call")
+                    || ProtosValueLookup.hasProperty(shape, "parent")
+                    || ProtosValueLookup.hasProperty(shape, "freeze")) {
+                return false;
+            }
+            return ownsSourceMethod(prototype, "construct") && ownsSourceMethod(prototype, "init");
+        }
+
+        private static boolean ownsSourceMethod(ProtosObjectValue prototype, String selector) {
+            ProtosValueLookup.StructuralSelection selection =
+                    ProtosValueLookup.selectStructural(prototype, selector);
+            return selection != null
+                    && selection.home() == prototype
+                    && selection.allOwnersFrozen()
+                    && selection.read() instanceof ProtosClosureValue closure
+                    && closure.nativeBody().isEmpty();
+        }
+
+        /* The complete selection, observed without invoking anything. */
+        @TruffleBoundary
+        static boolean selectsStandard(ProtosObjectValue factory, ProtosPrelude prelude) {
+            if (canonicalFactoryOrNull(factory, prelude) == null) {
+                return false;
+            }
+            ProtosObjectValue root = ProtosObjectValue.rootObject();
+            ProtosValueLookup.StructuralSelection call = ProtosValueLookup.selectStructural(root, "call");
+            ProtosValueLookup.StructuralSelection construct =
+                    ProtosValueLookup.selectStructural(root, "construct");
+            ProtosValueLookup.StructuralSelection parent =
+                    ProtosValueLookup.selectStructural(root, "parent");
+            ProtosValueLookup.StructuralSelection freeze =
+                    ProtosValueLookup.selectStructural(root, "freeze");
+            return call != null && construct != null && parent != null && freeze != null
+                    && standardRoot(call, construct, parent, freeze);
+        }
+    }
+
+    /**
+     * The canonical construction of a call admitted by
+     * {@link IsStandardRangeConstructionSelection}: a fresh ordinary object
+     * whose immediate parent is the factory when the bounds are in its
+     * direction, and the opposite canonical prototype otherwise
+     * ({@code Range}: start &lt;= stop; {@code InvertedRange}: start &gt;=
+     * stop; equal bounds keep the factory), with exactly the local slots
+     * {@code start} and {@code stop} holding the supplied Integers unchanged,
+     * then FROZEN, through the same object mutation path as the source
+     * initialization. Each execution answers a fresh object.
+     */
+    @Operation(storeBytecodeIndex = false)
+    public static final class MakeRange {
+        /* Signed-64 bounds: the comparison and the construction stay compiled. */
+        @Specialization(guards = {"factory == cachedFactory", "opposite != null"}, limit = "2")
+        public static ProtosObjectValue doLong(
+                ProtosObjectValue factory,
+                long start,
+                long stop,
+                @Bind VirtualFrame frame,
+                @Bind("admittedPrelude(frame)") ProtosPrelude prelude,
+                @Cached("factory") ProtosObjectValue cachedFactory,
+                @Cached("oppositeOrNull(cachedFactory, prelude)") ProtosObjectValue opposite,
+                @Cached("isRange(cachedFactory, prelude)") boolean ascending) {
+            boolean keep = ascending ? start <= stop : start >= stop;
+            return construct(keep ? cachedFactory : opposite, start, stop);
+        }
+
+        /* Any Integer bounds: the exact comparison is cold. */
+        @Specialization(replaces = "doLong")
+        public static ProtosObjectValue doExact(
+                ProtosObjectValue factory,
+                Object start,
+                Object stop,
+                @Bind VirtualFrame frame) {
+            return construct(exactPrototype(factory, start, stop, admittedPrelude(frame)), start, stop);
+        }
+
+        static ProtosPrelude admittedPrelude(VirtualFrame frame) {
+            return ProtosFrameArguments.admittedPreludeOrNull(frame.getArguments());
+        }
+
+        private static ProtosObjectValue construct(ProtosObjectValue prototype, Object start, Object stop) {
+            ProtosObjectValue instance = new ProtosObjectValue(prototype);
+            instance.createLocalSlot("start", ProtosNumericValueSupport.guestValue(start));
+            instance.createLocalSlot("stop", ProtosNumericValueSupport.guestValue(stop));
+            return instance.freeze();
+        }
+
+        @TruffleBoundary
+        static ProtosObjectValue oppositeOrNull(ProtosObjectValue factory, ProtosPrelude prelude) {
+            if (prelude == null) {
+                return null;
+            }
+            Object range = prelude.bindings().readLocalSlot("Range").orElse(null);
+            Object inverted = prelude.bindings().readLocalSlot("InvertedRange").orElse(null);
+            if (factory == range && inverted instanceof ProtosObjectValue other) {
+                return other;
+            }
+            if (factory == inverted && range instanceof ProtosObjectValue other) {
+                return other;
+            }
+            return null;
+        }
+
+        @TruffleBoundary
+        static boolean isRange(ProtosObjectValue factory, ProtosPrelude prelude) {
+            return prelude != null
+                    && factory == prelude.bindings().readLocalSlot("Range").orElse(null);
+        }
+
+        @TruffleBoundary
+        static ProtosObjectValue exactPrototype(
+                ProtosObjectValue factory, Object start, Object stop, ProtosPrelude prelude) {
+            int order = ProtosNumericValueSupport.compareIntegers(start, stop);
+            boolean keep = isRange(factory, prelude) ? order <= 0 : order >= 0;
+            return keep ? factory : oppositeOrNull(factory, prelude);
+        }
+    }
+
     /*
      * BinarySubscript / SetItem / GetLen model.
      *

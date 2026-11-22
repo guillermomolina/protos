@@ -251,6 +251,32 @@
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosBytecodeRootNode.java",
+      "class": "ProtosBytecodeRootNode.RangeIterationNext",
+      "method": "doLong(LocalAccessor,RangeIterationState,VirtualFrame,BytecodeNode)",
+      "family": "LocalAccessor",
+      "operation": "setLong",
+      "receiver": "element",
+      "bytecode_node": "bytecode",
+      "occurrence": 0,
+      "receiver_class": "CONSTANT_OPERAND_RECEIVER",
+      "bytecode_node_class": "BOUND_BYTECODE_NODE",
+      "pe_reachability": "PE_REACHABLE_PROVEN"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosBytecodeRootNode.java",
+      "class": "ProtosBytecodeRootNode.RangeIterationNext",
+      "method": "doExact(LocalAccessor,RangeIterationState,VirtualFrame,BytecodeNode)",
+      "family": "LocalAccessor",
+      "operation": "setObject",
+      "receiver": "element",
+      "bytecode_node": "bytecode",
+      "occurrence": 0,
+      "receiver_class": "CONSTANT_OPERAND_RECEIVER",
+      "bytecode_node_class": "BOUND_BYTECODE_NODE",
+      "pe_reachability": "PE_REACHABLE_PROVEN"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosBytecodeRootNode.java",
       "class": "ProtosBytecodeRootNode.LoadAndClearTempLocal",
       "method": "doObject(LocalAccessor,VirtualFrame,BytecodeNode)",
       "family": "LocalAccessor",

@@ -254,6 +254,421 @@ tests: Array(
         Assertions.require(Range(1, 4).each(callback) === null)
         Assertions.require(InvertedRange(3, 0).eachStep(-2, callback) === null)
         Assertions.require(observed == 12331)
+    }),
+    Test("range direct sends visit exact integers in order", () => {
+        trace: 0
+        record: (value) => { trace = trace * 10 + value }
+
+        Assertions.require(Range(1, 4).each(record) === null)
+        Assertions.require(Range(1, 8).eachStep(3, record) === null)
+        Assertions.require(InvertedRange(3, 0).each(record) === null)
+        Assertions.require(InvertedRange(9, 4).eachStep(-2, record) === null)
+        Assertions.require(trace == 123147321975)
+
+        literal: 0
+        Range(1, 4).each((value) => { literal = literal * 10 + value })
+        InvertedRange(9, 4).eachStep(-2, (value) => { literal = literal * 10 + value })
+        Assertions.require(literal == 123975)
+    }),
+    Test("range saved in a binding and callbacks from bindings or functions", () => {
+        saved: Range(2, 6)
+        inverted: InvertedRange(6, 2)
+        sum: 0
+        callback: (value) => { sum = sum + value }
+        makeCallback: (scale) => {
+            (value) => { sum = sum + value * scale }
+        }
+
+        saved.each(callback)
+        saved.eachStep(2, callback)
+        inverted.each(makeCallback(10))
+        inverted.eachStep(-3, makeCallback(100))
+        visit: saved.each
+        visit(callback)
+        Assertions.require(sum == 14 + 6 + 180 + 900 + 14)
+    }),
+    Test("range empty or invalid step never inspects a noninvokable callback", () => {
+        Assertions.require(Range(3, 3).each(42) === null)
+        Assertions.require(Range(3, 3).eachStep(2, 42) === null)
+        Assertions.require(InvertedRange(3, 3).eachStep(-2, 42) === null)
+        Assertions.signals(Error, () => { Range(3, 3).eachStep(0, 42) })
+        Assertions.signals(Error, () => { Range(3, 3).eachStep(-1, 42) })
+        Assertions.signals(Error, () => { InvertedRange(3, 3).eachStep(1, 42) })
+        Assertions.signals(Error, () => { Range(0, 3).eachStep(1.5, 42) })
+        Assertions.signals(Error, () => { InvertedRange(3, 0).eachStep(0, 42) })
+    }),
+    Test("range steps crossing primitive integer boundaries stay exact", () => {
+        large: 9223372036854775807
+        visits: 0
+        last: 0
+        Range(large - 10, large).eachStep(4, (value) => {
+            visits = visits + 1
+            last = value
+        })
+        Assertions.require((visits == 3) && (last == large - 2))
+
+        crossing: 0
+        Range(large - 1, large + 2).each((value) => {
+            crossing = crossing + 1
+            last = value
+        })
+        Assertions.require((crossing == 3) && (last == large + 1))
+
+        smallest: -9223372036854775807 - 1
+        down: 0
+        InvertedRange(smallest + 5, smallest).eachStep(-3, (value) => {
+            down = down + 1
+            last = value
+        })
+        Assertions.require((down == 2) && (last == smallest + 2))
+
+        hugeStep: 0
+        Range(0, 10).eachStep(large + 1, (value) => { hugeStep = hugeStep + 1 })
+        Assertions.require(hugeStep == 1)
+    }),
+    Test("range callback error, nonlocal return and ensure visit counts", () => {
+        visits: 0
+        cleanups: 0
+        failure: Error()
+        caught: Error.handle(() => {
+            (() => {
+                Range(0, 10).eachStep(2, (value) => {
+                    visits = visits + 1
+                    if(value == 4) {
+                        failure.signal()
+                    }
+                })
+            }).ensure(() => { cleanups = cleanups + 1 })
+            null
+        }, (error) => { error })
+        Assertions.require((caught === failure) && (visits == 3) && (cleanups == 1))
+
+        early: () => {
+            (() => {
+                InvertedRange(10, 0).each((value) => {
+                    visits = visits + 1
+                    if(value == 8) {
+                        ^value
+                    }
+                })
+            }).ensure(() => { cleanups = cleanups + 1 })
+            -1
+        }
+        Assertions.require(early() == 8)
+        Assertions.require((visits == 6) && (cleanups == 2))
+    }),
+    Test("range repeated callback activations get fresh own bindings", () => {
+        fresh: 0
+        readers: {
+            first: null
+            last: null
+        }
+        Range(0, 4).each((value) => {
+            own: value * 2
+            fresh = fresh + own
+            reader: () => { own }
+            if(value == 0) {
+                readers.first = reader
+            }
+            readers.last = reader
+        })
+        Assertions.require(fresh == 12)
+        Assertions.require((readers.first() == 0) && (readers.last() == 6))
+    }),
+    Test("range large integer bounds and steps visit exact integers", () => {
+        max: 9223372036854775807
+        min: -9223372036854775807 - 1
+        big: max + 1000
+        count: 0
+        sum: 0
+        first: null
+        last: null
+        record: (value) => {
+            Assertions.require(Integer.recognizes(value))
+            (count == 0).ifTrue(() => { first = value })
+            count = count + 1
+            sum = sum + value
+            last = value
+            "ignored"
+        }
+        reset: () => {
+            count = 0
+            sum = 0
+            first = null
+            last = null
+        }
+
+        Assertions.require(Range(big, big + 3).each(record) === null)
+        Assertions.require((count == 3) && (first == big) && (last == big + 2) && (sum == big * 3 + 3))
+
+        reset()
+        Range(max - 1, max + 2).each(record)
+        Assertions.require((count == 3) && (first == max - 1) && (last == max + 1) && (sum == max * 3))
+
+        reset()
+        Assertions.require(InvertedRange(max + 2, max - 1).each(record) === null)
+        Assertions.require((count == 3) && (first == max + 2) && (last == max))
+
+        reset()
+        InvertedRange(min + 1, min - 2).each(record)
+        Assertions.require((count == 3) && (first == min + 1) && (last == min - 1))
+
+        reset()
+        Range(min - 2, min + 1).each(record)
+        Assertions.require((count == 3) && (first == min - 2) && (last == min))
+
+        reset()
+        Range(min, max).eachStep(max, record)
+        Assertions.require((count == 3) && (first == min) && (last == max - 1))
+
+        reset()
+        Assertions.require(Range(0, 10).eachStep(big, record) === null)
+        Assertions.require(InvertedRange(0, -10).eachStep(0 - big, record) === null)
+        Assertions.require((count == 2) && (first == 0) && (last == 0))
+
+        reset()
+        Range(big, big * 4).eachStep(big, record)
+        InvertedRange(0 - big, 0 - big * 4).eachStep(0 - big, record)
+        Assertions.require((count == 6) && (first == big) && (last == 0 - big * 3) && (sum == 0))
+    }),
+    Test("range large empty ranges and invalid large steps", () => {
+        max: 9223372036854775807
+        big: max + 1000
+        Assertions.require(Range(big, big).each(42) === null)
+        Assertions.require(InvertedRange(0 - big, 0 - big).each(42) === null)
+        Assertions.require(Range(big, big).eachStep(big, 42) === null)
+        Assertions.require(InvertedRange(big, big).eachStep(0 - big, 42) === null)
+        Assertions.signals(Error, () => { Range(big, big).eachStep(0 - big, 42) })
+        Assertions.signals(Error, () => { InvertedRange(big, big).eachStep(big, 42) })
+        Assertions.signals(Error, () => { Range(0, big).eachStep(0 - big, (value) => { 0 }) })
+        visits: 0
+        Assertions.signals(Error, () => {
+            InvertedRange(big, 0).eachStep(big, (value) => { visits = visits + 1 })
+        })
+        Assertions.require(visits == 0)
+    }),
+    Test("range large integer callback error and nonlocal return stop the loop", () => {
+        max: 9223372036854775807
+        visits: 0
+        failure: Error()
+        caught: Error.handle(() => {
+            Range(max - 1, max + 10).each((value) => {
+                visits = visits + 1
+                if(value == max + 1) {
+                    failure.signal()
+                }
+            })
+            null
+        }, (error) => { error })
+        Assertions.require((caught === failure) && (visits == 3))
+
+        early: () => {
+            InvertedRange(max + 5, max - 5).each((value) => {
+                visits = visits + 1
+                if(value == max) {
+                    ^value
+                }
+            })
+            -1
+        }
+        Assertions.require(early() == max)
+        Assertions.require(visits == 9)
+    }),
+    Test("range inherited traversal follows the prototype, not the bound order", () => {
+        max: 9223372036854775807
+        min: -9223372036854775807 - 1
+        big: max + 1000
+        visits: 0
+        record: (value) => { visits = visits + 1 }
+
+        // Direct children assembled without the canonical init, with bounds
+        // that the constructors would have normalized to the other prototype.
+        make: (low, high, ascending) => {
+            ascending.ifTrueIfFalse(
+                () => {
+                    (Range) {
+                        start: low
+                        stop: high
+                    }
+                },
+                () => {
+                    (InvertedRange) {
+                        start: low
+                        stop: high
+                    }
+                })
+        }
+
+        check: (low, high, ascending) => {
+            frozen: make(low, high, ascending)
+            frozen.freeze()
+            plain: make(low, high, ascending)
+            step: ascending.ifTrueIfFalse(() => { 1 }, () => { -1 })
+            largeStep: ascending.ifTrueIfFalse(() => { big }, () => { 0 - big })
+
+            Assertions.require(frozen.parent() === plain.parent())
+            Assertions.require((frozen.start == low) && (frozen.stop == high))
+
+            Array(frozen, plain).each((receiver) => {
+                visits = 0
+                Assertions.require(receiver.each(record) === null)
+                Assertions.require(receiver.eachStep(step, record) === null)
+                Assertions.require(receiver.eachStep(largeStep, record) === null)
+                Assertions.require(visits == 0)
+
+                // An empty traversal never inspects the callback.
+                Assertions.require(receiver.each(42) === null)
+                Assertions.require(receiver.eachStep(step, 42) === null)
+                Assertions.require(receiver.eachStep(largeStep, 42) === null)
+
+                // The owning prototype still rejects the opposite sign.
+                Assertions.signals(Error, () => { receiver.eachStep(0 - step, record) })
+                Assertions.signals(Error, () => { receiver.eachStep(0 - largeStep, record) })
+                Assertions.signals(Error, () => { receiver.eachStep(0 - step, 42) })
+                Assertions.require(visits == 0)
+            })
+            // Array each answers its receiver; the unfrozen child must not
+            // become the Case result, which crosses the Context boundary.
+            null
+        }
+
+        check(5, 0, true)
+        check(0, 5, false)
+        check(max + 5, max - 5, true)
+        check(max - 5, max + 5, false)
+        check(big, 0 - big, true)
+        check(0 - big, big, false)
+        check(min + 5, min - 5, true)
+        check(min - 5, min + 5, false)
+    }),
+    Test("returned ranges preserve dynamic callback effects and cleanup", () => {
+        make: (a, b) => { InvertedRange(a, b) }
+        max: 9223372036854775807
+        saved: make(max - 1, max + 2)
+        count: 0
+        sum: 0
+        callback: value => {
+            count = count + 1
+            sum = sum + value
+        }
+        Assertions.require(saved.each(callback) === null)
+        Assertions.require((count == 3) && (sum == max * 3))
+        Assertions.require(saved.eachStep(max + 1, callback) === null)
+        Assertions.require((count == 4) && (sum == max * 4 - 1))
+
+        cleaned: 0
+        Assertions.signals(Error, () => {
+            (() => { make(0, 3).each(value => { Error().signal() }) }).ensure(() => {
+                cleaned = cleaned + 1
+            })
+        })
+        Assertions.require(cleaned == 1)
+        early: () => {
+            saved.each(value => { ^value })
+            0
+        }
+        Assertions.require(early() == max - 1)
+    }),
+    Test("range literal callback captures accumulator across canonical and custom selection", () => {
+        store: { block: null }
+        keeper: {
+            each: (block) => {
+                store.block = block
+                store
+            }
+            eachStep: (step, block) => {
+                store.block = block
+                store
+            }
+        }
+        count: 0
+        last: 0
+        through: (receiver) => {
+            total: 100
+            returned: receiver.each((i) => {
+                total = total + i
+                count = count + 1
+                last = total
+            })
+            if(returned === store) {
+                total = 1000
+                store.block(1)
+                store.block(2)
+            }
+            total
+        }
+        stepped: (receiver, step) => {
+            total: 0
+            receiver.eachStep(step, (i) => { total = total * 10 + i })
+            total
+        }
+        Assertions.require(through(Range(0, 3)) == 103)
+        Assertions.require(through(keeper) == 1003)
+        Assertions.require(through(InvertedRange(2, 0)) == 103)
+        Assertions.require(through(Range(4, 4)) == 100)
+        store.block(10)
+        Assertions.require((count == 8) && (last == 1013))
+        Assertions.require(stepped(Range(0, 7), 3) == 36)
+        Assertions.require(stepped(InvertedRange(7, 0), -3) == 741)
+        Assertions.require(stepped(keeper, 3) == 0)
+        store.block(4)
+        Assertions.require(stepped(Range(0, 7), 3) == 36)
+    }),
+    Test("range callbacks observe their own context, return, escape and nest", () => {
+        own: context
+        h: {
+            previous: null
+            count: 0
+        }
+        Range(0, 3).each((i) => {
+            c: context
+            Assertions.require((c !== own) && (c !== h.previous) && (c.hasSlot("i")))
+            h.previous = c
+            h.count = h.count + 1
+        })
+        InvertedRange(4, 0).eachStep(-2, (i) => {
+            c: context
+            Assertions.require((c !== own) && (c !== h.previous) && (c.hasSlot("i")))
+            h.previous = c
+            h.count = h.count + 1
+        })
+        Assertions.require(h.count == 5)
+        finder: () => {
+            Range(0, 9).each((i) => { (i == 3).ifTrue(() => { ^(i * 7) }) })
+            -1
+        }
+        Assertions.require(finder() == 21)
+        store: { block: null }
+        keeper: {
+            each: (block) => {
+                store.block = block
+                null
+            }
+        }
+        binding: (receiver) => {
+            base: 10
+            receiver.each((i) => { base = base + i })
+            base = base + 100
+            () => { base }
+        }
+        Assertions.require(binding(Range(0, 2))() == 111)
+        read: binding(keeper)
+        store.block(5)
+        Assertions.require(read() == 115)
+        make: (receiver) => {
+            receiver.each((i) => { ^(i + 1) })
+            0
+        }
+        Assertions.require(make(keeper) == 0)
+        Assertions.signals(InvalidReturn, () => { store.block(3) })
+        pairs: () => {
+            total: 0
+            Range(0, 2).each((i) => {
+                Range(0, 2).each((j) => { total = total * 10 + (i * 2 + j) })
+            })
+            total
+        }
+        Assertions.require(pairs() == 123)
     })
 )
 tests.freeze()

@@ -51,6 +51,10 @@ public final class ProtosStandardObjectProtocol {
             ProtosStandardObjectProtocol::construct;
     private static final ProtosClosureValue STANDARD_CONSTRUCT =
             ProtosClosureValue.nativeClosure(STANDARD_CONSTRUCT_BODY);
+    private static final ProtosClosureValue STANDARD_PARENT =
+            ProtosClosureValue.nativeClosure(ProtosStandardObjectProtocol::parent);
+    private static final ProtosClosureValue STANDARD_FREEZE =
+            ProtosClosureValue.nativeClosure(ProtosStandardObjectProtocol::freeze);
     private static final ProtosNativeClosureBody STANDARD_ENSURE_BODY =
             ProtosStandardObjectProtocol::ensure;
     private static final ProtosClosureValue STANDARD_ENSURE =
@@ -216,6 +220,28 @@ public final class ProtosStandardObjectProtocol {
     }
 
     /**
+     * Whether {@code behavior} is the installed standard {@code Object.parent}
+     * selected from the root Object.
+     */
+    static boolean isCanonicalStandardParentSelection(
+            Object behavior,
+            ProtosObjectValue home) {
+        return behavior == STANDARD_PARENT
+                && home.isRootObject();
+    }
+
+    /**
+     * Whether {@code behavior} is the installed standard {@code Object.freeze}
+     * selected from the root Object.
+     */
+    static boolean isCanonicalStandardFreezeSelection(
+            Object behavior,
+            ProtosObjectValue home) {
+        return behavior == STANDARD_FREEZE
+                && home.isRootObject();
+    }
+
+    /**
      * D239-C1: the ordinary receiver domain admitted by the non-Closure
      * branch of standard {@code Object.call} and by standard
      * {@code Object.construct}.
@@ -323,8 +349,7 @@ public final class ProtosStandardObjectProtocol {
         if (!object.hasLocalSlot("freeze")) {
             object.createLocalSlot(
                     "freeze",
-                    ProtosClosureValue.nativeClosure(
-                            ProtosStandardObjectProtocol::freeze));
+                    STANDARD_FREEZE);
         }
         if (!object.hasLocalSlot("without")) {
             object.createLocalSlot(
@@ -341,25 +366,7 @@ public final class ProtosStandardObjectProtocol {
         if (!object.hasLocalSlot("parent")) {
             object.createLocalSlot(
                     "parent",
-                    ProtosClosureValue.nativeClosure(
-                            (activation, supplied) -> {
-                                if (!supplied.isEmpty()) {
-                                    throw invalid(activation);
-                                }
-                                var parent =
-                                        ProtosValueLookup.delegationParent(
-                                                activation.receiver(),
-                                                activation
-                                                        .prelude()
-                                                        .orElseThrow(
-                                                                () ->
-                                                                        new IllegalStateException(
-                                                                                "Object.parent requires Core prelude")));
-                                if (parent.isEmpty()) {
-                                    throw invalid(activation);
-                                }
-                                return parent.orElseThrow();
-                            }));
+                    STANDARD_PARENT);
         }
         if (!object.hasLocalSlot("ensure")) {
             object.createLocalSlot(
@@ -549,6 +556,25 @@ public final class ProtosStandardObjectProtocol {
             throw invalid(activation);
         }
         return ordinary.close();
+    }
+
+    private static Object parent(ProtosActivation activation, List<?> supplied) {
+        if (!supplied.isEmpty()) {
+            throw invalid(activation);
+        }
+        var parent =
+                ProtosValueLookup.delegationParent(
+                        activation.receiver(),
+                        activation
+                                .prelude()
+                                .orElseThrow(
+                                        () ->
+                                                new IllegalStateException(
+                                                        "Object.parent requires Core prelude")));
+        if (parent.isEmpty()) {
+            throw invalid(activation);
+        }
+        return parent.orElseThrow();
     }
 
     private static Object freeze(ProtosActivation activation, List<?> supplied) {

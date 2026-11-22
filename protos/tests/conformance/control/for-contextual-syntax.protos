@@ -366,6 +366,246 @@ tests: [
         for(i, 0, 2) { visits = visits + 1 }
         Assertions.require(visits == 2)
         Assertions.require(received.size() == 0)
+    }),
+    Test("numeric for forms equal their direct Range sends", () => {
+        forUnit: Array()
+        sendUnit: Array()
+        forResult: for(i, -2, 3) { forUnit = Arrays.append(forUnit, i) }
+        sendResult: Range(-2, 3).each(i => { sendUnit = Arrays.append(sendUnit, i) })
+        Assertions.require(sameValues(forUnit, sendUnit))
+        Assertions.require((forResult === null) && (sendResult === null))
+
+        forStep: Array()
+        sendStep: Array()
+        for(i, 1, 10, 4) { forStep = Arrays.append(forStep, i) }
+        Range(1, 10).eachStep(4, i => { sendStep = Arrays.append(sendStep, i) })
+        Assertions.require(sameValues(forStep, sendStep))
+        Assertions.require(sameValues(forStep, Array(1, 5, 9)))
+
+        forDown: Array()
+        sendDown: Array()
+        for(i, 3, 0) { forDown = Arrays.append(forDown, i) }
+        Range(3, 0).each(i => { sendDown = Arrays.append(sendDown, i) })
+        Assertions.require(sameValues(forDown, sendDown))
+        Assertions.require(sameValues(forDown, Array(3, 2, 1)))
+
+        forIn: Array()
+        for(i in Range(4, 7)) { forIn = Arrays.append(forIn, i) }
+        Assertions.require(sameValues(forIn, Array(4, 5, 6)))
+    }),
+    Test("numeric for step is evaluated after the Range is constructed", () => {
+        order: Array()
+        start: () => { order = Arrays.append(order, 1); 0 }
+        stop: () => { order = Arrays.append(order, 2); 6 }
+        step: () => { order = Arrays.append(order, 3); 2 }
+        visits: 0
+        for(i, start(), stop(), step()) { visits = visits + 1 }
+        Assertions.require(sameValues(order, Array(1, 2, 3)))
+        Assertions.require(visits == 3)
+    }),
+    Test("a lexically shadowed Range keeps its user-defined behavior", () => {
+        Range: {
+            construct: (start, stop) => {
+                {
+                    start: start
+                    stop: stop
+                    each: (block) => {
+                        block(stop)
+                        "each"
+                    }
+                    eachStep: (step, block) => {
+                        block(step)
+                        "eachStep"
+                    }
+                }
+            }
+        }
+        seen: Array()
+        unit: for(i, 0, 5) { seen = Arrays.append(seen, i) }
+        stepped: for(i, 0, 5, 7) { seen = Arrays.append(seen, i) }
+        Assertions.require(unit == "each")
+        Assertions.require(stepped == "eachStep")
+        Assertions.require(sameValues(seen, Array(5, 7)))
+    }),
+    Test("numeric for forms equal their direct Range sends over large integers", () => {
+        max: 9223372036854775807
+        min: -9223372036854775807 - 1
+        big: max + 1000
+
+        forUp: Array()
+        sendUp: Array()
+        forResult: for(i, max - 1, max + 2) { forUp = Arrays.append(forUp, i) }
+        sendResult: Range(max - 1, max + 2).each(i => { sendUp = Arrays.append(sendUp, i) })
+        Assertions.require(sameValues(forUp, sendUp))
+        Assertions.require(sameValues(forUp, Array(max - 1, max, max + 1)))
+        Assertions.require((forResult === null) && (sendResult === null))
+
+        forDown: Array()
+        sendDown: Array()
+        for(i, min + 1, min - 2) { forDown = Arrays.append(forDown, i) }
+        InvertedRange(min + 1, min - 2).each(i => { sendDown = Arrays.append(sendDown, i) })
+        Assertions.require(sameValues(forDown, sendDown))
+        Assertions.require(sameValues(forDown, Array(min + 1, min, min - 1)))
+
+        forStep: Array()
+        sendStep: Array()
+        for(i, 0 - big, big * 2, big) { forStep = Arrays.append(forStep, i) }
+        Range(0 - big, big * 2).eachStep(big, i => { sendStep = Arrays.append(sendStep, i) })
+        Assertions.require(sameValues(forStep, sendStep))
+        Assertions.require(sameValues(forStep, Array(0 - big, 0, big)))
+
+        forBack: Array()
+        sendBack: Array()
+        for(i, big, max - 1, 0 - 600) { forBack = Arrays.append(forBack, i) }
+        InvertedRange(big, max - 1).eachStep(0 - 600, i => { sendBack = Arrays.append(sendBack, i) })
+        Assertions.require(sameValues(forBack, sendBack))
+        Assertions.require(sameValues(forBack, Array(big, big - 600)))
+
+        forIn: Array()
+        for(i in Range(big, big + 2)) { forIn = Arrays.append(forIn, i) }
+        Assertions.require(sameValues(forIn, Array(big, big + 1)))
+    }),
+    Test("a lexically shadowed Range keeps its behavior over large integers", () => {
+        max: 9223372036854775807
+        Range: {
+            construct: (start, stop) => {
+                {
+                    each: (block) => {
+                        block(stop)
+                        "each"
+                    }
+                }
+            }
+        }
+        seen: Array()
+        unit: for(i, max, max + 5) { seen = Arrays.append(seen, i) }
+        Assertions.require(unit == "each")
+        Assertions.require(sameValues(seen, Array(max + 5)))
+    }),
+    Test("numeric for and saved normalized ranges share callback control", () => {
+        make: (a, b) => { Range(a, b) }
+        saved: make(5, 0)
+        direct: Array()
+        numeric: Array()
+        record: value => { direct = Arrays.append(direct, value) }
+        Assertions.require(saved.eachStep(-2, record) === null)
+        Assertions.require(for(i, 5, 0, -2) {
+            numeric = Arrays.append(numeric, i)
+        } === null)
+        Assertions.require(sameValues(direct, numeric))
+        Assertions.require(sameValues(direct, Array(5, 3, 1)))
+        Assertions.require(for(i, 4, 4) { Error().signal() } === null)
+        Assertions.require(Range(4, 4).each(17) === null)
+
+        numericReturn: () => {
+            for(i, 0, 5) { if(i == 2) { ^i } }
+            -1
+        }
+        directReturn: () => {
+            make(0, 5).each(i => { if(i == 2) { ^i } })
+            -1
+        }
+        Assertions.require(numericReturn() == directReturn())
+        Assertions.signals(Error, () => { for(i, 0, 3) { Error().signal() } })
+        Assertions.signals(Error, () => { saved.each(record => { Error().signal() }) })
+    }),
+    Test("contextual for callback captures accumulator across canonical and custom selection", () => {
+        store: { block: null }
+        keeper: {
+            each: (block) => {
+                store.block = block
+                store
+            }
+            eachStep: (step, block) => {
+                store.block = block
+                store
+            }
+        }
+        values: [13, 18, 6, 42]
+        sum: () => {
+            total: 0
+            for(i, 0, values.size()) { total = total + values[i] }
+            total
+        }
+        Assertions.require(sum() == 79)
+        through: (receiver) => {
+            total: 100
+            returned: for(item in receiver) { total = total + item }
+            if(returned === store) {
+                total = 1000
+                store.block(1)
+            }
+            total
+        }
+        Assertions.require(through([1, 2]) == 103)
+        Assertions.require(through(keeper) == 1001)
+        Assertions.require(through([3]) == 103)
+        escaped: store.block
+        escaped(10)
+        escaped(5)
+        nested: () => {
+            total: 0
+            for(i, 0, 3) { for(j, 0, 2) { total = total + (i * j) } }
+            for(i, 0, 7, 3) { total = total * 10 + i }
+            total
+        }
+        Assertions.require(nested() == 3036)
+    }),
+    Test("for callbacks observe their own context, return, escape and nest", () => {
+        own: context
+        h: {
+            previous: null
+            count: 0
+        }
+        for(i, 0, 3) {
+            c: context
+            Assertions.require((c !== own) && (c !== h.previous) && (c.hasSlot("i")))
+            h.previous = c
+            h.count = h.count + 1
+        }
+        for(i, 4, 0, -2) {
+            c: context
+            Assertions.require((c !== own) && (c !== h.previous) && (c.hasSlot("i")))
+            h.previous = c
+            h.count = h.count + 1
+        }
+        Assertions.require(h.count == 5)
+        finder: () => {
+            for(i, 0, 9) { (i == 3).ifTrue(() => { ^(i * 7) }) }
+            -1
+        }
+        Assertions.require(finder() == 21)
+        store: { block: null }
+        keeper: {
+            each: (block) => {
+                store.block = block
+                null
+            }
+        }
+        binding: (receiver) => {
+            base: 10
+            receiver.each((i) => { base = base + i })
+            base = base + 100
+            () => { base }
+        }
+        Assertions.require(binding(Range(0, 2))() == 111)
+        read: binding(keeper)
+        store.block(5)
+        Assertions.require(read() == 115)
+        make: (receiver) => {
+            receiver.each((i) => { ^(i + 1) })
+            0
+        }
+        Assertions.require(make(keeper) == 0)
+        Assertions.signals(InvalidReturn, () => { store.block(3) })
+        pairs: () => {
+            total: 0
+            for(i, 0, 2) {
+                for(j, 0, 2) { total = total * 10 + (i * 2 + j) }
+            }
+            total
+        }
+        Assertions.require(pairs() == 123)
     })
 ]
 tests.freeze()

@@ -21,10 +21,35 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
+import com.guillermomolina.protos.runtime.callables.ProtosNativeClosureBody;
 import java.util.Objects;
 
 public final class ProtosStandardNumberEqualityProtocol {
+    private static final ProtosNativeClosureBody STANDARD_EQUALITY_BODY =
+            (activation, supplied) -> {
+                if (supplied.size() != 1) {
+                    throw new ProtosSignalException(
+                            ProtosCoreErrors.newError(activation));
+                }
+
+                Object receiver = activation.receiver();
+                if (!ProtosNumericValueSupport.isCurrentNumber(receiver)) {
+                    throw new ProtosSignalException(
+                            ProtosCoreErrors.newError(activation));
+                }
+
+                Object argument = supplied.get(0);
+                if (!ProtosNumericValueSupport.isCurrentNumber(argument)) {
+                    return Boolean.FALSE;
+                }
+
+                return numericEquals(receiver, argument)
+                        ? Boolean.TRUE
+                        : Boolean.FALSE;
+            };
+
     private ProtosStandardNumberEqualityProtocol() {}
 
     public static void install(ProtosObjectValue numberPrototype) {
@@ -36,28 +61,20 @@ public final class ProtosStandardNumberEqualityProtocol {
 
         numberPrototype.createLocalSlot(
                 "==",
-                ProtosClosureValue.nativeClosure(
-                        (activation, supplied) -> {
-                            if (supplied.size() != 1) {
-                                throw new ProtosSignalException(
-                                        ProtosCoreErrors.newError(activation));
-                            }
+                ProtosClosureValue.nativeClosure(STANDARD_EQUALITY_BODY));
+    }
 
-                            Object receiver = activation.receiver();
-                            if (!ProtosNumericValueSupport.isCurrentNumber(receiver)) {
-                                throw new ProtosSignalException(
-                                        ProtosCoreErrors.newError(activation));
-                            }
-
-                            Object argument = supplied.get(0);
-                            if (!ProtosNumericValueSupport.isCurrentNumber(argument)) {
-                                return Boolean.FALSE;
-                            }
-
-                            return numericEquals(receiver, argument)
-                                    ? Boolean.TRUE
-                                    : Boolean.FALSE;
-                        }));
+    /**
+     * Whether the selected Number equality carries the installed standard body
+     * at the admitted Prelude's Number prototype. Observes identity only;
+     * callers must separately protect the lookup chain against mutation.
+     */
+    static boolean isCanonicalStandardEqualitySelection(
+            Object behavior, ProtosObjectValue home, ProtosPrelude prelude) {
+        return prelude != null
+                && home == prelude.numberPrototype()
+                && behavior instanceof ProtosClosureValue closure
+                && closure.nativeBodyOrNullForRuntime() == STANDARD_EQUALITY_BODY;
     }
 
     static boolean numericEquals(Object left, Object right) {

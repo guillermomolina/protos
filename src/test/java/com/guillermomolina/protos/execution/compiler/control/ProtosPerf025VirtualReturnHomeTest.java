@@ -204,6 +204,49 @@ final class ProtosPerf025VirtualReturnHomeTest {
     }
 
     @Test
+    void rangeCallbacksKeepReturnHomeObservabilityAndInvalidReturn() throws Exception {
+        withCore(module -> {
+            String quiet = "() => {\n    total: 0\n    Range(0, 4).each((i) => {\n"
+                    + "        total = total + i\n    })\n    total\n}";
+            assertUnobservable(module, quiet);
+            DirectEntry call = fastDirect(parsedClosure(quiet, module), module);
+            assertVirtualHome(call);
+            assertInteger(6, enter(call));
+
+            String returning = "() => {\n    Range(0, 9).each((i) => {\n"
+                    + "        (i == 3).ifTrue(() => { ^(i * 7) })\n    })\n    -1\n}";
+            assertObservable(module, returning);
+            assertInteger(21, callParsed(module, returning));
+
+            String nested = "() => {\n    Range(0, 3).each((i) => {\n"
+                    + "        Range(0, 3).each((j) => {\n"
+                    + "            ((i == 1) && (j == 2)).ifTrue(() => { ^(i * 10 + j) })\n"
+                    + "        })\n    })\n    0\n}";
+            assertObservable(module, nested);
+            assertInteger(12, callParsed(module, nested));
+
+            ProtosClosureValue escaped =
+                    assertInstanceOf(
+                            ProtosClosureValue.class,
+                            evaluate(
+                                    "store: {\n    block: null\n}\n"
+                                            + "keeper: {\n    each: (block) => {\n"
+                                            + "        store.block = block\n        null\n    }\n}\n"
+                                            + "make: (receiver) => {\n"
+                                            + "    receiver.each((i) => { ^(i + 1) })\n    0\n}\n"
+                                            + "make(keeper)\nstore.block\n",
+                                    module));
+            ProtosExecutionOutcome failed =
+                    ProtosRootTaskExecution.executeClosure(escaped, List.of(integer(3)), module);
+            assertSame(
+                    ProtosCoreErrors.prototype(
+                            module, ProtosCoreErrors.StandardError.INVALID_RETURN),
+                    failed.error().parent().orElseThrow(),
+                    "a retained callback returning after its owner completed is InvalidReturn");
+        });
+    }
+
+    @Test
     void literalInlineCallbackUnderVirtualHomeKeepsItsResult() throws Exception {
         withCore(module -> {
             ProtosClosureValue run =

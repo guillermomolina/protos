@@ -302,6 +302,123 @@ tests: Array(
         up: ((start, stop) => { InvertedRange(start, stop) }).parallel(1, 4).value()
         Assertions.require(up.parent() === Range)
         Assertions.require((up.start == 1) && (up.stop == 4))
+    }),
+    Test("range module aliases iterate like the prelude prototypes", () => {
+        Ranges: import("std:collections/range")
+        Up: Ranges.Range
+        Down: Ranges.InvertedRange
+        trace: 0
+        record: (value) => { trace = trace * 10 + value }
+
+        Assertions.require(Up(1, 3).each(record) === null)
+        Assertions.require(Up(1, 6).eachStep(4, record) === null)
+        Assertions.require(Down(3, 1).each(record) === null)
+        Assertions.require(Down(9, 4).eachStep(-4, record) === null)
+        Assertions.require(trace == 12153295)
+
+        canonical: Range
+        (() => {
+            Ranges.Range = 7
+            rebound: 0
+            Range(0, 3).each((value) => { rebound = rebound + value })
+            Down(3, 0).eachStep(-1, (value) => { rebound = rebound + value })
+            Assertions.require(rebound == 9)
+        }).ensure(() => {
+            Ranges.Range = canonical
+        })
+        Assertions.require(Ranges.Range === Range)
+    }),
+    Test("range-like objects with noncanonical identities keep their own each", () => {
+        lookalike: {
+            start: 0
+            stop: 3
+            each: (block) => {
+                block(10)
+                "own each"
+            }
+            eachStep: (step, block) => {
+                block(step)
+                "own eachStep"
+            }
+        }
+        seen: 0
+        Assertions.require(lookalike.each((value) => { seen = seen + value }) == "own each")
+        Assertions.require(lookalike.eachStep(5, (value) => { seen = seen + value }) == "own eachStep")
+        Assertions.require(seen == 15)
+
+        extracted: Range(1, 4).each
+        total: 0
+        Assertions.require(extracted((value) => { total = total + value }) === null)
+        Assertions.require(total == 6)
+        stepped: InvertedRange(4, 0).eachStep
+        Assertions.require(stepped(-2, (value) => { total = total + value }) === null)
+        Assertions.require(total == 12)
+    }),
+    Test("range module aliases iterate large integers like the prelude prototypes", () => {
+        Ranges: import("std:collections/range")
+        Up: Ranges.Range
+        Down: Ranges.InvertedRange
+        max: 9223372036854775807
+        big: max + 1000
+        aliasSum: 0
+        preludeSum: 0
+
+        Assertions.require(Up(max - 1, max + 2).each((value) => { aliasSum = aliasSum + value }) === null)
+        Range(max - 1, max + 2).each((value) => { preludeSum = preludeSum + value })
+        Assertions.require((aliasSum == preludeSum) && (aliasSum == max * 3))
+
+        Assertions.require(Down(big, 0 - big).eachStep(0 - big, (value) => { aliasSum = aliasSum + value }) === null)
+        InvertedRange(big, 0 - big).eachStep(0 - big, (value) => { preludeSum = preludeSum + value })
+        Assertions.require((aliasSum == preludeSum) && (aliasSum == max * 3 + big))
+    }),
+    Test("range-like objects with large bounds keep their own each", () => {
+        max: 9223372036854775807
+        lookalike: {
+            start: max
+            stop: max + 3
+            each: (block) => {
+                block(this.stop)
+                "own each"
+            }
+        }
+        calls: 0
+        seen: null
+        Assertions.require(lookalike.each((value) => {
+            calls = calls + 1
+            seen = value
+        }) == "own each")
+        Assertions.require((calls == 1) && (seen == max + 3))
+    }),
+    Test("extracted factories and terminal construction match ordinary construct sends", () => {
+        Ranges: import("std:collections/range")
+        Factory: Ranges.Range
+        Backward: Ranges.InvertedRange
+        make: (a, b) => { Factory(a, b) }
+        compare: (actual, source) => {
+            Assertions.require(actual !== source)
+            Assertions.require(actual.parent() === source.parent())
+            Assertions.require(actual.slotNames().size() == 2)
+            Assertions.require(actual.hasSlot("start") && actual.hasSlot("stop"))
+            Assertions.require((actual.start == source.start) && (actual.stop == source.stop))
+            Assertions.signals(Error, () => { actual.start = 9 })
+            Assertions.signals(Error, () => { actual.extra: 9 })
+        }
+        compare(make(0, 3), Range.construct(0, 3))
+        compare(make(3, 0), Range.construct(3, 0))
+        compare(make(4, 4), Range.construct(4, 4))
+        compare(Backward(0, 3), InvertedRange.construct(0, 3))
+        compare(Backward(4, 4), InvertedRange.construct(4, 4))
+        max: 9223372036854775807
+        compare(make(max, max + 2), Range.construct(max, max + 2))
+        Assertions.require(make(0, 3) !== make(0, 3))
+
+        (() => {
+            Range: { call: (a, b) => { a + b } }
+            Assertions.require(Range(2, 3) == 5)
+            Assertions.require(Factory(2, 3).parent() === Ranges.Range)
+        })()
+        Other: (a, b) => { a * b }
+        Assertions.require(Other(2, 3) == 6)
     })
 )
 tests.freeze()
