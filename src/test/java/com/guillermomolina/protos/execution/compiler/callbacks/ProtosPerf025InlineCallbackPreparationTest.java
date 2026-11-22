@@ -108,7 +108,7 @@ final class ProtosPerf025InlineCallbackPreparationTest {
                 int snapshot =
                         indexOfContainingAfter(names, "c.GetArrayEachSnapshot", selection);
                 int next =
-                        indexOfContainingAfter(names, "c.ArrayEachNext", snapshot);
+                        indexOfContainingAfter(names, "c.IterationNext", snapshot);
                 int backward =
                         indexOfContainingAfter(names, "branch.backward", next);
 
@@ -406,7 +406,7 @@ final class ProtosPerf025InlineCallbackPreparationTest {
                         names,
                         "c.IsStandardArrayEachSelection",
                         "c.GetArrayEachSnapshot",
-                        "c.ArrayEachNext",
+                        "c.IterationNext",
                         "c.ResetInlineCallbackLocal",
                         "c.MaterializeCurrentClosure",
                         "c.GetMethod",

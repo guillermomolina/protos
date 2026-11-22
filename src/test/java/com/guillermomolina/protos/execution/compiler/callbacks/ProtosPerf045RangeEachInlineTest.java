@@ -42,6 +42,7 @@ import com.oracle.truffle.api.Truffle;
 import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.bytecode.Instruction;
+import com.oracle.truffle.api.bytecode.LocalAccessor;
 import com.oracle.truffle.api.bytecode.TagTree;
 import com.oracle.truffle.api.instrumentation.StandardTags;
 import com.oracle.truffle.api.nodes.RootNode;
@@ -115,7 +116,7 @@ final class ProtosPerf045RangeEachInlineTest {
                     int iteration = indexAfter(names, "c.IsStandardRangeIterationSelection", make);
                     int prepare = indexAfter(names, "c.PrepareRangeIteration", iteration);
                     assertTrue(selection >= 0 && make > selection && iteration > make
-                            && prepare > iteration && indexAfter(names, "c.RangeIterationNext", prepare) > prepare,
+                            && prepare > iteration && indexAfter(names, "c.IterationNext", prepare) > prepare,
                             () -> "construction precedes the internal loop: " + names);
                     assertFalse(names.subList(selection, make + 1).stream()
                                     .anyMatch(name -> name.contains("CallBinaryMethod")),
@@ -167,6 +168,30 @@ final class ProtosPerf045RangeEachInlineTest {
                         assertTrue(module.instructions().stream().anyMatch(name -> name.contains("c.MakeRange")));
                     }
                 }
+            }
+        });
+    }
+
+    @Test
+    void countedForFollowsTheDirectionOfTheEquivalentRange() throws Exception {
+        inContext(() -> {
+            String[][] cases = {
+                {"for(i, 0, 5) { hook(i) }", "0,1,2,3,4"},
+                {"for(i, 5, 0) { hook(i) }", "5,4,3,2,1"},
+                {"for(i, 0, 10, 2) { hook(i) }", "0,2,4,6,8"},
+                {"for(i, 10, 0, -2) { hook(i) }", "10,8,6,4,2"},
+                {"for(i, 3, 3) { hook(i) }", ""}
+            };
+            for (String[] entry : cases) {
+                Module module = new Module();
+                module.run("run: () => {\n    " + entry[0] + "\n}\nrun()\nrun()\n");
+                List<Long> once = entry[1].isEmpty()
+                        ? List.of()
+                        : java.util.Arrays.stream(entry[1].split(","))
+                                .map(Long::valueOf).toList();
+                List<Long> expected = new java.util.ArrayList<>(once);
+                expected.addAll(once);
+                assertEquals(expected, module.visits, entry[0]);
             }
         });
     }
@@ -360,11 +385,11 @@ final class ProtosPerf045RangeEachInlineTest {
             List<String> names = module.instructions();
             int selection = indexAfter(names, "c.IsStandardRangeIterationSelection", -1);
             int prepare = indexAfter(names, "c.PrepareRangeIteration", selection);
-            int next = indexAfter(names, "c.RangeIterationNext", prepare);
+            int next = indexAfter(names, "c.IterationNext", prepare);
             assertTrue(selection >= 0 && prepare > selection && next > prepare,
                     () -> "the standard Range iteration must be internal: " + names);
-            assertTrue(names.stream().anyMatch(name -> name.contains("c.ArrayEachNext")),
-                    () -> "the native Array branch is still emitted first: " + names);
+            assertTrue(names.stream().anyMatch(name -> name.contains("c.GetArrayEachSnapshot")),
+                    () -> "the native Array preparation is still emitted: " + names);
         });
     }
 
@@ -425,7 +450,7 @@ final class ProtosPerf045RangeEachInlineTest {
             assertInstanceOf(ProtosNullValue.class, outcome);
             assertEquals(List.of(0L, 10L, 20L, 2L, 1L), module.visits);
             List<String> names = assertInternalLoop(module);
-            int next = indexAfter(names, "c.RangeIterationNext", -1);
+            int next = indexAfter(names, "c.IterationNext", -1);
             assertTrue(indexAfter(names, "c.Call", next) > next,
                     () -> "a dynamic callback is invoked by the shared dispatcher: " + names);
         });
@@ -530,7 +555,7 @@ final class ProtosPerf045RangeEachInlineTest {
                     run()
                     """);
             assertTrue(ordinary.instructions().stream()
-                            .noneMatch(name -> name.contains("c.RangeIterationNext")),
+                            .noneMatch(name -> name.contains("c.IterationNext")),
                     "the ordinary comparison must not use the Range iteration");
 
             assertEquals("14", ProtosNumericValueSupport.integerDecimalText(ordinaryOutcome));
@@ -693,7 +718,7 @@ final class ProtosPerf045RangeEachInlineTest {
             assertEquals(1, rootTags(root.getBytecodeNode().getTagTree()),
                     "a dynamic callback has no inline region in run");
             List<String> names = module.instructions();
-            int next = indexAfter(names, "c.RangeIterationNext", -1);
+            int next = indexAfter(names, "c.IterationNext", -1);
             assertTrue(next >= 0 && indexAfter(names, "c.Call", next) > next,
                     () -> "a dynamic callback is invoked by the shared dispatcher: " + names);
         });
@@ -715,8 +740,9 @@ final class ProtosPerf045RangeEachInlineTest {
                     """);
             assertEquals(List.of(0L, 2L, 4L), module.visits);
             List<String> names = module.instructions();
-            assertEquals(1, count(names, "c.RangeIterationNext"), () -> names.toString());
-            assertEquals(0, count(names, "c.ArrayEachNext"), () -> names.toString());
+            assertEquals(1, count(names, "c.IterationNext"), () -> names.toString());
+            assertEquals(0, count(names, "c.GetArrayEachSnapshot"),
+                    "eachStep prepares only a Range cursor");
             assertEquals(2, rootTags(module.runRoot().getBytecodeNode().getTagTree()),
                     "run RootTag plus the eachStep inline callback RootTag");
         });
@@ -1203,7 +1229,7 @@ final class ProtosPerf045RangeEachInlineTest {
                 ProtosBytecodeRootNode run = assertInstanceOf(
                         ProtosBytecodeRootNode.class, root.getRootNodes().getNode(1));
                 assertTrue(run.getBytecodeNode().getInstructionsAsList().stream()
-                                .anyMatch(instruction -> instruction.getName().endsWith("RangeIterationNext")),
+                                .anyMatch(instruction -> instruction.getName().endsWith("IterationNext")),
                         "the suspended loop is the internal Range iteration");
             } finally {
                 context.leave();
@@ -1300,7 +1326,9 @@ final class ProtosPerf045RangeEachInlineTest {
                         }
                         total
                     }
+                    initial: run([1, 2])
                     a: run(Range(0, 3))
+                    inverted: run(InvertedRange(3, 1))
                     b: run(keeper)
                     c: run(Range(0, 1))
                     escaped: store.block
@@ -1313,13 +1341,13 @@ final class ProtosPerf045RangeEachInlineTest {
                     d: run(keeper)
                     e: run([5])
                     escaped(1)
-                    ((a == 103) && (b == 1003) && (c == 100) && (d == 107) && (e == 105))
+                    ((initial == 103) && (a == 103) && (inverted == 105) && (b == 1003) && (c == 100) && (d == 107) && (e == 105))
                         .ifTrueIfFalse(() => { 1 }, () => { 0 })
                     """);
             assertEquals("1", ProtosNumericValueSupport.integerDecimalText(outcome));
             assertEquals(
-                    List.of(100L, 101L, 103L, 1001L, 1003L, 100L,
-                            1013L, 1033L, 107L, 105L, 1034L),
+                    List.of(101L, 103L, 100L, 101L, 103L, 103L, 105L,
+                            1001L, 1003L, 100L, 1013L, 1033L, 107L, 105L, 1034L),
                     module.visits);
         });
     }
@@ -1731,18 +1759,20 @@ final class ProtosPerf045RangeEachInlineTest {
                     frame: 0
                     total: 0
                     Error.handle(() => {
-                        Range(0, 4).each((i) => {
-                            hook(i)
-                            if(i == 1) { gate.value() }
-                            if(i == 2) { Error().signal() }
-                            total = total + i
-                        })
+                        (() => {
+                            Range(0, 4).each((i) => {
+                                hook(i)
+                                if(i == 1) { gate.value() }
+                                if(i == 2) { Error().signal() }
+                                total = total + i
+                            })
+                        }).ensure(() => { hook(99) })
                         -1
                     }, (error) => total * 100 + 7)
                 }
                 run()
                 """,
-                List.of(0L, 1L), List.of(0L, 1L, 2L), "107");
+                List.of(0L, 1L), List.of(0L, 1L, 2L, 99L), "107");
     }
 
     @Test
@@ -1777,7 +1807,7 @@ final class ProtosPerf045RangeEachInlineTest {
      * and resumes: the visits before and after resumption and the result
      * show that the loop continues from its cursor with its bindings.
      */
-    private static void assertSuspendedRun(
+    static void assertSuspendedRun(
             String program, List<Long> beforeResume, List<Long> all, String result)
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
@@ -1826,11 +1856,7 @@ final class ProtosPerf045RangeEachInlineTest {
         return new CanonicalToBytecodeLowerer(LANGUAGE_REF.get(null), source).lowerRoot(sequence);
     }
 
-    /*
-     * Exactly one physical inline callback region below run, one shared
-     * While loop whose condition advances either the Array snapshot or the
-     * Range cursor, and both advances placed before that single region.
-     */
+    /* One shared loop, with protocol admission and state selection outside it. */
     private static void assertSingleSharedLoop(Module module) {
         ProtosBytecodeRootNode root = module.runRoot();
         BytecodeNode bytecode = root.getBytecodeNode();
@@ -1842,20 +1868,353 @@ final class ProtosPerf045RangeEachInlineTest {
         int enter = inline.get(0).getEnterBytecodeIndex();
 
         List<Instruction> instructions = bytecode.getInstructionsAsList();
-        List<Instruction> arrayNext = named(instructions, "ArrayEachNext");
-        List<Instruction> rangeNext = named(instructions, "RangeIterationNext");
+        List<Instruction> next = named(instructions, "IterationNext");
         List<Instruction> snapshot = named(instructions, "GetArrayEachSnapshot");
         List<Instruction> prepare = named(instructions, "PrepareRangeIteration");
-        assertEquals(1, arrayNext.size(), () -> instructions.toString());
-        assertEquals(1, rangeNext.size(), () -> instructions.toString());
+        assertEquals(1, next.size(), () -> instructions.toString());
         assertEquals(1, snapshot.size(), () -> instructions.toString());
         assertEquals(1, prepare.size(), () -> instructions.toString());
-        assertTrue(prepare.get(0).getBytecodeIndex() < rangeNext.get(0).getBytecodeIndex()
-                        && snapshot.get(0).getBytecodeIndex() < arrayNext.get(0).getBytecodeIndex(),
-                "each advance follows its own iteration state");
-        assertTrue(arrayNext.get(0).getBytecodeIndex() < enter
-                        && rangeNext.get(0).getBytecodeIndex() < enter,
-                "both advances belong to the loop condition of the single callback region");
+        int advance = next.get(0).getBytecodeIndex();
+        assertTrue(advance < enter, "the iterator advances before the callback body");
+        assertEquals(1, next.get(0).getArguments().stream()
+                .filter(argument -> argument.getKind() == Instruction.Argument.Kind.CONSTANT)
+                .map(Instruction.Argument::asConstant)
+                .filter(LocalAccessor.class::isInstance).count(),
+                "the iterator writes the element through its constant LocalAccessor");
+
+        int prepared = Math.max(snapshot.get(0).getBytecodeIndex(), prepare.get(0).getBytecodeIndex());
+        // Continuation composition has its own back edges. Only an edge
+        // returning past IterationNext, after state preparation, repeats visits.
+        List<Instruction> backward = instructions.stream()
+                .filter(instruction -> instruction.getName().contains("branch.backward"))
+                .filter(instruction -> instruction.getBytecodeIndex() > enter)
+                .filter(instruction -> instruction.getArguments().stream().anyMatch(argument ->
+                        argument.getKind() == Instruction.Argument.Kind.BYTECODE_INDEX
+                                && argument.asBytecodeIndex() > prepared
+                                && argument.asBytecodeIndex() <= advance))
+                .toList();
+        assertEquals(1, backward.size(), "one physical While back edge to iterator advancement");
+        int condition = backward.get(0).getArguments().stream()
+                .filter(argument -> argument.getKind() == Instruction.Argument.Kind.BYTECODE_INDEX)
+                .findFirst().orElseThrow().asBytecodeIndex();
+        assertTrue(condition <= advance && backward.get(0).getBytecodeIndex() > enter);
+        assertTrue(snapshot.get(0).getBytecodeIndex() < condition
+                        && prepare.get(0).getBytecodeIndex() < condition,
+                "both state preparations are outside the repeated condition");
+        for (String selection : List.of(
+                "IsStandardArrayEachSelection", "IsStandardRangeIterationSelection")) {
+            List<Instruction> selected = named(instructions, selection);
+            assertEquals(1, selected.size());
+            assertTrue(selected.get(0).getBytecodeIndex() < condition);
+        }
+        List<Instruction> repeated = instructions.stream()
+                .filter(instruction -> instruction.getBytecodeIndex() >= condition
+                        && instruction.getBytecodeIndex() < enter)
+                .toList();
+        assertEquals(1, repeated.stream()
+                .filter(instruction -> instruction.getName().contains("branch.false")).count(),
+                "only the While termination decision belongs to the condition");
+        assertFalse(repeated.stream().anyMatch(instruction -> {
+            String name = instruction.getName();
+            return name.contains("merge.conditional") || name.contains("IsStandard")
+                    || (name.contains("branch") && instruction.getBytecodeIndex() < advance);
+        }), "no Array/Range decision precedes advancement in the repeated condition");
+    }
+
+    @Test
+    void sharedConditionContainsOnlyIteratorAdvancementAndWhileTermination() throws Exception {
+        inContext(() -> {
+            Module module = new Module();
+            module.run("""
+                    run: () => {
+                        frame: 0
+                        Range(0, 64).each(i => { hook(i) })
+                    }
+                    run()
+                    """);
+            assertEquals(64, module.visits.size());
+            assertSingleSharedLoop(module);
+        });
+    }
+
+    @Test
+    void sameEachSiteVisitsArrayRangeInvertedCustomAndArrayInOrder() throws Exception {
+        inContext(() -> {
+            Module module = new Module();
+            Object result = module.run("""
+                    custom: {
+                        each: (block) => {
+                            hook(90)
+                            block(7)
+                            99
+                        }
+                    }
+                    run: (receiver) => {
+                        total: 0
+                        answer: receiver.each(i => {
+                            hook(i)
+                            total = total + i
+                        })
+                        hook(total)
+                        answer
+                    }
+                    values: [3, 4]
+                    a: run(values)
+                    b: run(Range(1, 3))
+                    d: run(InvertedRange(3, 1))
+                    c: run(custom)
+                    fresh: [5, 6]
+                    e: run(fresh)
+                    ((a === values) && (b === null) && (d === null) && (c == 99) && (e === fresh))
+                        .ifTrueIfFalse(() => { 1 }, () => { 0 })
+                    """);
+            assertEquals("1", ProtosNumericValueSupport.integerDecimalText(result));
+            assertEquals(List.of(3L, 4L, 7L, 1L, 2L, 3L, 3L, 2L, 5L,
+                    90L, 7L, 7L, 5L, 6L, 11L), module.visits);
+            for (int index : List.of(0, 1, 3, 4, 6, 7, 12, 13)) {
+                assertSame(module.runRoot(), module.stacks.get(index).get(1),
+                        "standard callbacks stay in run after selection changes");
+            }
+            assertNotSame(module.runRoot(), module.stacks.get(10).get(1),
+                    "the custom each invokes its callback through ordinary dispatch");
+            assertSingleSharedLoop(module);
+        });
+    }
+
+    @Test
+    void originalIndexedSumKeepsOneInlineMessageIterationAndDirectOperations() throws Exception {
+        inContext(() -> {
+            Module module = new Module();
+            List<RootNode> entered = new ArrayList<>();
+            Object result;
+            try (ExecutionListener listener = ExecutionListener.newBuilder().roots(true)
+                    .sourceFilter(source -> source.getName().equals("range-each-inline.protos"))
+                    .onEnter(event -> Truffle.getRuntime().iterateFrames(frame -> {
+                        entered.add(((RootCallTarget) frame.getCallTarget()).getRootNode());
+                        return Boolean.TRUE;
+                    }))
+                    .attach(Context.getCurrent().getEngine())) {
+                result = module.run("""
+                    run: () => {
+                        values: [
+                            13, 18, 6, 42, 43, 1, 58, 4,
+                            7, 32, 8, 59, 9, 64, 38, 37,
+                            25, 61, 24, 21, 23, 63, 35, 31,
+                            34, 30, 17, 48, 51, 41, 27, 40,
+                            15, 33, 46, 2, 28, 44, 54, 56,
+                            62, 11, 22, 12, 19, 50, 26, 55,
+                            60, 53, 57, 36, 5, 45, 14, 16,
+                            20, 39, 47, 10, 3, 52, 29, 49
+                        ]
+                        total: 0
+                        n: values.size()
+                        for(i, 0, n) {
+                            total = total + values[i]
+                        }
+                        total
+                    }
+                    run()
+                    """);
+            }
+            assertFalse(entered.isEmpty(), "the physical-root observer must be live");
+            assertTrue(entered.stream().anyMatch(root -> root == module.runRoot()));
+            assertTrue(entered.stream().allMatch(root -> root == module.lastRoot || root == module.runRoot()),
+                    () -> "only the module and run physical roots may execute: " + entered);
+            assertEquals("2080", ProtosNumericValueSupport.integerDecimalText(result));
+            assertSingleSharedLoop(module);
+            assertNoTerminalScratchClears(module.runRoot());
+            printStaticBciManifest(module.runRoot());
+            List<String> names = module.instructions();
+            assertEquals(0, named(module.runRoot().getBytecodeNode().getInstructionsAsList(),
+                    "ArrayEachNext").size());
+            assertEquals(0, named(module.runRoot().getBytecodeNode().getInstructionsAsList(),
+                    "RangeIterationNext").size());
+            for (String operation : List.of("NumberAdd", "BinarySubscript", "GetLen")) {
+                assertEquals(1, count(names, "c." + operation),
+                        () -> "one direct operation, without a duplicated sum body: " + names);
+            }
+            assertEquals(1, count(names, "c.IsStandardRangeIterationSelection"),
+                    "numeric for retains ordinary Range.each selection");
+        });
+    }
+
+    @Test
+    void arrayAndRangeSuspendAtFirstMiddleAndLastWithoutRepeatedVisits() throws Exception {
+        for (String receiver : List.of("[0, 1, 2, 3, 4]", "Range(0, 5)")) {
+            for (int stop : List.of(0, 2, 4)) {
+                assertSuspendedRun("""
+                        run: () => {
+                            frame: 0
+                            total: 0
+                            %s.each(i => {
+                                hook(i)
+                                if(i == %d) { gate.value() }
+                                total = total + i
+                            })
+                            total
+                        }
+                        run()
+                        """.formatted(receiver, stop),
+                        List.of(0L, 1L, 2L, 3L, 4L).subList(0, stop + 1),
+                        List.of(0L, 1L, 2L, 3L, 4L), "10");
+            }
+        }
+    }
+
+    @Test
+    void resumedNonLocalReturnRunsEnsureOnceAndStopsLaterVisits() throws Exception {
+        assertSuspendedRun("""
+                find: () => {
+                    frame: 0
+                    Range(0, 5).each(i => {
+                        hook(i)
+                        if(i == 2) {
+                            gate.value()
+                            ^i
+                        }
+                    })
+                    -1
+                }
+                run: () => {
+                    frame: 0
+                    (() => find()).ensure(() => { hook(99) })
+                }
+                run()
+                """, List.of(0L, 1L, 2L), List.of(0L, 1L, 2L, 99L), "2");
+    }
+
+    @Test
+    void scalarTerminalAfterSuspendedNumericForReturnsTheResumedValue() throws Exception {
+        assertSuspendedRun("""
+                run: () => {
+                    values: [1, 2, 3, 4]
+                    total: 0
+                    n: values.size()
+                    for(i, 0, n) {
+                        hook(i)
+                        if(i == 1) { gate.value() }
+                        total = total + values[i]
+                    }
+                    total
+                }
+                run()
+                """, List.of(0L, 1L), List.of(0L, 1L, 2L, 3L), "10");
+    }
+
+    @Test
+    void closureTerminalAfterSuspendedPrefixKeepsItsCapture() throws Exception {
+        assertSuspendedRun("""
+                run: () => {
+                    values: [1, 2, 3, 4]
+                    total: 0
+                    n: values.size()
+                    for(i, 0, n) {
+                        hook(i)
+                        if(i == 2) { gate.value() }
+                        total = total + values[i]
+                    }
+                    () => total * 10
+                }
+                run()()
+                """, List.of(0L, 1L, 2L), List.of(0L, 1L, 2L, 3L), "100");
+    }
+
+    /*
+     * PERF045: after the discarded prefix of run, the scalar terminal read
+     * returns without clearing the prefix scratch locals.
+     */
+    private static void assertNoTerminalScratchClears(ProtosBytecodeRootNode root) {
+        List<Instruction> instructions = root.getBytecodeNode().getInstructionsAsList();
+        int last = instructions.size() - 1;
+        while (last >= 0 && !instructions.get(last).getName().equals("return")) {
+            last--;
+        }
+        assertTrue(last > 0, () -> "run ends with a return: " + instructions);
+        List<String> tail = new ArrayList<>();
+        for (int index = last - 1; index >= 0; index--) {
+            String name = instructions.get(index).getName();
+            if (name.contains("branch")) {
+                break;
+            }
+            tail.add(name);
+        }
+        assertFalse(tail.contains("clear.local"),
+                () -> "the terminal read follows no scratch clear.local: " + tail);
+    }
+
+    /* Static instruction rows only: these are never execution counts. */
+    private static void printStaticBciManifest(ProtosBytecodeRootNode root) {
+        BytecodeNode bytecode = root.getBytecodeNode();
+        for (Instruction instruction : bytecode.getInstructionsAsList()) {
+            List<Integer> locals = new ArrayList<>();
+            List<Integer> targets = new ArrayList<>();
+            List<String> accessors = new ArrayList<>();
+            for (Instruction.Argument argument : instruction.getArguments()) {
+                switch (argument.getKind()) {
+                    case LOCAL_OFFSET -> locals.add(argument.asLocalOffset());
+                    case BYTECODE_INDEX -> targets.add(argument.asBytecodeIndex());
+                    case CONSTANT -> {
+                        if (argument.asConstant() instanceof LocalAccessor accessor) {
+                            accessors.add(accessor.toString());
+                        }
+                    }
+                    default -> { }
+                }
+            }
+            int bci = instruction.getBytecodeIndex();
+            String name = ProtosInstructionNames.of(instruction);
+            System.out.println("PERF045_STATIC_BCI=kind=static|root=run|rootClass=" + root.getClass().getSimpleName()
+                    + "|bci=" + bci + "|name=" + name
+                    + "|family=" + staticInstructionFamily(instruction.getName())
+                    + "|localOffsets=" + locals + "|bytecodeIndices=" + targets
+                    + "|localAccessors=" + accessors
+                    + "|rootTag=" + staticRootRegion(bytecode.getTagTree(), bci));
+        }
+    }
+
+    private static String staticRootRegion(TagTree tree, int bci) {
+        if (tree == null) {
+            return "unknown";
+        }
+        for (TagTree child : tree.getTreeChildren()) {
+            String region = staticRootRegion(child, bci);
+            if (!region.equals("unknown")) {
+                return region;
+            }
+        }
+        int enter = tree.getEnterBytecodeIndex();
+        int exit = tree.getReturnBytecodeIndex();
+        return tree.hasTag(StandardTags.RootTag.class) && enter < exit && enter <= bci && bci <= exit
+                ? enter + ".." + exit : "unknown";
+    }
+
+    private static String staticInstructionFamily(String rawName) {
+        String name = rawName.toLowerCase(java.util.Locale.ROOT);
+        if (name.contains("tag.")) {
+            return "tags";
+        }
+        if (name.contains("continuation") || name.contains("yield") || name.contains("resume")) {
+            return "continuations";
+        }
+        if (name.contains("cell") || name.contains("binding") || name.contains("capture")
+                || name.contains("lexical")) {
+            return "lexical-cells";
+        }
+        if (name.contains("local")) {
+            return "local-loads-and-stores";
+        }
+        if (name.contains("numberadd") || name.contains("binarysubscript") || name.contains("getlen")) {
+            return "algorithmic-operations";
+        }
+        if (name.contains("selection") || name.contains("dispatch") || name.contains("invoke")
+                || name.contains("send") || name.contains("lookup") || name.contains("isstandard")) {
+            return "protocol-and-selection";
+        }
+        if (name.contains("iteration") || name.contains("snapshot") || name.contains("branch")
+                || name.contains("return") || name.contains("merge")) {
+            return "iteration-and-control";
+        }
+        return "other";
     }
 
     private static void collectInlineRoots(TagTree tree, boolean outermost, List<TagTree> into) {
@@ -1873,7 +2232,7 @@ final class ProtosPerf045RangeEachInlineTest {
 
     private static List<Instruction> named(List<Instruction> instructions, String operation) {
         return instructions.stream()
-                .filter(instruction -> instruction.getName().endsWith(operation))
+                .filter(instruction -> ProtosInstructionNames.of(instruction).contains("c." + operation))
                 .toList();
     }
 
@@ -1894,7 +2253,7 @@ final class ProtosPerf045RangeEachInlineTest {
 
     private static List<String> assertInternalLoop(Module module) {
         List<String> names = module.instructions();
-        int next = indexAfter(names, "c.RangeIterationNext", -1);
+        int next = indexAfter(names, "c.IterationNext", -1);
         assertTrue(next >= 0, () -> "the standard Range iteration must be internal: " + names);
         return names;
     }

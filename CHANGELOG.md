@@ -8,6 +8,11 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.195-SNAPSHOT
+
+- **PERF045.** Advance Array and Range iteration through local cursors and streamline terminal returns.
+- Keep primitive and exact Range traversal, Array snapshot order, callback suspension and once-only advancement covered by iteration regressions. Refresh generated-bytecode and local-accessor baselines.
+
 ## 0.4.194-SNAPSHOT
 
 - **I173 / D262-A.** Add ordinary reflective `Object.createSlot(name, value)` and `Object.updateSlot(name, value)` messages for runtime-computed semantic String slot names, including names that cannot be expressed as source identifiers. Creation requires an absent local slot on an open object; updating requires an existing writable local slot. Both return the exact supplied value, support ordinary named argument association, and never mutate delegation ancestors or perform implicit upsert.

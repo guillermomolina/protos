@@ -64,6 +64,92 @@ final class ProtosArrayEachNativeIterationTest {
             LanguageReference.create(ProtosLanguage.class);
 
     @Test
+    void longElementsUseTheUnifiedIterationOperationInOrder() throws Exception {
+        inContext(() -> {
+            Module module = new Module(null);
+            module.run("""
+                    run: () => {
+                        frame: 0
+                        [1, -2, 3].each(element => { hook(element) })
+                    }
+                    run()
+                    """);
+            assertEquals(List.of(1L, -2L, 3L), module.visits);
+            assertNativeLoop(module);
+        });
+    }
+
+    @Test
+    void objectElementsKeepTheirIdentityAndSnapshotOrder() throws Exception {
+        inContext(() -> {
+            Module module = new Module(null);
+            Object first = module.run("""
+                    run: () => {
+                        frame: 0
+                        first: { value: 1 }
+                        second: { value: 2 }
+                        values: [first, second, first]
+                        values.each(element => {
+                            values.atPut(1, first)
+                            hook(element)
+                        })
+                        first
+                    }
+                    run()
+                    """);
+            assertEquals(3, module.visits.size());
+            assertTrue(first == module.visits.get(0));
+            assertTrue(first != module.visits.get(1));
+            assertTrue(first == module.visits.get(2));
+            assertNativeLoop(module);
+        });
+    }
+
+    @Test
+    void mixedElementsSwitchBetweenLongAndGenericValuesWithoutLosingVisits() throws Exception {
+        inContext(() -> {
+            Module module = new Module(null);
+            Object marker = module.run("""
+                    run: () => {
+                        frame: 0
+                        marker: { value: 7 }
+                        [1, 1.5, true, marker, 2, marker, false, 3].each(element => {
+                            hook(element)
+                        })
+                        marker
+                    }
+                    run()
+                    """);
+            assertEquals(List.of(1L, 1.5, true, marker, 2L, marker, false, 3L), module.visits);
+            assertTrue(marker == module.visits.get(3));
+            assertTrue(marker == module.visits.get(5));
+            assertNativeLoop(module);
+        });
+    }
+
+    @Test
+    void suspendedArrayRetainsItsSnapshotAcrossRepresentationChangingWrites() throws Exception {
+        ProtosPerf045RangeEachInlineTest.assertSuspendedRun("""
+                run: () => {
+                    frame: 0
+                    values: [0, 1, 2, 3]
+                    total: 0
+                    values.each(element => {
+                        hook(element)
+                        if(element == 1) {
+                            values.atPut(2, false)
+                            gate.value()
+                            values.atPut(3, 9.5)
+                        }
+                        total = total + element
+                    })
+                    total
+                }
+                run()
+                """, List.of(0L, 1L), List.of(0L, 1L, 2L, 3L), "6");
+    }
+
+    @Test
     void emptyArrayVisitsNothingAndAnswersItsReceiver() throws Exception {
         inContext(() -> {
             Module module = new Module(null);
@@ -179,7 +265,7 @@ final class ProtosArrayEachNativeIterationTest {
                     """);
             assertEquals(List.of(1L, 2L, 3L), module.visits);
             List<String> names = assertNativeLoop(module);
-            int next = indexAfter(names, "c.ArrayEachNext", -1);
+            int next = indexAfter(names, "c.IterationNext", -1);
             int reset = indexAfter(names, "c.ResetInlineCallbackLocal", next);
             int backward = indexAfter(names, "branch.backward", next);
             assertTrue(reset > next && reset < backward,
@@ -283,7 +369,7 @@ final class ProtosArrayEachNativeIterationTest {
             // invocation materializes its own activation lazily, and that
             // activation keeps its bindings once the invocation ends.
             List<String> names = instructionNames(module.physicalRun());
-            assertTrue(names.stream().anyMatch(name -> name.contains("c.ArrayEachNext")),
+            assertTrue(names.stream().anyMatch(name -> name.contains("c.IterationNext")),
                     () -> "the observing callback runs in the caller: " + names);
             assertTrue(names.stream().anyMatch(name -> name.contains("c.PublishInlineCallbackContext")),
                     () -> "its context is published lazily: " + names);
@@ -824,7 +910,7 @@ final class ProtosArrayEachNativeIterationTest {
 
     private static List<String> assertNativeLoop(Module module) {
         List<String> names = instructionNames(module.physicalRun());
-        int next = indexAfter(names, "c.ArrayEachNext", -1);
+        int next = indexAfter(names, "c.IterationNext", -1);
         assertTrue(next >= 0, () -> "the admitted callback must iterate natively: " + names);
         return names;
     }

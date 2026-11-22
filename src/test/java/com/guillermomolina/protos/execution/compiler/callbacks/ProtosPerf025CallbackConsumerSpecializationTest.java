@@ -449,7 +449,7 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
             if (current.inlined()) {
                 // Fresh binding state replaces an unobservable invocation identity.
                 current.assertAnyInstruction(
-                        "ResetInlineCallbackLocal", "ArrayEachNext", "AssociationEachNext");
+                        "ResetInlineCallbackLocal", "IterationNext", "AssociationEachNext");
             } else {
                 assertTrue(stops.get(index - 1).call() != current.call(),
                         "each physical invocation has its own arguments");

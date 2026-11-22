@@ -687,7 +687,7 @@ final class ProtosPerf026D1IndexedEachInlineCallbackTest {
         assertEquals(
                 1,
                 instructions.stream()
-                        .filter(name -> name.endsWith("ArrayEachNext"))
+                        .filter(name -> name.endsWith("IterationNext"))
                         .count(),
                 () -> "Native iterator missing: " + instructions);
 
@@ -822,7 +822,7 @@ final class ProtosPerf026D1IndexedEachInlineCallbackTest {
                     assertEquals(
                             0,
                             instructions.stream()
-                                    .filter(name -> name.endsWith("ArrayEachNext"))
+                                    .filter(name -> name.endsWith("IterationNext"))
                                     .count(),
                             "Non-admitted callback cannot use native iterator");
 

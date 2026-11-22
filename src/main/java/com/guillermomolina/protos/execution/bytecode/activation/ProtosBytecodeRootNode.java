@@ -2165,10 +2165,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
-     * One step of a native standard association {@code each}: stores the
-     * next snapshot key and value, in snapshot order, directly into the
-     * locals of the inline callback's two parameters and answers whether an
-     * association was stored.
+     * One step of a native standard association {@code each}: stores the next
+     * snapshot key and value, in snapshot order, directly into the locals of
+     * the inline callback's two parameters and answers whether an association
+     * was stored.
      */
     @Operation(storeBytecodeIndex = false)
     @ConstantOperand(type = LocalAccessor.class, name = "key")
@@ -2226,9 +2226,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     /**
      * The iteration state of one native standard {@code each}: the single
      * shallow snapshot established at its start and the position of the
-     * next element to visit. Held only in a Bytecode DSL local of the
-     * iterating root, so it survives that root's suspensions and is never a
-     * guest value.
+     * next element to visit. The state belongs to the physical activation and
+     * survives its suspensions; it is held in a Bytecode DSL local read by
+     * the iteration operation. It is never a guest value.
      */
     public static final class ArrayEachSnapshot {
         /* One published indexed generation: known length, indexed reads, no copy. */
@@ -2281,36 +2281,94 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
-     * One step of a native standard {@code each}: stores the next snapshot
-     * element, in ascending order, directly into the local of the inline
-     * callback parameter and answers whether an element was stored. A
-     * signed-64 Integer element uses primitive {@code long} local storage;
-     * every other element is stored as the exact object.
+     * Advances an admitted Array snapshot or Range cursor before executing the
+     * callback, writing its parameter through a {@link LocalAccessor}. Array
+     * and Range long specializations use primitive {@code long} local storage;
+     * the object specializations preserve other Array values and exact Range
+     * Integers, including values beyond signed-64 bounds. The boolean result
+     * controls the enclosing While: false means exhausted, true means one
+     * element was stored. Suspension resumes the current callback without
+     * advancing the snapshot or cursor twice.
      */
     @Operation(storeBytecodeIndex = false)
     @ConstantOperand(type = LocalAccessor.class, name = "element")
-    public static final class ArrayEachNext {
-        @Specialization(guards = "snapshot.nextIsLong()")
-        public static boolean doLong(
+    @ConstantOperand(type = LocalAccessor.class, name = "cursor")
+    public static final class IterationNext {
+        /*
+         * The cursor is read inside the operation from its constant local, so
+         * no separate cursor load is executed per advance, and each iteration
+         * family stays an independently profiled specialization.
+         */
+        @Specialization(guards = "isRangeLong(iteration)")
+        public static boolean doRangeLong(
                 LocalAccessor element,
-                ArrayEachSnapshot snapshot,
+                LocalAccessor cursor,
                 @Bind VirtualFrame frame,
-                @Bind BytecodeNode bytecode) {
-            element.setLong(bytecode, frame, (Long) snapshot.advance());
+                @Bind BytecodeNode bytecode,
+                @Bind("cursor.getObject(bytecode, frame)") Object iteration) {
+            RangeIterationState state = (RangeIterationState) iteration;
+            if (!state.hasNext()) {
+                return false;
+            }
+            element.setLong(bytecode, frame, state.advance());
             return true;
         }
 
-        @Specialization(guards = "!snapshot.nextIsLong()")
-        public static boolean doObject(
+        @Specialization(guards = "isRangeExact(iteration)")
+        public static boolean doRangeExact(
                 LocalAccessor element,
-                ArrayEachSnapshot snapshot,
+                LocalAccessor cursor,
                 @Bind VirtualFrame frame,
-                @Bind BytecodeNode bytecode) {
+                @Bind BytecodeNode bytecode,
+                @Bind("cursor.getObject(bytecode, frame)") Object iteration) {
+            Object current = ((RangeIterationState) iteration).advanceExactOrNull();
+            if (current == null) {
+                return false;
+            }
+            element.setObject(bytecode, frame, current);
+            return true;
+        }
+
+        @Specialization(guards = "isArrayLong(iteration)")
+        public static boolean doArrayLong(
+                LocalAccessor element,
+                LocalAccessor cursor,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode,
+                @Bind("cursor.getObject(bytecode, frame)") Object iteration) {
+            element.setLong(bytecode, frame, (Long) ((ArrayEachSnapshot) iteration).advance());
+            return true;
+        }
+
+        @Specialization(guards = "isArrayObject(iteration)")
+        public static boolean doArrayObject(
+                LocalAccessor element,
+                LocalAccessor cursor,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode,
+                @Bind("cursor.getObject(bytecode, frame)") Object iteration) {
+            ArrayEachSnapshot snapshot = (ArrayEachSnapshot) iteration;
             if (!snapshot.hasNext()) {
                 return false;
             }
             element.setObject(bytecode, frame, snapshot.advance());
             return true;
+        }
+
+        static boolean isRangeLong(Object iteration) {
+            return iteration instanceof RangeIterationState state && !state.isExact();
+        }
+
+        static boolean isRangeExact(Object iteration) {
+            return iteration instanceof RangeIterationState state && state.isExact();
+        }
+
+        static boolean isArrayLong(Object iteration) {
+            return iteration instanceof ArrayEachSnapshot snapshot && snapshot.nextIsLong();
+        }
+
+        static boolean isArrayObject(Object iteration) {
+            return iteration instanceof ArrayEachSnapshot snapshot && !snapshot.nextIsLong();
         }
     }
 
@@ -2748,48 +2806,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
-    /**
-     * One step of an admitted standard Range iteration: when the cursor is
-     * still before the exclusive stop bound in the iteration direction,
-     * stores it into the supplied local as a primitive {@code long}, advances
-     * it by the step and answers true; otherwise answers false without
-     * advancing. On the primitive cursor an advance beyond the signed-64
-     * range ends the iteration, because the exact next Integer is then past
-     * the signed-64 stop bound. The exact cursor compares and adds with the
-     * published Integer operations, so it crosses the signed-64 limits in
-     * either direction without truncation and stores each visited Integer
-     * in its normalized representation.
-     */
-    @Operation(storeBytecodeIndex = false)
-    @ConstantOperand(type = LocalAccessor.class, name = "element")
-    public static final class RangeIterationNext {
-        @Specialization(guards = "!state.isExact()")
-        public static boolean doLong(
-                LocalAccessor element,
-                RangeIterationState state,
-                @Bind VirtualFrame frame,
-                @Bind BytecodeNode bytecode) {
-            if (!state.hasNext()) {
-                return false;
-            }
-            element.setLong(bytecode, frame, state.advance());
-            return true;
-        }
-
-        @Specialization(guards = "state.isExact()")
-        public static boolean doExact(
-                LocalAccessor element,
-                RangeIterationState state,
-                @Bind VirtualFrame frame,
-                @Bind BytecodeNode bytecode) {
-            Object current = state.advanceExactOrNull();
-            if (current == null) {
-                return false;
-            }
-            element.setObject(bytecode, frame, current);
-            return true;
-        }
-    }
 
     /**
      * The cursor of one admitted standard Range iteration. Its direction is

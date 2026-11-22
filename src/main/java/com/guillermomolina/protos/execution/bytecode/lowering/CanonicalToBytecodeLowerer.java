@@ -1322,7 +1322,19 @@ final class CanonicalToBytecodeLowerer {
                     java.util.List<CanonicalExpression> prefix =
                             expressions.subList(0, expressions.size() - 1);
 
-                    emitDiscardedPrefix(builder, prefix);
+                    /*
+                     * A scalar or direct terminal value invokes nothing and
+                     * cannot suspend, so the prefix scratch temporaries (never
+                     * bindings) are dead until the root returns and end with
+                     * its frame. A terminal Closure keeps the clears because
+                     * its creation may retain the frame, as does a root whose
+                     * frame a frame-backed lexical view may retain.
+                     */
+                    boolean frameMayOutliveReturn =
+                            currentRootTopScope != null
+                                    && currentRootTopScope.requiresLexicalView();
+                    emitDiscardedPrefix(
+                            builder, prefix, closureTerminal || frameMayOutliveReturn);
                 }
 
                 /*
@@ -2957,11 +2969,26 @@ final class CanonicalToBytecodeLowerer {
     private void emitDiscardedPrefix(
             ProtosBytecodeRootNodeGen.Builder builder,
             java.util.List<CanonicalExpression> expressions) {
+        emitDiscardedPrefix(builder, expressions, true);
+    }
+
+    /*
+     * clearScratch false: the caller proves that nothing after the prefix
+     * invokes or suspends before the root returns and that no frame-backed
+     * view retains the frame, so the scratch locals end with the frame and
+     * need no explicit clear.
+     */
+    private void emitDiscardedPrefix(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            java.util.List<CanonicalExpression> expressions,
+            boolean clearScratch) {
         ComposedSequenceScratch scratch =
                 createComposedSequenceScratch(builder, expressions);
         boolean childResultReleased =
                 emitDiscardedPrefix(builder, expressions, scratch);
-        emitClearComposedSequenceScratch(builder, scratch, childResultReleased);
+        if (clearScratch) {
+            emitClearComposedSequenceScratch(builder, scratch, childResultReleased);
+        }
     }
 
     /* Clears scratch locals owned by the caller after their last use. */
@@ -10572,7 +10599,7 @@ final class CanonicalToBytecodeLowerer {
      *   <li>Standard: evaluating the literal argument has no observable
      *       effect and its activation is proven unobservable, so no Closure
      *       is created. {@code GetArrayEachSnapshot} establishes the single
-     *       snapshot; a While loop advances it with {@code ArrayEachNext},
+     *       snapshot; a While loop advances it with {@code IterationNext},
      *       which stores each element into the parameter local, and runs the
      *       callback body inline with its other bindings reset to ABSENT.
      *       The result is the original receiver.
@@ -10581,7 +10608,7 @@ final class CanonicalToBytecodeLowerer {
      *       canonical {@code Range} or {@code InvertedRange} behavior is
      *       selected over Integer bounds. If so, {@code PrepareRangeIteration}
      *       establishes the cursor and the same While loop, advanced by
-     *       {@code RangeIterationNext}, runs the same single inline callback
+     *       {@code IterationNext}, runs the same single inline callback
      *       body. The result is null.
      *   <li>Otherwise: the literal argument is evaluated exactly once
      *       (materializing the genuine Closure) and the selected behavior is
@@ -10656,15 +10683,7 @@ final class CanonicalToBytecodeLowerer {
         BytecodeLocal element = builder.createLocal(
                 NORMAL_INLINE_CALLBACK_BINDING_LOCAL_PREFIX + parameter, nextInlineCallbackRegion + 1);
         builder.beginWhile();
-        builder.beginConditional();
-        builder.emitLoadLocal(arrayStandard);
-        builder.beginArrayEachNext(element);
-        builder.emitLoadLocal(iteration);
-        builder.endArrayEachNext();
-        builder.beginRangeIterationNext(element);
-        builder.emitLoadLocal(iteration);
-        builder.endRangeIterationNext();
-        builder.endConditional();
+        builder.emitIterationNext(element, iteration);
         emitInlineControlClosureBody(
                 builder, callback, InlineBodyResult.DISCARD, null,
                 scratch, childResult, resumeValue, false,
@@ -10794,7 +10813,7 @@ final class CanonicalToBytecodeLowerer {
      *       with a valid Integer step.
      *   <li>Standard: {@code PrepareRangeIteration} establishes the cursor in
      *       a local and a While loop advances it with
-     *       {@code RangeIterationNext}, which stores each visited Integer
+     *       {@code IterationNext}, which stores each visited Integer
      *       into the callback parameter local. A literal callback runs inline
      *       with its other bindings reset to ABSENT before each visit; any
      *       other callback value is invoked, only when an element is
@@ -10844,9 +10863,7 @@ final class CanonicalToBytecodeLowerer {
                     NORMAL_INLINE_CALLBACK_BINDING_LOCAL_PREFIX + parameter,
                     nextInlineCallbackRegion + 1);
             builder.beginWhile();
-            builder.beginRangeIterationNext(element);
-            builder.emitLoadLocal(state);
-            builder.endRangeIterationNext();
+            builder.emitIterationNext(element, state);
             emitInlineControlClosureBody(
                     builder, inlineCallback, InlineBodyResult.DISCARD, null,
                     scratch, childResult, resumeValue, false,
@@ -10855,9 +10872,7 @@ final class CanonicalToBytecodeLowerer {
         } else {
             BytecodeLocal element = builder.createLocal("rangeElement", null);
             builder.beginWhile();
-            builder.beginRangeIterationNext(element);
-            builder.emitLoadLocal(state);
-            builder.endRangeIterationNext();
+            builder.emitIterationNext(element, state);
             builder.beginBlock();
             emitDispatchedCall(
                     builder, callbackValue, java.util.List.of(element), null,

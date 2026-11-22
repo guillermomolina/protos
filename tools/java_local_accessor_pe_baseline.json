@@ -225,8 +225,8 @@
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosBytecodeRootNode.java",
-      "class": "ProtosBytecodeRootNode.ArrayEachNext",
-      "method": "doLong(LocalAccessor,ArrayEachSnapshot,VirtualFrame,BytecodeNode)",
+      "class": "ProtosBytecodeRootNode.IterationNext",
+      "method": "doArrayLong(LocalAccessor,ArrayEachSnapshot,VirtualFrame,BytecodeNode)",
       "family": "LocalAccessor",
       "operation": "setLong",
       "receiver": "element",
@@ -238,8 +238,8 @@
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosBytecodeRootNode.java",
-      "class": "ProtosBytecodeRootNode.ArrayEachNext",
-      "method": "doObject(LocalAccessor,ArrayEachSnapshot,VirtualFrame,BytecodeNode)",
+      "class": "ProtosBytecodeRootNode.IterationNext",
+      "method": "doArrayObject(LocalAccessor,ArrayEachSnapshot,VirtualFrame,BytecodeNode)",
       "family": "LocalAccessor",
       "operation": "setObject",
       "receiver": "element",
@@ -251,8 +251,8 @@
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosBytecodeRootNode.java",
-      "class": "ProtosBytecodeRootNode.RangeIterationNext",
-      "method": "doLong(LocalAccessor,RangeIterationState,VirtualFrame,BytecodeNode)",
+      "class": "ProtosBytecodeRootNode.IterationNext",
+      "method": "doRangeLong(LocalAccessor,RangeIterationState,VirtualFrame,BytecodeNode)",
       "family": "LocalAccessor",
       "operation": "setLong",
       "receiver": "element",
@@ -264,8 +264,8 @@
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosBytecodeRootNode.java",
-      "class": "ProtosBytecodeRootNode.RangeIterationNext",
-      "method": "doExact(LocalAccessor,RangeIterationState,VirtualFrame,BytecodeNode)",
+      "class": "ProtosBytecodeRootNode.IterationNext",
+      "method": "doRangeExact(LocalAccessor,RangeIterationState,VirtualFrame,BytecodeNode)",
       "family": "LocalAccessor",
       "operation": "setObject",
       "receiver": "element",

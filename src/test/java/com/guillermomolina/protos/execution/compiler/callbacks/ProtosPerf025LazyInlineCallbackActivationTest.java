@@ -126,7 +126,7 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
                         }
                         run()
                         """);
-        assertContains(names, "ArrayEachNext");
+        assertContains(names, "IterationNext");
         assertContains(names, "store.local");
         System.out.println("PERF025_FRAME_NATIVE_ONE_PARAMETER_EACH_STAYS_LAZY=YES");
         System.out.println("PERF025_FRAME_NATIVE_PARAMETER_PATH_WITHOUT_ACTIVATION=YES");
@@ -178,7 +178,7 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
                         run()
                         """);
         List<String> names = instructions.stream().map(ProtosInstructionNames::of).toList();
-        List<Object> parameter = constantLocals(instructions, "ArrayEachNext");
+        List<Object> parameter = constantLocals(instructions, "IterationNext");
         List<Object> creations = constantLocals(instructions, "ResetInlineCallbackLocal");
         assertEquals(1, parameter.size(), () -> "one formal: " + names);
         assertEquals(3, creations.size(), () -> "copy, first and second: " + names);

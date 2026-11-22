@@ -52,7 +52,7 @@ final class ProtosI115EachSelectionOrderingTest {
                 }
                 run(Array(1, 2))
                 """,
-                "ArrayEachNext");
+                "IterationNext");
     }
 
     @Test
