@@ -1293,7 +1293,8 @@ final class ProtosI115MCompactLoweringTest {
                     && !names.get(j).startsWith("c.Number")
                     && !names.get(j).startsWith("c.RichCompare"); j++) {
                 Instruction candidate = instructions.get(j);
-                if (names.get(j).startsWith("c.LoadAndClearTempLocal")
+                if ((names.get(j).startsWith("c.LoadAndClearTempLocal")
+                                || names.get(j).startsWith("c.StoreCellFromLocal"))
                         && candidate.getArguments().stream().anyMatch(argument ->
                                 argument.getKind() == Instruction.Argument.Kind.CONSTANT
                                         && outcome.equals(String.valueOf(argument.asConstant())))) {
@@ -1307,10 +1308,15 @@ final class ProtosI115MCompactLoweringTest {
         if (label.startsWith("captured")) {
             /*
              * The captured binding is written only on the completed path: the
-             * first StoreCell after the producer follows its cold composition
-             * loop and the release of its outcome local. The site's only send
-             * is its own read() call; the producer adds no root or callback call.
+             * first cell write after the producer follows its cold composition
+             * loop and the release of its outcome local. An arithmetic result
+             * is released by the cell write itself (StoreCellFromLocal, with
+             * no intervening last-use load); an ordering result is first
+             * validated, so its release precedes a stack-valued StoreCell.
+             * The site's only send is its own read() call; the producer adds
+             * no root or callback call.
              */
+            boolean ordering = names.stream().anyMatch(name -> name.startsWith("c.RichCompare"));
             int producer = 0;
             while (!names.get(producer).startsWith("c.Number")
                     && !names.get(producer).startsWith("c.RichCompare")) {
@@ -1325,14 +1331,23 @@ final class ProtosI115MCompactLoweringTest {
                     backward = j;
                 } else if (backward >= 0 && name.startsWith("c.LoadAndClearTempLocal")) {
                     release = j;
+                } else if (name.startsWith("c.StoreCellFromLocal")) {
+                    assertFalse(ordering, label + " validates an ordering result first: " + names);
+                    assertTrue(release < 0,
+                            label + " reads its result only in the cell write: " + names);
+                    storeCell = j;
+                    release = j;
                 } else if (name.startsWith("c.StoreCell")) {
+                    assertTrue(ordering, label + " stores an arithmetic result "
+                            + "through a separate last-use load: " + names);
                     storeCell = j;
                 }
             }
             int published = storeCell;
             int composed = backward;
             int released = release;
-            assertTrue(composed > producer && released > composed && published > released,
+            // The direct cell write is its own release; a StoreCell follows its release.
+            assertTrue(composed > producer && released > composed && published >= released,
                     label + " publishes the cell only after completion: " + names);
             assertTrue(names.stream().filter(name -> name.startsWith("c.Call")).count() <= 1L,
                     label + " adds a call beyond read(): " + names);

@@ -2082,7 +2082,12 @@ final class ProtosPerf045RangeEachInlineTest {
                     module.runRoot(), "MakeConstantLongArray", "c.CallVarargsMethod", 64);
             // The indexed outcome is the addition's operand; the sum is the cell write's value.
             assertCompletedResultConsumedBy(listed, "BinarySubscript", "NumberAdd");
-            assertCompletedResultConsumedBy(listed, "NumberAdd", "StoreCell");
+            assertCompletedResultConsumedBy(listed, "NumberAdd", "StoreCellFromLocal");
+            // Only the creations of values and total use StoreCell; none follows the sum.
+            int sum = indexAfter(names, "c.NumberAdd", -1);
+            assertEquals(0, names.subList(sum, names.size()).stream()
+                            .filter(name -> isOperation(name, "StoreCell")).count(),
+                    () -> "the sum reaches the captured cell without a stack-valued store: " + names);
             // The completed size result is consumed through its own outcome local too.
             assertCompositionGuardedByCompletion(listed, "GetLen");
             // Producer-owned results keep the instrumentation: the run root
@@ -2354,14 +2359,27 @@ final class ProtosPerf045RangeEachInlineTest {
     /*
      * The completed path of the operation's guarded composition reads and
      * clears its own outcome (same LocalAccessor identity) exactly once, and
-     * that value is consumed directly by the next logical instruction, with
-     * no intermediate operand-local store/load/clear cycle.
+     * that value is consumed directly, with no intermediate operand-local
+     * store/load/clear cycle: either the consumer is the first completed
+     * row and takes the outcome as one of its own constant locals, or the
+     * outcome is released by a LoadAndClearTempLocal whose value the
+     * consumer, the next logical row, takes from the operand stack.
      */
     private static void assertCompletedResultConsumedBy(
             List<Instruction> listed, String operation, String consumer) {
         GuardedComposition guarded = guardedComposition(listed, operation);
         List<String> names = guarded.names();
         int completion = guarded.completion();
+        if (isOperation(names.get(completion), consumer)) {
+            List<LocalAccessor> operands = localAccessors(guarded.instructions().get(completion));
+            assertEquals(1, operands.stream()
+                            .filter(local -> sameLocal(local, guarded.outcome())).count(),
+                    () -> operation + " outcome is read once, by " + consumer + " itself: " + names);
+            assertFalse(names.get(completion - 1).startsWith("c.LoadAndClearTempLocal")
+                            || names.get(completion - 1).startsWith("load.local"),
+                    () -> operation + " result has no independent last-use load: " + names);
+            return;
+        }
         assertTrue(names.get(completion).startsWith("c.LoadAndClearTempLocal"),
                 () -> operation + " completed path releases its outcome first: " + names);
         List<LocalAccessor> read = localAccessors(guarded.instructions().get(completion));
@@ -2370,6 +2388,11 @@ final class ProtosPerf045RangeEachInlineTest {
         assertTrue(names.get(completion + 1).startsWith("c." + consumer),
                 () -> operation + " result reaches " + consumer
                         + " without an intermediate copy: " + names);
+    }
+
+    /* Whether a listed name is exactly the operation, possibly quickened. */
+    private static boolean isOperation(String name, String operation) {
+        return name.equals("c." + operation) || name.startsWith("c." + operation + "$");
     }
 
     /* Static instruction rows only: these are never execution counts. */

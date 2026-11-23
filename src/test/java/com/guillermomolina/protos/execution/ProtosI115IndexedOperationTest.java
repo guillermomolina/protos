@@ -2280,6 +2280,238 @@ final class ProtosI115IndexedOperationTest {
                 """));
     }
 
+    /*
+     * An indexed result consumed by an addition whose sum is written into a
+     * captured binding, which a second Closure reads: the binding observed
+     * through that Closure is exactly the completed sum, across primitive
+     * long and double storage, large Integer promotion, an object indexed
+     * value under a selected addition, and a Closure-held fallback callback
+     * that writes the same binding after the loop.
+     */
+    @Test
+    void indexedSumStoredIntoCapturedBindingAcrossCarriers() {
+        String loop = """
+                run: () => {
+                    values: %s
+                    total: %s
+                    read: () => total
+                    for(i, 0, values.size()) {
+                        total = total + values[i]
+                    }
+                    %s
+                }
+                run()
+                """;
+        assertEquals(10010L, evalLong(loop.formatted(
+                "[1, 2, 3, 4]", "0", "read() * 1000 + total")));
+        assertTrue(evalBoolean(loop.formatted(
+                "[1.5, 2.5]", "0.0", "(read() == 4.0) && (total == 4.0)")));
+        assertTrue(evalBoolean(loop.formatted(
+                "[9223372036854775807, 1]", "0",
+                "read() == (9223372036854775807 + 1)")));
+        assertTrue(evalBoolean(loop.formatted(
+                "[(0 - 9223372036854775807), (0 - 1), (0 - 1)]", "0",
+                "read() == ((0 - 9223372036854775807) - 2)")));
+        // Object indexed values reach a selected addition, which answers itself.
+        assertEquals(13L, evalLong("""
+                seen: { value: 0 }
+                plusSource: { add: (other) => {
+                    seen.value = seen.value * 10 + other.n
+                    customPlus
+                } }
+                customPlus: plusSource.alias("add", "+")
+                run: () => {
+                    values: [{ n: 1 }, { n: 3 }]
+                    total: customPlus
+                    read: () => total
+                    for(i, 0, values.size()) {
+                        total = total + values[i]
+                    }
+                    read() === customPlus
+                }
+                run()
+                seen.value
+                """));
+        // The retained fallback callback shares the binding with read.
+        assertEquals(7L, evalLong("""
+                run: () => {
+                    values: [1, 2, 3]
+                    total: 0
+                    read: () => total
+                    step: (i) => { total = total + values[i] }
+                    Range(0, 3).each(step)
+                    step(0)
+                    read()
+                }
+                run()
+                """));
+    }
+
+    /*
+     * Selection changes at the same sites of the captured indexed sum:
+     * a selected addition answering an Integer hands the binding to the
+     * standard path (custom to standard), a nonstandard selected at is
+     * invoked once per element, and an override installed between two
+     * invocations is observed by the second while the first stays
+     * standard (standard to custom).
+     */
+    @Test
+    void capturedIndexedSumObservesSelectedAtAndArithmetic() {
+        assertEquals(46L, evalLong("""
+                plusSource: { add: (other) => { 41 } }
+                customPlus: plusSource.alias("add", "+")
+                run: () => {
+                    values: [1, 2, 3]
+                    total: customPlus
+                    read: () => total
+                    for(i, 0, values.size()) {
+                        total = total + values[i]
+                    }
+                    read()
+                }
+                run()
+                """));
+        assertEquals(60300L, evalLong("""
+                Custom: Array {}
+                c: Custom(1, 2, 3)
+                run: () => {
+                    total: 0
+                    read: () => total
+                    for(i, 0, 3) {
+                        total = total + c[i]
+                    }
+                    read()
+                }
+                first: run()
+                Custom.at: (index) => { 100 }
+                first * 10000 + run()
+                """));
+        assertEquals(3042L, evalLong(TRACE + """
+                Counted: Array {
+                    at: (index) => {
+                        trace.value = trace.value + 1
+                        14
+                    }
+                }
+                c: Counted(1, 2, 3)
+                run: () => {
+                    total: 0
+                    read: () => total
+                    for(i, 0, 3) {
+                        total = total + c[i]
+                    }
+                    read()
+                }
+                r: run()
+                trace.value * 1000 + r
+                """));
+    }
+
+    /*
+     * Suspension inside the captured indexed sum: a selected at that
+     * suspends after the indexed operands are evaluated and before the
+     * addition, and a selected addition that suspends before its result
+     * is complete, after the indexed access. Each selected method runs once
+     * per element, and the binding observed through another Closure while
+     * the addition is suspended is still the previous value: no
+     * intermediate result reaches the cell before the addition completes.
+     */
+    @Test
+    void suspendedSelectionsInCapturedIndexedSumResumeOnce() {
+        assertEquals(3030L, evalLong(TRACE + """
+                Lazy: Array {
+                    at: (index) => {
+                        trace.value = trace.value + 1
+                        (() => { 10 }).future().value()
+                    }
+                }
+                l: Lazy(1, 2, 3)
+                run: () => {
+                    total: 0
+                    read: () => total
+                    for(i, 0, 3) {
+                        total = total + l[i]
+                    }
+                    read()
+                }
+                result: (() => { run() }).future().value()
+                trace.value * 1000 + result
+                """));
+        assertEquals(11012L, evalLong(TRACE + """
+                holder: { read: 0 }
+                seen: { value: 0 }
+                plusSource: { add: (other) => {
+                    trace.value = trace.value + 1
+                    if(holder.read() === customPlus) { seen.value = 10 }
+                    (() => { 7 }).future().value()
+                } }
+                customPlus: plusSource.alias("add", "+")
+                run: () => {
+                    values: [1, 2, 3]
+                    total: customPlus
+                    holder.read = () => total
+                    for(i, 0, values.size()) {
+                        total = total + values[i]
+                    }
+                    holder.read()
+                }
+                result: (() => { run() }).future().value()
+                (trace.value + seen.value) * 1000 + result
+                """));
+    }
+
+    /*
+     * Abrupt completion of the captured indexed sum: an indexed Error and a
+     * selected addition's Error leave the binding at its last completed
+     * value, and a non-local return after a write answers that write.
+     */
+    @Test
+    void abruptCompletionLeavesCapturedSumAtLastCompletedWrite() {
+        assertEquals(3L, evalLong("""
+                run: () => {
+                    values: [1, 2]
+                    total: 0
+                    read: () => total
+                    Error.handle(() => {
+                        for(i, 0, 3) {
+                            total = total + values[i]
+                        }
+                    }, (caught) => 0)
+                    read()
+                }
+                run()
+                """));
+        assertTrue(evalBoolean("""
+                failSource: { add: (other) => { Error().signal() } }
+                customFail: failSource.alias("add", "+")
+                run: () => {
+                    values: [1, 2]
+                    total: customFail
+                    read: () => total
+                    Error.handle(() => {
+                        for(i, 0, values.size()) {
+                            total = total + values[i]
+                        }
+                    }, (caught) => 0)
+                    read() === customFail
+                }
+                run()
+                """));
+        assertEquals(6L, evalLong("""
+                run: () => {
+                    values: [1, 2, 3, 4]
+                    total: 0
+                    read: () => total
+                    for(i, 0, values.size()) {
+                        total = total + values[i]
+                        if(i == 2) { ^read() }
+                    }
+                    0
+                }
+                run()
+                """));
+    }
+
     /**
      * Primitive {@code long}, {@code double} and {@code boolean} storage
      * through stack operands; errors for bounds, mutability and index type.

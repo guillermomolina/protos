@@ -5939,8 +5939,32 @@ final class CanonicalToBytecodeLowerer {
         if (storage.cell() != null
                 && result == null
                 && value instanceof CanonicalSend numeric
+                && directCellNumericValue(numeric)
+                && !isOrderingSelector(numeric.message())) {
+            /*
+             * The completed result is written into the cell straight from
+             * its result local, read and cleared by the cell write itself.
+             * The cell is a constant operand, so no cell reference is pending
+             * while the numeric operation may suspend, and the write executes
+             * once, only after that operation and any composition of a
+             * suspended selected invocation have completed.
+             */
+            builder.beginBlock();
+            builder.beginSourceSection(
+                    numeric.span().startOffset(), numeric.span().length());
+            BytecodeLocal numericResult = emitCompletedNumericResult(
+                    builder, numeric, preparedCall, childResult, resumeValue);
+            builder.endSourceSection();
+            builder.emitStoreCellFromLocal(storage.cell(), numericResult);
+            builder.endBlock();
+            return true;
+        }
+        if (storage.cell() != null
+                && result == null
+                && value instanceof CanonicalSend numeric
                 && directCellNumericValue(numeric)) {
             /*
+             * An ordering result is validated as a canonical Boolean first.
              * The cell is a constant operand of StoreCell, so no cell
              * reference is pending while the numeric operation may suspend;
              * StoreCell executes only after that operation has completed.
@@ -9848,24 +9872,9 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
-        noteDynamicInvocation();
-        BytecodeLocal numericResult = builder.createLocal("numericResult", null);
-        BytecodeLocal numericResume = builder.createLocal("numericResume", null);
-
         builder.beginBlock();
-
-        // The operation stores its result in numericResult and answers whether to compose it.
-        builder.beginIfThen();
-        beginNumericOperation(builder, send.message(), false, numericResult);
-        emitPrimitiveNumericOperandValue(
-                builder, send.receiver(), preparedCall, childResult, resumeValue);
-        emitPrimitiveNumericOperandValue(
-                builder, send.arguments().get(0), preparedCall, childResult, resumeValue);
-        endNumericOperation(builder, send.message());
-        builder.beginBlock();
-        emitDispatchedContinuationComposition(builder, numericResult, numericResume);
-        builder.endBlock();
-        builder.endIfThen();
+        BytecodeLocal numericResult =
+                emitCompletedNumericResult(builder, send, preparedCall, childResult, resumeValue);
 
         // The result local is read and cleared at its only use, the Block's value.
         if (isOrderingSelector(send.message())) {
@@ -9877,6 +9886,37 @@ final class CanonicalToBytecodeLowerer {
         }
 
         builder.endBlock();
+    }
+
+    /**
+     * The production half of a direct numeric operation, shared by every
+     * consumer: the operation stores its result in a site-owned result local
+     * and answers whether that result is a suspended invocation, which only
+     * then is composed with the shared continuation loop. Answers the result
+     * local, which holds the completed result after the emitted code and
+     * whose last use, at its single consumer, must read and clear it.
+     */
+    private BytecodeLocal emitCompletedNumericResult(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalSend send,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        noteDynamicInvocation();
+        BytecodeLocal numericResult = builder.createLocal("numericResult", null);
+        BytecodeLocal numericResume = builder.createLocal("numericResume", null);
+        builder.beginIfThen();
+        beginNumericOperation(builder, send.message(), false, numericResult);
+        emitPrimitiveNumericOperandValue(
+                builder, send.receiver(), preparedCall, childResult, resumeValue);
+        emitPrimitiveNumericOperandValue(
+                builder, send.arguments().get(0), preparedCall, childResult, resumeValue);
+        endNumericOperation(builder, send.message());
+        builder.beginBlock();
+        emitDispatchedContinuationComposition(builder, numericResult, numericResume);
+        builder.endBlock();
+        builder.endIfThen();
+        return numericResult;
     }
 
     /**

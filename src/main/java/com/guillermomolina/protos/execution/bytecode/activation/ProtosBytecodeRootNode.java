@@ -1081,6 +1081,28 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
+     * Stores a completed value, held in the temporary local {@code value},
+     * into the cell held by {@code cell}: the value is read at its last use
+     * and cleared, exactly as {@link LoadAndClearTempLocal} does, and then
+     * written with the {@link StoreCell} semantics. Nothing here invokes
+     * guest behavior.
+     */
+    @Operation(storeBytecodeIndex = true)
+    @ConstantOperand(type = LocalAccessor.class, name = "cell")
+    @ConstantOperand(type = LocalAccessor.class, name = "value")
+    public static final class StoreCellFromLocal {
+        @Specialization
+        public static void perform(
+                LocalAccessor cellLocal,
+                LocalAccessor valueLocal,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode) {
+            Object value = LoadAndClearTempLocal.doObject(valueLocal, frame, bytecode);
+            StoreCell.perform(cellLocal, value, frame, bytecode);
+        }
+    }
+
+    /**
      * Installs the creator's cells, in the Closure scope's constant
      * captured-cell order, into a Closure created by the enclosed operation.
      */
