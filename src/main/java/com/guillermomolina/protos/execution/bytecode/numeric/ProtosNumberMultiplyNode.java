@@ -32,6 +32,7 @@ import com.oracle.truffle.api.dsl.GenerateUncached;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.Node;
+import com.oracle.truffle.api.source.SourceSection;
 
 /**
  * The multiplication operation with exact overflow promotion, executed
@@ -54,19 +55,20 @@ import com.oracle.truffle.api.nodes.Node;
 @ConstantOperand(type = LocalAccessor.class, name = "outcome")
 @ConstantOperand(type = LocalAccessor.class, name = "commitCell")
 @ConstantOperand(type = boolean.class, name = "commitToCell")
+@ConstantOperand(type = SourceSection.class, name = "assignmentSection")
 @OperationProxy.Proxyable(allowUncached = true, storeBytecodeIndex = false)
 abstract class ProtosNumberMultiplyNode extends ProtosNumberMultiplyFastPathsBase {
 
     @Specialization(guards = "selection.execute(frame, SELECTOR, left)", replaces = "doLL")
     @StoreBytecodeIndex
     static boolean doLLOvf(VirtualFrame frame, boolean terminal, LocalAccessor outcome,
-            LocalAccessor commitCell, boolean commitToCell,
+            LocalAccessor commitCell, boolean commitToCell, SourceSection assignmentSection,
             long left, long right,
             @Bind Node node,
             @Shared("selection") @Cached ProtosNumericSelectionNode selection,
             @Bind("bytecodeOf($node)") BytecodeNode bytecode) {
         return ProtosBytecodeRootNode.StoreAndTestContinuation.storeResultAndCommit(
-                outcome, commitCell, commitToCell,
+                outcome, commitCell, commitToCell, assignmentSection,
                 multiplyOrPromote(frame, node, left, right), frame, bytecode);
     }
 
@@ -77,7 +79,7 @@ abstract class ProtosNumberMultiplyNode extends ProtosNumberMultiplyFastPathsBas
             VirtualFrame frame,
             boolean terminal,
             LocalAccessor outcome,
-            LocalAccessor commitCell, boolean commitToCell,
+            LocalAccessor commitCell, boolean commitToCell, SourceSection assignmentSection,
             Object left,
             Object right,
             @Bind Node node,
@@ -87,11 +89,11 @@ abstract class ProtosNumberMultiplyNode extends ProtosNumberMultiplyFastPathsBas
             @Bind("bytecodeOf($node)") BytecodeNode bytecode) {
         if (selection.execute(frame, SELECTOR, left)) {
             return ProtosBytecodeRootNode.StoreAndTestContinuation.storeResultAndCommit(
-                    outcome, commitCell, commitToCell,
+                    outcome, commitCell, commitToCell, assignmentSection,
                     genericMultiply(root, frame, node, left, right), frame, bytecode);
         }
         return ProtosBytecodeRootNode.StoreAndTestContinuation.storeResultAndCommit(
-                outcome, commitCell, commitToCell, overload.execute(frame, terminal, SELECTOR, left, right,
+                outcome, commitCell, commitToCell, assignmentSection, overload.execute(frame, terminal, SELECTOR, left, right,
                 root, bytecode, bytecode.getBytecodeIndex(frame)), frame, bytecode);
     }
 }

@@ -33,6 +33,7 @@ import com.oracle.truffle.api.dsl.GenerateUncached;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.Node;
+import com.oracle.truffle.api.source.SourceSection;
 
 /**
  * The exact division operation {@code /}. Primitive specializations execute
@@ -52,18 +53,19 @@ import com.oracle.truffle.api.nodes.Node;
 @ConstantOperand(type = LocalAccessor.class, name = "outcome")
 @ConstantOperand(type = LocalAccessor.class, name = "commitCell")
 @ConstantOperand(type = boolean.class, name = "commitToCell")
+@ConstantOperand(type = SourceSection.class, name = "assignmentSection")
 @OperationProxy.Proxyable(allowUncached = true, storeBytecodeIndex = false)
 abstract class ProtosNumberDivideNode extends Node {
     static final String SELECTOR = "/";
 
     abstract boolean execute(VirtualFrame frame, boolean terminal, LocalAccessor outcome,
-            LocalAccessor commitCell, boolean commitToCell,
+            LocalAccessor commitCell, boolean commitToCell, SourceSection assignmentSection,
             Object left, Object right);
 
     @Specialization(guards = "selection.execute(frame, SELECTOR, left)")
     @StoreBytecodeIndex
     static boolean doLL(VirtualFrame frame, boolean terminal, LocalAccessor outcome,
-            LocalAccessor commitCell, boolean commitToCell,
+            LocalAccessor commitCell, boolean commitToCell, SourceSection assignmentSection,
             long left, long right,
             @Bind Node node,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
@@ -74,27 +76,27 @@ abstract class ProtosNumberDivideNode extends Node {
             outcome.setLong(bytecode, frame, left / right);
             if (commitToCell) {
                 ProtosBytecodeRootNode.StoreAndTestContinuation.commitCompletedCell(
-                        commitCell, outcome, frame, bytecode);
+                        commitCell, outcome, assignmentSection, frame, bytecode);
             }
             return false;
         }
         // No truncation: Fraction, MIN/-1 and zero take the exact factory path.
         return ProtosBytecodeRootNode.StoreAndTestContinuation.storeResultAndCommit(
-                outcome, commitCell, commitToCell,
+                outcome, commitCell, commitToCell, assignmentSection,
                 divideIntegers(root, frame, node, left, right), frame, bytecode);
     }
 
     @Specialization(guards = "selection.execute(frame, SELECTOR, left)")
     @StoreBytecodeIndex
     static boolean doDD(VirtualFrame frame, boolean terminal, LocalAccessor outcome,
-            LocalAccessor commitCell, boolean commitToCell,
+            LocalAccessor commitCell, boolean commitToCell, SourceSection assignmentSection,
             double left, double right,
             @Shared("selection") @Cached ProtosNumericSelectionNode selection,
             @Bind("bytecodeOf($node)") BytecodeNode bytecode) {
         outcome.setDouble(bytecode, frame, left / right);
         if (commitToCell) {
             ProtosBytecodeRootNode.StoreAndTestContinuation.commitCompletedCell(
-                    commitCell, outcome, frame, bytecode);
+                    commitCell, outcome, assignmentSection, frame, bytecode);
         }
         return false;
     }
@@ -102,14 +104,14 @@ abstract class ProtosNumberDivideNode extends Node {
     @Specialization(guards = "selection.execute(frame, SELECTOR, left)")
     @StoreBytecodeIndex
     static boolean doDL(VirtualFrame frame, boolean terminal, LocalAccessor outcome,
-            LocalAccessor commitCell, boolean commitToCell,
+            LocalAccessor commitCell, boolean commitToCell, SourceSection assignmentSection,
             double left, long right,
             @Shared("selection") @Cached ProtosNumericSelectionNode selection,
             @Bind("bytecodeOf($node)") BytecodeNode bytecode) {
         outcome.setDouble(bytecode, frame, left / right);
         if (commitToCell) {
             ProtosBytecodeRootNode.StoreAndTestContinuation.commitCompletedCell(
-                    commitCell, outcome, frame, bytecode);
+                    commitCell, outcome, assignmentSection, frame, bytecode);
         }
         return false;
     }
@@ -117,14 +119,14 @@ abstract class ProtosNumberDivideNode extends Node {
     @Specialization(guards = "selection.execute(frame, SELECTOR, left)")
     @StoreBytecodeIndex
     static boolean doLD(VirtualFrame frame, boolean terminal, LocalAccessor outcome,
-            LocalAccessor commitCell, boolean commitToCell,
+            LocalAccessor commitCell, boolean commitToCell, SourceSection assignmentSection,
             long left, double right,
             @Shared("selection") @Cached ProtosNumericSelectionNode selection,
             @Bind("bytecodeOf($node)") BytecodeNode bytecode) {
         outcome.setDouble(bytecode, frame, left / right);
         if (commitToCell) {
             ProtosBytecodeRootNode.StoreAndTestContinuation.commitCompletedCell(
-                    commitCell, outcome, frame, bytecode);
+                    commitCell, outcome, assignmentSection, frame, bytecode);
         }
         return false;
     }
@@ -133,7 +135,7 @@ abstract class ProtosNumberDivideNode extends Node {
     @StoreBytecodeIndex
     @InliningCutoff
     static boolean doGeneric(VirtualFrame frame, boolean terminal, LocalAccessor outcome,
-            LocalAccessor commitCell, boolean commitToCell,
+            LocalAccessor commitCell, boolean commitToCell, SourceSection assignmentSection,
             Object left, Object right,
             @Bind Node node,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
@@ -142,7 +144,7 @@ abstract class ProtosNumberDivideNode extends Node {
             @Bind("bytecodeOf($node)") BytecodeNode bytecode) {
         if (!selection.execute(frame, SELECTOR, left)) {
             return ProtosBytecodeRootNode.StoreAndTestContinuation.storeResultAndCommit(
-                    outcome, commitCell, commitToCell,
+                    outcome, commitCell, commitToCell, assignmentSection,
                     overload.execute(frame, terminal, SELECTOR, left, right,
                     root, bytecode, bytecode.getBytecodeIndex(frame)), frame, bytecode);
         }
@@ -151,18 +153,18 @@ abstract class ProtosNumberDivideNode extends Node {
         if (ProtosNumericValueSupport.isCurrentInteger(receiver)
                 && ProtosNumericValueSupport.isCurrentInteger(argument)) {
             return ProtosBytecodeRootNode.StoreAndTestContinuation.storeResultAndCommit(
-                    outcome, commitCell, commitToCell, divideIntegers(root, frame, node, receiver, argument),
+                    outcome, commitCell, commitToCell, assignmentSection, divideIntegers(root, frame, node, receiver, argument),
                     frame, bytecode);
         }
         if (isFloatOperand(receiver) && isFloatOperand(argument)
                 && (ProtosNumericValueSupport.isCurrentFloat(receiver)
                         || ProtosNumericValueSupport.isCurrentFloat(argument))) {
             return ProtosBytecodeRootNode.StoreAndTestContinuation.storeResultAndCommit(
-                    outcome, commitCell, commitToCell,
+                    outcome, commitCell, commitToCell, assignmentSection,
                     floatValue(receiver) / floatValue(argument), frame, bytecode);
         }
         return ProtosBytecodeRootNode.StoreAndTestContinuation.storeResultAndCommit(
-                outcome, commitCell, commitToCell,
+                outcome, commitCell, commitToCell, assignmentSection,
                 ProtosNumericOperationSupport.arithmetic(root, frame, left, SELECTOR, right),
                 frame, bytecode);
     }

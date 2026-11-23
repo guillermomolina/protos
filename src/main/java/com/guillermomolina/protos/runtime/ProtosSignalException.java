@@ -22,6 +22,7 @@ import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.bytecode.BytecodeLocation;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.exception.AbstractTruffleException;
+import com.oracle.truffle.api.source.SourceSection;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -41,6 +42,7 @@ public final class ProtosSignalException extends AbstractTruffleException {
     private BytecodeNode originBytecode;
     private int originBytecodeIndex = -1;
     private ProtosDiagnosticTrace terminalDiagnosticTrace;
+    private SourceSection assignmentFailureSection;
     /*
      * Uncached-interpreter frames keep their bytecode index only in a frame slot that later
      * cleanup in the same frame may overwrite before the stack trace is read, so the exact
@@ -76,6 +78,25 @@ public final class ProtosSignalException extends AbstractTruffleException {
             originBytecode = bytecode;
             originBytecodeIndex = bytecodeIndex;
         }
+    }
+
+    /**
+     * Records a write failure before its first semantic root crossing. A transfer with an
+     * established origin keeps that origin even if it later crosses an assignment.
+     */
+    public void recordAssignmentFailureIfAbsentForRuntime(SourceSection section) {
+        Objects.requireNonNull(section, "section");
+        if (!section.isAvailable()) {
+            throw new IllegalArgumentException("assignment source section must be available");
+        }
+        if (assignmentFailureSection == null && originBytecode == null) {
+            assignmentFailureSection = section;
+        }
+    }
+
+    /** The explicit write position for diagnostic projection, or {@code null}. */
+    public SourceSection assignmentFailureSectionForRuntime() {
+        return assignmentFailureSection;
     }
 
     /**

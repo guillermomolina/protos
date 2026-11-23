@@ -87,6 +87,29 @@ final class ProtosI115MCompactLoweringTest {
     }
 
     @Test
+    void capturedNumericProducerCarriesAssignmentSourceWithoutAnotherOperation() throws Exception {
+        try (ProtosStandaloneHostedSession session = openSession("captured-provenance", """
+                run: () => {
+                    values: [7]
+                    total: 5
+                    read: () => total
+                    for(i, 0, 1) {
+                        total = total + values[i]
+                    }
+                    read()
+                }
+                """)) {
+            ProtosBytecodeRootNode root = selectedRoot(session.prepareTopLevel("run"));
+            root.getRootNodes().ensureSourceInformation();
+            List<Instruction> instructions = root.getBytecodeNode().getInstructionsAsList();
+            ProtosPerf045RangeEachInlineTest.assertProducerCommitsCapturedCell(instructions, "NumberAdd");
+            assertEquals(1, instructions.stream().filter(instruction ->
+                    ProtosInstructionNames.of(instruction).startsWith("c.NumberAdd")).count());
+            assertEquals(12L, session.prepareTopLevel("run").executable().execute().asLong());
+        }
+    }
+
+    @Test
     void inlineDynamicSelectionPreparesBeforeValueOperands() throws Exception {
         try (ProtosStandaloneHostedSession session = openSession(
                 "inline-dynamic-operands", """
@@ -1307,6 +1330,7 @@ final class ProtosI115MCompactLoweringTest {
      * method dispatch.
      */
     private static void assertOwnedNumericResults(String label, ProtosBytecodeRootNode run) {
+        run.getRootNodes().ensureSourceInformation();
         List<Instruction> instructions = run.getBytecodeNode().getInstructionsAsList().stream()
                 .filter(instruction -> !instruction.getName().startsWith("tag.")
                         && !instruction.getName().startsWith("trace."))

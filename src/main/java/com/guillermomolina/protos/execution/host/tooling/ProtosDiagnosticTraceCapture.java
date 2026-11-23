@@ -178,8 +178,10 @@ final class ProtosDiagnosticTraceCapture {
             if (location == null && origin != null && origin.belongsTo(semantic)) {
                 location = origin.location();
             }
+            SourceSection assignmentFailure = origin != null && origin.belongsTo(semantic)
+                    && signal != null ? signal.assignmentFailureSectionForRuntime() : null;
             origin = null;
-            projectSemanticFrame(semantic, location, collector);
+            projectSemanticFrame(semantic, location, collector, assignmentFailure);
         }
         while (nextLogical < logicalCallers && !collector.full()) {
             projectLogicalCaller(signal.resumedTerminalCallerForRuntime(nextLogical++), collector);
@@ -267,10 +269,18 @@ final class ProtosDiagnosticTraceCapture {
             ProtosBytecodeRootNode semantic,
             BytecodeLocation location,
             Collector collector) {
+        projectSemanticFrame(semantic, location, collector, null);
+    }
+
+    private static void projectSemanticFrame(
+            ProtosBytecodeRootNode semantic,
+            BytecodeLocation location,
+            Collector collector,
+            SourceSection assignmentFailure) {
         String label = semantic.getName();
         if (location == null) {
             semantic.getRootNodes().ensureSourceInformation();
-            collector.add(frame(label, semantic.getSourceSection(), null));
+            collector.add(frame(label, semantic.getSourceSection(), assignmentFailure));
             return;
         }
 
@@ -280,7 +290,8 @@ final class ProtosDiagnosticTraceCapture {
         BytecodeLocation current = location.update();
         BytecodeNode bytecode = current.getBytecodeNode();
         int bytecodeIndex = current.getBytecodeIndex();
-        SourceSection position = current.getSourceLocation();
+        SourceSection position = assignmentFailure != null
+                ? assignmentFailure : current.getSourceLocation();
 
         List<TagTree> regions = activeNestedRootTags(bytecode.getTagTree(), bytecodeIndex);
         for (int index = regions.size() - 1; index >= 0 && !collector.full(); index--) {

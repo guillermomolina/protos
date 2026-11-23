@@ -79,6 +79,30 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
     private static final String MATERIALIZE = "PublishInlineCallbackContext";
 
     @Test
+    void suspendedNumericProducerRetainsTheCapturedReaderAcrossInlineVisits() throws Exception {
+        ProtosPerf045RangeEachInlineTest.assertSuspendedRun("""
+                state: { read: null }
+                source: { apply: (other) => {
+                    hook(state.read())
+                    gate.value()
+                    hook(state.read())
+                    42
+                } }
+                selected: source.alias("apply", "+")
+                run: () => {
+                    total: 5
+                    state.read = () => total
+                    Array(0, 1).each(i => {
+                        if(i == 0) { total = selected + i }
+                        hook(state.read())
+                    })
+                    total
+                }
+                run()
+                """, List.of(5L), List.of(5L, 5L, 42L, 42L), "42");
+    }
+
+    @Test
     void frameNativeZeroParameterCallbackEntersWithoutActivation() throws Exception {
         /*
          * A dynamic standard receiver selects the inline branch; its custom

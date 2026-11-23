@@ -55,6 +55,7 @@ import com.oracle.truffle.api.bytecode.LocalAccessor;
 import com.oracle.truffle.api.bytecode.StackValue;
 import com.oracle.truffle.api.instrumentation.StandardTags;
 import com.oracle.truffle.api.source.Source;
+import com.oracle.truffle.api.source.SourceSection;
 import com.oracle.truffle.api.strings.TruffleString;
 import java.math.BigInteger;
 import java.util.Objects;
@@ -5573,7 +5574,7 @@ final class CanonicalToBytecodeLowerer {
             // retain a primitive carrier; a cell holds guest values only.
             if (identity != null
                     && emitStoreLexicalBinding(
-                            builder, identity, create.value(),
+                            builder, identity, create.value(), create.span(),
                             currentActivationLocal == null, result,
                             preparedCall, childResult, resumeValue)) {
                 return;
@@ -5752,7 +5753,7 @@ final class CanonicalToBytecodeLowerer {
         if (identity != null
                 && access == CanonicalBindingAnalysis.LexicalAccess.DIRECT
                 && emitStoreLexicalBinding(
-                        builder, identity, assign.value(), true, result,
+                        builder, identity, assign.value(), assign.span(), true, result,
                         preparedCall, childResult, resumeValue)) {
             return;
         }
@@ -6025,6 +6026,7 @@ final class CanonicalToBytecodeLowerer {
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalBindingIdentity identity,
             CanonicalExpression value,
+            SourceSpan destinationSpan,
             boolean carrierPermitted,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
@@ -6049,7 +6051,8 @@ final class CanonicalToBytecodeLowerer {
             builder.beginSourceSection(
                     numeric.span().startOffset(), numeric.span().length());
             emitCompletedNumericResult(
-                    builder, numeric, preparedCall, childResult, resumeValue, storage.cell());
+                    builder, numeric, preparedCall, childResult, resumeValue, storage.cell(),
+                    source.createSection(destinationSpan.startOffset(), destinationSpan.length()));
             builder.endSourceSection();
             builder.endBlock();
             return true;
@@ -9998,7 +10001,8 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
         return emitCompletedNumericResult(
-                builder, send, preparedCall, childResult, resumeValue, null);
+                builder, send, preparedCall, childResult, resumeValue, null,
+                source.createSection(send.span().startOffset(), send.span().length()));
     }
 
     private BytecodeLocal emitCompletedNumericResult(
@@ -10007,13 +10011,14 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue,
-            BytecodeLocal commitCell) {
+            BytecodeLocal commitCell,
+            SourceSection assignmentSection) {
         noteDynamicInvocation();
         BytecodeLocal numericResult = builder.createLocal("numericResult", null);
         BytecodeLocal numericResume = builder.createLocal("numericResume", null);
         builder.beginIfThen();
         beginNumericOperation(builder, send.message(), false, numericResult,
-                commitCell == null ? numericResult : commitCell, commitCell != null);
+                commitCell == null ? numericResult : commitCell, commitCell != null, assignmentSection);
         emitPrimitiveNumericOperandValue(
                 builder, send.receiver(), preparedCall, childResult, resumeValue);
         emitPrimitiveNumericOperandValue(
@@ -10022,7 +10027,10 @@ final class CanonicalToBytecodeLowerer {
         builder.beginBlock();
         emitDispatchedContinuationComposition(builder, numericResult, numericResume);
         if (commitCell != null) {
+            // The resumed write has its own source position; the producer still describes the RHS.
+            builder.beginSourceSection(assignmentSection.getCharIndex(), assignmentSection.getCharLength());
             builder.emitStoreCellFromLocal(commitCell, numericResult);
+            builder.endSourceSection();
         }
         builder.endBlock();
         builder.endIfThen();
@@ -10073,7 +10081,8 @@ final class CanonicalToBytecodeLowerer {
         noteDynamicInvocation();
         BytecodeLocal terminalResult = builder.createLocal("terminalNumericResult", null);
         builder.beginBlock();
-        beginNumericOperation(builder, send.message(), true, terminalResult, terminalResult, false);
+        beginNumericOperation(builder, send.message(), true, terminalResult, terminalResult, false,
+                source.createSection(send.span().startOffset(), send.span().length()));
         emitPrimitiveNumericOperandValue(
                 builder, send.receiver(), null, null, null);
         emitPrimitiveNumericOperandValue(
@@ -10116,14 +10125,15 @@ final class CanonicalToBytecodeLowerer {
 
     private static void beginNumericOperation(
             ProtosBytecodeRootNodeGen.Builder builder, String selector, boolean terminal,
-            BytecodeLocal outcome, BytecodeLocal commitCell, boolean commitToCell) {
+            BytecodeLocal outcome, BytecodeLocal commitCell, boolean commitToCell,
+            SourceSection assignmentSection) {
         switch (selector) {
-            case "+" -> builder.beginNumberAdd(terminal, outcome, commitCell, commitToCell);
-            case "-" -> builder.beginNumberSubtract(terminal, outcome, commitCell, commitToCell);
-            case "*" -> builder.beginNumberMultiply(terminal, outcome, commitCell, commitToCell);
-            case "/" -> builder.beginNumberDivide(terminal, outcome, commitCell, commitToCell);
-            case "div" -> builder.beginNumberQuotient(terminal, outcome, commitCell, commitToCell);
-            case "mod" -> builder.beginNumberRemainder(terminal, outcome, commitCell, commitToCell);
+            case "+" -> builder.beginNumberAdd(terminal, outcome, commitCell, commitToCell, assignmentSection);
+            case "-" -> builder.beginNumberSubtract(terminal, outcome, commitCell, commitToCell, assignmentSection);
+            case "*" -> builder.beginNumberMultiply(terminal, outcome, commitCell, commitToCell, assignmentSection);
+            case "/" -> builder.beginNumberDivide(terminal, outcome, commitCell, commitToCell, assignmentSection);
+            case "div" -> builder.beginNumberQuotient(terminal, outcome, commitCell, commitToCell, assignmentSection);
+            case "mod" -> builder.beginNumberRemainder(terminal, outcome, commitCell, commitToCell, assignmentSection);
             case "<" -> builder.beginRichCompareLt(outcome);
             case "<=" -> builder.beginRichCompareLe(outcome);
             case ">" -> builder.beginRichCompareGt(outcome);

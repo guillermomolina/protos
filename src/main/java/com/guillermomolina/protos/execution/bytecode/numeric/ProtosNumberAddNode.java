@@ -34,6 +34,7 @@ import com.oracle.truffle.api.dsl.GenerateUncached;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.Node;
+import com.oracle.truffle.api.source.SourceSection;
 
 /**
  * The addition operation. Primitive specializations, exact overflow
@@ -57,30 +58,31 @@ import com.oracle.truffle.api.nodes.Node;
 @ConstantOperand(type = LocalAccessor.class, name = "outcome")
 @ConstantOperand(type = LocalAccessor.class, name = "commitCell")
 @ConstantOperand(type = boolean.class, name = "commitToCell")
+@ConstantOperand(type = SourceSection.class, name = "assignmentSection")
 @OperationProxy.Proxyable(allowUncached = true, storeBytecodeIndex = false)
 abstract class ProtosNumberAddNode extends ProtosNumberAddFastPathsBase {
 
     @Specialization(guards = "selection.execute(frame, SELECTOR, left)", replaces = "doLL")
     @StoreBytecodeIndex
     static boolean doLLOvf(VirtualFrame frame, boolean terminal, LocalAccessor outcome,
-            LocalAccessor commitCell, boolean commitToCell,
+            LocalAccessor commitCell, boolean commitToCell, SourceSection assignmentSection,
             long left, long right,
             @Bind Node node,
             @Shared("selection") @Cached ProtosNumericSelectionNode selection,
             @Bind("bytecodeOf($node)") BytecodeNode bytecode) {
         return ProtosBytecodeRootNode.StoreAndTestContinuation.storeResultAndCommit(
-                outcome, commitCell, commitToCell, addOrPromote(frame, node, left, right), frame, bytecode);
+                outcome, commitCell, commitToCell, assignmentSection, addOrPromote(frame, node, left, right), frame, bytecode);
     }
 
     @Specialization(guards = "selection.execute(frame, SELECTOR, left)")
     @StoreBytecodeIndex
     static boolean doStrings(VirtualFrame frame, boolean terminal, LocalAccessor outcome,
-            LocalAccessor commitCell, boolean commitToCell,
+            LocalAccessor commitCell, boolean commitToCell, SourceSection assignmentSection,
             ProtosStringValue left, ProtosStringValue right,
             @Shared("selection") @Cached ProtosNumericSelectionNode selection,
             @Bind("bytecodeOf($node)") BytecodeNode bytecode) {
         return ProtosBytecodeRootNode.StoreAndTestContinuation.storeResultAndCommit(
-                outcome, commitCell, commitToCell, concatenate(left, right), frame, bytecode);
+                outcome, commitCell, commitToCell, assignmentSection, concatenate(left, right), frame, bytecode);
     }
 
     @TruffleBoundary
@@ -96,7 +98,7 @@ abstract class ProtosNumberAddNode extends ProtosNumberAddFastPathsBase {
             VirtualFrame frame,
             boolean terminal,
             LocalAccessor outcome,
-            LocalAccessor commitCell, boolean commitToCell,
+            LocalAccessor commitCell, boolean commitToCell, SourceSection assignmentSection,
             Object left,
             Object right,
             @Bind Node node,
@@ -108,15 +110,15 @@ abstract class ProtosNumberAddNode extends ProtosNumberAddFastPathsBase {
             if (left instanceof ProtosStringValue stringLeft
                     && right instanceof ProtosStringValue stringRight) {
                 return ProtosBytecodeRootNode.StoreAndTestContinuation.storeResultAndCommit(
-                        outcome, commitCell, commitToCell,
+                        outcome, commitCell, commitToCell, assignmentSection,
                         concatenate(stringLeft, stringRight), frame, bytecode);
             }
             return ProtosBytecodeRootNode.StoreAndTestContinuation.storeResultAndCommit(
-                    outcome, commitCell, commitToCell,
+                    outcome, commitCell, commitToCell, assignmentSection,
                     genericAdd(root, frame, node, left, right), frame, bytecode);
         }
         return ProtosBytecodeRootNode.StoreAndTestContinuation.storeResultAndCommit(
-                outcome, commitCell, commitToCell, overload.execute(frame, terminal, SELECTOR, left, right,
+                outcome, commitCell, commitToCell, assignmentSection, overload.execute(frame, terminal, SELECTOR, left, right,
                 root, bytecode, bytecode.getBytecodeIndex(frame)), frame, bytecode);
     }
 }

@@ -2298,6 +2298,7 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
      */
     private static void assertProducerOwnsItsResult(
             ProtosBytecodeRootNode root, String where, boolean terminal) {
+        root.getRootNodes().ensureSourceInformation();
         List<Instruction> instructions = root.getBytecodeNode().getInstructionsAsList().stream()
                 .filter(instruction -> !instruction.getName().startsWith("tag.")
                         && !instruction.getName().startsWith("trace."))
@@ -2706,16 +2707,18 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
 
     /*
      * Operand layout shared by every arithmetic fast path:
-     * (frame, terminal, outcome, commitCell, commitToCell, left, right, ...).
+     * (frame, terminal, outcome, commitCell, commitToCell, assignmentSection, left, right, ...).
      */
     private static final int OUTCOME = 2;
-    private static final int LEFT_OPERAND = 5;
+    private static final int LEFT_OPERAND = 6;
 
     private static void assertGuestLongOperands(Method method, String where) {
         Class<?>[] parameters = method.getParameterTypes();
         assertTrue(parameters.length > LEFT_OPERAND + 1, where);
         assertSame(com.oracle.truffle.api.bytecode.LocalAccessor.class, parameters[OUTCOME],
                 where + " outcome local");
+        assertSame(com.oracle.truffle.api.source.SourceSection.class, parameters[LEFT_OPERAND - 1],
+                where + " assignment provenance constant");
         assertSame(long.class, parameters[LEFT_OPERAND], where + " left operand");
         assertSame(long.class, parameters[LEFT_OPERAND + 1], where + " right operand");
     }
@@ -2816,6 +2819,39 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
             }
         }
         System.out.println("PERF040_E1_ARRIVAL_ORDER=PASS");
+    }
+
+    @Test
+    void capturedProducersKeepOneCompletedValueAcrossOverflowAndGenericTransitions() {
+        for (String selector : List.of("+", "-", "*")) {
+            String overflowLeft = selector.equals("-")
+                    ? "(0 - 9223372036854775807 - 1)" : "9223372036854775807";
+            String overflowRight = selector.equals("*") ? "2" : "1";
+            String program = """
+                    state: { read: null; calls: 0 }
+                    update: (x, y) => {
+                        total: 5
+                        state.read = () => total
+                        total = x %s y
+                        total === state.read()
+                    }
+                    source: { apply: (y) => {
+                        state.calls = state.calls + 1
+                        41
+                    } }
+                    selected: source.alias("apply", "%s")
+                    big: 9223372036854775807 + 1
+                    update(1, 2) && update(%s, %s) &&
+                        update(1, 2.5) && update(2.5, 1) && update(1.5, 2.5) &&
+                        update(big, big) && update(selected, 1) &&
+                        update(2, 3) && (state.calls == 1)
+                    """.formatted(selector, selector, overflowLeft, overflowRight);
+            for (boolean debug : List.of(false, true)) {
+                try (Context context = context(debug)) {
+                    assertTrue(eval(context, program), selector + " " + mode(debug));
+                }
+            }
+        }
     }
 
     /**

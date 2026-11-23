@@ -97,6 +97,7 @@ import com.oracle.truffle.api.exception.AbstractTruffleException;
 import com.oracle.truffle.api.frame.FrameDescriptor;
 import com.oracle.truffle.api.frame.MaterializedFrame;
 import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.api.source.SourceSection;
 import com.oracle.truffle.api.profiles.ConditionProfile;
 import com.oracle.truffle.api.profiles.InlinedBranchProfile;
 import com.oracle.truffle.api.nodes.ControlFlowException;
@@ -1916,6 +1917,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @ConstantOperand(type = LocalAccessor.class, name = "outcome")
     @ConstantOperand(type = LocalAccessor.class, name = "commitCell")
     @ConstantOperand(type = boolean.class, name = "commitToCell")
+    @ConstantOperand(type = SourceSection.class, name = "assignmentSection")
     public static final class NumberQuotient {
         static final String SELECTOR = "div";
 
@@ -1926,14 +1928,15 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         @Specialization(guards = {"fitsLong(left, right)",
                 "selection.execute(frame, SELECTOR, left)"})
         public static boolean small(boolean terminal, LocalAccessor outcome,
-                LocalAccessor commitCell, boolean commitToCell, long left, long right,
+                LocalAccessor commitCell, boolean commitToCell, SourceSection assignmentSection,
+                long left, long right,
                 @Bind VirtualFrame frame,
                 @Shared("selection") @Cached ProtosNumericSelectionNode selection,
                 @Bind BytecodeNode bytecode) {
             outcome.setLong(bytecode, frame, left / right);
             if (commitToCell) {
                 StoreAndTestContinuation.commitCompletedCell(
-                        commitCell, outcome, frame, bytecode);
+                        commitCell, outcome, assignmentSection, frame, bytecode);
             }
             return false;
         }
@@ -1941,7 +1944,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         @Specialization
         @InliningCutoff
         public static boolean exact(boolean terminal, LocalAccessor outcome,
-                LocalAccessor commitCell, boolean commitToCell, Object left, Object right,
+                LocalAccessor commitCell, boolean commitToCell, SourceSection assignmentSection,
+                Object left, Object right,
                 @Bind VirtualFrame frame,
                 @Bind ProtosBytecodeRootNode root,
                 @Bind BytecodeNode bytecode,
@@ -1950,12 +1954,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached ProtosNumericOverloadNode overload) {
             if (selection.execute(frame, SELECTOR, left)) {
                 return StoreAndTestContinuation.storeResultAndCommit(
-                        outcome, commitCell, commitToCell,
+                        outcome, commitCell, commitToCell, assignmentSection,
                         ProtosNumericOperationSupport.arithmetic(root, frame, left, SELECTOR, right),
                         frame, bytecode);
             }
             return StoreAndTestContinuation.storeResultAndCommit(
-                    outcome, commitCell, commitToCell,
+                    outcome, commitCell, commitToCell, assignmentSection,
                     overload.execute(frame, terminal, SELECTOR, left, right,
                     root, bytecode, bytecodeIndex), frame, bytecode);
         }
@@ -1970,20 +1974,22 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @ConstantOperand(type = LocalAccessor.class, name = "outcome")
     @ConstantOperand(type = LocalAccessor.class, name = "commitCell")
     @ConstantOperand(type = boolean.class, name = "commitToCell")
+    @ConstantOperand(type = SourceSection.class, name = "assignmentSection")
     public static final class NumberRemainder {
         static final String SELECTOR = "mod";
 
         @Specialization(guards = {"right != 0",
                 "selection.execute(frame, SELECTOR, left)"})
         public static boolean small(boolean terminal, LocalAccessor outcome,
-                LocalAccessor commitCell, boolean commitToCell, long left, long right,
+                LocalAccessor commitCell, boolean commitToCell, SourceSection assignmentSection,
+                long left, long right,
                 @Bind VirtualFrame frame,
                 @Shared("selection") @Cached ProtosNumericSelectionNode selection,
                 @Bind BytecodeNode bytecode) {
             outcome.setLong(bytecode, frame, left % right);
             if (commitToCell) {
                 StoreAndTestContinuation.commitCompletedCell(
-                        commitCell, outcome, frame, bytecode);
+                        commitCell, outcome, assignmentSection, frame, bytecode);
             }
             return false;
         }
@@ -1991,7 +1997,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         @Specialization
         @InliningCutoff
         public static boolean exact(boolean terminal, LocalAccessor outcome,
-                LocalAccessor commitCell, boolean commitToCell, Object left, Object right,
+                LocalAccessor commitCell, boolean commitToCell, SourceSection assignmentSection,
+                Object left, Object right,
                 @Bind VirtualFrame frame,
                 @Bind ProtosBytecodeRootNode root,
                 @Bind BytecodeNode bytecode,
@@ -2000,12 +2007,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached ProtosNumericOverloadNode overload) {
             if (selection.execute(frame, SELECTOR, left)) {
                 return StoreAndTestContinuation.storeResultAndCommit(
-                        outcome, commitCell, commitToCell,
+                        outcome, commitCell, commitToCell, assignmentSection,
                         ProtosNumericOperationSupport.arithmetic(root, frame, left, SELECTOR, right),
                         frame, bytecode);
             }
             return StoreAndTestContinuation.storeResultAndCommit(
-                    outcome, commitCell, commitToCell,
+                    outcome, commitCell, commitToCell, assignmentSection,
                     overload.execute(frame, terminal, SELECTOR, left, right,
                     root, bytecode, bytecodeIndex), frame, bytecode);
         }
@@ -6359,24 +6366,32 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation(storeBytecodeIndex = false)
     @ConstantOperand(type = LocalAccessor.class, name = "outcome")
     public static final class StoreAndTestContinuation {
+        // Numeric evaluation has already completed; only this write can acquire assignment provenance.
         static void commitCompletedCell(
                 LocalAccessor commitCell,
                 LocalAccessor outcome,
+                SourceSection assignmentSection,
                 VirtualFrame frame,
                 BytecodeNode bytecode) {
-            StoreCellFromLocal.perform(commitCell, outcome, frame, bytecode);
+            try {
+                StoreCellFromLocal.perform(commitCell, outcome, frame, bytecode);
+            } catch (ProtosSignalException failure) {
+                failure.recordAssignmentFailureIfAbsentForRuntime(assignmentSection);
+                throw failure;
+            }
         }
 
         static boolean storeResultAndCommit(
                 LocalAccessor outcome,
                 LocalAccessor commitCell,
                 boolean commitToCell,
+                SourceSection assignmentSection,
                 Object value,
                 VirtualFrame frame,
                 BytecodeNode bytecode) {
             boolean pending = storeResult(outcome, value, frame, bytecode);
             if (commitToCell && !pending) {
-                commitCompletedCell(commitCell, outcome, frame, bytecode);
+                commitCompletedCell(commitCell, outcome, assignmentSection, frame, bytecode);
             }
             return pending;
         }

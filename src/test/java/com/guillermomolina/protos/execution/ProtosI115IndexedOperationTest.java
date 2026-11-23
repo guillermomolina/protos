@@ -44,6 +44,29 @@ final class ProtosI115IndexedOperationTest {
             + "}\n";
 
     @Test
+    void failingIndexedOperandDoesNotCommitItsNumericConsumer() {
+        assertTrue(evalBoolean("""
+                state: { order: 0 }
+                run: () => {
+                    total: 5
+                    read: () => total
+                    values: [7]
+                    index: () => {
+                        state.order = state.order * 10 + 2
+                        9
+                    }
+                    left: () => {
+                        state.order = state.order * 10 + 1
+                        total
+                    }
+                    Error.handle(() => { total = left() + values[index()] }, (error) => null)
+                    (state.order == 12) && (read() == 5)
+                }
+                run()
+                """));
+    }
+
+    @Test
     void arrayReadWriteBoundsAndFrozenState() {
         assertEquals(44L, evalLong("a: [1, 2, 3]\na[1] = 40\na[0] + a[1] + a[2]"));
         assertEquals(3L, evalLong("a: [1, 2, 3]\na[2] = 9\na.size()"));
@@ -2527,6 +2550,7 @@ final class ProtosI115IndexedOperationTest {
         try (ProtosStandaloneHostedSession session = open(source)) {
             assertEquals(12L, call(session, "run"));
             ProtosBytecodeRootNode run = root(session, "run");
+            run.getRootNodes().ensureSourceInformation();
             ProtosPerf045RangeEachInlineTest.assertProducerCommitsCapturedCell(
                     run.getBytecodeNode().getInstructionsAsList(), "NumberAdd");
             IndexedCensus census = IndexedCensus.of(run);

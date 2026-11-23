@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.parser.ProtosParser;
@@ -36,6 +37,8 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosTask;
+import com.guillermomolina.protos.runtime.ProtosSignalException;
+import com.guillermomolina.protos.runtime.diagnostics.ProtosDiagnosticTrace;
 import com.guillermomolina.protos.semantic.Canonicalizer;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.oracle.truffle.api.RootCallTarget;
@@ -48,6 +51,7 @@ import com.oracle.truffle.api.bytecode.TagTree;
 import com.oracle.truffle.api.instrumentation.StandardTags;
 import com.oracle.truffle.api.nodes.RootNode;
 import com.oracle.truffle.api.source.Source;
+import com.oracle.truffle.api.source.SourceSection;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -70,6 +74,231 @@ final class ProtosPerf045RangeEachInlineTest {
 
     private static final LanguageReference<ProtosLanguage> LANGUAGE_REF =
             LanguageReference.create(ProtosLanguage.class);
+
+    @Test
+    void numericFailurePreservesCapturedValueAndRhsLocation() throws Exception {
+        ProtosActivation module = new ProtosCoreBootstrap().bootstrap(CORE).newModuleActivation();
+        String program = """
+                state: { read: null; write: null }
+                make: () => {
+                    total: 5
+                    state.read = () => total
+                    state.write = () => {
+                        total = 6 / 0
+                        null
+                    }
+                }
+                make()
+                state.write()
+                """;
+        ProtosExecutionOutcome outcome = ProtosTestExecutionSupport.execute(
+                "numeric-commit-rhs.protos", program, module);
+        assertEquals(ProtosExecutionOutcome.State.FAILED, outcome.state());
+        assertFailurePosition(outcome, program, "numeric-commit-rhs.protos", "6 / 0");
+        assertEquals("5", ProtosNumericValueSupport.integerDecimalText(
+                ProtosTestExecutionSupport.evaluate("state.read()", module)));
+    }
+
+    @Test
+    void frozenCapturedDestinationFailsAtAssignmentWithoutChangingValue() throws Exception {
+        ProtosActivation module = new ProtosCoreBootstrap().bootstrap(CORE).newModuleActivation();
+        String program = """
+                state: { owner: null; read: null; write: null }
+                make: () => {
+                    total: 5
+                    state.owner = context
+                    state.read = () => total
+                    state.write = () => {
+                        total = 6 + 3
+                        null
+                    }
+                }
+                make()
+                state.owner.freeze()
+                state.write()
+                """;
+        ProtosExecutionOutcome outcome = ProtosTestExecutionSupport.execute(
+                "numeric-commit-frozen.protos", program, module);
+        assertEquals(ProtosExecutionOutcome.State.FAILED, outcome.state());
+        assertFailurePosition(outcome, program, "numeric-commit-frozen.protos", "total = 6 + 3");
+        assertEquals("5", ProtosNumericValueSupport.integerDecimalText(
+                ProtosTestExecutionSupport.evaluate("state.read()", module)));
+    }
+
+    @Test
+    void assignmentProvenanceIsWriteOnceAndKeepsTheOriginalErrorTransfer() throws Exception {
+        ProtosActivation module = new ProtosCoreBootstrap().bootstrap(CORE).newModuleActivation();
+        ProtosObjectValue error = (ProtosObjectValue) ProtosTestExecutionSupport.evaluate("Error()", module);
+        ProtosSignalException occurrence = new ProtosSignalException(error);
+        Source source = Source.newBuilder(ProtosLanguage.ID, "total = 6 + 3", "commit.protos").build();
+        SourceSection assignment = source.createSection(0, source.getLength());
+        occurrence.recordAssignmentFailureIfAbsentForRuntime(assignment);
+        occurrence.recordAssignmentFailureIfAbsentForRuntime(source.createSection(8, 5));
+        assertSame(assignment, occurrence.assignmentFailureSectionForRuntime());
+        assertSame(error, occurrence.error());
+        assertTrue(occurrence.selectedHandlerFrame().isEmpty());
+        assertNull(occurrence.originBytecodeForRuntime());
+        assertEquals(-1, occurrence.originBytecodeIndexForRuntime());
+        assertEquals(0, occurrence.resumedTerminalCallerCountForRuntime());
+        ProtosTestExecutionSupport.callEntered(() -> {
+            ProtosBytecodeRootNode root = lower("1 + 2");
+            BytecodeNode bytecode = root.getBytecodeNode();
+            occurrence.recordOriginIfAbsentForRuntime(bytecode, 0);
+            occurrence.recordAssignmentFailureIfAbsentForRuntime(source.createSection(8, 5));
+            assertSame(bytecode, occurrence.originBytecodeForRuntime());
+            assertEquals(0, occurrence.originBytecodeIndexForRuntime());
+            assertSame(assignment, occurrence.assignmentFailureSectionForRuntime());
+            ProtosSignalException alreadyLocated = new ProtosSignalException(error);
+            alreadyLocated.recordOriginIfAbsentForRuntime(bytecode, 0);
+            alreadyLocated.recordAssignmentFailureIfAbsentForRuntime(assignment);
+            assertNull(alreadyLocated.assignmentFailureSectionForRuntime(),
+                    "an established numeric origin cannot become an assignment failure");
+            assertSame(error, alreadyLocated.error());
+            return null;
+        });
+    }
+
+    @Test
+    void selectedNumericErrorKeepsIdentityAndDoesNotWrite() throws Exception {
+        ProtosActivation module = new ProtosCoreBootstrap().bootstrap(CORE).newModuleActivation();
+        assertSame(Boolean.TRUE, ProtosTestExecutionSupport.evaluate("""
+                original: Error()
+                source: { apply: (other) => original.signal() }
+                selected: source.alias("apply", "+")
+                run: () => {
+                    total: 5
+                    read: () => total
+                    caught: Error.handle(() => { total = selected + 1 }, (error) => error)
+                    (caught === original) && (read() == 5)
+                }
+                run()
+                """, module));
+    }
+
+    @Test
+    void selectedProducerCommitsOnlyAfterResumptionToTheCapturedCell() throws Exception {
+        assertSuspendedRun("""
+                state: { read: null }
+                source: { apply: (other) => {
+                    hook(state.read())
+                    gate.value()
+                    hook(state.read())
+                    42
+                } }
+                selected: source.alias("apply", "+")
+                run: () => {
+                    total: 5
+                    state.read = () => total
+                    total = selected + 1
+                    hook(state.read())
+                    total
+                }
+                run()
+                """, List.of(5L), List.of(5L, 5L, 42L), "42");
+    }
+
+    @Test
+    void nonLocalReturnAfterSuspensionAbandonsThePendingNumericCommit() throws Exception {
+        assertSuspendedRun("""
+                state: { read: null }
+                run: () => {
+                    total: 5
+                    state.read = () => total
+                    source: { apply: (other) => {
+                        hook(state.read())
+                        gate.value()
+                        ^77
+                    } }
+                    selected: source.alias("apply", "+")
+                    total = selected + 1
+                    hook(99)
+                    total
+                }
+                result: run()
+                hook(state.read())
+                result
+                """, List.of(5L), List.of(5L, 5L), "77");
+    }
+
+    @Test
+    void successfulCapturedAssignmentReturnsTheExactCompletedResult() throws Exception {
+        ProtosActivation module = new ProtosCoreBootstrap().bootstrap(CORE).newModuleActivation();
+        assertSame(Boolean.TRUE, ProtosTestExecutionSupport.evaluate("""
+                value: { marker: 42 }
+                source: { apply: (other) => value }
+                selected: source.alias("apply", "+")
+                run: () => {
+                    total: 5
+                    read: () => total
+                    result: (total = selected + 1)
+                    (result === value) && (read() === result)
+                }
+                run()
+                """, module));
+    }
+
+    @Test
+    void pendingProducerKeepsItsCellThroughCompletionOrCancellation() throws Exception {
+        inContext(() -> {
+            for (boolean cancel : List.of(false, true)) {
+                ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
+                ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+                ProtosActivation activation = prelude.newModuleActivation(
+                        new ProtosActorModuleState(), null, prelude.newExecutionContext(), domain);
+                ProtosFutureValue gate = new ProtosFutureValue(prelude.futurePrototype(), domain);
+                ProtosClosureValue[] reader = new ProtosClosureValue[1];
+                activation.context().createLocalSlot("gate", gate);
+                activation.context().createLocalSlot("capture", ProtosClosureValue.nativeClosure(
+                        (caller, supplied) -> {
+                            reader[0] = (ProtosClosureValue) supplied.get(0);
+                            return ProtosNullValue.INSTANCE;
+                        }));
+                ProtosBytecodeRootNode root = lower("""
+                        source: { apply: (other) => { gate.value(); 42 } }
+                        selected: source.alias("apply", "+")
+                        run: () => {
+                            total: 5
+                            capture(() => total)
+                            total = selected + 1
+                            total
+                        }
+                        run()
+                        """);
+                ProtosTask task = domain.createTask(null,
+                        current -> ProtosBytecodeTaskExecution.execute(current, root.getCallTarget(), activation));
+                assertTrue(domain.dispatchOne());
+                assertEquals(ProtosTask.State.SUSPENDED, task.state());
+                var cell = reader[0].capturedCellsForRuntime()[0];
+                assertEquals("5", ProtosNumericValueSupport.integerDecimalText(cell.valueOrNullForRuntime()));
+                if (cancel) {
+                    assertTrue(task.requestCancellation());
+                    for (int turn = 0; turn < 8 && task.state() != ProtosTask.State.CANCELLED; turn++) {
+                        assertTrue(domain.dispatchOne(), "cancellation must make progress");
+                    }
+                    assertEquals(ProtosTask.State.CANCELLED, task.state());
+                }
+                assertTrue(gate.resolve(ProtosNullValue.INSTANCE, activation));
+                while (domain.dispatchOne()) {
+                    // A queued wakeup must not revive an abandoned producer.
+                }
+                assertEquals(cancel ? ProtosTask.State.CANCELLED : ProtosTask.State.COMPLETED, task.state());
+                assertSame(cell, reader[0].capturedCellsForRuntime()[0]);
+                assertEquals(cancel ? "5" : "42",
+                        ProtosNumericValueSupport.integerDecimalText(cell.valueOrNullForRuntime()));
+            }
+        });
+    }
+
+    private static void assertFailurePosition(
+            ProtosExecutionOutcome outcome, String program, String name, String expression) {
+        Source source = Source.newBuilder(ProtosLanguage.ID, program, name).build();
+        SourceSection expected = source.createSection(program.indexOf(expression), expression.length());
+        ProtosDiagnosticTrace trace = outcome.failureDiagnosticTrace().orElseThrow();
+        assertTrue(trace.frames().stream().anyMatch(frame -> name.equals(frame.sourceName())
+                        && frame.line() == expected.getStartLine()
+                        && frame.column() == expected.getStartColumn()),
+                () -> "missing failure position for " + expression + ": " + trace.frames());
+    }
 
     @Test
     void canonicalConstructionAndIterationNeverEnterSourceRangeRoots() throws Exception {
@@ -2483,6 +2712,16 @@ final class ProtosPerf045RangeEachInlineTest {
                 .filter(argument -> argument.getKind() == Instruction.Argument.Kind.CONSTANT)
                 .map(Instruction.Argument::asConstant).filter(Boolean.class::isInstance).toList();
         assertEquals(List.of(false, true), booleans, "nonterminal producer owns its commit");
+        List<SourceSection> provenance = instructions.get(producer).getArguments().stream()
+                .filter(argument -> argument.getKind() == Instruction.Argument.Kind.CONSTANT)
+                .map(Instruction.Argument::asConstant).filter(SourceSection.class::isInstance)
+                .map(SourceSection.class::cast).toList();
+        assertEquals(1, provenance.size(), "assignment provenance is one lowering-time constant");
+        SourceSection assignment = provenance.get(0);
+        assertTrue(assignment.getCharacters().toString().contains("="), "whole assignment span");
+        SourceSection numeric = instructions.get(producer).getSourceSection();
+        assertTrue(numeric != null && numeric.getCharIndex() > assignment.getCharIndex(),
+                "the producer keeps the distinct RHS source section");
         int deferred = -1;
         int stores = 0;
         for (int i = producer + 2; i < guarded.completion(); i++) {
@@ -2493,6 +2732,8 @@ final class ProtosPerf045RangeEachInlineTest {
                 assertTrue(sameLocal(cell, destination.get(0)), "deferred commit uses the same cell");
                 assertTrue(sameLocal(guarded.outcome(), destination.get(1)),
                         "deferred commit releases the resumed result");
+                assertEquals(assignment, instructions.get(i).getSourceSection(),
+                        "resumed write keeps the assignment source section");
             }
         }
         assertEquals(1, stores, "exactly one deferred commit inside the suspension guard");
