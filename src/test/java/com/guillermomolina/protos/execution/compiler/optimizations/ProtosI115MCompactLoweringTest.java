@@ -1084,6 +1084,268 @@ final class ProtosI115MCompactLoweringTest {
                 .findFirst().orElseThrow().asConstant();
     }
 
+    /**
+     * Every numeric selector stores its exact result through its own
+     * constant outcome local and answers only whether that result must be
+     * composed: no StoreAndTestContinuation follows a numeric operation, a
+     * nonterminal operation's answer is the guard of its composition, and a
+     * terminal operation's answer is discarded while the stored result is
+     * the root's value. Long, Double, exact-overflow, nested, terminal and
+     * captured-cell results stay exact; a site that invokes nothing else
+     * emits no ordinary dispatch for its standard numeric path.
+     */
+    @Test
+    void numericProducersStoreTheirOwnResultsForEverySelector() throws Exception {
+        record Row(String selector, long x, long y, String expected,
+                double dx, double dy, String expectedDouble, String inverse) {
+            String apply(String left, String right) {
+                return selector.equals("div") || selector.equals("mod")
+                        ? "(" + left + ")." + selector + "(" + right + ")"
+                        : "(" + left + ") " + selector + " (" + right + ")";
+            }
+        }
+        List<Row> rows = List.of(
+                new Row("+", 8, 3, "11", 1.5, 2.25, "3.75", "-"),
+                new Row("-", 8, 3, "5", 1.5, 2.25, "-0.75", "+"),
+                new Row("*", 8, 3, "24", 1.5, 2.0, "3.0", "div"),
+                new Row("/", 9, 3, "3", 7.5, 2.5, "3.0", null),
+                new Row("div", 8, 3, "2", 0, 0, null, null),
+                new Row("mod", 8, 3, "2", 0, 0, null, null),
+                new Row("<", 8, 3, "false", 1.5, 2.25, "true", null),
+                new Row("<=", 3, 3, "true", 2.25, 1.5, "false", null),
+                new Row(">", 8, 3, "true", 1.5, 2.25, "false", null),
+                new Row(">=", 2, 3, "false", 2.25, 2.25, "true", null));
+        StringBuilder source = new StringBuilder();
+        for (int i = 0; i < rows.size(); i++) {
+            Row row = rows.get(i);
+            String x = "x" + i;
+            String y = "y" + i;
+            source.append(x).append(": ").append(row.x()).append('\n')
+                    .append(y).append(": ").append(row.y()).append('\n')
+                    .append("terminal").append(i).append(": () => { ")
+                    .append(row.apply(x, y)).append(" }\n")
+                    .append("nonterminal").append(i).append(": () => {\n    r: ")
+                    .append(row.apply(x, y)).append("\n    r\n}\n")
+                    .append("nested").append(i).append(": () => { (")
+                    .append(row.apply(x, y)).append(") == (").append(row.expected())
+                    .append(") }\n")
+                    .append("captured").append(i).append(": () => {\n    r: 0\n")
+                    .append("    read: () => r\n    r = ").append(row.apply(x, y))
+                    .append("\n    read()\n}\n");
+            if (row.expectedDouble() != null) {
+                source.append("double").append(i).append(": () => {\n    r: ")
+                        .append(row.apply(Double.toString(row.dx()), Double.toString(row.dy())))
+                        .append("\n    r\n}\n");
+            }
+            if (row.inverse() != null) {
+                // Exact large-Integer promotion: the inverse recovers the receiver.
+                String wide = row.selector().equals("-") ? "0 - 9223372036854775807"
+                        : "9223372036854775807";
+                String promoted = row.apply(wide, "2");
+                String back = row.inverse().equals("div")
+                        ? "(" + promoted + ").div(2)" : "(" + promoted + ") " + row.inverse() + " 2";
+                source.append("overflow").append(i).append(": () => { (")
+                        .append(back).append(") == (").append(wide).append(") }\n");
+            }
+        }
+        source.append("""
+                maxEdge: () => { 9223372036854775807 + 0 }
+                minEdge: () => { (0 - 9223372036854775807 - 1) * 1 }
+                recovered: () => {
+                    big: 9223372036854775807 + 1
+                    small: big - 9223372036854775807
+                    small + 1
+                }
+                mixedLongDouble: () => { 3 + 0.5 }
+                mixedDoubleLong: () => { 0.5 * 4 }
+                signedQuotient: () => { (0 - 7).div(2) }
+                signedRemainder: () => { (0 - 7).mod(2) }
+                cellAfterReturn: () => {
+                    r: 5
+                    read: () => r
+                    m: () => {
+                        r = r + (() => { ^read() })()
+                        1
+                    }
+                    m()
+                    read()
+                }
+                """);
+        source.append("divideByZero: () => {\n")
+                .append("    Error.handle(() => { x3 / 0; false }, (caught) => { true })\n}\n");
+        try (ProtosStandaloneHostedSession session =
+                openSession("numeric-producer-matrix", source.toString())) {
+            for (int round = 0; round < 3; round++) {
+                for (int i = 0; i < rows.size(); i++) {
+                    Row row = rows.get(i);
+                    for (String function : List.of("terminal", "nonterminal", "captured")) {
+                        Value value = session.prepareTopLevel(function + i).executable().execute();
+                        assertEquals(row.expected(), value.isBoolean()
+                                        ? Boolean.toString(value.asBoolean())
+                                        : Long.toString(value.asLong()),
+                                row.selector() + " " + function);
+                    }
+                    assertTrue(session.prepareTopLevel("nested" + i).executable().execute()
+                            .asBoolean(), row.selector() + " nested");
+                    if (row.expectedDouble() != null) {
+                        Value value = session.prepareTopLevel("double" + i).executable().execute();
+                        assertEquals(row.expectedDouble(), value.isBoolean()
+                                        ? Boolean.toString(value.asBoolean())
+                                        : Double.toString(value.asDouble()),
+                                row.selector() + " double");
+                    }
+                    if (row.inverse() != null) {
+                        assertTrue(session.prepareTopLevel("overflow" + i).executable().execute()
+                                .asBoolean(), row.selector() + " exact promotion");
+                    }
+                }
+                assertTrue(session.prepareTopLevel("divideByZero").executable().execute()
+                        .asBoolean(), "an Integer division by zero signals its Error");
+                assertEquals(Long.MAX_VALUE, longResult(session, "maxEdge"));
+                assertEquals(Long.MIN_VALUE, longResult(session, "minEdge"));
+                assertEquals(2L, longResult(session, "recovered"),
+                        "a site returns to primitive results after promotion");
+                assertEquals(3.5, session.prepareTopLevel("mixedLongDouble").executable()
+                        .execute().asDouble());
+                assertEquals(2.0, session.prepareTopLevel("mixedDoubleLong").executable()
+                        .execute().asDouble());
+                assertEquals(-3L, longResult(session, "signedQuotient"), "truncating div");
+                assertEquals(-1L, longResult(session, "signedRemainder"), "truncating mod");
+                // The ^ returns from cellAfterReturn (its captured home) with the
+                // binding read before the interrupted operation could write it.
+                assertEquals(5L, longResult(session, "cellAfterReturn"));
+            }
+            for (int i = 0; i < rows.size(); i++) {
+                for (String function : List.of("terminal", "nonterminal", "nested", "captured")) {
+                    assertOwnedNumericResults(function + i, selectedRoot(
+                            session.prepareTopLevel(function + i)));
+                }
+            }
+        }
+    }
+
+    private static boolean readsOffset(Instruction instruction, int offset) {
+        return instruction.getArguments().stream()
+                .anyMatch(argument -> argument.getKind() == Instruction.Argument.Kind.LOCAL_OFFSET
+                        && argument.asLocalOffset() == offset);
+    }
+
+    private static long longResult(ProtosStandaloneHostedSession session, String function)
+            throws Exception {
+        return session.prepareTopLevel(function).executable().execute().asLong();
+    }
+
+    /*
+     * Every numeric operation of run carries exactly one constant outcome
+     * LocalAccessor and is followed by the branch its answer guards, or by
+     * the discard of a terminal answer; none is followed by a separate
+     * StoreAndTestContinuation, and the standard path adds no ordinary
+     * method dispatch.
+     */
+    private static void assertOwnedNumericResults(String label, ProtosBytecodeRootNode run) {
+        List<Instruction> instructions = run.getBytecodeNode().getInstructionsAsList().stream()
+                .filter(instruction -> !instruction.getName().startsWith("tag.")
+                        && !instruction.getName().startsWith("trace."))
+                .toList();
+        List<String> names = instructions.stream().map(ProtosInstructionNames::of).toList();
+        int operations = 0;
+        for (int i = 0; i < names.size(); i++) {
+            String name = names.get(i);
+            if (!name.startsWith("c.Number") && !name.startsWith("c.RichCompare")) {
+                continue;
+            }
+            operations++;
+            long outcomes = instructions.get(i).getArguments().stream()
+                    .filter(argument -> argument.getKind() == Instruction.Argument.Kind.CONSTANT
+                            && argument.asConstant()
+                                    instanceof com.oracle.truffle.api.bytecode.LocalAccessor)
+                    .count();
+            assertEquals(1L, outcomes, label + ": " + name + " outcome local: " + names);
+            String outcome = instructions.get(i).getArguments().stream()
+                    .filter(argument -> argument.getKind() == Instruction.Argument.Kind.CONSTANT
+                            && argument.asConstant()
+                                    instanceof com.oracle.truffle.api.bytecode.LocalAccessor)
+                    .map(argument -> argument.asConstant().toString())
+                    .findFirst().orElseThrow();
+            int offset = Integer.parseInt(outcome.replaceAll(".*localOffset=(-?\\d+).*", "$1"));
+            String next = names.get(i + 1);
+            if (next.startsWith("pop")) {
+                // Terminal: the status is discarded and the stored result returned.
+                assertTrue(names.get(i + 2).startsWith("load.local")
+                                && readsOffset(instructions.get(i + 2), offset),
+                        label + ": " + name + " returns its stored result: " + names);
+                continue;
+            }
+            assertTrue(next.startsWith("branch.false"),
+                    label + ": " + name + " answer is neither guard nor discarded: " + names);
+            int composition = i + 2;
+            while (composition < names.size()
+                    && !names.get(composition).startsWith("c.IsContinuation")) {
+                composition++;
+            }
+            assertTrue(composition < names.size()
+                            && names.get(composition - 1).startsWith("load.local")
+                            && readsOffset(instructions.get(composition - 1), offset),
+                    label + ": " + name + " composition tests its own outcome: " + names);
+            long releases = 0;
+            // Up to the next numeric operation, which may reuse the same frame slot.
+            for (int j = composition; j < names.size()
+                    && !names.get(j).startsWith("c.Number")
+                    && !names.get(j).startsWith("c.RichCompare"); j++) {
+                Instruction candidate = instructions.get(j);
+                if (names.get(j).startsWith("c.LoadAndClearTempLocal")
+                        && candidate.getArguments().stream().anyMatch(argument ->
+                                argument.getKind() == Instruction.Argument.Kind.CONSTANT
+                                        && outcome.equals(String.valueOf(argument.asConstant())))) {
+                    releases++;
+                }
+            }
+            assertEquals(1L, releases,
+                    label + ": " + name + " completed result consumed once: " + names);
+        }
+        assertTrue(operations > 0, label + " has a numeric operation: " + names);
+        if (label.startsWith("captured")) {
+            /*
+             * The captured binding is written only on the completed path: the
+             * first StoreCell after the producer follows its cold composition
+             * loop and the release of its outcome local. The site's only send
+             * is its own read() call; the producer adds no root or callback call.
+             */
+            int producer = 0;
+            while (!names.get(producer).startsWith("c.Number")
+                    && !names.get(producer).startsWith("c.RichCompare")) {
+                producer++;
+            }
+            int storeCell = -1;
+            int backward = -1;
+            int release = -1;
+            for (int j = producer + 1; j < names.size() && storeCell < 0; j++) {
+                String name = names.get(j);
+                if (backward < 0 && name.startsWith("branch.backward")) {
+                    backward = j;
+                } else if (backward >= 0 && name.startsWith("c.LoadAndClearTempLocal")) {
+                    release = j;
+                } else if (name.startsWith("c.StoreCell")) {
+                    storeCell = j;
+                }
+            }
+            int published = storeCell;
+            int composed = backward;
+            int released = release;
+            assertTrue(composed > producer && released > composed && published > released,
+                    label + " publishes the cell only after completion: " + names);
+            assertTrue(names.stream().filter(name -> name.startsWith("c.Call")).count() <= 1L,
+                    label + " adds a call beyond read(): " + names);
+        }
+        assertFalse(names.stream().anyMatch(name -> name.startsWith("c.StoreAndTestContinuation")),
+                label + " stores a numeric result separately: " + names);
+        if (label.startsWith("terminal") || label.startsWith("nonterminal")) {
+            assertFalse(names.stream().anyMatch(name -> name.startsWith("c.Call")
+                            || name.startsWith("c.GetMethod")),
+                    label + " dispatches its standard numeric path: " + names);
+        }
+    }
+
     private static Census runCase(String name, String source, int expected, Sites sites)
             throws Exception {
         try (ProtosStandaloneHostedSession session = openSession(name, source)) {

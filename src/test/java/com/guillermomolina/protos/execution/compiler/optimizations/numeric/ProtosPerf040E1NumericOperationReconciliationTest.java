@@ -2194,6 +2194,346 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
      * same operand types. Every other specialization neither rewrites nor
      * replaces. The generated nodes exist.
      */
+    /**
+     * Every numeric selector, at terminal, nonterminal, captured-cell and
+     * nested sites: the standard result, a selected custom behavior, the
+     * restored standard result, an exact exceptional domain and a selected
+     * Error. Each site's operation stores its result through its own
+     * constant outcome local, with no separate StoreAndTestContinuation; a
+     * nonterminal answer guards the existing composition reading that same
+     * local, and a terminal answer is discarded while the stored guest
+     * value is returned.
+     */
+    @Test
+    void producerOwnedResultsAcrossEverySelectorAndSiteShape() throws Exception {
+        withCore(module -> {
+            Object large = call(closure("(x, y) => x + y", module), module, Long.MAX_VALUE, 1L);
+            assertTrue(ProtosNumericValueSupport.isLargeInteger(large));
+            ProtosClosureValue failing = closure("(other) => { Error().signal() }", module);
+            for (Map.Entry<String, Object[]> entry : Map.of(
+                    "+", new Object[] {9L, Long.MAX_VALUE, 1L},
+                    "-", new Object[] {3L, Long.MIN_VALUE, 1L},
+                    "*", new Object[] {18L, Long.MAX_VALUE, 2L},
+                    "/", new Object[] {2L, 5L, 2L},
+                    "div", new Object[] {2L, Long.MIN_VALUE, -1L},
+                    "mod", new Object[] {0L, 7L, -2L},
+                    "<", new Object[] {Boolean.FALSE, large, 1L},
+                    "<=", new Object[] {Boolean.FALSE, large, 1L},
+                    ">", new Object[] {Boolean.TRUE, large, 1L},
+                    ">=", new Object[] {Boolean.TRUE, large, 1L}).entrySet()) {
+                String selector = entry.getKey();
+                Object standard = entry.getValue()[0];
+                Object exceptionalLeft = entry.getValue()[1];
+                Object exceptionalRight = entry.getValue()[2];
+                boolean ordering = List.of("<", "<=", ">", ">=").contains(selector);
+                String expression = selector.equals("div") || selector.equals("mod")
+                        ? "x." + selector + "(y)" : "x " + selector + " y";
+                Map<String, ProtosClosureValue> sites = new java.util.LinkedHashMap<>();
+                sites.put("terminal", closure("(x, y) => " + expression, module));
+                sites.put("nonterminal", closure(
+                        "(x, y) => {\n    r: " + expression + "\n    r\n}", module));
+                sites.put("captured", closure("(x, y) => {\n    r: 0\n    read: () => r\n"
+                        + "    r = " + expression + "\n    read()\n}", module));
+                sites.put("nested", closure(
+                        "(x, y) => {\n    box: [" + expression + "]\n    box[0]\n}", module));
+                ProtosObjectValue custom = new ProtosObjectValue(ProtosObjectValue.rootObject());
+                custom.createLocalSlot(selector, ordering ? answeringFalse() : answering(41L));
+                Object selected = ordering ? Boolean.FALSE : Long.valueOf(41L);
+                for (Map.Entry<String, ProtosClosureValue> site : sites.entrySet()) {
+                    String where = selector + " " + site.getKey();
+                    ProtosClosureValue closure = site.getValue();
+                    for (int round = 0; round < 3; round++) {
+                        assertEquals(standard, normalized(call(closure, module, 6L, 3L)), where);
+                        assertEquals(selected, normalized(call(closure, module, custom, 1L)),
+                                where + " selected");
+                        assertEquals(standard, normalized(call(closure, module, 6L, 3L)),
+                                where + " restored");
+                    }
+                    Object exceptional = call(closure, module, exceptionalLeft, exceptionalRight);
+                    switch (selector) {
+                        case "+", "-", "*", "div" -> assertTrue(
+                                ProtosNumericValueSupport.isLargeInteger(exceptional), where);
+                        case "/" -> assertTrue(
+                                ProtosNumericValueSupport.isFraction(exceptional), where);
+                        // Truncating remainder: the sign follows the receiver.
+                        case "mod" -> assertEquals(1L, normalized(exceptional), where);
+                        default -> assertEquals(standard, exceptional, where + " large");
+                    }
+                    custom.assignLocalSlot(selector, failing);
+                    assertThrows(ProtosSignalException.class,
+                            () -> call(closure, module, custom, 1L), where + " selected Error");
+                    custom.assignLocalSlot(selector, ordering ? answeringFalse() : answering(41L));
+                    assertEquals(standard, normalized(call(closure, module, 6L, 3L)),
+                            where + " after the selected Error");
+                    assertProducerOwnsItsResult(rootOf(closure), where,
+                            site.getKey().equals("terminal"));
+                }
+            }
+        });
+        System.out.println("PERF045_PRODUCER_OWNED_NUMERIC_MATRIX=PASS");
+    }
+
+    /*
+     * Each numeric operation carries exactly one constant outcome
+     * LocalAccessor and no StoreAndTestContinuation follows it. A guarding
+     * branch.false leads to the existing composition, whose IsContinuation
+     * reads the same local and whose resumption writes it back; the
+     * completed path releases that same local. A terminal arithmetic site
+     * may instead discard its answer (pop) and return the stored value.
+     */
+    private static void assertProducerOwnsItsResult(
+            ProtosBytecodeRootNode root, String where, boolean terminal) {
+        List<Instruction> instructions = root.getBytecodeNode().getInstructionsAsList().stream()
+                .filter(instruction -> !instruction.getName().startsWith("tag.")
+                        && !instruction.getName().startsWith("trace."))
+                .toList();
+        List<String> names = instructions.stream().map(Instruction::getName).toList();
+        assertFalse(names.stream().anyMatch(name -> name.startsWith("c.StoreAndTestContinuation")),
+                () -> where + " stores a numeric result separately: " + names);
+        int producers = 0;
+        for (int i = 0; i < names.size(); i++) {
+            if (!names.get(i).startsWith("c.Number") && !names.get(i).startsWith("c.RichCompare")) {
+                continue;
+            }
+            producers++;
+            List<com.oracle.truffle.api.bytecode.LocalAccessor> outcomes =
+                    instructions.get(i).getArguments().stream()
+                            .filter(argument -> argument.getKind() == Instruction.Argument.Kind.CONSTANT)
+                            .map(Instruction.Argument::asConstant)
+                            .filter(com.oracle.truffle.api.bytecode.LocalAccessor.class::isInstance)
+                            .map(com.oracle.truffle.api.bytecode.LocalAccessor.class::cast)
+                            .toList();
+            assertEquals(1, outcomes.size(), () -> where + " outcome local: " + names);
+            String outcome = outcomes.get(0).toString();
+            int offset = Integer.parseInt(outcome.replaceAll(".*localOffset=(-?\\d+).*", "$1"));
+            String next = names.get(i + 1);
+            if (next.startsWith("pop")) {
+                assertTrue(terminal, () -> where + " discards a nonterminal answer: " + names);
+                int load = i + 2;
+                assertTrue(names.get(load).startsWith("load.local")
+                                && readsOffset(instructions.get(load), offset),
+                        () -> where + " returns its stored result: " + names);
+                continue;
+            }
+            assertTrue(next.startsWith("branch.false"),
+                    () -> where + " answer is not its guard: " + names);
+            int composition = -1;
+            for (int j = i + 2; j < names.size(); j++) {
+                if (names.get(j).startsWith("c.IsContinuation")) {
+                    composition = j;
+                    break;
+                }
+            }
+            int check = composition;
+            assertTrue(check > i + 1 && names.get(check - 1).startsWith("load.local")
+                            && readsOffset(instructions.get(check - 1), offset),
+                    () -> where + " composition tests its own outcome: " + names);
+            long releases = 0;
+            for (int j = check; j < names.size(); j++) {
+                if (names.get(j).startsWith("c.LoadAndClearTempLocal")
+                        && instructions.get(j).getArguments().stream().anyMatch(argument ->
+                                argument.getKind() == Instruction.Argument.Kind.CONSTANT
+                                        && outcome.equals(String.valueOf(argument.asConstant())))) {
+                    releases++;
+                }
+            }
+            assertEquals(1L, releases, () -> where + " completed result released once: " + names);
+        }
+        assertTrue(producers > 0, () -> where + " has a numeric operation: " + names);
+    }
+
+    private static boolean readsOffset(Instruction instruction, int offset) {
+        return instruction.getArguments().stream()
+                .anyMatch(argument -> argument.getKind() == Instruction.Argument.Kind.LOCAL_OFFSET
+                        && argument.asLocalOffset() == offset);
+    }
+
+    /**
+     * A selected {@code +} that suspends inside a Task, consumed at a
+     * terminal and at a nonterminal position, and one that signals an Error
+     * after resuming: each operand is evaluated once, the selected method
+     * runs once, the resumed result reaches its consumer once and the Error
+     * reaches the guest handler without publishing a result.
+     */
+    @Test
+    void suspendedSelectionsCompleteAtTerminalAndNonterminalSitesAndSignalErrors()
+            throws Exception {
+        withCanonicalPrelude(canonical -> {
+            int[] operands = new int[1];
+            int[] selected = new int[1];
+            ProtosClosureValue next = ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> {
+                        operands[0]++;
+                        return Long.valueOf(operands[0]);
+                    });
+            ProtosClosureValue mark = ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> {
+                        selected[0]++;
+                        return Long.valueOf(selected[0]);
+                    });
+            ProtosEmbeddedProcess embedding =
+                    ProtosLanguageContext.current().embeddedProcessForHostEntry();
+            ProtosActorExecutionDomain rootDomain = embedding.rootExecutionDomain();
+            ProtosActivation canonicalModule = canonical.newModuleActivation(
+                    new ProtosActorModuleState(), null,
+                    canonical.newExecutionContext(), rootDomain);
+            Object standardPlus =
+                    canonical.integerPrototype().readLocalSlot("+").orElseThrow();
+            Object suspendingPlus = call(
+                    closure("(mark) => (other) => {\n    mark()\n"
+                            + "    (() => { 42 }).future().value()\n}", canonicalModule),
+                    canonicalModule, mark);
+            Object suspendingError = call(
+                    closure("(mark) => (other) => {\n    mark()\n"
+                            + "    (() => { 0 }).future().value()\n"
+                            + "    Error().signal()\n}", canonicalModule),
+                    canonicalModule, mark);
+            AlternativeIntegers alternative =
+                    alternativeIntegers(canonical, standardPlus, false);
+            ProtosActivation module = alternative.prelude().newModuleActivation(
+                    new ProtosActorModuleState(), null,
+                    alternative.prelude().newExecutionContext(), rootDomain);
+            Map<String, ProtosClosureValue> sites = new java.util.LinkedHashMap<>();
+            sites.put("terminal", closure(
+                    "(next) => {\n    a: next()\n    b: next()\n"
+                            + "    (() => { a + b }).future().value()\n}", module));
+            sites.put("nonterminal", closure(
+                    "(next) => {\n    (() => {\n        sum: next() + next()\n"
+                            + "        sum\n    }).future().value()\n}", module));
+            sites.put("handled", closure(
+                    "(next) => {\n    (() => {\n"
+                            + "        Error.handle(() => { next() + next() }, (caught) => { 7 })\n"
+                            + "    }).future().value()\n}", module));
+            // The Task's own binding, captured by read, observed before and after
+            // the selected + completes its assignment (before * 100 + after,
+            // spelled without + because this Prelude redefines Integer +).
+            sites.put("captured", closure(
+                    "(next) => {\n    (() => {\n        total: 5\n        read: () => total\n"
+                            + "        before: read()\n        total = next() + next()\n"
+                            + "        before * 100 - (0 - read())\n    }).future().value()\n}", module));
+            // A selected Error publishes no assignment to the captured binding.
+            sites.put("capturedError", closure(
+                    "(next) => {\n    (() => {\n        total: 5\n        read: () => total\n"
+                            + "        Error.handle(() => { total = next() + next() }, (caught) => { 0 })\n"
+                            + "        read()\n    }).future().value()\n}", module));
+            // Expected results: standard selection, then the selected implementation.
+            Map<String, long[]> expected = Map.of(
+                    "terminal", new long[] {3L, 42L},
+                    "nonterminal", new long[] {3L, 42L},
+                    "handled", new long[] {3L, 7L},
+                    "captured", new long[] {503L, 542L},
+                    "capturedError", new long[] {3L, 5L});
+            java.util.concurrent.atomic.AtomicInteger hostSuspensions =
+                    new java.util.concurrent.atomic.AtomicInteger();
+            java.util.function.Consumer<com.guillermomolina.protos.runtime.ProtosFutureValue>
+                    previous = ProtosHostEntrySuspension.suspendedForTesting;
+            ProtosHostEntrySuspension.suspendedForTesting =
+                    future -> hostSuspensions.incrementAndGet();
+            try {
+                for (Map.Entry<String, ProtosClosureValue> site : sites.entrySet()) {
+                    String where = site.getKey();
+                    ProtosHostExecutableClosure hostEntry =
+                            ProtosHostExecutableClosure.prepareForEmbeddingRuntime(
+                                    site.getValue(), module, embedding);
+                    for (int round = 0; round < 3; round++) {
+                        boolean failing = where.equals("handled") || where.equals("capturedError");
+                        alternative.integer().assignLocalSlot("+", standardPlus);
+                        operands[0] = 0;
+                        selected[0] = 0;
+                        assertEquals(expected.get(where)[0], normalized(
+                                InteropLibrary.getUncached().execute(hostEntry, next)), where);
+                        assertEquals(2, operands[0], where + " standard operands");
+                        assertEquals(0, selected[0], where + " standard selects nothing");
+
+                        alternative.integer().assignLocalSlot("+",
+                                failing ? suspendingError : suspendingPlus);
+                        operands[0] = 0;
+                        // Two operands once each: a repeated assignment after the
+                        // resumption would re-evaluate them.
+                        assertEquals(expected.get(where)[1], normalized(
+                                InteropLibrary.getUncached().execute(hostEntry, next)), where);
+                        assertEquals(2, operands[0], where + " each operand evaluated once");
+                        assertEquals(1, selected[0], where + " the selected method runs once");
+                    }
+                }
+                assertTrue(hostSuspensions.get() >= 1,
+                        "the host entry really suspended at least once");
+            } finally {
+                ProtosHostEntrySuspension.suspendedForTesting = previous;
+                alternative.integer().assignLocalSlot("+", standardPlus);
+            }
+        });
+        System.out.println("PERF045_SUSPENDED_SELECTION_TERMINAL_NONTERMINAL_ERROR=PASS");
+    }
+
+    /**
+     * A genuine non-local return from a numeric operand and from inside a
+     * selected numeric method: the original home answers the returned
+     * value, no operand is evaluated twice, the selected method runs once,
+     * and a return whose home is no longer active signals InvalidReturn as
+     * a catchable guest Error.
+     */
+    @Test
+    void nonLocalReturnsThroughNumericOperandsAndSelections() throws Exception {
+        withCore(module -> {
+            int[] operands = new int[1];
+            ProtosClosureValue next = ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> {
+                        operands[0]++;
+                        return Long.valueOf(operands[0]);
+                    });
+            ProtosClosureValue operand = closure(
+                    "(next) => {\n    m: () => {\n        sum: next() + (() => { ^7 })()\n"
+                            + "        next()\n        sum\n    }\n    m()\n}", module);
+            for (int round = 0; round < 3; round++) {
+                operands[0] = 0;
+                assertEquals(7L, normalized(call(operand, module, next)));
+                assertEquals(1, operands[0], "no operand evaluated after the return");
+            }
+            // A captured destination keeps its value: the ^ (captured home: the
+            // outer invocation) answers the binding read before the interrupted
+            // assignment, and no later operand runs.
+            ProtosClosureValue capturedDestination = closure(
+                    "(next) => {\n    total: 5\n    read: () => total\n"
+                            + "    m: () => {\n        total = next() + (() => { ^read() * 10 })()\n"
+                            + "        next()\n        0\n    }\n    m()\n}", module);
+            for (int round = 0; round < 3; round++) {
+                operands[0] = 0;
+                assertEquals(50L, normalized(call(capturedDestination, module, next)));
+                assertEquals(1, operands[0], "no operand evaluated after the return");
+            }
+
+            // A module-level method owns a fresh return home per invocation
+            // (CALLABLES.md); it invokes its argument once, so the counter
+            // observes exactly one selected invocation.
+            ProtosClosureValue returning = closure(
+                    "(other) => {\n    other()\n"
+                            + "    Array(1).each((element) => { ^9 })\n    0\n}", module);
+            ProtosObjectValue custom = new ProtosObjectValue(ProtosObjectValue.rootObject());
+            custom.createLocalSlot("+", returning);
+            ProtosClosureValue site = closure(
+                    "(x, next) => {\n    r: x + next\n    r * 2\n}", module);
+            for (int round = 0; round < 3; round++) {
+                operands[0] = 0;
+                assertEquals(18L, normalized(call(site, module, custom, next)));
+                assertEquals(1, operands[0], "the selected method runs once");
+            }
+
+            ProtosPrelude prelude = module.preludeOrNullForRuntime();
+            // The home of the returned closure is the completed invocation of a
+            // module-level function, so its ^ inside an operand is InvalidReturn.
+            Object escaped = call(closure("() => { () => { ^1 } }", module), module);
+            ProtosClosureValue handled = closure(
+                    "(escaped) => {\n"
+                            + "    Error.handle(() => { 1 + escaped() }, (caught) => { caught })\n}",
+                    module);
+            ProtosObjectValue invalidReturn =
+                    assertInstanceOf(ProtosObjectValue.class, call(handled, module, escaped));
+            assertSame(prelude.invalidReturnPrototype(), invalidReturn.parent().orElseThrow());
+        });
+        System.out.println("PERF045_NUMERIC_NON_LOCAL_RETURN=PASS");
+    }
+
     @Test
     void onlyOverflowGeneralizesAndGeneratedNodesExist() throws Exception {
         for (Map.Entry<String, Class<?>> entry : NODES.entrySet()) {
@@ -2253,11 +2593,14 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
             assertEquals(List.of(ArithmeticException.class),
                     Arrays.asList(specialization.rewriteOn()), where);
             assertEquals(0, specialization.replaces().length, where);
-            assertSame(long.class, method.getReturnType(), where + " must return long");
+            // The specialization stores its long result in the outcome local
+            // and answers only the Boolean continuation status.
+            assertSame(boolean.class, method.getReturnType(), where + " must answer its status");
             assertGuestLongOperands(method, where);
             return;
         }
         assertEquals(0, specialization.rewriteOn().length, where);
+        assertSame(boolean.class, method.getReturnType(), where + " must answer its status");
         if (!arithmetic || !method.getName().equals("doLLOvf")) {
             assertEquals(0, specialization.replaces().length, where);
             return;
@@ -2268,22 +2611,30 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
                 .findFirst()
                 .orElseThrow();
         // The generalization accepts exactly the replaced signature (frame,
-        // terminal constant, operands and the shared selection guard node);
-        // it additionally binds its node to reach the caller's numeric factory.
+        // terminal constant, outcome local, operands, the shared selection
+        // guard node and the bound BytecodeNode); it additionally binds its
+        // node to reach the caller's numeric factory.
         List<Class<?>> replaced = Arrays.asList(primitive.getParameterTypes());
         List<Class<?>> signature = new ArrayList<>(Arrays.asList(method.getParameterTypes()));
         assertTrue(signature.remove(com.oracle.truffle.api.nodes.Node.class), where);
         assertEquals(replaced, signature, where);
-        assertSame(Object.class, method.getReturnType(), where);
+        assertTrue(signature.contains(com.oracle.truffle.api.bytecode.BytecodeNode.class), where);
+        assertSame(boolean.class, method.getReturnType(), where);
         assertGuestLongOperands(method, where);
     }
 
-    /* Operand layout shared by every fast path: (frame, terminal, left, right, ...). */
-    private static final int LEFT_OPERAND = 2;
+    /*
+     * Operand layout shared by every arithmetic fast path:
+     * (frame, terminal, outcome, left, right, ...).
+     */
+    private static final int OUTCOME = 2;
+    private static final int LEFT_OPERAND = 3;
 
     private static void assertGuestLongOperands(Method method, String where) {
         Class<?>[] parameters = method.getParameterTypes();
         assertTrue(parameters.length > LEFT_OPERAND + 1, where);
+        assertSame(com.oracle.truffle.api.bytecode.LocalAccessor.class, parameters[OUTCOME],
+                where + " outcome local");
         assertSame(long.class, parameters[LEFT_OPERAND], where + " left operand");
         assertSame(long.class, parameters[LEFT_OPERAND + 1], where + " right operand");
     }
@@ -2295,8 +2646,11 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
         String where = node.getSimpleName() + "." + name;
         Class<?>[] parameters = method.getParameterTypes();
         assertTrue(parameters.length > LEFT_OPERAND + 1, where);
+        assertSame(com.oracle.truffle.api.bytecode.LocalAccessor.class, parameters[OUTCOME],
+                where + " outcome local");
         assertSame(left, parameters[LEFT_OPERAND], where + " left operand");
         assertSame(right, parameters[LEFT_OPERAND + 1], where + " right operand");
+        assertSame(boolean.class, method.getReturnType(), where + " status");
     }
 
     /* Every primitive fast path stays behind the standard numeric selection guard. */
@@ -2328,7 +2682,11 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
             assertEquals(1, occurrences(activeSource, "@Fallback"), node.getSimpleName());
             assertTrue(activeSource.contains(
                     "@Fallback\n    @StoreBytecodeIndex\n    @InliningCutoff\n"
-                            + "    static Object doGeneric("),
+                            + "    static boolean doGeneric("),
+                    node.getSimpleName());
+            // One constant result destination per operation proxy.
+            assertEquals(1, occurrences(activeSource,
+                            "@ConstantOperand(type = LocalAccessor.class, name = \"outcome\")"),
                     node.getSimpleName());
             int fallback = activeSource.indexOf("@Fallback");
             assertTrue(activeSource.lastIndexOf("@Specialization") < fallback,

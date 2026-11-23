@@ -20,6 +20,8 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.execution.ProtosStandardNumberOrderingProtocol.Relation;
 import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
+import com.oracle.truffle.api.bytecode.ConstantOperand;
+import com.oracle.truffle.api.bytecode.LocalAccessor;
 import com.oracle.truffle.api.bytecode.OperationProxy;
 import com.oracle.truffle.api.bytecode.StoreBytecodeIndex;
 import com.oracle.truffle.api.dsl.Bind;
@@ -41,46 +43,61 @@ import com.oracle.truffle.api.nodes.Node;
  * {@link ProtosNumericOverloadNode}. Its result, possibly a suspended
  * invocation, is composed by the enclosing bytecode, which then requires a
  * canonical Boolean.
+ *
+ * <p>The operation stores its result in the {@code outcome} local and
+ * answers whether that result must be composed as a continuation.
  */
 @GenerateUncached
 @GenerateInline(false)
+@ConstantOperand(type = LocalAccessor.class, name = "outcome")
 @OperationProxy.Proxyable(allowUncached = true, storeBytecodeIndex = false)
 abstract class ProtosRichCompareLeNode extends Node {
     static final String SELECTOR = "<=";
 
-    abstract Object execute(VirtualFrame frame, Object left, Object right);
+    abstract boolean execute(VirtualFrame frame, LocalAccessor outcome, Object left, Object right);
 
     @Specialization(guards = "selection.execute(frame, SELECTOR, left)")
-    static boolean doLL(VirtualFrame frame, long left, long right,
-            @Shared("selection") @Cached ProtosNumericSelectionNode selection) {
-        return left <= right;
+    static boolean doLL(VirtualFrame frame, LocalAccessor outcome, long left, long right,
+            @Shared("selection") @Cached ProtosNumericSelectionNode selection,
+            @Bind("bytecodeOf($node)") BytecodeNode bytecode) {
+        outcome.setBoolean(bytecode, frame, left <= right);
+        return false;
     }
 
     @Specialization(guards = "selection.execute(frame, SELECTOR, left)")
-    static boolean doDD(VirtualFrame frame, double left, double right,
-            @Shared("selection") @Cached ProtosNumericSelectionNode selection) {
-        return left <= right;
+    static boolean doDD(VirtualFrame frame, LocalAccessor outcome, double left, double right,
+            @Shared("selection") @Cached ProtosNumericSelectionNode selection,
+            @Bind("bytecodeOf($node)") BytecodeNode bytecode) {
+        outcome.setBoolean(bytecode, frame, left <= right);
+        return false;
     }
 
     @Fallback
     @StoreBytecodeIndex
     @InliningCutoff
-    static Object doGeneric(
-            VirtualFrame frame, Object left, Object right,
-            @Bind("$node") Node node,
+    static boolean doGeneric(
+            VirtualFrame frame, LocalAccessor outcome, Object left, Object right,
+            @Bind Node node,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
             @Shared("selection") @Cached ProtosNumericSelectionNode selection,
-            @Cached ProtosNumericOverloadNode overload) {
+            @Cached ProtosNumericOverloadNode overload,
+            @Bind("bytecodeOf($node)") BytecodeNode bytecode) {
         if (selection.execute(frame, SELECTOR, left)) {
-            return ProtosNumericOperationSupport.compare(
-                    root, frame, left, right, Relation.LESS_EQUAL);
+            return ProtosBytecodeRootNode.StoreAndTestContinuation.storeResult(
+                    outcome, ProtosNumericOperationSupport.compare(
+                    root, frame, left, right, Relation.LESS_EQUAL), frame, bytecode);
         }
-        BytecodeNode bytecode = BytecodeNode.get(node);
-        return overload.execute(frame, false, SELECTOR, left, right,
-                root, bytecode, bytecode.getBytecodeIndex(frame));
+        return ProtosBytecodeRootNode.StoreAndTestContinuation.storeResult(
+                outcome, overload.execute(frame, false, SELECTOR, left, right,
+                root, bytecode, bytecode.getBytecodeIndex(frame)), frame, bytecode);
     }
 
     static ProtosBytecodeRootNode rootOf(Node node) {
         return (ProtosBytecodeRootNode) BytecodeNode.get(node).getBytecodeRootNode();
+    }
+
+    /* The bytecode node executing this operation, resolved from the proxied node. */
+    static BytecodeNode bytecodeOf(Node node) {
+        return BytecodeNode.get(node);
     }
 }

@@ -21,6 +21,7 @@ import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.bytecode.ConstantOperand;
+import com.oracle.truffle.api.bytecode.LocalAccessor;
 import com.oracle.truffle.api.bytecode.OperationProxy;
 import com.oracle.truffle.api.bytecode.StoreBytecodeIndex;
 import com.oracle.truffle.api.dsl.Bind;
@@ -41,72 +42,97 @@ import com.oracle.truffle.api.nodes.Node;
  * numeric kernels; any other selection invokes the selected implementation
  * through {@link ProtosNumericOverloadNode}, whose result (including a
  * suspended invocation) is the exact result of this operation.
+ *
+ * <p>The operation stores its result in the {@code outcome} local and
+ * answers whether that result must be composed as a continuation.
  */
 @GenerateUncached
 @GenerateInline(false)
 @ConstantOperand(type = boolean.class, name = "terminal")
+@ConstantOperand(type = LocalAccessor.class, name = "outcome")
 @OperationProxy.Proxyable(allowUncached = true, storeBytecodeIndex = false)
 abstract class ProtosNumberDivideNode extends Node {
     static final String SELECTOR = "/";
 
-    abstract Object execute(VirtualFrame frame, boolean terminal, Object left, Object right);
+    abstract boolean execute(VirtualFrame frame, boolean terminal, LocalAccessor outcome,
+            Object left, Object right);
 
     @Specialization(guards = "selection.execute(frame, SELECTOR, left)")
-    static Object doLL(VirtualFrame frame, boolean terminal, long left, long right,
-            @Bind("$node") Node node,
+    static boolean doLL(VirtualFrame frame, boolean terminal, LocalAccessor outcome,
+            long left, long right,
+            @Bind Node node,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
-            @Shared("selection") @Cached ProtosNumericSelectionNode selection) {
+            @Shared("selection") @Cached ProtosNumericSelectionNode selection,
+            @Bind("bytecodeOf($node)") BytecodeNode bytecode) {
         if (right != 0L && (left != Long.MIN_VALUE || right != -1L)
                 && left % right == 0L) {
-            return left / right;
+            outcome.setLong(bytecode, frame, left / right);
+            return false;
         }
         // No truncation: Fraction, MIN/-1 and zero take the exact factory path.
-        return divideIntegers(root, frame, node, left, right);
+        return ProtosBytecodeRootNode.StoreAndTestContinuation.storeResult(
+                outcome, divideIntegers(root, frame, node, left, right), frame, bytecode);
     }
 
     @Specialization(guards = "selection.execute(frame, SELECTOR, left)")
-    static double doDD(VirtualFrame frame, boolean terminal, double left, double right,
-            @Shared("selection") @Cached ProtosNumericSelectionNode selection) {
-        return left / right;
+    static boolean doDD(VirtualFrame frame, boolean terminal, LocalAccessor outcome,
+            double left, double right,
+            @Shared("selection") @Cached ProtosNumericSelectionNode selection,
+            @Bind("bytecodeOf($node)") BytecodeNode bytecode) {
+        outcome.setDouble(bytecode, frame, left / right);
+        return false;
     }
 
     @Specialization(guards = "selection.execute(frame, SELECTOR, left)")
-    static double doDL(VirtualFrame frame, boolean terminal, double left, long right,
-            @Shared("selection") @Cached ProtosNumericSelectionNode selection) {
-        return left / right;
+    static boolean doDL(VirtualFrame frame, boolean terminal, LocalAccessor outcome,
+            double left, long right,
+            @Shared("selection") @Cached ProtosNumericSelectionNode selection,
+            @Bind("bytecodeOf($node)") BytecodeNode bytecode) {
+        outcome.setDouble(bytecode, frame, left / right);
+        return false;
     }
 
     @Specialization(guards = "selection.execute(frame, SELECTOR, left)")
-    static double doLD(VirtualFrame frame, boolean terminal, long left, double right,
-            @Shared("selection") @Cached ProtosNumericSelectionNode selection) {
-        return left / right;
+    static boolean doLD(VirtualFrame frame, boolean terminal, LocalAccessor outcome,
+            long left, double right,
+            @Shared("selection") @Cached ProtosNumericSelectionNode selection,
+            @Bind("bytecodeOf($node)") BytecodeNode bytecode) {
+        outcome.setDouble(bytecode, frame, left / right);
+        return false;
     }
 
     @Fallback
     @StoreBytecodeIndex
     @InliningCutoff
-    static Object doGeneric(VirtualFrame frame, boolean terminal, Object left, Object right,
-            @Bind("$node") Node node,
+    static boolean doGeneric(VirtualFrame frame, boolean terminal, LocalAccessor outcome,
+            Object left, Object right,
+            @Bind Node node,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
             @Shared("selection") @Cached ProtosNumericSelectionNode selection,
-            @Cached ProtosNumericOverloadNode overload) {
+            @Cached ProtosNumericOverloadNode overload,
+            @Bind("bytecodeOf($node)") BytecodeNode bytecode) {
         if (!selection.execute(frame, SELECTOR, left)) {
-            BytecodeNode bytecode = BytecodeNode.get(node);
-            return overload.execute(frame, terminal, SELECTOR, left, right,
-                    root, bytecode, bytecode.getBytecodeIndex(frame));
+            return ProtosBytecodeRootNode.StoreAndTestContinuation.storeResult(
+                    outcome, overload.execute(frame, terminal, SELECTOR, left, right,
+                    root, bytecode, bytecode.getBytecodeIndex(frame)), frame, bytecode);
         }
         Object receiver = ProtosNumericValueSupport.guestValue(left);
         Object argument = ProtosNumericValueSupport.guestValue(right);
         if (ProtosNumericValueSupport.isCurrentInteger(receiver)
                 && ProtosNumericValueSupport.isCurrentInteger(argument)) {
-            return divideIntegers(root, frame, node, receiver, argument);
+            return ProtosBytecodeRootNode.StoreAndTestContinuation.storeResult(
+                    outcome, divideIntegers(root, frame, node, receiver, argument),
+                    frame, bytecode);
         }
         if (isFloatOperand(receiver) && isFloatOperand(argument)
                 && (ProtosNumericValueSupport.isCurrentFloat(receiver)
                         || ProtosNumericValueSupport.isCurrentFloat(argument))) {
-            return floatValue(receiver) / floatValue(argument);
+            return ProtosBytecodeRootNode.StoreAndTestContinuation.storeResult(
+                    outcome, floatValue(receiver) / floatValue(argument), frame, bytecode);
         }
-        return ProtosNumericOperationSupport.arithmetic(root, frame, left, SELECTOR, right);
+        return ProtosBytecodeRootNode.StoreAndTestContinuation.storeResult(
+                outcome, ProtosNumericOperationSupport.arithmetic(root, frame, left, SELECTOR, right),
+                frame, bytecode);
     }
 
     @InliningCutoff
@@ -132,5 +158,10 @@ abstract class ProtosNumberDivideNode extends Node {
 
     static ProtosBytecodeRootNode rootOf(Node node) {
         return (ProtosBytecodeRootNode) BytecodeNode.get(node).getBytecodeRootNode();
+    }
+
+    /* The bytecode node executing this operation, resolved from the proxied node. */
+    static BytecodeNode bytecodeOf(Node node) {
+        return BytecodeNode.get(node);
     }
 }

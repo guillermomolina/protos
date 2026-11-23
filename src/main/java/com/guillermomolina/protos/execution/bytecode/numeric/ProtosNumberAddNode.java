@@ -22,6 +22,7 @@ import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.bytecode.ConstantOperand;
+import com.oracle.truffle.api.bytecode.LocalAccessor;
 import com.oracle.truffle.api.bytecode.OperationProxy;
 import com.oracle.truffle.api.bytecode.StoreBytecodeIndex;
 import com.oracle.truffle.api.dsl.Bind;
@@ -46,25 +47,34 @@ import com.oracle.truffle.api.nodes.Node;
  * suspended invocation) is the exact result of this operation. The
  * {@code terminal} constant states whether the site is the terminal
  * invocation of its root.
+ *
+ * <p>The operation stores its result in the {@code outcome} local and
+ * answers whether that result must be composed as a continuation.
  */
 @GenerateUncached
 @GenerateInline(false)
 @ConstantOperand(type = boolean.class, name = "terminal")
+@ConstantOperand(type = LocalAccessor.class, name = "outcome")
 @OperationProxy.Proxyable(allowUncached = true, storeBytecodeIndex = false)
 abstract class ProtosNumberAddNode extends ProtosNumberAddFastPathsBase {
 
     @Specialization(guards = "selection.execute(frame, SELECTOR, left)", replaces = "doLL")
-    static Object doLLOvf(VirtualFrame frame, boolean terminal, long left, long right,
-            @Bind("$node") Node node,
-            @Shared("selection") @Cached ProtosNumericSelectionNode selection) {
-        return addOrPromote(frame, node, left, right);
+    static boolean doLLOvf(VirtualFrame frame, boolean terminal, LocalAccessor outcome,
+            long left, long right,
+            @Bind Node node,
+            @Shared("selection") @Cached ProtosNumericSelectionNode selection,
+            @Bind("bytecodeOf($node)") BytecodeNode bytecode) {
+        return ProtosBytecodeRootNode.StoreAndTestContinuation.storeResult(
+                outcome, addOrPromote(frame, node, left, right), frame, bytecode);
     }
 
     @Specialization(guards = "selection.execute(frame, SELECTOR, left)")
-    static ProtosStringValue doStrings(VirtualFrame frame, boolean terminal,
+    static boolean doStrings(VirtualFrame frame, boolean terminal, LocalAccessor outcome,
             ProtosStringValue left, ProtosStringValue right,
-            @Shared("selection") @Cached ProtosNumericSelectionNode selection) {
-        return concatenate(left, right);
+            @Shared("selection") @Cached ProtosNumericSelectionNode selection,
+            @Bind("bytecodeOf($node)") BytecodeNode bytecode) {
+        return ProtosBytecodeRootNode.StoreAndTestContinuation.storeResult(
+                outcome, concatenate(left, right), frame, bytecode);
     }
 
     @TruffleBoundary
@@ -76,24 +86,28 @@ abstract class ProtosNumberAddNode extends ProtosNumberAddFastPathsBase {
     @Fallback
     @StoreBytecodeIndex
     @InliningCutoff
-    static Object doGeneric(
+    static boolean doGeneric(
             VirtualFrame frame,
             boolean terminal,
+            LocalAccessor outcome,
             Object left,
             Object right,
-            @Bind("$node") Node node,
+            @Bind Node node,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
             @Shared("selection") @Cached ProtosNumericSelectionNode selection,
-            @Cached ProtosNumericOverloadNode overload) {
+            @Cached ProtosNumericOverloadNode overload,
+            @Bind("bytecodeOf($node)") BytecodeNode bytecode) {
         if (selection.execute(frame, SELECTOR, left)) {
             if (left instanceof ProtosStringValue stringLeft
                     && right instanceof ProtosStringValue stringRight) {
-                return concatenate(stringLeft, stringRight);
+                return ProtosBytecodeRootNode.StoreAndTestContinuation.storeResult(
+                        outcome, concatenate(stringLeft, stringRight), frame, bytecode);
             }
-            return genericAdd(root, frame, node, left, right);
+            return ProtosBytecodeRootNode.StoreAndTestContinuation.storeResult(
+                    outcome, genericAdd(root, frame, node, left, right), frame, bytecode);
         }
-        BytecodeNode bytecode = BytecodeNode.get(node);
-        return overload.execute(frame, terminal, SELECTOR, left, right,
-                root, bytecode, bytecode.getBytecodeIndex(frame));
+        return ProtosBytecodeRootNode.StoreAndTestContinuation.storeResult(
+                outcome, overload.execute(frame, terminal, SELECTOR, left, right,
+                root, bytecode, bytecode.getBytecodeIndex(frame)), frame, bytecode);
     }
 }

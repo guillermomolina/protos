@@ -19,6 +19,8 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
+import com.oracle.truffle.api.bytecode.LocalAccessor;
+import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.Cached.Shared;
 import com.oracle.truffle.api.dsl.GenerateCached;
@@ -38,31 +40,44 @@ abstract class ProtosNumberAddFastPathsBase extends Node {
 
     static final String SELECTOR = "+";
 
-    abstract Object execute(VirtualFrame frame, boolean terminal, Object left, Object right);
+    abstract boolean execute(VirtualFrame frame, boolean terminal, LocalAccessor outcome,
+            Object left, Object right);
 
     @Specialization(guards = "selection.execute(frame, SELECTOR, left)",
             rewriteOn = ArithmeticException.class)
-    static long doLL(VirtualFrame frame, boolean terminal, long left, long right,
-            @Shared("selection") @Cached ProtosNumericSelectionNode selection) {
-        return Math.addExact(left, right);
+    static boolean doLL(VirtualFrame frame, boolean terminal, LocalAccessor outcome,
+            long left, long right,
+            @Shared("selection") @Cached ProtosNumericSelectionNode selection,
+            @Bind("bytecodeOf($node)") BytecodeNode bytecode) {
+        outcome.setLong(bytecode, frame, Math.addExact(left, right));
+        return false;
     }
 
     @Specialization(guards = "selection.execute(frame, SELECTOR, left)")
-    static double doDD(VirtualFrame frame, boolean terminal, double left, double right,
-            @Shared("selection") @Cached ProtosNumericSelectionNode selection) {
-        return left + right;
+    static boolean doDD(VirtualFrame frame, boolean terminal, LocalAccessor outcome,
+            double left, double right,
+            @Shared("selection") @Cached ProtosNumericSelectionNode selection,
+            @Bind("bytecodeOf($node)") BytecodeNode bytecode) {
+        outcome.setDouble(bytecode, frame, left + right);
+        return false;
     }
 
     @Specialization(guards = "selection.execute(frame, SELECTOR, left)")
-    static double doDL(VirtualFrame frame, boolean terminal, double left, long right,
-            @Shared("selection") @Cached ProtosNumericSelectionNode selection) {
-        return left + right;
+    static boolean doDL(VirtualFrame frame, boolean terminal, LocalAccessor outcome,
+            double left, long right,
+            @Shared("selection") @Cached ProtosNumericSelectionNode selection,
+            @Bind("bytecodeOf($node)") BytecodeNode bytecode) {
+        outcome.setDouble(bytecode, frame, left + right);
+        return false;
     }
 
     @Specialization(guards = "selection.execute(frame, SELECTOR, left)")
-    static double doLD(VirtualFrame frame, boolean terminal, long left, double right,
-            @Shared("selection") @Cached ProtosNumericSelectionNode selection) {
-        return left + right;
+    static boolean doLD(VirtualFrame frame, boolean terminal, LocalAccessor outcome,
+            long left, double right,
+            @Shared("selection") @Cached ProtosNumericSelectionNode selection,
+            @Bind("bytecodeOf($node)") BytecodeNode bytecode) {
+        outcome.setDouble(bytecode, frame, left + right);
+        return false;
     }
 
     /*
@@ -101,5 +116,10 @@ abstract class ProtosNumberAddFastPathsBase extends Node {
      */
     static ProtosBytecodeRootNode rootOf(Node node) {
         return (ProtosBytecodeRootNode) BytecodeNode.get(node).getBytecodeRootNode();
+    }
+
+    /* The bytecode node executing this operation, resolved from the proxied node. */
+    static BytecodeNode bytecodeOf(Node node) {
+        return BytecodeNode.get(node);
     }
 }

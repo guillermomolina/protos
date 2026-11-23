@@ -773,8 +773,11 @@ final class ProtosI115IndexedOperationTest {
         int consumer = producers.get(consumerOrdinal);
         assertTrue(census.names.get(consumer).startsWith("c.Number"),
                 label + ": consumer is not a numeric operation: " + census.names);
-        assertTrue(census.names.get(consumer + 1).startsWith("c.StoreAndTestContinuation")
-                        || census.names.get(consumer + 1).startsWith("return"),
+        assertTrue(census.ownsResult(consumer),
+                label + ": numeric consumer does not store its own result: " + census.names);
+        assertTrue(census.names.get(consumer + 1).startsWith("branch.false")
+                        || census.names.get(consumer + 1).startsWith("pop")
+                        || census.names.get(consumer + 1).startsWith("load.local"),
                 label + ": numeric consumer lacks its own result guard: " + census.names);
         for (int ordinal : indexedOrdinals) {
             int indexed = producers.get(ordinal);
@@ -972,8 +975,22 @@ final class ProtosI115IndexedOperationTest {
             return null;
         }
 
+        /*
+         * Whether the operation at position stores its own result through
+         * its constant outcome LocalAccessor: a numeric or indexed producer.
+         */
+        boolean ownsResult(int position) {
+            String name = names.get(position);
+            return (isIndexedOperation(name) || name.startsWith("c.Number")
+                            || name.startsWith("c.RichCompare"))
+                    && !localRefs(position).isEmpty();
+        }
+
         /* The local the producer's result is stored into, or null. */
         private LocalRef resultLocalRef(int producer) {
+            if (ownsResult(producer)) {
+                return localRefs(producer).get(0);
+            }
             if (producer + 1 < names.size()
                     && (names.get(producer + 1).startsWith("store.local")
                             || names.get(producer + 1).startsWith("c.StoreAndTestContinuation"))) {
@@ -1021,7 +1038,8 @@ final class ProtosI115IndexedOperationTest {
          * A composition is owned by producer when its IsContinuation consumes
          * the producer's stack result directly, or when it consumes a
          * load.local whose local is, by LocalRef identity, the local of the
-         * nearest preceding producer-result write (a store.local or
+         * nearest preceding producer-result write (a producer storing its own
+         * result through its outcome LocalAccessor, or a store.local or
          * StoreAndTestContinuation immediately following a producer). The
          * nearest such write is unique, so one composition never has two
          * owners, and a logical local that only reuses the same physical
@@ -1055,8 +1073,15 @@ final class ProtosI115IndexedOperationTest {
             if (read.isEmpty()) {
                 return -1;
             }
-            for (int k = isContinuation - 2; k >= 1; k--) {
-                if (!isResultWrite(k) || !isProducer(names.get(k - 1))) {
+            for (int k = isContinuation - 2; k >= 0; k--) {
+                if (ownsResult(k)) {
+                    LocalRef owned = resultLocalRef(k);
+                    if (owned != null && owned.sameAs(read.get(0))) {
+                        return k;
+                    }
+                    continue;
+                }
+                if (k < 1 || !isResultWrite(k) || !isProducer(names.get(k - 1))) {
                     continue;
                 }
                 LocalRef written = resultLocalRef(k - 1);
@@ -1071,21 +1096,23 @@ final class ProtosI115IndexedOperationTest {
         private boolean isResultWrite(int position) {
             String name = names.get(position);
             return name.startsWith("store.local")
-                    || name.startsWith("c.StoreAndTestContinuation");
+                    || name.startsWith("c.StoreAndTestContinuation")
+                    || ownsResult(position);
         }
 
         /*
-         * The indexed producer's result is written by its continuation guard,
-         * guarded by the following branch.false, released exactly once
+         * The indexed producer writes its own result through its outcome
+         * LocalAccessor, with no separate StoreAndTestContinuation; its
+         * answer is the following branch.false, the result is released exactly once
          * outside its composition before any new write of its local, and the
          * instruction after that release is not a further store.local copy:
          * the release is itself the consumer's operand. Neither read nor
          * release follows it in the linear run without a new write.
          */
         void assertDirectlyConsumed(int producer, int consumer, String label) {
-            assertTrue(names.get(producer + 1).startsWith("c.StoreAndTestContinuation"),
-                    label + " lacks the continuation guard of its result: " + names);
-            assertTrue(names.get(producer + 2).startsWith("branch.false"),
+            assertTrue(ownsResult(producer),
+                    label + " does not store its own result: " + names);
+            assertTrue(names.get(producer + 1).startsWith("branch.false"),
                     label + " does not guard its composition: " + names);
             LocalRef local = resultLocalRef(producer);
             assertTrue(local != null, label + " has no result destination: " + names);
@@ -1530,6 +1557,237 @@ final class ProtosI115IndexedOperationTest {
                 n: (() => { length() }).future().value()
                 trace.value * 1000000 + w * 10000 + p * 100 + n
                 """));
+    }
+
+    /**
+     * Every indexed selector, over every Array storage representation and
+     * over selected behaviors, stores its exact result through the
+     * operation's own outcome local: no separate StoreAndTestContinuation
+     * follows the operation, its answer is the guard of its composition,
+     * and the composition (when present) reads and writes back that same
+     * local. Results, including a suspended and resumed selection, an
+     * Error from a selection and the RHS answer of indexed assignment,
+     * stay exact, and each operand is evaluated once.
+     */
+    @Test
+    void indexedProducersStoreTheirOwnResultsAcrossSelectorsAndStorage() throws Exception {
+        String source = TRACE + """
+                longs: [1, 2, 3]
+                doubles: [1.5, 2.5]
+                booleans: [true, false]
+                generic: ["a", 2]
+                Box: Array {
+                    at: (index) => { index + 100 }
+                    atPut: (index, value) => { 999 }
+                    size: () => { 77 }
+                }
+                Failing: Array {
+                    at: (index) => { Error().signal() }
+                }
+                box: Box(1, 2)
+                failing: Failing(1)
+                read: (a, i) => { a[i] }
+                assign: (a, i, v) => { (a[i] = v) }
+                put: (a, i, v) => { a.atPut(i, v) }
+                length: (a) => { a.size() }
+                nested: (a, b) => { a[b[0]] + a.size() * 10 }
+                ordered: () => { step(1, longs)[step(2, longs[0])] + step(3, 10) }
+                reset: () => { trace.value = 0 }
+                traced: () => { trace.value }
+                scratch: [0, 0]
+                longRead: () => { read(longs, 1) }
+                doubleRead: () => { read(doubles, 1) }
+                booleanRead: () => { read(booleans, 1) }
+                genericRead: () => { read(generic, 1) }
+                longAssign: () => { assign(scratch, 0, 9) }
+                boxPut: () => { put(box, 0, 7) }
+                boxAssign: () => { assign(box, 0, 7) }
+                longLength: () => { length(longs) }
+                boxLength: () => { length(box) }
+                boxRead: () => { read(box, 1) }
+                nestedLongs: () => { nested(longs, [1]) }
+                targets: [longs, box]
+                alternate: () => {
+                    total: 0
+                    i: 0
+                    while(i < 6) {
+                        total = total + read(targets[i.mod(2)], 1)
+                        i = i + 1
+                    }
+                    total
+                }
+                failed: () => {
+                    Error.handle(() => { read(failing, 0); false }, (caught) => { true })
+                }
+                """;
+        try (ProtosStandaloneHostedSession session = open(source)) {
+            for (int round = 0; round < 3; round++) {
+                assertEquals(2L, call(session, "longRead"));
+                assertEquals(2.5, session.prepareTopLevel("doubleRead").executable().execute()
+                        .asDouble());
+                assertTrue(!session.prepareTopLevel("booleanRead").executable().execute()
+                        .asBoolean());
+                assertEquals(2L, call(session, "genericRead"));
+                assertEquals(9L, call(session, "longAssign"));
+                assertEquals(999L, call(session, "boxPut"));
+                assertEquals(7L, call(session, "boxAssign"));
+                assertEquals(3L, call(session, "longLength"));
+                assertEquals(77L, call(session, "boxLength"));
+                assertEquals(101L, call(session, "boxRead"));
+                assertEquals(32L, call(session, "nestedLongs"));
+                assertEquals(3L * 2 + 3L * 101, call(session, "alternate"));
+                assertTrue(session.prepareTopLevel("failed").executable().execute().asBoolean());
+                assertTraced(session, "ordered", 12L, 123L);
+            }
+            for (String function : List.of("read", "assign", "put", "length", "nested", "ordered")) {
+                IndexedCensus census = IndexedCensus.of(root(session, function));
+                assertEquals(0L, census.count(name -> name.startsWith("c.StoreAndTestContinuation")),
+                        function + " stores an indexed result separately: " + census.names);
+                List<Integer> operations = census.positions(
+                        ProtosI115IndexedOperationTest::isIndexedOperation);
+                assertTrue(!operations.isEmpty(), function + ": " + census.names);
+                for (int operation : operations) {
+                    assertTrue(census.ownsResult(operation),
+                            function + " operation lacks its outcome local: " + census.names);
+                    assertTrue(census.names.get(operation + 1).startsWith("branch.false"),
+                            function + " operation answer is not its guard: " + census.names);
+                    assertTrue(census.ownedCompositions(operation).size() <= 1,
+                            function + " composes one operation twice: " + census.names);
+                    if (operations.size() == 1) {
+                        // As elsewhere, only a single-operation root is charged with
+                        // the release of its result local; nested roots share scratch.
+                        census.assertResultLocalReleased(operation, function);
+                    }
+                }
+                census.assertNoUseAfterRelease(function);
+                // Only the three explicit step(...) calls of ordered are sends.
+                assertEquals(function.equals("ordered") ? 3L : 0L,
+                        census.count(IndexedCensus::isExternalDispatch),
+                        function + " dispatches its standard path externally: " + census.names);
+            }
+        }
+        // Suspended at, atPut and size each run once, after their operands,
+        // which are evaluated once across the resumption.
+        assertTrue(evalBoolean(TRACE + """
+                Lazy: Array {
+                    at: (index) => {
+                        trace.value = trace.value * 10 + 4
+                        (() => { index + 40 }).future().value()
+                    }
+                    atPut: (index, value) => {
+                        trace.value = trace.value * 10 + 5
+                        (() => { 42 }).future().value()
+                    }
+                    size: () => {
+                        trace.value = trace.value * 10 + 6
+                        (() => { 7 }).future().value()
+                    }
+                }
+                l: Lazy(1, 2, 3)
+                r: (() => { step(1, l)[step(2, 1)] }).future().value()
+                p: (() => { step(3, l).atPut(step(4, 0), step(5, 9)) }).future().value()
+                a: (() => { (step(6, l)[step(7, 0)] = step(8, 6)) }).future().value()
+                n: (() => { step(9, l).size() }).future().value()
+                (trace.value == 1243455678596) && (r == 41) && (p == 42) && (a == 6) && (n == 7)
+                """));
+        // Inside one Task, a binding captured by read keeps its prior value until
+        // each suspended indexed selection completes; the completed result is then
+        // visible through read, a suspended selected Error publishes nothing, and
+        // every receiver/index/RHS runs once before its selection.
+        assertTrue(evalBoolean(TRACE + """
+                Lazy: Array {
+                    at: (index) => {
+                        trace.value = trace.value * 10 + 4
+                        (() => { index + 40 }).future().value()
+                    }
+                    atPut: (index, value) => {
+                        trace.value = trace.value * 10 + 5
+                        (() => { 42 }).future().value()
+                    }
+                    size: () => {
+                        trace.value = trace.value * 10 + 6
+                        (() => { 7 }).future().value()
+                    }
+                }
+                Bad: Array {
+                    atPut: (index, value) => {
+                        (() => { 0 }).future().value()
+                        Error().signal()
+                    }
+                }
+                l: Lazy(1, 2, 3)
+                bad: Bad(1)
+                task: () => {
+                    got: 0
+                    read: () => got
+                    before: read()
+                    got = step(1, l)[step(2, 1)]
+                    afterAt: read()
+                    got = (step(3, l)[step(5, 0)] = step(6, 8))
+                    afterAssign: read()
+                    put: step(7, l).atPut(0, 9)
+                    got = step(8, l).size()
+                    afterSize: read()
+                    Error.handle(() => { got = (bad[0] = 3) }, (caught) => { 0 })
+                    afterError: read()
+                    early: (before == 0) && (afterAt == 41) && (afterAssign == 8)
+                    late: (put == 42) && (afterSize == 7) && (afterError == 7) && (bad[0] == 1)
+                    early && late
+                }
+                ok: (() => { task() }).future().value()
+                ok && (trace.value == 12435657586)
+                """));
+        // A selected Error publishes no assignment or size result.
+        assertTrue(evalBoolean("""
+                Bad: Array {
+                    atPut: (index, value) => { Error().signal() }
+                    size: () => { Error().signal() }
+                }
+                b: Bad(1)
+                r: 0
+                Error.handle(() => { r = (b[0] = 5) }, (caught) => { 0 })
+                n: 0
+                Error.handle(() => { n = b.size() }, (caught) => { 0 })
+                (r == 0) && (n == 0) && (b[0] == 1)
+                """));
+        // One site follows a mutated selection and then the standard one.
+        assertTrue(evalBoolean("""
+                Flip: Array { at: (index) => { index + 100 } }
+                x: Flip(1, 2)
+                read: (a, i) => { a[i] }
+                first: read(x, 0)
+                Flip.at = (index) => { index + 200 }
+                second: read(x, 0)
+                standard: read([5, 6], 1)
+                (first == 100) && (second == 200) && (standard == 6)
+                """));
+        // Standard Bytes indexing and size through the same producers.
+        assertTrue(evalBoolean(BYTES + """
+                read: (r, i) => { r[i] }
+                length: (r) => { r.size() }
+                (read(source, 0) == 106) && (length(source) == source.size())
+                """));
+        // Suspended selections resume into the producer's own outcome local
+        // without repeating the selection; indexed assignment answers its RHS.
+        assertEquals(41004206L, evalLong("""
+                Lazy: Array {
+                    at: (index) => { (() => { index + 40 }).future().value() }
+                    atPut: (index, value) => { (() => { 42 }).future().value() }
+                }
+                l: Lazy(1, 2, 3)
+                read: () => { l[1] }
+                put: () => { l.atPut(0, 5) }
+                assign: () => { l[0] = 6 }
+                r: (() => { read() }).future().value()
+                p: (() => { put() }).future().value()
+                a: (() => { assign() }).future().value()
+                r * 1000000 + p * 100 + a
+                """));
+    }
+
+    private static long call(ProtosStandaloneHostedSession session, String function)
+            throws Exception {
+        return session.prepareTopLevel(function).executable().execute().asLong();
     }
 
     @Test

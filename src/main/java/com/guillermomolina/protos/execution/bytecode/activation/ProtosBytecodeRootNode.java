@@ -1885,10 +1885,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * behavior selected for the original receiver; the generic
      * specialization completes a standard selection with the existing
      * kernel and invokes any other selected implementation through
-     * {@link ProtosNumericOverloadNode}.
+     * {@link ProtosNumericOverloadNode}. The result is stored in the
+     * {@code outcome} local; the operation answers whether it must be
+     * composed as a continuation.
      */
     @Operation(storeBytecodeIndex = true)
     @ConstantOperand(type = boolean.class, name = "terminal")
+    @ConstantOperand(type = LocalAccessor.class, name = "outcome")
     public static final class NumberQuotient {
         static final String SELECTOR = "div";
 
@@ -1898,15 +1901,17 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         @Specialization(guards = {"fitsLong(left, right)",
                 "selection.execute(frame, SELECTOR, left)"})
-        public static long small(boolean terminal, long left, long right,
+        public static boolean small(boolean terminal, LocalAccessor outcome, long left, long right,
                 @Bind VirtualFrame frame,
-                @Shared("selection") @Cached ProtosNumericSelectionNode selection) {
-            return left / right;
+                @Shared("selection") @Cached ProtosNumericSelectionNode selection,
+                @Bind BytecodeNode bytecode) {
+            outcome.setLong(bytecode, frame, left / right);
+            return false;
         }
 
         @Specialization
         @InliningCutoff
-        public static Object exact(boolean terminal, Object left, Object right,
+        public static boolean exact(boolean terminal, LocalAccessor outcome, Object left, Object right,
                 @Bind VirtualFrame frame,
                 @Bind ProtosBytecodeRootNode root,
                 @Bind BytecodeNode bytecode,
@@ -1914,10 +1919,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Shared("selection") @Cached ProtosNumericSelectionNode selection,
                 @Cached ProtosNumericOverloadNode overload) {
             if (selection.execute(frame, SELECTOR, left)) {
-                return ProtosNumericOperationSupport.arithmetic(root, frame, left, SELECTOR, right);
+                return StoreAndTestContinuation.storeResult(
+                        outcome, ProtosNumericOperationSupport.arithmetic(root, frame, left, SELECTOR, right),
+                        frame, bytecode);
             }
-            return overload.execute(frame, terminal, SELECTOR, left, right,
-                    root, bytecode, bytecodeIndex);
+            return StoreAndTestContinuation.storeResult(
+                    outcome, overload.execute(frame, terminal, SELECTOR, left, right,
+                    root, bytecode, bytecodeIndex), frame, bytecode);
         }
     }
 
@@ -1927,20 +1935,23 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      */
     @Operation(storeBytecodeIndex = true)
     @ConstantOperand(type = boolean.class, name = "terminal")
+    @ConstantOperand(type = LocalAccessor.class, name = "outcome")
     public static final class NumberRemainder {
         static final String SELECTOR = "mod";
 
         @Specialization(guards = {"right != 0",
                 "selection.execute(frame, SELECTOR, left)"})
-        public static long small(boolean terminal, long left, long right,
+        public static boolean small(boolean terminal, LocalAccessor outcome, long left, long right,
                 @Bind VirtualFrame frame,
-                @Shared("selection") @Cached ProtosNumericSelectionNode selection) {
-            return left % right;
+                @Shared("selection") @Cached ProtosNumericSelectionNode selection,
+                @Bind BytecodeNode bytecode) {
+            outcome.setLong(bytecode, frame, left % right);
+            return false;
         }
 
         @Specialization
         @InliningCutoff
-        public static Object exact(boolean terminal, Object left, Object right,
+        public static boolean exact(boolean terminal, LocalAccessor outcome, Object left, Object right,
                 @Bind VirtualFrame frame,
                 @Bind ProtosBytecodeRootNode root,
                 @Bind BytecodeNode bytecode,
@@ -1948,10 +1959,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Shared("selection") @Cached ProtosNumericSelectionNode selection,
                 @Cached ProtosNumericOverloadNode overload) {
             if (selection.execute(frame, SELECTOR, left)) {
-                return ProtosNumericOperationSupport.arithmetic(root, frame, left, SELECTOR, right);
+                return StoreAndTestContinuation.storeResult(
+                        outcome, ProtosNumericOperationSupport.arithmetic(root, frame, left, SELECTOR, right),
+                        frame, bytecode);
             }
-            return overload.execute(frame, terminal, SELECTOR, left, right,
-                    root, bytecode, bytecodeIndex);
+            return StoreAndTestContinuation.storeResult(
+                    outcome, overload.execute(frame, terminal, SELECTOR, left, right,
+                    root, bytecode, bytecodeIndex), frame, bytecode);
         }
     }
 
@@ -3293,68 +3307,83 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * index) and otherwise invokes the selected behavior through the shared
      * call dispatcher. The fallback replaces no standard specialization, so a
      * site that alternates between standard and redefined selections keeps
-     * its standard entries. A suspended invocation is the operation's result
-     * and is composed by the enclosing bytecode.
+     * its standard entries. Each operation stores its result in the constant
+     * outcome local, typed for a primitive carrier, and answers whether that
+     * result must be composed as a continuation: only a suspended selected
+     * invocation answers true, and the enclosing bytecode composes it.
      */
     @Operation(storeBytecodeIndex = true)
+    @ConstantOperand(type = LocalAccessor.class, name = "outcome")
     public static final class BinarySubscript {
         static final String SELECTOR = "at";
 
         @Specialization(guards = {"array.hasLongStorageForRuntime()",
                 "selection.execute(frame, SELECTOR, array)"})
-        public static long doLongStorage(
+        public static boolean doLongStorage(
+                LocalAccessor outcome,
                 ProtosArrayValue array,
                 long index,
                 @Bind VirtualFrame frame,
                 @Shared("selection") @Cached StandardIndexedSelectionNode selection,
                 @Bind Node inliningTarget,
-                @Shared("indexError") @Cached InlinedBranchProfile errorProfile) {
-            return array.indexedLongAtNormalized(
+                @Shared("indexError") @Cached InlinedBranchProfile errorProfile,
+                @Bind BytecodeNode bytecode) {
+            outcome.setLong(bytecode, frame, array.indexedLongAtNormalized(
                     existingArrayIndex(array, index, frame,
-                            inliningTarget, errorProfile));
+                            inliningTarget, errorProfile)));
+            return false;
         }
 
         @Specialization(guards = {"array.hasDoubleStorageForRuntime()",
                 "selection.execute(frame, SELECTOR, array)"})
-        public static double doDoubleStorage(
+        public static boolean doDoubleStorage(
+                LocalAccessor outcome,
                 ProtosArrayValue array,
                 long index,
                 @Bind VirtualFrame frame,
                 @Shared("selection") @Cached StandardIndexedSelectionNode selection,
                 @Bind Node inliningTarget,
-                @Shared("indexError") @Cached InlinedBranchProfile errorProfile) {
-            return array.indexedDoubleAtNormalized(
+                @Shared("indexError") @Cached InlinedBranchProfile errorProfile,
+                @Bind BytecodeNode bytecode) {
+            outcome.setDouble(bytecode, frame, array.indexedDoubleAtNormalized(
                     existingArrayIndex(array, index, frame,
-                            inliningTarget, errorProfile));
+                            inliningTarget, errorProfile)));
+            return false;
         }
 
         @Specialization(guards = {"array.hasBooleanStorageForRuntime()",
                 "selection.execute(frame, SELECTOR, array)"})
         public static boolean doBooleanStorage(
+                LocalAccessor outcome,
                 ProtosArrayValue array,
                 long index,
                 @Bind VirtualFrame frame,
                 @Shared("selection") @Cached StandardIndexedSelectionNode selection,
                 @Bind Node inliningTarget,
-                @Shared("indexError") @Cached InlinedBranchProfile errorProfile) {
-            return array.indexedBooleanAtNormalized(
+                @Shared("indexError") @Cached InlinedBranchProfile errorProfile,
+                @Bind BytecodeNode bytecode) {
+            outcome.setBoolean(bytecode, frame, array.indexedBooleanAtNormalized(
                     existingArrayIndex(array, index, frame,
-                            inliningTarget, errorProfile));
+                            inliningTarget, errorProfile)));
+            return false;
         }
 
         /* Every storage representation, read as its exact guest value. */
         @Specialization(guards = "selection.execute(frame, SELECTOR, array)",
                 replaces = {"doLongStorage", "doDoubleStorage", "doBooleanStorage"})
-        public static Object doArray(
+        public static boolean doArray(
+                LocalAccessor outcome,
                 ProtosArrayValue array,
                 long index,
                 @Bind VirtualFrame frame,
                 @Shared("selection") @Cached StandardIndexedSelectionNode selection,
                 @Bind Node inliningTarget,
-                @Shared("indexError") @Cached InlinedBranchProfile errorProfile) {
-            return array.indexedAtNormalized(
+                @Shared("indexError") @Cached InlinedBranchProfile errorProfile,
+                @Bind BytecodeNode bytecode) {
+            return StoreAndTestContinuation.storeResult(
+                    outcome, array.indexedAtNormalized(
                     existingArrayIndex(array, index, frame,
-                            inliningTarget, errorProfile));
+                            inliningTarget, errorProfile)), frame, bytecode);
         }
 
         /*
@@ -3363,33 +3392,39 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
          * it is narrowed to a host index.
          */
         @Specialization(guards = "selection.execute(frame, SELECTOR, bytes)")
-        public static Object doBytes(
+        public static boolean doBytes(
+                LocalAccessor outcome,
                 ProtosBytesValue bytes,
                 long index,
                 @Bind VirtualFrame frame,
                 @Shared("selection") @Cached StandardIndexedSelectionNode selection,
                 @Bind Node inliningTarget,
-                @Shared("indexError") @Cached InlinedBranchProfile errorProfile) {
-            return bytes.indexedAt(
+                @Shared("indexError") @Cached InlinedBranchProfile errorProfile,
+                @Bind BytecodeNode bytecode) {
+            return StoreAndTestContinuation.storeResult(
+                    outcome, bytes.indexedAt(
                     existingBytesIndex(bytes, index, frame,
-                            inliningTarget, errorProfile));
+                            inliningTarget, errorProfile)), frame, bytecode);
         }
 
         @Fallback
         @InliningCutoff
-        public static Object doSelected(
+        public static boolean doSelected(
+                LocalAccessor outcome,
                 Object receiver,
                 Object index,
                 @Bind VirtualFrame frame,
                 @Bind ProtosBytecodeRootNode root,
-                @Cached ProtosFunctionCallDispatchers.CallNode call) {
-            return invokeSelectedIndexed(
+                @Cached ProtosFunctionCallDispatchers.CallNode call,
+                @Bind BytecodeNode bytecode) {
+            return StoreAndTestContinuation.storeResult(
+                    outcome, invokeSelectedIndexed(
                     frame, SELECTOR, receiver,
                     ProtosFrameArguments.dispatchedCall1(
                             null, ProtosFrameArguments.functionCallMarker(),
                             null, null, null,
                             ProtosNumericValueSupport.guestValue(index)),
-                    root, call);
+                    root, call), frame, bytecode);
         }
     }
 
@@ -3399,6 +3434,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * result and answers its own RHS.
      */
     @Operation(storeBytecodeIndex = true)
+    @ConstantOperand(type = LocalAccessor.class, name = "outcome")
     public static final class SetItem {
         static final String SELECTOR = "atPut";
 
@@ -3410,68 +3446,80 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
          */
         @Specialization(guards = {"array.hasLongStorageForRuntime()",
                 "selection.execute(frame, SELECTOR, array)"})
-        public static long doLongStorage(
+        public static boolean doLongStorage(
+                LocalAccessor outcome,
                 ProtosArrayValue array,
                 long index,
                 long value,
                 @Bind VirtualFrame frame,
                 @Shared("selection") @Cached StandardIndexedSelectionNode selection,
                 @Bind Node inliningTarget,
-                @Shared("indexError") @Cached InlinedBranchProfile errorProfile) {
+                @Shared("indexError") @Cached InlinedBranchProfile errorProfile,
+                @Bind BytecodeNode bytecode) {
             array.indexedLongStoragePutNormalized(
                     writableArrayIndex(array, index, frame,
                             inliningTarget, errorProfile), value);
-            return value;
+            outcome.setLong(bytecode, frame, value);
+            return false;
         }
 
         @Specialization(guards = {"array.hasDoubleStorageForRuntime()",
                 "selection.execute(frame, SELECTOR, array)"})
-        public static double doDoubleStorage(
+        public static boolean doDoubleStorage(
+                LocalAccessor outcome,
                 ProtosArrayValue array,
                 long index,
                 double value,
                 @Bind VirtualFrame frame,
                 @Shared("selection") @Cached StandardIndexedSelectionNode selection,
                 @Bind Node inliningTarget,
-                @Shared("indexError") @Cached InlinedBranchProfile errorProfile) {
+                @Shared("indexError") @Cached InlinedBranchProfile errorProfile,
+                @Bind BytecodeNode bytecode) {
             array.indexedDoubleStoragePutNormalized(
                     writableArrayIndex(array, index, frame,
                             inliningTarget, errorProfile), value);
-            return value;
+            outcome.setDouble(bytecode, frame, value);
+            return false;
         }
 
         @Specialization(guards = {"array.hasBooleanStorageForRuntime()",
                 "selection.execute(frame, SELECTOR, array)"})
         public static boolean doBooleanStorage(
+                LocalAccessor outcome,
                 ProtosArrayValue array,
                 long index,
                 boolean value,
                 @Bind VirtualFrame frame,
                 @Shared("selection") @Cached StandardIndexedSelectionNode selection,
                 @Bind Node inliningTarget,
-                @Shared("indexError") @Cached InlinedBranchProfile errorProfile) {
+                @Shared("indexError") @Cached InlinedBranchProfile errorProfile,
+                @Bind BytecodeNode bytecode) {
             array.indexedBooleanStoragePutNormalized(
                     writableArrayIndex(array, index, frame,
                             inliningTarget, errorProfile), value);
-            return value;
+            outcome.setBoolean(bytecode, frame, value);
+            return false;
         }
 
         /* Every storage; an incompatible value promotes primitive storage. */
         @Specialization(guards = "selection.execute(frame, SELECTOR, array)",
                 replaces = {"doLongStorage", "doDoubleStorage", "doBooleanStorage"})
-        public static Object doArray(
+        public static boolean doArray(
+                LocalAccessor outcome,
                 ProtosArrayValue array,
                 long index,
                 Object value,
                 @Bind VirtualFrame frame,
                 @Shared("selection") @Cached StandardIndexedSelectionNode selection,
                 @Bind Node inliningTarget,
-                @Shared("indexError") @Cached InlinedBranchProfile errorProfile) {
+                @Shared("indexError") @Cached InlinedBranchProfile errorProfile,
+                @Bind BytecodeNode bytecode) {
             array.indexedPutNormalized(
                     writableArrayIndex(array, index, frame,
                             inliningTarget, errorProfile),
                     ProtosNumericValueSupport.guestValue(value));
-            return value;
+            return StoreAndTestContinuation.storeResult(
+                    outcome, value, frame, bytecode);
         }
 
         /*
@@ -3479,14 +3527,16 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
          * protocol: FROZEN first, then index, then octet 0..255.
          */
         @Specialization(guards = "selection.execute(frame, SELECTOR, bytes)")
-        public static Object doBytes(
+        public static boolean doBytes(
+                LocalAccessor outcome,
                 ProtosBytesValue bytes,
                 long index,
                 Object value,
                 @Bind VirtualFrame frame,
                 @Shared("selection") @Cached StandardIndexedSelectionNode selection,
                 @Bind Node inliningTarget,
-                @Shared("indexError") @Cached InlinedBranchProfile errorProfile) {
+                @Shared("indexError") @Cached InlinedBranchProfile errorProfile,
+                @Bind BytecodeNode bytecode) {
             if (bytes.isFrozen()) {
                 errorProfile.enter(inliningTarget);
                 throw indexedError(frame);
@@ -3500,26 +3550,30 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 throw indexedError(frame);
             }
             bytes.indexedPut(hostIndex, octet);
-            return value;
+            return StoreAndTestContinuation.storeResult(
+                    outcome, value, frame, bytecode);
         }
 
         @Fallback
         @InliningCutoff
-        public static Object doSelected(
+        public static boolean doSelected(
+                LocalAccessor outcome,
                 Object receiver,
                 Object index,
                 Object value,
                 @Bind VirtualFrame frame,
                 @Bind ProtosBytecodeRootNode root,
-                @Cached ProtosFunctionCallDispatchers.CallNode call) {
-            return invokeSelectedIndexed(
+                @Cached ProtosFunctionCallDispatchers.CallNode call,
+                @Bind BytecodeNode bytecode) {
+            return StoreAndTestContinuation.storeResult(
+                    outcome, invokeSelectedIndexed(
                     frame, SELECTOR, receiver,
                     ProtosFrameArguments.dispatchedCall2(
                             null, ProtosFrameArguments.functionCallMarker(),
                             null, null, null,
                             ProtosNumericValueSupport.guestValue(index),
                             ProtosNumericValueSupport.guestValue(value)),
-                    root, call);
+                    root, call), frame, bytecode);
         }
     }
 
@@ -3808,39 +3862,49 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * selection invokes the selected size.
      */
     @Operation(storeBytecodeIndex = true)
+    @ConstantOperand(type = LocalAccessor.class, name = "outcome")
     public static final class GetLen {
         static final String SELECTOR = "size";
 
         @Specialization(guards = "selection.execute(frame, SELECTOR, array)")
-        public static long doArray(
+        public static boolean doArray(
+                LocalAccessor outcome,
                 ProtosArrayValue array,
                 @Bind VirtualFrame frame,
-                @Shared("selection") @Cached StandardIndexedSelectionNode selection) {
-            return array.indexedSize();
+                @Shared("selection") @Cached StandardIndexedSelectionNode selection,
+                @Bind BytecodeNode bytecode) {
+            outcome.setLong(bytecode, frame, array.indexedSize());
+            return false;
         }
 
         /* Direct standard Bytes length, as primitive long. */
         @Specialization(guards = "selection.execute(frame, SELECTOR, bytes)")
-        public static long doBytes(
+        public static boolean doBytes(
+                LocalAccessor outcome,
                 ProtosBytesValue bytes,
                 @Bind VirtualFrame frame,
-                @Shared("selection") @Cached StandardIndexedSelectionNode selection) {
-            return bytes.indexedSize();
+                @Shared("selection") @Cached StandardIndexedSelectionNode selection,
+                @Bind BytecodeNode bytecode) {
+            outcome.setLong(bytecode, frame, bytes.indexedSize());
+            return false;
         }
 
         @Fallback
         @InliningCutoff
-        public static Object doSelected(
+        public static boolean doSelected(
+                LocalAccessor outcome,
                 Object receiver,
                 @Bind VirtualFrame frame,
                 @Bind ProtosBytecodeRootNode root,
-                @Cached ProtosFunctionCallDispatchers.CallNode call) {
-            return invokeSelectedIndexed(
+                @Cached ProtosFunctionCallDispatchers.CallNode call,
+                @Bind BytecodeNode bytecode) {
+            return StoreAndTestContinuation.storeResult(
+                    outcome, invokeSelectedIndexed(
                     frame, SELECTOR, receiver,
                     ProtosFrameArguments.dispatchedCall0(
                             null, ProtosFrameArguments.functionCallMarker(),
                             null, null, null),
-                    root, call);
+                    root, call), frame, bytecode);
         }
     }
 
@@ -6158,6 +6222,34 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 Object value,
                 @Bind VirtualFrame frame,
                 @Bind BytecodeNode bytecode) {
+            return storeResult(outcome, value, frame, bytecode);
+        }
+
+        /**
+         * Stores one completed producer result into {@code outcome} and
+         * answers whether it must be composed as a continuation. A Long,
+         * Double or Boolean carrier is stored typed and is an ordinary
+         * completion; every other value is stored unchanged and classified
+         * exactly as {@link IsContinuation#perform}. Producer operations
+         * that own their result destination complete through this method.
+         */
+        static boolean storeResult(
+                LocalAccessor outcome,
+                Object value,
+                VirtualFrame frame,
+                BytecodeNode bytecode) {
+            if (value instanceof Long carrier) {
+                outcome.setLong(bytecode, frame, carrier);
+                return false;
+            }
+            if (value instanceof Double carrier) {
+                outcome.setDouble(bytecode, frame, carrier);
+                return false;
+            }
+            if (value instanceof Boolean carrier) {
+                outcome.setBoolean(bytecode, frame, carrier);
+                return false;
+            }
             outcome.setObject(bytecode, frame, value);
             return ProtosTailCallContinuation.isSuspended(value);
         }

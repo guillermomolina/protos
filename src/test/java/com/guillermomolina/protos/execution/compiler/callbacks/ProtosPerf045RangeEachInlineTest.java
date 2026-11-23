@@ -1350,6 +1350,38 @@ final class ProtosPerf045RangeEachInlineTest {
                     List.of(101L, 103L, 100L, 101L, 103L, 103L, 105L,
                             1001L, 1003L, 100L, 1013L, 1033L, 107L, 105L, 1034L),
                     module.visits);
+
+            // A callback retained by a custom each observes the binding after a
+            // standard inline iteration of the same root has modified it.
+            Module retained = new Module();
+            Object observed = retained.run(
+                    """
+                    store: { block: null }
+                    keeper: {
+                        each: (block) => {
+                            store.block = block
+                            store
+                        }
+                    }
+                    run: () => {
+                        total: 0
+                        keeper.each((i) => {
+                            total = total + i
+                            total
+                        })
+                        Range(0, 4).each((i) => {
+                            hook(i)
+                            total = total + i
+                        })
+                        before: total
+                        after: store.block(100)
+                        before * 1000 + after + total
+                    }
+                    run()
+                    """);
+            // before 6; the retained callback writes 106; total is then 106.
+            assertEquals("6212", ProtosNumericValueSupport.integerDecimalText(observed));
+            assertEquals(List.of(0L, 1L, 2L, 3L), retained.visits);
         });
     }
 
@@ -2035,6 +2067,8 @@ final class ProtosPerf045RangeEachInlineTest {
                     "ArrayEachNext").size());
             assertEquals(0, named(module.runRoot().getBytecodeNode().getInstructionsAsList(),
                     "RangeIterationNext").size());
+            assertEquals(0, count(names, "c.StoreAndTestContinuation"),
+                    () -> "numeric and indexed producers store their own results: " + names);
             for (String operation : List.of("NumberAdd", "BinarySubscript", "GetLen")) {
                 assertEquals(1, count(names, "c." + operation),
                         () -> "one direct operation, without a duplicated sum body: " + names);
@@ -2049,6 +2083,13 @@ final class ProtosPerf045RangeEachInlineTest {
             // The indexed outcome is the addition's operand; the sum is the cell write's value.
             assertCompletedResultConsumedBy(listed, "BinarySubscript", "NumberAdd");
             assertCompletedResultConsumedBy(listed, "NumberAdd", "StoreCell");
+            // The completed size result is consumed through its own outcome local too.
+            assertCompositionGuardedByCompletion(listed, "GetLen");
+            // Producer-owned results keep the instrumentation: the run root
+            // still publishes its RootTag.
+            TagTree tree = module.runRoot().getBytecodeNode().getTagTree();
+            assertTrue(tree != null && rootTags(tree) >= 1,
+                    "run keeps its RootTag instrumentation");
         });
     }
 
@@ -2115,6 +2156,30 @@ final class ProtosPerf045RangeEachInlineTest {
                 """, List.of(0L, 1L), List.of(0L, 1L, 2L, 3L), "10");
     }
 
+    /*
+     * A Closure captures total before a numeric for that suspends at a
+     * middle visit; after the resumption the direct read and the captured
+     * reader observe the same binding, and no visit runs twice.
+     */
+    @Test
+    void capturedReaderAndDirectReadAgreeAfterSuspendedNumericFor() throws Exception {
+        assertSuspendedRun("""
+                run: () => {
+                    values: [1, 2, 3, 4]
+                    total: 0
+                    read: () => total
+                    n: values.size()
+                    for(i, 0, n) {
+                        hook(i)
+                        if(i == 2) { gate.value() }
+                        total = total + values[i]
+                    }
+                    (total == read()).ifTrueIfFalse(() => { total * 100 + read() }, () => { 0 })
+                }
+                run()
+                """, List.of(0L, 1L, 2L), List.of(0L, 1L, 2L, 3L), "1010");
+    }
+
     @Test
     void closureTerminalAfterSuspendedPrefixKeepsItsCapture() throws Exception {
         assertSuspendedRun("""
@@ -2157,8 +2222,10 @@ final class ProtosPerf045RangeEachInlineTest {
     }
 
     /*
-     * The operation's result feeds one StoreAndTestContinuation, whose answer
-     * guards the composition: the conditional branch skips the composition
+     * The producer owns its result: it stores the result in its constant
+     * outcome LocalAccessor and its own Boolean answer guards the
+     * composition, with no separate StoreAndTestContinuation between the
+     * producer and the guard. The conditional branch skips the composition
      * loop, so a completed result never executes IsContinuation, Yield or
      * ResumeDispatchedContinuation. The loop stays physically emitted as the
      * cold branch for results that are suspensions.
@@ -2194,26 +2261,25 @@ final class ProtosPerf045RangeEachInlineTest {
         List<String> names = instructions.stream().map(ProtosInstructionNames::of).toList();
         int producer = indexAfter(names, "c." + operation, -1);
         assertTrue(producer >= 0, () -> names.toString());
-        assertTrue(names.get(producer + 1).startsWith("c.StoreAndTestContinuation"),
-                () -> operation + " feeds StoreAndTestContinuation directly: " + names);
-        List<LocalAccessor> outcomes = localAccessors(instructions.get(producer + 1));
-        assertEquals(1, outcomes.size(), "the outcome local is one constant LocalAccessor");
+        assertFalse(names.get(producer + 1).startsWith("c.StoreAndTestContinuation"),
+                () -> operation + " stores its own result without a separate store: " + names);
+        List<LocalAccessor> outcomes = localAccessors(instructions.get(producer));
+        assertEquals(1, outcomes.size(),
+                "the producer's outcome is one constant LocalAccessor");
         LocalAccessor outcome = outcomes.get(0);
         int outcomeOffset = localOffset(outcome);
-        Instruction test = instructions.get(producer + 2);
+        Instruction test = instructions.get(producer + 1);
         assertTrue(test.getName().contains("branch.false"),
-                () -> operation + " completion answers the guarding branch: " + names);
+                () -> operation + " answer is the guarding branch condition: " + names);
         int skip = test.getArguments().stream()
                 .filter(argument -> argument.getKind() == Instruction.Argument.Kind.BYTECODE_INDEX)
                 .findFirst().orElseThrow().asBytecodeIndex();
-        assertTrue(instructions.get(producer).getBytecodeIndex()
-                        < instructions.get(producer + 1).getBytecodeIndex()
-                        && instructions.get(producer + 1).getBytecodeIndex() < test.getBytecodeIndex()
+        assertTrue(instructions.get(producer).getBytecodeIndex() < test.getBytecodeIndex()
                         && test.getBytecodeIndex() < skip,
-                () -> operation + " producer, guard and branch precede the skip target: " + names);
+                () -> operation + " producer and branch precede the skip target: " + names);
         int composition = indexAfter(names, "c.IsContinuation", producer);
-        assertTrue(composition > producer + 2, () -> "the cold composition remains emitted: " + names);
-        for (int index = producer + 3; index < composition; index++) {
+        assertTrue(composition > producer + 1, () -> "the cold composition remains emitted: " + names);
+        for (int index = producer + 2; index < composition; index++) {
             String name = names.get(index);
             assertFalse(isGuardedProducer(name),
                     () -> operation + " guard reaches another producer's composition: " + names);

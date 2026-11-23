@@ -3841,7 +3841,10 @@ final class CanonicalToBytecodeLowerer {
      * numeric operations, the indexed operation carries no
      * {@link StandardTags.CallTag} of its own: it is located by the source
      * section of its send, and a selected invocation is located through the
-     * operation's stored bytecode index. {@code result} receives the
+     * operation's stored bytecode index. The operation itself stores its
+     * result in {@code outcome} and answers whether that result must be
+     * composed, which is the condition of the continuation branch; no
+     * separate store follows it. {@code result} receives the
      * selected result (for an explicit {@code atPut}, the selected method's
      * result); a null {@code result} discards it.
      */
@@ -3872,28 +3875,27 @@ final class CanonicalToBytecodeLowerer {
             boolean stackResult) {
         noteDynamicInvocation();
 
+        // The operation stores its result in outcome and answers whether to compose it.
         builder.beginIfThen();
-        builder.beginStoreAndTestContinuation(outcome);
         switch (selector) {
             case "at" -> {
-                builder.beginBinarySubscript();
+                builder.beginBinarySubscript(outcome);
                 operands.run();
                 builder.endBinarySubscript();
             }
             case "atPut" -> {
-                builder.beginSetItem();
+                builder.beginSetItem(outcome);
                 operands.run();
                 builder.endSetItem();
             }
             case "size" -> {
-                builder.beginGetLen();
+                builder.beginGetLen(outcome);
                 operands.run();
                 builder.endGetLen();
             }
             default -> throw new AssertionError(
                     "Not an indexed selector: " + selector);
         }
-        builder.endStoreAndTestContinuation();
         builder.beginBlock();
         emitDispatchedContinuationComposition(builder, outcome, resumeValue);
         builder.endBlock();
@@ -9824,9 +9826,10 @@ final class CanonicalToBytecodeLowerer {
      * operand stack. The receiver and the argument are evaluated once onto
      * the stack and consumed by the numeric operation, which verifies the
      * selected behavior itself: a standard selection executes internally, any
-     * other selection invokes the selected implementation. Its result may be
-     * a suspended invocation, so it is composed with the shared continuation
-     * loop before the enclosing expression consumes it; a resumption
+     * other selection invokes the selected implementation. The operation
+     * stores its result in the site's result local and answers whether that
+     * result is a suspended invocation; only then is it composed with the
+     * shared continuation loop before the enclosing expression consumes it; a resumption
      * continues the selected invocation and never re-evaluates the operands
      * or the operation. An ordering result must then be a canonical Boolean.
      *
@@ -9851,15 +9854,14 @@ final class CanonicalToBytecodeLowerer {
 
         builder.beginBlock();
 
+        // The operation stores its result in numericResult and answers whether to compose it.
         builder.beginIfThen();
-        builder.beginStoreAndTestContinuation(numericResult);
-        beginNumericOperation(builder, send.message(), false);
+        beginNumericOperation(builder, send.message(), false, numericResult);
         emitPrimitiveNumericOperandValue(
                 builder, send.receiver(), preparedCall, childResult, resumeValue);
         emitPrimitiveNumericOperandValue(
                 builder, send.arguments().get(0), preparedCall, childResult, resumeValue);
         endNumericOperation(builder, send.message());
-        builder.endStoreAndTestContinuation();
         builder.beginBlock();
         emitDispatchedContinuationComposition(builder, numericResult, numericResume);
         builder.endBlock();
@@ -9909,19 +9911,26 @@ final class CanonicalToBytecodeLowerer {
      * The terminal arithmetic send of a root: no guest work follows it, so a
      * suspended selected implementation leaves the root in the terminal
      * transport of the operation, which carries this call location, instead
-     * of being composed here.
+     * of being composed here. The operation stores the selected result,
+     * including such a transport, in a terminal result local; its
+     * completion condition is discarded and the stored result is the value
+     * of the root.
      */
     private void emitTerminalNumericOperation(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalSend send) {
         currentRootEmittedTerminalInvocation = true;
         noteDynamicInvocation();
-        beginNumericOperation(builder, send.message(), true);
+        BytecodeLocal terminalResult = builder.createLocal("terminalNumericResult", null);
+        builder.beginBlock();
+        beginNumericOperation(builder, send.message(), true, terminalResult);
         emitPrimitiveNumericOperandValue(
                 builder, send.receiver(), null, null, null);
         emitPrimitiveNumericOperandValue(
                 builder, send.arguments().get(0), null, null, null);
         endNumericOperation(builder, send.message());
+        builder.emitLoadLocal(terminalResult);
+        builder.endBlock();
     }
 
     /*
@@ -9956,18 +9965,19 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private static void beginNumericOperation(
-            ProtosBytecodeRootNodeGen.Builder builder, String selector, boolean terminal) {
+            ProtosBytecodeRootNodeGen.Builder builder, String selector, boolean terminal,
+            BytecodeLocal outcome) {
         switch (selector) {
-            case "+" -> builder.beginNumberAdd(terminal);
-            case "-" -> builder.beginNumberSubtract(terminal);
-            case "*" -> builder.beginNumberMultiply(terminal);
-            case "/" -> builder.beginNumberDivide(terminal);
-            case "div" -> builder.beginNumberQuotient(terminal);
-            case "mod" -> builder.beginNumberRemainder(terminal);
-            case "<" -> builder.beginRichCompareLt();
-            case "<=" -> builder.beginRichCompareLe();
-            case ">" -> builder.beginRichCompareGt();
-            case ">=" -> builder.beginRichCompareGe();
+            case "+" -> builder.beginNumberAdd(terminal, outcome);
+            case "-" -> builder.beginNumberSubtract(terminal, outcome);
+            case "*" -> builder.beginNumberMultiply(terminal, outcome);
+            case "/" -> builder.beginNumberDivide(terminal, outcome);
+            case "div" -> builder.beginNumberQuotient(terminal, outcome);
+            case "mod" -> builder.beginNumberRemainder(terminal, outcome);
+            case "<" -> builder.beginRichCompareLt(outcome);
+            case "<=" -> builder.beginRichCompareLe(outcome);
+            case ">" -> builder.beginRichCompareGt(outcome);
+            case ">=" -> builder.beginRichCompareGe(outcome);
             default -> throw new AssertionError("not a numeric selector: " + selector);
         }
     }

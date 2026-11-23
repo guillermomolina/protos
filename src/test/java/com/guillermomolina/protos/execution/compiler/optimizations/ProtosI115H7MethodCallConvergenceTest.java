@@ -584,6 +584,18 @@ final class ProtosI115H7MethodCallConvergenceTest {
                 b: 16777217.0
                 (a < b) && !(b < a)
             }
+
+            lessUpward: () => {
+                a: 16777216.0
+                b: 16777217.0
+                a < b
+            }
+
+            lessDownward: () => {
+                a: 16777217.0
+                b: 16777216.0
+                a < b
+            }
             """;
 
     /*
@@ -621,23 +633,16 @@ final class ProtosI115H7MethodCallConvergenceTest {
 
     /*
      * 6: double and mixed long/double operations keep double precision.
-     * Float literals are not admitted to the compact lane, so the double
-     * fast paths of NumberAdd/NumberInPlaceAdd and Lt are checked directly;
-     * the source cases check the observable values.
+     * The double fast paths of NumberAdd and RichCompareLt store their typed
+     * result in the operation's outcome local and answer only a Boolean
+     * continuation status, so their exact values are observed through real
+     * guest execution, before and after warm-up.
      */
     @Test
     void doubleOperationsKeepDoublePrecision() throws Exception {
-        // 16777217 has no Java float representation.
-        assertEquals(16777217.0, ProtosNumberAddFastPathsBase.doLD(null, false, 16777216L, 1.0, null));
-        assertEquals(16777217.0, ProtosNumberAddFastPathsBase.doDL(null, false, 1.0, 16777216L, null));
-        assertEquals(0.1 + 0.2, ProtosNumberAddFastPathsBase.doDD(null, false, 0.1, 0.2, null));
-        // I115: RichCompareLt's double lane yields the primitive boolean that a
-        // conditional branch consumes directly;
-        // mixed operands and guest results are checked by execution.
-        assertTrue(ProtosRichCompareLtNode.doDD(null, 16777216.0, 16777217.0, null));
-        assertFalse(ProtosRichCompareLtNode.doDD(null, 16777217.0, 16777216.0, null));
         try (ProtosStandaloneHostedSession session =
                 open("double-results", LONG_DOUBLE)) {
+            assertDoublePrecision(session);
             /*
              * I115: `&&` and `!` are internal Boolean control. A canonical
              * receiver is decided by CanonicalControlCondition and the
@@ -667,7 +672,21 @@ final class ProtosI115H7MethodCallConvergenceTest {
                 assertTrue(session.prepareTopLevel("lessDoubles").executable().execute()
                         .asBoolean(), "doubles beyond float precision order exactly");
             }
+            assertDoublePrecision(session);
         }
+    }
+
+    /* The exact double and comparison values of the double fast paths. */
+    private static void assertDoublePrecision(ProtosStandaloneHostedSession session)
+            throws Exception {
+        // 16777217 has no Java float representation.
+        assertDouble(session, "sumLongDouble", 16777217.0);
+        assertDouble(session, "sumDoubleLong", 16777217.0);
+        assertDouble(session, "sumDouble", 0.1 + 0.2);
+        assertTrue(session.prepareTopLevel("lessUpward").executable().execute().asBoolean(),
+                "16777216.0 < 16777217.0");
+        assertFalse(session.prepareTopLevel("lessDownward").executable().execute().asBoolean(),
+                "16777217.0 < 16777216.0");
     }
 
     /*
@@ -679,12 +698,16 @@ final class ProtosI115H7MethodCallConvergenceTest {
      */
     @Test
     void compactIntegerOperationsReturnLongs() throws Exception {
-        assertEquals(42L, ProtosNumberAddFastPathsBase.doLL(null, false, 40L, 2L, null));
-        assertEquals(38L, ProtosNumberSubtractFastPathsBase.doLL(null, false, 40L, 2L, null));
-        assertEquals(80L, ProtosNumberMultiplyFastPathsBase.doLL(null, false, 40L, 2L, null));
-        // The primitive lane rewrites on overflow; the generalization promotes.
+        /*
+         * Three levels are distinct: the Java specialization answers a Boolean
+         * continuation status, the physical outcome local holds the primitive
+         * long, and the guest observes the exact Integer. The primitive lane
+         * rewrites on overflow before storing any result (so no outcome local
+         * is touched here); the generalization promotes exactly.
+         */
         assertThrows(ArithmeticException.class,
-                () -> ProtosNumberMultiplyFastPathsBase.doLL(null, false, Long.MIN_VALUE, -1L, null));
+                () -> ProtosNumberMultiplyFastPathsBase.doLL(
+                        null, false, null, Long.MIN_VALUE, -1L, null, null));
         try (ProtosStandaloneHostedSession session = open("integer-operations", """
                 addWide: () => {
                     a: 2147483647
@@ -718,6 +741,10 @@ final class ProtosI115H7MethodCallConvergenceTest {
                 assertRawLong(session, "multiplyEdge", Long.MIN_VALUE);
                 assertLarge(session, "multiplyOverflow", "9223372036854775808");
             }
+            // After warm-up the specialized sites keep their exact guest values.
+            assertRawLong(session, "addWide", 4294967294L);
+            assertRawLong(session, "multiplyEdge", Long.MIN_VALUE);
+            assertLarge(session, "multiplyOverflow", "9223372036854775808");
         }
     }
 

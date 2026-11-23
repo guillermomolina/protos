@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.201-SNAPSHOT
+
+- **PERF045.** Store numeric and indexed results in their producer operations.
+
 ## 0.4.200-SNAPSHOT
 
 - **PERF045.** Restrict constant Array argument cleanup to the ordinary construction fallback.

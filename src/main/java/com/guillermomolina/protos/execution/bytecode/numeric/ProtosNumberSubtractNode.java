@@ -20,6 +20,7 @@ package com.guillermomolina.protos.execution;
 import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.bytecode.ConstantOperand;
+import com.oracle.truffle.api.bytecode.LocalAccessor;
 import com.oracle.truffle.api.bytecode.OperationProxy;
 import com.oracle.truffle.api.bytecode.StoreBytecodeIndex;
 import com.oracle.truffle.api.dsl.Bind;
@@ -43,37 +44,47 @@ import com.oracle.truffle.api.nodes.Node;
  * suspended invocation) is the exact result of this operation. The
  * {@code terminal} constant states whether the site is the terminal
  * invocation of its root.
+ *
+ * <p>The operation stores its result in the {@code outcome} local and
+ * answers whether that result must be composed as a continuation.
  */
 @GenerateUncached
 @GenerateInline(false)
 @ConstantOperand(type = boolean.class, name = "terminal")
+@ConstantOperand(type = LocalAccessor.class, name = "outcome")
 @OperationProxy.Proxyable(allowUncached = true, storeBytecodeIndex = false)
 abstract class ProtosNumberSubtractNode extends ProtosNumberSubtractFastPathsBase {
 
     @Specialization(guards = "selection.execute(frame, SELECTOR, left)", replaces = "doLL")
-    static Object doLLOvf(VirtualFrame frame, boolean terminal, long left, long right,
-            @Bind("$node") Node node,
-            @Shared("selection") @Cached ProtosNumericSelectionNode selection) {
-        return subtractOrPromote(frame, node, left, right);
+    static boolean doLLOvf(VirtualFrame frame, boolean terminal, LocalAccessor outcome,
+            long left, long right,
+            @Bind Node node,
+            @Shared("selection") @Cached ProtosNumericSelectionNode selection,
+            @Bind("bytecodeOf($node)") BytecodeNode bytecode) {
+        return ProtosBytecodeRootNode.StoreAndTestContinuation.storeResult(
+                outcome, subtractOrPromote(frame, node, left, right), frame, bytecode);
     }
 
     @Fallback
     @StoreBytecodeIndex
     @InliningCutoff
-    static Object doGeneric(
+    static boolean doGeneric(
             VirtualFrame frame,
             boolean terminal,
+            LocalAccessor outcome,
             Object left,
             Object right,
-            @Bind("$node") Node node,
+            @Bind Node node,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
             @Shared("selection") @Cached ProtosNumericSelectionNode selection,
-            @Cached ProtosNumericOverloadNode overload) {
+            @Cached ProtosNumericOverloadNode overload,
+            @Bind("bytecodeOf($node)") BytecodeNode bytecode) {
         if (selection.execute(frame, SELECTOR, left)) {
-            return genericSubtract(root, frame, node, left, right);
+            return ProtosBytecodeRootNode.StoreAndTestContinuation.storeResult(
+                    outcome, genericSubtract(root, frame, node, left, right), frame, bytecode);
         }
-        BytecodeNode bytecode = BytecodeNode.get(node);
-        return overload.execute(frame, terminal, SELECTOR, left, right,
-                root, bytecode, bytecode.getBytecodeIndex(frame));
+        return ProtosBytecodeRootNode.StoreAndTestContinuation.storeResult(
+                outcome, overload.execute(frame, terminal, SELECTOR, left, right,
+                root, bytecode, bytecode.getBytecodeIndex(frame)), frame, bytecode);
     }
 }
