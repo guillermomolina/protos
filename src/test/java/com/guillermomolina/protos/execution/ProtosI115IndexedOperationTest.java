@@ -2512,6 +2512,131 @@ final class ProtosI115IndexedOperationTest {
                 """));
     }
 
+    /*
+     * A captured receiver (a cell shared with keep) indexed by a callback
+     * formal (viaFormal), a plain LOCAL (viaLocal) or a while-loop LOCAL
+     * (sumLocal) uses the cell/local indexed form, which reads both bindings
+     * itself. Its results equal the ordinary at protocol over every Array
+     * storage and Bytes; out-of-range and invalid indexes signal the
+     * standard Error; an exact large Integer index reaches a selected at
+     * unchanged; an override installed between invocations is selected by
+     * the warmed site; a suspending selected at runs once per access and
+     * resumes with its own index; an Error signaled by a selected at runs
+     * the selection once and reaches the handler.
+     */
+    private static final String CELL_LOCAL_SITES = TRACE + """
+            longs: [10, 20, 30]
+            doubles: [1.5, 2.5]
+            booleans: [true, false]
+            objects: ["a", { n: 7 }]
+            bytes: Encoding.UTF8.encode("jobs")
+            big: 9223372036854775807 + 1000
+            Custom: Array { at: (index) => { step(1, index - 9223372036854775807) } }
+            custom: Custom(1, 2, 3)
+            shared: [1, 2, 3]
+            override: () => { shared.at: (index) => { step(2, index + 100) } }
+            Lazy: Array { at: (index) => { step(3, (() => { index * 10 }).future().value()) } }
+            lazy: Lazy(0, 0, 0)
+            Failing: Array { at: (index) => { step(4, index); Error().signal() } }
+            failing: Failing(1)
+            viaFormal: (source, k) => {
+                values: source
+                keep: () => values
+                result: null
+                Array(k).each((element) => { result = values[element] })
+                result
+            }
+            viaLocal: (source, k) => {
+                values: source
+                keep: () => values
+                index: k
+                values[index]
+            }
+            sumLocal: (source) => {
+                values: source
+                keep: () => values
+                total: 0
+                i: 0
+                while(i < 3) {
+                    total = total * 100 + values[i]
+                    i = i + 1
+                }
+                total
+            }
+            fails: (source, k) => {
+                Error.handle(() => { viaFormal(source, k); false }, (caught) => true) && Error.handle(() => { viaLocal(source, k); false }, (caught) => true)
+            }
+            standard: () => {
+                ok: (viaFormal(longs, 1) == 20) && (viaLocal(longs, 2) == 30)
+                ok = ok && (viaFormal(doubles, 1) == 2.5) && (viaLocal(doubles, 0) == 1.5)
+                ok = ok && (viaFormal(booleans, 1) == false) && (viaLocal(booleans, 0) == true)
+                ok = ok && (viaFormal(objects, 0) == "a") && (viaLocal(objects, 1).n == 7)
+                ok = ok && (viaFormal(bytes, 0) == 106) && (viaLocal(bytes, 3) == 115)
+                ok = ok && (sumLocal(longs) == 102030) && (viaFormal(shared, 1) == 2)
+                ok = ok && fails(longs, 3) && fails(longs, 0 - 1) && fails(longs, 1.0)
+                ok = ok && fails(longs, "x") && fails(longs, big) && fails(bytes, 4)
+                ok && (viaLocal(longs, 0) == 10)
+            }
+            exactIndex: () => {
+                trace.value = 0
+                (viaFormal(custom, big) == 1000) && (viaLocal(custom, big) == 1000) && (trace.value == 11)
+            }
+            overridden: () => {
+                trace.value = 0
+                (viaFormal(shared, 1) == 101) && (viaLocal(shared, 2) == 102) && (trace.value == 22)
+            }
+            suspended: () => {
+                trace.value = 0
+                result: (() => { viaFormal(lazy, 2) * 1000 + viaLocal(lazy, 1) }).future().value()
+                trace.value * 100000 + result
+            }
+            failed: () => {
+                trace.value = 0
+                fails(failing, 0) && (trace.value == 44)
+            }
+            """;
+
+    @Test
+    void capturedReceiverIndexedByLocalBindingsKeepsTheAtProtocol() throws Exception {
+        try (ProtosStandaloneHostedSession session = open(CELL_LOCAL_SITES)) {
+            for (int round = 0; round < 3; round++) {
+                assertTrue(session.prepareTopLevel("standard").executable().execute().asBoolean(),
+                        "standard storage, Bytes and Errors, round " + round);
+                assertTrue(session.prepareTopLevel("exactIndex").executable().execute().asBoolean(),
+                        "an exact large Integer index reaches the selected at once");
+            }
+            for (String function : List.of("viaFormal", "viaLocal", "sumLocal")) {
+                List<String> names = names(root(session, function));
+                int subscript = -1;
+                for (int i = 0; i < names.size(); i++) {
+                    if (names.get(i).startsWith("c.BinarySubscript")) {
+                        assertEquals(-1, subscript, function + " one indexed operation: " + names);
+                        subscript = i;
+                    }
+                }
+                assertTrue(subscript >= 2
+                                && names.get(subscript).startsWith("c.BinarySubscriptCellLocal"),
+                        function + " reads its cell receiver and local index itself: " + names);
+                assertTrue(!(names.get(subscript - 2).startsWith("c.LoadCell")
+                                && names.get(subscript - 1).startsWith("load.local")),
+                        function + " keeps a separate operand pair: " + names);
+                assertTrue(names.stream().noneMatch(name -> name.startsWith("c.IsStandardIndexedSelection")),
+                        function + " adds an external selector: " + names);
+            }
+            session.prepareTopLevel("override").executable().execute();
+            assertTrue(session.prepareTopLevel("overridden").executable().execute().asBoolean(),
+                    "an override installed between invocations is selected once per access");
+            assertTrue(session.prepareTopLevel("failed").executable().execute().asBoolean(),
+                    "an Error signaled by a selected at runs the selection once");
+            assertTrue(!session.prepareTopLevel("standard").executable().execute().asBoolean(),
+                    "the overridden shared receiver no longer answers its standard element");
+        }
+        // Suspension runs inside a Task of a polyglot Context, as every other
+        // suspending selection of this file does.
+        assertEquals(3320010L, evalLong(CELL_LOCAL_SITES + "suspended()\n"),
+                "each suspending selected at runs once and resumes with its own index");
+    }
+
     /**
      * Primitive {@code long}, {@code double} and {@code boolean} storage
      * through stack operands; errors for bounds, mutability and index type.

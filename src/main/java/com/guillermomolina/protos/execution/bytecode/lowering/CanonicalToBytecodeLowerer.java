@@ -3728,6 +3728,23 @@ final class CanonicalToBytecodeLowerer {
         builder.beginSourceSection(
                 send.span().startOffset(), send.span().length());
         builder.beginBlock();
+        BytecodeLocal receiverCell = "at".equals(send.message())
+                ? directCellOperandOrNull(send.receiver())
+                : null;
+        BytecodeLocal indexLocal = receiverCell != null
+                ? directLocalOperandOrNull(send.arguments().get(0))
+                : null;
+        if (indexLocal != null) {
+            // The operation reads both bindings itself, receiver first.
+            emitComposedIndexedOperation(builder,
+                    () -> builder.emitBinarySubscriptCellLocal(
+                            childResult, receiverCell, indexLocal),
+                    result, childResult, resumeValue, primitiveCarrierResult, stackResult);
+            noteIndexedOutcomeReleased(send, childResult);
+            builder.endBlock();
+            builder.endSourceSection();
+            return;
+        }
         if (stackStagedIndexedOperands(send.receiver(), send.arguments())) {
             // Each operand is emitted once, in Protos order, as an operand of the operation.
             emitIndexedOperation(builder, send.message(), () -> {
@@ -3764,6 +3781,68 @@ final class CanonicalToBytecodeLowerer {
         noteIndexedOutcomeReleased(send, childResult);
         builder.endBlock();
         builder.endSourceSection();
+    }
+
+    /*
+     * The cell local of an indexed receiver that emitLookup lowers to
+     * exactly one LoadCell: a lookup statically resolved to a reachable CELL
+     * binding with DIRECT access. Null for every other operand, which keeps
+     * the ordinary indexed path.
+     */
+    private BytecodeLocal directCellOperandOrNull(CanonicalExpression expression) {
+        if (!(expression instanceof CanonicalLookup lookup)
+                || currentNormalCallbackScalarLocals.containsKey(lookup.name())
+                || currentRootAnalysis == null) {
+            return null;
+        }
+        CanonicalBindingIdentity identity = staticIdentityOrNull(
+                currentRootAnalysis.resolutionOf(lookup).orElse(null));
+        if (identity == null
+                || currentRootAnalysis.accessOf(lookup)
+                        != CanonicalBindingAnalysis.LexicalAccess.DIRECT
+                || enclosingRegionLocalOrNull(identity) != null) {
+            return null;
+        }
+        return cellLocalOrNull(identity);
+    }
+
+    /*
+     * The local of an indexed argument that emitLookup lowers to exactly one
+     * load.local: the inline callback's own LOCAL binding, an enclosing
+     * inline region's LOCAL binding with DIRECT access, or a LOCAL binding of
+     * this root with DIRECT access. Null for every other operand, which keeps
+     * the ordinary indexed path.
+     */
+    private BytecodeLocal directLocalOperandOrNull(CanonicalExpression expression) {
+        if (!(expression instanceof CanonicalLookup lookup)) {
+            return null;
+        }
+        if (currentNormalCallbackScalarLocals.containsKey(lookup.name())) {
+            CanonicalBindingResolution resolution =
+                    currentNormalCallbackScalarAnalysis.resolutionOf(lookup).orElse(null);
+            return resolution instanceof CanonicalBindingResolution.Resolved resolved
+                            && resolved.identity().owner() == currentNormalCallbackScalarScope
+                    ? currentNormalCallbackScalarLocals.get(lookup.name())
+                    : null;
+        }
+        if (currentRootAnalysis == null) {
+            return null;
+        }
+        CanonicalBindingIdentity identity = staticIdentityOrNull(
+                currentRootAnalysis.resolutionOf(lookup).orElse(null));
+        if (identity == null
+                || currentRootAnalysis.accessOf(lookup)
+                        != CanonicalBindingAnalysis.LexicalAccess.DIRECT) {
+            return null;
+        }
+        BytecodeLocal region = enclosingRegionLocalOrNull(identity);
+        if (region != null) {
+            return region;
+        }
+        if (cellLocalOrNull(identity) != null) {
+            return null;
+        }
+        return ownLocalOrNull(identity);
     }
 
     /*
@@ -3873,29 +3952,48 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal resumeValue,
             boolean primitiveCarrierResult,
             boolean stackResult) {
+        Runnable operation = switch (selector) {
+            case "at" -> () -> {
+                builder.beginBinarySubscript(outcome);
+                operands.run();
+                builder.endBinarySubscript();
+            };
+            case "atPut" -> () -> {
+                builder.beginSetItem(outcome);
+                operands.run();
+                builder.endSetItem();
+            };
+            case "size" -> () -> {
+                builder.beginGetLen(outcome);
+                operands.run();
+                builder.endGetLen();
+            };
+            default -> throw new AssertionError(
+                    "Not an indexed selector: " + selector);
+        };
+        emitComposedIndexedOperation(builder, operation, result, outcome, resumeValue,
+                primitiveCarrierResult, stackResult);
+    }
+
+    /**
+     * The composition and result consumption shared by every indexed
+     * operation form: {@code operation} emits one indexed operation that
+     * stores its result in {@code outcome} and answers whether that result
+     * must be composed as a continuation.
+     */
+    private void emitComposedIndexedOperation(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            Runnable operation,
+            BytecodeLocal result,
+            BytecodeLocal outcome,
+            BytecodeLocal resumeValue,
+            boolean primitiveCarrierResult,
+            boolean stackResult) {
         noteDynamicInvocation();
 
         // The operation stores its result in outcome and answers whether to compose it.
         builder.beginIfThen();
-        switch (selector) {
-            case "at" -> {
-                builder.beginBinarySubscript(outcome);
-                operands.run();
-                builder.endBinarySubscript();
-            }
-            case "atPut" -> {
-                builder.beginSetItem(outcome);
-                operands.run();
-                builder.endSetItem();
-            }
-            case "size" -> {
-                builder.beginGetLen(outcome);
-                operands.run();
-                builder.endGetLen();
-            }
-            default -> throw new AssertionError(
-                    "Not an indexed selector: " + selector);
-        }
+        operation.run();
         builder.beginBlock();
         emitDispatchedContinuationComposition(builder, outcome, resumeValue);
         builder.endBlock();

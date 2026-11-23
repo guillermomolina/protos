@@ -2078,6 +2078,7 @@ final class ProtosPerf045RangeEachInlineTest {
             assertEquals(1, count(names, "c.IsStandardRangeIterationSelection"),
                     "numeric for retains ordinary Range.each selection");
             List<Instruction> listed = module.runRoot().getBytecodeNode().getInstructionsAsList();
+            assertCellLocalSubscriptReadsItsOwnOperands(listed);
             ProtosI115MCompactLoweringTest.assertConstantArrayFallbackCleanup(
                     module.runRoot(), "MakeConstantLongArray", "c.CallVarargsMethod", 64);
             // The indexed outcome is the addition's operand; the sum is the cell write's value.
@@ -2268,9 +2269,12 @@ final class ProtosPerf045RangeEachInlineTest {
         assertTrue(producer >= 0, () -> names.toString());
         assertFalse(names.get(producer + 1).startsWith("c.StoreAndTestContinuation"),
                 () -> operation + " stores its own result without a separate store: " + names);
+        // The outcome is the first constant LocalAccessor; only the cell/local
+        // indexed form also carries its receiver cell and index locals.
         List<LocalAccessor> outcomes = localAccessors(instructions.get(producer));
-        assertEquals(1, outcomes.size(),
-                "the producer's outcome is one constant LocalAccessor");
+        assertEquals(isOperation(names.get(producer), CELL_LOCAL_SUBSCRIPT) ? 3 : 1,
+                outcomes.size(),
+                () -> names.get(producer) + " constant LocalAccessors: " + outcomes);
         LocalAccessor outcome = outcomes.get(0);
         int outcomeOffset = localOffset(outcome);
         Instruction test = instructions.get(producer + 1);
@@ -2309,6 +2313,67 @@ final class ProtosPerf045RangeEachInlineTest {
         }
         assertTrue(completion > resume, () -> operation + " has a completed path: " + names);
         return new GuardedComposition(instructions, names, producer, outcome, completion);
+    }
+
+    /* The indexed form reading a cell receiver and a local index itself. */
+    private static final String CELL_LOCAL_SUBSCRIPT = "BinarySubscriptCellLocal";
+
+    /*
+     * values[i] is the one BinarySubscript-family producer, in its cell/local
+     * form: its receiver is the captured values cell (a creation StoreCell's
+     * cell, not the total cell written by StoreCellFromLocal), its index is
+     * the formal IterationNext writes, and no separate LoadCell of that cell,
+     * no load.local of that formal and no generic send lies between the
+     * advance and the producer.
+     */
+    private static void assertCellLocalSubscriptReadsItsOwnOperands(List<Instruction> listed) {
+        List<Instruction> instructions = logicalInstructions(listed);
+        List<String> names = instructions.stream().map(ProtosInstructionNames::of).toList();
+        assertEquals(0L, names.stream().filter(name -> isOperation(name, "BinarySubscript")).count(),
+                () -> "no stack-operand BinarySubscript remains for values[i]: " + names);
+        int producer = -1;
+        for (int index = 0; index < names.size(); index++) {
+            if (isOperation(names.get(index), CELL_LOCAL_SUBSCRIPT)) {
+                assertEquals(-1, producer, () -> "one indexed producer: " + names);
+                producer = index;
+            }
+        }
+        int subscript = producer;
+        assertTrue(subscript > 0, () -> "values[i] uses the cell/local form: " + names);
+        List<LocalAccessor> operands = localAccessors(instructions.get(subscript));
+        LocalAccessor receiver = operands.get(1);
+        LocalAccessor index = operands.get(2);
+        int next = indexAfter(names, "c.IterationNext", -1);
+        assertTrue(next >= 0 && next < subscript, () -> names.toString());
+        assertTrue(sameLocal(index, localAccessors(instructions.get(next)).get(0)),
+                () -> "the index is the formal written by IterationNext: " + names);
+        boolean createdCell = false;
+        for (int position = 0; position < names.size(); position++) {
+            if (isOperation(names.get(position), "StoreCell")
+                    && sameLocal(receiver, localAccessors(instructions.get(position)).get(0))) {
+                createdCell = true;
+            }
+            if (isOperation(names.get(position), "StoreCellFromLocal")) {
+                assertFalse(sameLocal(receiver, localAccessors(instructions.get(position)).get(0)),
+                        () -> "the receiver is not the total cell: " + names);
+            }
+        }
+        assertTrue(createdCell, () -> "the receiver is the created values cell: " + names);
+        int indexOffset = localOffset(index);
+        for (int position = next + 1; position < subscript; position++) {
+            String name = names.get(position);
+            Instruction instruction = instructions.get(position);
+            assertFalse(isOperation(name, "LoadCell")
+                            && sameLocal(receiver, localAccessors(instruction).get(0)),
+                    () -> "the receiver cell is not loaded separately: " + names);
+            assertFalse(name.startsWith("load.local") && readsOffset(instruction, indexOffset),
+                    () -> "the index formal is not loaded separately: " + names);
+            assertFalse(name.startsWith("c.GetMethod") || name.startsWith("c.Call"),
+                    () -> "the standard indexed path adds no generic send: " + names);
+        }
+        assertFalse(isOperation(names.get(subscript - 2), "LoadCell")
+                        && names.get(subscript - 1).startsWith("load.local"),
+                () -> "no LoadCell/load.local operand pair precedes the producer: " + names);
     }
 
     /* Original instructions, without trace.* and tag.* rows. */

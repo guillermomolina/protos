@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.203-SNAPSHOT
+
+- **PERF045.** Read captured indexed receivers and local indexes inside the indexed operation.
+
 ## 0.4.202-SNAPSHOT
 
 - **PERF045.** Store completed numeric results into captured cells from their result local.

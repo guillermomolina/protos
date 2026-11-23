@@ -941,6 +941,69 @@ final class ProtosI115MCompactLoweringTest {
         }
     }
 
+    /*
+     * A captured receiver indexed by a LOCAL emits the cell/local form of
+     * BinarySubscript as its only indexed operation, guarding its own
+     * composition, with no operand pair, external selection, guest send or
+     * Error machinery in the normal body, also after the site has executed
+     * both valid accesses and an indexed Error.
+     */
+    @Test
+    void capturedReceiverLocalIndexAddsNoGuestOperations() throws Exception {
+        try (ProtosStandaloneHostedSession session = openSession(
+                "captured-local-index", """
+                read: (a, i) => {
+                    values: a
+                    keep: () => values
+                    values[i]
+                }
+                exercise: () => {
+                    a: [1, 2, 3]
+                    ok: true
+                    k: 0
+                    while(k < 20) {
+                        ok = ok && (read(a, 1) == 2)
+                        k = k + 1
+                    }
+                    ok = ok && Error.handle(() => { read(a, 3); false }, (caught) => true)
+                    ok && (read(a, 2) == 3)
+                }
+                """)) {
+            assertTrue(session.prepareTopLevel("exercise").executable().execute().asBoolean());
+            ProtosBytecodeRootNode root = selectedRoot(session.prepareTopLevel("read"));
+            List<String> names = root.getBytecodeNode().getInstructionsAsList().stream()
+                    .filter(instruction -> !instruction.getName().startsWith("tag.")
+                            && !instruction.getName().startsWith("trace."))
+                    .map(ProtosInstructionNames::of).toList();
+            List<Integer> operations = new java.util.ArrayList<>();
+            for (int i = 0; i < names.size(); i++) {
+                if (names.get(i).startsWith("c.BinarySubscript")) {
+                    operations.add(i);
+                }
+            }
+            assertEquals(1, operations.size(), names.toString());
+            int operation = operations.get(0);
+            assertTrue(names.get(operation).startsWith("c.BinarySubscriptCellLocal"),
+                    "the captured receiver and local index are read by the operation: " + names);
+            assertTrue(names.get(operation + 1).startsWith("branch.false"),
+                    "the operation's answer guards its own composition: " + names);
+            assertFalse(names.get(operation - 2).startsWith("c.LoadCell")
+                            && names.get(operation - 1).startsWith("load.local"),
+                    "no separate receiver/index operand pair: " + names);
+            for (String absent : List.of(
+                    "c.GetMethod", "c.CallNilaryMethod", "c.CallUnaryMethod",
+                    "c.CallBinaryMethod", "c.CallRequest", "c.PrepareSendOne",
+                    "c.IsStandardIndexedSelection", "c.StoreAndTestContinuation",
+                    "c.PrepareStructuredErrorHandler")) {
+                assertTrue(names.stream().noneMatch(name -> name.startsWith(absent)),
+                        "read emits " + absent + ": " + names);
+            }
+            assertTrue(names.stream().noneMatch(name -> name.contains("Error")
+                            || name.contains("Signal") || name.contains("Profile")),
+                    "read emits a check operation: " + names);
+        }
+    }
+
     @Test
     void constantArrayOperationsKeepPrimitiveConstantOperands() throws Exception {
         try (ProtosStandaloneHostedSession session = openSession(

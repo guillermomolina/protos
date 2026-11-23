@@ -3450,6 +3450,137 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
+    /**
+     * {@link BinarySubscript} over a receiver held by a lexical cell and an
+     * index held by a local, both provably PRESENT, read inside the operation
+     * instead of by a separate {@link LoadCell} and {@code load.local}. The
+     * receiver is read first, exactly as {@link LoadCell} reads it, then the
+     * index, as the local's current value: primitive {@code long} while the
+     * local holds one, otherwise its exact guest value. The indexed
+     * selection, access, outcome store and continuation answer are those of
+     * {@link BinarySubscript}, through {@link CellLocalSubscriptNode}.
+     */
+    @Operation(storeBytecodeIndex = true)
+    @ConstantOperand(type = LocalAccessor.class, name = "outcome")
+    @ConstantOperand(type = LocalAccessor.class, name = "receiverCell")
+    @ConstantOperand(type = LocalAccessor.class, name = "index")
+    public static final class BinarySubscriptCellLocal {
+        /*
+         * The typed index read is attempted first. Its failure is caught
+         * here, never declared as rewriteOn: under rewriteOn the DSL would
+         * answer the exception's value (the index) as this operation's
+         * boolean result. The exception carries the local's exact value,
+         * which takes the generic selection unchanged.
+         */
+        @Specialization
+        public static boolean perform(
+                LocalAccessor outcome,
+                LocalAccessor receiverCell,
+                LocalAccessor index,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode,
+                @Bind ProtosBytecodeRootNode root,
+                @Cached CellLocalSubscriptNode subscript) {
+            Object receiver = LoadCell.perform(receiverCell, frame, bytecode);
+            long indexValue;
+            try {
+                indexValue = index.getLong(bytecode, frame);
+            } catch (UnexpectedResultException notLong) {
+                return subscript.execute(
+                        frame, outcome, receiver, notLong.getResult(), root, bytecode);
+            }
+            return subscript.executeLong(frame, outcome, receiver, indexValue, root, bytecode);
+        }
+    }
+
+    /*
+     * The indexed selection of BinarySubscriptCellLocal over its already read
+     * operands. Each specialization has the guard of the BinarySubscript
+     * specialization of the same name and executes that specialization's own
+     * method, so the standard Array/Bytes access, bounds handling, selection
+     * check, outcome store and selected-behavior fallback stay owned by
+     * BinarySubscript.
+     */
+    @GenerateUncached
+    @GenerateInline(false)
+    abstract static class CellLocalSubscriptNode extends Node {
+        static final String SELECTOR = BinarySubscript.SELECTOR;
+
+        abstract boolean execute(VirtualFrame frame, LocalAccessor outcome, Object receiver,
+                Object index, ProtosBytecodeRootNode root, BytecodeNode bytecode);
+
+        abstract boolean executeLong(VirtualFrame frame, LocalAccessor outcome, Object receiver,
+                long index, ProtosBytecodeRootNode root, BytecodeNode bytecode);
+
+        @Specialization(guards = {"array.hasLongStorageForRuntime()",
+                "selection.execute(frame, SELECTOR, array)"})
+        static boolean doLongStorage(
+                VirtualFrame frame, LocalAccessor outcome, ProtosArrayValue array, long index,
+                ProtosBytecodeRootNode root, BytecodeNode bytecode,
+                @Shared("selection") @Cached StandardIndexedSelectionNode selection,
+                @Bind Node inliningTarget,
+                @Shared("indexError") @Cached InlinedBranchProfile errorProfile) {
+            return BinarySubscript.doLongStorage(outcome, array, index, frame,
+                    selection, inliningTarget, errorProfile, bytecode);
+        }
+
+        @Specialization(guards = {"array.hasDoubleStorageForRuntime()",
+                "selection.execute(frame, SELECTOR, array)"})
+        static boolean doDoubleStorage(
+                VirtualFrame frame, LocalAccessor outcome, ProtosArrayValue array, long index,
+                ProtosBytecodeRootNode root, BytecodeNode bytecode,
+                @Shared("selection") @Cached StandardIndexedSelectionNode selection,
+                @Bind Node inliningTarget,
+                @Shared("indexError") @Cached InlinedBranchProfile errorProfile) {
+            return BinarySubscript.doDoubleStorage(outcome, array, index, frame,
+                    selection, inliningTarget, errorProfile, bytecode);
+        }
+
+        @Specialization(guards = {"array.hasBooleanStorageForRuntime()",
+                "selection.execute(frame, SELECTOR, array)"})
+        static boolean doBooleanStorage(
+                VirtualFrame frame, LocalAccessor outcome, ProtosArrayValue array, long index,
+                ProtosBytecodeRootNode root, BytecodeNode bytecode,
+                @Shared("selection") @Cached StandardIndexedSelectionNode selection,
+                @Bind Node inliningTarget,
+                @Shared("indexError") @Cached InlinedBranchProfile errorProfile) {
+            return BinarySubscript.doBooleanStorage(outcome, array, index, frame,
+                    selection, inliningTarget, errorProfile, bytecode);
+        }
+
+        @Specialization(guards = "selection.execute(frame, SELECTOR, array)",
+                replaces = {"doLongStorage", "doDoubleStorage", "doBooleanStorage"})
+        static boolean doArray(
+                VirtualFrame frame, LocalAccessor outcome, ProtosArrayValue array, long index,
+                ProtosBytecodeRootNode root, BytecodeNode bytecode,
+                @Shared("selection") @Cached StandardIndexedSelectionNode selection,
+                @Bind Node inliningTarget,
+                @Shared("indexError") @Cached InlinedBranchProfile errorProfile) {
+            return BinarySubscript.doArray(outcome, array, index, frame,
+                    selection, inliningTarget, errorProfile, bytecode);
+        }
+
+        @Specialization(guards = "selection.execute(frame, SELECTOR, bytes)")
+        static boolean doBytes(
+                VirtualFrame frame, LocalAccessor outcome, ProtosBytesValue bytes, long index,
+                ProtosBytecodeRootNode root, BytecodeNode bytecode,
+                @Shared("selection") @Cached StandardIndexedSelectionNode selection,
+                @Bind Node inliningTarget,
+                @Shared("indexError") @Cached InlinedBranchProfile errorProfile) {
+            return BinarySubscript.doBytes(outcome, bytes, index, frame,
+                    selection, inliningTarget, errorProfile, bytecode);
+        }
+
+        @Fallback
+        @InliningCutoff
+        static boolean doSelected(
+                VirtualFrame frame, LocalAccessor outcome, Object receiver, Object index,
+                ProtosBytecodeRootNode root, BytecodeNode bytecode,
+                @Cached ProtosFunctionCallDispatchers.CallNode call) {
+            return BinarySubscript.doSelected(outcome, receiver, index, frame, root, call, bytecode);
+        }
+    }
+
     /*
      * The standard atPut result is the inserted value; a redefined atPut
      * answers the result of its invocation. Indexed assignment discards this

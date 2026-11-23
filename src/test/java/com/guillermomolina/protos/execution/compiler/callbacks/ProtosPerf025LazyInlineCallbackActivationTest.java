@@ -205,6 +205,69 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
     }
 
     /**
+     * A captured receiver indexed by the callback formal reads that formal
+     * inside the indexed operation: its index operand is the same constant
+     * local IterationNext writes for the current visit, with no callback
+     * activation or context publication. A selected {@code at} suspending at
+     * every visit resumes with the index of that visit, not the formal of a
+     * previous one, and runs once per visit.
+     */
+    @Test
+    void cellLocalSubscriptObservesTheCurrentFormalAcrossSuspension() throws Exception {
+        List<Instruction> instructions =
+                assertRegionInstructionsWithoutActivation(
+                        """
+                        run: () => {
+                            probe()
+                            values: Array(10, 20, 30)
+                            read: () => values
+                            total: 0
+                            Array(0, 1, 2).each((element) => {
+                                total = total * 100 + values[element]
+                            })
+                            total
+                        }
+                        run()
+                        """);
+        List<String> names = instructions.stream().map(ProtosInstructionNames::of).toList();
+        List<Object> subscript = constantLocals(instructions, "BinarySubscriptCellLocal");
+        assertEquals(3, subscript.size(), () -> "outcome, receiver cell and index: " + names);
+        Object formal = constantLocals(instructions, "IterationNext").get(0);
+        assertEquals(formal, subscript.get(2),
+                () -> "the index operand is the formal of the current visit: " + names);
+
+        ProtosExecutionOutcome outcome =
+                ProtosTestExecutionSupport.execute(
+                        "perf025-cell-local-subscript-suspension.protos",
+                        """
+                        trace: { value: 0 }
+                        Lazy: Array {
+                            at: (index) => {
+                                trace.value = trace.value + 1
+                                (() => { index * 10 }).future().value()
+                            }
+                        }
+                        run: () => {
+                            values: Lazy(0, 0, 0)
+                            read: () => values
+                            total: 0
+                            Array(0, 1, 2).each((element) => {
+                                total = total * 100 + values[element] + element
+                            })
+                            total
+                        }
+                        result: (() => { run() }).future().value()
+                        trace.value * 100000 + result
+                        """,
+                        new ProtosCoreBootstrap().bootstrap(CORE).newModuleActivation());
+        assertEquals(
+                ProtosExecutionOutcome.State.COMPLETED,
+                outcome.state(),
+                () -> "outcome=" + outcome.state() + ", error=" + outcome.error());
+        assertInteger(301122, outcome.value());
+    }
+
+    /**
      * The first context expression materializes the semantic activation;
      * later observers in the same invocation receive the identical Context,
      * and each invocation has its own.
