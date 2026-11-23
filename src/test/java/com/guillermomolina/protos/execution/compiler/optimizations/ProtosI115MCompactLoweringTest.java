@@ -213,11 +213,26 @@ final class ProtosI115MCompactLoweringTest {
                 doubles: () => Array(1.5, 2.5)
                 booleans: () => Array(true, false)
                 mixed: (value) => Array(value, true, null)
+                longsStaged: () => {
+                    values: Array(1, 2)
+                    values
+                }
+                doublesStaged: () => {
+                    values: Array(1.5, 2.5)
+                    values
+                }
+                booleansStaged: () => {
+                    values: Array(true, false)
+                    values
+                }
                 """)) {
             for (var entry : java.util.Map.of(
                     "longs", "MakeConstantLongArray",
                     "doubles", "MakeConstantDoubleArray",
                     "booleans", "MakeConstantBooleanArray",
+                    "longsStaged", "MakeConstantLongArray",
+                    "doublesStaged", "MakeConstantDoubleArray",
+                    "booleansStaged", "MakeConstantBooleanArray",
                     "mixed", "MakeArray").entrySet()) {
                 ProtosBytecodeRootNode root = selectedRoot(session.prepareTopLevel(entry.getKey()));
                 List<String> names = root.getBytecodeNode().getInstructionsAsList().stream()
@@ -257,8 +272,126 @@ final class ProtosI115MCompactLoweringTest {
                         "The actual factory lookup must precede its standard-selection guard: " + names);
                 assertTrue(construction > guard && ordinaryCall > construction,
                         "Both standard construction and the nonstandard factory call must remain: " + names);
+                if (entry.getKey().endsWith("Staged")) {
+                    assertConstantArrayFallbackCleanup(root, entry.getValue(), ordinaryOperation, 2);
+                }
             }
         }
+    }
+
+    /*
+     * Follow the selection's actual edges. Block scoping is disabled in this root;
+     * require a unique metadata mapping before resolving physical operands to logical locals.
+     */
+    static void assertConstantArrayFallbackCleanup(
+            ProtosBytecodeRootNode root, String constructor, String call, int argumentCount) {
+        var bytecode = root.getBytecodeNode();
+        List<Instruction> instructions = bytecode.getInstructionsAsList().stream()
+                .filter(instruction -> !instruction.getName().startsWith("trace.")
+                        && !instruction.getName().startsWith("tag."))
+                .toList();
+        Instruction guard = instructions.stream()
+                .filter(instruction -> ProtosInstructionNames.of(instruction)
+                        .contains("IsStandardArrayConstructionSelection"))
+                .findFirst().orElseThrow();
+        Instruction selection = instructions.stream()
+                .filter(instruction -> instruction.getBytecodeIndex() > guard.getBytecodeIndex())
+                .findFirst().orElseThrow();
+        assertTrue(selection.getName().contains("branch.false"),
+                () -> "selection guard must feed its false branch: " + guard + " -> " + selection);
+        int alternative = branchDestination(selection);
+        Instruction standard = instructions.stream()
+                .filter(instruction -> ProtosInstructionNames.of(instruction).contains(constructor))
+                .findFirst().orElseThrow();
+        assertTrue(standard.getBytecodeIndex() > selection.getBytecodeIndex()
+                && standard.getBytecodeIndex() < alternative);
+        Instruction jump = instructions.stream()
+                .filter(instruction -> instruction.getBytecodeIndex() > standard.getBytecodeIndex()
+                        && instruction.getBytecodeIndex() < alternative
+                        && instruction.getName().equals("branch"))
+                .findFirst().orElseThrow();
+        int merge = branchDestination(jump);
+        Instruction invocation = instructions.stream()
+                .filter(instruction -> ProtosInstructionNames.of(instruction).equals(call)
+                        && instruction.getBytecodeIndex() >= alternative
+                        && instruction.getBytecodeIndex() < merge)
+                .findFirst().orElseThrow();
+        assertTrue(merge > alternative, "the standard branch skips the entire fallback");
+        Instruction continuationTest = instructions.stream()
+                .filter(instruction -> instruction.getBytecodeIndex() > invocation.getBytecodeIndex()
+                        && instruction.getBytecodeIndex() < merge
+                        && ProtosInstructionNames.of(instruction).equals("c.IsContinuation"))
+                .findFirst().orElseThrow();
+        Instruction completionGuard = instructions.stream()
+                .filter(instruction -> instruction.getBytecodeIndex() > continuationTest.getBytecodeIndex())
+                .findFirst().orElseThrow();
+        assertTrue(completionGuard.getName().contains("branch.false"),
+                () -> "continuation test must feed its loop exit: " + completionGuard);
+        int completed = branchDestination(completionGuard);
+        assertTrue(completed > completionGuard.getBytecodeIndex() && completed < merge);
+        Instruction resume = instructions.stream()
+                .filter(instruction -> ProtosInstructionNames.of(instruction)
+                                .contains("ResumeDispatchedContinuation")
+                        && instruction.getBytecodeIndex() > completionGuard.getBytecodeIndex()
+                        && instruction.getBytecodeIndex() < completed)
+                .findFirst().orElseThrow();
+        Instruction repeat = instructions.stream()
+                .filter(instruction -> instruction.getName().equals("branch.backward")
+                        && instruction.getBytecodeIndex() > resume.getBytecodeIndex()
+                        && instruction.getBytecodeIndex() < completed)
+                .findFirst().orElseThrow();
+        int loopStart = branchDestination(repeat);
+        assertTrue(loopStart > invocation.getBytecodeIndex()
+                        && loopStart <= continuationTest.getBytecodeIndex(),
+                "resumption repeats the continuation test without repeating the invocation");
+
+        var locals = bytecode.getLocals();
+        assertEquals(locals.size(), locals.stream().map(local -> local.getLocalOffset()).distinct().count(),
+                "physical operands must map uniquely to logical local metadata");
+        var staged = instructions.stream()
+                .filter(instruction -> instruction.getName().startsWith("store.local")
+                        && instruction.getBytecodeIndex() >= alternative
+                        && instruction.getBytecodeIndex() < invocation.getBytecodeIndex())
+                .map(instruction -> locals.stream()
+                        .filter(local -> local.getLocalOffset() == localOperand(instruction))
+                        .findFirst().orElseThrow())
+                .filter(local -> "invocationArgument".equals(local.getName()))
+                .toList();
+        assertEquals(argumentCount, staged.size());
+        assertEquals(argumentCount, staged.stream().map(local -> local.getLocalIndex()).distinct().count());
+        for (var local : staged) {
+            var accesses = instructions.stream()
+                    .filter(instruction -> instruction.getName().startsWith("store.local")
+                            || instruction.getName().equals("clear.local"))
+                    .filter(instruction -> locals.stream()
+                            .filter(candidate -> candidate.getLocalOffset() == localOperand(instruction))
+                            .findFirst().orElseThrow().getLocalIndex() == local.getLocalIndex())
+                    .toList();
+            assertEquals(1, accesses.stream()
+                    .filter(instruction -> instruction.getName().startsWith("store.local")).count());
+            assertEquals(1, accesses.stream()
+                    .filter(instruction -> instruction.getName().equals("clear.local")).count());
+            for (Instruction access : accesses) {
+                assertTrue(access.getBytecodeIndex() >= alternative && access.getBytecodeIndex() < merge,
+                        "argument writes and clears belong exclusively to the alternative branch");
+                if (access.getName().equals("clear.local")) {
+                    assertTrue(access.getBytecodeIndex() >= completed,
+                            "argument cleanup follows the invocation's complete continuation composition");
+                }
+            }
+        }
+    }
+
+    private static int branchDestination(Instruction instruction) {
+        return instruction.getArguments().stream()
+                .filter(argument -> argument.getKind() == Instruction.Argument.Kind.BYTECODE_INDEX)
+                .findFirst().orElseThrow().asBytecodeIndex();
+    }
+
+    private static int localOperand(Instruction instruction) {
+        return instruction.getArguments().stream()
+                .filter(argument -> argument.getKind() == Instruction.Argument.Kind.LOCAL_OFFSET)
+                .findFirst().orElseThrow().asLocalOffset();
     }
 
     @Test

@@ -8,6 +8,11 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.200-SNAPSHOT
+
+- **PERF045.** Restrict constant Array argument cleanup to the ordinary construction fallback.
+- Clear staged constant Array arguments only after ordinary fallback invocation and continuation completion; add structural checks for fallback-local lifetime and cleanup.
+
 ## 0.4.199-SNAPSHOT
 
 - **PERF045.** Consume completed indexed results directly in numeric operations and captured cell writes.

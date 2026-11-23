@@ -8776,11 +8776,19 @@ final class CanonicalToBytecodeLowerer {
                     childResult, result, resumeValue,
                     primitiveCarrierResult);
         }
+        if (constant != null) {
+            // Only the fallback initializes these locals; retain them through call composition.
+            for (BytecodeLocal argumentValue : argumentValues) {
+                builder.emitClearLocal(argumentValue);
+            }
+        }
         builder.endBlock();
         builder.endIfThenElse();
 
-        for (BytecodeLocal argumentValue : argumentValues) {
-            builder.emitClearLocal(argumentValue);
+        if (constant == null) {
+            for (BytecodeLocal argumentValue : argumentValues) {
+                builder.emitClearLocal(argumentValue);
+            }
         }
         if (suppliedVector != null) {
             builder.emitClearLocal(suppliedVector);

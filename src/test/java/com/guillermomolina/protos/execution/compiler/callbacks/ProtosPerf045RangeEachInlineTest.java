@@ -2044,6 +2044,8 @@ final class ProtosPerf045RangeEachInlineTest {
             assertEquals(1, count(names, "c.IsStandardRangeIterationSelection"),
                     "numeric for retains ordinary Range.each selection");
             List<Instruction> listed = module.runRoot().getBytecodeNode().getInstructionsAsList();
+            ProtosI115MCompactLoweringTest.assertConstantArrayFallbackCleanup(
+                    module.runRoot(), "MakeConstantLongArray", "c.CallVarargsMethod", 64);
             // The indexed outcome is the addition's operand; the sum is the cell write's value.
             assertCompletedResultConsumedBy(listed, "BinarySubscript", "NumberAdd");
             assertCompletedResultConsumedBy(listed, "NumberAdd", "StoreCell");
