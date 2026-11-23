@@ -1,7 +1,9 @@
 # FFM provider examples (`ffi:sqlite3`)
 
 These programs call C functions of the real shared SQLite library from
-Protos through the optional external FFM provider (I144). Every C declaration
+Protos through the generic FFM provider (I144): an optional external provider
+JAR on the portable JVM, or the provider integrated into the installed Native
+executable. Every C declaration
 and all control flow are Protos source; the provider contains no
 SQLite-specific Java.
 
@@ -43,22 +45,26 @@ not the public application learning path:
 | [`sqlite-memory-query.protos`](sqlite-memory-query.protos) | Low-level in-memory query, including the historical borrowed TEXT/BLOB copying path. |
 
 Unlike most examples in this tree, they do **not** run with a plain
-`bin/protos <file>`: the provider must be passed explicitly with
-`--foreign-provider-path`, and SQLite must be authorized separately with
+`bin/protos <file>`: on the portable JVM the provider must be passed
+explicitly with `--foreign-provider-path`, and in every distribution SQLite
+must be authorized separately with
 `--allow-library sqlite3=libsqlite3.so.0`. No native library is authorized by
 default, and the library authorization grants no Protos capability.
 
 ## Requirements
 
-- Linux x86-64 (LP64) and JDK 25;
-- the portable JVM distribution (Native Image is not supported);
+- Linux x86-64 (LP64);
+- either the portable JVM distribution with JDK 25 and the external provider
+  JAR, or the installed Native executable, which integrates the generic FFM
+  provider and is restricted to its registered finite C signature set (see
+  [Native Image: integrated provider](../../../docs/guide/interop/ffm-provider.md#native-image-integrated-provider));
 - a shared SQLite library that the native loader finds as
   `libsqlite3.so.0`, authorized with `--allow-library sqlite3=libsqlite3.so.0`
   (an absolute path such as
   `--allow-library sqlite3=/usr/lib/x86_64-linux-gnu/libsqlite3.so.0` also
   works). The library runs trusted in process; this is not a sandbox.
 
-## Build the provider
+## Build the provider (portable JVM only)
 
 ```sh
 make dist
@@ -72,7 +78,7 @@ Replace `<version>` with the ZIP actually listed (the project version from
 `pom.xml`). The tool writes `target/ffm-provider/protos-ffm-provider.jar`.
 Details: [Build the provider JAR](../../../docs/guide/interop/ffm-provider.md#build-the-provider-jar).
 
-## Run
+## Run on the portable JVM
 
 ```sh
 bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar --allow-library sqlite3=libsqlite3.so.0 \
@@ -95,6 +101,21 @@ bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar -
     protos/examples/ffi/sqlite-memory-query.protos
 ```
 
+## Run on the installed Native executable
+
+No provider JAR is used; only the library authorization:
+
+```sh
+protos --allow-library sqlite3=libsqlite3.so.0 \
+    protos/examples/ffi/sqlite-library.protos
+protos --allow-library sqlite3=libsqlite3.so.0 \
+    protos/examples/ffi/sqlite-version-public.protos
+```
+
+Other public `std:sqlite` examples run the same way. Any declaration whose
+physical C signature is outside the Native registered set is refused with an
+ordinary `Error` before C is entered.
+
 Supply disposable filenames for the persistent examples.
 For the WAL example, use a disposable database, not an existing database whose
 journaling mode you want to preserve.
@@ -103,11 +124,13 @@ All programs validate their results with `std:test/assertions`. Success means
 **exit status 0 and no standard output**. A broken expectation fails an
 assertion and exits non-zero with a diagnostic on standard error.
 
-Without `--foreign-provider-path` (or with the JAR only on `CLASSPATH`), no
-provider owns the `ffi` scheme: `import("ffi:sqlite3")` fails with an
-ordinary resolution Error and the exit status is non-zero. With the provider
-but without `--allow-library sqlite3=...`, the import fails with
-`ForeignError` (`foreignCategory` `unauthorized-library`). In both cases
+On the portable JVM, without `--foreign-provider-path` (or with the JAR only
+on `CLASSPATH`), no provider owns the `ffi` scheme: `import("ffi:sqlite3")`
+fails with an ordinary resolution Error and the exit status is non-zero. With
+the provider but without `--allow-library sqlite3=...`, the import fails with
+`ForeignError` (`foreignCategory` `unauthorized-library`). On the Native
+executable, without any `--allow-library` no `ffi:` provider is registered,
+so the import fails with an ordinary resolution Error. In all these cases
 nothing native is loaded.
 
 ## Why `:memory:`
@@ -144,7 +167,9 @@ without copying low-level native declarations.
 - The provider validates arity, kinds, ranges and handle state before a call,
   but cannot check that a declared signature matches the C function. A wrong
   declaration can corrupt memory or terminate the process.
-- No callbacks, structs, variadic functions, C++, or Native Image.
+- No callbacks, structs, variadic functions or C++ ABI. The Native
+  executable supports only its registered finite physical C signature set
+  and never loads Java provider JARs.
   Public `std:ffi` lacks specialized TEXT/BLOB input descriptors; `std:sqlite`
   supports TEXT/BLOB parameters through its private adapter.
 - C calls are synchronous; a blocked call delays the Actor and session close.

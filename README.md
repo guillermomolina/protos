@@ -545,15 +545,21 @@ To rebuild the Native Image and run its regression suite:
 make test-native
 ```
 
-The Native executable is a real GraalVM Native Image (AOT) host, but guest
-code currently runs interpreter-only: the Native build selects Truffle's
-fallback runtime because Truffle guest JIT compilation of Protos Bytecode DSL
-roots is blocked upstream by
-[oracle/graal#14579](https://github.com/oracle/graal/issues/14579). The JVM
-path keeps the optimizing runtime and guest JIT. The Native regression suite
-verifies the CLI, guest execution, the Test Tool, and DAP, and checks that
-interpreter-only execution reports no compilation or `FrameWithoutBoxing`
-failures.
+The Native executable is an ahead-of-time compiled GraalVM Native Image host
+whose Truffle runtime performs guest JIT compilation. The Native regression
+suite verifies the CLI, guest execution, the Test Tool, and DAP, and the Native
+regression and distribution gates require successful Tier-2 compilation of both
+the Bytecode DSL root family and the builtin-call root family; a
+fallback-runtime marker or a compilation failure fails the gate. Historically,
+an interim interpreter-only fallback (PLAT045) was used while
+[oracle/graal#14579](https://github.com/oracle/graal/issues/14579) blocked
+Bytecode DSL compilation in Native Image; that policy is superseded.
+
+The installed Native executable also integrates the generic FFM provider, so
+public `std:ffi` and `std:sqlite` programs run with an explicit host library
+authorization such as `--allow-library sqlite3=libsqlite3.so.0` and no
+provider JAR; see the
+[FFM provider guide](docs/guide/interop/ffm-provider.md).
 
 ## Learn Protos
 
@@ -576,8 +582,9 @@ failures.
 -   [Test Tool](docs/guide/tools/test-tool.md) — running and registering
     Protos test corpora.
 -   [Embedding Protos in Java](docs/guide/embedding/java.md) and
-    [foreign interoperability](docs/guide/interop/README.md) — portable JVM
-    integration.
+    [foreign interoperability](docs/guide/interop/README.md) — Java
+    embedding and external Java providers on the portable JVM, plus the
+    integrated FFM provider of the installed Native executable.
 -   [Executable tutorials](protos/tutorials/README.md) — small progressive
     `.protos` programs that are exercised by CLI regression coverage where
     applicable.

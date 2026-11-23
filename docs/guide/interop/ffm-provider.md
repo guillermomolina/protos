@@ -7,11 +7,14 @@
 > [public `std:ffi` guide](../library/ffi.md). This guide remains useful for
 > authors of the generic backend and for private operations not published by R1.
 
-The FFM provider (`providers/ffm`) is an external I085 provider that calls C
+The FFM provider (`providers/ffm`) is a generic I085 provider that calls C
 functions of host-authorized shared libraries through the Java 25 Foreign
 Function and Memory API. Unlike the `java:`, `inventado:`, and `oslib:` test
-fixtures, it is a real artifact; like them, it is built and loaded outside the
-Protos distribution. See also the provider's own
+fixtures, it is a real artifact. The same generic backend has two delivery
+forms: on the **portable JVM** it is a separately built external JAR loaded
+with `--foreign-provider-path`; in the installed **Native Image** executable it
+is integrated, with no JAR and no dynamic Java loading (see
+[Native Image: integrated provider](#native-image-integrated-provider)). See also the provider's own
 [README](../../../providers/ffm/README.md).
 
 > **Warning.** Validation catches wrong arities, kinds, ranges, NUL bytes, and
@@ -56,11 +59,12 @@ Protos application -> std:ffi (ordinary descriptors, Closures, Arrays)
     |
     | private operations on import("ffi:sqlite3")
     v
-I085 foreign provider SPI
+Generic FFM provider operations (I144)
     |
-    v
-Optional FFM provider JAR (I144)
-    |
+    +-- portable JVM: external provider JAR, loaded with
+    |   --foreign-provider-path through the I085 provider SPI
+    +-- installed Native: integrated provider, no JAR,
+    |   finite registered physical signature set
     v
 Java 25 Foreign Function & Memory API
     |
@@ -68,9 +72,10 @@ Java 25 Foreign Function & Memory API
 Host-authorized native libraries (for example libsqlite3.so.0)
 ```
 
-- The provider is **external and optional**. It is not part of
-  `lib/protos.jar` and is not shipped in the distribution; you build it
-  separately against the distribution's public SPI.
+- On the portable JVM the provider is **external and optional**. It is not
+  part of `lib/protos.jar` and is not shipped in the portable distribution;
+  you build it separately against the distribution's public SPI. The installed
+  Native executable contains the integrated form instead.
 - The JAR carries **no embedded authorization**. Whether it runs at all, and
   which libraries it may load, is decided by the host at start-up.
 - The distributable provider accepts any logical alias matching
@@ -87,8 +92,8 @@ Host-authorized native libraries (for example libsqlite3.so.0)
 ## Requirements
 
 - Linux x86-64 (LP64); other platforms are rejected on first use;
-- JDK 25 (to build the JAR and to run the portable CLI);
-- the portable JVM distribution with the provider JAR, or the installed
+- portable JVM only: JDK 25 (to build the JAR and to run the portable CLI);
+- the portable JVM distribution with the external provider JAR, or the installed
   Native Image executable, which integrates the same provider (see
   [Native Image: integrated provider](#native-image-integrated-provider));
 - for the SQLite examples, a shared SQLite library reachable by the native

@@ -6,8 +6,8 @@ verifies the official distribution, and activates Protos in your home directory.
 It does not require Java, GraalVM, Maven, root access, or a source checkout.
 
 The Dev Container remains the preconfigured editor/debugging path. The portable
-JVM release remains a separately installed distribution for users who need its
-optimizing runtime, Java embedding, or foreign providers.
+JVM release remains a separately installed distribution for users who need Java
+embedding or dynamically loaded external Java providers.
 
 ## Published releases
 
@@ -224,13 +224,16 @@ exact checksum and host contract; do not reuse a checksum from another release.
 
 ### Native limitations
 
-- Guest Protos code currently runs interpreter-only: Truffle guest JIT
-  compilation is unavailable in the Native executable while
-  [oracle/graal#14579](https://github.com/oracle/graal/issues/14579) remains
-  unresolved (PLAT045). Long-running programs are slower than on the portable
-  JVM, but the Native distribution remains independently executable.
+- Native guest code is JIT-compiled by its Truffle runtime: successful guest
+  Tier-2 compilation is a required Native acceptance property. (The earlier
+  interpreter-only fallback, PLAT045, is historical.)
 - `--foreign-provider-path` is unavailable in Native: dynamic Java-provider
   plugins require the portable JVM release.
+- Integrated FFM is available in Native without a provider JAR, using an
+  explicit library authorization such as
+  `--allow-library sqlite3=libsqlite3.so.0`; only its registered finite C
+  signature set is supported. See the
+  [FFM provider guide](interop/ffm-provider.md#native-image-integrated-provider).
 - Java embedding also requires the portable JVM distribution.
 
 The full comparison is in

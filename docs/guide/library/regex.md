@@ -143,7 +143,6 @@ needle.search("is 1+1=2? yes") === null // false
 
 ## JVM and Native
 
-Behavior is identical. On the Native distribution, guest JIT is disabled
-(PLAT045), so long searches run interpreter-only and are slower than on the
-portable JVM. The Unicode property data `std:regex` reads when it loads is
+Behavior is identical: the regex language and observable results are the
+same in both supported distributions. The Unicode property data `std:regex` reads when it loads is
 embedded in the Native executable of Protos 0.3.312 (DIST015-FIX).

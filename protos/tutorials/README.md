@@ -131,7 +131,7 @@ an explicitly injected test Bytes key, an explicit Instant, structured JSON
 claims and HS256 issue/verify. Authentication does not itself grant account
 permissions. See the [strict JWT guide](../../docs/guide/library/jwt.md).
 
-The following lessons use the optional external FFM provider (I144) and the shared SQLite
+The following lessons use the generic FFM provider (I144) and the shared SQLite
 library:
 [`08-language-interactions/07-ffi-provider-basics.protos`](08-language-interactions/07-ffi-provider-basics.protos)
 (importing `ffi:sqlite3`, building signatures, scalar C calls, C results as
@@ -140,10 +140,12 @@ data, pre-entry rejection) and
 (owned handles, `out` parameters, borrowed memory, release order), followed by
 [`12-system-resources/05-sqlite-protos-first.protos`](12-system-resources/05-sqlite-protos-first.protos)
 (public `std:sqlite`, typed parameters, copied rows and Closable cleanup).
-These lessons need
-the provider JAR authorized explicitly with
-`bin/protos --foreign-provider-path <protos-ffm-provider.jar> --allow-library sqlite3=libsqlite3.so.0 <file>`, on
-Linux x86-64 with JDK 25. They check their results with assertions and finish
+These lessons need an explicit SQLite authorization on Linux x86-64. On the
+portable JVM (JDK 25) the external provider JAR must also be loaded:
+`bin/protos --foreign-provider-path <protos-ffm-provider.jar> --allow-library sqlite3=libsqlite3.so.0 <file>`.
+The installed Native executable integrates the provider and needs only
+`protos --allow-library sqlite3=libsqlite3.so.0 <file>`, restricted to its
+registered finite C signature set. They check their results with assertions and finish
 silently on success. See the
 [FFM provider guide](../../docs/guide/interop/ffm-provider.md).
 
@@ -159,8 +161,9 @@ for explicitly authorized C calls, then
 [`05-public-ffi-owned-out.protos`](12-system-resources/05-public-ffi-owned-out.protos)
 for output Arrays and owned handles, following the private
 [`04-ffi-ownership-and-borrows.protos`](12-system-resources/04-ffi-ownership-and-borrows.protos)
-lesson. These latter two programs require the
-authorized provider JAR and a SQLite library authorized by the host.
+lesson. These latter two programs require the applicable FFM provider (the
+external JAR on the portable JVM, integrated on Native) and a SQLite library
+authorized by the host; importing `std:ffi` grants no native authority.
 
 The public SQLite path builds on `std:sqlite` and is distinct from both the
 private provider lessons (`07-ffi-provider-basics`,
@@ -174,7 +177,8 @@ above. Follow this progression:
 - [`07-sqlite-durable-transactions.protos`](12-system-resources/07-sqlite-durable-transactions.protos):
   persistence, commit, rollback, explicit close and read-only reopen.
 
-Supply a disposable SQLite filename for lesson 07:
+Supply a disposable SQLite filename for lesson 07. Both commands assume a
+repository checkout containing the tutorial source. Portable JVM:
 
 ```sh
 bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar \
@@ -183,7 +187,15 @@ bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar \
   /tmp/protos-sqlite-tutorial.db
 ```
 
-These lessons need an FFM provider and a SQLite library authorized by the host.
+Installed Native executable:
+
+```sh
+protos --allow-library sqlite3=libsqlite3.so.0 \
+  protos/tutorials/12-system-resources/07-sqlite-durable-transactions.protos \
+  /tmp/protos-sqlite-tutorial.db
+```
+
+These lessons need the applicable FFM provider and a SQLite library authorized by the host.
 They finish silently on successful assertions.
 See the [SQLite guide](../../docs/guide/library/sqlite.md).
 

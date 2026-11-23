@@ -43,6 +43,32 @@ backend implementation and native lifetime details see the advanced
 
 ## Getting started
 
+There are two workflows. In both, SQLite must be authorized explicitly with
+`--allow-library sqlite3=libsqlite3.so.0`, and `import("std:sqlite")` alone
+loads no SQLite library. The authorized library runs as trusted native code in
+the process; Protos `Filesystem` permissions do not confine it.
+
+### Native Image — installed executable
+
+```sh
+protos --allow-library sqlite3=libsqlite3.so.0 \
+    protos/examples/ffi/sqlite-library.protos
+```
+
+Here `protos` is the installed Native executable, and the example path is
+relative to a repository checkout. The operating system supplies
+`libsqlite3.so.0`; no JDK, provider JAR or dynamic Java plugin is required,
+because the generic FFM provider is integrated into the executable. The durable
+tutorial takes a disposable database filename:
+
+```sh
+protos --allow-library sqlite3=libsqlite3.so.0 \
+    protos/tutorials/12-system-resources/07-sqlite-durable-transactions.protos \
+    /tmp/protos-sqlite-tutorial.db
+```
+
+### Portable JVM — external FFM provider
+
 1. Build the portable JVM distribution and note the archive name, which comes
    from the project version in `pom.xml`:
 

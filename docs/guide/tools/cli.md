@@ -39,6 +39,8 @@ the library only when the program imports `ffi:<alias>`; see the
 
 ### Foreign providers with `run` and `debug`
 
+Portable JVM, with an external provider JAR:
+
 ```sh
 protos run --foreign-provider-path provider.jar \
   --allow-library sqlite3=libsqlite3.so.0 Main
@@ -53,13 +55,24 @@ protos --foreign-provider-path provider.jar \
   --allow-library sqlite3=libsqlite3.so.0 debug app.protos
 ```
 
+Installed Native executable, with the integrated FFM provider and no
+provider JAR:
+
+```sh
+protos run --allow-library sqlite3=libsqlite3.so.0 Main
+protos debug --allow-library sqlite3=libsqlite3.so.0 app.protos
+```
+
 - Both options may precede the subcommand or follow it, but always before the
   `run` entry or the `debug` file; the two positions are combined, and an
   alias may still be given only once. After the entry or file the same
   spellings are ordinary `process.args()` elements.
-- Authorizing a library is independent of trusting the provider JAR: the JAR
-  is trusted by `--foreign-provider-path`, each library by its own
-  `--allow-library`, and neither implies the other or any Protos capability.
+- On the portable JVM, authorizing a library is independent of trusting the
+  provider JAR: the JAR is trusted by `--foreign-provider-path`, each library
+  by its own `--allow-library`, and neither implies the other or any Protos
+  capability. On Native, the integrated FFM provider loads no external Java
+  code, but each library still requires its own explicit `--allow-library`;
+  `--foreign-provider-path` is unavailable there.
 - `TRUSTED_IN_PROCESS` provides no confinement: the provider and every
   authorized library run with the full authority of the operating-system
   process.
@@ -546,7 +559,7 @@ protos lint --fail-on-warning src/main.protos
 |---|---|---|
 | Requirements | Linux x86_64, dynamic glibc 2.39 or newer; no JDK | GraalVM 25.5.5.0.3 (JDK 25.0.5.0.3) |
 | PLAT073-C implementation bytecode | AOT Native executable; no installed JDK or Java classfiles required | Java 25 classfile major 69; Java 21 runtime unsupported |
-| Guest execution | Interpreter-only; guest JIT disabled (PLAT045) | Optimizing runtime with guest JIT |
+| Guest execution | Truffle guest JIT; successful Tier-2 compilation is a required acceptance gate | Optimizing runtime with guest JIT |
 | Commands on this page | All available | All available |
 | `--foreign-provider-path` | Not available: no dynamic plugin loading | Available |
 | `--allow-library` | Available: integrated generic FFM provider, finite C signature set; OS-provided libraries | Available with an explicit provider JAR |

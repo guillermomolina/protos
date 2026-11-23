@@ -96,28 +96,34 @@ The exact rules are in the normative owners listed at the top of this page.
 
 ## Availability at this revision
 
-Choose the portable JVM CLI when you need to load an external provider.
-Native Image distributions do not support dynamic provider loading.
+Choose the portable JVM CLI when you need to load an external Java provider.
+Native Image distributions do not support dynamic Java provider loading, but
+the installed Native executable integrates the generic `ffi:` provider.
 
 | Surface | State |
 |---|---|
-| Shared foreign substrate (facades, cache, admission/identity, `ForeignError`, pull `each`, sessions) | Available |
-| `std:interop` explicit operations | Implemented |
-| Public external provider SPI `com.guillermomolina.protos.spi.foreign` | Available |
+| Shared foreign substrate (facades, cache, admission/identity, `ForeignError`, pull `each`, sessions) | Available in both distributions for supported foreign values |
+| `std:interop` explicit operations | Implemented in both distributions for supported foreign values |
+| Public external provider SPI `com.guillermomolina.protos.spi.foreign` | Available on the portable JVM |
 | Loading external providers in the **portable JVM CLI**: `protos --foreign-provider-path <jars> file.protos` | Available |
 | Synchronous callbacks through the **public SPI** | Not available: callbacks do not cross `spi.foreign` |
 | Foreign providers in a **standard Polyglot Context** ([embedding](../embedding/java.md)) | Not available: no Context option or public API registers providers there |
 | `ProtosPolyglotRuntimeHost.openWithForeignProviders(...)` | Public method, but it builds a Protos-owned runtime host, not a standard Context; running guest code on it requires internal bootstrap classes. Not a documented application flow |
 | Restricted host-Java catalogue provider (`ProtosHostJavaCatalogue`, `openWithHostJava`) | Requires internal bootstrap classes; same limitation as the previous row |
-| External providers in the **Native CLI** | Not available: Native Image builds offer no dynamic plugin loading |
-| Any provider shipped inside the Protos distribution | None. The `java:`, `inventado:`, and `oslib:` providers are test fixtures |
+| Dynamic Java provider loading in the **Native CLI** | Not available: Native Image builds offer no dynamic plugin loading |
+| Integrated generic `ffi:` provider in the **Native CLI** ([guide](ffm-provider.md#native-image-integrated-provider)) | Available with explicit `--allow-library` authorization; registered finite C signature set only |
+| Java providers shipped inside the Protos distribution | None. The `java:`, `inventado:`, and `oslib:` providers are test fixtures; the integrated Native `ffi:` provider is part of the Native executable, not a Java plugin |
 | Optional external FFM provider `ffi:` ([guide](ffm-provider.md)) | Available in `providers/ffm` as a separately built JAR for the portable JVM CLI on Linux x86-64; not part of the distribution |
-| Application SQLite `std:sqlite` ([guide](../library/sqlite.md)) | Memory/file connections, typed parameters, copied rows and manual transactions; explicit FFM provider and SQLite authorization required |
-| Public C declaration MODULE `std:ffi` ([guide](../library/ffi.md)) | Available as Protos Standard Library source over the external provider |
+| Application SQLite `std:sqlite` ([guide](../library/sqlite.md)) | Memory/file connections, typed parameters, copied rows and manual transactions; requires the applicable FFM provider (external JAR on JVM, integrated on Native) and explicit SQLite authorization |
+| Public C declaration MODULE `std:ffi` ([guide](../library/ffi.md)) | Available as Protos Standard Library source over the applicable authorized FFM provider |
 
-The practical consequence: today, the supported way for a Protos program to
-use a foreign provider is to build a provider JAR against the public SPI and
-pass it to the portable JVM CLI with `--foreign-provider-path`.
+The practical consequence: there are two supported workflows. On the
+portable JVM, a program can use any external provider JAR built against the
+public SPI, passed with `--foreign-provider-path` (including the optional FFM
+provider JAR). On the installed Native executable, a program can use only the
+integrated `ffi:` provider, through `std:ffi` or `std:sqlite`, with each native
+library authorized by `--allow-library`; it offers no external Java plugins,
+no callbacks, and no native ABI beyond its registered signature set.
 
 ## Provider identity and trust
 

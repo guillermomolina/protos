@@ -1,11 +1,24 @@
 # Protos FFM provider (`ffi:`)
 
-Optional, external foreign provider (I144, decision D238-B1-SQL-R1) that lets
+Generic foreign provider (I144, decision D238-B1-SQL-R1) that lets
 Protos code declare and call C functions of a **host-authorized** shared
 library through the Java 25 Foreign Function and Memory API
-(`java.lang.foreign`). It is built separately from Protos, against the public
-I085 SPI (`com.guillermomolina.protos.spi.foreign`) and the GraalVM Native
-Image SDK API (compile time only), and is never part of `lib/protos.jar`.
+(`java.lang.foreign`). It has two delivery forms of the same generic
+implementation:
+
+- **Portable JVM:** an optional external artifact, built separately from
+  Protos against the public I085 SPI
+  (`com.guillermomolina.protos.spi.foreign`) and the GraalVM Native Image SDK
+  API (compile time only), never part of `lib/protos.jar`, and loaded with
+  `--foreign-provider-path`.
+- **Installed Native executable:** integrated, with no JAR and no dynamic Java
+  loading, restricted to a finite registered physical signature set; see
+  [Native Image: integrated provider](#native-image-integrated-provider).
+
+In both forms the private backend operations are the same, applications use
+the Protos-first `std:ffi` and `std:sqlite` layers, and every native library
+needs an explicit `--allow-library` authorization and runs as trusted native
+code in process.
 
 ```text
 Ordinary Protos application
@@ -14,7 +27,9 @@ Ordinary Protos application
 Protos descriptors, Closures and Arrays (LIB028)
     | private provider operations
     v
-I085 external SPI           <- this provider: module ffi:<library>
+generic FFM provider        <- module ffi:<library>
+    | portable JVM: external JAR through the I085 SPI
+    | installed Native: integrated, finite signature set
     v
 Java 25 java.lang.foreign
     v
@@ -22,6 +37,8 @@ host-authorized native library (trusted, in process)
 ```
 
 ## Quickstart (from the repository)
+
+Portable JVM, with the external provider JAR:
 
 ```sh
 make dist
@@ -35,6 +52,13 @@ bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar -
 Building the JAR and authorizing it are separate steps: the build produces an
 inert artifact, only `--foreign-provider-path` on each run lets a host use it,
 and only `--allow-library` authorizes a native library such as SQLite. A successful run of the example prints nothing and exits with status 0.
+
+Installed Native executable, with the integrated provider and no JAR:
+
+```sh
+protos --allow-library sqlite3=libsqlite3.so.0 \
+    protos/examples/ffi/sqlite-version-public.protos
+```
 
 ## For Protos application authors
 
@@ -84,7 +108,8 @@ with the Actor or Process, releasing any owned resources it still holds.
 
 ## Requirements and limits
 
-- Portable JVM CLI, Java 25 (GraalVM 25), Linux x86-64 (LP64) only. Other
+- External JAR: portable JVM CLI, Java 25 (GraalVM 25). Integrated form: the
+  installed Native executable. Linux x86-64 (LP64) only. Other
   platforms are rejected on first use.
 - Native Image: integrated into the installed executable, without dynamic
   provider loading and with a finite signature set; see

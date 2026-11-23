@@ -113,24 +113,31 @@ describes may be unavailable on a given runtime, in which case the operation
 signals an ordinary `Error` (see [Runtime inspection](inspect.md)):
 
 - **Native Linux x86_64** — a self-contained executable for Linux x86_64 with
-  dynamic glibc 2.39 or newer. It needs no external JDK. Guest code runs
-  interpreter-only: guest JIT compilation is disabled under PLAT045, so
-  compute-heavy library work (for example large regex searches) is slower than
-  on the JVM, but results are identical. `std:runtime` deliberately reports which
-  distribution is running through its `platform` field.
+  dynamic glibc 2.39 or newer. It needs no external JDK. Its Truffle runtime
+  performs guest JIT compilation, subject to the Native runtime contract.
+  `std:runtime` deliberately reports which distribution is running through its
+  `platform` field.
 - **Portable JVM** — runs on the supported external runtime, GraalVM
   25.5.5.0.3 (JDK 25.0.5.0.3), with the optimizing runtime and guest JIT.
+
+Both distributions execute the same Standard Library modules and support guest
+optimization, each under its own runtime contract.
 
 `std:regex` depends on Unicode property data. Since Protos 0.3.312 that data is
 embedded in the Native executable, so `import("std:regex/regex")` works in both
 distributions.
 
-The modules whose usefulness differs are `std:interop` and `std:ffi`: they act
-on foreign values from external providers that only the portable JVM CLI can
-load. The `std:ffi` MODULE is public and importable, but it does not authorize
-or load native libraries; the host must separately authorize the external
-provider and its logical library alias. See [Explicit foreign operations](interop.md)
-and the [public `std:ffi` guide](ffi.md).
+The modules whose usefulness depends on the host are `std:interop`, `std:ffi`
+and `std:sqlite`. The portable JVM accepts external provider JARs through
+`--foreign-provider-path`; the installed Native executable has an integrated
+generic FFM provider instead and loads no external Java providers.
+`std:interop` operates on supported foreign values from whichever provider the
+host makes available, including the integrated Native provider. `std:ffi` and
+`std:sqlite` additionally require an explicit host native-library
+authorization (`--allow-library alias=target`) in both distributions; importing
+these modules grants no native authority. See
+[Explicit foreign operations](interop.md) and the
+[public `std:ffi` guide](ffi.md).
 
 See [Try Protos](../00-try-protos.md) for downloading and running either
 distribution.

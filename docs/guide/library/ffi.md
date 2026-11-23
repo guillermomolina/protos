@@ -13,15 +13,18 @@ contract is [`spec/semantics/FFI.md`](../../../spec/semantics/FFI.md).
 - **`std:interop`** provides the four explicit operations `invoke`,
   `instantiate`, `readMember` and `writeMember` on foreign values. It does not
   declare C signatures; see [Explicit foreign operations](interop.md).
-- **`ffi:`** is the private scheme of an optional external provider. The I144
+- **`ffi:`** is the private scheme of the generic FFM provider, implemented
+  as an optional external provider JAR on the portable JVM and integrated into
+  the installed Native executable. The I144
   FFM provider supplies generic backend operations and a host-authorized
   `ffi:sqlite3` facade. Its private `signature`/`param`/`bind` API is for
   backend authors, not the recommended application API; see the
   [I144 provider guide](../interop/ffm-provider.md).
 
-The provider JAR is executable Java code and authorized C is trusted native
-code. The host chooses whether to load the provider and which library it may
-open. Neither importing `std:ffi` nor constructing descriptors grants that
+On the portable JVM, the provider JAR is trusted executable Java code; in both
+distributions, authorized C is trusted native code running in process. The
+host chooses (on the JVM) whether to load the provider and (everywhere) which
+library it may open. Neither importing `std:ffi` nor constructing descriptors grants that
 authority.
 
 ## Availability and setup
@@ -91,19 +94,31 @@ sqlite: import("ffi:sqlite3")
 ```
 
 This is a distinct foreign import of the logical alias `sqlite3`. It succeeds
-only when the host explicitly loads the external provider **and** authorizes
-that alias with `--allow-library sqlite3=<target>` (or the embedding provider
+only when the FFM provider is available (on the portable JVM, the host
+explicitly loads the external provider JAR; on Native, it is integrated)
+**and** the host authorizes that alias with `--allow-library sqlite3=<target>` (or the embedding provider
 option `library.sqlite3`). The target is an exact load name such as
 `libsqlite3.so.0` or an absolute path, passed unchanged to the operating-system
 loader. The provider's presence alone authorizes no library. The application passes the resulting library facade to `FFI`;
 `FFI.bind` never accepts a path or a library name String as authority.
+
+Portable JVM:
 
 ```sh
 bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar --allow-library sqlite3=libsqlite3.so.0 \
     protos/examples/ffi/sqlite-version-public.protos
 ```
 
-Two libraries use two aliases under the same provider:
+Installed Native executable:
+
+```sh
+protos --allow-library sqlite3=libsqlite3.so.0 \
+    protos/examples/ffi/sqlite-version-public.protos
+```
+
+Two libraries use two aliases under the same provider (portable JVM shown;
+on Native, a library's functions are usable only within the registered
+signature set):
 
 ```sh
 bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar \
@@ -113,7 +128,7 @@ bin/protos --foreign-provider-path target/ffm-provider/protos-ffm-provider.jar \
 ```
 
 A workspace application or a debugged file uses the same options, before the
-entry or file:
+entry or file. Portable JVM:
 
 ```sh
 protos run --foreign-provider-path provider.jar \
@@ -123,10 +138,17 @@ protos debug --foreign-provider-path provider.jar \
   --allow-library sqlite3=libsqlite3.so.0 app.protos
 ```
 
+Installed Native executable:
+
+```sh
+protos run --allow-library sqlite3=libsqlite3.so.0 Main
+protos debug --allow-library sqlite3=libsqlite3.so.0 app.protos
+```
+
 See the [FFM provider guide](../interop/ffm-provider.md) for both option
 positions and their limits.
 
-Loading the provider (`--foreign-provider-path`), authorizing a native library
+Loading the provider (`--foreign-provider-path`, portable JVM only), authorizing a native library
 (`--allow-library`), and granting Protos capabilities (`--allow-filesystem`,
 `--allow-network`, ...) are independent decisions. An authorized library runs
 `TRUSTED_IN_PROCESS`: it can use native file and network access, load

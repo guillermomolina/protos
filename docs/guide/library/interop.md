@@ -64,12 +64,20 @@ back into Protos.
 
 ## Where foreign values come from
 
-No foreign provider ships inside the Protos distribution. To obtain foreign
-values today you load an external provider JAR on the **portable JVM** CLI:
+Foreign values come from a provider made available by the host:
 
-```sh
-protos --foreign-provider-path provider.jar main.protos
-```
+- on the **portable JVM** CLI, from external Java provider JARs loaded with
+  `--foreign-provider-path`:
+
+  ```sh
+  protos --foreign-provider-path provider.jar main.protos
+  ```
+
+- on the installed **Native** executable, from the integrated FFM provider,
+  through `ffi:<alias>` imports of libraries the host authorized with
+  `--allow-library` (see the
+  [FFM provider guide](../interop/ffm-provider.md#native-image-integrated-provider)).
+  Native loads no external Java providers.
 
 See [Writing and registering an external provider](../interop/custom-provider.md)
 and the [`java:` provider fixture](../interop/java-provider.md). The Java
@@ -81,7 +89,7 @@ scheme and is not an alias for it.
 | Distribution | `std:interop` |
 |---|---|
 | Portable JVM | Module available; operates on values from providers loaded with `--foreign-provider-path` |
-| Native Linux x86_64 | Part of the shipped Standard Library, but the Native CLI cannot load external providers, so there are no foreign values for it to act on |
+| Native Linux x86_64 | Module available; operates on supported foreign values from authorized `ffi:` imports of the integrated FFM provider; arbitrary external Java providers are not supported |
 
 Java embedding with a standard Polyglot `Context` is a portable-JVM feature
 only, and even there no public API registers foreign providers; see
@@ -90,15 +98,23 @@ only, and even there no public API registers foreign providers; see
 ## Public C declarations: `std:ffi`
 
 `std:interop` operates explicitly on existing foreign values; `std:ffi` is the
-separate Protos-first MODULE for public C declarations. The external `ffi:`
-provider supplies private backend operations and native authority only when
+separate Protos-first MODULE for public C declarations. The `ffi:`
+provider (an external JAR on the portable JVM, integrated in Native) supplies private backend operations and native authority only when
 the host authorizes it. Importing `std:ffi` alone opens no native session and
 grants no authority.
 
-Run the program by explicitly authorizing the provider on the portable JVM CLI:
+Run the program on the portable JVM CLI by explicitly loading the provider JAR
+and authorizing the library:
 
 ```sh
 bin/protos --foreign-provider-path /path/to/protos-ffm-provider.jar --allow-library sqlite3=libsqlite3.so.0 \
+  protos/examples/ffi/sqlite-version-public.protos
+```
+
+On the installed Native executable, only the library authorization is needed:
+
+```sh
+protos --allow-library sqlite3=libsqlite3.so.0 \
   protos/examples/ffi/sqlite-version-public.protos
 ```
 
@@ -123,7 +139,7 @@ or [numeric query example](../../../protos/examples/ffi/sqlite-numeric-query-pub
 
 For the higher-level [SQLite library](sqlite.md), use `std:sqlite` for memory
 and file connections, prepared Integer/Float/TEXT/BLOB/null parameters, copied
-rows and manual transactions. The host must explicitly supply the FFM provider
-and authorize SQLite. Its borrowed-memory adaptation stays private, with a
+rows and manual transactions. The host must explicitly authorize SQLite; on the
+portable JVM it must also supply the FFM provider JAR. Its borrowed-memory adaptation stays private, with a
 16 MiB copy bound; public R1 adds no `FFI.copy`, `FFI.borrowed` or
 `FFI.preserving`.
