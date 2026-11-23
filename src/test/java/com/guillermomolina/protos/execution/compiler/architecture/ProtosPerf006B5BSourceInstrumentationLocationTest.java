@@ -29,6 +29,7 @@ import com.oracle.truffle.api.debug.Debugger;
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosLexicalCell;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -361,6 +362,87 @@ final class ProtosPerf006B5BSourceInstrumentationLocationTest {
                 COMBINED_FAILING_NAME, COMBINED_FAILING, core().newModuleActivation());
         assertAccessAndSignalLocations(
                 failedTrace(outcome), COMBINED_FAILING_NAME, COMBINED_FAILING, "l[k + 1]");
+    }
+
+    @Test
+    void producerOwnedCapturedCommitKeepsAssignmentTagsAndOperationSource() throws Exception {
+        String program = """
+                run: () => {
+                    values: [7]
+                    total: 5
+                    read: () => total
+                    for(i, 0, 1) {
+                        total = total + values[i]
+                    }
+                    read()
+                }
+                run()
+                """;
+        ProtosActivation module = core().newModuleActivation();
+        ProtosClosureValue run = assertInstanceOf(ProtosClosureValue.class,
+                ProtosTestExecutionSupport.evaluate("perf045-commit-tags.protos",
+                        program.substring(0, program.lastIndexOf("run()")) + "run", module));
+        ProtosBytecodeRootNode root = run.executionPlan().orElseThrow()
+                .bytecodeActivationRootForTesting();
+        root.getRootNodes().ensureComplete();
+        List<com.oracle.truffle.api.bytecode.Instruction> instructions =
+                root.getBytecodeNode().getInstructionsAsList();
+        instructionWithSection(instructions, "c.NumberAdd", "total + values[i]");
+        List<TagTree> statements = collectTags(
+                root.getBytecodeNode().getTagTree(), StandardTags.StatementTag.class);
+        assertTrue(sourceCharacters(statements).contains("total = total + values[i]"));
+        assertEquals(statements, collectTags(
+                root.getBytecodeNode().getTagTree(), StandardTags.ExpressionTag.class));
+        assertTrue(collectTags(root.getBytecodeNode().getTagTree(),
+                StandardTags.RootTag.class).size() >= 1);
+        ProtosPerf045RangeEachInlineTest.assertProducerCommitsCapturedCell(instructions, "NumberAdd");
+        try (DebuggerSession debugger = ProtosTestExecutionSupport.callEntered(() ->
+                Debugger.find(Context.getCurrent().getEngine()).startSession(event -> {}))) {
+            assertEquals("12", com.guillermomolina.protos.runtime.ProtosNumericValueSupport
+                    .integerDecimalText(ProtosTestExecutionSupport.evaluate("run()", module)));
+        }
+    }
+
+    @Test
+    void failedProducerOwnedCellCommitRetainsTheAssignmentLocation() throws Exception {
+        String name = "perf045-failed-cell-commit.protos";
+        String program = """
+                make: () => {
+                    total: 5
+                    write: (x, y) => {
+                        total = x + y
+                        null
+                    }
+                    discard(write)
+                    write
+                }
+                write: make()
+                write(6, 3)
+                """;
+        ProtosActivation module = core().newModuleActivation();
+        AtomicInteger reached = new AtomicInteger();
+        module.context().createLocalSlot("discard", ProtosClosureValue.nativeClosure(
+                (activation, supplied) -> {
+                    ProtosClosureValue write = assertInstanceOf(ProtosClosureValue.class, supplied.get(0));
+                    ProtosLexicalCell[] cells = write.capturedCellsForRuntime();
+                    assertEquals(1, cells.length, "the writer captures only total");
+                    cells[0] = ProtosLexicalCell.discardedParallelCaptureForRuntime();
+                    reached.incrementAndGet();
+                    return ProtosNullValue.INSTANCE;
+                }));
+        ProtosDiagnosticTrace trace = failedTrace(
+                ProtosTestExecutionSupport.execute(name, program, module));
+        assertEquals(1, reached.get(), "the cell commit, rather than arithmetic, must fail");
+        String[] lines = program.split("\n", -1);
+        int line = 0;
+        while (!lines[line].contains("total = x + y")) {
+            line++;
+        }
+        int assignmentLine = line + 1;
+        int assignmentColumn = lines[line].indexOf("total = x + y") + 1;
+        assertTrue(trace.frames().stream().anyMatch(frame -> name.equals(frame.sourceName())
+                        && frame.line() == assignmentLine && frame.column() == assignmentColumn),
+                "a failed commit must retain the assignment location: " + framesOf(trace.frames()));
     }
 
     private static int instructionWithSection(

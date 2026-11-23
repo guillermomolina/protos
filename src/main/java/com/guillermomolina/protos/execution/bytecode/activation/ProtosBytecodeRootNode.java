@@ -1914,6 +1914,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation(storeBytecodeIndex = true)
     @ConstantOperand(type = boolean.class, name = "terminal")
     @ConstantOperand(type = LocalAccessor.class, name = "outcome")
+    @ConstantOperand(type = LocalAccessor.class, name = "commitCell")
+    @ConstantOperand(type = boolean.class, name = "commitToCell")
     public static final class NumberQuotient {
         static final String SELECTOR = "div";
 
@@ -1923,17 +1925,23 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         @Specialization(guards = {"fitsLong(left, right)",
                 "selection.execute(frame, SELECTOR, left)"})
-        public static boolean small(boolean terminal, LocalAccessor outcome, long left, long right,
+        public static boolean small(boolean terminal, LocalAccessor outcome,
+                LocalAccessor commitCell, boolean commitToCell, long left, long right,
                 @Bind VirtualFrame frame,
                 @Shared("selection") @Cached ProtosNumericSelectionNode selection,
                 @Bind BytecodeNode bytecode) {
             outcome.setLong(bytecode, frame, left / right);
+            if (commitToCell) {
+                StoreAndTestContinuation.commitCompletedCell(
+                        commitCell, outcome, frame, bytecode);
+            }
             return false;
         }
 
         @Specialization
         @InliningCutoff
-        public static boolean exact(boolean terminal, LocalAccessor outcome, Object left, Object right,
+        public static boolean exact(boolean terminal, LocalAccessor outcome,
+                LocalAccessor commitCell, boolean commitToCell, Object left, Object right,
                 @Bind VirtualFrame frame,
                 @Bind ProtosBytecodeRootNode root,
                 @Bind BytecodeNode bytecode,
@@ -1941,12 +1949,14 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Shared("selection") @Cached ProtosNumericSelectionNode selection,
                 @Cached ProtosNumericOverloadNode overload) {
             if (selection.execute(frame, SELECTOR, left)) {
-                return StoreAndTestContinuation.storeResult(
-                        outcome, ProtosNumericOperationSupport.arithmetic(root, frame, left, SELECTOR, right),
+                return StoreAndTestContinuation.storeResultAndCommit(
+                        outcome, commitCell, commitToCell,
+                        ProtosNumericOperationSupport.arithmetic(root, frame, left, SELECTOR, right),
                         frame, bytecode);
             }
-            return StoreAndTestContinuation.storeResult(
-                    outcome, overload.execute(frame, terminal, SELECTOR, left, right,
+            return StoreAndTestContinuation.storeResultAndCommit(
+                    outcome, commitCell, commitToCell,
+                    overload.execute(frame, terminal, SELECTOR, left, right,
                     root, bytecode, bytecodeIndex), frame, bytecode);
         }
     }
@@ -1958,22 +1968,30 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation(storeBytecodeIndex = true)
     @ConstantOperand(type = boolean.class, name = "terminal")
     @ConstantOperand(type = LocalAccessor.class, name = "outcome")
+    @ConstantOperand(type = LocalAccessor.class, name = "commitCell")
+    @ConstantOperand(type = boolean.class, name = "commitToCell")
     public static final class NumberRemainder {
         static final String SELECTOR = "mod";
 
         @Specialization(guards = {"right != 0",
                 "selection.execute(frame, SELECTOR, left)"})
-        public static boolean small(boolean terminal, LocalAccessor outcome, long left, long right,
+        public static boolean small(boolean terminal, LocalAccessor outcome,
+                LocalAccessor commitCell, boolean commitToCell, long left, long right,
                 @Bind VirtualFrame frame,
                 @Shared("selection") @Cached ProtosNumericSelectionNode selection,
                 @Bind BytecodeNode bytecode) {
             outcome.setLong(bytecode, frame, left % right);
+            if (commitToCell) {
+                StoreAndTestContinuation.commitCompletedCell(
+                        commitCell, outcome, frame, bytecode);
+            }
             return false;
         }
 
         @Specialization
         @InliningCutoff
-        public static boolean exact(boolean terminal, LocalAccessor outcome, Object left, Object right,
+        public static boolean exact(boolean terminal, LocalAccessor outcome,
+                LocalAccessor commitCell, boolean commitToCell, Object left, Object right,
                 @Bind VirtualFrame frame,
                 @Bind ProtosBytecodeRootNode root,
                 @Bind BytecodeNode bytecode,
@@ -1981,12 +1999,14 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Shared("selection") @Cached ProtosNumericSelectionNode selection,
                 @Cached ProtosNumericOverloadNode overload) {
             if (selection.execute(frame, SELECTOR, left)) {
-                return StoreAndTestContinuation.storeResult(
-                        outcome, ProtosNumericOperationSupport.arithmetic(root, frame, left, SELECTOR, right),
+                return StoreAndTestContinuation.storeResultAndCommit(
+                        outcome, commitCell, commitToCell,
+                        ProtosNumericOperationSupport.arithmetic(root, frame, left, SELECTOR, right),
                         frame, bytecode);
             }
-            return StoreAndTestContinuation.storeResult(
-                    outcome, overload.execute(frame, terminal, SELECTOR, left, right,
+            return StoreAndTestContinuation.storeResultAndCommit(
+                    outcome, commitCell, commitToCell,
+                    overload.execute(frame, terminal, SELECTOR, left, right,
                     root, bytecode, bytecodeIndex), frame, bytecode);
         }
     }
@@ -6339,6 +6359,28 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation(storeBytecodeIndex = false)
     @ConstantOperand(type = LocalAccessor.class, name = "outcome")
     public static final class StoreAndTestContinuation {
+        static void commitCompletedCell(
+                LocalAccessor commitCell,
+                LocalAccessor outcome,
+                VirtualFrame frame,
+                BytecodeNode bytecode) {
+            StoreCellFromLocal.perform(commitCell, outcome, frame, bytecode);
+        }
+
+        static boolean storeResultAndCommit(
+                LocalAccessor outcome,
+                LocalAccessor commitCell,
+                boolean commitToCell,
+                Object value,
+                VirtualFrame frame,
+                BytecodeNode bytecode) {
+            boolean pending = storeResult(outcome, value, frame, bytecode);
+            if (commitToCell && !pending) {
+                commitCompletedCell(commitCell, outcome, frame, bytecode);
+            }
+            return pending;
+        }
+
         @Specialization
         public static boolean doLong(
                 LocalAccessor outcome,

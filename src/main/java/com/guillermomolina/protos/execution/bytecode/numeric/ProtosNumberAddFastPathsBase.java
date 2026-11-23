@@ -20,6 +20,7 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.bytecode.LocalAccessor;
+import com.oracle.truffle.api.bytecode.StoreBytecodeIndex;
 import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.Cached.Shared;
@@ -41,42 +42,67 @@ abstract class ProtosNumberAddFastPathsBase extends Node {
     static final String SELECTOR = "+";
 
     abstract boolean execute(VirtualFrame frame, boolean terminal, LocalAccessor outcome,
+            LocalAccessor commitCell, boolean commitToCell,
             Object left, Object right);
 
     @Specialization(guards = "selection.execute(frame, SELECTOR, left)",
             rewriteOn = ArithmeticException.class)
+    @StoreBytecodeIndex
     static boolean doLL(VirtualFrame frame, boolean terminal, LocalAccessor outcome,
+            LocalAccessor commitCell, boolean commitToCell,
             long left, long right,
             @Shared("selection") @Cached ProtosNumericSelectionNode selection,
             @Bind("bytecodeOf($node)") BytecodeNode bytecode) {
         outcome.setLong(bytecode, frame, Math.addExact(left, right));
+        if (commitToCell) {
+            ProtosBytecodeRootNode.StoreAndTestContinuation.commitCompletedCell(
+                    commitCell, outcome, frame, bytecode);
+        }
         return false;
     }
 
     @Specialization(guards = "selection.execute(frame, SELECTOR, left)")
+    @StoreBytecodeIndex
     static boolean doDD(VirtualFrame frame, boolean terminal, LocalAccessor outcome,
+            LocalAccessor commitCell, boolean commitToCell,
             double left, double right,
             @Shared("selection") @Cached ProtosNumericSelectionNode selection,
             @Bind("bytecodeOf($node)") BytecodeNode bytecode) {
         outcome.setDouble(bytecode, frame, left + right);
+        if (commitToCell) {
+            ProtosBytecodeRootNode.StoreAndTestContinuation.commitCompletedCell(
+                    commitCell, outcome, frame, bytecode);
+        }
         return false;
     }
 
     @Specialization(guards = "selection.execute(frame, SELECTOR, left)")
+    @StoreBytecodeIndex
     static boolean doDL(VirtualFrame frame, boolean terminal, LocalAccessor outcome,
+            LocalAccessor commitCell, boolean commitToCell,
             double left, long right,
             @Shared("selection") @Cached ProtosNumericSelectionNode selection,
             @Bind("bytecodeOf($node)") BytecodeNode bytecode) {
         outcome.setDouble(bytecode, frame, left + right);
+        if (commitToCell) {
+            ProtosBytecodeRootNode.StoreAndTestContinuation.commitCompletedCell(
+                    commitCell, outcome, frame, bytecode);
+        }
         return false;
     }
 
     @Specialization(guards = "selection.execute(frame, SELECTOR, left)")
+    @StoreBytecodeIndex
     static boolean doLD(VirtualFrame frame, boolean terminal, LocalAccessor outcome,
+            LocalAccessor commitCell, boolean commitToCell,
             long left, double right,
             @Shared("selection") @Cached ProtosNumericSelectionNode selection,
             @Bind("bytecodeOf($node)") BytecodeNode bytecode) {
         outcome.setDouble(bytecode, frame, left + right);
+        if (commitToCell) {
+            ProtosBytecodeRootNode.StoreAndTestContinuation.commitCompletedCell(
+                    commitCell, outcome, frame, bytecode);
+        }
         return false;
     }
 

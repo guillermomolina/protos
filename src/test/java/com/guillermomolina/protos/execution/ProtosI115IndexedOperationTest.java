@@ -2386,6 +2386,35 @@ final class ProtosI115IndexedOperationTest {
                 Custom.at: (index) => { 100 }
                 first * 10000 + run()
                 """));
+        assertTrue(evalBoolean("""
+                Custom: Array {}
+                standardAt: Custom.at
+                c: Custom(7)
+                run: () => {
+                    total: 0
+                    read: () => total
+                    for(i, 0, 1) { total = total + c[i] }
+                    read()
+                }
+                a: run()
+                Custom.at: (index) => { 41 }
+                b: run()
+                Custom.at = standardAt
+                d: run()
+                (a == 7) && (b == 41) && (d == 7)
+                """));
+        assertTrue(evalBoolean("""
+                source: { add: (other) => { 41 } }
+                selected: source.alias("add", "+")
+                values: [7]
+                run: (seed) => {
+                    total: seed
+                    read: () => total
+                    for(i, 0, 1) { total = total + values[i] }
+                    read()
+                }
+                (run(0) == 7) && (run(selected) == 41) && (run(0) == 7)
+                """));
         assertEquals(3042L, evalLong(TRACE + """
                 Counted: Array {
                     at: (index) => {
@@ -2458,6 +2487,55 @@ final class ProtosI115IndexedOperationTest {
                 result: (() => { run() }).future().value()
                 (trace.value + seen.value) * 1000 + result
                 """));
+    }
+
+    @Test
+    void capturedSumKeepsTheLeftOperandWhenSelectedAtMutatesItsCell() {
+        for (boolean suspend : List.of(false, true)) {
+            assertTrue(evalBoolean("""
+                    state: { visits: 0 }
+                    run: () => {
+                        total: 5
+                        read: () => total
+                        Mutating: Array { at: (index) => {
+                            state.visits = state.visits + 1
+                            total = 100
+                            %s
+                        } }
+                        values: Mutating(1)
+                        for(i, 0, 1) {
+                            total = total + values[i]
+                        }
+                        (read() == 12) && (state.visits == 1)
+                    }
+                    (() => { run() }).future().value()
+                    """.formatted(suspend ? "(() => { 7 }).future().value()" : "7")));
+        }
+    }
+
+    @Test
+    void capturedNumericProducerOwnsCommitAndOnlyDefersItForSuspension() throws Exception {
+        String source = """
+                values: [7]
+                run: () => {
+                    total: 5
+                    read: () => total
+                    for(i, 0, 1) { total = total + values[i] }
+                    read()
+                }
+                """;
+        try (ProtosStandaloneHostedSession session = open(source)) {
+            assertEquals(12L, call(session, "run"));
+            ProtosBytecodeRootNode run = root(session, "run");
+            ProtosPerf045RangeEachInlineTest.assertProducerCommitsCapturedCell(
+                    run.getBytecodeNode().getInstructionsAsList(), "NumberAdd");
+            IndexedCensus census = IndexedCensus.of(run);
+            int indexed = onlyOperation(census, "c.BinarySubscript");
+            int numeric = onlyOperation(census, "c.NumberAdd");
+            census.assertDirectlyConsumed(indexed, numeric, "captured indexed sum");
+            assertEquals(1, census.ownedCompositions(numeric).size(),
+                    "the numeric producer retains exactly one continuation composition");
+        }
     }
 
     /*

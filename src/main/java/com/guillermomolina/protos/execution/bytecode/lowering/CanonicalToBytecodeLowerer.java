@@ -6040,20 +6040,17 @@ final class CanonicalToBytecodeLowerer {
                 && directCellNumericValue(numeric)
                 && !isOrderingSelector(numeric.message())) {
             /*
-             * The completed result is written into the cell straight from
-             * its result local, read and cleared by the cell write itself.
-             * The cell is a constant operand, so no cell reference is pending
-             * while the numeric operation may suspend, and the write executes
-             * once, only after that operation and any composition of a
-             * suspended selected invocation have completed.
+             * The producer commits and releases a synchronous result itself.
+             * Only a suspended selection reaches the deferred cell write in
+             * its existing composition branch. The constant cell destination
+             * never leaves a cell reference pending on the operand stack.
              */
             builder.beginBlock();
             builder.beginSourceSection(
                     numeric.span().startOffset(), numeric.span().length());
-            BytecodeLocal numericResult = emitCompletedNumericResult(
-                    builder, numeric, preparedCall, childResult, resumeValue);
+            emitCompletedNumericResult(
+                    builder, numeric, preparedCall, childResult, resumeValue, storage.cell());
             builder.endSourceSection();
-            builder.emitStoreCellFromLocal(storage.cell(), numericResult);
             builder.endBlock();
             return true;
         }
@@ -10000,11 +9997,23 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
+        return emitCompletedNumericResult(
+                builder, send, preparedCall, childResult, resumeValue, null);
+    }
+
+    private BytecodeLocal emitCompletedNumericResult(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalSend send,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue,
+            BytecodeLocal commitCell) {
         noteDynamicInvocation();
         BytecodeLocal numericResult = builder.createLocal("numericResult", null);
         BytecodeLocal numericResume = builder.createLocal("numericResume", null);
         builder.beginIfThen();
-        beginNumericOperation(builder, send.message(), false, numericResult);
+        beginNumericOperation(builder, send.message(), false, numericResult,
+                commitCell == null ? numericResult : commitCell, commitCell != null);
         emitPrimitiveNumericOperandValue(
                 builder, send.receiver(), preparedCall, childResult, resumeValue);
         emitPrimitiveNumericOperandValue(
@@ -10012,6 +10021,9 @@ final class CanonicalToBytecodeLowerer {
         endNumericOperation(builder, send.message());
         builder.beginBlock();
         emitDispatchedContinuationComposition(builder, numericResult, numericResume);
+        if (commitCell != null) {
+            builder.emitStoreCellFromLocal(commitCell, numericResult);
+        }
         builder.endBlock();
         builder.endIfThen();
         return numericResult;
@@ -10061,7 +10073,7 @@ final class CanonicalToBytecodeLowerer {
         noteDynamicInvocation();
         BytecodeLocal terminalResult = builder.createLocal("terminalNumericResult", null);
         builder.beginBlock();
-        beginNumericOperation(builder, send.message(), true, terminalResult);
+        beginNumericOperation(builder, send.message(), true, terminalResult, terminalResult, false);
         emitPrimitiveNumericOperandValue(
                 builder, send.receiver(), null, null, null);
         emitPrimitiveNumericOperandValue(
@@ -10104,14 +10116,14 @@ final class CanonicalToBytecodeLowerer {
 
     private static void beginNumericOperation(
             ProtosBytecodeRootNodeGen.Builder builder, String selector, boolean terminal,
-            BytecodeLocal outcome) {
+            BytecodeLocal outcome, BytecodeLocal commitCell, boolean commitToCell) {
         switch (selector) {
-            case "+" -> builder.beginNumberAdd(terminal, outcome);
-            case "-" -> builder.beginNumberSubtract(terminal, outcome);
-            case "*" -> builder.beginNumberMultiply(terminal, outcome);
-            case "/" -> builder.beginNumberDivide(terminal, outcome);
-            case "div" -> builder.beginNumberQuotient(terminal, outcome);
-            case "mod" -> builder.beginNumberRemainder(terminal, outcome);
+            case "+" -> builder.beginNumberAdd(terminal, outcome, commitCell, commitToCell);
+            case "-" -> builder.beginNumberSubtract(terminal, outcome, commitCell, commitToCell);
+            case "*" -> builder.beginNumberMultiply(terminal, outcome, commitCell, commitToCell);
+            case "/" -> builder.beginNumberDivide(terminal, outcome, commitCell, commitToCell);
+            case "div" -> builder.beginNumberQuotient(terminal, outcome, commitCell, commitToCell);
+            case "mod" -> builder.beginNumberRemainder(terminal, outcome, commitCell, commitToCell);
             case "<" -> builder.beginRichCompareLt(outcome);
             case "<=" -> builder.beginRichCompareLe(outcome);
             case ">" -> builder.beginRichCompareGt(outcome);

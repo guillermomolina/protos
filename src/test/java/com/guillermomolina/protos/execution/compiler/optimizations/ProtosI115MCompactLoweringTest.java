@@ -1299,8 +1299,9 @@ final class ProtosI115MCompactLoweringTest {
     }
 
     /*
-     * Every numeric operation of run carries exactly one constant outcome
-     * LocalAccessor and is followed by the branch its answer guards, or by
+     * Every numeric operation of run carries its constant outcome
+     * LocalAccessor (and arithmetic carries a commit destination) and is followed by
+     * the branch its answer guards, or by
      * the discard of a terminal answer; none is followed by a separate
      * StoreAndTestContinuation, and the standard path adds no ordinary
      * method dispatch.
@@ -1323,7 +1324,8 @@ final class ProtosI115MCompactLoweringTest {
                             && argument.asConstant()
                                     instanceof com.oracle.truffle.api.bytecode.LocalAccessor)
                     .count();
-            assertEquals(1L, outcomes, label + ": " + name + " outcome local: " + names);
+            assertEquals(name.startsWith("c.Number") ? 2L : 1L, outcomes,
+                    label + ": " + name + " result and optional commit locals: " + names);
             String outcome = instructions.get(i).getArguments().stream()
                     .filter(argument -> argument.getKind() == Instruction.Argument.Kind.CONSTANT
                             && argument.asConstant()
@@ -1370,16 +1372,19 @@ final class ProtosI115MCompactLoweringTest {
         assertTrue(operations > 0, label + " has a numeric operation: " + names);
         if (label.startsWith("captured")) {
             /*
-             * The captured binding is written only on the completed path: the
-             * first cell write after the producer follows its cold composition
-             * loop and the release of its outcome local. An arithmetic result
-             * is released by the cell write itself (StoreCellFromLocal, with
-             * no intervening last-use load); an ordering result is first
-             * validated, so its release precedes a stack-valued StoreCell.
+             * Arithmetic commits in the producer on normal completion and
+             * in its cold branch after resumption. Ordering results still
+             * require canonical Boolean validation before a stack-valued
+             * StoreCell. Both paths preserve last-use release.
              * The site's only send is its own read() call; the producer adds
              * no root or callback call.
              */
             boolean ordering = names.stream().anyMatch(name -> name.startsWith("c.RichCompare"));
+            if (!ordering) {
+                String operation = names.stream().filter(name -> name.startsWith("c.Number"))
+                        .findFirst().orElseThrow().substring(2).split("\\$")[0];
+                ProtosPerf045RangeEachInlineTest.assertProducerCommitsCapturedCell(instructions, operation);
+            }
             int producer = 0;
             while (!names.get(producer).startsWith("c.Number")
                     && !names.get(producer).startsWith("c.RichCompare")) {

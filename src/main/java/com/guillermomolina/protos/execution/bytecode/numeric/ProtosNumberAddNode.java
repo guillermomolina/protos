@@ -55,26 +55,32 @@ import com.oracle.truffle.api.nodes.Node;
 @GenerateInline(false)
 @ConstantOperand(type = boolean.class, name = "terminal")
 @ConstantOperand(type = LocalAccessor.class, name = "outcome")
+@ConstantOperand(type = LocalAccessor.class, name = "commitCell")
+@ConstantOperand(type = boolean.class, name = "commitToCell")
 @OperationProxy.Proxyable(allowUncached = true, storeBytecodeIndex = false)
 abstract class ProtosNumberAddNode extends ProtosNumberAddFastPathsBase {
 
     @Specialization(guards = "selection.execute(frame, SELECTOR, left)", replaces = "doLL")
+    @StoreBytecodeIndex
     static boolean doLLOvf(VirtualFrame frame, boolean terminal, LocalAccessor outcome,
+            LocalAccessor commitCell, boolean commitToCell,
             long left, long right,
             @Bind Node node,
             @Shared("selection") @Cached ProtosNumericSelectionNode selection,
             @Bind("bytecodeOf($node)") BytecodeNode bytecode) {
-        return ProtosBytecodeRootNode.StoreAndTestContinuation.storeResult(
-                outcome, addOrPromote(frame, node, left, right), frame, bytecode);
+        return ProtosBytecodeRootNode.StoreAndTestContinuation.storeResultAndCommit(
+                outcome, commitCell, commitToCell, addOrPromote(frame, node, left, right), frame, bytecode);
     }
 
     @Specialization(guards = "selection.execute(frame, SELECTOR, left)")
+    @StoreBytecodeIndex
     static boolean doStrings(VirtualFrame frame, boolean terminal, LocalAccessor outcome,
+            LocalAccessor commitCell, boolean commitToCell,
             ProtosStringValue left, ProtosStringValue right,
             @Shared("selection") @Cached ProtosNumericSelectionNode selection,
             @Bind("bytecodeOf($node)") BytecodeNode bytecode) {
-        return ProtosBytecodeRootNode.StoreAndTestContinuation.storeResult(
-                outcome, concatenate(left, right), frame, bytecode);
+        return ProtosBytecodeRootNode.StoreAndTestContinuation.storeResultAndCommit(
+                outcome, commitCell, commitToCell, concatenate(left, right), frame, bytecode);
     }
 
     @TruffleBoundary
@@ -90,6 +96,7 @@ abstract class ProtosNumberAddNode extends ProtosNumberAddFastPathsBase {
             VirtualFrame frame,
             boolean terminal,
             LocalAccessor outcome,
+            LocalAccessor commitCell, boolean commitToCell,
             Object left,
             Object right,
             @Bind Node node,
@@ -100,14 +107,16 @@ abstract class ProtosNumberAddNode extends ProtosNumberAddFastPathsBase {
         if (selection.execute(frame, SELECTOR, left)) {
             if (left instanceof ProtosStringValue stringLeft
                     && right instanceof ProtosStringValue stringRight) {
-                return ProtosBytecodeRootNode.StoreAndTestContinuation.storeResult(
-                        outcome, concatenate(stringLeft, stringRight), frame, bytecode);
+                return ProtosBytecodeRootNode.StoreAndTestContinuation.storeResultAndCommit(
+                        outcome, commitCell, commitToCell,
+                        concatenate(stringLeft, stringRight), frame, bytecode);
             }
-            return ProtosBytecodeRootNode.StoreAndTestContinuation.storeResult(
-                    outcome, genericAdd(root, frame, node, left, right), frame, bytecode);
+            return ProtosBytecodeRootNode.StoreAndTestContinuation.storeResultAndCommit(
+                    outcome, commitCell, commitToCell,
+                    genericAdd(root, frame, node, left, right), frame, bytecode);
         }
-        return ProtosBytecodeRootNode.StoreAndTestContinuation.storeResult(
-                outcome, overload.execute(frame, terminal, SELECTOR, left, right,
+        return ProtosBytecodeRootNode.StoreAndTestContinuation.storeResultAndCommit(
+                outcome, commitCell, commitToCell, overload.execute(frame, terminal, SELECTOR, left, right,
                 root, bytecode, bytecode.getBytecodeIndex(frame)), frame, bytecode);
     }
 }

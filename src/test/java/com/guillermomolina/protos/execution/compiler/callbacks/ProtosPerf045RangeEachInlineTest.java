@@ -2081,9 +2081,21 @@ final class ProtosPerf045RangeEachInlineTest {
             assertCellLocalSubscriptReadsItsOwnOperands(listed);
             ProtosI115MCompactLoweringTest.assertConstantArrayFallbackCleanup(
                     module.runRoot(), "MakeConstantLongArray", "c.CallVarargsMethod", 64);
-            // The indexed outcome is the addition's operand; the sum is the cell write's value.
+            // The indexed outcome is consumed by addition, which owns the cell commit.
             assertCompletedResultConsumedBy(listed, "BinarySubscript", "NumberAdd");
-            assertCompletedResultConsumedBy(listed, "NumberAdd", "StoreCellFromLocal");
+            assertProducerCommitsCapturedCell(listed, "NumberAdd");
+            GuardedComposition addition = guardedComposition(listed, "NumberAdd");
+            assertTrue(addition.names().get(addition.completion()).startsWith("branch.backward"),
+                    "normal completion goes straight to the shared loop back edge");
+            LocalAccessor totalCell = localAccessors(
+                    addition.instructions().get(addition.producer())).get(1);
+            int indexed = indexAfter(addition.names(), "c.BinarySubscript", -1);
+            int left = indexed - 1;
+            assertTrue(isOperation(addition.names().get(left), "LoadCell"),
+                    "the accumulator is evaluated before the indexed operand");
+            assertTrue(sameLocal(totalCell,
+                    localAccessors(addition.instructions().get(left)).get(0)),
+                    "the producer commits to the captured total cell it read before indexing");
             // Only the creations of values and total use StoreCell; none follows the sum.
             int sum = indexAfter(names, "c.NumberAdd", -1);
             assertEquals(0, names.subList(sum, names.size()).stream()
@@ -2269,10 +2281,11 @@ final class ProtosPerf045RangeEachInlineTest {
         assertTrue(producer >= 0, () -> names.toString());
         assertFalse(names.get(producer + 1).startsWith("c.StoreAndTestContinuation"),
                 () -> operation + " stores its own result without a separate store: " + names);
-        // The outcome is the first constant LocalAccessor; only the cell/local
-        // indexed form also carries its receiver cell and index locals.
+        // The outcome is first; arithmetic also carries its commit cell,
+        // and the cell/local indexed form carries receiver and index locals.
         List<LocalAccessor> outcomes = localAccessors(instructions.get(producer));
-        assertEquals(isOperation(names.get(producer), CELL_LOCAL_SUBSCRIPT) ? 3 : 1,
+        assertEquals(isOperation(names.get(producer), CELL_LOCAL_SUBSCRIPT) ? 3
+                        : names.get(producer).startsWith("c.Number") ? 2 : 1,
                 outcomes.size(),
                 () -> names.get(producer) + " constant LocalAccessors: " + outcomes);
         LocalAccessor outcome = outcomes.get(0);
@@ -2453,6 +2466,48 @@ final class ProtosPerf045RangeEachInlineTest {
         assertTrue(names.get(completion + 1).startsWith("c." + consumer),
                 () -> operation + " result reaches " + consumer
                         + " without an intermediate copy: " + names);
+    }
+
+    /** The producer commits normally; only its suspended branch contains a cell store. */
+    public static void assertProducerCommitsCapturedCell(
+            List<Instruction> listed, String operation) {
+        GuardedComposition guarded = guardedComposition(listed, operation);
+        List<Instruction> instructions = guarded.instructions();
+        List<String> names = guarded.names();
+        int producer = guarded.producer();
+        List<LocalAccessor> operands = localAccessors(instructions.get(producer));
+        assertEquals(2, operands.size(), "outcome and captured commit destination");
+        LocalAccessor cell = operands.get(1);
+        assertFalse(sameLocal(cell, guarded.outcome()), "the real cell is not the result temporary");
+        List<Object> booleans = instructions.get(producer).getArguments().stream()
+                .filter(argument -> argument.getKind() == Instruction.Argument.Kind.CONSTANT)
+                .map(Instruction.Argument::asConstant).filter(Boolean.class::isInstance).toList();
+        assertEquals(List.of(false, true), booleans, "nonterminal producer owns its commit");
+        int deferred = -1;
+        int stores = 0;
+        for (int i = producer + 2; i < guarded.completion(); i++) {
+            if (isOperation(names.get(i), "StoreCellFromLocal")) {
+                stores++;
+                deferred = i;
+                List<LocalAccessor> destination = localAccessors(instructions.get(i));
+                assertTrue(sameLocal(cell, destination.get(0)), "deferred commit uses the same cell");
+                assertTrue(sameLocal(guarded.outcome(), destination.get(1)),
+                        "deferred commit releases the resumed result");
+            }
+        }
+        assertEquals(1, stores, "exactly one deferred commit inside the suspension guard");
+        assertTrue(deferred > indexAfter(names, "c.ResumeDispatchedContinuation", producer));
+        assertTrue(names.get(deferred - 1).startsWith("branch.backward"),
+                "deferred commit follows the existing continuation loop immediately");
+        assertFalse(isOperation(names.get(guarded.completion()), "StoreCellFromLocal"),
+                "normal completion skips the independent cell store");
+        assertEquals(1, names.subList(producer + 2, guarded.completion()).stream()
+                .filter(name -> isOperation(name, "IsContinuation")).count(),
+                "one continuation composition owned by the producer");
+        assertTrue(instructions.subList(0, producer).stream().anyMatch(instruction ->
+                isOperation(ProtosInstructionNames.of(instruction), "StoreCell")
+                        && sameLocal(cell, localAccessors(instruction).get(0))),
+                "commit destination is an actual captured binding cell");
     }
 
     /* Whether a listed name is exactly the operation, possibly quickened. */

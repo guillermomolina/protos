@@ -2249,6 +2249,21 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
                         assertEquals(standard, normalized(call(closure, module, 6L, 3L)),
                                 where + " restored");
                     }
+                    if (!ordering && !selector.equals("div") && !selector.equals("mod")) {
+                        double expectedDouble = switch (selector) {
+                            case "+" -> 9.0;
+                            case "-" -> 3.0;
+                            case "*" -> 18.0;
+                            case "/" -> 2.0;
+                            default -> throw new AssertionError(selector);
+                        };
+                        for (Object[] pair : List.of(new Object[] {6.0, 3.0},
+                                new Object[] {6L, 3.0}, new Object[] {6.0, 3L})) {
+                            Object floating = call(closure, module, pair);
+                            assertEquals(expectedDouble,
+                                    ProtosNumericValueSupport.currentFloatValue(floating), where);
+                        }
+                    }
                     Object exceptional = call(closure, module, exceptionalLeft, exceptionalRight);
                     switch (selector) {
                         case "+", "-", "*", "div" -> assertTrue(
@@ -2274,8 +2289,8 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
     }
 
     /*
-     * Each numeric operation carries exactly one constant outcome
-     * LocalAccessor and no StoreAndTestContinuation follows it. A guarding
+     * Each numeric operation carries its outcome LocalAccessor; arithmetic
+     * also carries a commit cell. No StoreAndTestContinuation follows it. A guarding
      * branch.false leads to the existing composition, whose IsContinuation
      * reads the same local and whose resumption writes it back; the
      * completed path releases that same local. A terminal arithmetic site
@@ -2303,7 +2318,18 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
                             .filter(com.oracle.truffle.api.bytecode.LocalAccessor.class::isInstance)
                             .map(com.oracle.truffle.api.bytecode.LocalAccessor.class::cast)
                             .toList();
-            assertEquals(1, outcomes.size(), () -> where + " outcome local: " + names);
+            assertEquals(names.get(i).startsWith("c.Number") ? 2 : 1, outcomes.size(),
+                    () -> where + " outcome and optional commit locals: " + names);
+            boolean directCommit = instructions.get(i).getArguments().stream()
+                    .filter(argument -> argument.getKind() == Instruction.Argument.Kind.CONSTANT)
+                    .map(Instruction.Argument::asConstant).filter(Boolean.class::isInstance)
+                    .reduce((first, last) -> last).orElse(Boolean.FALSE).equals(Boolean.TRUE)
+                    && names.get(i).startsWith("c.Number") && outcomes.size() == 2
+                    && !outcomes.get(0).toString().equals(outcomes.get(1).toString());
+            if (directCommit) {
+                ProtosPerf045RangeEachInlineTest.assertProducerCommitsCapturedCell(
+                        instructions, names.get(i).substring(2).split("\\$")[0]);
+            }
             String outcome = outcomes.get(0).toString();
             int offset = Integer.parseInt(outcome.replaceAll(".*localOffset=(-?\\d+).*", "$1"));
             String next = names.get(i + 1);
@@ -2330,7 +2356,8 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
                     () -> where + " composition tests its own outcome: " + names);
             long releases = 0;
             for (int j = check; j < names.size(); j++) {
-                if (names.get(j).startsWith("c.LoadAndClearTempLocal")
+                if ((names.get(j).startsWith("c.LoadAndClearTempLocal")
+                                || directCommit && names.get(j).startsWith("c.StoreCellFromLocal"))
                         && instructions.get(j).getArguments().stream().anyMatch(argument ->
                                 argument.getKind() == Instruction.Argument.Kind.CONSTANT
                                         && outcome.equals(String.valueOf(argument.asConstant())))) {
@@ -2346,6 +2373,60 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
         return instruction.getArguments().stream()
                 .anyMatch(argument -> argument.getKind() == Instruction.Argument.Kind.LOCAL_OFFSET
                         && argument.asLocalOffset() == offset);
+    }
+
+    @Test
+    void capturedCommitFamiliesKeepSelectedResultsAndPriorValueAcrossSuspension() {
+        for (String selector : List.of("+", "-", "*", "/", "div", "mod")) {
+            String expression = selector.equals("div") || selector.equals("mod")
+                    ? "x." + selector + "(y)" : "x " + selector + " y";
+            long standard = switch (selector) {
+                case "+" -> 9L;
+                case "-" -> 3L;
+                case "*" -> 18L;
+                case "/", "div" -> 2L;
+                case "mod" -> 0L;
+                default -> throw new AssertionError(selector);
+            };
+            String program = """
+                    holder: {
+                        read: 0
+                        calls: 0
+                        observations: 0
+                    }
+                    source: { apply: (other) => {
+                        holder.calls = holder.calls + 1
+                        (() => {
+                            if(holder.read() == 5) {
+                                holder.observations = holder.observations + 1
+                            }
+                            41
+                        }).future().value()
+                    } }
+                    selected: source.alias("apply", "%s")
+                    failingSource: { apply: (other) => {
+                        (() => { 0 }).future().value()
+                        Error().signal()
+                    } }
+                    failing: failingSource.alias("apply", "%s")
+                    run: (x, y) => {
+                        total: 5
+                        holder.read = () => total
+                        Error.handle(() => { total = %s }, (caught) => { 0 })
+                        holder.read()
+                    }
+                    first: (() => { run(6, 3) }).future().value()
+                    custom: (() => { run(selected, 3) }).future().value()
+                    restored: (() => { run(6, 3) }).future().value()
+                    failed: (() => { run(failing, 3) }).future().value()
+                    (first == %d) && (custom == 41) && (restored == %d) && (failed == 5) && (holder.calls == 1) && (holder.observations == 1)
+                    """.formatted(selector, selector, expression, standard, standard);
+            for (boolean debug : List.of(false, true)) {
+                try (Context context = context(debug)) {
+                    assertTrue(eval(context, program), selector + " " + mode(debug));
+                }
+            }
+        }
     }
 
     /**
@@ -2625,10 +2706,10 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
 
     /*
      * Operand layout shared by every arithmetic fast path:
-     * (frame, terminal, outcome, left, right, ...).
+     * (frame, terminal, outcome, commitCell, commitToCell, left, right, ...).
      */
     private static final int OUTCOME = 2;
-    private static final int LEFT_OPERAND = 3;
+    private static final int LEFT_OPERAND = 5;
 
     private static void assertGuestLongOperands(Method method, String where) {
         Class<?>[] parameters = method.getParameterTypes();

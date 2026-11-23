@@ -707,7 +707,7 @@ final class ProtosI115H7MethodCallConvergenceTest {
          */
         assertThrows(ArithmeticException.class,
                 () -> ProtosNumberMultiplyFastPathsBase.doLL(
-                        null, false, null, Long.MIN_VALUE, -1L, null, null));
+                        null, false, null, null, false, Long.MIN_VALUE, -1L, null, null));
         try (ProtosStandaloneHostedSession session = open("integer-operations", """
                 addWide: () => {
                     a: 2147483647

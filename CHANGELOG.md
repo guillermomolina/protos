@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.204-SNAPSHOT
+
+- **PERF045.** Move captured numeric assignment writes into producers.
+
 ## 0.4.203-SNAPSHOT
 
 - **PERF045.** Read captured indexed receivers and local indexes inside the indexed operation.
