@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.208-SNAPSHOT
+
+- **PERF045.** Advance unit-step primitive Ranges without overflow checks.
+
 ## 0.4.207-SNAPSHOT
 
 - **PERF045.** Create canonical Range slots through pre-canonicalized cached keys.

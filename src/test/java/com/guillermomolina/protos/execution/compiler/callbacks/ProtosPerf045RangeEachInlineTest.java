@@ -875,6 +875,113 @@ final class ProtosPerf045RangeEachInlineTest {
         });
     }
 
+    @Test
+    void unitStepRangesVisitEveryIntegerInOrderAndTerminate() throws Exception {
+        inContext(() -> {
+            Module module = new Module();
+            Object outcome = module.run(
+                    """
+                    run: () => {
+                        frame: 0
+                        Range(0, 64).each((i) => { hook(i) })
+                        Range(0, 64).eachStep(1, (i) => { hook(i) })
+                        InvertedRange(63, -1).each((i) => { hook(i) })
+                        InvertedRange(63, -1).eachStep(-1, (i) => { hook(i) })
+                        Range(7, 7).each((i) => { hook(i) })
+                        Range(7, 7).eachStep(1, (i) => { hook(i) })
+                        InvertedRange(7, 7).each((i) => { hook(i) })
+                        InvertedRange(7, 7).eachStep(-1, (i) => { hook(i) })
+                        Range(5, 2).each((i) => { hook(i) })
+                        InvertedRange(2, 5).each((i) => { hook(i) })
+                        1
+                    }
+                    run()
+                    """);
+            assertEquals("1", ProtosNumericValueSupport.integerDecimalText(outcome),
+                    "every unit-step iteration terminates");
+            List<Object> expected = new ArrayList<>();
+            for (int pass = 0; pass < 2; pass++) {
+                for (long i = 0; i < 64; i++) {
+                    expected.add(i);
+                }
+            }
+            for (int pass = 0; pass < 2; pass++) {
+                for (long i = 63; i > -1; i--) {
+                    expected.add(i);
+                }
+            }
+            // Reversed bounds take their direction from the bounds, not from the prototype.
+            expected.addAll(List.of(5L, 4L, 3L, 2L, 3L, 4L));
+            assertEquals(expected, module.visits);
+            assertInternalLoop(module);
+        });
+    }
+
+    @Test
+    void unitStepRangesEndingAtTheSigned64LimitsNeverWrap() throws Exception {
+        inContext(() -> {
+            Module module = new Module();
+            Object outcome = module.run(
+                    """
+                    run: () => {
+                        frame: 0
+                        Range(9223372036854775805, 9223372036854775807).each((i) => { hook(i) })
+                        Range(9223372036854775805, 9223372036854775807).eachStep(1, (i) => { hook(i) })
+                        InvertedRange(-9223372036854775807 + 1, -9223372036854775807 - 1)
+                            .each((i) => { hook(i) })
+                        InvertedRange(-9223372036854775807 + 1, -9223372036854775807 - 1)
+                            .eachStep(-1, (i) => { hook(i) })
+                        1
+                    }
+                    run()
+                    """);
+            assertEquals("1", ProtosNumericValueSupport.integerDecimalText(outcome),
+                    "unit-step iteration next to the signed 64-bit limits terminates");
+            assertEquals(List.of(
+                    Long.MAX_VALUE - 2, Long.MAX_VALUE - 1,
+                    Long.MAX_VALUE - 2, Long.MAX_VALUE - 1,
+                    Long.MIN_VALUE + 2, Long.MIN_VALUE + 1,
+                    Long.MIN_VALUE + 2, Long.MIN_VALUE + 1),
+                    module.visits);
+        });
+    }
+
+    @Test
+    void nonUnitStepsKeepTheOverflowCheckedAdvance() throws Exception {
+        inContext(() -> {
+            Module module = new Module();
+            Object outcome = module.run(
+                    """
+                    run: () => {
+                        frame: 0
+                        Range(9223372036854775797, 9223372036854775807).eachStep(5, (i) => { hook(i) })
+                        Range(9223372036854775803, 9223372036854775807).eachStep(5, (i) => { hook(i) })
+                        InvertedRange(-9223372036854775797, -9223372036854775807 - 1)
+                            .eachStep(-5, (i) => { hook(i) })
+                        InvertedRange(-9223372036854775804, -9223372036854775807 - 1)
+                            .eachStep(-5, (i) => { hook(i) })
+                        Range(-3, 10).eachStep(4, (i) => { hook(i) })
+                        InvertedRange(10, -3).eachStep(-4, (i) => { hook(i) })
+                        Range(4, 4).eachStep(3, (i) => { hook(i) })
+                        InvertedRange(4, 4).eachStep(-3, (i) => { hook(i) })
+                        Range(9223372036854775806, 9223372036854775812).eachStep(2, (i) => { hook(i) })
+                        1
+                    }
+                    run()
+                    """);
+            assertEquals("1", ProtosNumericValueSupport.integerDecimalText(outcome));
+            assertEquals(List.of(
+                    "9223372036854775797", "9223372036854775802",
+                    "9223372036854775803",
+                    "-9223372036854775797", "-9223372036854775802", "-9223372036854775807",
+                    "-9223372036854775804",
+                    "-3", "1", "5", "9",
+                    "10", "6", "2", "-2",
+                    "9223372036854775806", "9223372036854775808", "9223372036854775810"),
+                    module.visitTexts());
+        });
+    }
+
     /**
      * The callback is created lexically during the {@code run} invocation,
      * so it captures the return home of {@code run} (CALLABLES, return homes)
@@ -1783,14 +1890,29 @@ final class ProtosPerf045RangeEachInlineTest {
                     b: run(InvertedRange(5, 0), -2)
                     c: run(keeper, 9)
                     d: run(Range(0, 0), 1)
+                    e: run(Range(0, 3), 1)
+                    f: run(InvertedRange(2, -1), -1)
+                    g: run(Range(1, 6), 2)
+                    h: run(InvertedRange(6, -1), -3)
+                    k: run(Range(0, 9223372036854775808 * 2), 9223372036854775808)
+                    m: run(Range(0, 2), 1)
+                    n: run(InvertedRange(1, -1), -1)
                     store.block(10)
-                    ((a == 106) && (b == 109) && (c == 101) && (d == 100))
+                    ((a == 106) && (b == 109) && (c == 101) && (d == 100) && (e == 103) && (f == 103) && (g == 109) && (h == 109) && (k == 9223372036854775908) && (m == 101) && (n == 101))
                         .ifTrueIfFalse(() => { 1 }, () => { 0 })
                     """);
             assertEquals("1", ProtosNumericValueSupport.integerDecimalText(outcome));
             assertEquals(
-                    List.of(100L, 102L, 106L, 105L, 108L, 109L, 101L, 111L),
-                    module.visits);
+                    List.of("100", "102", "106", "105", "108", "109", "101",
+                            "100", "101", "103",
+                            "102", "103", "103",
+                            "101", "104", "109",
+                            "106", "109", "109",
+                            "100", "9223372036854775908",
+                            "100", "101",
+                            "101", "101",
+                            "111"),
+                    module.visitTexts());
         });
     }
 

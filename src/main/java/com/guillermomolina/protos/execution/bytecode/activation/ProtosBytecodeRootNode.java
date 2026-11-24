@@ -2370,6 +2370,27 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
          * no separate cursor load is executed per advance, and each iteration
          * family stays an independently profiled specialization.
          */
+        /*
+         * A primitive cursor whose step is 1 or -1 never overflows: the
+         * advance runs only after next < stop (ascending) or next > stop
+         * (descending) held, so next + step is at most stop or at least
+         * stop and stays inside the signed long domain.
+         */
+        @Specialization(guards = "isRangeUnitStep(iteration)")
+        public static boolean doRangeUnitStep(
+                LocalAccessor element,
+                LocalAccessor cursor,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode,
+                @Bind("cursor.getObject(bytecode, frame)") Object iteration) {
+            RangeIterationState state = (RangeIterationState) iteration;
+            if (!state.hasNextUnitStep()) {
+                return false;
+            }
+            element.setLong(bytecode, frame, state.advanceUnitStep());
+            return true;
+        }
+
         @Specialization(guards = "isRangeLong(iteration)")
         public static boolean doRangeLong(
                 LocalAccessor element,
@@ -2426,8 +2447,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return true;
         }
 
+        static boolean isRangeUnitStep(Object iteration) {
+            return iteration instanceof RangeIterationState state && !state.isExact() && state.isUnitStep();
+        }
+
         static boolean isRangeLong(Object iteration) {
-            return iteration instanceof RangeIterationState state && !state.isExact();
+            return iteration instanceof RangeIterationState state && !state.isExact() && !state.isUnitStep();
         }
 
         static boolean isRangeExact(Object iteration) {
@@ -2938,6 +2963,30 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             }
             Object current = exactNext;
             exactNext = ProtosNumericValueSupport.addIntegers(current, exactStep, prelude);
+            return current;
+        }
+
+        boolean isUnitStep() {
+            return !exact && (step == 1L || step == -1L);
+        }
+
+        /*
+         * Termination of a unit-step primitive cursor. Such a cursor is never
+         * marked exhausted, because its advance cannot overflow.
+         */
+        boolean hasNextUnitStep() {
+            return step == 1L ? next < stop : next > stop;
+        }
+
+        /*
+         * Advances a unit-step primitive cursor; called only after
+         * hasNextUnitStep() answered true. Then next < stop <= Long.MAX_VALUE
+         * (step 1) or next > stop >= Long.MIN_VALUE (step -1), so next + step
+         * cannot overflow.
+         */
+        long advanceUnitStep() {
+            long current = next;
+            next = current + step;
             return current;
         }
 
