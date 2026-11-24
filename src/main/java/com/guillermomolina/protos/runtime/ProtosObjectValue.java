@@ -608,6 +608,29 @@ public class ProtosObjectValue extends DynamicObject implements TruffleObject {
             Object value,
             DynamicObject.GetNode getNode,
             DynamicObject.PutNode putNode) {
+        createLocalSlotCached(name, value, getNode, putNode, false);
+    }
+
+    /**
+     * Backend-only {@link #createLocalSlot(String, Object, DynamicObject.GetNode,
+     * DynamicObject.PutNode)} for a name the caller has already canonicalized,
+     * such as a Java string literal: every validation is the same, and the
+     * object authority queries and writes that key as given.
+     */
+    public void createLocalSlotCanonical(
+            String canonicalName,
+            Object value,
+            DynamicObject.GetNode getNode,
+            DynamicObject.PutNode putNode) {
+        createLocalSlotCached(canonicalName, value, getNode, putNode, true);
+    }
+
+    private void createLocalSlotCached(
+            String name,
+            Object value,
+            DynamicObject.GetNode getNode,
+            DynamicObject.PutNode putNode,
+            boolean canonical) {
         Objects.requireNonNull(name, "name");
         Objects.requireNonNull(value, "value");
 
@@ -622,14 +645,15 @@ public class ProtosObjectValue extends DynamicObject implements TruffleObject {
             throw new IllegalStateException(
                     "cached slot creation requires the object authority");
         }
+        String key = canonical ? name : ProtosMapBackedLexicalBindingAuthority.key(name);
         if (current != EMPTY_LEXICAL_BINDINGS
                 && ((ProtosMapBackedLexicalBindingAuthority) current)
-                        .containsBinding(name, getNode)) {
+                        .containsBindingCanonical(key, getNode)) {
             throw new IllegalStateException("local slot already exists: " + name);
         }
 
         ((ProtosMapBackedLexicalBindingAuthority) writableLexicalBindingAuthority())
-                .putBinding(name, value, putNode);
+                .putBindingCanonical(key, value, putNode);
     }
 
     public void assignLocalSlot(String name, Object value) {

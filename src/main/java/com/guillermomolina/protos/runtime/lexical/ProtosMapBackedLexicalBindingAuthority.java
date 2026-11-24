@@ -81,7 +81,7 @@ final class ProtosMapBackedLexicalBindingAuthority
         return storage == candidate;
     }
 
-    private static String key(String name) {
+    static String key(String name) {
         return Objects.requireNonNull(name, "name").intern();
     }
 
@@ -99,7 +99,18 @@ final class ProtosMapBackedLexicalBindingAuthority
      * {@code null}; a {@code null} read therefore means absence.
      */
     boolean containsBinding(String name, DynamicObject.GetNode getNode) {
-        return getNode.execute(storage, key(name), null) != null;
+        return containsBindingCanonical(key(name), getNode);
+    }
+
+    /**
+     * {@link #containsBinding(String, DynamicObject.GetNode)} for a name the
+     * caller has already canonicalized: the key is used as given, without
+     * interning it again, against the same single storage.
+     */
+    boolean containsBindingCanonical(
+            String canonicalName, DynamicObject.GetNode getNode) {
+        Objects.requireNonNull(canonicalName, "name");
+        return getNode.execute(storage, canonicalName, null) != null;
     }
 
     @Override
@@ -189,14 +200,27 @@ final class ProtosMapBackedLexicalBindingAuthority
      */
     void putBinding(String name, Object value, DynamicObject.PutNode putNode) {
         Objects.requireNonNull(value, "value");
-        if (storage == ProtosObjectValue.rootObject() && "call".equals(name)) {
+        putBindingCanonical(key(name), value, putNode);
+    }
+
+    /**
+     * {@link #putBinding(String, Object, DynamicObject.PutNode)} for a name
+     * the caller has already canonicalized: the key is written as given,
+     * without interning it again, into the same single storage, with the same
+     * root {@code call} invalidation rule.
+     */
+    void putBindingCanonical(
+            String canonicalName, Object value, DynamicObject.PutNode putNode) {
+        Objects.requireNonNull(value, "value");
+        Objects.requireNonNull(canonicalName, "name");
+        if (storage == ProtosObjectValue.rootObject() && "call".equals(canonicalName)) {
             synchronized (storage) {
                 ProtosObjectValue.invalidateRootCallSelectionForRuntime();
-                putNode.execute(storage, key(name), value);
+                putNode.execute(storage, canonicalName, value);
             }
             return;
         }
-        putNode.execute(storage, key(name), value);
+        putNode.execute(storage, canonicalName, value);
     }
 
     /**

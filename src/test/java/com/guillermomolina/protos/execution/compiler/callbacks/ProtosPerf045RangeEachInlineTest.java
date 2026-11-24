@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -413,7 +414,9 @@ final class ProtosPerf045RangeEachInlineTest {
                 {"InvertedRange", "3", "0"}, {"InvertedRange", "0", "3"},
                 {"InvertedRange", "4", "4"},
                 {"InvertedRange", "9223372036854775809", "-9223372036854775810"},
-                {"Range", "1", "2"}, {"InvertedRange", "2", "1"}
+                {"Range", "1", "2"}, {"InvertedRange", "2", "1"},
+                {"Range", "-9223372036854775810", "0"},
+                {"InvertedRange", "0", "-9223372036854775810"}
             };
             StringBuilder built = new StringBuilder();
             StringBuilder ordinary = new StringBuilder();
@@ -523,6 +526,19 @@ final class ProtosPerf045RangeEachInlineTest {
                     ProtosNumericValueSupport.integerDecimalText(
                             actual.readLocalSlot(slot).orElseThrow()));
         }
+        Object shape = actual.getShape();
+        Object start = actual.readLocalSlot("start").orElseThrow();
+        assertEquals("object is frozen", assertThrows(IllegalStateException.class,
+                () -> actual.assignLocalSlot("start", 9L)).getMessage());
+        assertEquals("object is frozen", assertThrows(IllegalStateException.class,
+                () -> actual.createLocalSlot("extra", 9L)).getMessage());
+        assertEquals("object is frozen", assertThrows(IllegalStateException.class,
+                () -> actual.createLocalSlotCanonical("extra", 9L,
+                        com.oracle.truffle.api.object.DynamicObject.GetNode.getUncached(),
+                        com.oracle.truffle.api.object.DynamicObject.PutNode.getUncached()))
+                .getMessage());
+        assertSame(shape, actual.getShape());
+        assertEquals(start, actual.readLocalSlot("start").orElseThrow());
     }
 
     @Test
@@ -612,6 +628,7 @@ final class ProtosPerf045RangeEachInlineTest {
                         hook(canonical.stop)
                         Custom: { call: (a, b) => { a + b } }
                         hook(build(Custom, 2, 3))
+                        hook(build(Range, 1, 3).start)
                         Custom.call = (a, b) => { a * b }
                         hook(build(Custom, 2, 3))
                         Custom.removeSlot("call")
@@ -627,7 +644,7 @@ final class ProtosPerf045RangeEachInlineTest {
                     run()
                     """);
             assertInstanceOf(ProtosNullValue.class, result);
-            assertEquals(List.of(2L, 5L, 6L, 1L, 3L, 4L, 1L), module.visits);
+            assertEquals(List.of(2L, 5L, 1L, 6L, 1L, 3L, 4L, 1L), module.visits);
         });
     }
 

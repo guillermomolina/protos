@@ -183,6 +183,20 @@ final class ProtosPerf025ObjectModelPayAsYouGrowTest {
         assertEquals(0, authority.storage().getShape().getPropertyCount());
         assertSame(authority, context.lexicalBindingAuthorityForRuntime());
 
+        int contextProperties = context.getShape().getPropertyCount();
+        IllegalStateException canonical = assertThrows(
+                IllegalStateException.class,
+                () -> context.createLocalSlotCanonical("start", new Object(),
+                        DynamicObject.GetNode.getUncached(),
+                        DynamicObject.PutNode.getUncached()));
+        assertEquals("cached slot creation requires the object authority",
+                canonical.getMessage());
+        assertFalse(context.hasLocalSlot("start"));
+        assertNull(context.getShape().getProperty("start"));
+        assertEquals(contextProperties, context.getShape().getPropertyCount());
+        assertEquals(0, authority.storage().getShape().getPropertyCount());
+        assertSame(authority, context.lexicalBindingAuthorityForRuntime());
+
         assertMutationStateTakesPrecedence(true, "object is frozen");
         assertMutationStateTakesPrecedence(false, "object is closed");
     }
@@ -208,6 +222,12 @@ final class ProtosPerf025ObjectModelPayAsYouGrowTest {
                         DynamicObject.GetNode.getUncached(),
                         DynamicObject.PutNode.getUncached()));
         assertEquals(message, cached.getMessage());
+        IllegalStateException canonical = assertThrows(
+                IllegalStateException.class,
+                () -> context.createLocalSlotCanonical("x", new Object(),
+                        DynamicObject.GetNode.getUncached(),
+                        DynamicObject.PutNode.getUncached()));
+        assertEquals(message, canonical.getMessage());
         IllegalStateException general = assertThrows(
                 IllegalStateException.class,
                 () -> context.createLocalSlot("x", new Object()));
@@ -253,6 +273,109 @@ final class ProtosPerf025ObjectModelPayAsYouGrowTest {
         object.createLocalSlot("other", new Object(), getNode, putNode);
         assertSame(authority, lexicalAuthority(object));
         assertSame(object, authority.storage());
+    }
+
+    @Test
+    void canonicalSlotCreationKeepsTheSingleObjectAuthority() throws Exception {
+        ProtosObjectValue object =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosObjectValue other =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        assertTrue(object.isOpen());
+        Object sharedEmpty = lexicalAuthority(object);
+        assertSame(sharedEmpty, lexicalAuthority(other));
+        DynamicObject.GetNode getNode = DynamicObject.GetNode.getUncached();
+        DynamicObject.PutNode putNode = DynamicObject.PutNode.getUncached();
+        Object start = new Object();
+        Object stop = new Object();
+
+        object.createLocalSlotCanonical("start", start, getNode, putNode);
+        ProtosMapBackedLexicalBindingAuthority authority =
+                assertInstanceOf(
+                        ProtosMapBackedLexicalBindingAuthority.class,
+                        lexicalAuthority(object));
+        assertNotSame(sharedEmpty, authority);
+        assertSame(object, authority.storage());
+
+        object.createLocalSlotCanonical("stop", stop, getNode, putNode);
+        assertSame(authority, lexicalAuthority(object));
+        assertSame(object, authority.storage());
+        assertEquals(2, object.getShape().getPropertyCount());
+        assertNotNull(object.getShape().getProperty("start"));
+        assertNotNull(object.getShape().getProperty("stop"));
+        assertSame(start, object.readLocalSlot("start").orElseThrow());
+        assertSame(stop, object.readLocalSlot("stop").orElseThrow());
+        assertEquals(List.of("start", "stop"),
+                List.copyOf(object.localSlotsSnapshot().keySet()));
+
+        IllegalStateException duplicate = assertThrows(
+                IllegalStateException.class,
+                () -> object.createLocalSlotCanonical(
+                        "start", new Object(), getNode, putNode));
+        assertEquals("local slot already exists: start", duplicate.getMessage());
+        assertSame(start, object.readLocalSlot("start").orElseThrow());
+        assertEquals(2, object.getShape().getPropertyCount());
+
+        assertSame(object, object.freeze(DynamicObject.SetShapeFlagsNode.getUncached()));
+        assertTrue(object.isFrozen());
+        IllegalStateException frozenCreate = assertThrows(
+                IllegalStateException.class,
+                () -> object.createLocalSlotCanonical(
+                        "step", new Object(), getNode, putNode));
+        assertEquals("object is frozen", frozenCreate.getMessage());
+        IllegalStateException frozenAssign = assertThrows(
+                IllegalStateException.class,
+                () -> object.assignLocalSlot("start", new Object()));
+        assertEquals("object is frozen", frozenAssign.getMessage());
+        assertSame(start, object.readLocalSlot("start").orElseThrow());
+        assertNull(object.getShape().getProperty("step"));
+        assertEquals(2, object.getShape().getPropertyCount());
+        assertSame(authority, lexicalAuthority(object));
+    }
+
+    @Test
+    void canonicalAndGeneralCachedCreationShareOneKeySpace() throws Exception {
+        DynamicObject.GetNode getNode = DynamicObject.GetNode.getUncached();
+        DynamicObject.PutNode putNode = DynamicObject.PutNode.getUncached();
+
+        ProtosObjectValue canonicalFirst =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        Object original = new Object();
+        canonicalFirst.createLocalSlotCanonical("start", original, getNode, putNode);
+        String equivalent = new String(new char[] {'s', 't', 'a', 'r', 't'});
+        assertNotSame("start", equivalent);
+        assertTrue(canonicalFirst.hasLocalSlot(equivalent));
+        assertSame(original, canonicalFirst.readLocalSlot(equivalent).orElseThrow());
+        Object shapeBefore = canonicalFirst.getShape();
+        IllegalStateException generalDuplicate = assertThrows(
+                IllegalStateException.class,
+                () -> canonicalFirst.createLocalSlot(
+                        equivalent, new Object(), getNode, putNode));
+        assertEquals("local slot already exists: start", generalDuplicate.getMessage());
+        assertSame(shapeBefore, canonicalFirst.getShape());
+        assertSame(original, canonicalFirst.readLocalSlot("start").orElseThrow());
+        assertEquals(1, canonicalFirst.getShape().getPropertyCount());
+
+        ProtosObjectValue generalFirst =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        String dynamic = new String(new char[] {'s', 't', 'a', 'r', 't'});
+        assertNotSame("start", dynamic);
+        Object value = new Object();
+        generalFirst.createLocalSlot(dynamic, value, getNode, putNode);
+        ProtosMapBackedLexicalBindingAuthority authority =
+                assertInstanceOf(
+                        ProtosMapBackedLexicalBindingAuthority.class,
+                        lexicalAuthority(generalFirst));
+        IllegalStateException canonicalDuplicate = assertThrows(
+                IllegalStateException.class,
+                () -> generalFirst.createLocalSlotCanonical(
+                        "start", new Object(), getNode, putNode));
+        assertEquals(generalDuplicate.getMessage(), canonicalDuplicate.getMessage());
+        assertSame(value, generalFirst.readLocalSlot("start").orElseThrow());
+        assertEquals(1, generalFirst.getShape().getPropertyCount());
+        assertEquals(java.util.Set.of("start"), generalFirst.localSlotsSnapshot().keySet());
+        assertSame(authority, lexicalAuthority(generalFirst));
+        assertSame(generalFirst, authority.storage());
     }
 
     /*

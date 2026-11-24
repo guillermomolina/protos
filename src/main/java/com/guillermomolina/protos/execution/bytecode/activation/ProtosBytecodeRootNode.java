@@ -3326,9 +3326,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 DynamicObject.PutNode stopPut,
                 DynamicObject.SetShapeFlagsNode freeze) {
             ProtosObjectValue instance = new ProtosObjectValue(prototype);
-            instance.createLocalSlot("start", ProtosNumericValueSupport.guestValue(start),
+            instance.createLocalSlotCanonical("start", ProtosNumericValueSupport.guestValue(start),
                     startGet, startPut);
-            instance.createLocalSlot("stop", ProtosNumericValueSupport.guestValue(stop),
+            instance.createLocalSlotCanonical("stop", ProtosNumericValueSupport.guestValue(stop),
                     stopGet, stopPut);
             return instance.freeze(freeze);
         }
