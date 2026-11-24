@@ -40,21 +40,33 @@ projectedStatement: ((value) => value.step()).parallel(child)
 Assertions.signals(SlotNotFound, () => projectedStatement.value())
 // Projection did not mutate or retire the originating Statement.
 Assertions.require(child.column(0) == 2)
-// Destination Actors import and acquire their own sessions. A returned live
-// Statement cannot cross the reply boundary; an incoming Connection cannot
-// cross the argument boundary either.
+// Native SQLite authority belongs to the RootActor: a secondary Actor may
+// import std:sqlite but cannot open a database, and live Connections and
+// Statements cannot cross the Actor boundary.
 marker: db.prepare("CREATE TABLE private_marker (n INTEGER)")
 Assertions.require(marker.step() === false)
 marker.close().value()
-worker: Actor.spawn("std:sqlite", "openMemory")
+worker: Actor.spawn("./sqlite-lifecycle-worker.protos", "worker")
 (() => {
-    Assertions.signals(NonTransferableValue, () => worker.request("prepare", db))
-    Assertions.signals(NonTransferableValue, () => worker.request("prepare", "SELECT 1").value())
-    // This accepted request raises an unhandled SQL Error in the destination.
-    // It terminates that Actor, so test it last. request reports the missing
-    // normal reply as RequestOutcomeUncertain, not as a transferred SQL Error.
-    Assertions.signals(RequestOutcomeUncertain,
-        () => worker.request("prepare", "SELECT * FROM private_marker").value())
+    Assertions.require(worker.request("importSucceeds").value() == true)
+    Assertions.require(worker.request("openMemoryRefused").value() == true)
+    Assertions.require(worker.request("openFileRefused", "lifecycle-denied.db").value() == true)
+    live: db.prepare("SELECT 7, 'row'")
+    Assertions.signals(NonTransferableValue, () => worker.request("echo", db))
+    Assertions.signals(NonTransferableValue, () => worker.request("echo", live))
+    Assertions.require(live.step())
+    Assertions.require((live.column(0) == 7) && (live.column(1) == "row"))
+    // A real copied SQLite row is ordinary data and crosses the boundary.
+    row: live.row()
+    copied: worker.request("echo", row).value()
+    Assertions.require((copied.size() == 2) && (copied[0] == 7) && (copied[1] == "row"))
+    // The RootActor's Connection and Statement remain usable.
+    Assertions.require(live.column(0) == 7)
+    Assertions.require(live.step() === false)
+    live.close().value()
+    markerQuery: db.prepare("SELECT * FROM private_marker")
+    Assertions.require(markerQuery.step() === false)
+    markerQuery.close().value()
 }).ensure(() => worker.stop())
 // Distinct in-memory databases do not share schema or wrapper identity.
 other: SQLite.openMemory()

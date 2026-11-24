@@ -36,8 +36,9 @@
 
 Assertions: import("std:test/assertions")
 
-// Importing the scheme opens this Actor's provider session and loads the
-// host-authorized SQLite library. Without the provider JAR this import fails;
+// Importing the scheme opens the RootActor's provider session and loads the
+// host-authorized SQLite library; only the RootActor may do this, and the same
+// import in another Actor fails with an ordinary Error. Without the provider JAR this import fails;
 // with the provider but without --allow-library sqlite3=... it signals
 // ForeignError (foreignCategory "unauthorized-library").
 sqlite: import("ffi:sqlite3")

@@ -41,6 +41,11 @@
       {"returnType": "void", "parameterTypes": []},
       {"returnType": "void", "parameterTypes": ["void*"]},
       {"returnType": "void", "parameterTypes": ["jlong"]},
+      {"returnType": "jbyte", "parameterTypes": ["jbyte"]},
+      {"returnType": "jshort", "parameterTypes": ["jshort"]},
+      {"returnType": "jfloat", "parameterTypes": ["jfloat"]},
+      {"returnType": "jint", "parameterTypes": ["void*", "void*", "void*"]},
+      {"returnType": "jint", "parameterTypes": ["void*", "void*", "void*", "void*"]},
       {
         "returnType": "jlong",
         "parameterTypes": ["jlong", "jlong", "jlong", "jlong", "jlong", "jlong", "jlong"],

@@ -1,0 +1,504 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// Declarative std:ffi layouts: scalar sizes and alignments, fields, structs,
+// unions, fixed arrays, typed pointers and layout queries. No native library
+// is imported and no foreign provider is entered; the Java host also checks
+// that no provider session is opened.
+// Run by ProtosI144FfmFixtureAbiTest and dist/test_external_foreign_providers.py.
+
+FFI: import("std:ffi")
+
+// Every check carries a label, so a failure names its location
+// (the Java host reports the `label` slot of the CheckFailure).
+CheckFailure: Error {}
+
+check: (label, condition) => {
+    (condition === true).ifFalse(() => {
+        failure: CheckFailure { label: label }
+        failure.signal()
+    })
+    null
+}
+
+caught: (prototype, body) => {
+    result: null
+    prototype.handle(body, (error) => {
+        result = error
+        error
+    })
+    result
+}
+
+/// An ordinary Error of the public adapter, never a ForeignError.
+ordinary: (label, body) => {
+    error: caught(Error, body)
+    check(label, (error === null) == false)
+    check(label + " is ordinary", (error.parent() === ForeignError) == false)
+}
+
+max: 9223372036854775807
+field: FFI.field
+path: (...selectors) => Array(...selectors)
+
+// ---- scalar sizes and alignments of the Linux x86-64 LP64 profile
+
+for(entry in Array(
+        Array("i8", FFI.i8, 1), Array("u8", FFI.u8, 1),
+        Array("i16", FFI.i16, 2), Array("u16", FFI.u16, 2),
+        Array("i32", FFI.i32, 4), Array("u32", FFI.u32, 4), Array("f32", FFI.f32, 4),
+        Array("i64", FFI.i64, 8), Array("u64", FFI.u64, 8),
+        Array("sizeT", FFI.sizeT, 8), Array("f64", FFI.f64, 8))) {
+    check(entry[0] + " size", FFI.sizeOf(entry[1]) == entry[2])
+    check(entry[0] + " align", FFI.alignOf(entry[1]) == entry[2])
+    check(entry[0] + " empty path", FFI.offsetOf(entry[1], Array()) == 0)
+}
+check("scalar identity", (FFI.u16 === FFI.u16) && (FFI.f32 === FFI.f32) && (FFI.i32 === FFI.i32))
+check("distinct scalars", (FFI.i8 !== FFI.u8) && (FFI.u64 !== FFI.sizeT) && (FFI.f32 !== FFI.f64))
+ordinary("void size", () => FFI.sizeOf(FFI.void))
+ordinary("utf8z size", () => FFI.sizeOf(FFI.utf8z))
+ordinary("out size", () => FFI.sizeOf(FFI.out(FFI.i32)))
+ordinary("forged size", () => FFI.sizeOf({}))
+ordinary("null size", () => FFI.alignOf(null))
+ordinary("size arity", () => FFI.sizeOf(FFI.i8, FFI.i8))
+
+// ---- field descriptors
+
+a: field("a", FFI.i8)
+check("field fresh", a !== field("a", FFI.i8))
+check("field ordinary", a.parent() === Object)
+ordinary("field frozen", () => a.createSlot("extra", 1))
+ordinary("descriptor frozen", () => FFI.i8.createSlot("extra", 1))
+ordinary("field is not a layout", () => FFI.sizeOf(a))
+ordinary("field of field", () => field("b", a))
+ordinary("field of void", () => field("b", FFI.void))
+ordinary("field of utf8z", () => field("b", FFI.utf8z))
+ordinary("field of out", () => field("b", FFI.out(FFI.i8)))
+ordinary("field of forged", () => field("b", {}))
+ordinary("field name kind", () => field(1, FFI.i8))
+ordinary("field null name", () => field(null, FFI.i8))
+ordinary("field arity", () => field("b", FFI.i8, FFI.i8))
+ordinary("out of field", () => FFI.out(a))
+
+// ---- struct: internal and tail padding
+
+padded: FFI.struct(Array(field("a", FFI.i8), field("b", FFI.i32), field("c", FFI.i16)))
+check("padded size", FFI.sizeOf(padded) == 12)
+check("padded align", FFI.alignOf(padded) == 4)
+check("padded a", FFI.offsetOf(padded, path("a")) == 0)
+check("padded b internal", FFI.offsetOf(padded, path("b")) == 4)
+check("padded c", FFI.offsetOf(padded, path("c")) == 8)
+check("padded empty", FFI.offsetOf(padded, Array()) == 0)
+check("struct fresh", padded !== FFI.struct(Array(field("a", FFI.i8))))
+ordinary("struct frozen", () => padded.createSlot("extra", 1))
+tail: FFI.struct(Array(field("wide", FFI.i64), field("flag", FFI.u8)))
+check("tail size", FFI.sizeOf(tail) == 16)
+check("tail align", FFI.alignOf(tail) == 8)
+check("single member", FFI.sizeOf(FFI.struct(Array(field("x", FFI.i16)))) == 2)
+
+// ---- nested struct
+
+nested: FFI.struct(Array(field("tag", FFI.i8), field("inner", padded), field("d", FFI.f64)))
+check("nested size", FFI.sizeOf(nested) == 24)
+check("nested align", FFI.alignOf(nested) == 8)
+check("nested inner", FFI.offsetOf(nested, path("inner")) == 4)
+check("nested inner c", FFI.offsetOf(nested, path("inner", "c")) == 12)
+check("nested d", FFI.offsetOf(nested, path("d")) == 16)
+ordinary("dotted is one selector", () => FFI.offsetOf(nested, path("inner.c")))
+
+// ---- union: overlap and final alignment
+
+mixed: FFI.union(Array(
+    field("small", FFI.i8), field("wide", FFI.i64), field("half", FFI.array(FFI.u16, 5))))
+check("union size", FFI.sizeOf(mixed) == 16)
+check("union align", FFI.alignOf(mixed) == 8)
+check("union overlap small", FFI.offsetOf(mixed, path("small")) == 0)
+check("union overlap wide", FFI.offsetOf(mixed, path("wide")) == 0)
+check("union element", FFI.offsetOf(mixed, path("half", 4)) == 8)
+unionTail: FFI.union(Array(field("bytes", FFI.array(FFI.u8, 9)), field("word", FFI.i32)))
+check("union tail size", FFI.sizeOf(unionTail) == 12)
+check("union tail align", FFI.alignOf(unionTail) == 4)
+
+// ---- nested struct containing a union
+
+withUnion: FFI.struct(Array(field("kind", FFI.u8), field("value", mixed), field("after", FFI.u32)))
+check("with union size", FFI.sizeOf(withUnion) == 32)
+check("with union value", FFI.offsetOf(withUnion, path("value")) == 8)
+check("with union half", FFI.offsetOf(withUnion, path("value", "half", 3)) == 14)
+check("with union after", FFI.offsetOf(withUnion, path("after")) == 24)
+
+// ---- fixed arrays
+
+quad: FFI.array(padded, 4)
+check("array size", FFI.sizeOf(quad) == 48)
+check("array align", FFI.alignOf(quad) == 4)
+check("array stride", FFI.offsetOf(quad, path(3)) == 36)
+check("array element field", FFI.offsetOf(quad, path(3, "c")) == 44)
+check("array zero", FFI.offsetOf(quad, path(0)) == 0)
+check("array fresh", quad !== FFI.array(padded, 4))
+ordinary("array negative index", () => FFI.offsetOf(quad, path(-1)))
+ordinary("array index at count", () => FFI.offsetOf(quad, path(4)))
+ordinary("array float index", () => FFI.offsetOf(quad, path(1.0)))
+ordinary("array string index", () => FFI.offsetOf(quad, path("1")))
+ordinary("array null index", () => FFI.offsetOf(quad, path(null)))
+ordinary("array zero count", () => FFI.array(FFI.i8, 0))
+ordinary("array negative count", () => FFI.array(FFI.i8, -1))
+ordinary("array float count", () => FFI.array(FFI.i8, 2.0))
+ordinary("array void element", () => FFI.array(FFI.void, 2))
+ordinary("array field element", () => FFI.array(a, 2))
+ordinary("array arity", () => FFI.array(FFI.i8, 2, 3))
+
+withArray: FFI.struct(Array(
+    field("head", FFI.i16), field("items", FFI.array(padded, 3)), field("tail", FFI.i8)))
+check("struct with array size", FFI.sizeOf(withArray) == 44)
+check("struct with array items", FFI.offsetOf(withArray, path("items")) == 4)
+check("struct with array path", FFI.offsetOf(withArray, path("items", 2, "c")) == 36)
+check("struct with array tail", FFI.offsetOf(withArray, path("tail")) == 40)
+
+// ---- very large counts: compact metadata, checked arithmetic
+
+huge: FFI.array(FFI.u8, max)
+check("max array size", FFI.sizeOf(huge) == max)
+check("max array index", FFI.offsetOf(huge, path(max - 1)) == max - 1)
+ordinary("max array index at count", () => FFI.offsetOf(huge, path(max)))
+halfMax: FFI.array(FFI.i16, 4611686018427387903)
+check("large array size", FFI.sizeOf(halfMax) == 9223372036854775806)
+check("large array offset", FFI.offsetOf(halfMax, path(4611686018427387902)) == 9223372036854775804)
+ordinary("multiplication overflow", () => FFI.array(FFI.i16, 4611686018427387904))
+ordinary("nested multiplication overflow", () => FFI.array(halfMax, 2))
+ordinary("count beyond the domain", () => FFI.array(FFI.u8, max + 1))
+ordinary("addition overflow", () => FFI.struct(Array(field("a", huge), field("b", FFI.u8))))
+ordinary("alignment overflow", () => FFI.struct(Array(field("a", huge), field("b", FFI.i16))))
+ordinary("tail alignment overflow", () => FFI.struct(Array(
+    field("a", FFI.i16), field("b", FFI.array(FFI.u8, max - 2)))))
+ordinary("union tail overflow", () => FFI.union(Array(field("a", huge), field("b", FFI.i16))))
+check("union at the bound", FFI.sizeOf(FFI.union(Array(field("a", huge), field("b", FFI.u8)))) == max)
+
+// ---- path errors
+
+ordinary("unknown field", () => FFI.offsetOf(padded, path("zz")))
+ordinary("integer selector on struct", () => FFI.offsetOf(padded, path(0)))
+ordinary("through scalar", () => FFI.offsetOf(padded, path("a", "x")))
+ordinary("through scalar index", () => FFI.offsetOf(FFI.i32, path(0)))
+ordinary("path kind", () => FFI.offsetOf(padded, "a"))
+ordinary("path null", () => FFI.offsetOf(padded, null))
+ordinary("offset of forged", () => FFI.offsetOf({}, Array()))
+ordinary("offset arity", () => FFI.offsetOf(padded, Array(), Array()))
+
+// ---- declaration admission: duplicates, empty groups, forgeries
+
+ordinary("duplicate names", () => FFI.struct(Array(field("x", FFI.i8), field("x", FFI.i16))))
+ordinary("duplicate union names", () => FFI.union(Array(field("x", FFI.i8), field("x", FFI.i8))))
+ordinary("empty struct", () => FFI.struct(Array()))
+ordinary("empty union", () => FFI.union(Array()))
+ordinary("struct of layouts", () => FFI.struct(Array(FFI.i8)))
+ordinary("struct of forged", () => FFI.struct(Array({ layout: FFI.i8 })))
+ordinary("struct of null", () => FFI.struct(Array(null)))
+ordinary("struct not an Array", () => FFI.struct(a))
+ordinary("struct arity", () => FFI.struct(Array(a), Array(a)))
+ordinary("union not an Array", () => FFI.union(null))
+
+// ---- source Arrays are snapshotted
+
+declarations: Array(field("first", FFI.i8), field("second", FFI.i64))
+snapshot: FFI.struct(declarations)
+declarations[0] = field("other", FFI.f64)
+declarations[1] = field("first", FFI.i8)
+check("snapshot size", FFI.sizeOf(snapshot) == 16)
+check("snapshot names", FFI.offsetOf(snapshot, path("second")) == 8)
+ordinary("snapshot ignores later fields", () => FFI.offsetOf(snapshot, path("other")))
+selectors: path("items", 2)
+check("path before", FFI.offsetOf(withArray, selectors) == 28)
+selectors[1] = 0
+check("path after", FFI.offsetOf(withArray, selectors) == 4)
+
+// ---- arbitrary semantic String field names
+
+names: FFI.struct(Array(
+    field("call", FFI.i8), field("init", FFI.i8), field("createSlot", FFI.i8),
+    field("slotValue", FFI.i8), field("", FFI.i8), field(" white space ", FFI.i8),
+    field("while", FFI.i8), field("1x", FFI.i8), field("a.b", FFI.i32),
+    field("a", FFI.struct(Array(field("b", FFI.i64))))))
+check("name call", FFI.offsetOf(names, path("call")) == 0)
+check("name init", FFI.offsetOf(names, path("init")) == 1)
+check("name createSlot", FFI.offsetOf(names, path("createSlot")) == 2)
+check("name slotValue", FFI.offsetOf(names, path("slotValue")) == 3)
+check("name empty", FFI.offsetOf(names, path("")) == 4)
+check("name whitespace", FFI.offsetOf(names, path(" white space ")) == 5)
+check("name reserved", FFI.offsetOf(names, path("while")) == 6)
+check("name nonlexical", FFI.offsetOf(names, path("1x")) == 7)
+check("name dotted", FFI.offsetOf(names, path("a.b")) == 8)
+check("name nested", FFI.offsetOf(names, path("a", "b")) == 16)
+check("names size", FFI.sizeOf(names) == 24)
+
+// ---- typed pointers
+
+voidPointer: FFI.pointer(FFI.void)
+check("void pointer size", FFI.sizeOf(voidPointer) == 8)
+check("void pointer align", FFI.alignOf(voidPointer) == 8)
+paddedPointer: FFI.pointer(padded)
+check("pointer size", FFI.sizeOf(paddedPointer) == 8)
+check("pointer to pointer", FFI.sizeOf(FFI.pointer(paddedPointer)) == 8)
+check("pointer fresh", paddedPointer !== FFI.pointer(padded))
+ordinary("pointer frozen", () => paddedPointer.createSlot("extra", 1))
+ordinary("pointer not traversed", () => FFI.offsetOf(paddedPointer, path("a")))
+ordinary("pointer not indexed", () => FFI.offsetOf(paddedPointer, path(0)))
+ordinary("pointer to utf8z", () => FFI.pointer(FFI.utf8z))
+ordinary("pointer to field", () => FFI.pointer(a))
+ordinary("pointer to forged", () => FFI.pointer({}))
+ordinary("pointer arity", () => FFI.pointer(padded, padded))
+withPointer: FFI.struct(Array(
+    field("flag", FFI.i8), field("data", voidPointer), field("ratio", FFI.f32)))
+check("struct with pointer size", FFI.sizeOf(withPointer) == 24)
+check("struct with pointer data", FFI.offsetOf(withPointer, path("data")) == 8)
+check("struct with pointer ratio", FFI.offsetOf(withPointer, path("ratio")) == 16)
+ordinary("struct pointer not traversed", () => FFI.offsetOf(withPointer, path("data", 0)))
+ordinary("out of pointer", () => FFI.out(paddedPointer))
+ordinary("out of struct", () => FFI.out(padded))
+
+// ---- nullable typed pointers
+
+maybe: FFI.nullable(paddedPointer)
+check("nullable pointer fresh", (maybe !== paddedPointer) && (maybe !== FFI.nullable(paddedPointer)))
+ordinary("nullable frozen", () => maybe.createSlot("extra", 1))
+check("nullable void pointer", FFI.nullable(voidPointer) !== voidPointer)
+ordinary("nested nullable", () => FFI.nullable(maybe))
+ordinary("nullable scalar", () => FFI.nullable(FFI.i32))
+ordinary("nullable struct", () => FFI.nullable(padded))
+ordinary("nullable field", () => FFI.nullable(a))
+ordinary("nullable forged", () => FFI.nullable({}))
+
+// ---- nullable typed pointers are storage layouts with the pointer's storage
+
+check("nullable pointer size", FFI.sizeOf(maybe) == FFI.sizeOf(paddedPointer))
+check("nullable pointer align", FFI.alignOf(maybe) == FFI.alignOf(paddedPointer))
+check("nullable pointer empty path", FFI.offsetOf(maybe, Array()) == 0)
+ordinary("nullable pointer not traversed", () => FFI.offsetOf(maybe, path("a")))
+ordinary("nullable pointer not indexed", () => FFI.offsetOf(maybe, path(0)))
+ordinary("nullable pointer forged", () => FFI.sizeOf({ pointee: padded }))
+ordinary("out of nullable pointer", () => FFI.out(maybe))
+maybeVoid: FFI.nullable(voidPointer)
+holder: FFI.struct(Array(
+    field("tag", FFI.u8), field("next", maybeVoid), field("ratio", FFI.f32)))
+check("nullable member size", FFI.sizeOf(holder) == 24)
+check("nullable member align", FFI.alignOf(holder) == 8)
+check("nullable member tag", FFI.offsetOf(holder, path("tag")) == 0)
+check("nullable member next", FFI.offsetOf(holder, path("next")) == 8)
+check("nullable member ratio", FFI.offsetOf(holder, path("ratio")) == 16)
+ordinary("path through nullable member", () => FFI.offsetOf(holder, path("next", "a")))
+overlay: FFI.union(Array(field("pointer", maybe), field("small", FFI.u16)))
+check("nullable union member", (FFI.sizeOf(overlay) == 8) && (FFI.alignOf(overlay) == 8))
+check("nullable union offset", FFI.offsetOf(overlay, path("pointer")) == 0)
+maybes: FFI.array(maybe, 3)
+check("nullable array size", FFI.sizeOf(maybes) == 24)
+check("nullable array stride", FFI.offsetOf(maybes, path(2)) == 16)
+ordinary("nullable array element not traversed", () => FFI.offsetOf(maybes, path(1, "a")))
+toMaybe: FFI.pointer(maybe)
+check("pointer to nullable", (FFI.sizeOf(toMaybe) == 8) && (FFI.alignOf(toMaybe) == 8))
+ordinary("nested nullable pointer", () => FFI.nullable(FFI.nullable(voidPointer)))
+check("nullable keeps the plain pointer", FFI.sizeOf(paddedPointer) == 8)
+
+// ---- aggregates built from many declarations
+
+total: 200
+seed: Array(0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+hundred: Array(...seed, ...seed, ...seed, ...seed, ...seed, ...seed, ...seed, ...seed, ...seed, ...seed)
+labels: Array(...hundred, ...hundred)
+many: Array(...labels)
+check("declaration count", many.size() == total)
+// Distinct names "a", "aa", ...; even positions are u8, odd positions i32.
+spelling: ""
+position: 0
+while(position < total) {
+    spelling = spelling + "a"
+    labels[position] = spelling
+    layout: FFI.u8
+    if((position % 2) == 1) { layout = FFI.i32 }
+    many[position] = field(spelling, layout)
+    position = position + 1
+}
+kept: Array(...many)
+wideStruct: FFI.struct(many)
+wideUnion: FFI.union(many)
+many[0] = field("other", FFI.f64)
+many[1] = field(labels[0], FFI.i64)
+check("many struct size", FFI.sizeOf(wideStruct) == 800)
+check("many struct align", FFI.alignOf(wideStruct) == 4)
+check("many union size", FFI.sizeOf(wideUnion) == 4)
+check("many union align", FFI.alignOf(wideUnion) == 4)
+// Each u8/i32 pair occupies 8 bytes: the u8 at the pair base, the i32 at base + 4.
+position = 0
+base: 0
+while(position < total) {
+    expected: base
+    if((position % 2) == 1) {
+        expected = base + 4
+        base = base + 8
+    }
+    check("many struct offset", FFI.offsetOf(wideStruct, path(labels[position])) == expected)
+    check("many union offset", FFI.offsetOf(wideUnion, path(labels[position])) == 0)
+    position = position + 1
+}
+ordinary("many struct snapshot", () => FFI.offsetOf(wideStruct, path("other")))
+ordinary("many union snapshot", () => FFI.offsetOf(wideUnion, path("other")))
+lastDuplicate: Array(...kept)
+lastDuplicate[total - 1] = field(labels[0], FFI.i32)
+ordinary("duplicate at the end", () => FFI.struct(lastDuplicate))
+ordinary("union duplicate at the end", () => FFI.union(lastDuplicate))
+neighbourDuplicate: Array(...kept)
+neighbourDuplicate[total - 1] = field(labels[total - 2], FFI.i32)
+ordinary("duplicate of the neighbour", () => FFI.struct(neighbourDuplicate))
+
+// ---- missing required arguments are rejected; explicit null is a supplied argument
+
+ordinary("field without arguments", () => field())
+ordinary("field without layout", () => field("a"))
+ordinary("field with null layout", () => field("a", null))
+ordinary("struct without fields", () => FFI.struct())
+ordinary("union without fields", () => FFI.union())
+ordinary("array without arguments", () => FFI.array())
+ordinary("array without count", () => FFI.array(FFI.i8))
+ordinary("array with null count", () => FFI.array(FFI.i8, null))
+ordinary("pointer without pointee", () => FFI.pointer())
+ordinary("pointer with null pointee", () => FFI.pointer(null))
+ordinary("sizeOf without layout", () => FFI.sizeOf())
+ordinary("alignOf without layout", () => FFI.alignOf())
+ordinary("offsetOf without arguments", () => FFI.offsetOf())
+ordinary("offsetOf without path", () => FFI.offsetOf(padded))
+ordinary("offsetOf with null path", () => FFI.offsetOf(padded, null))
+ordinary("bindPreserving without arguments", () => FFI.bindPreserving())
+
+// ---- prototype association: exact identities, no mutation, no guest behavior
+
+Point: {
+    x: 1
+    y: 2
+    sum: () => { this.x + this.y }
+}
+pointParent: Point.parent()
+pointNames: Point.slotNames()
+pointLayout: FFI.struct(Array(field("x", FFI.i32), field("y", FFI.i32)))
+check("prototype answers itself", FFI.prototype(pointLayout, Point) === Point)
+check("layoutOf exact", FFI.layoutOf(Point) === pointLayout)
+check("prototype idempotent", FFI.prototype(pointLayout, Point) === Point)
+check("layoutOf unchanged", FFI.layoutOf(Point) === pointLayout)
+check("parent unchanged", Point.parent() === pointParent)
+check("slot count unchanged", Point.slotNames().size() == pointNames.size())
+check("slots unchanged", Point.hasSlot("x") && Point.hasSlot("y") && Point.hasSlot("sum"))
+check("methods work", Point.sum() == 3)
+derivedPoint: Point { x: 10 }
+check("ordinary derivation", derivedPoint.sum() == 12)
+Point.x = 5
+check("mutable slots do not change the layout", FFI.layoutOf(Point) === pointLayout)
+check("layout size unchanged", FFI.sizeOf(FFI.layoutOf(Point)) == 8)
+ordinary("associated layout frozen", () => pointLayout.createSlot("extra", 1))
+
+initialized: 0
+Counter: {
+    count: 0
+    init: () => {
+        initialized = initialized + 1
+        this
+    }
+}
+FFI.prototype(pointLayout, Counter)
+check("registration does not initialize", initialized == 0)
+
+// Identical structure, distinct identities.
+Twin: { value: 1 }
+OtherTwin: { value: 1 }
+twinLayout: FFI.struct(Array(field("value", FFI.i64)))
+sameShapeLayout: FFI.struct(Array(field("value", FFI.i64)))
+FFI.prototype(twinLayout, Twin)
+ordinary("structural twin is not registered", () => FFI.layoutOf(OtherTwin))
+FFI.prototype(sameShapeLayout, OtherTwin)
+check("independent twins", (FFI.layoutOf(Twin) === twinLayout) && (FFI.layoutOf(OtherTwin) === sameShapeLayout))
+ordinary("conflicting association", () => FFI.prototype(sameShapeLayout, Twin))
+check("conflict leaves the association", FFI.layoutOf(Twin) === twinLayout)
+
+// No delegation-based lookup.
+Child: Twin { extra: 2 }
+ordinary("descendant is not registered", () => FFI.layoutOf(Child))
+FFI.prototype(padded, Child)
+check("descendant association", FFI.layoutOf(Child) === padded)
+check("parent association independent", FFI.layoutOf(Twin) === twinLayout)
+
+// Registration and lookup invoke no guest behavior on the candidate.
+invoked: 0
+trap: { state: 0 }
+for(selector in Array("==", "!=", "hash", "parent", "slotNames", "slotValue", "hasSlot",
+        "call", "construct", "init", "freeze", "close", "removeSlot", "updateSlot")) {
+    trap.createSlot(selector, (...ignored) => {
+        invoked = invoked + 1
+        Error().signal()
+    })
+}
+trap.createSlot("createSlot", (...ignored) => {
+    invoked = invoked + 1
+    Error().signal()
+})
+check("trap registration", FFI.prototype(quad, trap) === trap)
+check("trap lookup", FFI.layoutOf(trap) === quad)
+check("trap idempotent", FFI.prototype(quad, trap) === trap)
+ordinary("trap conflict", () => FFI.prototype(padded, trap))
+check("no guest selector invoked", invoked == 0)
+
+// Structural state is neither required nor changed.
+opened: { slot: 1 }
+closed: { slot: 1 }
+closed.close()
+frozen: { slot: 1 }
+frozen.freeze()
+check("open registration", FFI.prototype(padded, opened) === opened)
+check("closed registration", FFI.prototype(padded, closed) === closed)
+check("frozen registration", FFI.prototype(padded, frozen) === frozen)
+opened.createSlot("later", 2)
+check("open stays open", opened.later == 2)
+ordinary("closed stays closed", () => closed.createSlot("later", 2))
+closed.slot = 3
+check("closed stays updatable", closed.slot == 3)
+ordinary("frozen stays frozen", () => frozen.updateSlot("slot", 3))
+
+// Specialized values are not ordinary objects.
+bytes: Encoding.UTF8.encode("ab")
+for(value in Array(null, true, false, 7, 18446744073709551616, 1.5, "text", Array(1),
+        Map(), IdentityMap(), (x) => x, bytes, Complex(1, 2))) {
+    ordinary("specialized value", () => FFI.prototype(padded, value))
+    ordinary("specialized lookup", () => FFI.layoutOf(value))
+}
+// An ordinary object delegating to a specialized prototype is still an ordinary object.
+textLike: String { tag: 1 }
+check("ordinary child of a specialized prototype", FFI.prototype(padded, textLike) === textLike)
+
+// Invalid layouts and arity.
+Plain: { value: 0 }
+ordinary("forged layout", () => FFI.prototype({}, Plain))
+ordinary("field layout", () => FFI.prototype(a, Plain))
+ordinary("void layout", () => FFI.prototype(FFI.void, Plain))
+ordinary("utf8z layout", () => FFI.prototype(FFI.utf8z, Plain))
+ordinary("out layout", () => FFI.prototype(FFI.out(FFI.i32), Plain))
+ordinary("null layout", () => FFI.prototype(null, Plain))
+ordinary("null prototype", () => FFI.prototype(padded, null))
+ordinary("prototype without arguments", () => FFI.prototype())
+ordinary("prototype without prototype", () => FFI.prototype(padded))
+ordinary("prototype extra argument", () => FFI.prototype(padded, Plain, Plain))
+ordinary("layoutOf without argument", () => FFI.layoutOf())
+ordinary("layoutOf extra argument", () => FFI.layoutOf(Point, Point))
+ordinary("layoutOf null", () => FFI.layoutOf(null))
+ordinary("layoutOf unregistered", () => FFI.layoutOf(Plain))
+ordinary("failed registrations leave nothing", () => FFI.layoutOf(Plain))
+check("typed pointer layouts are admitted", FFI.prototype(maybe, { link: 0 }) !== null)
+
+print("FFM-LAYOUTS-PASS")

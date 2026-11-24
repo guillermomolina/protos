@@ -498,6 +498,15 @@ entry are ordinary Errors, while failures of entered foreign operations are
 `ForeignError`. Native status codes are data. No additional Error prototype
 is introduced by `std:ffi`.
 
+Acquisition of the production native FFM provider is admitted only in the
+Process's RootActor (`FFI.md`, RootActor-only native authority). In any other
+Actor, an `ffi:` import, including the one performed by a `std:sqlite` open,
+is refused with an ordinary Error; no native provider operation is entered, so
+the refusal is not a `ForeignError`. In the RootActor, a host library
+authorization failure keeps its existing `ForeignError` behavior (for example
+the `unauthorized-library` category). This restriction introduces no new Error
+prototype.
+
 ## External OS execution failures (D229-B1)
 
 `../io/EXTERNAL_PROCESS.md` uses only existing categories through

@@ -94,9 +94,11 @@ Next steps:
 
 The Java provider knows no SQLite function. It supplies generic ABI
 descriptors and operations; every C function is declared by name and
-signature in Protos source, which also owns all control flow. Each Actor that
-imports `ffi:sqlite3` gets its own session, opened on first import and closed
-with the Actor or Process, releasing any owned resources it still holds.
+signature in Protos source, which also owns all control flow. Only the
+Process's RootActor can acquire the provider: its session opens on its first
+`ffi:` import and closes with the RootActor or Process, releasing any owned
+resources it still holds. The same import in any other Actor fails with an
+ordinary Error before a session is opened or a library is loaded.
 
 > **Trusted C only.** An authorized library runs `TRUSTED_IN_PROCESS`, inside
 > the operating-system process with its full authority: native file and
@@ -308,7 +310,8 @@ payload never contains host objects, addresses, paths, or stacks.
 
 ## Lifetime guarantees
 
-- One session per Actor; sessions share no state, no global registry exists.
+- One session, owned by the RootActor; other Actors cannot acquire one, and no
+  global registry exists.
   Nothing is loaded and no `Linker` is created until the first import.
 - Reference identity is per session and acquisition, never the address; no
   address is ever visible, and no Integer converts to an address.

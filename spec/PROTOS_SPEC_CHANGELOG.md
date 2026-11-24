@@ -23,6 +23,13 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.509] - 2026-11-25
+
+### D261-R2 / I174-A — Fixed-width scalars, declarative layouts and RootActor native admission
+
+- Primary owner `semantics/FFI.md`: define the D261-R2 scalar and declarative layout surface, exact scalar admission and f32 rounding, layout/prototype identity separation, bindPreserving and RootActor-only native FFM authority.
+- Reconcile `concurrency/ACTORS.md`, `semantics/ERRORS.md`, `semantics/MODULES.md` and `semantics/SQLITE.md` with the native authority boundary and unchanged ordinary module, error, transfer and trusted in-process contracts.
+
 ## [0.1.508] - 2026-11-24
 
 ### D262-A / I173 — Explicit reflective local slot creation and update

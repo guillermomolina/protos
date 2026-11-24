@@ -33,7 +33,11 @@ options it needs (``sqlite3=libsqlite3.so.0`` for SQLite), and the negative
 cases prove that provider presence alone authorizes nothing. The two-library
 case compiles ``native/ffi_test.c`` and ``native/ffi_second.c`` under the
 runner's work directory and authorizes both by absolute path under the same
-distributable JAR. The ``ffi-test`` ABI fixture (``ffm-abi.protos``) is run by
+distributable JAR. I174 adds, under the same distributable JAR, the pure
+declarative layout program (``ffm-layouts.protos``, no library grant) and the
+fixed-width scalar and C-measured layout program
+(``ffm-scalar-layout-abi.protos``), which authorizes both compiled fixtures
+and calls the same registered scalar shape through each of them. The ``ffi-test`` ABI fixture (``ffm-abi.protos``) is run by
 the Java test host ``ProtosI144FfmFixtureAbiTest``. Missing platform support or
 shared SQLite is reported as UNSUPPORTED, never as PASS. The I144 tutorials
 and examples (``protos/tutorials``, ``protos/examples/ffi``) run from their
@@ -179,6 +183,9 @@ RESULT_KEYS = (
     "I169_CLI_INVALID_OPTIONS",
     "I169_TOOLS_DENIED",
     "I169_TWO_LIBRARIES",
+    "I174_FFM_LAYOUTS",
+    "I174_FFM_SCALAR_LAYOUT_ABI",
+    "I174_FFM_ROOT_ACTOR",
     *(key for key, _, _ in LIB029_CASES),
     *(key for key, _, _ in LIB030_CASES),
     *(key for key, _ in LIB031_CASES),
@@ -565,7 +572,7 @@ I169_PARSE_KEYS = ("I169_DISTRIBUTION_BASELINE", "I169_CLI_INVALID_OPTIONS", "I1
 def native_keys() -> list[str]:
     """Result keys that need the native FFM provider (Linux x86_64, JDK 25)."""
     return [key for key in RESULT_KEYS
-            if (key.startswith(("I144_", "I169_", "DOC024_", "LIB030_", "LIB031_"))
+            if (key.startswith(("I144_", "I169_", "I174_", "DOC024_", "LIB030_", "LIB031_"))
                 or (key.startswith("LIB029_") and key != "LIB029_MISSING"))
             and key not in I169_PARSE_KEYS]
 
@@ -700,10 +707,15 @@ def plan_i169(runner: Runner, install: Path, provider: Path, plan: list) -> None
                    *library_options((f"sqlite3={missing}",)), sqlite_program],
                   "i169-library-unavailable", "I144-FFM-SQLITE-PASS", []))
 
+    # Declarative layouts need no library grant at all.
+    plan.append(lambda: check_ffm_program(runner, "I174_FFM_LAYOUTS", install,
+                  "ffm-layouts.protos", provider, "FFM-LAYOUTS-PASS"))
+
     compiler = next((found for found in (shutil.which(name) for name in ("cc", "gcc", "clang"))
                      if found is not None), None)
     if compiler is None:
-        runner.record("I169_TWO_LIBRARIES", UNSUPPORTED, "no C compiler (cc, gcc, or clang) on PATH")
+        for key in ("I169_TWO_LIBRARIES", "I174_FFM_SCALAR_LAYOUT_ABI", "I174_FFM_ROOT_ACTOR"):
+            runner.record(key, UNSUPPORTED, "no C compiler (cc, gcc, or clang) on PATH")
         return
     native = runner.work / "i169-native"
     native.mkdir()
@@ -716,7 +728,8 @@ def plan_i169(runner: Runner, install: Path, provider: Path, plan: list) -> None
              "-o", str(target), str(CASES / "native" / source)],
             runner.work, runner.environment())
         if completed.returncode != 0:
-            runner.record("I169_TWO_LIBRARIES", FAIL, f"{source} did not compile")
+            for key in ("I169_TWO_LIBRARIES", "I174_FFM_SCALAR_LAYOUT_ABI", "I174_FFM_ROOT_ACTOR"):
+                runner.record(key, FAIL, f"{source} did not compile")
             return
         libraries[alias] = target
     marker_file = native / "second-marker.txt"
@@ -734,6 +747,13 @@ def plan_i169(runner: Runner, install: Path, provider: Path, plan: list) -> None
             runner.record("I169_TWO_LIBRARIES", FAIL, f"native marker file content {written!r}")
 
     plan.append(two_libraries)
+    # Fixed-width scalars and C-measured layouts; the u8(u8) shape is also called
+    # through the second, independently authorized library.
+    plan.append(lambda: check_ffm_program(runner, "I174_FFM_SCALAR_LAYOUT_ABI", install,
+                  "ffm-scalar-layout-abi.protos", provider, "FFM-SCALAR-LAYOUT-ABI-PASS", grants))
+    # Native FFM authority is RootActor-only; a real secondary Actor is refused.
+    plan.append(lambda: check_ffm_program(runner, "I174_FFM_ROOT_ACTOR", install,
+                  "ffm-root-actor.protos", provider, "FFM-ROOT-ACTOR-PASS", grants))
 
 
 def plan_i169_cli(runner: Runner, install: Path, plan: list) -> None:

@@ -107,9 +107,16 @@ Runtime-provisioned facilities that a host or the Standard Library installs befo
 separate private initializer context under D242. Its public declarations and
 private Actor-local adaptation metadata follow `FFI.md`. Importing `std:ffi`
 loads no native library and creates no FFM session or native authority.
-An independently host-authorized `ffi:` acquisition follows the existing
-foreign-module facade, Actor-local lifecycle and canonical `ModuleKey` rules;
-this library changes none of those rules.
+Every Actor that imports `std:ffi` obtains its own ordinary Actor-local MODULE
+instance, whose declarations and associations need no native authority.
+An `ffi:` acquisition of the production native FFM provider is different: it
+is admitted only in the Process's RootActor, and in any other Actor it fails
+with an ordinary Error before a provider session is opened (`FFI.md`,
+RootActor-only native authority). An admitted, independently host-authorized
+`ffi:` acquisition otherwise follows the existing foreign-module facade,
+Actor-local lifecycle and canonical `ModuleKey` rules, and the canonical key
+path reaches the same admission. The generic foreign MODULE rules for every
+other provider are unchanged.
 
 ## Module Loading, Identity, and Cycles
 

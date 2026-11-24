@@ -24,7 +24,14 @@ tests: [
         Assertions.signals(Error, () => import("ffi:sqlite3"))
     }),
     Test("scalar descriptors are stable ordinary frozen objects", () => {
-        values: Array(FFI.void, FFI.i32, FFI.i64, FFI.f64, FFI.sizeT, FFI.utf8z)
+        values: Array(
+            FFI.void,
+            FFI.i8, FFI.u8,
+            FFI.i16, FFI.u16,
+            FFI.i32, FFI.u32,
+            FFI.i64, FFI.u64,
+            FFI.f32, FFI.f64,
+            FFI.sizeT, FFI.utf8z)
         Assertions.require(FFI.i32 === FFI.i32)
         Assertions.require(FFI.i32 !== FFI.i64)
         for(value in values) {
@@ -34,8 +41,16 @@ tests: [
         null
     }),
     Test("public surface contains exactly the approved members", () => {
-        expected: Array("void", "i32", "i64", "f64", "sizeT", "utf8z",
-            "opaque", "nullable", "owned", "out", "bind", "release")
+        expected: Array(
+            "void",
+            "i8", "u8", "i16", "u16",
+            "i32", "u32", "i64", "u64",
+            "f32", "f64", "sizeT", "utf8z",
+            "opaque", "nullable", "owned", "out",
+            "bind", "bindPreserving", "release",
+            "field", "struct", "union", "array", "pointer",
+            "sizeOf", "alignOf", "offsetOf",
+            "prototype", "layoutOf")
         names: FFI.slotNames()
         Assertions.require(names.size() == expected.size())
         for(name in expected) {

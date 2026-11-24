@@ -107,10 +107,12 @@ Protos API.
 
 ## Public declarations
 
-The MODULE exports exactly six scalar descriptors (`void`, `i32`, `i64`,
-`f64`, `sizeT`, `utf8z`) and six ordinary Closures (`opaque`, `nullable`,
-`owned`, `out`, `bind`, `release`). Helpers, descriptor adaptation metadata,
-and release dispatch metadata are private and Actor-local. No public descriptor
+The MODULE exports exactly thirteen scalar descriptors (`void`, `i8`, `u8`,
+`i16`, `u16`, `i32`, `u32`, `i64`, `u64`, `f32`, `f64`, `sizeT`, `utf8z`)
+and seventeen ordinary Closures (`opaque`, `nullable`, `owned`, `out`, `bind`,
+`bindPreserving`, `release`, `field`, `struct`, `union`, `array`, `pointer`,
+`sizeOf`, `alignOf`, `offsetOf`, `prototype`, `layoutOf`). Helpers, descriptor adaptation metadata,
+layout metadata and release dispatch metadata are private and Actor-local. No public descriptor
 slot layout is defined. Descriptors are immutable ordinary frozen Protos
 objects, not exposed provider classes or records. Repeated reads of one scalar
 descriptor in one MODULE instance preserve its identity; distinct scalar
@@ -120,9 +122,16 @@ structurally similar objects do not forge declarations.
 | Descriptor | Input / result domain |
 |---|---|
 | `void` | Return only; direct result is `null` |
+| `i8` | Exact Integer in -128..127 |
+| `u8` | Exact Integer in 0..255 |
+| `i16` | Exact Integer in -32768..32767 |
+| `u16` | Exact Integer in 0..65535 |
 | `i32` | Exact Integer in -2147483648..2147483647 |
+| `u32` | Exact Integer in 0..4294967295 |
 | `i64` | Exact Integer in -9223372036854775808..9223372036854775807 |
+| `u64` | Exact Integer in 0..18446744073709551615 |
 | `sizeT` | Exact Integer in 0..18446744073709551615 in the initial LP64 profile |
+| `f32` | Float input rounded once to IEEE binary32; result is the exact Float value of the binary32 result; no Integer-to-Float coercion |
 | `f64` | Float, IEEE binary64; no Integer-to-Float coercion |
 | `utf8z` | Input-only String, strict UTF-8 with one trailing NUL; interior NUL and invalid Unicode are rejected |
 | opaque | Non-null foreign resource of the declared logical type, library, session and live generation |
@@ -130,17 +139,41 @@ structurally similar objects do not forge declarations.
 | owned opaque | Result-only resource acquisition with declared destructor and provider custody; native NULL becomes `null` |
 
 Native integral results become exact Protos Integers, including unsigned
-`sizeT` values above the signed 64-bit range. Inputs are never rounded,
-truncated, wrapped, parsed from text, or implicitly numerically coerced.
+`u64` and `sizeT` values above the signed 64-bit range; an unsigned result is
+never negative. Integer inputs are never rounded, truncated, wrapped, parsed
+from text, or implicitly numerically coerced: a signed or unsigned descriptor
+admits exactly its stated range, and a negative Integer is never admitted for
+an unsigned descriptor. A Float is never admitted for an Integer descriptor
+and an Integer is never admitted for `f32` or `f64`.
+
+`f32` is the only descriptor that rounds. The binary64 Float input is rounded
+once to binary32 according to IEEE 754 roundTiesToEven, including its
+specified overflow threshold. Finite values above the largest finite binary32
+value may round to that largest finite value or to an infinity of the same
+sign according to this rounding rule. The sign of zero is kept, values below
+the binary32 normal range round to binary32 subnormals or to a zero of the
+same sign, infinities are kept, and NaN remains the canonical semantic NaN.
+A binary32 result or output is widened exactly to a Float. Protos acquires no binary32 value
+family: the semantic value is always a Float.
+
+The physical carrier of a scalar is fixed by its width (8, 16, 32 or 64 bits
+for the integral descriptors; binary32 or binary64 for `f32` and `f64`).
+Signedness is semantic: a signed and an unsigned descriptor of the same width
+share one physical ABI carrier, which holds the two's-complement bit pattern
+of the exact admitted value.
 
 `FFI.opaque(library, nativeTypeName)` declares a logical opaque type associated
 with that exact library facade and original session. The name is a String
 C identifier (ASCII letter or underscore followed by ASCII letters, digits or
 underscores, at most 128 characters). No native address can be constructed.
 
-`FFI.nullable(opaqueDescriptor)` accepts only a plain opaque declaration and
-answers a nullable declaration retaining the same library, session and type.
-It does not make scalars, owned declarations, or output positions nullable.
+`FFI.nullable(descriptor)` accepts a plain opaque declaration or a plain,
+non-nullable typed pointer descriptor (see Declarative layouts). For an opaque
+declaration it answers a nullable declaration retaining the same library,
+session and type. For a typed pointer it answers a fresh frozen nullable
+typed pointer descriptor retaining the exact pointer descriptor identity.
+It does not make scalars, layouts other than typed pointers, owned
+declarations, output positions or nullable declarations nullable.
 
 `FFI.owned(opaqueDescriptor, releaseSymbol, releaseReturnDescriptor)` accepts
 a plain opaque declaration, a String C identifier for a destructor, and
@@ -149,9 +182,142 @@ one reference of that opaque type. Declaration resolves the destructor under
 the original library authority; it does not itself acquire a resource.
 
 `FFI.out(descriptor)` declares a zero-initialized native output slot. Supported
-targets are `i32`, `i64`, `f64`, `sizeT`, opaque, nullable opaque, and owned
-opaque declarations. `void`, `utf8z`, nested `out`, and non-descriptors are
-rejected. An output position consumes no Protos invocation argument.
+targets are the integral scalars, `f32`, `f64`, opaque, nullable opaque, and
+owned opaque declarations. `void`, `utf8z`, nested `out`, field, aggregate and
+typed pointer descriptors, and non-descriptors are rejected. An output position
+consumes no Protos invocation argument.
+
+## Declarative layouts
+
+Layout descriptors describe native data under the Linux x86-64 LP64 profile.
+They are pure, immutable Protos declarations: declaring or querying one
+acquires no library, opens no foreign provider session, enters no native code,
+allocates no native memory and carries no native address. Every declaration
+answers a fresh frozen ordinary object associated with private immutable
+metadata by exact identity; structurally similar objects do not forge one.
+Declarative layout capability is distinct from native memory: this contract
+defines no allocation of, read from, or write to native storage described by a
+layout, and no invocation that passes or returns one.
+
+A *storage layout* is one of the integral scalars, `f32`, `f64`, a struct, a
+union, a fixed array, a typed pointer or a nullable typed pointer. `void`,
+`utf8z`, `out`, opaque, nullable opaque, owned and field descriptors are not
+storage layouts.
+
+| Storage layout | Size | Alignment |
+|---|---:|---:|
+| `i8`, `u8` | 1 | 1 |
+| `i16`, `u16` | 2 | 2 |
+| `i32`, `u32`, `f32` | 4 | 4 |
+| `i64`, `u64`, `sizeT`, `f64` | 8 | 8 |
+| typed pointer, nullable typed pointer | 8 | 8 |
+
+Layout sizes and offsets are exact Integers in the signed-addressable domain
+0..9223372036854775807. Every size and offset computation is performed with
+exact Integer arithmetic and checked against that bound before it becomes
+layout metadata; a declaration whose intermediate or final size or offset
+would exceed it is rejected with an ordinary Error. Rounding an offset up to
+an alignment adds `(alignment - (offset mod alignment)) mod alignment`.
+
+`FFI.field(name, layout)` requires exactly two arguments: a String name and a
+storage layout. Every String is a valid field name, including the empty
+String, whitespace, punctuation, dots, reserved words and non-identifiers; no
+C identifier rule applies. It answers a fresh field declaration.
+
+`FFI.struct(fields)` and `FFI.union(fields)` require exactly one ordinary Array
+of at least one field declaration. The Array is shallowly snapshotted before
+use; later mutation does not change the declaration. Field names must be
+pairwise distinct under String equality; a duplicate is rejected.
+
+- A struct lays out its fields in source order. For each field, the occupied
+  size is rounded up to the field's alignment, that value is the field's
+  offset, and the field's size is added. The struct's alignment is the largest
+  field alignment, and its size is the occupied size rounded up to that
+  alignment, which includes internal and tail padding.
+- A union places every field at offset zero. Its alignment is the largest
+  field alignment and its size is the largest field size rounded up to that
+  alignment. A union has no active-member tag and no member is selected or
+  inferred.
+
+`FFI.array(element, count)` requires exactly two arguments: a storage layout
+and an exact positive Integer count. Its stride is the element size, its size
+is `count` times the stride and its alignment is the element alignment. It
+retains the exact element descriptor identity and count; its metadata does not
+grow with the count.
+
+`FFI.pointer(pointee)` accepts a storage layout or `FFI.void` and answers a
+typed data pointer descriptor retaining the exact pointee identity. A pointer
+to `void` has no pointee size. `FFI.nullable(pointer)` answers a nullable
+typed pointer retaining the exact pointer and pointee identities. Nullable and
+non-nullable typed pointers have identical size, alignment and array stride,
+and both may be aggregate members, array elements and pointee layouts;
+nullability affects only the admission of native values, not physical
+storage. A nullable typed pointer is distinct from the nominal R1 nullable
+opaque declaration, which is not a storage layout. Both typed pointer kinds
+are declarative only: no pointer value, address, dereference, pointer
+arithmetic, native invocation or memory access is defined for either.
+
+`FFI.sizeOf(layout)` and `FFI.alignOf(layout)` answer the exact size and
+alignment of a storage layout. `FFI.offsetOf(layout, path)` answers the byte
+offset reached from a storage layout by an ordinary Array path, which is
+shallowly snapshotted. An empty path answers zero. At a struct or union, the
+selector must be a String naming one of its fields, and the field offset is
+added; a String is always one selector, so a dot does not separate selectors.
+At a fixed array, the selector must be an exact Integer in `0..count-1`, and
+the index times the stride is added. Any other selector kind, an unknown
+field, an index out of range, or a selector applied at a scalar or at a typed
+pointer is rejected; a pointer is never dereferenced.
+
+Every rejected layout declaration or query is an ordinary Error.
+
+The integral scalar storage layouts, `f32` and `f64` are the scalar
+descriptors of Public declarations and are admitted by `bind`,
+`bindPreserving` and `out` as described there. Struct, union, fixed array,
+field, typed pointer and nullable typed pointer descriptors are not invocation
+descriptors in this revision: used as a return, parameter or `out` target they
+are rejected with an ordinary Error before any provider signature is composed
+and before native entry. An aggregate is never passed as a pointer.
+
+### Prototype association
+
+A layout describes immutable native ABI storage; an ordinary Protos prototype
+describes Protos behavior. They remain separate objects, and an association
+between them is Actor-local state of one `std:ffi` MODULE instance.
+
+`FFI.prototype(layout, ordinaryPrototype)` requires exactly two arguments: a
+storage layout and an ordinary object. Specialized values (`null`, Booleans,
+numbers, Strings, collections, Closures, Bytes and other specialized values)
+are not ordinary objects; an ordinary object is admitted whatever its
+delegation parent, local slots, or open, closed or frozen state. The
+association maps the exact prototype identity to the exact layout descriptor
+identity. Registering the same layout identity again for the same prototype is
+idempotent; a different layout identity, even one with identical size,
+alignment and fields, is rejected with an ordinary Error and leaves the
+existing association unchanged. The operation answers the exact supplied
+prototype.
+
+`FFI.layoutOf(prototype)` requires exactly one argument and answers the exact
+layout descriptor associated with that exact prototype identity. An absent
+association is an ordinary Error; no delegation parent or descendant is
+consulted and no layout is inferred from structure.
+
+Neither operation mutates, freezes, closes, constructs, initializes or sends
+any message to the prototype, and neither uses its equality or hash. Ordinary
+`call`, `construct` and `init` behavior of the prototype is unchanged.
+Association requires no native authority, library or foreign provider
+session. Another Actor's `std:ffi` MODULE instance has its own, independent
+associations.
+
+### Not yet implemented
+
+The following capabilities are not provided by this revision. They are not
+rejected design directions: `FFI.cType` (a public C-type query
+of the active ABI profile), native region allocation, physical native pointer
+operations including typed pointer invocation, aggregate-by-value invocation,
+reading or writing native memory through a layout, borrowed pointer
+descriptors, extent assertions and aggregate projection.
+
+
 
 ## Binding and invocation
 
@@ -164,6 +330,13 @@ the binding. Library-associated descriptors cannot silently migrate to another
 library or session. A return is scalar except `utf8z`, opaque, nullable opaque,
 or owned opaque. Parameters are non-void input scalars, opaque, nullable opaque,
 or supported `out` positions; owned declarations are not direct input positions.
+
+`FFI.bindPreserving(library, symbol, returnDescriptor, argumentDescriptors)`
+has exactly the admission, invocation, result and failure semantics of `bind`,
+and additionally declares the trusted ABI assertion that the C function leaves
+earlier borrowed native regions valid (see Borrowed memory and isolation).
+Each of `bind` and `bindPreserving` answers a fresh ordinary Closure on every
+successful declaration.
 
 The result is a new ordinary Closure capturing the native binding and private
 adaptation metadata. Repeated declarations may reuse a provider's cached native
@@ -189,6 +362,16 @@ ordinary Errors before native entry. A failure of an entered foreign operation
 (such as symbol resolution or native result conversion) is a fresh `ForeignError`
 under D188, with only its existing safe payload; no new Error prototype is added.
 The public adapter does not reinterpret or swallow those failures.
+
+### Native Image scalar admission
+
+In a Native Image executable, a declaration is admitted only when the exact
+physical carrier shape of its signature (return and parameter carriers,
+including address carriers for outputs) belongs to the finite set registered
+for that image. A valid declaration of any other shape is refused with an
+ordinary Error before linking and before native entry; no fallback shape or
+coercion is attempted. A JVM admits every valid declaration. Signed and
+unsigned descriptors of one width share a registered shape.
 
 ## Custody, identity and release
 
@@ -227,11 +410,33 @@ Session close revokes all such regions. A preserving declaration is a trusted
 ABI assertion, not a physical proof of native memory lifetime. A copy is
 independent of subsequent native mutations.
 
-R1 defines no public `FFI.borrowed`, `FFI.preserving`, `FFI.copy`, or equivalent
-memory-reading method. Consequently public `bind` accepts no borrowed-memory
-descriptor and publishes no borrowed-memory wrapper with an extended lifetime
-promise. The private mechanism remains available for the separately owned
+A binding declared by `FFI.bindPreserving` carries this preserving assertion:
+its validated calls do not advance the borrow epoch, so they leave earlier
+borrowed regions valid; a binding declared by `FFI.bind` does advance it.
+The public API defines no `FFI.borrowed`, `FFI.preserving`, `FFI.copy`, or
+equivalent memory-reading method. Consequently neither `bind` nor
+`bindPreserving` accepts a borrowed-memory descriptor, and neither publishes a
+borrowed-memory wrapper with an extended lifetime promise. The private mechanism remains available for the separately owned
 LIB029 adaptation; it does not authorize a new public method in this slice.
+
+### RootActor-only native authority
+
+Only the Process's RootActor can acquire a session of the production native
+FFM provider (`protos-ffm`), and only the RootActor directly uses that native
+authority. An `ffi:` import, or any other acquisition of that provider, from
+any other Actor fails with an ordinary Error before any provider session,
+library load or native entry; the failure leaves no cached MODULE or session,
+and the RootActor's own session never authorizes another Actor. Host library
+authorization remains independently required: RootActor identity alone
+authorizes no library. RootActor identity is the logical Actor identity of the
+Process, not a particular Java or operating-system thread.
+
+Importing `std:ffi` grants no native authority. Its source-backed declarations,
+layout queries and prototype associations are ordinary Actor-local MODULE
+behavior, available to every Actor. Native code entered by the RootActor
+remains trusted in-process code: its effects, including threads it creates,
+are not Protos Actors and are not confined by this restriction. Other foreign
+providers keep their own existing contracts.
 
 Live native sessions, library authority, bindings capturing such authority,
 resources and borrowed regions have no automatic Actor or P transfer contract
@@ -244,7 +449,8 @@ not make an otherwise forbidden transfer valid.
 
 ## Exclusions
 
-R1 excludes numeric pointers, pointer arithmetic, C structures, callbacks and
+R1 excludes numeric pointers, pointer arithmetic, native C structure values
+and aggregate invocation (declarative layouts excepted), callbacks and
 upcalls, variadic functions, C++, arbitrary library paths, `SQLITE_TRANSIENT`,
 a mandatory binding generator, external plugin execution in Native Image,
 and a second semantics of invocation. It defines no SQLite connection,

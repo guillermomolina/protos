@@ -76,6 +76,12 @@ final class ProtosForeignProviderProcessLifecycle {
                                 () ->
                                         new IllegalArgumentException(
                                                 "unknown foreign provider: " + providerId.value()));
+        // Native FFM authority belongs to the Process's RootActor alone; this pre-entry refusal
+        // precedes every session, compartment, library, Linker and Arena acquisition.
+        if (ProtosExternalProviderPluginLoader.INTEGRATED_PROVIDER_ID.equals(providerId.value())
+                && !actor.isRootActorForRuntime()) {
+            throw new IllegalStateException("native FFM requires the RootActor");
+        }
         ProtosForeignProviderAdmission.require(descriptor);
 
         Slot<ProtosForeignProviderSessionBinding> slot;

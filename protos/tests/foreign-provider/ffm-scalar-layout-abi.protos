@@ -1,0 +1,366 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// Fixed-width scalar downcalls, scalar outputs, public preserving binding and
+// declarative layouts compared with C facts computed by sizeof, _Alignof and
+// offsetof. The host authorizes exactly:
+//   first=<absolute libffi_test.so>   (native/ffi_test.c)
+//   second=<absolute libffi_second.so> (native/ffi_second.c)
+// Run by ProtosI144FfmFixtureAbiTest, dist/test_external_foreign_providers.py
+// and dist/validate_native.py.
+
+FFI: import("std:ffi")
+first: import("ffi:first")
+second: import("ffi:second")
+
+// Every check carries a label, so a failure names its location
+// (the Java host reports the `label` slot of the CheckFailure).
+CheckFailure: Error {}
+
+check: (label, condition) => {
+    (condition === true).ifFalse(() => {
+        failure: CheckFailure { label: label }
+        failure.signal()
+    })
+    null
+}
+
+caught: (prototype, body) => {
+    result: null
+    prototype.handle(body, (error) => {
+        result = error
+        error
+    })
+    result
+}
+
+/// The ordinary pre-entry Error, never a ForeignError.
+ordinary: (label, body) => {
+    error: caught(Error, body)
+    check(label, (error === null) == false)
+    check(label + " is ordinary", (error.parent() === ForeignError) == false)
+}
+
+/// A ForeignError signalled after entry.
+foreign: (label, body) => {
+    error: caught(ForeignError, body)
+    check(label, (error === null) == false)
+}
+
+declare: (symbol, returns, parameters) => FFI.bind(first, symbol, returns, parameters)
+calls: declare("ffi_test_scalar_calls_count", FFI.i32, Array())
+
+// Rejected calls never enter C: the native entry counter is unchanged.
+rejected: (label, body) => {
+    before: calls()
+    ordinary(label, body)
+    check(label + " did not enter C", calls() == before)
+}
+
+// ---- signed narrow integers
+
+i8: declare("ffi_test_i8_identity", FFI.i8, Array(FFI.i8))
+i16: declare("ffi_test_i16_identity", FFI.i16, Array(FFI.i16))
+entered: calls()
+check("i8 min", i8(-128) == -128)
+check("i8 max", i8(127) == 127)
+check("i8 zero", i8(0) == 0)
+check("i16 min", i16(-32768) == -32768)
+check("i16 max", i16(32767) == 32767)
+check("signed entries", calls() == entered + 5)
+rejected("i8 below", () => i8(-129))
+rejected("i8 above", () => i8(128))
+rejected("i16 below", () => i16(-32769))
+rejected("i16 above", () => i16(32768))
+rejected("i8 float", () => i8(1.0))
+rejected("i8 string", () => i8("1"))
+rejected("i8 null", () => i8(null))
+rejected("i8 arity", () => i8())
+rejected("i8 extra", () => i8(1, 2))
+
+// ---- unsigned integers: the complete unsigned domain, never a negative value
+
+u8: declare("ffi_test_u8_identity", FFI.u8, Array(FFI.u8))
+u16: declare("ffi_test_u16_identity", FFI.u16, Array(FFI.u16))
+u32: declare("ffi_test_u32_identity", FFI.u32, Array(FFI.u32))
+u64: declare("ffi_test_u64_identity", FFI.u64, Array(FFI.u64))
+check("u8 min", u8(0) == 0)
+check("u8 max", u8(255) == 255)
+check("u8 high bit", u8(128) == 128)
+check("u16 min", u16(0) == 0)
+check("u16 max", u16(65535) == 65535)
+check("u16 high bit", u16(32768) == 32768)
+check("u32 min", u32(0) == 0)
+check("u32 max", u32(4294967295) == 4294967295)
+check("u32 high bit", u32(2147483648) == 2147483648)
+check("u64 min", u64(0) == 0)
+check("u64 signed max", u64(9223372036854775807) == 9223372036854775807)
+check("u64 above signed max", u64(9223372036854775808) == 9223372036854775808)
+check("u64 max", u64(18446744073709551615) == 18446744073709551615)
+check("u64 large result is an Integer", Integer.recognizes(u64(18446744073709551615)))
+rejected("u8 below", () => u8(-1))
+rejected("u8 above", () => u8(256))
+rejected("u16 below", () => u16(-1))
+rejected("u16 above", () => u16(65536))
+rejected("u32 below", () => u32(-1))
+rejected("u32 above", () => u32(4294967296))
+rejected("u64 below", () => u64(-1))
+rejected("u64 above", () => u64(18446744073709551616))
+rejected("u64 float", () => u64(1.0))
+rejected("u32 float", () => u32(0.0))
+
+// ---- f32: one IEEE binary32 rounding of a Float input
+
+f32: declare("ffi_test_f32_identity", FFI.f32, Array(FFI.f32))
+power: (exponent) => {
+    value: 1.0
+    factor: 2.0
+    count: exponent
+    if(exponent < 0) {
+        factor = 0.5
+        count = 0 - exponent
+    }
+    while(count > 0) {
+        value = value * factor
+        count = count - 1
+    }
+    value
+}
+infinity: 1.0 / 0.0
+negativeInfinity: 0.0 - infinity
+negativeZero: 0.0 * -1.0
+check("f32 one", f32(1.5) == 1.5)
+check("f32 positive zero", (f32(0.0) == 0.0) && ((1.0 / f32(0.0)) == infinity))
+check("f32 negative zero", (f32(negativeZero) == 0.0) && ((1.0 / f32(negativeZero)) == negativeInfinity))
+check("f32 representative", f32(0.1) == 0.10000000149011612)
+check("f32 negative", f32(-2.75) == -2.75)
+check("f32 result is a Float", Float.recognizes(f32(0.25)))
+smallestSubnormal: power(-149)
+check("f32 smallest subnormal", f32(smallestSubnormal) == smallestSubnormal)
+check("f32 subnormal", f32(smallestSubnormal * 3.0) == smallestSubnormal * 3.0)
+check("f32 subnormal halfway to even zero", f32(power(-150)) == 0.0)
+check("f32 subnormal above halfway", f32(power(-150) * 1.5) == smallestSubnormal)
+check("f32 halfway to even below", f32(1.0 + power(-24)) == 1.0)
+check("f32 halfway to even above", f32(1.0 + (3.0 * power(-24))) == 1.0 + power(-22))
+check("f32 above halfway", f32(1.0 + power(-24) + power(-40)) == 1.0 + power(-23))
+largest: (2.0 - power(-23)) * power(127)
+check("f32 largest finite", f32(largest) == largest)
+check("f32 overflow", f32(largest * 2.0) == infinity)
+check("f32 negative overflow", f32(0.0 - (largest * 2.0)) == negativeInfinity)
+check("f32 infinity", f32(infinity) == infinity)
+check("f32 negative infinity", f32(negativeInfinity) == negativeInfinity)
+// The rounding threshold: half an ulp (2^103) above the largest finite value
+// rounds to even, which is the overflow; anything below rounds back.
+check("f32 below the overflow threshold", f32(largest + power(102)) == largest)
+check("f32 at the overflow threshold", f32(largest + power(103)) == infinity)
+check("f32 negative below the threshold",
+    f32(0.0 - (largest + power(102))) == (0.0 - largest))
+check("f32 negative at the threshold", f32(0.0 - (largest + power(103))) == negativeInfinity)
+// Halfway between zero and the smallest subnormal rounds to the even zero, keeping its sign.
+positiveTiny: f32(power(-150))
+negativeTiny: f32(0.0 - power(-150))
+check("f32 positive underflow identity", positiveTiny === 0.0)
+check("f32 positive underflow sign", (1.0 / positiveTiny) == infinity)
+check("f32 negative underflow identity", negativeTiny === negativeZero)
+check("f32 negative underflow is not positive zero", (negativeTiny === 0.0) == false)
+check("f32 negative underflow sign", (1.0 / negativeTiny) == negativeInfinity)
+check("f32 negative zero identity", f32(negativeZero) === negativeZero)
+nan: f32(0.0 / 0.0)
+check("f32 NaN is a Float", Float.recognizes(nan))
+check("f32 NaN", (nan == nan) == false)
+check("f32 NaN identity", nan === (0.0 / 0.0))
+rejected("f32 integer", () => f32(1))
+rejected("f32 string", () => f32("1.0"))
+rejected("f32 null", () => f32(null))
+
+// ---- scalar outputs: real native pointers, results in ABI position order
+
+narrow: declare("ffi_test_out_narrow", FFI.i32,
+    Array(FFI.out(FFI.i8), FFI.out(FFI.u8), FFI.out(FFI.i16), FFI.out(FFI.u16)))
+narrowed: narrow()
+check("narrow outputs", Array.recognizes(narrowed) && (narrowed.size() == 5))
+check("narrow status", narrowed[0] == 4)
+check("narrow i8", narrowed[1] == -128)
+check("narrow u8", narrowed[2] == 255)
+check("narrow i16", narrowed[3] == -32768)
+check("narrow u16", narrowed[4] == 65535)
+wide: declare("ffi_test_out_wide", FFI.i32,
+    Array(FFI.out(FFI.u32), FFI.out(FFI.u64), FFI.out(FFI.f32)))
+widened: wide()
+check("wide outputs", widened.size() == 4)
+check("wide status", widened[0] == 3)
+check("wide u32", widened[1] == 4294967295)
+check("wide u64", widened[2] == 18446744073709551614)
+check("wide f32", widened[3] == -1.5)
+check("fresh output Arrays", widened !== wide())
+// Every invocation publishes a fresh, independent Array in ABI position order.
+again: narrow()
+check("narrow fresh", again !== narrowed)
+narrowed[1] = 0
+check("narrow independent", again[1] == -128)
+check("narrow order low", (again[0] == 4) && (again[1] == -128) && (again[2] == 255))
+check("narrow order high", (again[3] == -32768) && (again[4] == 65535))
+mixedOutputs: declare("ffi_test_divmod", FFI.i32,
+    Array(FFI.i32, FFI.i32, FFI.out(FFI.i32), FFI.out(FFI.i32)))
+quotient: mixedOutputs(-17, 5)
+check("inputs before outputs", (quotient.size() == 3) && (quotient[0] == 0))
+check("outputs in position order", (quotient[1] == -3) && (quotient[2] == -2))
+rejected("outputs consume no argument", () => narrow(1))
+
+// ---- fresh ordinary Closures
+
+check("fresh closure", i8 !== declare("ffi_test_i8_identity", FFI.i8, Array(FFI.i8)))
+check("closure is ordinary", i8.parent() === Object)
+parameters: Array(FFI.u8)
+snapshot: declare("ffi_test_u8_identity", FFI.u8, parameters)
+parameters[0] = FFI.i8
+check("parameters snapshotted", snapshot(200) == 200)
+
+// ---- the u8(u8) shape through a second, independently authorized library
+
+complement: FFI.bind(second, "ffi_second_u8_complement", FFI.u8, Array(FFI.u8))
+check("second u8 zero", complement(0) == 255)
+check("second u8 max", complement(255) == 0)
+check("second u8 mixed", complement(15) == 240)
+ordinary("second u8 above", () => complement(256))
+foreign("symbols stay in their library", () => FFI.bind(second, "ffi_test_u8_identity", FFI.u8, Array(FFI.u8)))
+
+// ---- declarative layouts are not bindable in this slice
+
+padded: FFI.struct(Array(
+    FFI.field("a", FFI.i8), FFI.field("b", FFI.i32), FFI.field("c", FFI.i16)))
+pointer: FFI.pointer(padded)
+ordinary("struct return", () => declare("ffi_test_i8_identity", padded, Array()))
+ordinary("struct parameter", () => declare("ffi_test_i8_identity", FFI.i8, Array(padded)))
+ordinary("array parameter", () => declare("ffi_test_i8_identity", FFI.i8, Array(FFI.array(FFI.i8, 1))))
+ordinary("pointer return", () => declare("ffi_test_i8_identity", pointer, Array()))
+ordinary("pointer parameter", () => declare("ffi_test_i8_identity", FFI.i8, Array(pointer)))
+ordinary("nullable pointer parameter",
+    () => declare("ffi_test_i8_identity", FFI.i8, Array(FFI.nullable(pointer))))
+ordinary("field parameter",
+    () => declare("ffi_test_i8_identity", FFI.i8, Array(FFI.field("x", FFI.i8))))
+nullablePointer: FFI.nullable(pointer)
+for(invalid in Array(pointer, nullablePointer, padded, FFI.array(FFI.i8, 2))) {
+    rejected("invalid return", () => declare("ffi_test_i8_identity", invalid, Array()))
+    rejected("invalid parameter", () => declare("ffi_test_i8_identity", FFI.i8, Array(invalid)))
+    rejected("invalid output target", () => FFI.out(invalid))
+    rejected("invalid preserving parameter",
+        () => FFI.bindPreserving(first, "ffi_test_i8_identity", FFI.i8, Array(invalid)))
+}
+ordinary("preserving struct return",
+    () => FFI.bindPreserving(first, "ffi_test_i8_identity", padded, Array()))
+
+// ---- public layouts against C sizeof, _Alignof and offsetof
+
+layout: declare("ffi_test_layout", FFI.i64, Array(FFI.i64))
+check("unknown C query", layout(9999) == -1)
+field: FFI.field
+nested: FFI.struct(Array(field("tag", FFI.i8), field("inner", padded), field("d", FFI.f64)))
+mixed: FFI.union(Array(
+    field("small", FFI.i8), field("wide", FFI.i64), field("half", FFI.array(FFI.u16, 5))))
+quad: FFI.array(padded, 4)
+withArray: FFI.struct(Array(
+    field("head", FFI.i16), field("items", FFI.array(padded, 3)), field("tail", FFI.i8)))
+withPointer: FFI.struct(Array(
+    field("flag", FFI.i8), field("data", FFI.pointer(FFI.void)), field("ratio", FFI.f32)))
+withUnion: FFI.struct(Array(field("kind", FFI.u8), field("value", mixed), field("after", FFI.u32)))
+
+withNullable: FFI.struct(Array(field("tag", FFI.u8),
+    field("next", FFI.nullable(FFI.pointer(padded))), field("ratio", FFI.f32)))
+
+oracle: Array(
+    Array(0, FFI.sizeOf(FFI.i8)), Array(1, FFI.alignOf(FFI.i8)),
+    Array(2, FFI.sizeOf(FFI.u8)), Array(3, FFI.alignOf(FFI.u8)),
+    Array(4, FFI.sizeOf(FFI.i16)), Array(5, FFI.alignOf(FFI.i16)),
+    Array(6, FFI.sizeOf(FFI.u16)), Array(7, FFI.alignOf(FFI.u16)),
+    Array(8, FFI.sizeOf(FFI.i32)), Array(9, FFI.alignOf(FFI.i32)),
+    Array(10, FFI.sizeOf(FFI.u32)), Array(11, FFI.alignOf(FFI.u32)),
+    Array(12, FFI.sizeOf(FFI.i64)), Array(13, FFI.alignOf(FFI.i64)),
+    Array(14, FFI.sizeOf(FFI.u64)), Array(15, FFI.alignOf(FFI.u64)),
+    Array(16, FFI.sizeOf(FFI.sizeT)), Array(17, FFI.alignOf(FFI.sizeT)),
+    Array(18, FFI.sizeOf(FFI.f32)), Array(19, FFI.alignOf(FFI.f32)),
+    Array(20, FFI.sizeOf(FFI.f64)), Array(21, FFI.alignOf(FFI.f64)),
+    Array(22, FFI.sizeOf(FFI.pointer(FFI.void))), Array(23, FFI.alignOf(FFI.pointer(FFI.i8))),
+    Array(30, FFI.sizeOf(padded)), Array(31, FFI.alignOf(padded)),
+    Array(32, FFI.offsetOf(padded, Array("a"))), Array(33, FFI.offsetOf(padded, Array("b"))),
+    Array(34, FFI.offsetOf(padded, Array("c"))),
+    Array(40, FFI.sizeOf(nested)), Array(41, FFI.alignOf(nested)),
+    Array(42, FFI.offsetOf(nested, Array("inner"))),
+    Array(43, FFI.offsetOf(nested, Array("inner", "c"))),
+    Array(44, FFI.offsetOf(nested, Array("d"))),
+    Array(50, FFI.sizeOf(mixed)), Array(51, FFI.alignOf(mixed)),
+    Array(52, FFI.offsetOf(mixed, Array("wide"))),
+    Array(53, FFI.offsetOf(mixed, Array("half", 4))),
+    Array(60, FFI.sizeOf(quad)), Array(61, FFI.alignOf(quad)),
+    Array(70, FFI.sizeOf(withArray)), Array(71, FFI.alignOf(withArray)),
+    Array(72, FFI.offsetOf(withArray, Array("items"))),
+    Array(73, FFI.offsetOf(withArray, Array("items", 2, "c"))),
+    Array(74, FFI.offsetOf(withArray, Array("tail"))),
+    Array(80, FFI.sizeOf(withPointer)), Array(81, FFI.alignOf(withPointer)),
+    Array(82, FFI.offsetOf(withPointer, Array("data"))),
+    Array(83, FFI.offsetOf(withPointer, Array("ratio"))),
+    Array(90, FFI.sizeOf(withUnion)), Array(91, FFI.alignOf(withUnion)),
+    Array(92, FFI.offsetOf(withUnion, Array("value"))),
+    Array(93, FFI.offsetOf(withUnion, Array("value", "half", 3))),
+    Array(94, FFI.offsetOf(withUnion, Array("after"))),
+    Array(100, FFI.sizeOf(withNullable)), Array(101, FFI.alignOf(withNullable)),
+    Array(102, FFI.offsetOf(withNullable, Array("tag"))),
+    Array(103, FFI.offsetOf(withNullable, Array("next"))),
+    Array(104, FFI.offsetOf(withNullable, Array("ratio"))))
+for(fact in oracle) {
+    measured: layout(fact[0])
+    ((measured >= 0) && (measured == fact[1])).ifFalse(() => {
+        failure: CheckFailure {
+            label: "C layout query"
+            query: fact[0]
+            measured: measured
+            declared: fact[1]
+        }
+        failure.signal()
+    })
+}
+
+// ---- prototype association keeps the C-verified layout and never enters C
+
+Record: { tag: 0 }
+beforeAssociation: calls()
+check("association answers the prototype", FFI.prototype(withNullable, Record) === Record)
+check("association keeps the layout", FFI.layoutOf(Record) === withNullable)
+check("association did not enter C", calls() == beforeAssociation)
+associated: FFI.layoutOf(Record)
+check("associated size", FFI.sizeOf(associated) == layout(100))
+check("associated align", FFI.alignOf(associated) == layout(101))
+check("associated tag", FFI.offsetOf(associated, Array("tag")) == layout(102))
+check("associated next", FFI.offsetOf(associated, Array("next")) == layout(103))
+check("associated ratio", FFI.offsetOf(associated, Array("ratio")) == layout(104))
+
+// ---- public preserving binding and the existing provider-private borrow epoch
+
+region: first.bind("ffi_test_bytes", first.param(first.signature(first.borrowed), first.i32))(4)
+check("borrowed region live", first.isLive(region) == true)
+preservingLength: FFI.bindPreserving(first, "ffi_test_bytes_length", FFI.i32, Array())
+check("preserving fresh", preservingLength !== FFI.bindPreserving(first, "ffi_test_bytes_length", FFI.i32, Array()))
+check("preserving call", preservingLength() == 4)
+check("preserving keeps the region", first.isLive(region) == true)
+ordinary("preserving arity", () => FFI.bindPreserving(first, "ffi_test_bytes_length", FFI.i32, Array(), 1))
+ordinary("preserving admission", () => preservingLength(1))
+check("rejected call keeps the region", first.isLive(region) == true)
+ordinaryLength: FFI.bind(first, "ffi_test_bytes_length", FFI.i32, Array())
+check("distinct policies", ordinaryLength !== preservingLength)
+check("ordinary call", ordinaryLength() == 4)
+check("ordinary call revokes the region", first.isLive(region) == false)
+foreign("preserving missing symbol", () => FFI.bindPreserving(first, "ffi_test_missing_symbol", FFI.void, Array()))
+
+print("FFM-SCALAR-LAYOUT-ABI-PASS")

@@ -1,0 +1,51 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// RootActor-only native FFM authority with a real secondary Actor. The host
+// authorizes first=<absolute libffi_test.so> (and second, unused here).
+// Run by dist/test_external_foreign_providers.py and dist/validate_native.py.
+
+Assertions: import("std:test/assertions")
+FFI: import("std:ffi")
+
+// Spawned before the RootActor acquires any native library.
+worker: Actor.spawn("./ffm-root-actor-worker.protos", "worker")
+(() => {
+    Assertions.require(worker.request("layoutSize").value() == 16)
+    Assertions.require(worker.request("nativeImportRefused").value() == true)
+
+    first: import("ffi:first")
+    identity: FFI.bind(first, "ffi_test_i32_identity", FFI.i32, Array(FFI.i32))
+    calls: FFI.bind(first, "ffi_test_scalar_calls_count", FFI.i32, Array())
+    Assertions.require(identity(41) == 41)
+
+    before: calls()
+    Assertions.require(worker.request("nativeImportRefused").value() == true)
+    Assertions.require(calls() == before)
+    Assertions.require(identity(42) == 42)
+
+    // Native authority never crosses an Actor boundary.
+    Assertions.signals(NonTransferableValue, () => worker.request("echo", first))
+    raw: first.bind("ffi_test_i32_identity", first.param(first.signature(first.i32), first.i32))
+    Assertions.signals(NonTransferableValue, () => worker.request("echo", raw))
+    // An ordinary Closure capturing live foreign authority is not transferable either.
+    Assertions.signals(NonTransferableValue, () => worker.request("echo", identity))
+    // Ordinary results remain transferable.
+    Assertions.require(worker.request("echo", identity(7)).value() == 7)
+    Assertions.require(worker.request("layoutSize").value() == 16)
+    Assertions.require(identity(43) == 43)
+}).ensure(() => worker.stop())
+
+print("FFM-ROOT-ACTOR-PASS")

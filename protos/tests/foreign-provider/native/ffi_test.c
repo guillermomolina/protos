@@ -211,3 +211,191 @@ int32_t ffi_test_tail(const char *text, int32_t skip, const char **tail) {
 
 /* First octet of the private copy, readable from any session as int32_t f(void). */
 int32_t ffi_test_input_byte_zero(void) { return ffi_test_input_byte(0); }
+
+/* ---- fixed-width scalars: identities, outputs and an entry counter */
+
+static int32_t ffi_test_scalar_calls;
+
+int32_t ffi_test_scalar_calls_count(void) { return ffi_test_scalar_calls; }
+
+int8_t ffi_test_i8_identity(int8_t value) {
+    ffi_test_scalar_calls++;
+    return value;
+}
+
+uint8_t ffi_test_u8_identity(uint8_t value) {
+    ffi_test_scalar_calls++;
+    return value;
+}
+
+int16_t ffi_test_i16_identity(int16_t value) {
+    ffi_test_scalar_calls++;
+    return value;
+}
+
+uint16_t ffi_test_u16_identity(uint16_t value) {
+    ffi_test_scalar_calls++;
+    return value;
+}
+
+uint32_t ffi_test_u32_identity(uint32_t value) {
+    ffi_test_scalar_calls++;
+    return value;
+}
+
+uint64_t ffi_test_u64_identity(uint64_t value) {
+    ffi_test_scalar_calls++;
+    return value;
+}
+
+float ffi_test_f32_identity(float value) {
+    ffi_test_scalar_calls++;
+    return value;
+}
+
+/* A valid C signature whose physical shape is deliberately not registered for Native Image. */
+float ffi_test_f32_add(float left, float right) {
+    ffi_test_scalar_calls++;
+    return left + right;
+}
+
+/* Writes the extreme values of the narrow widths through real native pointers. */
+int32_t ffi_test_out_narrow(int8_t *i8, uint8_t *u8, int16_t *i16, uint16_t *u16) {
+    ffi_test_scalar_calls++;
+    *i8 = INT8_MIN;
+    *u8 = UINT8_MAX;
+    *i16 = INT16_MIN;
+    *u16 = UINT16_MAX;
+    return 4;
+}
+
+/* Writes unsigned values above the signed ranges and one binary32 value. */
+int32_t ffi_test_out_wide(uint32_t *u32, uint64_t *u64, float *f32) {
+    ffi_test_scalar_calls++;
+    *u32 = UINT32_MAX;
+    *u64 = UINT64_MAX - 1;
+    *f32 = -1.5f;
+    return 3;
+}
+
+/* ---- C aggregate layouts measured by the C compiler itself */
+
+struct ffi_test_padded {
+    int8_t a;
+    int32_t b;
+    int16_t c;
+};
+
+struct ffi_test_nested {
+    int8_t tag;
+    struct ffi_test_padded inner;
+    double d;
+};
+
+union ffi_test_mixed {
+    int8_t small;
+    int64_t wide;
+    uint16_t half[5];
+};
+
+struct ffi_test_with_array {
+    int16_t head;
+    struct ffi_test_padded items[3];
+    int8_t tail;
+};
+
+struct ffi_test_with_pointer {
+    int8_t flag;
+    void *data;
+    float ratio;
+};
+
+struct ffi_test_with_union {
+    uint8_t kind;
+    union ffi_test_mixed value;
+    uint32_t after;
+};
+
+/* C has no pointer nullability: a pointer that may be NULL has the pointer layout. */
+struct ffi_test_with_nullable {
+    uint8_t tag;
+    struct ffi_test_padded *next;
+    float ratio;
+};
+
+/*
+ * One numbered C fact per query, computed with sizeof, _Alignof and offsetof;
+ * answers -1 for an unknown query.
+ */
+int64_t ffi_test_layout(int64_t query) {
+    switch (query) {
+    case 0: return (int64_t)sizeof(int8_t);
+    case 1: return (int64_t)_Alignof(int8_t);
+    case 2: return (int64_t)sizeof(uint8_t);
+    case 3: return (int64_t)_Alignof(uint8_t);
+    case 4: return (int64_t)sizeof(int16_t);
+    case 5: return (int64_t)_Alignof(int16_t);
+    case 6: return (int64_t)sizeof(uint16_t);
+    case 7: return (int64_t)_Alignof(uint16_t);
+    case 8: return (int64_t)sizeof(int32_t);
+    case 9: return (int64_t)_Alignof(int32_t);
+    case 10: return (int64_t)sizeof(uint32_t);
+    case 11: return (int64_t)_Alignof(uint32_t);
+    case 12: return (int64_t)sizeof(int64_t);
+    case 13: return (int64_t)_Alignof(int64_t);
+    case 14: return (int64_t)sizeof(uint64_t);
+    case 15: return (int64_t)_Alignof(uint64_t);
+    case 16: return (int64_t)sizeof(size_t);
+    case 17: return (int64_t)_Alignof(size_t);
+    case 18: return (int64_t)sizeof(float);
+    case 19: return (int64_t)_Alignof(float);
+    case 20: return (int64_t)sizeof(double);
+    case 21: return (int64_t)_Alignof(double);
+    case 22: return (int64_t)sizeof(void *);
+    case 23: return (int64_t)_Alignof(void *);
+
+    case 30: return (int64_t)sizeof(struct ffi_test_padded);
+    case 31: return (int64_t)_Alignof(struct ffi_test_padded);
+    case 32: return (int64_t)offsetof(struct ffi_test_padded, a);
+    case 33: return (int64_t)offsetof(struct ffi_test_padded, b);
+    case 34: return (int64_t)offsetof(struct ffi_test_padded, c);
+
+    case 40: return (int64_t)sizeof(struct ffi_test_nested);
+    case 41: return (int64_t)_Alignof(struct ffi_test_nested);
+    case 42: return (int64_t)offsetof(struct ffi_test_nested, inner);
+    case 43: return (int64_t)offsetof(struct ffi_test_nested, inner.c);
+    case 44: return (int64_t)offsetof(struct ffi_test_nested, d);
+
+    case 50: return (int64_t)sizeof(union ffi_test_mixed);
+    case 51: return (int64_t)_Alignof(union ffi_test_mixed);
+    case 52: return (int64_t)offsetof(union ffi_test_mixed, wide);
+    case 53: return (int64_t)offsetof(union ffi_test_mixed, half[4]);
+
+    case 60: return (int64_t)sizeof(struct ffi_test_padded[4]);
+    case 61: return (int64_t)_Alignof(struct ffi_test_padded[4]);
+
+    case 70: return (int64_t)sizeof(struct ffi_test_with_array);
+    case 71: return (int64_t)_Alignof(struct ffi_test_with_array);
+    case 72: return (int64_t)offsetof(struct ffi_test_with_array, items);
+    case 73: return (int64_t)offsetof(struct ffi_test_with_array, items[2].c);
+    case 74: return (int64_t)offsetof(struct ffi_test_with_array, tail);
+
+    case 80: return (int64_t)sizeof(struct ffi_test_with_pointer);
+    case 81: return (int64_t)_Alignof(struct ffi_test_with_pointer);
+    case 82: return (int64_t)offsetof(struct ffi_test_with_pointer, data);
+    case 83: return (int64_t)offsetof(struct ffi_test_with_pointer, ratio);
+
+    case 90: return (int64_t)sizeof(struct ffi_test_with_union);
+    case 91: return (int64_t)_Alignof(struct ffi_test_with_union);
+    case 92: return (int64_t)offsetof(struct ffi_test_with_union, value);
+    case 93: return (int64_t)offsetof(struct ffi_test_with_union, value.half[3]);
+    case 94: return (int64_t)offsetof(struct ffi_test_with_union, after);
+
+    case 100: return (int64_t)sizeof(struct ffi_test_with_nullable);
+    case 101: return (int64_t)_Alignof(struct ffi_test_with_nullable);
+    case 102: return (int64_t)offsetof(struct ffi_test_with_nullable, tag);
+    case 103: return (int64_t)offsetof(struct ffi_test_with_nullable, next);
+    case 104: return (int64_t)offsetof(struct ffi_test_with_nullable, ratio);
+    default: return -1;
+    }
+}

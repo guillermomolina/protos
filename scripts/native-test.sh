@@ -826,6 +826,9 @@ run_ffm_case MISSING_LIBRARY 0 'library-unavailable' \
 ForeignError.handle(() => import("ffi:missing"), (e) => { error = e })
 print(error.foreignCategory)'
 
+# Declarative std:ffi layouts: no library grant, no SQLite or C compiler needed.
+run_ffm_case LAYOUTS 0 'FFM-LAYOUTS-PASS' "${ffm_cases_dir}/ffm-layouts.protos"
+
 # SQLite: the OS-provided libsqlite3.so.0 only.
 ffm_sqlite_status="EXECUTED"
 if ! { ldconfig -p 2>/dev/null | grep -Fq 'libsqlite3.so.0'; }; then
@@ -847,6 +850,9 @@ else
     run_ffm_case SQLITE_REOPEN 0 'LIB031-DURABLE-PASS' \
         --allow-library sqlite3=libsqlite3.so.0 "${ffm_cases_dir}/sqlite-durable.protos" \
         verify "${ffm_db}"
+    run_ffm_case SQLITE_LIFECYCLE 0 'LIB029-LIFECYCLE-PASS' \
+        --allow-library sqlite3=libsqlite3.so.0 \
+        "${ffm_cases_dir}/sqlite-lifecycle.protos"
     run_ffm_case SQLITE_UNAUTHORIZED 0 'unauthorized-library' \
         --allow-library other=libsqlite3.so.0 \
         -e 'error: null
@@ -874,6 +880,14 @@ else
         --allow-library "first=${tmp_dir}/libffi_test.so" \
         --allow-library "second=${tmp_dir}/libffi_second.so" \
         "${ffm_cases_dir}/ffm-library-allowlist.protos" "${tmp_dir}/i170-second-marker.txt"
+    run_ffm_case SCALAR_LAYOUT_ABI 0 'FFM-SCALAR-LAYOUT-ABI-PASS' \
+        --allow-library "first=${tmp_dir}/libffi_test.so" \
+        --allow-library "second=${tmp_dir}/libffi_second.so" \
+        "${ffm_cases_dir}/ffm-scalar-layout-abi.protos"
+    run_ffm_case ROOT_ACTOR 0 'FFM-ROOT-ACTOR-PASS' \
+        --allow-library "first=${tmp_dir}/libffi_test.so" \
+        --allow-library "second=${tmp_dir}/libffi_second.so" \
+        "${ffm_cases_dir}/ffm-root-actor.protos"
     run_ffm_case MISSING_SYMBOL 0 'symbol-not-found' \
         --allow-library "first=${tmp_dir}/libffi_test.so" \
         -e 'FFI: import("std:ffi")

@@ -35,10 +35,15 @@ The following owners retain their authority without modification:
 
 ## Native admission and authority
 
-Importing `std:sqlite` acquires no native library and grants no authority. Only
-opening a Connection acquires the existing `ffi:sqlite3` facade. The host must
-explicitly authorize that alias under D259, independently of supplying the
-optional generic FFM provider.
+Importing `std:sqlite` acquires no native library, grants no authority and is
+permitted in every Actor. Only opening a Connection acquires the existing
+`ffi:sqlite3` facade. Opening requires the RootActor's native FFM authority
+(`FFI.md`, RootActor-only native authority) and, independently, the host's
+explicit authorization of that alias under D259, independently of supplying
+the optional generic FFM provider. In any other Actor, `openMemory` and
+`openFile` fail with an ordinary Error before native entry. Connections and
+Statements remain local to the RootActor that opened them; copied rows keep
+their ordinary transfer semantics, and no automatic proxy is introduced.
 
 The trusted library can perform every native effect permitted to the OS
 process, including filesystem access beyond guest Filesystem directories.

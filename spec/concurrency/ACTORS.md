@@ -1728,6 +1728,14 @@ effects observable from several Actors. Protos guarantees neither isolation
 nor coordination of that library-internal state; accepting that is part of the
 host's explicit authorization.
 
+Protos acquisition and direct invocation of the production native FFM provider
+are admitted only in the Process's RootActor (`../semantics/FFI.md`,
+RootActor-only native authority); other Actors cannot enter that native code
+directly. The restriction governs Protos entry into native code, not what the
+authorized library does once entered: its effects, including operating-system
+threads it creates, are trusted in-process effects, and such threads are not
+Protos Actors.
+
 The exception does not extend to:
 
 - Protos-managed objects and slots, which keep full Actor isolation;

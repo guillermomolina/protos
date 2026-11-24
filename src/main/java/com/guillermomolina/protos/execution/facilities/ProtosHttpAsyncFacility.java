@@ -141,6 +141,16 @@ public final class ProtosHttpAsyncFacility {
         return facility.freeze();
     }
 
+    /**
+     * The exact ordinary-object recognition operation alone, for std:ffi prototype association.
+     * It carries no authority and retains no runtime state.
+     */
+    static ProtosObjectValue createObjectRecognitionFacility() {
+        ProtosObjectValue facility = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        operation(facility, "ordinaryObject", 1, ProtosHttpAsyncFacility::ordinaryObject);
+        return facility.freeze();
+    }
+
     /** D121 provenance check for a first, non-suspending source close. */
     private static Object closeAllowed(ProtosActivation activation, List<?> supplied) {
         ProtosActor actor = activation.executionDomain().currentActorForRuntime().orElse(null);

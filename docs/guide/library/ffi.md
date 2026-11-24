@@ -161,25 +161,42 @@ virtual-method support.
 The public sample is
 [`sqlite-version-public.protos`](../../../protos/examples/ffi/sqlite-version-public.protos).
 
-## The twelve public members
+## The public members
 
-The MODULE exports exactly six scalar descriptor values and six ordinary
-Closures:
+The MODULE exports thirteen scalar descriptor values and seventeen ordinary
+Closures. The R1 binding members:
 
 | Member | Signature or value | Meaning and restrictions |
 |---|---|---|
 | `FFI.void` | scalar descriptor | Return-only C `void`; direct Protos result is `null`. |
 | `FFI.i32` | scalar descriptor | Signed 32-bit Integer descriptor. |
 | `FFI.i64` | scalar descriptor | Signed 64-bit Integer descriptor. |
+| `FFI.i8`, `FFI.i16` | scalar descriptors | Signed 8- and 16-bit Integer descriptors. |
+| `FFI.u8`, `FFI.u16`, `FFI.u32`, `FFI.u64` | scalar descriptors | Unsigned 8-, 16-, 32- and 64-bit Integer descriptors. |
+| `FFI.f32` | scalar descriptor | C binary32 `float`; a Protos `Float` input is rounded once to binary32. |
 | `FFI.f64` | scalar descriptor | C binary64 `double`; Protos `Float` only. |
 | `FFI.sizeT` | scalar descriptor | Initial LP64 `size_t`, unsigned 64-bit Integer. |
 | `FFI.utf8z` | scalar descriptor | Input-only String encoded as strict UTF-8 and terminated with NUL. |
 | `FFI.opaque(library, nativeTypeName)` | Closure | Declares a non-null opaque reference tied to this library and session. The type name is a C identifier. |
-| `FFI.nullable(opaqueDescriptor)` | Closure | Admits `null` for a plain opaque descriptor; does not accept scalar, owned or `out` descriptors. |
+| `FFI.nullable(descriptor)` | Closure | Admits `null` for a plain opaque descriptor, or declares a nullable typed pointer from a plain typed pointer; does not accept scalar, owned, `out` or already nullable descriptors. |
 | `FFI.owned(opaqueDescriptor, releaseSymbol, releaseReturnDescriptor)` | Closure | Declares an owned opaque result and its one-reference destructor; destructor result descriptor is `void` or `i32`. |
-| `FFI.out(descriptor)` | Closure | Declares zero-initialized native output storage and consumes no Protos argument. Targets are `i32`, `i64`, `f64`, `sizeT`, opaque, nullable opaque and owned opaque; nested `out`, `void`, `utf8z` and non-descriptors are rejected. |
+| `FFI.out(descriptor)` | Closure | Declares zero-initialized native output storage and consumes no Protos argument. Targets are the integral scalars, `f32`, `f64`, opaque, nullable opaque and owned opaque; nested `out`, `void`, `utf8z`, layouts, typed pointers and non-descriptors are rejected. |
 | `FFI.bind(library, symbol, returnDescriptor, argumentDescriptors)` | Closure | Resolves a supported declaration through the already-authorized library and returns a new ordinary Protos Closure. The final parameter must be an ordinary Array of descriptors. |
+| `FFI.bindPreserving(library, symbol, returnDescriptor, argumentDescriptors)` | Closure | Like `bind`, plus the trusted declaration that the C function leaves earlier borrowed native regions valid. |
 | `FFI.release(ownedHandle)` | Closure | Irreversibly retires a registered owned handle, calls its destructor at most once and returns the exact C result. |
+
+The declarative layout members, which need no library and no native
+authority:
+
+| Member | Meaning |
+|---|---|
+| `FFI.field(name, layout)` | A named member; any String is a valid name. |
+| `FFI.struct(fields)` / `FFI.union(fields)` | A C struct with internal and tail padding, or a C union with every member at offset zero. `fields` is an ordinary Array of distinct field declarations. |
+| `FFI.array(element, count)` | A fixed C array of a positive count; its metadata does not grow with the count. |
+| `FFI.pointer(pointee)` | A declarative typed data pointer to a layout or to `FFI.void`. |
+| `FFI.sizeOf(layout)`, `FFI.alignOf(layout)` | Exact size and alignment. |
+| `FFI.offsetOf(layout, path)` | Byte offset reached by an Array of field names and array indices; pointers are never followed. |
+| `FFI.prototype(layout, prototype)` / `FFI.layoutOf(prototype)` | Associate an exact ordinary prototype with an exact layout, and look it up. |
 
 These are the public members, not a public descriptor record layout. Descriptor
 objects are ordinary frozen Protos objects; structurally similar objects do not
@@ -187,21 +204,59 @@ become descriptors.
 
 ## Scalar descriptors
 
-The six scalar descriptors have distinct identities. Each is an ordinary,
+The scalar descriptors have distinct identities. Each is an ordinary,
 frozen Protos object, but each declares a different ABI domain:
 
 | Descriptor | Exact Protos domain | C-side behavior |
 |---|---|---|
 | `FFI.void` | Return only | No C result; maps to `null`. |
+| `FFI.i8`, `FFI.i16` | Integer from `-128` through `127`, or `-32768` through `32767` | Exact signed value. |
+| `FFI.u8`, `FFI.u16`, `FFI.u32`, `FFI.u64` | Integer from `0` through `255`, `65535`, `4294967295` or `18446744073709551615` | Exact unsigned value; a negative Integer is rejected. |
 | `FFI.i32` | Integer from `-2147483648` through `2147483647` | Exact signed 32-bit value; no truncation or wrapping. |
 | `FFI.i64` | Integer from `-9223372036854775808` through `9223372036854775807` | Exact signed 64-bit value. |
 | `FFI.sizeT` | Integer from `0` through `18446744073709551615` in the initial LP64 profile | Unsigned 64-bit `size_t`; values above signed 64-bit range remain exact. |
+| `FFI.f32` | Protos `Float` | Rounded once to IEEE binary32 (round to nearest, ties to even); results widen exactly to `Float`. An Integer is not converted. |
 | `FFI.f64` | Protos `Float` | IEEE binary64; an Integer is not implicitly converted. |
 | `FFI.utf8z` | Input Protos `String` | Strict UTF-8 plus a trailing NUL; interior NUL and invalid Unicode are rejected. |
 
 Native integral results are exact Protos Integers. There is no implicit
 numeric conversion, pointer-to-Integer conversion or pointer construction.
 `void` and `utf8z` are not output-position types.
+
+## Declarative layouts and prototypes
+
+Layouts describe C data for the Linux x86-64 LP64 profile. Declaring and
+querying them is ordinary Protos code: no library is imported, no native
+memory is allocated and no provider is entered, so they work in every Actor.
+
+```protos
+FFI: import("std:ffi")
+
+Point: FFI.struct(Array(FFI.field("x", FFI.i32), FFI.field("y", FFI.i32)))
+Tagged: FFI.struct(Array(
+    FFI.field("tag", FFI.u8), FFI.field("next", FFI.nullable(FFI.pointer(Point)))))
+
+FFI.sizeOf(Point)                        // 8
+FFI.offsetOf(Tagged, Array("next"))      // 8, after padding
+FFI.sizeOf(FFI.array(Point, 4))          // 32
+
+Vector2: {
+    x: 0
+    y: 0
+    length2: () => { this.x * this.x + this.y * this.y }
+}
+FFI.prototype(Point, Vector2)            // answers Vector2, unchanged
+FFI.layoutOf(Vector2) === Point          // true
+```
+
+The association is exact: a descendant of `Vector2` has no layout until it is
+registered itself, and the prototype is neither mutated nor called.
+
+Typed pointers are declarations only. This release does not allocate native
+memory, read or write native regions, pass or return aggregates by value,
+invoke through typed pointers, or provide `FFI.cType`. Layout and typed
+pointer descriptors are therefore rejected by `bind`, `bindPreserving` and
+`out`.
 
 ## First binding
 
@@ -341,8 +396,13 @@ limited to Linux x86-64 LP64.
 Closures that capture a native binding, live native resources and native
 authority do not automatically cross Actor boundaries or isolated P execution.
 Importing `std:ffi` in another Actor produces that Actor's ordinary local
-MODULE; it does not transfer a provider session or host grant. Native calls are
-synchronous and do not implicitly schedule parallel work.
+MODULE; it does not transfer a provider session or host grant. That MODULE's
+declarations, layout queries and prototype associations work in every Actor
+because they need no native authority. Acquiring a native library is
+different: only the Process's RootActor can import `ffi:<alias>`, and the
+same import in any other Actor fails with an ordinary Error before any native
+code runs. The host must still authorize each library explicitly. Native calls
+are synchronous and do not implicitly schedule parallel work.
 
 ## Troubleshooting
 

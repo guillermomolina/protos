@@ -775,6 +775,12 @@ public final class ProtosCoreBootstrap {
                         Map.of(
                                 "_terminalFutureFacility",
                                 ProtosHttpAsyncFacility::createTerminalFacility)),
+                // std:ffi: exact ordinary-object recognition for prototype association only.
+                Map.entry(
+                        ProtosModuleKey.module("std:ffi"),
+                        Map.of(
+                                "_ffiObjectRecognitionFacility",
+                                ProtosHttpAsyncFacility::createObjectRecognitionFacility)),
                 // LIB025: the private asynchronous bridge of std:http/server.
                 Map.entry(
                         ProtosHttpAsyncFacility.MODULE_KEY,

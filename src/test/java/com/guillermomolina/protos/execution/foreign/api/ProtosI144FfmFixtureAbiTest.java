@@ -60,6 +60,7 @@ class ProtosI144FfmFixtureAbiTest {
     static Path jar;
     static Path distributable;
     static Path library;
+    static Path secondLibrary;
 
     @BeforeAll
     static void buildFixture() throws Exception {
@@ -71,17 +72,8 @@ class ProtosI144FfmFixtureAbiTest {
         Path compiler = findCompiler();
         assumeTrue(compiler != null, "no C compiler (cc, gcc, or clang) on PATH");
 
-        library = work.resolve("libffi_test.so");
-        Process cc =
-                new ProcessBuilder(
-                                compiler.toString(), "-shared", "-fPIC", "-O2", "-std=c11",
-                                "-Wall", "-Werror", "-o", library.toString(),
-                                CASES.resolve("native").resolve("ffi_test.c").toString())
-                        .redirectErrorStream(true)
-                        .start();
-        String ccOutput = new String(cc.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-        assertEquals(true, cc.waitFor(60, TimeUnit.SECONDS), "cc timed out");
-        assertEquals(0, cc.exitValue(), ccOutput);
+        library = compileFixture(compiler, "ffi_test");
+        secondLibrary = compileFixture(compiler, "ffi_second");
 
         Path classes = Files.createDirectories(work.resolve("classes"));
         List<String> arguments =
@@ -119,6 +111,163 @@ class ProtosI144FfmFixtureAbiTest {
                         classes,
                         "com.guillermomolina.protos.ffm",
                         "com.guillermomolina.protos.ffm.FfmForeignProvider");
+    }
+
+    private static Path compileFixture(Path compiler, String name) throws Exception {
+        Path target = work.resolve("lib" + name + ".so");
+        Process cc =
+                new ProcessBuilder(
+                                compiler.toString(), "-shared", "-fPIC", "-O2", "-std=c11",
+                                "-Wall", "-Werror", "-o", target.toString(),
+                                CASES.resolve("native").resolve(name + ".c").toString())
+                        .redirectErrorStream(true)
+                        .start();
+        String ccOutput = new String(cc.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        assertEquals(true, cc.waitFor(60, TimeUnit.SECONDS), "cc timed out");
+        assertEquals(0, cc.exitValue(), ccOutput);
+        return target;
+    }
+
+    /** The program without its CLI success marker: this embedded host has no print. */
+    private static String withoutMarker(String file, String marker) throws Exception {
+        String line = "\nprint(\"" + marker + "\")";
+        String program = Files.readString(CASES.resolve(file));
+        assertTrue(program.contains(line), file + " marker");
+        return program.replace(line, "\n");
+    }
+
+    /**
+     * Declarative layouts are pure Protos: the program runs with no authorized library at all
+     * and opens no foreign provider session. Every semantic assertion is in the program.
+     */
+    @Test
+    void layoutProgramRunsWithoutAnyLibraryOrProviderSession() throws Exception {
+        String source = withoutMarker("ffm-layouts.protos", "FFM-LAYOUTS-PASS");
+        try (ProtosExternalForeignProviderTest.Fixture fixture = distributable(Map.of())) {
+            ProtosExecutionOutcome outcome = fixture.run(source);
+            assertEquals(
+                    ProtosExecutionOutcome.State.COMPLETED,
+                    outcome.state(),
+                    () -> "ffm-layouts.protos failed with " + describe(fixture, outcome.error()));
+            assertEquals(0, fixture.context.foreignProviderSessionCountForTesting());
+
+            // Public surface: the association operations are published; the private
+            // recognition facility and its operation are not, nor are they in the Prelude
+            // or on the canonical Object prototype.
+            ProtosObjectValue module = (ProtosObjectValue) fixture.eval("import(\"std:ffi\")");
+            java.util.Set<String> surface = module.localSlotsSnapshot().keySet();
+            for (String name : List.of("prototype", "layoutOf", "struct", "bindPreserving")) {
+                assertTrue(surface.contains(name), name);
+            }
+            for (String name :
+                    List.of("_ffiObjectRecognitionFacility", "recognition", "isOrdinaryObject",
+                            "ordinaryObject", "associations")) {
+                assertTrue(!surface.contains(name), name);
+                assertTrue(fixture.prelude.bindings().readLocalSlot(name).isEmpty(), name);
+            }
+            ProtosObjectValue object =
+                    (ProtosObjectValue) fixture.prelude.bindings().readLocalSlot("Object")
+                            .orElseThrow();
+            assertTrue(!object.localSlotsSnapshot().containsKey("ordinaryObject"));
+            assertTrue(!object.localSlotsSnapshot().containsKey("_ffiObjectRecognitionFacility"));
+            assertEquals(0, fixture.context.foreignProviderSessionCountForTesting());
+        }
+    }
+
+    /**
+     * Prototype associations are Actor-local MODULE state: each Actor declares and registers
+     * independently, without native authority, and one Actor's registration is absent from the
+     * other Actor's MODULE instance.
+     */
+    @Test
+    void prototypeAssociationsAreActorLocalAndNeedNoNativeAuthority() throws Exception {
+        String register =
+                "FFI: import(\"std:ffi\")\n"
+                        + "layout: FFI.struct(Array(FFI.field(\"x\", FFI.i32)))\n"
+                        + "P: { x: 0 }\n"
+                        + "FFI.prototype(layout, P)\n";
+        try (ProtosExternalForeignProviderTest.Fixture fixture = distributable(Map.of())) {
+            ProtosActivation observer = fixture.newActorActivation();
+            Object rootPrototype = fixture.eval(register);
+            Object observerPrototype = fixture.eval(observer, register);
+            assertEquals(
+                    Boolean.TRUE,
+                    fixture.eval(observer, "FFI: import(\"std:ffi\")\n"
+                            + "P: { x: 0 }\n"
+                            + "layout: FFI.array(FFI.u8, 4)\n"
+                            + "FFI.layoutOf(FFI.prototype(layout, P)) === layout"));
+            // The root registration is not visible through the observer's MODULE instance,
+            // and the observer's registration is not visible through the root's.
+            Object observerLayoutOf = fixture.eval(observer, "import(\"std:ffi\").layoutOf");
+            assertOrdinary(fixture, invoke(fixture, observerLayoutOf, rootPrototype));
+            Object rootLayoutOf = fixture.eval("import(\"std:ffi\").layoutOf");
+            assertOrdinary(fixture, invoke(fixture, rootLayoutOf, observerPrototype));
+            assertEquals(0, fixture.context.foreignProviderSessionCountForTesting());
+        }
+    }
+
+    /**
+     * Fixed-width scalar downcalls, outputs, preserving binding and C-measured layouts against
+     * the compiled C fixtures, under two independently authorized libraries.
+     */
+    @Test
+    void scalarAndLayoutAbiProgramRunsAgainstCompiledC() throws Exception {
+        String source = withoutMarker("ffm-scalar-layout-abi.protos", "FFM-SCALAR-LAYOUT-ABI-PASS");
+        try (ProtosExternalForeignProviderTest.Fixture fixture =
+                distributable(
+                        Map.of(
+                                "library.first", library.toAbsolutePath().toString(),
+                                "library.second", secondLibrary.toAbsolutePath().toString()))) {
+            ProtosExecutionOutcome outcome = fixture.run(source);
+            assertEquals(
+                    ProtosExecutionOutcome.State.COMPLETED,
+                    outcome.state(),
+                    () -> "ffm-scalar-layout-abi.protos failed with "
+                            + describe(fixture, outcome.error()));
+        }
+    }
+
+    /**
+     * The deliberately unregistered Native Image shape F(F,F) is a valid ABI signature: on the
+     * JVM it links and really enters C, while a rejected argument still never does. The Native
+     * Image refusal of the same declaration is covered by dist/validate_native.py.
+     */
+    @Test
+    void unregisteredNativeShapeIsAnActualJvmDowncall() throws Exception {
+        String program =
+                "FFI: import(\"std:ffi\")\n"
+                        + "first: import(\"ffi:first\")\n"
+                        + "calls: FFI.bind(first, \"ffi_test_scalar_calls_count\", FFI.i32,"
+                        + " Array())\n"
+                        + "add: FFI.bind(first, \"ffi_test_f32_add\", FFI.f32,"
+                        + " Array(FFI.f32, FFI.f32))\n"
+                        + "before: calls()\n"
+                        + "sum: add(1.5, 2.25)\n"
+                        + "afterSum: calls()\n"
+                        + "refused: false\n"
+                        + "Error.handle(() => add(1, 2.0), (error) => {\n"
+                        + "    refused = (error.parent() === ForeignError) == false\n"
+                        + "    error\n"
+                        + "})\n"
+                        + "{\n"
+                        + "    exact: sum == 3.75\n"
+                        + "    float: Float.recognizes(sum)\n"
+                        + "    entered: afterSum == before + 1\n"
+                        + "    refused: refused\n"
+                        + "    unchanged: calls() == afterSum\n"
+                        + "}\n";
+        try (ProtosExternalForeignProviderTest.Fixture fixture =
+                distributable(Map.of("library.first", library.toAbsolutePath().toString()))) {
+            ProtosExecutionOutcome outcome = fixture.run(program);
+            assertEquals(
+                    ProtosExecutionOutcome.State.COMPLETED,
+                    outcome.state(),
+                    () -> "F(F,F) program failed with " + describe(fixture, outcome.error()));
+            ProtosObjectValue published = (ProtosObjectValue) outcome.value();
+            for (String slot : List.of("exact", "float", "entered", "refused", "unchanged")) {
+                assertEquals(Boolean.TRUE, published.readLocalSlot(slot).orElseThrow(), slot);
+            }
+        }
     }
 
     @Test
@@ -358,36 +507,137 @@ class ProtosI144FfmFixtureAbiTest {
         }
     }
 
+    /** Pure std:ffi declarations, usable from any Actor without native authority. */
+    private static final String PURE_DECLARATIONS =
+            "FFI: import(\"std:ffi\")\n"
+                    + "layout: FFI.struct(Array(FFI.field(\"a\", FFI.i8), FFI.field(\"b\", FFI.i32)))\n"
+                    + "P: { a: 0 }\n"
+                    + "(FFI.sizeOf(FFI.i16) == 2) && (FFI.sizeOf(layout) == 8)"
+                    + " && (FFI.layoutOf(FFI.prototype(layout, P)) === layout)";
+
+    /**
+     * Native FFM authority belongs to the RootActor alone. A secondary Actor's import of an
+     * authorized library is an ordinary pre-entry Error that opens no compartment or session and
+     * leaves nothing cached, before, during and after the RootActor's own session.
+     */
     @Test
-    void distributableResourcesKeepTheirActorLocalSessionCustody() throws Exception {
+    void distributableNativeFfmRequiresRootActor() throws Exception {
         String path = library.toAbsolutePath().toString();
         try (ProtosExternalForeignProviderTest.Fixture fixture =
                 distributable(Map.of("library.first", path))) {
             ProtosActivation observer = fixture.newActorActivation();
+            assertEquals(0, fixture.context.foreignProviderCompartmentCountForTesting());
+            assertEquals(0, fixture.context.foreignProviderSessionCountForTesting());
+
+            assertEquals(Boolean.TRUE, fixture.eval(observer, PURE_DECLARATIONS));
+            for (int attempt = 0; attempt < 2; attempt++) {
+                assertDeniedOutsideRoot(fixture, observer);
+                assertEquals(0, fixture.context.foreignProviderCompartmentCountForTesting());
+                assertEquals(0, fixture.context.foreignProviderSessionCountForTesting());
+            }
+            assertEquals(Boolean.TRUE, fixture.eval(observer, PURE_DECLARATIONS));
+            assertEquals(0, fixture.context.foreignProviderSessionCountForTesting());
+
+            // The RootActor acquires the same authorized library and enters real C.
             assertEquals("3", integer(fixture.eval(identity("first", 3))));
-            assertEquals("4", integer(fixture.eval(observer, identity("first", 4))));
+            assertEquals(1, fixture.context.foreignProviderCompartmentCountForTesting());
+            assertEquals(1, fixture.context.foreignProviderSessionCountForTesting());
             ProtosForeignModuleFacadeValue rootFacade =
                     (ProtosForeignModuleFacadeValue)
                             fixture.eval("ffi: import(\"ffi:first\")\nffi");
-            ProtosForeignModuleFacadeValue observerFacade =
-                    (ProtosForeignModuleFacadeValue)
-                            fixture.eval(observer, "ffi: import(\"ffi:first\")\nffi");
-            // Each Actor holds its own session; nothing is transferred between them.
-            assertTrue(
-                    rootFacade.attachmentForRuntime().orElseThrow().session()
-                            != observerFacade.attachmentForRuntime().orElseThrow().session());
-            Object held =
-                    fixture.eval("ffi: import(\"ffi:first\")\n"
-                            + "ffi.bind(\"ffi_test_i32_identity\","
-                            + " ffi.param(ffi.signature(ffi.i32), ffi.i32))");
             ProtosForeignProviderSessionBinding session =
                     rootFacade.attachmentForRuntime().orElseThrow().session();
+            Object held =
+                    fixture.eval("FFI: import(\"std:ffi\")\n"
+                            + "FFI.bind(import(\"ffi:first\"), \"ffi_test_i32_identity\","
+                            + " FFI.i32, Array(FFI.i32))");
+
+            // The root session neither authorizes nor is shared with the secondary Actor.
+            assertDeniedOutsideRoot(fixture, observer);
+            assertEquals(1, fixture.context.foreignProviderSessionCountForTesting());
+            assertTrue(session.isOpenForRuntime());
+            assertEquals("5", integer(invokeValue(fixture, held, 5)));
+
             session.closeForRuntime();
             session.closeForRuntime();
             assertOrdinary(fixture, invoke(fixture, held, 1));
-            // The other Actor's session is unaffected by the root session's close.
-            assertEquals("5", integer(fixture.eval(observer, identity("first", 5))));
+            // Closing the root session does not authorize the secondary Actor.
+            assertDeniedOutsideRoot(fixture, observer);
         }
+    }
+
+    /**
+     * The canonical foreign ModuleKey load path reaches the same session admission: a secondary
+     * Actor cannot bypass it by loading the canonical key directly.
+     */
+    @Test
+    void canonicalForeignModuleKeyCannotBypassRootActorAdmission() throws Exception {
+        String path = library.toAbsolutePath().toString();
+        try (ProtosExternalForeignProviderTest.Fixture fixture =
+                distributable(Map.of("library.first", path))) {
+            ProtosActivation observer = fixture.newActorActivation();
+            ProtosModuleRuntime runtime =
+                    ProtosStandardImportProtocol.runtimeForPrelude(fixture.prelude);
+            for (int attempt = 0; attempt < 2; attempt++) {
+                com.guillermomolina.protos.runtime.ProtosSignalException failure =
+                        org.junit.jupiter.api.Assertions.assertThrows(
+                                com.guillermomolina.protos.runtime.ProtosSignalException.class,
+                                () ->
+                                        runtime.loadCanonicalModule(
+                                                FIRST_KEY,
+                                                observer));
+                assertOrdinary(fixture, failure.error());
+                assertNotCached(observer);
+            }
+            assertEquals(0, fixture.context.foreignProviderCompartmentCountForTesting());
+            assertEquals(0, fixture.context.foreignProviderSessionCountForTesting());
+        }
+    }
+
+    /** RootActor identity alone authorizes no library: the host allowlist stays independent. */
+    @Test
+    void rootActorStillNeedsTheHostLibraryAuthorization() throws Exception {
+        String path = library.toAbsolutePath().toString();
+        try (ProtosExternalForeignProviderTest.Fixture fixture =
+                distributable(Map.of("library.first", path))) {
+            assertForeign(fixture, fixture.run("import(\"ffi:second\")"), "unauthorized-library");
+        }
+        try (ProtosExternalForeignProviderTest.Fixture fixture = distributable(Map.of())) {
+            assertForeign(fixture, fixture.run("import(\"ffi:first\")"), "unauthorized-library");
+        }
+    }
+
+    /** The canonical foreign ModuleKey of the authorized {@code ffi:first} library. */
+    private static final com.guillermomolina.protos.runtime.modules.ProtosModuleKey FIRST_KEY =
+            ProtosForeignModuleKey.encode("ffi", "first");
+
+    /** A refused foreign import leaves no cached MODULE record in the refused Actor. */
+    private static void assertNotCached(ProtosActivation actor) {
+        assertTrue(actor.actorModuleState().lookup(FIRST_KEY).isEmpty());
+    }
+
+    /**
+     * A secondary Actor's native import fails with exactly the ordinary pre-entry Error and
+     * leaves no cached record for the foreign key.
+     */
+    private static void assertDeniedOutsideRoot(
+            ProtosExternalForeignProviderTest.Fixture fixture, ProtosActivation actor) {
+        ProtosExecutionOutcome outcome = fixture.run(actor, "import(\"ffi:first\")");
+        assertEquals(ProtosExecutionOutcome.State.FAILED, outcome.state());
+        ProtosObjectValue error = outcome.error();
+        assertSame(fixture.standardError("Error"), error.parent().orElseThrow(),
+                () -> describe(fixture, error));
+        assertNotCached(actor);
+    }
+
+    /** Invokes a held Closure directly and answers its result. */
+    private static Object invokeValue(
+            ProtosExternalForeignProviderTest.Fixture fixture, Object callable, int argument) {
+        return ProtosInvocation.invoke(
+                callable,
+                List.of(com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integer(
+                        argument)),
+                fixture.root);
     }
 
     @Test
@@ -447,7 +697,8 @@ class ProtosI144FfmFixtureAbiTest {
     /** Non-variadic downcall shapes of the image metadata, in the same letter notation. */
     private static java.util.Set<String> metadataShapes() throws Exception {
         Map<String, String> letters =
-                Map.of("jint", "I", "jlong", "L", "jdouble", "D", "void*", "P", "void", "V");
+                Map.of("jbyte", "B", "jshort", "S", "jint", "I", "jlong", "L", "jfloat", "F",
+                        "jdouble", "D", "void*", "P", "void", "V");
         java.util.Set<String> shapes = new java.util.TreeSet<>();
         java.util.regex.Matcher entry =
                 java.util.regex.Pattern.compile(
@@ -495,6 +746,22 @@ class ProtosI144FfmFixtureAbiTest {
                             "D(P,I)", "I(P,P,I,P)", "I(P,P,I,P,P)", "I(P,I,P,I,P)", "P(P,I)")) {
                 assertTrue(registered.contains(shape), shape);
             }
+            // Exactly the shapes of the fixed-width scalar fixtures, not a Cartesian product.
+            java.util.Set<String> scalarShapes =
+                    java.util.Set.of("B(B)", "S(S)", "F(F)", "I(P,P,P)", "I(P,P,P,P)");
+            for (String shape : scalarShapes) {
+                assertTrue(registered.contains(shape), shape);
+            }
+            java.util.Set<String> narrow = new java.util.TreeSet<>();
+            for (String shape : registered) {
+                if (shape.matches(".*[BSF].*")) {
+                    narrow.add(shape);
+                }
+            }
+            assertEquals(java.util.Set.of("B(B)", "S(S)", "F(F)"), narrow);
+            for (String shape : List.of("F(F,F)", "B(S)", "S(B)", "F(D)", "D(F)", "B()")) {
+                assertTrue(!registered.contains(shape), shape);
+            }
         }
     }
 
@@ -527,6 +794,9 @@ class ProtosI144FfmFixtureAbiTest {
             java.lang.reflect.Constructor<?> newOut = out.getDeclaredConstructor(type);
             newOut.setAccessible(true);
             Object outI32 = newOut.newInstance(s.apply("I32"));
+            Object outI8 = newOut.newInstance(s.apply("I8"));
+            Object outU64 = newOut.newInstance(s.apply("U64"));
+            Object outF32 = newOut.newInstance(s.apply("F32"));
 
             Object[][] cases = {
                 {s.apply("I32"), List.of(s.apply("I32"), s.apply("I32")), "I(I,I)"},
@@ -536,6 +806,15 @@ class ProtosI144FfmFixtureAbiTest {
                 {s.apply("I32"), List.of(handle), "I(P)"},
                 {s.apply("VOID"), List.of(handle), "V(P)"},
                 {s.apply("I32"), List.of(s.apply("UTF8Z"), s.apply("I32"), outI32), "I(P,I,P)"},
+                // Signedness is semantic: one carrier letter per physical width.
+                {s.apply("I8"), List.of(s.apply("I8")), "B(B)"},
+                {s.apply("U8"), List.of(s.apply("U8")), "B(B)"},
+                {s.apply("I16"), List.of(s.apply("I16")), "S(S)"},
+                {s.apply("U16"), List.of(s.apply("U16")), "S(S)"},
+                {s.apply("U32"), List.of(s.apply("U32")), "I(I)"},
+                {s.apply("U64"), List.of(s.apply("U64")), "L(L)"},
+                {s.apply("F32"), List.of(s.apply("F32")), "F(F)"},
+                {s.apply("I32"), List.of(outI8, outU64, outF32), "I(P,P,P)"},
             };
             for (Object[] c : cases) {
                 Object value = create.newInstance(c[0], c[1], false);
@@ -554,6 +833,12 @@ class ProtosI144FfmFixtureAbiTest {
             field.setAccessible(true);
             assertTrue(!((java.util.Set<String>) field.get(null)).contains("D(D,D,D)"));
             assertEquals(true, linkable.invoke(unregistered));
+            Object narrowUnregistered =
+                    create.newInstance(
+                            s.apply("F32"), List.of(s.apply("F32"), s.apply("F32")), false);
+            assertEquals("F(F,F)", shape.invoke(narrowUnregistered));
+            assertTrue(!((java.util.Set<String>) field.get(null)).contains("F(F,F)"));
+            assertEquals(true, linkable.invoke(narrowUnregistered));
         }
     }
 

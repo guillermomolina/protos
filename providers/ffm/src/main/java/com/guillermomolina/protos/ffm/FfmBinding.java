@@ -44,7 +44,9 @@ import org.graalvm.nativeimage.ImageInfo;
 final class FfmBinding {
     /**
      * Physical downcall shapes registered for a Native Image executable, one letter per carrier:
-     * {@code I} int, {@code L} long, {@code D} double, {@code P} address and {@code V} void return.
+     * {@code B} byte, {@code S} short, {@code I} int, {@code L} long, {@code F} float, {@code D}
+     * double, {@code P} address and {@code V} void return. Signed and unsigned descriptors of one
+     * width share one carrier letter.
      * The image metadata registers exactly these shapes; a declaration of any other shape is
      * refused before linking there. A JVM links every valid declaration.
      */
@@ -53,7 +55,8 @@ final class FfmBinding {
                     "I()", "I(I)", "I(I,I)", "I(P)", "I(P,I)", "I(P,P)", "I(P,I,L)", "I(P,I,D)",
                     "I(P,I,P)", "I(P,P,L)", "I(L,I,P)", "I(I,I,P,P)", "I(P,P,I,P)",
                     "I(P,P,I,P,P)", "I(P,I,P,I,P)", "L()", "L(L)", "L(P)", "L(P,I)", "D(P,I)",
-                    "D(D,D)", "P(I)", "P(L)", "P(P,I)", "V()", "V(L)", "V(P)");
+                    "D(D,D)", "P(I)", "P(L)", "P(P,I)", "V()", "V(L)", "V(P)",
+                    "B(B)", "S(S)", "I(P,P,P)", "F(F)", "I(P,P,P,P)");
 
     /**
      * Immutable declared signature: return descriptor, ordered parameters, borrow policy.
@@ -159,6 +162,15 @@ final class FfmBinding {
         }
 
         private static char carrier(MemoryLayout layout) {
+            if (layout.equals(ValueLayout.JAVA_BYTE)) {
+                return 'B';
+            }
+            if (layout.equals(ValueLayout.JAVA_SHORT)) {
+                return 'S';
+            }
+            if (layout.equals(ValueLayout.JAVA_FLOAT)) {
+                return 'F';
+            }
             if (layout.equals(ValueLayout.JAVA_INT)) {
                 return 'I';
             }
@@ -459,9 +471,14 @@ final class FfmBinding {
                     case FfmTypes.Scalar scalar ->
                             switch (scalar) {
                                 // Boxed per arm: no numeric promotion between arms.
-                                case I32 -> Integer.valueOf(slot.get(ValueLayout.JAVA_INT, 0));
-                                case I64, SIZE_T ->
+                                case I8, U8 -> Byte.valueOf(slot.get(ValueLayout.JAVA_BYTE, 0));
+                                case I16, U16 ->
+                                        Short.valueOf(slot.get(ValueLayout.JAVA_SHORT, 0));
+                                case I32, U32 ->
+                                        Integer.valueOf(slot.get(ValueLayout.JAVA_INT, 0));
+                                case I64, U64, SIZE_T ->
                                         Long.valueOf(slot.get(ValueLayout.JAVA_LONG, 0));
+                                case F32 -> Float.valueOf(slot.get(ValueLayout.JAVA_FLOAT, 0));
                                 case F64 ->
                                         Double.valueOf(slot.get(ValueLayout.JAVA_DOUBLE, 0));
                                 default -> throw new IllegalStateException("not an out scalar");
@@ -479,9 +496,16 @@ final class FfmBinding {
             case FfmTypes.Scalar scalar ->
                     switch (scalar) {
                         case VOID -> FfmHandles.Absent.INSTANCE;
+                        case I8 -> Long.valueOf((Byte) raw);
+                        case U8 -> Long.valueOf(Byte.toUnsignedLong((Byte) raw));
+                        case I16 -> Long.valueOf((Short) raw);
+                        case U16 -> Long.valueOf(Short.toUnsignedLong((Short) raw));
                         case I32 -> Long.valueOf((Integer) raw);
+                        case U32 -> Long.valueOf(Integer.toUnsignedLong((Integer) raw));
                         case I64 -> (Long) raw;
-                        case SIZE_T -> FfmTypes.unsignedSize((Long) raw);
+                        case U64, SIZE_T -> FfmTypes.unsignedSize((Long) raw);
+                        // Exact widening of the binary32 carrier, signed zero and NaN included.
+                        case F32 -> Double.valueOf((Float) raw);
                         case F64 -> (Double) raw;
                         case UTF8Z -> throw new IllegalStateException("utf8z is input only");
                     };

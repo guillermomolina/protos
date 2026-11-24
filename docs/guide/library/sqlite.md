@@ -254,9 +254,12 @@ too. A later `reset()` that SQLite confirms with `SQLITE_OK` makes it reusable.
 
 Importing `std:sqlite` imports ordinary Protos code and acquires no native
 library or authority. `openMemory()` and `openFile()` use the explicitly authorized
-`ffi:sqlite3` provider. Every Connection, Statement, binding and library session
-belongs to its originating Actor. Live resources cannot cross Actor or P
-boundaries; ordinary copied rows follow ordinary value-transfer rules.
+`ffi:sqlite3` provider, so only the Process's RootActor can open a database;
+other Actors may import `std:sqlite`, but their `openMemory()` and `openFile()`
+fail with an ordinary Error before native entry. Every Connection, Statement,
+binding and library session belongs to the RootActor. Live resources cannot
+cross Actor or P boundaries; ordinary copied rows follow ordinary
+value-transfer rules. There is no automatic proxy.
 
 The supported execution profile is Linux x86-64 LP64, the portable JVM, JDK 25
 and the supported GraalVM 25.5 toolchain, with `libsqlite3.so.0` installed and

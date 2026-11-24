@@ -16,9 +16,10 @@
  */
 
 /*
- * Second, independent C library for the native library allowlist test. It
- * depends on nothing beyond the C runtime and is compiled only by
- * dist/test_external_foreign_providers.py. Its symbols never overlap with
+ * Second, independent C library for the native library allowlist and scalar
+ * ABI tests. It depends on nothing beyond the C runtime and is compiled only
+ * by the test hosts (dist/test_external_foreign_providers.py,
+ * dist/validate_native.py and ProtosI144FfmFixtureAbiTest). Its symbols never overlap with
  * native/ffi_test.c, so each authorized alias proves its own exact target.
  */
 
@@ -52,3 +53,7 @@ int32_t ffi_second_write_marker(const char *path) {
     int closed = fclose(file);
     return written < 0 || closed != 0 ? -1 : 0;
 }
+
+/* ---- the u8(u8) physical shape under a second, independently authorized library */
+
+uint8_t ffi_second_u8_complement(uint8_t value) { return (uint8_t)~value; }

@@ -13,14 +13,22 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-//! Protos-first synchronous FFI R1 (D238-B1-SQL-R1).
+//! Protos-first synchronous FFI R1 (D238-B1-SQL-R1) with declarative layouts.
 //! Import grants no authority. Native libraries must be supplied by the host.
 //! ABI declarations are trusted: a wrong signature can terminate the process.
+//! Layout descriptors are pure Protos metadata for the Linux x86-64 LP64
+//! profile; declaring or querying one never enters a foreign provider.
 
 Interop: import("std:interop")
 Arrays: import("std:collections/array")
 descriptors: IdentityMap()
 owners: IdentityMap()
+// Exact ordinary-prototype identity -> exact layout descriptor identity.
+associations: IdentityMap()
+// Private exact ordinary-object recognition; never part of the MODULE surface.
+recognition: _ffiObjectRecognitionFacility
+context.removeSlot("_ffiObjectRecognitionFacility")
+isOrdinaryObject: (value) => recognition.ordinaryObject(value)
 
 fail: () => Error().signal()
 requireString: (value) => {
@@ -36,32 +44,265 @@ metadata: (descriptor) => {
     descriptors.containsKey(descriptor).ifFalse(() => fail())
     descriptors.at(descriptor)
 }
-make: (kind, library, native, target) => {
+// Every descriptor is a fresh frozen ordinary object associated by exact
+// identity with one frozen metadata record. `layoutKind` is null for the R1
+// library-bound declarations; `size` and `align` are null unless the
+// descriptor is an ordinary storage layout. `parts` holds kind-specific
+// frozen metadata.
+register: (kind, layoutKind, size, align, library, native, target, parts) => {
     descriptor: {}
     descriptor.freeze()
     record: {
         kind: kind
+        layoutKind: layoutKind
+        size: size
+        align: align
         library: library
         native: native
         target: target
+        parts: parts
     }
     record.freeze()
     descriptors[descriptor] = record
     descriptor
 }
-scalar: (name) => make(name, null, null, null)
+make: (kind, library, native, target) => {
+    register(kind, null, null, null, library, native, target, null)
+}
+scalar: (name, size, align) => register(name, "scalar", size, align, null, null, null, null)
+voidDescriptor: scalar("void", null, null)
 /// Immutable void return descriptor; calls without outputs answer null.
-this.void: scalar("void")
+this.void: voidDescriptor
+/// Immutable signed 8-bit Integer descriptor; inputs must fit exactly.
+this.i8: scalar("i8", 1, 1)
+/// Immutable unsigned 8-bit Integer descriptor; inputs must fit exactly.
+this.u8: scalar("u8", 1, 1)
+/// Immutable signed 16-bit Integer descriptor; inputs must fit exactly.
+this.i16: scalar("i16", 2, 2)
+/// Immutable unsigned 16-bit Integer descriptor; inputs must fit exactly.
+this.u16: scalar("u16", 2, 2)
 /// Immutable signed 32-bit Integer descriptor; inputs must fit exactly.
-this.i32: scalar("i32")
+this.i32: scalar("i32", 4, 4)
+/// Immutable unsigned 32-bit Integer descriptor; inputs must fit exactly.
+this.u32: scalar("u32", 4, 4)
 /// Immutable signed 64-bit Integer descriptor; inputs must fit exactly.
-this.i64: scalar("i64")
+this.i64: scalar("i64", 8, 8)
+/// Immutable unsigned 64-bit Integer descriptor; inputs must fit exactly.
+this.u64: scalar("u64", 8, 8)
+/// Immutable IEEE binary32 descriptor; a Float input is rounded once to binary32.
+this.f32: scalar("f32", 4, 4)
 /// Immutable IEEE binary64 Float descriptor; no Integer coercion is performed.
-this.f64: scalar("f64")
+this.f64: scalar("f64", 8, 8)
 /// Immutable unsigned 64-bit Integer descriptor for the initial LP64 profile.
-this.sizeT: scalar("sizeT")
+this.sizeT: scalar("sizeT", 8, 8)
 /// Immutable input-only strict UTF-8 String descriptor; interior NUL is rejected.
-this.utf8z: scalar("utf8z")
+this.utf8z: scalar("utf8z", null, null)
+
+// ---- declarative layouts (pure Protos metadata; no provider, no native memory)
+
+maxLayoutSize: 9223372036854775807
+pointerSize: 8
+
+requireArity: (extra) => {
+    (extra.size() == 0).ifFalse(() => fail())
+}
+requirePositive: (value) => {
+    (Integer.recognizes(value) && (value > 0)).ifFalse(() => fail())
+}
+requireNonnegative: (value) => {
+    (Integer.recognizes(value) && (value >= 0)).ifFalse(() => fail())
+}
+// The signed-addressable bound: checked before a value becomes metadata.
+checkedSize: (value) => {
+    requireNonnegative(value)
+    (value <= maxLayoutSize).ifFalse(() => fail())
+    value
+}
+checkedAdd: (left, right) => checkedSize(left + right)
+checkedMultiply: (left, right) => checkedSize(left * right)
+alignUp: (offset, alignment) => {
+    requirePositive(alignment)
+    padding: (alignment - (offset % alignment)) % alignment
+    checkedAdd(offset, padding)
+}
+isRegistered: (value) => descriptors.containsKey(value)
+// A registered descriptor that occupies native storage with a fixed size.
+isStorageLayout: (value) => {
+    if(isRegistered(value) == false) { ^false }
+    record: descriptors.at(value)
+    kind: record.layoutKind
+    if(kind === null) { ^false }
+    if(record.size === null) { ^false }
+    composite: (kind == "struct") || (kind == "union") || (kind == "array")
+    pointer: (kind == "pointer") || (kind == "nullablePointer")
+    (kind == "scalar") || composite || pointer
+}
+storage: (value) => {
+    isStorageLayout(value).ifFalse(() => fail())
+    descriptors.at(value)
+}
+// R1 declarations and scalars are the only descriptors a binding admits;
+// aggregates, fields and typed pointers are declarative in this slice.
+isBindable: (record) => (record.layoutKind === null) || (record.layoutKind == "scalar")
+
+/// Declare a named member of a struct or union. Any String is a field name.
+this.field: (name: fail(), layout: fail(), ...extra) => {
+    requireArity(extra)
+    requireString(name)
+    storage(layout)
+    parts: {
+        name: name
+        layout: layout
+    }
+    parts.freeze()
+    register("field", "field", null, null, null, null, null, parts)
+}
+
+// Snapshot and admit an ordinary Array of at least one field declaration
+// with pairwise distinct names (semantic String equality).
+admitFields: (fields) => {
+    Array.recognizes(fields).ifFalse(() => fail())
+    snapshot: Array(...fields)
+    (snapshot.size() > 0).ifFalse(() => fail())
+    names: Map()
+    for(declaration in snapshot) {
+        isRegistered(declaration).ifFalse(() => fail())
+        record: descriptors.at(declaration)
+        (record.layoutKind == "field").ifFalse(() => fail())
+        names.containsKey(record.parts.name).ifTrue(() => fail())
+        names[record.parts.name] = true
+    }
+    snapshot
+}
+
+member: (name, layout, offset) => {
+    entry: {
+        name: name
+        layout: layout
+        offset: offset
+    }
+    entry.freeze()
+    entry
+}
+
+aggregate: (kind, members, size, align) => {
+    byName: Map()
+    for(entry in members) {
+        byName[entry.name] = entry
+    }
+    members.freeze()
+    byName.freeze()
+    parts: {
+        members: members
+        byName: byName
+    }
+    parts.freeze()
+    register(kind, kind, size, align, null, null, null, parts)
+}
+
+/// Declare a C struct: source-ordered members with internal and tail padding.
+this.struct: (fields: fail(), ...extra) => {
+    requireArity(extra)
+    declarations: admitFields(fields)
+    members: Array(...declarations)
+    index: 0
+    size: 0
+    align: 1
+    for(declaration in declarations) {
+        parts: descriptors.at(declaration).parts
+        layout: descriptors.at(parts.layout)
+        offset: alignUp(size, layout.align)
+        members[index] = member(parts.name, parts.layout, offset)
+        index = index + 1
+        size = checkedAdd(offset, layout.size)
+        if(layout.align > align) { align = layout.align }
+    }
+    aggregate("struct", members, alignUp(size, align), align)
+}
+
+/// Declare a C union: every member at offset zero, no active-member tag.
+this.union: (fields: fail(), ...extra) => {
+    requireArity(extra)
+    declarations: admitFields(fields)
+    members: Array(...declarations)
+    index: 0
+    size: 0
+    align: 1
+    for(declaration in declarations) {
+        parts: descriptors.at(declaration).parts
+        layout: descriptors.at(parts.layout)
+        members[index] = member(parts.name, parts.layout, 0)
+        index = index + 1
+        if(layout.size > size) { size = layout.size }
+        if(layout.align > align) { align = layout.align }
+    }
+    aggregate("union", members, alignUp(size, align), align)
+}
+
+/// Declare a fixed C array of a positive exact count; storage is not allocated.
+this.array: (element: fail(), count: fail(), ...extra) => {
+    requireArity(extra)
+    layout: storage(element)
+    requirePositive(count)
+    // A storage layout size is a multiple of its alignment, so it is the stride.
+    size: checkedMultiply(layout.size, count)
+    parts: {
+        element: element
+        count: count
+        stride: layout.size
+    }
+    parts.freeze()
+    register("array", "array", size, layout.align, null, null, null, parts)
+}
+
+/// Declare a typed C data pointer to a storage layout or to FFI.void.
+/// The declaration is descriptive only: it carries no address.
+this.pointer: (pointee: fail(), ...extra) => {
+    requireArity(extra)
+    (isStorageLayout(pointee) || (pointee === voidDescriptor)).ifFalse(() => fail())
+    parts: { pointee: pointee }
+    parts.freeze()
+    register("pointer", "pointer", pointerSize, pointerSize, null, null, null, parts)
+}
+
+/// Exact native byte size of a storage layout.
+this.sizeOf: (layout: fail(), ...extra) => {
+    requireArity(extra)
+    storage(layout).size
+}
+
+/// Exact native alignment of a storage layout.
+this.alignOf: (layout: fail(), ...extra) => {
+    requireArity(extra)
+    storage(layout).align
+}
+
+/// Byte offset reached by an Array path of field names and array indices.
+/// Pointers are never dereferenced; an empty path answers zero.
+this.offsetOf: (layout: fail(), path: fail(), ...extra) => {
+    requireArity(extra)
+    current: storage(layout)
+    Array.recognizes(path).ifFalse(() => fail())
+    selectors: Array(...path)
+    offset: 0
+    for(selector in selectors) {
+        kind: current.layoutKind
+        if((kind == "struct") || (kind == "union")) {
+            requireString(selector)
+            current.parts.byName.containsKey(selector).ifFalse(() => fail())
+            entry: current.parts.byName.at(selector)
+            offset = checkedAdd(offset, entry.offset)
+            current = descriptors.at(entry.layout)
+        } else {
+            (kind == "array").ifFalse(() => fail())
+            requireNonnegative(selector)
+            (selector < current.parts.count).ifFalse(() => fail())
+            offset = checkedAdd(offset, checkedMultiply(selector, current.parts.stride))
+            current = descriptors.at(current.parts.element)
+        }
+    }
+    offset
+}
 
 nativeType: (library, descriptor) => {
     record: metadata(descriptor)
@@ -83,10 +324,38 @@ this.opaque: (library, nativeTypeName, ...extra) => {
     make("opaque", library, native, null)
 }
 
-/// Admit null in addition to references of a plain opaque descriptor.
+/// Associate an exact ordinary prototype with an exact storage layout and
+/// answer the prototype. Repeating the same association is idempotent; a
+/// different layout for an already associated prototype is an Error. The
+/// prototype is neither mutated nor invoked.
+this.prototype: (layout: fail(), ordinaryPrototype: fail(), ...extra) => {
+    requireArity(extra)
+    storage(layout)
+    (isOrdinaryObject(ordinaryPrototype) === true).ifFalse(() => fail())
+    if(associations.containsKey(ordinaryPrototype)) {
+        (associations.at(ordinaryPrototype) === layout).ifFalse(() => fail())
+        ^ordinaryPrototype
+    }
+    associations[ordinaryPrototype] = layout
+    ordinaryPrototype
+}
+
+/// The exact layout associated with this exact prototype; no delegation lookup.
+this.layoutOf: (prototype: fail(), ...extra) => {
+    requireArity(extra)
+    associations.containsKey(prototype).ifFalse(() => fail())
+    associations.at(prototype)
+}
+
+/// Admit null in addition to a plain opaque descriptor or typed pointer.
 this.nullable: (opaqueDescriptor, ...extra) => {
     (extra.size() == 0).ifFalse(() => fail())
     record: metadata(opaqueDescriptor)
+    if(record.layoutKind == "pointer") {
+        // Nullability restricts later value admission; storage is unchanged.
+        ^register("nullablePointer", "nullablePointer", record.size, record.align, null, null,
+            opaqueDescriptor, record.parts)
+    }
     (record.kind == "opaque").ifFalse(() => fail())
     native: operation(record.library, "nullable", record.native)
     make("nullable", record.library, native, opaqueDescriptor)
@@ -110,6 +379,7 @@ this.owned: (opaqueDescriptor, releaseSymbol, releaseReturnDescriptor, ...extra)
 this.out: (descriptor, ...extra) => {
     (extra.size() == 0).ifFalse(() => fail())
     record: metadata(descriptor)
+    isBindable(record).ifFalse(() => fail())
     if((record.kind == "void") || (record.kind == "utf8z") || (record.kind == "out")) {
         fail()
     }
@@ -126,29 +396,38 @@ publish: (library, descriptor, value) => {
     value
 }
 
-/// Bind a trusted ABI declaration and answer a fresh ordinary Closure.
-/// Parameters are snapshotted. Results with outs are fresh ordinary Arrays
-/// ordered [nativeReturn, out0, ...]; a C error status remains ordinary data.
-this.bind: (library, symbol, returnDescriptor, argumentDescriptors, ...extra) => {
-    (extra.size() == 0).ifFalse(() => fail())
+// Shared by bind and bindPreserving: one declaration path, one Closure shape.
+declareBinding: (library, symbol, returnDescriptor, argumentDescriptors, preserving) => {
     requireString(symbol)
     Array.recognizes(argumentDescriptors).ifFalse(() => fail())
     parameters: Array(...argumentDescriptors)
     returns: metadata(returnDescriptor)
+    isBindable(returns).ifFalse(() => fail())
     if((returns.kind == "out") || (returns.kind == "utf8z")) { fail() }
     // Validate the entire public declaration before composing provider values.
+    // The result positions are the native return followed by every out.
+    positions: 1
     for(parameter in parameters) {
         record: metadata(parameter)
+        isBindable(record).ifFalse(() => fail())
         if((record.kind == "void") || (record.kind == "owned")) { fail() }
+        if(record.kind == "out") { positions = positions + 1 }
     }
     signature: operation(library, "signature", nativeType(library, returnDescriptor))
-    outputs: Array(returnDescriptor)
+    // Filled in place, then cut to the exact length: linear in the parameters.
+    staged: Array(returnDescriptor, ...parameters)
+    position: 1
     for(parameter in parameters) {
         signature = operation(library, "param", signature, nativeType(library, parameter))
         record: metadata(parameter)
         if(record.kind == "out") {
-            outputs = Arrays.append(outputs, record.target)
+            staged[position] = record.target
+            position = position + 1
         }
+    }
+    outputs: Arrays.take(staged, positions)
+    if(preserving) {
+        signature = operation(library, "preserving", signature)
     }
     parameters.freeze()
     outputs.freeze()
@@ -158,19 +437,35 @@ this.bind: (library, symbol, returnDescriptor, argumentDescriptors, ...extra) =>
         // resource type/session/generation/liveness and UTF-8 checks.
         result: Interop.invoke(binding, ...arguments)
         answer: null
-        if(outputs.size() == 1) {
+        if(positions == 1) {
             answer = publish(library, returnDescriptor, result)
         }
-        if(outputs.size() > 1) {
-            answer = Array()
+        if(positions > 1) {
+            answer = Array(...outputs)
             index: 0
             for(descriptor in outputs) {
-                answer = Arrays.append(answer, publish(library, descriptor, result[index]))
+                answer[index] = publish(library, descriptor, result[index])
                 index = index + 1
             }
         }
         answer
     }
+}
+
+/// Bind a trusted ABI declaration and answer a fresh ordinary Closure.
+/// Parameters are snapshotted. Results with outs are fresh ordinary Arrays
+/// ordered [nativeReturn, out0, ...]; a C error status remains ordinary data.
+this.bind: (library, symbol, returnDescriptor, argumentDescriptors, ...extra) => {
+    requireArity(extra)
+    declareBinding(library, symbol, returnDescriptor, argumentDescriptors, false)
+}
+
+/// Like bind, with the trusted declaration that the C function leaves earlier
+/// borrowed native regions valid; such calls do not revoke them.
+this.bindPreserving: (library: fail(), symbol: fail(), returnDescriptor: fail(),
+        argumentDescriptors: fail(), ...extra) => {
+    requireArity(extra)
+    declareBinding(library, symbol, returnDescriptor, argumentDescriptors, true)
 }
 
 /// Retire an owned handle before attempting its destructor, without retries.

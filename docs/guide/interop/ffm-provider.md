@@ -259,8 +259,11 @@ virtual methods.
    portable JVM CLI with `--foreign-provider-path`. Registration runs only
    `providerId()` and `scheme()`: nothing native happens.
 2. A program imports an authorized logical library, for example
-   `import("ffi:sqlite3")`. Only now does the Actor's session open, the
-   platform get checked (Linux x86-64 LP64), and the library load.
+   `import("ffi:sqlite3")`. Only now does the RootActor's session open, the
+   platform get checked (Linux x86-64 LP64), and the library load. Only the
+   RootActor can do this: the same import in any other Actor fails with an
+   ordinary Error before any session or library load, while importing
+   `std:ffi` itself stays available to every Actor.
 3. Protos code builds descriptors and signatures from provider handles and
    scalars, binds symbols, and calls them. Control flow, declarations, and
    the reconstruction of Arrays and Bytes are Protos source.
@@ -404,7 +407,7 @@ C often returns a status and writes the real result through a pointer, as in
 ## Owned resources
 
 `owned(opaque, destructorSymbol, destructorReturnType)` hands a C object's
-lifetime to the Actor's provider session:
+lifetime to the RootActor's provider session:
 
 - every non-null owned result (return or `out`) enters the session's
   **custody before it is published** to Protos code;
@@ -413,7 +416,7 @@ lifetime to the Actor's provider session:
 - `release` is **irreversible**: it marks the reference released first, then
   calls the destructor, so the destructor runs **at most once**; its C result
   is answered unchanged;
-- resources still held when the session closes (the Actor or Process ends)
+- resources still held when the session closes (the RootActor or Process ends)
   are released then, **most recent first**;
 - closing the session invalidates every reference it issued;
 - handle identity is per session and acquisition, **not the native

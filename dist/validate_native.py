@@ -477,7 +477,11 @@ def validate_filesystem_grant(
 # JDK, Maven, GraalVM or an external provider JAR on the consumer path.
 FFM_SQLITE_TARGET = "libsqlite3.so.0"
 FFM_LIBC_TARGET = "libc.so.6"
+# Printed by a guest program when a call that must be refused before native
+# entry failed after entry instead; never part of a passing case.
+FFM_FOREIGN_ENTRY_MARKER = "ffm-foreign-entry-failure"
 FFM_UNEXPECTED_MARKERS = (
+    FFM_FOREIGN_ENTRY_MARKER,
     "Internal error",
     "MissingForeignRegistrationError",
     "UnsatisfiedLinkError",
@@ -511,6 +515,35 @@ FFM_UNSUPPORTED_SIGNATURE = (
     '    () => FFI.bind(sqlite, "sqlite3_libversion_number", FFI.f64,'
     " Array(FFI.f64, FFI.f64, FFI.f64)),\n"
     '    (error) => { print("ffm-unsupported-refused") })\n'
+)
+# I174: the fixed-width scalar fixtures and C-measured layouts run against
+# compiled test-only C libraries that are never bundled into the product.
+FFM_CASES = Path(__file__).resolve().parents[1] / "protos" / "tests" / "foreign-provider"
+FFM_FIXTURES = (("first", "ffi_test"), ("second", "ffi_second"))
+FFM_LAYOUTS_MARKER = "FFM-LAYOUTS-PASS"
+FFM_SCALAR_LAYOUT_ABI_MARKER = "FFM-SCALAR-LAYOUT-ABI-PASS"
+FFM_ROOT_ACTOR_MARKER = "FFM-ROOT-ACTOR-PASS"
+# f32(f32, f32), physical shape F(F,F): a valid C signature that is not
+# registered for the image. It must be refused before linking with exactly an
+# ordinary Error (parent Error, the convention of ffm-public-api.protos), never
+# a ForeignError, so the fixture's native entry counter is unchanged.
+FFM_UNREGISTERED_SCALAR = (
+    'FFI: import("std:ffi")\n'
+    'first: import("ffi:first")\n'
+    'calls: FFI.bind(first, "ffi_test_scalar_calls_count", FFI.i32, Array())\n'
+    "before: calls()\n"
+    "refused: null\n"
+    "Error.handle(\n"
+    '    () => FFI.bind(first, "ffi_test_f32_add", FFI.f32, Array(FFI.f32, FFI.f32)),\n'
+    "    (error) => { refused = error })\n"
+    "((refused === null) == false).ifTrue(() => {\n"
+    "    (refused.parent() === ForeignError).ifTrue(() => {\n"
+    '        print("' + FFM_FOREIGN_ENTRY_MARKER + '")\n'
+    "    })\n"
+    "    ((refused.parent() === Error) && (calls() == before)).ifTrue(() => {\n"
+    '        print("ffm-unregistered-scalar-refused")\n'
+    "    })\n"
+    "})\n"
 )
 FFM_UNAUTHORIZED = (
     "error: null\n"
@@ -581,6 +614,36 @@ def run_ffm_case(
             + result.stderr
         )
     print("NATIVE_DIST_" + label + "_CHECK: PASS")
+
+
+def ffm_fixture_compiler() -> str | None:
+    """The host C compiler used only to build the test-only FFM fixtures."""
+    return next(
+        (found for found in (shutil.which(name) for name in ("cc", "gcc", "clang"))
+         if found is not None),
+        None,
+    )
+
+
+def compile_ffm_fixtures(compiler: str | None, target: Path) -> dict[str, Path]:
+    """Compile the FFM C fixtures into ``target``; any absence or error fails."""
+    if compiler is None:
+        fail("the validation host provides no C compiler for the FFM fixtures")
+    libraries: dict[str, Path] = {}
+    for alias, stem in FFM_FIXTURES:
+        source = FFM_CASES / "native" / (stem + ".c")
+        if not source.is_file():
+            fail("the FFM fixture source is missing: " + str(source))
+        library = target / ("lib" + stem + ".so")
+        result = subprocess.run(
+            [compiler, "-shared", "-fPIC", "-O2", "-std=c11", "-Wall", "-Werror",
+             "-o", str(library), str(source)],
+            text=True, capture_output=True, check=False,
+        )
+        if result.returncode != 0 or not library.is_file():
+            fail("the FFM fixture " + source.name + " did not compile:\n" + result.stderr)
+        libraries[alias] = library
+    return libraries
 
 
 def bundled_shared_objects(dist: Path, stem: str) -> list[Path]:
@@ -670,6 +733,46 @@ def validate_native_ffm(
         expected_stdout="ffm-libc",
     )
 
+    # I174: declarative layouts need no library grant.
+    run_ffm_case(
+        "FFM_LAYOUTS",
+        [str(launcher), str(FFM_CASES / "ffm-layouts.protos")],
+        cwd=cwd,
+        env=env,
+        expected_stdout=FFM_LAYOUTS_MARKER,
+    )
+    fixtures = temp / "ffm-fixtures"
+    fixtures.mkdir()
+    libraries = compile_ffm_fixtures(ffm_fixture_compiler(), fixtures)
+    fixture_grants: list[str] = []
+    for alias, library in libraries.items():
+        fixture_grants += ["--allow-library", alias + "=" + str(library)]
+    # Real fixed-width scalars, outputs and C-measured layouts; the same u8(u8)
+    # shape is also called through the second, independently authorized library.
+    run_ffm_case(
+        "FFM_SCALAR_LAYOUT_ABI",
+        [str(launcher), *fixture_grants, str(FFM_CASES / "ffm-scalar-layout-abi.protos")],
+        cwd=cwd,
+        env=env,
+        expected_stdout=FFM_SCALAR_LAYOUT_ABI_MARKER,
+    )
+    # Native FFM authority is RootActor-only; the guest program itself verifies
+    # the secondary Actor's exact ordinary Error before printing its marker.
+    run_ffm_case(
+        "FFM_ROOT_ACTOR",
+        [str(launcher), *fixture_grants, str(FFM_CASES / "ffm-root-actor.protos")],
+        cwd=cwd,
+        env=env,
+        expected_stdout=FFM_ROOT_ACTOR_MARKER,
+    )
+    run_ffm_case(
+        "FFM_UNREGISTERED_SCALAR_SIGNATURE",
+        [str(launcher), *fixture_grants, "-e", FFM_UNREGISTERED_SCALAR],
+        cwd=cwd,
+        env=env,
+        expected_stdout="ffm-unregistered-scalar-refused",
+    )
+
     if not os_library_available(FFM_SQLITE_TARGET, ldconfig):
         fail("the validation host provides no OS " + FFM_SQLITE_TARGET)
     sqlite_grant = ["--allow-library", "sqlite3=" + FFM_SQLITE_TARGET]
@@ -679,6 +782,17 @@ def validate_native_ffm(
         cwd=cwd,
         env=env,
         expected_stdout="ffm-sqlite=true",
+    )
+    run_ffm_case(
+        "FFM_SQLITE_LIFECYCLE",
+        [
+            str(launcher),
+            *sqlite_grant,
+            str(FFM_CASES / "sqlite-lifecycle.protos"),
+        ],
+        cwd=cwd,
+        env=env,
+        expected_stdout="LIB029-LIFECYCLE-PASS",
     )
     run_ffm_case(
         "FFM_UNAUTHORIZED",

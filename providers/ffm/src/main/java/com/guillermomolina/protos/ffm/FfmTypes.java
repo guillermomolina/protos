@@ -27,9 +27,12 @@ import java.util.regex.Pattern;
 /**
  * Immutable, typed ABI descriptors of the I144 R1 subset and their exact conversions.
  *
- * <p>Only the Linux x86-64 LP64 System V ABI is supported: {@code i32} is a signed 32-bit integer,
- * {@code i64} a signed 64-bit integer, {@code sizeT} an unsigned 64-bit integer, and {@code f64}
- * IEEE binary64. {@link #requireSupportedPlatform(Linker)} checks the platform and the native
+ * <p>Only the Linux x86-64 LP64 System V ABI is supported: {@code i8}, {@code i16}, {@code i32}
+ * and {@code i64} are signed integers of 8, 16, 32 and 64 bits; {@code u8}, {@code u16}, {@code
+ * u32}, {@code u64} and {@code sizeT} are unsigned integers of 8, 16, 32, 64 and 64 bits; {@code
+ * f32} is IEEE binary32 and {@code f64} IEEE binary64. Signedness is semantic metadata: a signed
+ * and an unsigned descriptor of one width share one physical Java carrier, which holds the
+ * two's-complement bit pattern of the exact value. {@link #requireSupportedPlatform(Linker)} checks the platform and the native
  * linker's canonical C layouts instead of assuming that C {@code long}, pointers, and {@code
  * size_t} share a size everywhere.
  *
@@ -55,8 +58,15 @@ final class FfmTypes {
     /** Scalar descriptors, including {@code void} and NUL-terminated UTF-8 input text. */
     enum Scalar implements Type {
         VOID("void"),
+        I8("i8"),
+        U8("u8"),
+        I16("i16"),
+        U16("u16"),
         I32("i32"),
+        U32("u32"),
         I64("i64"),
+        U64("u64"),
+        F32("f32"),
         F64("f64"),
         SIZE_T("sizeT"),
         UTF8Z("utf8z");
@@ -250,10 +260,7 @@ final class FfmTypes {
     }
 
     static boolean isOutTarget(Type type) {
-        return type == Scalar.I32
-                || type == Scalar.I64
-                || type == Scalar.F64
-                || type == Scalar.SIZE_T
+        return isNumericScalar(type)
                 || type instanceof OpaqueType
                 || type instanceof OwnedType
                 || type == BorrowedType.INSTANCE
@@ -266,16 +273,18 @@ final class FfmTypes {
     }
 
     static boolean isParameterType(Type type) {
-        return type == Scalar.I32
-                || type == Scalar.I64
-                || type == Scalar.F64
-                || type == Scalar.SIZE_T
+        return isNumericScalar(type)
                 || type == Scalar.UTF8Z
                 || type instanceof OpaqueType
                 || type instanceof OutType
                 || type instanceof InputType
                 || type == InputLength.INSTANCE
                 || type == CopyDestructor.INSTANCE;
+    }
+
+    /** Whether {@code type} is a fixed-width integer or floating-point scalar. */
+    static boolean isNumericScalar(Type type) {
+        return type instanceof Scalar scalar && scalar != Scalar.VOID && scalar != Scalar.UTF8Z;
     }
 
     /** The library whose handles this descriptor admits, or null for a library-neutral one. */
@@ -293,8 +302,11 @@ final class FfmTypes {
         return switch (type) {
             case Scalar scalar ->
                     switch (scalar) {
-                        case I32 -> ValueLayout.JAVA_INT;
-                        case I64, SIZE_T -> ValueLayout.JAVA_LONG;
+                        case I8, U8 -> ValueLayout.JAVA_BYTE;
+                        case I16, U16 -> ValueLayout.JAVA_SHORT;
+                        case I32, U32 -> ValueLayout.JAVA_INT;
+                        case I64, U64, SIZE_T -> ValueLayout.JAVA_LONG;
+                        case F32 -> ValueLayout.JAVA_FLOAT;
                         case F64 -> ValueLayout.JAVA_DOUBLE;
                         case UTF8Z -> ValueLayout.ADDRESS;
                         case VOID -> throw new IllegalArgumentException("void has no layout");
@@ -359,23 +371,38 @@ final class FfmTypes {
         return null;
     }
 
+    /** Whether {@code value} is an exact Integer of the signed {@code bits}-bit range. */
+    private static boolean admitsSigned(Object value, int bits) {
+        BigInteger exact = exactInteger(value);
+        return exact != null && exact.bitLength() < bits;
+    }
+
+    /**
+     * Whether {@code value} is an exact Integer of the complete unsigned {@code bits}-bit range,
+     * checked before any conversion to a physical two's-complement carrier.
+     */
+    private static boolean admitsUnsigned(Object value, int bits) {
+        BigInteger exact = exactInteger(value);
+        return exact != null && exact.signum() >= 0 && exact.bitLength() <= bits;
+    }
+
     /** Whether {@code value} is admitted for scalar descriptor {@code scalar}. */
     static boolean admitsScalar(Scalar scalar, Object value) {
         return switch (scalar) {
-            case I32 -> {
-                BigInteger exact = exactInteger(value);
-                yield exact != null
-                        && exact.bitLength() < Integer.SIZE;
-            }
-            case I64 -> {
-                BigInteger exact = exactInteger(value);
-                yield exact != null && exact.bitLength() < Long.SIZE;
-            }
+            case I8 -> admitsSigned(value, Byte.SIZE);
+            case I16 -> admitsSigned(value, Short.SIZE);
+            case I32 -> admitsSigned(value, Integer.SIZE);
+            case I64 -> admitsSigned(value, Long.SIZE);
+            case U8 -> admitsUnsigned(value, Byte.SIZE);
+            case U16 -> admitsUnsigned(value, Short.SIZE);
+            case U32 -> admitsUnsigned(value, Integer.SIZE);
+            case U64 -> admitsUnsigned(value, Long.SIZE);
             case SIZE_T -> {
                 BigInteger exact = exactInteger(value);
                 yield exact != null && exact.signum() >= 0 && exact.compareTo(SIZE_T_MAX) <= 0;
             }
-            case F64 -> value instanceof Double;
+            // Never an Integer coerced into a floating-point carrier.
+            case F32, F64 -> value instanceof Double;
             case UTF8Z -> value instanceof String text && isEncodable(text);
             case VOID -> false;
         };
@@ -387,10 +414,19 @@ final class FfmTypes {
             throw new FfmFailure("invalid-argument", "argument does not match " + scalar.spelling());
         }
         return switch (scalar) {
+            case I8 -> Byte.valueOf(exactInteger(value).byteValueExact());
+            case I16 -> Short.valueOf(exactInteger(value).shortValueExact());
             case I32 -> Integer.valueOf(exactInteger(value).intValueExact());
             case I64 -> Long.valueOf(exactInteger(value).longValueExact());
-            // Two's-complement bit pattern of the exact unsigned value; never a wrapped input.
-            case SIZE_T -> Long.valueOf(exactInteger(value).longValue());
+            // Two's-complement bit pattern of the exact, already admitted unsigned value; the
+            // narrowing never wraps an input because the full unsigned range was checked first.
+            case U8 -> Byte.valueOf((byte) exactInteger(value).intValue());
+            case U16 -> Short.valueOf((short) exactInteger(value).intValue());
+            case U32 -> Integer.valueOf(exactInteger(value).intValue());
+            case U64, SIZE_T -> Long.valueOf(exactInteger(value).longValue());
+            // One IEEE binary32 rounding of the semantic binary64 value (round to nearest even,
+            // signed zero, subnormals, overflow to infinity and NaN preserved by Java).
+            case F32 -> Float.valueOf((float) ((Double) value).doubleValue());
             case F64 -> value;
             case UTF8Z, VOID -> throw new IllegalStateException("not a direct scalar");
         };

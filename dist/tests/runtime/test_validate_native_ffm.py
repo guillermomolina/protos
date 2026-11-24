@@ -94,6 +94,124 @@ class ClassifyFfmCaseTest(unittest.TestCase):
             self.assertIn(marker, reason)
 
 
+class FixedWidthFixtureTest(unittest.TestCase):
+    def test_missing_compiler_is_a_failure_not_a_pass(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            with contextlib.redirect_stdout(io.StringIO()), \
+                    contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit):
+                    validate_native.compile_ffm_fixtures(None, Path(raw))
+
+    def test_fixture_sources_and_programs_exist(self) -> None:
+        for _, stem in validate_native.FFM_FIXTURES:
+            self.assertTrue((validate_native.FFM_CASES / "native" / (stem + ".c")).is_file())
+        for program, marker in (
+                ("ffm-layouts.protos", validate_native.FFM_LAYOUTS_MARKER),
+                ("ffm-scalar-layout-abi.protos",
+                 validate_native.FFM_SCALAR_LAYOUT_ABI_MARKER),
+                ("ffm-root-actor.protos", validate_native.FFM_ROOT_ACTOR_MARKER)):
+            text = (validate_native.FFM_CASES / program).read_text(encoding="utf-8")
+            self.assertIn('print("' + marker + '")', text)
+        self.assertNotIn("ffi:sqlite3", validate_native.FFM_UNREGISTERED_SCALAR)
+
+    def test_missing_scalar_markers_are_failures(self) -> None:
+        for marker in (validate_native.FFM_LAYOUTS_MARKER,
+                       validate_native.FFM_SCALAR_LAYOUT_ABI_MARKER,
+                       "ffm-unregistered-scalar-refused"):
+            self.assertEqual(
+                "FAIL",
+                classify_ffm_case(0, "", "", expected_status=0, expected_stdout=marker)[0],
+            )
+            self.assertEqual(
+                "FAIL",
+                classify_ffm_case(0, marker + "\n", "MissingForeignRegistrationError",
+                                  expected_status=0, expected_stdout=marker)[0],
+            )
+
+
+class UnregisteredScalarSignatureTest(unittest.TestCase):
+    MARKER = "ffm-unregistered-scalar-refused"
+
+    def verdict(self, returncode: int, stdout: str, stderr: str) -> str:
+        return classify_ffm_case(returncode, stdout, stderr, expected_status=0,
+                                 expected_stdout=self.MARKER)[0]
+
+    def test_clean_ordinary_refusal_passes(self) -> None:
+        self.assertEqual("PASS", self.verdict(0, self.MARKER + "\n", ""))
+
+    def test_unsuccessful_exit_fails(self) -> None:
+        self.assertEqual("FAIL", self.verdict(1, self.MARKER + "\n", ""))
+
+    def test_missing_marker_fails(self) -> None:
+        self.assertEqual("FAIL", self.verdict(0, "", ""))
+
+    def test_missing_registration_error_fails(self) -> None:
+        self.assertEqual(
+            "FAIL",
+            self.verdict(0, self.MARKER + "\n", "MissingForeignRegistrationError: F(F,F)"))
+
+    def test_foreign_entry_failure_fails(self) -> None:
+        self.assertEqual(
+            "FAIL",
+            self.verdict(0, validate_native.FFM_FOREIGN_ENTRY_MARKER + "\n", ""))
+        self.assertEqual(
+            "FAIL",
+            self.verdict(0, validate_native.FFM_FOREIGN_ENTRY_MARKER + "\n" + self.MARKER + "\n",
+                         ""))
+
+    def test_program_requires_an_exact_ordinary_error(self) -> None:
+        program = validate_native.FFM_UNREGISTERED_SCALAR
+        self.assertIn("refused.parent() === Error", program)
+        self.assertIn("calls() == before", program)
+        self.assertIn(validate_native.FFM_FOREIGN_ENTRY_MARKER, program)
+        self.assertNotIn("MissingForeignRegistrationError", program)
+
+
+class RootActorProgramTest(unittest.TestCase):
+    MARKER = validate_native.FFM_ROOT_ACTOR_MARKER
+
+    def verdict(self, returncode: int, stdout: str, stderr: str) -> str:
+        return classify_ffm_case(returncode, stdout, stderr, expected_status=0,
+                                 expected_stdout=self.MARKER)[0]
+
+    def test_worker_module_exists(self) -> None:
+        self.assertTrue((validate_native.FFM_CASES / "ffm-root-actor-worker.protos").is_file())
+
+    def test_success_needs_status_and_marker(self) -> None:
+        self.assertEqual("PASS", self.verdict(0, self.MARKER + "\n", ""))
+        self.assertEqual("FAIL", self.verdict(1, self.MARKER + "\n", ""))
+        self.assertEqual("FAIL", self.verdict(0, "", ""))
+
+    def test_sqlite_lifecycle_programs_exist(self) -> None:
+        for name in ("sqlite-lifecycle.protos", "sqlite-lifecycle-worker.protos"):
+            self.assertTrue((validate_native.FFM_CASES / name).is_file(), name)
+        text = (validate_native.FFM_CASES / "sqlite-lifecycle.protos").read_text(encoding="utf-8")
+        self.assertIn('print("LIB029-LIFECYCLE-PASS")', text)
+
+    def test_sqlite_lifecycle_classification(self) -> None:
+        marker = "LIB029-LIFECYCLE-PASS"
+
+        def verdict(returncode: int, stdout: str, stderr: str) -> str:
+            return classify_ffm_case(returncode, stdout, stderr, expected_status=0,
+                                     expected_stdout=marker)[0]
+
+        self.assertEqual("PASS", verdict(0, marker + "\n", ""))
+        self.assertEqual("FAIL", verdict(0, "", ""))
+        self.assertEqual("FAIL", verdict(1, marker + "\n", ""))
+        self.assertEqual("FAIL", verdict(0, marker + "\n", "MissingForeignRegistrationError"))
+        self.assertEqual(
+            "FAIL",
+            verdict(0, validate_native.FFM_FOREIGN_ENTRY_MARKER + "\n" + marker + "\n", ""))
+
+    def test_uncontrolled_failures_fail(self) -> None:
+        self.assertEqual(
+            "FAIL",
+            self.verdict(0, validate_native.FFM_FOREIGN_ENTRY_MARKER + "\n" + self.MARKER, ""))
+        self.assertEqual(
+            "FAIL",
+            self.verdict(0, self.MARKER + "\n", "MissingForeignRegistrationError"))
+
+
 class DistributionContentTest(unittest.TestCase):
     def test_bundled_sqlite_is_detected(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
