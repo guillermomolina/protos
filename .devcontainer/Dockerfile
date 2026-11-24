@@ -11,6 +11,7 @@ ENV LANG=C.UTF-8
 USER root
 
 RUN microdnf install -y \
+        bash-completion \
         file \
         binutils \
         findutils \

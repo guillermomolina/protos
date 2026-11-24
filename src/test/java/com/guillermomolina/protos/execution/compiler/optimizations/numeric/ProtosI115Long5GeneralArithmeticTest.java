@@ -411,8 +411,19 @@ final class ProtosI115Long5GeneralArithmeticTest {
     }
 
     /* The local the producer's result is stored into, or null when it is transported directly. */
+    /* The first instruction after the write of the producer's result local. */
+    private static int resultScanStart(List<Instruction> instructions, int producer) {
+        return localOffsets(instructions.get(producer)).isEmpty() ? producer + 2 : producer + 1;
+    }
+
     private static Integer resultLocal(
             List<Instruction> instructions, List<String> names, int producer) {
+        // PERF045: a producer that owns its result local names it as its
+        // LocalAccessor operand.
+        List<Integer> owned = localOffsets(instructions.get(producer));
+        if (!owned.isEmpty()) {
+            return owned.get(0);
+        }
         if (producer + 1 < names.size() && names.get(producer + 1).startsWith("store.local")) {
             List<Integer> stored = localOffsets(instructions.get(producer + 1));
             return stored.isEmpty() ? null : stored.get(0);
@@ -435,7 +446,7 @@ final class ProtosI115Long5GeneralArithmeticTest {
         }
         boolean cleared = false;
         int last = -1;
-        for (int i = producer + 2; i < names.size(); i++) {
+        for (int i = resultScanStart(instructions, producer); i < names.size(); i++) {
             if (!localOffsets(instructions.get(i)).contains(local)) {
                 continue;
             }
@@ -458,7 +469,10 @@ final class ProtosI115Long5GeneralArithmeticTest {
         }
         boolean returned = last >= 0 && last + 1 < names.size()
                 && names.get(last).startsWith("load.local")
-                && names.get(last + 1).startsWith("return");
+                && (names.get(last + 1).startsWith("return")
+                        || (names.get(last + 1).startsWith("c.EpilogForReturn")
+                                && last + 2 < names.size()
+                                && names.get(last + 2).startsWith("return")));
         assertTrue(cleared || returned, function + " keeps the result local " + local + " of "
                 + names.get(producer) + " live past its last use: " + names);
     }
@@ -484,7 +498,7 @@ final class ProtosI115Long5GeneralArithmeticTest {
         if (local == null) {
             return;
         }
-        for (int i = producer + 2; i < names.size(); i++) {
+        for (int i = resultScanStart(instructions, producer); i < names.size(); i++) {
             String name = names.get(i);
             if (unambiguous) {
                 assertTrue(!isTransport(name), function + " transports the result of "

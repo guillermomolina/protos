@@ -132,7 +132,15 @@ final class ProtosI115DirectAdditionStructureExperimentTest {
         int ret = lastIndexOfPrefix(instructions, "return");
         assertTrue(add >= 0 && ret > add,
                 "NumberAdd must precede return: " + instructions);
-        for (int i = add + 1; i < ret; i++) {
+        // PERF045: the producer stores its result in its own terminal result
+        // local; the only permitted transport is popping its completion flag
+        // and loading that local once.
+        int first = add + 1;
+        if (first + 1 < ret && instructions.get(first).equals("pop")
+                && instructions.get(first + 1).startsWith("load.local")) {
+            first += 2;
+        }
+        for (int i = first; i < ret; i++) {
             String name = instructions.get(i);
             assertTrue(!name.startsWith("store.local") && !name.startsWith("load.local"),
                     "NumberAdd result must flow directly to return: " + instructions);
