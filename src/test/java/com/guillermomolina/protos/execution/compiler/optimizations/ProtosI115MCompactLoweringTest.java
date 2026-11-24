@@ -190,6 +190,24 @@ final class ProtosI115MCompactLoweringTest {
                     trace.value = 0
                     (build(Mine) == 200) && (trace.value == 12)
                 }
+                Plain: { construct: (a, b) => a - b }
+                plain: () => {
+                    trace.value = 0
+                    (build(Plain) == -10) && (trace.value == 12)
+                }
+                plainRedefine: () => { Plain.construct = (a, b) => a * 10 + b }
+                plainRestore: () => { Plain.construct = (a, b) => a - b }
+                plainRedefined: () => {
+                    trace.value = 0
+                    (build(Plain) == 120) && (trace.value == 12)
+                }
+                mineParent: () => {
+                    first: build(Mine)
+                    second: build(Mine)
+                    second[0] = 7
+                    ok: (first.parent() === Mine.construct(1, 2).parent()) && !(first === second)
+                    ok && (first[0] == 10) && (second[0] == 7) && (first.size() == 2)
+                }
                 compact: () => Array(1, 2).size() * 10 + Array(3, 4)[1]
                 published: () => {
                     k: 4
@@ -213,6 +231,24 @@ final class ProtosI115MCompactLoweringTest {
             assertEquals(44L, session.prepareTopLevel("mine").executable().execute().asLong());
             assertTrue(session.prepareTopLevel("alternative").executable().execute().asBoolean());
             assertTrue(session.prepareTopLevel("standard").executable().execute().asBoolean());
+            // The same site alternates between the FROZEN standard entry and an
+            // ordinary factory whose construct is reassigned in place, keeping its
+            // Shape: every execution observes the currently selected behavior.
+            for (int round = 0; round < 3; round++) {
+                assertTrue(session.prepareTopLevel("plain").executable().execute().asBoolean());
+                assertTrue(session.prepareTopLevel("standard").executable().execute().asBoolean());
+            }
+            session.prepareTopLevel("plainRedefine").executable().execute();
+            for (int round = 0; round < 3; round++) {
+                assertTrue(session.prepareTopLevel("plainRedefined").executable().execute().asBoolean());
+                assertTrue(session.prepareTopLevel("standard").executable().execute().asBoolean());
+            }
+            session.prepareTopLevel("plainRestore").executable().execute();
+            assertTrue(session.prepareTopLevel("plain").executable().execute().asBoolean());
+            for (int round = 0; round < 3; round++) {
+                assertTrue(session.prepareTopLevel("mineParent").executable().execute().asBoolean());
+                assertTrue(session.prepareTopLevel("standard").executable().execute().asBoolean());
+            }
             for (int round = 0; round < 4; round++) {
                 assertEquals(24L, session.prepareTopLevel("compact").executable().execute().asLong());
                 assertEquals(24L, session.prepareTopLevel("published").executable().execute().asLong());
@@ -222,7 +258,10 @@ final class ProtosI115MCompactLoweringTest {
                 for (int round = 0; round < 3; round++) {
                     assertTrue(other.prepareTopLevel("standard").executable().execute().asBoolean());
                     assertTrue(other.prepareTopLevel("alternative").executable().execute().asBoolean());
+                    assertTrue(other.prepareTopLevel("plain").executable().execute().asBoolean());
+                    assertTrue(other.prepareTopLevel("mineParent").executable().execute().asBoolean());
                     assertTrue(session.prepareTopLevel("standard").executable().execute().asBoolean());
+                    assertTrue(session.prepareTopLevel("mineParent").executable().execute().asBoolean());
                 }
             }
         }

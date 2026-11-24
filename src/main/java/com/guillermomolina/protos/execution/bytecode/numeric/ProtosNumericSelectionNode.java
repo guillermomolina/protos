@@ -578,6 +578,38 @@ abstract class ProtosNumericSelectionNode extends Node {
                         closure, home, selector, prelude) != null;
     }
 
+    /*
+     * Specialization time only: whether, under this Prelude, the FROZEN local
+     * SmallInteger binding selects a prototype whose chain for every given
+     * selector is valid, entirely FROZEN and selects the standard operator.
+     * Nothing is invoked. FROZEN owners never change their slots, parents or
+     * Shapes, so a positive answer stays exact for this Prelude identity; any
+     * selection that cannot be proven answers false and leaves the decision
+     * to the dynamic entries.
+     */
+    @TruffleBoundary
+    static boolean frozenStandardLongOperators(ProtosPrelude prelude, String... selectors) {
+        if (prelude == null) {
+            return false;
+        }
+        ProtosValueLookup.StructuralSelection binding =
+                selectBinding(prelude, SMALL_INTEGER_BINDING);
+        ProtosObjectValue prototype = frozenBoundPrototype(binding);
+        if (prototype == null) {
+            return false;
+        }
+        for (String selector : selectors) {
+            ProtosValueLookup.StructuralSelection selection = selectNumeric(prototype, selector);
+            if (selection == null || !selection.isValid() || !selection.allOwnersFrozen()) {
+                return false;
+            }
+            if (!standard(selector, 0L, selection.read(), selection.home(), prelude)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     /* The complete selection, observed without invoking anything. */
     @TruffleBoundary
     static boolean selectStandard(String selector, Object receiver, ProtosPrelude prelude) {

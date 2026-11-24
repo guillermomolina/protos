@@ -405,6 +405,104 @@ final class ProtosPerf045RangeEachInlineTest {
         });
     }
 
+    /*
+     * Repeated construction and iteration sites over signed-64 bounds under
+     * the FROZEN standard numeric selections: ascending and descending each,
+     * explicit steps of both signs, empty ranges and equal bounds visit
+     * exactly their integers in order, terminate, and never enter the source
+     * Range methods; every construction answers a fresh FROZEN object of the
+     * canonical prototype.
+     */
+    @Test
+    void frozenPrimitiveConstructionAndIterationFromRepeatedSites() throws Exception {
+        inContext(() -> {
+            Module module = new Module();
+            List<List<RootNode>> entered = new ArrayList<>();
+            try (ExecutionListener listener = observeRangeRoots(entered)) {
+                Object result = module.run(
+                        """
+                        run: () => {
+                            frame: 0
+                            walk: (a, b) => { Range(a, b).each(i => { hook(i) }) }
+                            back: (a, b) => { InvertedRange(a, b).each(i => { hook(i) }) }
+                            step: (a, b, s) => { Range(a, b).eachStep(s, i => { hook(i) }) }
+                            stepBack: (a, b, s) => { InvertedRange(a, b).eachStep(s, i => { hook(i) }) }
+                            round: () => {
+                                walk(0, 64)
+                                back(63, -1)
+                                step(0, 10, 1)
+                                step(0, 10, 2)
+                                stepBack(9, -1, -1)
+                                stepBack(9, -1, -3)
+                                walk(5, 5)
+                                back(5, 5)
+                                walk(7, 7)
+                                step(3, 3, 2)
+                            }
+                            round()
+                            round()
+                            round()
+                        }
+                        run()
+                        """);
+                assertInstanceOf(ProtosNullValue.class, result);
+                assertTrue(entered.isEmpty(),
+                        () -> "canonical construction and traversal entered Range source: " + entered);
+            }
+            List<Object> expectedRound = new ArrayList<>();
+            for (long value = 0; value < 64; value++) {
+                expectedRound.add(value);
+            }
+            for (long value = 63; value >= 0; value--) {
+                expectedRound.add(value);
+            }
+            for (long value = 0; value < 10; value++) {
+                expectedRound.add(value);
+            }
+            for (long value = 0; value < 10; value += 2) {
+                expectedRound.add(value);
+            }
+            for (long value = 9; value >= 0; value--) {
+                expectedRound.add(value);
+            }
+            for (long value = 9; value >= 0; value -= 3) {
+                expectedRound.add(value);
+            }
+            List<Object> expected = new ArrayList<>();
+            for (int round = 0; round < 3; round++) {
+                expected.addAll(expectedRound);
+            }
+            assertEquals(expected, module.visits);
+
+            Module built = new Module(module.prelude);
+            built.run(
+                    """
+                    run: () => {
+                        frame: 0
+                        up: (a, b) => { Range(a, b) }
+                        down: (a, b) => { InvertedRange(a, b) }
+                        hook(up(0, 64))
+                        hook(up(0, 64))
+                        hook(down(63, -1))
+                        hook(down(63, -1))
+                    }
+                    run()
+                    """);
+            assertEquals(4, built.visits.size());
+            Object range = module.prelude.bindings().readLocalSlot("Range").orElseThrow();
+            Object inverted = module.prelude.bindings().readLocalSlot("InvertedRange").orElseThrow();
+            java.util.Set<Object> identities =
+                    java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+            for (int index = 0; index < 4; index++) {
+                ProtosObjectValue value =
+                        assertInstanceOf(ProtosObjectValue.class, built.visits.get(index));
+                assertTrue(value.isFrozen());
+                assertSame(index < 2 ? range : inverted, value.parent().orElseThrow());
+                assertTrue(identities.add(value), "each construction answers a fresh object");
+            }
+        });
+    }
+
     @Test
     void oneConstructionSiteRepeatedlyBuildsFreshCanonicalRanges() throws Exception {
         inContext(() -> {
@@ -640,11 +738,38 @@ final class ProtosPerf045RangeEachInlineTest {
                         staged: Factory(change(), 4)
                         hook(staged.stop)
                         hook(Factory(2, 3))
+                        hook(build(InvertedRange, 3, 0).start)
+                        Plain: { construct: (a, b) => { a * 10 + b } }
+                        hook(build(Plain, 2, 3))
+                        Plain.construct = (a, b) => { a - b }
+                        hook(build(Plain, 2, 3))
+                        hook(build(Range, 4, 6).stop)
+                        Plain.construct = (a, b) => { a * 10 + b }
+                        hook(build(Plain, 2, 3))
+                        Plain.call: (a, b) => { a * b + 100 }
+                        hook(build(Plain, 2, 3))
+                        Plain.removeSlot("call")
+                        hook(build(Plain, 2, 3))
+                        walk: (r) => { r.each(i => { hook(i) }) }
+                        walkStep: (r, s) => { r.eachStep(s, i => { hook(i) }) }
+                        Walker: {
+                            each: (f) => { f(70) }
+                            eachStep: (s, f) => { f(s * 100) }
+                        }
+                        walk(build(Range, 0, 2))
+                        walk(Walker)
+                        walk(build(InvertedRange, 2, 0))
+                        walkStep(build(Range, 0, 4), 2)
+                        walkStep(Walker, 5)
+                        walkStep(build(InvertedRange, 4, 0), -2)
+                        walk(build(Range, 0, 2))
                     }
                     run()
                     """);
             assertInstanceOf(ProtosNullValue.class, result);
-            assertEquals(List.of(2L, 5L, 1L, 6L, 1L, 3L, 4L, 1L), module.visits);
+            assertEquals(List.of(2L, 5L, 1L, 6L, 1L, 3L, 4L, 1L,
+                    3L, 23L, -1L, 6L, 23L, 106L, 23L,
+                    0L, 1L, 70L, 2L, 1L, 0L, 2L, 500L, 4L, 2L, 0L, 1L), module.visits);
         });
     }
 
@@ -1424,6 +1549,17 @@ final class ProtosPerf045RangeEachInlineTest {
             // Signed-64 operands whose final advance leaves the signed-64 range.
             {"Range(" + min + ", " + max + ").eachStep(" + max + ", ",
                 List.of("-9223372036854775808", "-1", "9223372036854775806")},
+            // A signed-64 start with a bound beyond either signed-64 limit.
+            {"Range(" + max + ", " + max + " + 3).each",
+                List.of("9223372036854775807", "9223372036854775808", "9223372036854775809")},
+            {"InvertedRange(" + min + ", " + min + " - 3).each",
+                List.of("-9223372036854775808", "-9223372036854775809", "-9223372036854775810")},
+            // Signed-64 operands and steps whose next advance would leave the
+            // signed-64 range keep the complete selection.
+            {"Range(" + max + " - 4, " + max + ").eachStep(3, ",
+                List.of("9223372036854775803", "9223372036854775806")},
+            {"InvertedRange(" + min + " + 4, " + min + ").eachStep(-3, ",
+                List.of("-9223372036854775804", "-9223372036854775807")},
             // Empty large ranges.
             {"Range(" + big + ", " + big + ").each", List.of()},
             {"InvertedRange(" + big + ", " + big + ").eachStep(0 - " + big + ", ", List.of()},

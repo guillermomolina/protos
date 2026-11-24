@@ -2543,7 +2543,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         ProtosStandardObjectProtocol.CanonicalRootCallSelection callSelection,
                 @Cached ProtosNumericSelectionNode less,
                 @Cached ProtosNumericSelectionNode greater,
-                @Cached ProtosNumericSelectionNode plus) {
+                @Cached ProtosNumericSelectionNode plus,
+                @Cached("frozenStandardLongOperators(cachedPrelude, LESS, GREATER, PLUS)")
+                        boolean frozenLongIterationOperators) {
             Object start = startGetter.get(receiver);
             Object stop = stopGetter.get(receiver);
             if (start instanceof Long && stop instanceof Long last
@@ -2560,6 +2562,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 }
             } else if (!selectsStandard(stepped, receiver, step, cachedPrelude)) {
                 return false;
+            }
+            // Signed-64 operands under a Prelude whose operator chains were
+            // proven FROZEN and standard when this entry was installed.
+            if (start instanceof Long && stop instanceof Long
+                    && (!stepped || step instanceof Long)
+                    && frozenLongIterationOperators) {
+                return true;
             }
             return less.execute(frame, LESS, 0L)
                     && greater.execute(frame, GREATER, 0L)
@@ -2592,6 +2601,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         static ProtosPrelude admittedPrelude(VirtualFrame frame) {
             return ProtosFrameArguments.admittedPreludeOrNull(frame.getArguments());
+        }
+
+        /* Specialization time only: the FROZEN standard signed-64 operator proof. */
+        static boolean frozenStandardLongOperators(
+                ProtosPrelude prelude, String less, String greater, String plus) {
+            return ProtosNumericSelectionNode.frozenStandardLongOperators(prelude, less, greater, plus);
         }
 
         static boolean hasSelectionParent(
@@ -3088,7 +3103,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Shared("less") @Cached ProtosNumericSelectionNode less,
                 @Shared("greater") @Cached ProtosNumericSelectionNode greater,
                 @Shared("lessEqual") @Cached ProtosNumericSelectionNode lessEqual,
-                @Shared("greaterEqual") @Cached ProtosNumericSelectionNode greaterEqual) {
+                @Shared("greaterEqual") @Cached ProtosNumericSelectionNode greaterEqual,
+                @Cached("frozenStandardLongOperators(cachedPrelude, LESS, GREATER, LESS_EQUAL, GREATER_EQUAL)")
+                        boolean frozenLongComparisons) {
             if (!(start instanceof Long && stop instanceof Long)
                     && !(ProtosNumericValueSupport.isCurrentInteger(start)
                             && ProtosNumericValueSupport.isCurrentInteger(stop))) {
@@ -3098,6 +3115,11 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     ? !frozenStandard
                     : !standardRoot(callSelection, constructSelection, parentSelection, freezeSelection)) {
                 return false;
+            }
+            // Signed-64 bounds under a Prelude whose comparison chains were
+            // proven FROZEN and standard when this entry was installed.
+            if (start instanceof Long && stop instanceof Long && frozenLongComparisons) {
+                return true;
             }
             return standardComparisons(
                     frame, start, less, greater, lessEqual, greaterEqual);
@@ -3134,6 +3156,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         static ProtosPrelude admittedPrelude(VirtualFrame frame) {
             return ProtosFrameArguments.admittedPreludeOrNull(frame.getArguments());
+        }
+
+        /* Specialization time only: the FROZEN standard signed-64 operator proof. */
+        static boolean frozenStandardLongOperators(
+                ProtosPrelude prelude, String less, String greater, String lessEqual, String greaterEqual) {
+            return ProtosNumericSelectionNode.frozenStandardLongOperators(
+                    prelude, less, greater, lessEqual, greaterEqual);
         }
 
         /*
@@ -3977,6 +4006,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         @Specialization(
                 guards = {
                     "factory == cachedFactory",
+                    "prelude == cachedPrelude",
                     "callSelection != null",
                     "frozen || callSelection.isValid()",
                     "constructSelection != null",
@@ -3987,6 +4017,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         public static boolean doCached(
                 ProtosObjectValue factory,
                 @Bind VirtualFrame frame,
+                @Bind("admittedPrelude(frame)") ProtosPrelude prelude,
+                @Cached("prelude") ProtosPrelude cachedPrelude,
                 @Cached("ordinaryFactoryOrNull(factory)") ProtosObjectValue cachedFactory,
                 @Cached("selectCall(cachedFactory)")
                         ProtosValueLookup.StructuralSelection callSelection,
@@ -3994,15 +4026,15 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         ProtosValueLookup.StructuralSelection constructSelection,
                 @Cached("allOwnersFrozen(callSelection, constructSelection)") boolean frozen,
                 @Cached("frozenStandard(frozen, callSelection, constructSelection)")
-                        boolean frozenStandard) {
-            ProtosPrelude prelude =
-                    ProtosFrameArguments.admittedPreludeOrNull(frame.getArguments());
+                        boolean frozenStandard,
+                @Cached("frozenArrayForPrelude(frozen, frozenStandard, cachedPrelude)")
+                        ProtosObjectValue cachedArrayPrototype) {
             if (prelude == null) {
                 return false;
             }
             if (frozen) {
                 return frozenStandard
-                        && prelude.arrayPrototype() == constructSelection.home();
+                        && cachedArrayPrototype == constructSelection.home();
             }
             return ProtosStandardObjectProtocol.isCanonicalStandardCallSelection(
                             callSelection.read(), callSelection.home())
@@ -4035,6 +4067,28 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         static boolean isOrdinaryFactory(Object factory) {
             return ProtosValueLookup.isOrdinaryObject(factory)
                     && ((ProtosObjectValue) factory).usesObjectStorageForRuntime();
+        }
+
+        /* The caller's Prelude may differ between executions of one site. */
+        @NonIdempotent
+        static ProtosPrelude admittedPrelude(VirtualFrame frame) {
+            return ProtosFrameArguments.admittedPreludeOrNull(frame.getArguments());
+        }
+
+        /*
+         * Specialization time only: the Array prototype of the cached Prelude,
+         * read only for a FROZEN standard selection, exactly where the
+         * per-execution read used to happen. The Prelude's Array binding is
+         * fixed for its identity, which guards the entry.
+         */
+        static ProtosObjectValue frozenArrayForPrelude(
+                boolean frozen,
+                boolean frozenStandard,
+                ProtosPrelude prelude) {
+            if (!frozen || !frozenStandard || prelude == null) {
+                return null;
+            }
+            return prelude.arrayPrototype();
         }
 
         static ProtosObjectValue ordinaryFactoryOrNull(ProtosObjectValue factory) {
