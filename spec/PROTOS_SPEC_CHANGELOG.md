@@ -23,6 +23,13 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.510] - 2026-11-25
+
+### D261-R2 / I174-B — Typed native pointers and original-owner provenance
+
+- Primary owner `semantics/FFI.md`: define typed pointer, nullable pointer and borrowedPointer admission, addressOf provenance, pointer outputs, null-result errors, borrow epochs and owner revocation.
+- Update `concurrency/ACTORS.md` to include native pointer capabilities in the existing Actor-transfer restriction; pointers introduce no Core family or implicit native-memory access.
+
 ## [0.1.509] - 2026-11-25
 
 ### D261-R2 / I174-A — Fixed-width scalars, declarative layouts and RootActor native admission

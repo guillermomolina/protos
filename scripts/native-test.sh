@@ -888,6 +888,10 @@ else
         --allow-library "first=${tmp_dir}/libffi_test.so" \
         --allow-library "second=${tmp_dir}/libffi_second.so" \
         "${ffm_cases_dir}/ffm-root-actor.protos"
+    run_ffm_case POINTERS 0 'FFM-POINTERS-PASS' \
+        --allow-library "first=${tmp_dir}/libffi_test.so" \
+        --allow-library "second=${tmp_dir}/libffi_second.so" \
+        "${ffm_cases_dir}/ffm-pointers.protos"
     run_ffm_case MISSING_SYMBOL 0 'symbol-not-found' \
         --allow-library "first=${tmp_dir}/libffi_test.so" \
         -e 'FFI: import("std:ffi")

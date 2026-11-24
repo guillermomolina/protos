@@ -42,6 +42,31 @@ worker: Actor.spawn("./ffm-root-actor-worker.protos", "worker")
     Assertions.signals(NonTransferableValue, () => worker.request("echo", raw))
     // An ordinary Closure capturing live foreign authority is not transferable either.
     Assertions.signals(NonTransferableValue, () => worker.request("echo", identity))
+    // Typed native pointer capabilities are pass-only and never cross either.
+    bytes: FFI.pointer(FFI.u8)
+    plain: FFI.bind(first, "ffi_test_pointer_octets", bytes, Array(FFI.i32))(1)
+    counterType: FFI.opaque(first, "ffi_test_counter")
+    newCounter: FFI.bind(first, "ffi_test_counter_new",
+        FFI.owned(counterType, "ffi_test_counter_free", FFI.i32), Array(FFI.i64))
+    counter: newCounter(4)
+    (() => {
+        address: FFI.addressOf(counter)
+        readFirst: FFI.bindPreserving(first, "ffi_test_pointer_first", FFI.i32, Array(bytes))
+        // Acquired after every non-preserving call, so it is live when sent.
+        lent: FFI.bind(first, "ffi_test_pointer_octets", FFI.borrowedPointer(bytes),
+            Array(FFI.i32))(1)
+        Assertions.require(first.isLive(plain) == true)
+        Assertions.require(first.isLive(lent) == true)
+        Assertions.require(first.isLive(address) == true)
+        Assertions.signals(NonTransferableValue, () => worker.request("echo", plain))
+        Assertions.signals(NonTransferableValue, () => worker.request("echo", lent))
+        Assertions.signals(NonTransferableValue, () => worker.request("echo", address))
+        Assertions.signals(NonTransferableValue, () => worker.request("echo", counter))
+        Assertions.require(first.isLive(lent) == true)
+        Assertions.require(readFirst(lent) == 42)
+        // Copied scalar results of pointer calls remain transferable.
+        Assertions.require(worker.request("echo", readFirst(plain)).value() == 42)
+    }).ensure(() => FFI.release(counter))
     // Ordinary results remain transferable.
     Assertions.require(worker.request("echo", identity(7)).value() == 7)
     Assertions.require(worker.request("layoutSize").value() == 16)

@@ -49,8 +49,8 @@ final class FfmTypes {
 
     /** One ABI descriptor. Implementations are immutable and never expose an address. */
     sealed interface Type
-            permits Scalar, OpaqueType, OwnedType, BorrowedType, OutType, InputType, InputLength,
-                    CopyDestructor, Remainder {
+            permits Scalar, OpaqueType, OwnedType, BorrowedType, PointerType, OutType, InputType,
+                    InputLength, CopyDestructor, Remainder {
         /** The descriptor's spelling, safe for diagnostics; never contains an address. */
         String spelling();
     }
@@ -147,6 +147,97 @@ final class FfmTypes {
         @Override
         public String spelling() {
             return "borrowed";
+        }
+    }
+
+    /**
+     * Typed native data pointer declaration: plain, nullable, or borrowed.
+     *
+     * <p>A plain instance is the canonical pointee identity: the declaring library associates one
+     * plain instance with each exact pointee layout, and its nullable and borrowed variants,
+     * created once with it, retain that same identity. Identity is the Java object itself, never
+     * a number or an address. The descriptor carries no field definitions, layout or extent; it is
+     * library-neutral within one session. A pointer passes as {@link ValueLayout#ADDRESS} and
+     * a result in this position becomes a pass-only {@link FfmHandles.Pointer}. The borrowed
+     * variant is non-nullable, admitted only as a result or {@code out} target, and its results
+     * are governed by the session borrow epoch. Distinct from the private {@link BorrowedType}.
+     */
+    static final class PointerType implements Type {
+        private final PointerType identity;
+        private final boolean voidPointee;
+        private final boolean nullable;
+        private final boolean borrowed;
+        private final PointerType nullableVariant;
+        private final PointerType borrowedVariant;
+
+        /** A fresh plain descriptor, and therefore a fresh pointee identity. */
+        PointerType(boolean voidPointee) {
+            this.identity = this;
+            this.voidPointee = voidPointee;
+            this.nullable = false;
+            this.borrowed = false;
+            this.nullableVariant = new PointerType(this, true, false);
+            this.borrowedVariant = new PointerType(this, false, true);
+        }
+
+        private PointerType(PointerType plain, boolean nullable, boolean borrowed) {
+            this.identity = plain;
+            this.voidPointee = plain.voidPointee;
+            this.nullable = nullable;
+            this.borrowed = borrowed;
+            this.nullableVariant = null;
+            this.borrowedVariant = null;
+        }
+
+        /** The canonical plain descriptor naming this pointer's pointee. */
+        PointerType identity() {
+            return identity;
+        }
+
+        boolean isPlain() {
+            return identity == this;
+        }
+
+        boolean voidPointee() {
+            return voidPointee;
+        }
+
+        boolean nullable() {
+            return nullable;
+        }
+
+        boolean borrowed() {
+            return borrowed;
+        }
+
+        /** The nullable variant of a plain descriptor. */
+        PointerType asNullable() {
+            if (!isPlain()) {
+                throw new IllegalArgumentException("not a plain pointer descriptor");
+            }
+            return nullableVariant;
+        }
+
+        /** The borrowed result variant of a plain descriptor. */
+        PointerType asBorrowed() {
+            if (!isPlain()) {
+                throw new IllegalArgumentException("not a plain pointer descriptor");
+            }
+            return borrowedVariant;
+        }
+
+        @Override
+        public String spelling() {
+            String pointee = voidPointee ? "void" : "data";
+            if (nullable) {
+                return "nullablePointer(" + pointee + ")";
+            }
+            return (borrowed ? "borrowedPointer(" : "pointer(") + pointee + ")";
+        }
+
+        @Override
+        public String toString() {
+            return spelling();
         }
     }
 
@@ -264,6 +355,7 @@ final class FfmTypes {
                 || type instanceof OpaqueType
                 || type instanceof OwnedType
                 || type == BorrowedType.INSTANCE
+                || type instanceof PointerType
                 || type == Remainder.INSTANCE;
     }
 
@@ -276,6 +368,7 @@ final class FfmTypes {
         return isNumericScalar(type)
                 || type == Scalar.UTF8Z
                 || type instanceof OpaqueType
+                || (type instanceof PointerType pointer && !pointer.borrowed())
                 || type instanceof OutType
                 || type instanceof InputType
                 || type == InputLength.INSTANCE
@@ -287,7 +380,10 @@ final class FfmTypes {
         return type instanceof Scalar scalar && scalar != Scalar.VOID && scalar != Scalar.UTF8Z;
     }
 
-    /** The library whose handles this descriptor admits, or null for a library-neutral one. */
+    /**
+     * The library whose handles this descriptor admits, or null for a library-neutral one; typed
+     * pointer descriptors are library-neutral within their session.
+     */
     static String libraryOf(Type type) {
         return switch (type) {
             case OpaqueType opaque -> opaque.library();
@@ -314,6 +410,7 @@ final class FfmTypes {
             case OpaqueType ignored -> ValueLayout.ADDRESS;
             case OwnedType ignored -> ValueLayout.ADDRESS;
             case BorrowedType ignored -> ValueLayout.ADDRESS;
+            case PointerType ignored -> ValueLayout.ADDRESS;
             case OutType ignored -> ValueLayout.ADDRESS;
             case InputType ignored -> ValueLayout.ADDRESS;
             case InputLength ignored -> ValueLayout.JAVA_INT;

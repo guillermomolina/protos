@@ -399,3 +399,53 @@ int64_t ffi_test_layout(int64_t query) {
     default: return -1;
     }
 }
+
+/*
+ * ---- typed pointers: real pointer results, parameters and out slots
+ *
+ * Every function counts its entries, so a rejected call is observable as an
+ * unchanged counter. The static storage is never written by Protos: pointer
+ * capabilities carry no readable extent.
+ */
+
+static const uint8_t ffi_test_pointer_storage[4] = {42, 7, 255, 0};
+static int32_t ffi_test_pointer_calls;
+
+/* Answers the static storage, or NULL when present is zero. */
+const uint8_t *ffi_test_pointer_octets(int32_t present) {
+    ffi_test_pointer_calls++;
+    return present ? ffi_test_pointer_storage : NULL;
+}
+
+/* Reads the first octet; answers -1 for NULL. */
+int32_t ffi_test_pointer_first(const uint8_t *data) {
+    ffi_test_pointer_calls++;
+    return data == NULL ? -1 : data[0];
+}
+
+/* Writes the static storage through a pointer out slot; answers 1. */
+int32_t ffi_test_pointer_out(const uint8_t **out) {
+    ffi_test_pointer_calls++;
+    *out = ffi_test_pointer_storage;
+    return 1;
+}
+
+/*
+ * NULL into the pointer out, a fresh owned counter (initial 11) into the
+ * second out; answers 9. Declaring the first out as a non-nullable pointer
+ * makes the conversion fail after the owned counter was produced.
+ */
+int32_t ffi_test_pointer_mixed(const uint8_t **missing, ffi_test_counter **out) {
+    ffi_test_pointer_calls++;
+    *missing = NULL;
+    *out = ffi_test_counter_new(11);
+    return 9;
+}
+
+/* Receives a counter through an untyped pointer and answers its value. */
+int32_t ffi_test_pointer_counter_value(const void *data) {
+    ffi_test_pointer_calls++;
+    return (int32_t)((const ffi_test_counter *)data)->value;
+}
+
+int32_t ffi_test_pointer_calls_count(void) { return ffi_test_pointer_calls; }

@@ -315,6 +315,9 @@ returned as data.
 | `inputLength` | `int` length of the nearest preceding `text`/`octets` | no argument; exact octet count computed by the provider |
 | `copyDestructor` | `void (*)(void *)` destructor argument | no argument; always the copy sentinel `-1` (for SQLite, `SQLITE_TRANSIENT`) |
 | `out(remainder)` | `const char **` tail into the nearest preceding `utf8z`/`text` | no argument; unconsumed octet count, `null` for a NULL tail |
+| `pointerType(voidPointee)` | typed data pointer (private; built by `std:ffi` from `FFI.pointer`) | pass-only pointer capability; one descriptor per pointee layout |
+| `nullablePointerType(pointer)` | the same pointer, admitting C `NULL` | capability or `null` |
+| `borrowedPointerType(pointer)` | the same pointer as a borrow-epoch result (return or `out` only) | epoch-governed capability |
 
 Integers are never truncated or wrapped, and no Integer converts to a
 pointer. The private input regions are fresh, non-NULL, NUL-guarded copies in
@@ -340,6 +343,7 @@ that are not public in R1. Protos applications should use
 | `release(owned)` | releases an owned reference now; answers the destructor's C result |
 | `isLive(reference)` | whether a reference or borrowed region is still usable |
 | `copy(borrowed, length)` | bounded copy of a borrowed region into an independent indexed value of octets |
+| `addressOf(owned, voidPointer)` | pass-only `void` pointer capability retaining a live owned reference of this library |
 
 Signatures are built one parameter at a time. The usual Protos-first pattern
 folds an ordinary Array of descriptors:
@@ -536,6 +540,8 @@ instead rejects every semicolon and never reads `pzTail`.
 | Wrong kind (for example an Integer for `utf8z`) | ordinary Error, before entry |
 | Integer out of the declared range | ordinary Error, before entry |
 | Released, closed-session, or wrongly typed reference; stale borrowed region | ordinary Error, before entry |
+| Expired, released-owner, closed-session or incompatible pointer capability | ordinary Error, before entry |
+| C `NULL` in a non-nullable or borrowed typed pointer result | `ForeignError`, `foreignCategory` `null-result` |
 | Native symbol cannot be resolved by `bind` | `ForeignError` |
 | Provider failure after entry (load, conversion) | `ForeignError` |
 | `SQLITE_ERROR` or any other C status | an ordinary Integer result |
@@ -589,6 +595,11 @@ symbol whitelist and none would be an isolation guarantee.
   by address. Owned references enter custody before they are published, are
   released at most once (`release`, or session close), and are rejected after
   release.
+- Typed pointer capabilities (`std:ffi` `FFI.pointer`, `FFI.nullable`,
+  `FFI.borrowedPointer`, `FFI.addressOf`) are pass-only: no address, no
+  extent, no `copy`, no `release`, never in custody. Each is admissible only
+  while its session is open, its retained owner (from `addressOf`) is live, and,
+  for a borrowed result, the borrow epoch is unchanged.
 - Borrowed pointers (`borrowed`) are readable only through
   `copy(borrowed, length)` and only until the next non-`preserving` call. The
   SQLite pattern is: `sqlite3_column_text` / `sqlite3_column_blob`, then a

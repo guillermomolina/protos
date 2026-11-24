@@ -237,22 +237,16 @@ check("second u8 mixed", complement(15) == 240)
 ordinary("second u8 above", () => complement(256))
 foreign("symbols stay in their library", () => FFI.bind(second, "ffi_test_u8_identity", FFI.u8, Array(FFI.u8)))
 
-// ---- declarative layouts are not bindable in this slice
+// ---- aggregate layouts are not bindable (typed pointers: ffm-pointers.protos)
 
 padded: FFI.struct(Array(
     FFI.field("a", FFI.i8), FFI.field("b", FFI.i32), FFI.field("c", FFI.i16)))
-pointer: FFI.pointer(padded)
 ordinary("struct return", () => declare("ffi_test_i8_identity", padded, Array()))
 ordinary("struct parameter", () => declare("ffi_test_i8_identity", FFI.i8, Array(padded)))
 ordinary("array parameter", () => declare("ffi_test_i8_identity", FFI.i8, Array(FFI.array(FFI.i8, 1))))
-ordinary("pointer return", () => declare("ffi_test_i8_identity", pointer, Array()))
-ordinary("pointer parameter", () => declare("ffi_test_i8_identity", FFI.i8, Array(pointer)))
-ordinary("nullable pointer parameter",
-    () => declare("ffi_test_i8_identity", FFI.i8, Array(FFI.nullable(pointer))))
 ordinary("field parameter",
     () => declare("ffi_test_i8_identity", FFI.i8, Array(FFI.field("x", FFI.i8))))
-nullablePointer: FFI.nullable(pointer)
-for(invalid in Array(pointer, nullablePointer, padded, FFI.array(FFI.i8, 2))) {
+for(invalid in Array(padded, FFI.array(FFI.i8, 2), FFI.union(Array(FFI.field("x", FFI.i8))))) {
     rejected("invalid return", () => declare("ffi_test_i8_identity", invalid, Array()))
     rejected("invalid parameter", () => declare("ffi_test_i8_identity", FFI.i8, Array(invalid)))
     rejected("invalid output target", () => FFI.out(invalid))

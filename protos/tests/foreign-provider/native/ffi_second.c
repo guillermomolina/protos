@@ -57,3 +57,21 @@ int32_t ffi_second_write_marker(const char *path) {
 /* ---- the u8(u8) physical shape under a second, independently authorized library */
 
 uint8_t ffi_second_u8_complement(uint8_t value) { return (uint8_t)~value; }
+
+/* ---- a pointer obtained from another authorized library, read here */
+
+static int32_t ffi_second_pointer_calls;
+
+/* Reads the octet at index 1; answers -1 for NULL. */
+int32_t ffi_second_pointer_second(const uint8_t *data) {
+    ffi_second_pointer_calls++;
+    return data == NULL ? -1 : data[1];
+}
+
+int32_t ffi_second_pointer_calls_count(void) { return ffi_second_pointer_calls; }
+
+/* Checks only for NULL: never dereferences a pointer whose layout belongs to another library. */
+int32_t ffi_second_pointer_present(const void *data) {
+    ffi_second_pointer_calls++;
+    return data == NULL ? 0 : 1;
+}

@@ -1,0 +1,327 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// Typed native pointer capabilities: plain, nullable and borrowed results,
+// pointer parameters and out positions, the borrow epoch, cross-library
+// passage and original-owner provenance through FFI.addressOf. The host
+// authorizes exactly:
+//   first=<absolute libffi_test.so>   (native/ffi_test.c)
+//   second=<absolute libffi_second.so> (native/ffi_second.c)
+// Run by ProtosI144FfmFixtureAbiTest, dist/test_external_foreign_providers.py
+// and dist/validate_native.py.
+
+FFI: import("std:ffi")
+first: import("ffi:first")
+second: import("ffi:second")
+
+// Every check carries a label, so a failure names its location
+// (the Java host reports the `label` slot of the CheckFailure).
+CheckFailure: Error {}
+
+check: (label, condition) => {
+    (condition === true).ifFalse(() => {
+        failure: CheckFailure { label: label }
+        failure.signal()
+    })
+    null
+}
+
+caught: (prototype, body) => {
+    result: null
+    prototype.handle(body, (error) => {
+        result = error
+        error
+    })
+    result
+}
+
+/// The ordinary pre-entry Error, never a ForeignError.
+ordinary: (label, body) => {
+    error: caught(Error, body)
+    check(label, (error === null) == false)
+    check(label + " is ordinary", error.parent() === Error)
+}
+
+/// A ForeignError signalled after entry.
+foreign: (label, body) => {
+    error: caught(ForeignError, body)
+    check(label, (error === null) == false)
+}
+
+/// Any Error: the operation is not available on the value at all.
+failed: (label, body) => {
+    check(label, (caught(Error, body) === null) == false)
+}
+
+declare: (symbol, returns, parameters) => FFI.bind(first, symbol, returns, parameters)
+// The entry counters are trusted to leave borrowed regions valid.
+calls: FFI.bindPreserving(first, "ffi_test_pointer_calls_count", FFI.i32, Array())
+secondCalls: FFI.bindPreserving(second, "ffi_second_pointer_calls_count", FFI.i32, Array())
+
+// Rejected calls never enter C: both native entry counters are unchanged.
+rejected: (label, body) => {
+    before: calls()
+    beforeSecond: secondCalls()
+    ordinary(label, body)
+    check(label + " did not enter C", (calls() == before) && (secondCalls() == beforeSecond))
+}
+
+// ---- declarations
+
+bytes: FFI.pointer(FFI.u8)
+voidPointer: FFI.pointer(FFI.void)
+octets: declare("ffi_test_pointer_octets", bytes, Array(FFI.i32))
+maybeOctets: declare("ffi_test_pointer_octets", FFI.nullable(bytes), Array(FFI.i32))
+borrowedOctets: declare("ffi_test_pointer_octets", FFI.borrowedPointer(bytes), Array(FFI.i32))
+voidOctets: declare("ffi_test_pointer_octets", voidPointer, Array(FFI.i32))
+firstOctet: declare("ffi_test_pointer_first", FFI.i32, Array(bytes))
+firstMaybe: declare("ffi_test_pointer_first", FFI.i32, Array(FFI.nullable(bytes)))
+firstVoid: declare("ffi_test_pointer_first", FFI.i32, Array(voidPointer))
+preservingFirst: FFI.bindPreserving(first, "ffi_test_pointer_first", FFI.i32, Array(bytes))
+
+// ---- plain typed pointer results and parameters
+
+entered: calls()
+plain: octets(1)
+check("plain result", (plain === null) == false)
+check("plain pointer parameter", firstOctet(plain) == 42)
+check("plain pointer reusable", firstOctet(plain) == 42)
+check("plain entries", calls() == entered + 3)
+check("fresh capability per result", octets(1) !== plain)
+foreign("plain NULL result", () => octets(0))
+foreign("borrowed NULL result", () => borrowedOctets(0))
+rejected("plain parameter null", () => firstOctet(null))
+rejected("plain arity", () => firstOctet())
+rejected("plain extra", () => firstOctet(plain, plain))
+
+// ---- nullable typed pointers
+
+maybe: maybeOctets(1)
+check("nullable nonnull result", firstMaybe(maybe) == 42)
+check("nullable NULL result", maybeOctets(0) === null)
+check("nullable parameter null", firstMaybe(null) == -1)
+check("nullable parameter plain", firstMaybe(plain) == 42)
+check("plain parameter nullable result", firstOctet(maybe) == 42)
+
+// ---- compatible declarations share the exact pointee layout identity
+
+sameBytes: FFI.pointer(FFI.u8)
+check("independent declarations", sameBytes !== bytes)
+firstSame: declare("ffi_test_pointer_first", FFI.i32, Array(sameBytes))
+check("compatible parameter", firstSame(plain) == 42)
+sameOctets: declare("ffi_test_pointer_octets", sameBytes, Array(FFI.i32))
+check("compatible result", firstOctet(sameOctets(1)) == 42)
+signedBytes: FFI.pointer(FFI.i8)
+firstSigned: declare("ffi_test_pointer_first", FFI.i32, Array(signedBytes))
+rejected("mismatched pointee", () => firstSigned(plain))
+oneOctet: FFI.struct(Array(FFI.field("value", FFI.u8)))
+firstStruct: declare("ffi_test_pointer_first", FFI.i32, Array(FFI.pointer(oneOctet)))
+rejected("no structural equivalence", () => firstStruct(plain))
+
+// ---- void pointers: passage without reinterpretation
+
+check("data pointer through void", firstVoid(plain) == 42)
+untyped: voidOctets(1)
+check("void result through void", firstVoid(untyped) == 42)
+rejected("void is not reinterpreted", () => firstOctet(untyped))
+rejected("void is not reinterpreted as nullable", () => firstMaybe(untyped))
+
+// ---- values that are not pointer capabilities
+
+counterType: FFI.opaque(first, "ffi_test_counter")
+ownedCounter: FFI.owned(counterType, "ffi_test_counter_free", FFI.i32)
+newCounter: declare("ffi_test_counter_new", ownedCounter, Array(FFI.i64))
+destroyed: FFI.bindPreserving(first, "ffi_test_destroyed_count", FFI.i32, Array())
+opaqueCounter: newCounter(3)
+for(value in Array(0, 1, 140737488355328, 18446744073709551615, -1, 1.0, "x", true, false,
+        Array(), {}, { pointee: FFI.u8 }, FFI.u8, bytes, voidPointer, FFI.nullable(bytes),
+        FFI.borrowedPointer(bytes), first.i32, (x) => x, opaqueCounter)) {
+    rejected("not a pointer", () => firstOctet(value))
+    rejected("not a void pointer", () => firstVoid(value))
+    rejected("not a nullable pointer", () => firstMaybe(value))
+}
+check("opaque counter release", FFI.release(opaqueCounter) == 0)
+ordinary("borrowed parameter declaration",
+    () => declare("ffi_test_pointer_first", FFI.i32, Array(FFI.borrowedPointer(bytes))))
+ordinary("borrowed preserving parameter declaration",
+    () => FFI.bindPreserving(first, "ffi_test_pointer_first", FFI.i32,
+        Array(FFI.borrowedPointer(bytes))))
+
+// ---- pointer out positions
+
+outPlain: declare("ffi_test_pointer_out", FFI.i32, Array(FFI.out(bytes)))
+written: outPlain()
+check("pointer out Array", Array.recognizes(written) && (written.size() == 2))
+check("pointer out status", written[0] == 1)
+check("pointer out passes", firstOctet(written[1]) == 42)
+check("fresh output Array", outPlain() !== written)
+outBorrowed: declare("ffi_test_pointer_out", FFI.i32, Array(FFI.out(FFI.borrowedPointer(bytes))))
+lent: outBorrowed()
+check("borrowed out order", (lent.size() == 2) && (lent[0] == 1))
+check("borrowed out passes", preservingFirst(lent[1]) == 42)
+outMaybe: declare("ffi_test_pointer_out", FFI.i32, Array(FFI.out(FFI.nullable(bytes))))
+check("nullable out passes", firstOctet(outMaybe()[1]) == 42)
+
+// ---- the borrow epoch
+
+borrowed: borrowedOctets(1)
+check("borrowed result live", first.isLive(borrowed) == true)
+check("borrowed through preserving", preservingFirst(borrowed) == 42)
+check("preserving keeps the pointer", preservingFirst(borrowed) == 42)
+rejected("bad preserving invocation", () => preservingFirst(1))
+rejected("bad ordinary invocation", () => firstOctet("x"))
+check("rejections keep the pointer", first.isLive(borrowed) == true)
+check("rejected calls keep the pointer", preservingFirst(borrowed) == 42)
+check("admitted non-preserving call", firstOctet(borrowed) == 42)
+check("non-preserving call revoked it", first.isLive(borrowed) == false)
+rejected("expired borrowed pointer", () => preservingFirst(borrowed))
+rejected("expired through ordinary binding", () => firstOctet(borrowed))
+rejected("expired through void", () => firstVoid(borrowed))
+renewed: borrowedOctets(1)
+rejected("expired is not restored", () => preservingFirst(borrowed))
+check("renewed pointer", preservingFirst(renewed) == 42)
+check("plain results are not epoch-governed", firstOctet(plain) == 42)
+
+// ---- cross-library passage
+
+secondRead: FFI.bind(second, "ffi_second_pointer_second", FFI.i32, Array(bytes))
+secondPreserving: FFI.bindPreserving(second, "ffi_second_pointer_second", FFI.i32, Array(bytes))
+secondEntered: secondCalls()
+check("cross-library pointer", secondRead(plain) == 7)
+check("cross-library entry", secondCalls() == secondEntered + 1)
+crossBorrowed: borrowedOctets(1)
+check("cross-library preserving", secondPreserving(crossBorrowed) == 7)
+check("cross-library preserving keeps", preservingFirst(crossBorrowed) == 42)
+check("cross-library ordinary", secondRead(crossBorrowed) == 7)
+rejected("cross-library expired", () => secondPreserving(crossBorrowed))
+rejected("cross-library expired in first", () => preservingFirst(crossBorrowed))
+rejected("cross-library mismatched pointee",
+    () => FFI.bind(second, "ffi_second_pointer_second", FFI.i32, Array(signedBytes))(plain))
+
+// ---- original-owner provenance
+
+counterValue: declare("ffi_test_pointer_counter_value", FFI.i32, Array(voidPointer))
+counter: newCounter(5)
+address: FFI.addressOf(counter)
+check("owner-backed pointer", counterValue(address) == 5)
+check("owner-backed pointer is not epoch-governed", counterValue(address) == 5)
+check("owner-backed pointer live", first.isLive(address) == true)
+check("fresh address capability", FFI.addressOf(counter) !== address)
+rejected("opaque handle needs addressOf", () => counterValue(counter))
+rejected("void address is not typed", () => firstOctet(address))
+ordinary("pointer capability is not released", () => FFI.release(address))
+check("owner still live", counterValue(address) == 5)
+// The owner-backed capability crosses to the second library without being
+// dereferenced there; ownership and destructor authority stay with `counter`.
+secondPresent: FFI.bindPreserving(second, "ffi_second_pointer_present", FFI.i32,
+    Array(voidPointer))
+presentEntered: secondCalls()
+destroyedBeforePresent: destroyed()
+check("owner pointer in second library", secondPresent(address) == 1)
+check("second library entered once", secondCalls() == presentEntered + 1)
+check("owner live after second library", first.isLive(counter) == true)
+check("no destructor from passage", destroyed() == destroyedBeforePresent)
+// A destructor advances the borrow epoch: no other non-preserving call runs
+// between this borrowed result and the release below.
+lentBeforeRelease: borrowedOctets(1)
+check("borrowed live before release", first.isLive(lentBeforeRelease) == true)
+check("borrowed read before release", preservingFirst(lentBeforeRelease) == 42)
+destroyedBefore: destroyed()
+check("exact destructor result", FFI.release(counter) == 0)
+check("destructor ran once", destroyed() == destroyedBefore + 1)
+check("destructor revoked the borrow", first.isLive(lentBeforeRelease) == false)
+rejected("borrowed after destructor", () => preservingFirst(lentBeforeRelease))
+check("plain pointer survives the destructor", firstOctet(plain) == 42)
+check("retired pointer not live", first.isLive(address) == false)
+rejected("retired owner pointer", () => counterValue(address))
+rejected("retired owner pointer in second library", () => secondPresent(address))
+ordinary("addressOf released handle", () => FFI.addressOf(counter))
+ordinary("released handle stays released", () => FFI.release(counter))
+another: newCounter(6)
+rejected("retired pointer stays retired", () => counterValue(address))
+rejected("retired pointer stays retired in second library", () => secondPresent(address))
+check("new owner pointer", counterValue(FFI.addressOf(another)) == 6)
+check("new owner release", FFI.release(another) == 0)
+check("each destructor ran once", destroyed() == destroyedBefore + 2)
+for(value in Array(null, 0, 1.0, "x", {}, Array(), FFI.u8, bytes, plain, renewed, ownedCounter)) {
+    ordinary("addressOf arbitrary value", () => FFI.addressOf(value))
+}
+ordinary("addressOf arity", () => FFI.addressOf())
+ordinary("addressOf extra", () => FFI.addressOf(another, another))
+
+// ---- result conversion after entry keeps owned custody
+
+mixed: declare("ffi_test_pointer_mixed", FFI.i32, Array(FFI.out(bytes), FFI.out(ownedCounter)))
+mixedEntered: calls()
+foreign("NULL non-nullable pointer out", () => mixed())
+check("mixed entered C", calls() == mixedEntered + 1)
+mixedMaybe: declare("ffi_test_pointer_mixed", FFI.i32,
+    Array(FFI.out(FFI.nullable(bytes)), FFI.out(ownedCounter)))
+pair: mixedMaybe()
+check("mixed nullable status", (pair.size() == 3) && (pair[0] == 9))
+check("mixed nullable pointer", pair[1] === null)
+check("mixed owned counter", (pair[2] === null) == false)
+check("mixed owned release", FFI.release(pair[2]) == 0)
+
+// ---- no implicit native memory access
+
+failed("pointer not indexed", () => plain[0])
+failed("pointer not mutated", () => { plain[0] = 1 })
+failed("no readable size", () => plain.size())
+rejected("pointer is not copied", () => first.copy(plain, 1))
+rejected("pointer is not provider-released", () => first.release(plain))
+// A live borrowed pointer is rejected for what it is, not for having expired.
+held: borrowedOctets(1)
+check("held borrowed live", first.isLive(held) == true)
+failed("live borrowed pointer not indexed", () => held[0])
+failed("live borrowed pointer not mutated", () => { held[0] = 1 })
+rejected("live borrowed pointer is not copied", () => first.copy(held, 1))
+rejected("live borrowed pointer is not provider-released", () => first.release(held))
+rejected("live borrowed pointer is not released", () => FFI.release(held))
+check("held borrowed still live", first.isLive(held) == true)
+check("held borrowed still readable by C", preservingFirst(held) == 42)
+
+// ---- Boolean transport admits Booleans only where a position requires one
+
+voidType: first.pointerType(true)
+dataType: first.pointerType(false)
+check("pointer descriptors", ((voidType === null) == false) && ((dataType === null) == false))
+check("distinct pointer descriptors", voidType !== dataType)
+for(value in Array(null, 0, 1.0, "true", {})) {
+    rejected("pointerType domain", () => first.pointerType(value))
+}
+rejected("pointerType missing", () => first.pointerType())
+rejected("pointerType extra", () => first.pointerType(true, true))
+nullableType: first.nullablePointerType(dataType)
+borrowedType: first.borrowedPointerType(dataType)
+for(value in Array(true, false, first.i32, first.u8, nullableType, borrowedType)) {
+    rejected("nullablePointerType domain", () => first.nullablePointerType(value))
+    rejected("borrowedPointerType domain", () => first.borrowedPointerType(value))
+}
+rejected("opaque Boolean", () => first.opaque(true))
+rejected("signature Boolean", () => first.signature(true))
+rejected("release Boolean", () => first.release(true))
+rejected("copy Boolean", () => first.copy(true, 1))
+rejected("copy Boolean length", () => first.copy(held, true))
+scalarIdentity: declare("ffi_test_i32_identity", FFI.i32, Array(FFI.i32))
+for(flag in Array(true, false)) {
+    rejected("scalar Boolean", () => scalarIdentity(flag))
+    rejected("pointer Boolean", () => firstOctet(flag))
+    rejected("nullable pointer Boolean", () => firstMaybe(flag))
+    rejected("preserving pointer Boolean", () => preservingFirst(flag))
+    rejected("cross-library pointer Boolean", () => secondPreserving(flag))
+}
+
+print("FFM-POINTERS-PASS")

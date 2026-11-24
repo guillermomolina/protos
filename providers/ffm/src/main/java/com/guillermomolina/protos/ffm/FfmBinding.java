@@ -292,6 +292,19 @@ final class FfmBinding {
                         && resource.type().name().equals(opaque.name())
                         && resource.type().library().equals(opaque.library());
             }
+            case FfmTypes.PointerType pointer -> {
+                if (argument.kind() == ProtosForeignValueClass.Kind.NULL) {
+                    yield pointer.nullable();
+                }
+                // Exact pointee identity; a void parameter passes any live data pointer without
+                // dereferencing it, never the converse. Borrowed declarations are results only.
+                yield !pointer.borrowed()
+                        && value instanceof FfmHandles.Pointer capability
+                        && capability.session() == session
+                        && capability.isLive()
+                        && (capability.pointee() == pointer.identity()
+                                || pointer.voidPointee());
+            }
             case FfmTypes.InputType input ->
                     argument.kind() == ProtosForeignValueClass.Kind.STRING
                             && FfmTypes.inputLength(input, value) >= 0;
@@ -461,6 +474,12 @@ final class FfmBinding {
                     value == null
                             ? MemorySegment.NULL
                             : ((FfmHandles.Resource) value).addressForCall();
+            // Marshalled before the borrow epoch advances: a borrowed pointer admitted as the
+            // input of a non-preserving call is revoked for later use, not for this call.
+            case FfmTypes.PointerType ignored ->
+                    value == null
+                            ? MemorySegment.NULL
+                            : ((FfmHandles.Pointer) value).addressForCall();
             default -> throw new IllegalStateException("not an argument position");
         };
     }
@@ -530,6 +549,24 @@ final class FfmBinding {
                 yield address.equals(MemorySegment.NULL)
                         ? FfmHandles.Absent.INSTANCE
                         : new FfmHandles.Borrowed(session, session.borrowEpoch(), address);
+            }
+            case FfmTypes.PointerType pointer -> {
+                // A fresh pass-only capability without readable extent; a borrowed one retains
+                // the epoch reached after this call's own advancement.
+                MemorySegment address = (MemorySegment) raw;
+                if (address.equals(MemorySegment.NULL)) {
+                    if (!pointer.nullable()) {
+                        throw new FfmFailure("null-result", "a non-nullable pointer was NULL");
+                    }
+                    yield FfmHandles.Absent.INSTANCE;
+                }
+                yield new FfmHandles.Pointer(
+                        session,
+                        pointer.identity(),
+                        address,
+                        null,
+                        pointer.borrowed(),
+                        session.borrowEpoch());
             }
             case FfmTypes.OutType ignored -> throw new IllegalStateException("nested out");
             case FfmTypes.Remainder ignored -> ((Tail) raw).remaining();

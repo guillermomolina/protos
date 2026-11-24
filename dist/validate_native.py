@@ -523,6 +523,7 @@ FFM_FIXTURES = (("first", "ffi_test"), ("second", "ffi_second"))
 FFM_LAYOUTS_MARKER = "FFM-LAYOUTS-PASS"
 FFM_SCALAR_LAYOUT_ABI_MARKER = "FFM-SCALAR-LAYOUT-ABI-PASS"
 FFM_ROOT_ACTOR_MARKER = "FFM-ROOT-ACTOR-PASS"
+FFM_POINTERS_MARKER = "FFM-POINTERS-PASS"
 # f32(f32, f32), physical shape F(F,F): a valid C signature that is not
 # registered for the image. It must be refused before linking with exactly an
 # ordinary Error (parent Error, the convention of ffm-public-api.protos), never
@@ -764,6 +765,15 @@ def validate_native_ffm(
         cwd=cwd,
         env=env,
         expected_stdout=FFM_ROOT_ACTOR_MARKER,
+    )
+    # Typed native pointer capabilities through both compiled fixtures; every
+    # physical shape they use is already registered for the image.
+    run_ffm_case(
+        "FFM_POINTERS",
+        [str(launcher), *fixture_grants, str(FFM_CASES / "ffm-pointers.protos")],
+        cwd=cwd,
+        env=env,
+        expected_stdout=FFM_POINTERS_MARKER,
     )
     run_ffm_case(
         "FFM_UNREGISTERED_SCALAR_SIGNATURE",

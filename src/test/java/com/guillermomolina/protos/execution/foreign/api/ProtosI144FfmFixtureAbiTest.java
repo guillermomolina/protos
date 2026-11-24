@@ -228,6 +228,146 @@ class ProtosI144FfmFixtureAbiTest {
     }
 
     /**
+     * Typed native pointer capabilities against the compiled C fixtures: plain, nullable and
+     * borrowed results, pointer parameters and outs, the borrow epoch, cross-library passage and
+     * original-owner provenance. Every semantic assertion is in the program.
+     */
+    @Test
+    void pointerProgramRunsAgainstCompiledC() throws Exception {
+        String source = withoutMarker("ffm-pointers.protos", "FFM-POINTERS-PASS");
+        try (ProtosExternalForeignProviderTest.Fixture fixture =
+                distributable(
+                        Map.of(
+                                "library.first", library.toAbsolutePath().toString(),
+                                "library.second", secondLibrary.toAbsolutePath().toString()))) {
+            ProtosExecutionOutcome outcome = fixture.run(source);
+            assertEquals(
+                    ProtosExecutionOutcome.State.COMPLETED,
+                    outcome.state(),
+                    () -> "ffm-pointers.protos failed with " + describe(fixture, outcome.error()));
+        }
+    }
+
+    /** Borrowed and out pointer declarations are pure Protos metadata: no provider session. */
+    @Test
+    void pointerDeclarationsDoNotOpenAProviderSession() throws Exception {
+        try (ProtosExternalForeignProviderTest.Fixture fixture = fixture(authorized())) {
+            assertEquals(
+                    ProtosExecutionOutcome.State.COMPLETED,
+                    fixture.run(
+                                    "FFI: import(\"std:ffi\")\n"
+                                            + "bytes: FFI.pointer(FFI.u8)\n"
+                                            + "FFI.out(FFI.borrowedPointer(bytes))\n"
+                                            + "FFI.out(bytes)\n"
+                                            + "FFI.out(FFI.nullable(FFI.pointer(FFI.void)))")
+                            .state());
+            assertEquals(0, fixture.context.foreignProviderSessionCountForTesting());
+        }
+    }
+
+    private static final String POINTER_DECLARATIONS =
+            "FFI: import(\"std:ffi\")\n"
+                    + IMPORT
+                    + "bytes: FFI.pointer(FFI.u8)\n"
+                    + "counter: FFI.opaque(ffi, \"ffi_test_counter\")\n"
+                    + "owned: FFI.owned(counter, \"ffi_test_counter_free\", FFI.i32)\n";
+
+    /** Session close revokes plain, borrowed and owner-backed pointers before any C entry. */
+    @Test
+    void pointerCapabilitiesAreRejectedAfterSessionClose() throws Exception {
+        try (ProtosExternalForeignProviderTest.Fixture fixture = fixture(authorized())) {
+            ProtosActivation observer = fixture.newActorActivation();
+            ProtosForeignModuleFacadeValue facade =
+                    (ProtosForeignModuleFacadeValue) fixture.eval(IMPORT + "ffi");
+            Object plain =
+                    fixture.eval(POINTER_DECLARATIONS
+                            + "FFI.bind(ffi, \"ffi_test_pointer_octets\", bytes,"
+                            + " Array(FFI.i32))(1)");
+            Object read =
+                    fixture.eval(POINTER_DECLARATIONS
+                            + "FFI.bindPreserving(ffi, \"ffi_test_pointer_first\", FFI.i32,"
+                            + " Array(bytes))");
+            Object counterValue =
+                    fixture.eval(POINTER_DECLARATIONS
+                            + "FFI.bindPreserving(ffi, \"ffi_test_pointer_counter_value\","
+                            + " FFI.i32,"
+                            + " Array(FFI.pointer(FFI.void)))");
+            Object calls =
+                    fixture.eval(POINTER_DECLARATIONS
+                            + "FFI.bindPreserving(ffi, \"ffi_test_pointer_calls_count\","
+                            + " FFI.i32, Array())");
+            Object isLive = fixture.eval(IMPORT + "ffi.isLive");
+            Object address =
+                    fixture.eval(POINTER_DECLARATIONS
+                            + "FFI.addressOf(FFI.bind(ffi, \"ffi_test_counter_new\", owned,"
+                            + " Array(FFI.i64))(5))");
+            Object lent =
+                    fixture.eval(POINTER_DECLARATIONS
+                            + "FFI.bind(ffi, \"ffi_test_pointer_octets\","
+                            + " FFI.borrowedPointer(bytes), Array(FFI.i32))(1)");
+            // Independent declarations of FFI.pointer(FFI.u8) share the pointee identity.
+            assertEquals("42", integer(ProtosInvocation.invoke(read, List.of(plain), fixture.root)));
+            assertEquals("42", integer(ProtosInvocation.invoke(read, List.of(lent), fixture.root)));
+            assertEquals(
+                    "5",
+                    integer(ProtosInvocation.invoke(counterValue, List.of(address), fixture.root)));
+            String entered = integer(ProtosInvocation.invoke(calls, List.of(), fixture.root));
+            int destroyedBefore = destroyedCount(fixture, observer);
+            ProtosForeignProviderSessionBinding session =
+                    facade.attachmentForRuntime().orElseThrow().session();
+            // Every capability, the borrowed one included, is still live right before close.
+            for (Object pointer : List.of(plain, lent, address)) {
+                assertEquals(
+                        Boolean.TRUE,
+                        ProtosInvocation.invoke(isLive, List.of(pointer), fixture.root));
+            }
+
+            session.closeForRuntime();
+            session.closeForRuntime();
+
+            // The owner was destroyed exactly once by close; its pointer died with it.
+            assertEquals(destroyedBefore + 1, destroyedCount(fixture, observer));
+            assertOrdinary(fixture, invoke(fixture, read, plain));
+            assertOrdinary(fixture, invoke(fixture, read, lent));
+            assertOrdinary(fixture, invoke(fixture, counterValue, address));
+            assertOrdinary(fixture, invoke(fixture, isLive, plain));
+            assertEquals(entered, String.valueOf(nativeCount(fixture, observer,
+                    "ffi_test_pointer_calls_count")));
+            assertEquals(destroyedBefore + 1, destroyedCount(fixture, observer));
+        }
+    }
+
+    /**
+     * A NULL result in a non-nullable pointer out fails conversion only after C returned: the
+     * owned counter of the same call was already adopted into session custody, stays there, and
+     * is destroyed exactly once by session close, never again by a repeated close.
+     */
+    @Test
+    void ownedOutputIsAdoptedBeforePointerConversionFailsAndDestroyedOnce() throws Exception {
+        try (ProtosExternalForeignProviderTest.Fixture fixture = fixture(authorized())) {
+            ProtosActivation observer = fixture.newActorActivation();
+            int liveBaseline = nativeCount(fixture, observer, "ffi_test_live_count");
+            int destroyedBaseline = destroyedCount(fixture, observer);
+            ProtosForeignModuleFacadeValue facade =
+                    (ProtosForeignModuleFacadeValue) fixture.eval(IMPORT + "ffi");
+            ProtosExecutionOutcome outcome =
+                    fixture.run(POINTER_DECLARATIONS
+                            + "FFI.bind(ffi, \"ffi_test_pointer_mixed\", FFI.i32,"
+                            + " Array(FFI.out(bytes), FFI.out(owned)))()");
+            assertForeign(fixture, outcome, "null-result");
+            assertEquals(liveBaseline + 1, nativeCount(fixture, observer, "ffi_test_live_count"));
+            assertEquals(destroyedBaseline, destroyedCount(fixture, observer));
+
+            ProtosForeignProviderSessionBinding session =
+                    facade.attachmentForRuntime().orElseThrow().session();
+            session.closeForRuntime();
+            session.closeForRuntime();
+            assertEquals(destroyedBaseline + 1, destroyedCount(fixture, observer));
+            assertEquals(liveBaseline, nativeCount(fixture, observer, "ffi_test_live_count"));
+        }
+    }
+
+    /**
      * The deliberately unregistered Native Image shape F(F,F) is a valid ABI signature: on the
      * JVM it links and really enters C, while a rejected argument still never does. The Native
      * Image refusal of the same declaration is covered by dist/validate_native.py.

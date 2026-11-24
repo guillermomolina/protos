@@ -109,10 +109,12 @@ Protos API.
 
 The MODULE exports exactly thirteen scalar descriptors (`void`, `i8`, `u8`,
 `i16`, `u16`, `i32`, `u32`, `i64`, `u64`, `f32`, `f64`, `sizeT`, `utf8z`)
-and seventeen ordinary Closures (`opaque`, `nullable`, `owned`, `out`, `bind`,
+and nineteen ordinary Closures (`opaque`, `nullable`, `owned`, `out`, `bind`,
 `bindPreserving`, `release`, `field`, `struct`, `union`, `array`, `pointer`,
-`sizeOf`, `alignOf`, `offsetOf`, `prototype`, `layoutOf`). Helpers, descriptor adaptation metadata,
-layout metadata and release dispatch metadata are private and Actor-local. No public descriptor
+`borrowedPointer`, `addressOf`, `sizeOf`, `alignOf`, `offsetOf`, `prototype`,
+`layoutOf`). Helpers, descriptor adaptation metadata, layout metadata, the
+pointee-to-provider pointer descriptor map and release dispatch metadata are
+private and Actor-local. No public descriptor
 slot layout is defined. Descriptors are immutable ordinary frozen Protos
 objects, not exposed provider classes or records. Repeated reads of one scalar
 descriptor in one MODULE instance preserve its identity; distinct scalar
@@ -137,6 +139,9 @@ structurally similar objects do not forge declarations.
 | opaque | Non-null foreign resource of the declared logical type, library, session and live generation |
 | nullable opaque | The same opaque domain plus `null` |
 | owned opaque | Result-only resource acquisition with declared destructor and provider custody; native NULL becomes `null` |
+| typed pointer | Live pass-only pointer capability of a compatible pointee (see Typed native pointer capabilities); native NULL result is a `ForeignError` |
+| nullable typed pointer | The same domain plus `null`; native NULL result becomes `null` |
+| borrowed typed pointer | Return and `out` only; non-null pointer capability valid until the borrow epoch advances; native NULL result is a `ForeignError` |
 
 Native integral results become exact Protos Integers, including unsigned
 `u64` and `sizeT` values above the signed 64-bit range; an unsigned result is
@@ -182,9 +187,10 @@ one reference of that opaque type. Declaration resolves the destructor under
 the original library authority; it does not itself acquire a resource.
 
 `FFI.out(descriptor)` declares a zero-initialized native output slot. Supported
-targets are the integral scalars, `f32`, `f64`, opaque, nullable opaque, and
-owned opaque declarations. `void`, `utf8z`, nested `out`, field, aggregate and
-typed pointer descriptors, and non-descriptors are rejected. An output position
+targets are the integral scalars, `f32`, `f64`, opaque, nullable opaque,
+owned opaque, typed pointer, nullable typed pointer and borrowed typed pointer
+declarations. `void`, `utf8z`, nested `out`, field and aggregate descriptors,
+and non-descriptors are rejected. An output position
 consumes no Protos invocation argument.
 
 ## Declarative layouts
@@ -253,9 +259,18 @@ non-nullable typed pointers have identical size, alignment and array stride,
 and both may be aggregate members, array elements and pointee layouts;
 nullability affects only the admission of native values, not physical
 storage. A nullable typed pointer is distinct from the nominal R1 nullable
-opaque declaration, which is not a storage layout. Both typed pointer kinds
-are declarative only: no pointer value, address, dereference, pointer
-arithmetic, native invocation or memory access is defined for either.
+opaque declaration, which is not a storage layout. Both typed pointer kinds are
+also invocation descriptors (see Typed native pointer capabilities); neither
+defines an address, dereference, pointer arithmetic or memory access.
+
+`FFI.borrowedPointer(pointer)` requires exactly one plain, non-nullable typed
+pointer descriptor and answers a fresh frozen borrowed typed pointer
+declaration retaining the exact pointer and pointee identities. It is a
+return and `out` declaration only, never a storage layout: it is rejected by
+`sizeOf`, `alignOf`, `offsetOf`, `field`, `array`, `pointer`, `nullable` and
+`prototype`, and as a direct parameter. A nullable or already borrowed
+pointer, any other descriptor and any non-descriptor are rejected. Declaration
+requires no native provider.
 
 `FFI.sizeOf(layout)` and `FFI.alignOf(layout)` answer the exact size and
 alignment of a storage layout. `FFI.offsetOf(layout, path)` answers the byte
@@ -272,11 +287,12 @@ Every rejected layout declaration or query is an ordinary Error.
 
 The integral scalar storage layouts, `f32` and `f64` are the scalar
 descriptors of Public declarations and are admitted by `bind`,
-`bindPreserving` and `out` as described there. Struct, union, fixed array,
-field, typed pointer and nullable typed pointer descriptors are not invocation
-descriptors in this revision: used as a return, parameter or `out` target they
-are rejected with an ordinary Error before any provider signature is composed
-and before native entry. An aggregate is never passed as a pointer.
+`bindPreserving` and `out` as described there; typed pointer declarations are
+admitted in the positions of Typed native pointer capabilities. Struct, union,
+fixed array and field descriptors are not invocation descriptors in this
+revision: used as a return, parameter or `out` target they are rejected with
+an ordinary Error before any provider signature is composed and before native
+entry. An aggregate is never passed as a pointer.
 
 ### Prototype association
 
@@ -312,10 +328,11 @@ associations.
 
 The following capabilities are not provided by this revision. They are not
 rejected design directions: `FFI.cType` (a public C-type query
-of the active ABI profile), native region allocation, physical native pointer
-operations including typed pointer invocation, aggregate-by-value invocation,
-reading or writing native memory through a layout, borrowed pointer
-descriptors, extent assertions and aggregate projection.
+of the active ABI profile), native region allocation, bounded native regions
+and their views or slices, reading or writing native memory through a layout
+or a pointer (including indexed access), extent assertions, aggregate-by-value
+invocation, aggregate projection, and `FFI.addressOf` for anything other than
+an owned C handle.
 
 
 
@@ -328,8 +345,10 @@ and objects imitating Arrays are not Arrays. The Array sequence is shallowly
 copied before retaining a signature or Closure; later mutations do not change
 the binding. Library-associated descriptors cannot silently migrate to another
 library or session. A return is scalar except `utf8z`, opaque, nullable opaque,
-or owned opaque. Parameters are non-void input scalars, opaque, nullable opaque,
-or supported `out` positions; owned declarations are not direct input positions.
+owned opaque, typed pointer, nullable typed pointer or borrowed typed pointer.
+Parameters are non-void input scalars, opaque, nullable opaque, typed pointer,
+nullable typed pointer, or supported `out` positions; owned and borrowed
+typed pointer declarations are not direct input positions.
 
 `FFI.bindPreserving(library, symbol, returnDescriptor, argumentDescriptors)`
 has exactly the admission, invocation, result and failure semantics of `bind`,
@@ -363,6 +382,62 @@ ordinary Errors before native entry. A failure of an entered foreign operation
 under D188, with only its existing safe payload; no new Error prototype is added.
 The public adapter does not reinterpret or swallow those failures.
 
+### Typed native pointer capabilities
+
+A typed pointer declaration names an exact pointee layout identity (or
+`FFI.void`). Independently constructed pointer declarations of the same
+pointee layout are compatible; distinct pointee layouts are never compatible,
+whatever their structure, and no implicit conversion between them exists.
+Typed pointer declarations are library-neutral within the RootActor's native
+session: a pointer obtained through one authorized library may be passed to a
+compatible parameter of another authorized library of the same session.
+
+A non-null native result in a typed, nullable typed or borrowed typed pointer
+position (return or `out`) becomes a fresh pass-only pointer capability. A
+capability is a foreign reference with no readable member, no indexed access,
+no readable extent, no destructor and no release operation; `FFI.release`
+rejects it. It carries no numeric address: no Integer converts to a pointer
+and no pointer converts to an Integer, a String or a hash derived from an
+address. A capability's only use is to travel back as an argument. No
+ownership is inferred from address equality, symbol spelling or other
+results, and a capability is never registered in resource custody.
+
+Native NULL in a nullable typed pointer result position becomes `null`. Native
+NULL in a typed or borrowed typed pointer result position fails native result
+conversion after entry with a fresh `ForeignError`; owned results of the same
+call were already adopted (see Custody, identity and release).
+
+A typed pointer parameter admits only a live capability of the current
+session whose pointee identity is the declared one; a `FFI.void` pointer
+parameter admits any live capability without dereferencing it, but a
+capability whose pointee is `FFI.void` is never admitted by a parameter of
+another pointee. A nullable typed pointer parameter also admits `null`; a
+non-nullable one does not. Opaque handles, Integers, Strings, descriptors,
+ordinary objects and any other value are rejected. Every rejection, including
+of an expired or incompatible capability, is an ordinary Error before native
+entry.
+
+A capability is admissible only while every condition it retains holds: its
+originating session is open; when owner-backed, its original owned resource
+is still live; and when borrowed, the session borrow epoch still equals the
+epoch reached after the call that produced it. A borrowed capability is
+therefore revoked by every later validated call of a binding not declared
+preserving, every destructor call, and session close; a rejected call does
+not revoke it, and a `bindPreserving` call keeps it. A capability passed to an
+admitted non-preserving call is marshalled before that call advances the epoch:
+the call receives it and later uses are rejected. Revocation is permanent;
+reuse of the same machine address by a later result or acquisition never
+restores an earlier capability.
+
+`FFI.addressOf(ownedHandle)` requires exactly one active registered owned
+handle of this MODULE instance and answers a fresh pass-only capability with
+pointee `FFI.void` that retains that original owned resource. The handle keeps
+its custody, destructor authority, release dispatch and exact destructor
+result; the capability is revoked when the handle is released or its session
+ends. Arbitrary values, unregistered or released handles, non-owned references
+and pointer capabilities are rejected with an ordinary Error. No other library
+is acquired.
+
 ### Native Image scalar admission
 
 In a Native Image executable, a declaration is admitted only when the exact
@@ -383,8 +458,8 @@ retains those acquisitions for session shutdown.
 
 Published owned handles have a private identity-based association with their
 originating library in the Actor-local `std:ffi` MODULE. That map is dispatch
-metadata only, not resource custody. Borrowed or non-owned references are not
-registered as owned. Handles remain the existing foreign references; their
+metadata only, not resource custody. Borrowed or non-owned references and
+pointer capabilities are not registered as owned. Handles remain the existing foreign references; their
 native admission rules are not replaced by public wrappers.
 
 `FFI.release(ownedHandle)` requires an active registered owned handle of this
@@ -415,8 +490,11 @@ its validated calls do not advance the borrow epoch, so they leave earlier
 borrowed regions valid; a binding declared by `FFI.bind` does advance it.
 The public API defines no `FFI.borrowed`, `FFI.preserving`, `FFI.copy`, or
 equivalent memory-reading method. Consequently neither `bind` nor
-`bindPreserving` accepts a borrowed-memory descriptor, and neither publishes a
-borrowed-memory wrapper with an extended lifetime promise. The private mechanism remains available for the separately owned
+`bindPreserving` accepts the private borrowed-memory descriptor, and neither
+publishes a borrowed-memory wrapper with an extended lifetime promise. A
+public borrowed typed pointer (`FFI.borrowedPointer`) is a pass-only
+capability governed by the same epoch; it is not readable memory and is not
+admitted by the private `copy`. The private mechanism remains available for the separately owned
 LIB029 adaptation; it does not authorize a new public method in this slice.
 
 ### RootActor-only native authority
@@ -439,7 +517,8 @@ are not Protos Actors and are not confined by this restriction. Other foreign
 providers keep their own existing contracts.
 
 Live native sessions, library authority, bindings capturing such authority,
-resources and borrowed regions have no automatic Actor or P transfer contract
+resources, borrowed regions and native pointer capabilities (plain, borrowed
+or owner-backed) have no automatic Actor or P transfer contract
 (`../concurrency/ACTORS.md`, `../concurrency/PARALLEL_EXECUTION.md`). Importing
 `std:ffi` in another Actor creates its ordinary local MODULE instance, not
 inherited or delegated authority. No native call implicitly spawns work,

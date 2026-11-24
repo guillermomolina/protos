@@ -109,7 +109,8 @@ class FixedWidthFixtureTest(unittest.TestCase):
                 ("ffm-layouts.protos", validate_native.FFM_LAYOUTS_MARKER),
                 ("ffm-scalar-layout-abi.protos",
                  validate_native.FFM_SCALAR_LAYOUT_ABI_MARKER),
-                ("ffm-root-actor.protos", validate_native.FFM_ROOT_ACTOR_MARKER)):
+                ("ffm-root-actor.protos", validate_native.FFM_ROOT_ACTOR_MARKER),
+                ("ffm-pointers.protos", validate_native.FFM_POINTERS_MARKER)):
             text = (validate_native.FFM_CASES / program).read_text(encoding="utf-8")
             self.assertIn('print("' + marker + '")', text)
         self.assertNotIn("ffi:sqlite3", validate_native.FFM_UNREGISTERED_SCALAR)
@@ -210,6 +211,40 @@ class RootActorProgramTest(unittest.TestCase):
         self.assertEqual(
             "FAIL",
             self.verdict(0, self.MARKER + "\n", "MissingForeignRegistrationError"))
+
+
+class PointerProgramTest(unittest.TestCase):
+    MARKER = validate_native.FFM_POINTERS_MARKER
+
+    def verdict(self, returncode: int, stdout: str, stderr: str) -> str:
+        return classify_ffm_case(returncode, stdout, stderr, expected_status=0,
+                                 expected_stdout=self.MARKER)[0]
+
+    def test_program_uses_both_fixture_aliases(self) -> None:
+        text = (validate_native.FFM_CASES / "ffm-pointers.protos").read_text(encoding="utf-8")
+        self.assertIn('import("ffi:first")', text)
+        self.assertIn('import("ffi:second")', text)
+        self.assertIn('print("' + self.MARKER + '")', text)
+
+    def test_success_needs_status_and_marker(self) -> None:
+        self.assertEqual("PASS", self.verdict(0, self.MARKER + "\n", ""))
+
+    def test_missing_marker_fails(self) -> None:
+        self.assertEqual("FAIL", self.verdict(0, "", ""))
+
+    def test_unsuccessful_exit_fails(self) -> None:
+        self.assertEqual("FAIL", self.verdict(1, self.MARKER + "\n", ""))
+
+    def test_foreign_entry_failure_fails(self) -> None:
+        self.assertEqual(
+            "FAIL",
+            self.verdict(0, validate_native.FFM_FOREIGN_ENTRY_MARKER + "\n" + self.MARKER + "\n",
+                         ""))
+
+    def test_missing_registration_error_fails(self) -> None:
+        self.assertEqual(
+            "FAIL",
+            self.verdict(0, self.MARKER + "\n", "MissingForeignRegistrationError: P(I)"))
 
 
 class DistributionContentTest(unittest.TestCase):

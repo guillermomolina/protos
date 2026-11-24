@@ -18,6 +18,8 @@
 //! ABI declarations are trusted: a wrong signature can terminate the process.
 //! Layout descriptors are pure Protos metadata for the Linux x86-64 LP64
 //! profile; declaring or querying one never enters a foreign provider.
+//! Typed pointer results are pass-only capabilities: they carry no readable
+//! extent and are never converted to or from Integer addresses.
 
 Interop: import("std:interop")
 Arrays: import("std:collections/array")
@@ -25,6 +27,10 @@ descriptors: IdentityMap()
 owners: IdentityMap()
 // Exact ordinary-prototype identity -> exact layout descriptor identity.
 associations: IdentityMap()
+// Exact pointee layout identity -> canonical provider-side plain pointer
+// descriptor of this Actor's session, created lazily by the first binding
+// that needs it. A declaration map only: no pointer value is ever stored.
+pointerTypes: IdentityMap()
 // Private exact ordinary-object recognition; never part of the MODULE surface.
 recognition: _ffiObjectRecognitionFacility
 context.removeSlot("_ffiObjectRecognitionFacility")
@@ -141,9 +147,26 @@ storage: (value) => {
     isStorageLayout(value).ifFalse(() => fail())
     descriptors.at(value)
 }
-// R1 declarations and scalars are the only descriptors a binding admits;
-// aggregates, fields and typed pointers are declarative in this slice.
-isBindable: (record) => (record.layoutKind === null) || (record.layoutKind == "scalar")
+// Binding positions. R1 declarations, scalars and typed pointers are bindable;
+// aggregates and fields remain declarative (no aggregate-by-value calls).
+isR1OrScalar: (record) => (record.layoutKind === null) || (record.layoutKind == "scalar")
+isTypedPointer: (record) => (record.layoutKind == "pointer") || (record.layoutKind == "nullablePointer")
+isPointerResult: (record) => isTypedPointer(record) || (record.layoutKind == "borrowedPointer")
+isReturnDeclaration: (record) => {
+    if(isPointerResult(record)) { ^true }
+    if(isR1OrScalar(record) == false) { ^false }
+    ((record.kind == "out") || (record.kind == "utf8z")) == false
+}
+isParameterDeclaration: (record) => {
+    if(isTypedPointer(record)) { ^true }
+    if(isR1OrScalar(record) == false) { ^false }
+    ((record.kind == "void") || (record.kind == "owned")) == false
+}
+isOutTarget: (record) => {
+    if(isPointerResult(record)) { ^true }
+    if(isR1OrScalar(record) == false) { ^false }
+    ((record.kind == "void") || (record.kind == "utf8z") || (record.kind == "out")) == false
+}
 
 /// Declare a named member of a struct or union. Any String is a field name.
 this.field: (name: fail(), layout: fail(), ...extra) => {
@@ -265,6 +288,17 @@ this.pointer: (pointee: fail(), ...extra) => {
     register("pointer", "pointer", pointerSize, pointerSize, null, null, null, parts)
 }
 
+/// Declare a borrowed result of a plain typed pointer: admitted only as a
+/// return or out target. Each result is valid until the next call not
+/// declared preserving, a release, or the end of the native session.
+this.borrowedPointer: (pointer: fail(), ...extra) => {
+    requireArity(extra)
+    record: metadata(pointer)
+    (record.layoutKind == "pointer").ifFalse(() => fail())
+    register("borrowedPointer", "borrowedPointer",
+        null, null, null, null, pointer, record.parts)
+}
+
 /// Exact native byte size of a storage layout.
 this.sizeOf: (layout: fail(), ...extra) => {
     requireArity(extra)
@@ -304,6 +338,16 @@ this.offsetOf: (layout: fail(), path: fail(), ...extra) => {
     offset
 }
 
+// The canonical provider descriptor of one exact pointee layout, created on
+// first use through an authorized library and reused by every library of
+// this session. Distinct pointee layouts never share a descriptor.
+pointerType: (library, pointee) => {
+    if(pointerTypes.containsKey(pointee)) { ^pointerTypes.at(pointee) }
+    native: operation(library, "pointerType", pointee === voidDescriptor)
+    pointerTypes[pointee] = native
+    native
+}
+
 nativeType: (library, descriptor) => {
     record: metadata(descriptor)
     if(record.library !== null) {
@@ -312,6 +356,15 @@ nativeType: (library, descriptor) => {
     }
     if(record.kind == "out") {
         ^operation(library, "out", nativeType(library, record.target))
+    }
+    if(record.kind == "pointer") {
+        ^pointerType(library, record.parts.pointee)
+    }
+    if(record.kind == "nullablePointer") {
+        ^operation(library, "nullablePointerType", nativeType(library, record.target))
+    }
+    if(record.kind == "borrowedPointer") {
+        ^operation(library, "borrowedPointerType", nativeType(library, record.target))
     }
     Interop.readMember(library, record.kind)
 }
@@ -379,10 +432,7 @@ this.owned: (opaqueDescriptor, releaseSymbol, releaseReturnDescriptor, ...extra)
 this.out: (descriptor, ...extra) => {
     (extra.size() == 0).ifFalse(() => fail())
     record: metadata(descriptor)
-    isBindable(record).ifFalse(() => fail())
-    if((record.kind == "void") || (record.kind == "utf8z") || (record.kind == "out")) {
-        fail()
-    }
+    isOutTarget(record).ifFalse(() => fail())
     make("out", null, null, descriptor)
 }
 
@@ -401,16 +451,13 @@ declareBinding: (library, symbol, returnDescriptor, argumentDescriptors, preserv
     requireString(symbol)
     Array.recognizes(argumentDescriptors).ifFalse(() => fail())
     parameters: Array(...argumentDescriptors)
-    returns: metadata(returnDescriptor)
-    isBindable(returns).ifFalse(() => fail())
-    if((returns.kind == "out") || (returns.kind == "utf8z")) { fail() }
+    isReturnDeclaration(metadata(returnDescriptor)).ifFalse(() => fail())
     // Validate the entire public declaration before composing provider values.
     // The result positions are the native return followed by every out.
     positions: 1
     for(parameter in parameters) {
         record: metadata(parameter)
-        isBindable(record).ifFalse(() => fail())
-        if((record.kind == "void") || (record.kind == "owned")) { fail() }
+        isParameterDeclaration(record).ifFalse(() => fail())
         if(record.kind == "out") { positions = positions + 1 }
     }
     signature: operation(library, "signature", nativeType(library, returnDescriptor))
@@ -476,4 +523,15 @@ this.release: (ownedHandle, ...extra) => {
     library: owners.at(ownedHandle)
     owners.remove(ownedHandle)
     operation(library, "release", ownedHandle)
+}
+
+/// Answer a pass-only void pointer capability to a live owned C handle
+/// acquired through this module. The handle keeps its custody, destructor
+/// and release; the capability is revoked when the handle is released or
+/// the native session ends. No Integer address is ever produced.
+this.addressOf: (ownedHandle: fail(), ...extra) => {
+    requireArity(extra)
+    owners.containsKey(ownedHandle).ifFalse(() => fail())
+    library: owners.at(ownedHandle)
+    operation(library, "addressOf", ownedHandle, pointerType(library, voidDescriptor))
 }

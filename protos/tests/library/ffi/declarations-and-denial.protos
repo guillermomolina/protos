@@ -49,6 +49,7 @@ tests: [
             "opaque", "nullable", "owned", "out",
             "bind", "bindPreserving", "release",
             "field", "struct", "union", "array", "pointer",
+            "borrowedPointer", "addressOf",
             "sizeOf", "alignOf", "offsetOf",
             "prototype", "layoutOf")
         names: FFI.slotNames()
@@ -88,6 +89,34 @@ tests: [
         }
         Assertions.signals(Error, () => FFI.bind(null, 1, FFI.i32, Array()))
         Assertions.signals(Error, () => FFI.bind(null, "f", {}, Array()))
+    }),
+    Test("borrowed pointer declarations are authority free", () => {
+        pointer: FFI.pointer(FFI.u8)
+        borrowed: FFI.borrowedPointer(pointer)
+        Assertions.require(borrowed.parent() === Object)
+        Assertions.require(borrowed !== FFI.borrowedPointer(pointer))
+        Assertions.signals(Error, () => { borrowed.extra: 1 })
+        Assertions.require(FFI.out(borrowed) !== null)
+        Assertions.require(FFI.out(pointer) !== null)
+        Assertions.require(FFI.out(FFI.nullable(pointer)) !== null)
+        for(value in Array(null, false, 1, {}, FFI.u8, FFI.void, FFI.nullable(pointer),
+                borrowed, FFI.struct(Array(FFI.field("a", FFI.u8))))) {
+            Assertions.signals(Error, () => FFI.borrowedPointer(value))
+        }
+        Assertions.signals(Error, () => FFI.borrowedPointer())
+        Assertions.signals(Error, () => FFI.borrowedPointer(pointer, pointer))
+        Assertions.signals(Error, () => FFI.sizeOf(borrowed))
+        Assertions.signals(Error, () => FFI.pointer(borrowed))
+        Assertions.signals(Error, () => FFI.field("p", borrowed))
+        Assertions.signals(Error, () => FFI.bind(null, "f", FFI.i32, Array(borrowed)))
+    }),
+    Test("addressOf accepts only active published owned handles", () => {
+        for(value in Array(null, false, 1, 140737488355328, "x", {}, Array(), FFI.i32,
+                FFI.pointer(FFI.void), FFI.out(FFI.i32))) {
+            Assertions.signals(Error, () => FFI.addressOf(value))
+        }
+        Assertions.signals(Error, () => FFI.addressOf())
+        null
     }),
     Test("release accepts only active published owned handles", () => {
         for(value in Array(null, false, 1, {}, Array(), FFI.i32, FFI.out(FFI.i32))) {

@@ -32,7 +32,8 @@ import java.util.Set;
  *
  * <p>Classification: library modules (member read), declaration operations and bindings
  * (executable), ABI descriptors and signatures, opaque and owned references, borrowed pointers
- * (capability-free handles that only travel back as arguments), provider-private indexable results
+ * and typed pointer capabilities (capability-free handles that only travel back as arguments),
+ * provider-private indexable results
  * (indexed read and a {@code size} member), C scalars, and the C {@code void} absence.
  *
  * <p>The members of a library module are the minimal provider-private operations a future
@@ -40,7 +41,9 @@ import java.util.Set;
  * f64}, {@code sizeT}, {@code utf8z}, {@code borrowed}, and the LIB030 private input descriptors
  * {@code text}, {@code octets}, {@code inputLength}, {@code copyDestructor} and {@code
  * remainder}), {@code opaque(name)}, {@code
- * nullable(opaque)}, {@code owned(opaque, destructorSymbol, void|i32)}, {@code out(type)}, {@code
+ * nullable(opaque)}, {@code owned(opaque, destructorSymbol, void|i32)}, {@code
+ * pointerType(voidPointee)}, {@code nullablePointerType(pointer)}, {@code
+ * borrowedPointerType(pointer)}, {@code addressOf(owned, voidPointer)}, {@code out(type)}, {@code
  * signature(returnType)}, {@code param(signature, type)}, {@code preserving(signature)}, {@code
  * bind(symbol, signature)}, {@code release(owned)}, {@code isLive(reference)}, and {@code
  * copy(borrowed, length)}. Signatures are composed one parameter at a time from handles and
@@ -75,7 +78,11 @@ final class FfmValueOperations implements ProtosForeignValueOperations {
         BIND("bind", 2),
         RELEASE("release", 1),
         IS_LIVE("isLive", 1),
-        COPY("copy", 2);
+        COPY("copy", 2),
+        POINTER_TYPE("pointerType", 1),
+        NULLABLE_POINTER_TYPE("nullablePointerType", 1),
+        BORROWED_POINTER_TYPE("borrowedPointerType", 1),
+        ADDRESS_OF("addressOf", 2);
 
         final String member;
         final int arity;
@@ -138,13 +145,19 @@ final class FfmValueOperations implements ProtosForeignValueOperations {
                     ProtosForeignValueClass.handle(signature, Set.of());
             case FfmHandles.Resource resource -> ProtosForeignValueClass.handle(resource, Set.of());
             case FfmHandles.Borrowed borrowed -> ProtosForeignValueClass.handle(borrowed, Set.of());
+            case FfmHandles.Pointer pointer -> ProtosForeignValueClass.handle(pointer, Set.of());
             default -> throw new FfmFailure("internal", "unclassifiable provider value");
         };
     }
 
+    /**
+     * Every exported kind crosses; {@link #acceptsExecution} then admits each argument against
+     * its exact position. Only the {@code pointerType} declaration admits a Boolean: no binding
+     * parameter and no other operation does.
+     */
     @Override
     public boolean acceptsArgument(ProtosForeignArgumentValue argument) {
-        return argument.kind() != ProtosForeignValueClass.Kind.BOOLEAN;
+        return true;
     }
 
     @Override
@@ -216,7 +229,9 @@ final class FfmValueOperations implements ProtosForeignValueOperations {
             case IS_LIVE ->
                     (v[0] instanceof FfmHandles.Resource resource && resource.session() == session)
                             || (v[0] instanceof FfmHandles.Borrowed borrowed
-                                    && borrowed.session() == session);
+                                    && borrowed.session() == session)
+                            || (v[0] instanceof FfmHandles.Pointer pointer
+                                    && pointer.session() == session);
             case COPY -> {
                 BigInteger length = FfmTypes.exactInteger(v[1]);
                 yield v[0] instanceof FfmHandles.Borrowed borrowed
@@ -226,7 +241,21 @@ final class FfmValueOperations implements ProtosForeignValueOperations {
                         && length.signum() >= 0
                         && length.compareTo(BigInteger.valueOf(FfmHandles.MAX_COPY_BYTES)) <= 0;
             }
+            case POINTER_TYPE -> v[0] instanceof Boolean;
+            case NULLABLE_POINTER_TYPE, BORROWED_POINTER_TYPE -> isPlainPointer(v[0]);
+            case ADDRESS_OF ->
+                    v[0] instanceof FfmHandles.Resource resource
+                            && resource.session() == session
+                            && resource.isOwned()
+                            && resource.isLive()
+                            && resource.type().library().equals(library)
+                            && isPlainPointer(v[1])
+                            && ((FfmTypes.PointerType) v[1]).voidPointee();
         };
+    }
+
+    private static boolean isPlainPointer(Object value) {
+        return value instanceof FfmTypes.PointerType pointer && pointer.isPlain();
     }
 
     private static boolean isPlainOpaque(Object value, String library) {
@@ -309,9 +338,11 @@ final class FfmValueOperations implements ProtosForeignValueOperations {
             case RELEASE -> session.release((FfmHandles.Resource) v[0]);
             case IS_LIVE ->
                     Boolean.valueOf(
-                            v[0] instanceof FfmHandles.Resource resource
-                                    ? resource.isLive()
-                                    : ((FfmHandles.Borrowed) v[0]).isValid());
+                            switch (v[0]) {
+                                case FfmHandles.Resource resource -> resource.isLive();
+                                case FfmHandles.Pointer pointer -> pointer.isLive();
+                                default -> ((FfmHandles.Borrowed) v[0]).isValid();
+                            });
             case COPY -> {
                 session.beginCall();
                 try {
@@ -320,6 +351,20 @@ final class FfmValueOperations implements ProtosForeignValueOperations {
                 } finally {
                     session.endCall();
                 }
+            }
+            case POINTER_TYPE -> new FfmTypes.PointerType((Boolean) v[0]);
+            case NULLABLE_POINTER_TYPE -> ((FfmTypes.PointerType) v[0]).asNullable();
+            case BORROWED_POINTER_TYPE -> ((FfmTypes.PointerType) v[0]).asBorrowed();
+            case ADDRESS_OF -> {
+                // Pass-only, owner-backed: the resource keeps its custody and destructor.
+                FfmHandles.Resource owner = (FfmHandles.Resource) v[0];
+                yield new FfmHandles.Pointer(
+                        session,
+                        (FfmTypes.PointerType) v[1],
+                        owner.addressForCall(),
+                        owner,
+                        false,
+                        0L);
             }
         };
     }

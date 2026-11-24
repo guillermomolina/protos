@@ -2534,8 +2534,11 @@ The existing Process and TcpAcceptor transfer contracts are unchanged.
 ## Standard Library native resources (LIB028)
 
 `../semantics/FFI.md` owns the session, acquisition/generation and release rules
-of `std:ffi`. Live native resources and library/session authority have no
-automatic Actor transfer contract. An Actor neither inherits nor automatically
+of `std:ffi`. Live native resources, library/session authority and the
+pass-only native pointer capabilities of `std:ffi` (plain, borrowed and
+owner-backed typed pointers, whose lifetime rules `../semantics/FFI.md` owns)
+have no automatic Actor transfer contract; sending one is refused as for any
+nontransferable value. An Actor neither inherits nor automatically
 delegates FFI authority by importing this ordinary MODULE. Native invocation
 is synchronous; it adds no implicit suspension or parallel execution.
 

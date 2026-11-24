@@ -194,6 +194,81 @@ final class FfmHandles {
         }
     }
 
+    /**
+     * Pass-only typed native pointer capability of one session.
+     *
+     * <p>It carries no readable extent and no member: it can only travel back as the argument of
+     * a compatible pointer parameter. It has no destructor and is never registered in custody.
+     * Its admissibility intersects every retained lifetime condition: the originating session is
+     * usable, the retained owner (when present) is still live, and the retained borrow epoch
+     * (when epoch-governed) still equals the session epoch. Each condition is observed directly on
+     * the existing session and resource, so revocation needs no registry or traversal, and a
+     * later reuse of the same machine address never restores an earlier capability.
+     */
+    static final class Pointer {
+        private final FfmSession session;
+        private final FfmTypes.PointerType pointee;
+        private final MemorySegment address;
+        private final Resource owner;
+        private final boolean epochGoverned;
+        private final long epoch;
+
+        Pointer(
+                FfmSession session,
+                FfmTypes.PointerType pointee,
+                MemorySegment address,
+                Resource owner,
+                boolean epochGoverned,
+                long epoch) {
+            this.session = Objects.requireNonNull(session, "session");
+            this.pointee = Objects.requireNonNull(pointee, "pointee").identity();
+            this.address = Objects.requireNonNull(address, "address");
+            if (address.equals(MemorySegment.NULL)) {
+                throw new IllegalArgumentException("a pointer capability is never NULL");
+            }
+            this.owner = owner;
+            this.epochGoverned = epochGoverned;
+            this.epoch = epoch;
+        }
+
+        FfmSession session() {
+            return session;
+        }
+
+        /** The canonical plain descriptor naming the pointee. */
+        FfmTypes.PointerType pointee() {
+            return pointee;
+        }
+
+        /** The retained owner, or null when the pointer is not owner-backed. */
+        Resource owner() {
+            return owner;
+        }
+
+        boolean isEpochGoverned() {
+            return epochGoverned;
+        }
+
+        boolean isLive() {
+            return session.isUsable()
+                    && (owner == null || owner.isLive())
+                    && (!epochGoverned || session.borrowEpoch() == epoch);
+        }
+
+        /** The native address, only for marshalling inside one admitted call. */
+        MemorySegment addressForCall() {
+            if (!isLive()) {
+                throw new FfmFailure("expired-pointer", "the pointer is no longer valid");
+            }
+            return address;
+        }
+
+        @Override
+        public String toString() {
+            return "ffi-pointer";
+        }
+    }
+
     /** Provider-private indexable value: the exact Java elements, read by index. */
     interface Indexed {
         long size();

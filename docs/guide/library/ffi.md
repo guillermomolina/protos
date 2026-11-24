@@ -163,7 +163,7 @@ The public sample is
 
 ## The public members
 
-The MODULE exports thirteen scalar descriptor values and seventeen ordinary
+The MODULE exports thirteen scalar descriptor values and nineteen ordinary
 Closures. The R1 binding members:
 
 | Member | Signature or value | Meaning and restrictions |
@@ -180,10 +180,12 @@ Closures. The R1 binding members:
 | `FFI.opaque(library, nativeTypeName)` | Closure | Declares a non-null opaque reference tied to this library and session. The type name is a C identifier. |
 | `FFI.nullable(descriptor)` | Closure | Admits `null` for a plain opaque descriptor, or declares a nullable typed pointer from a plain typed pointer; does not accept scalar, owned, `out` or already nullable descriptors. |
 | `FFI.owned(opaqueDescriptor, releaseSymbol, releaseReturnDescriptor)` | Closure | Declares an owned opaque result and its one-reference destructor; destructor result descriptor is `void` or `i32`. |
-| `FFI.out(descriptor)` | Closure | Declares zero-initialized native output storage and consumes no Protos argument. Targets are the integral scalars, `f32`, `f64`, opaque, nullable opaque and owned opaque; nested `out`, `void`, `utf8z`, layouts, typed pointers and non-descriptors are rejected. |
+| `FFI.out(descriptor)` | Closure | Declares zero-initialized native output storage and consumes no Protos argument. Targets are the integral scalars, `f32`, `f64`, opaque, nullable opaque, owned opaque, typed pointers, nullable typed pointers and borrowed typed pointers; nested `out`, `void`, `utf8z`, aggregates, fields and non-descriptors are rejected. |
 | `FFI.bind(library, symbol, returnDescriptor, argumentDescriptors)` | Closure | Resolves a supported declaration through the already-authorized library and returns a new ordinary Protos Closure. The final parameter must be an ordinary Array of descriptors. |
 | `FFI.bindPreserving(library, symbol, returnDescriptor, argumentDescriptors)` | Closure | Like `bind`, plus the trusted declaration that the C function leaves earlier borrowed native regions valid. |
 | `FFI.release(ownedHandle)` | Closure | Irreversibly retires a registered owned handle, calls its destructor at most once and returns the exact C result. |
+| `FFI.borrowedPointer(pointer)` | Closure | Declares a borrowed result of a plain typed pointer, for return and `out` positions only. |
+| `FFI.addressOf(ownedHandle)` | Closure | Answers a pass-only `void` pointer capability to a live owned handle acquired through `std:ffi`; the handle keeps its destructor and release. |
 
 The declarative layout members, which need no library and no native
 authority:
@@ -193,7 +195,7 @@ authority:
 | `FFI.field(name, layout)` | A named member; any String is a valid name. |
 | `FFI.struct(fields)` / `FFI.union(fields)` | A C struct with internal and tail padding, or a C union with every member at offset zero. `fields` is an ordinary Array of distinct field declarations. |
 | `FFI.array(element, count)` | A fixed C array of a positive count; its metadata does not grow with the count. |
-| `FFI.pointer(pointee)` | A declarative typed data pointer to a layout or to `FFI.void`. |
+| `FFI.pointer(pointee)` | A typed data pointer to a layout or to `FFI.void`; also a pointer invocation descriptor. |
 | `FFI.sizeOf(layout)`, `FFI.alignOf(layout)` | Exact size and alignment. |
 | `FFI.offsetOf(layout, path)` | Byte offset reached by an Array of field names and array indices; pointers are never followed. |
 | `FFI.prototype(layout, prototype)` / `FFI.layoutOf(prototype)` | Associate an exact ordinary prototype with an exact layout, and look it up. |
@@ -252,11 +254,57 @@ FFI.layoutOf(Vector2) === Point          // true
 The association is exact: a descendant of `Vector2` has no layout until it is
 registered itself, and the prototype is neither mutated nor called.
 
-Typed pointers are declarations only. This release does not allocate native
-memory, read or write native regions, pass or return aggregates by value,
-invoke through typed pointers, or provide `FFI.cType`. Layout and typed
-pointer descriptors are therefore rejected by `bind`, `bindPreserving` and
-`out`.
+This release does not allocate native memory, read or write native regions,
+pass or return aggregates by value, or provide `FFI.cType`. Aggregate and
+field descriptors are therefore rejected by `bind`, `bindPreserving` and
+`out`. Typed pointers are bindable, as described next.
+
+## Typed native pointers
+
+Typed pointer declarations can appear in native signatures:
+
+| Declaration | Return | Parameter | `out` target |
+|---|---|---|---|
+| `FFI.pointer(layout)` / `FFI.pointer(FFI.void)` | yes (NULL is a `ForeignError`) | yes | yes |
+| `FFI.nullable(pointer)` | yes (NULL is `null`) | yes (`null` passes C `NULL`) | yes |
+| `FFI.borrowedPointer(pointer)` | yes (NULL is a `ForeignError`) | no | yes |
+
+A native pointer result becomes a pass-only capability. It has no address you
+can read, no size, no members and no indexed access; it can only be passed back
+to a compatible pointer parameter, possibly of another authorized library.
+Compatibility is the exact pointee layout identity: two independently declared
+`FFI.pointer(FFI.u8)` are compatible, `FFI.pointer(FFI.i8)` is not, and two
+structurally identical structs are not. A `FFI.void` pointer parameter accepts
+any live capability; a `void` capability is never accepted by a typed
+parameter. Integers, opaque handles, descriptors and other values are rejected
+before C is entered.
+
+A borrowed pointer stays valid until the next call of a binding declared with
+`bind` (not `bindPreserving`), the next `release`, or the end of the native
+session. Passing it to a `bindPreserving` binding keeps it valid:
+
+```protos
+FFI: import("std:ffi")
+native: import("ffi:mylib")
+
+bytes: FFI.pointer(FFI.u8)
+buffer: FFI.bind(native, "my_buffer", FFI.borrowedPointer(bytes), Array())
+checksum: FFI.bindPreserving(native, "my_checksum", FFI.i32, Array(bytes))
+
+data: buffer()
+checksum(data)       // C reads the buffer; data stays valid
+checksum(data)       // still valid: preserving calls do not revoke it
+```
+
+This only lets C use the pointer. It does not let Protos dereference, copy or
+index the memory it points to.
+
+`FFI.addressOf(ownedHandle)` turns a live owned handle acquired through
+`std:ffi` into a `void` pointer capability, for C functions that take an
+untyped pointer to it. In this release that is its only domain. The handle
+keeps its custody and destructor; once the handle is released (or the session
+ends), the capability is rejected before entry, even if C later reuses the
+same address.
 
 ## First binding
 

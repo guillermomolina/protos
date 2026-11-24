@@ -291,6 +291,9 @@ provider-private support operations for Protos-source `std:ffi`
 | `release(owned)` | marks released, then calls the destructor; answers its C result |
 | `isLive(reference)` | whether a reference or borrowed region is still usable |
 | `copy(borrowed, length)` | bounded copy of borrowed memory into an independent indexed value |
+| `pointerType(voidPointee)` | fresh plain typed pointer descriptor; its object is the pointee identity |
+| `nullablePointerType(pointer)`, `borrowedPointerType(pointer)` | nullable / borrowed-result variant retaining that identity |
+| `addressOf(owned, voidPointer)` | pass-only `void` pointer capability retaining a live owned reference |
 
 A binding without `out` positions answers its scalar, reference, or `null`
 (C `void` / NULL). With `out` positions it answers a provider-private indexed
@@ -341,6 +344,15 @@ payload never contains host objects, addresses, paths, or stacks.
   is a trusted ABI declaration (for example for `sqlite3_column_bytes`), not a
   physical check of memory lifetime: a wrong declaration has the same
   consequences as a wrong C signature.
+- Typed pointer results are pass-only capabilities: no address, extent,
+  member or indexed access, no destructor, never in custody, rejected by
+  `copy` and `release`. A capability is admitted only while its session is
+  usable, its retained owner (from `addressOf`) is live, and, for a borrowed
+  result, the borrow epoch is unchanged; it is marshalled before the epoch
+  advances, so a non-preserving call still receives it. A NULL non-nullable
+  pointer result is a `null-result` failure after owned outputs were adopted.
+  A borrowed pointer passed to a preserving function stays valid, but this
+  never lets Protos dereference it (`std:ffi` documentation).
 - Close never holds the session monitor during a C call; it waits for
   admitted calls without holding it, then releases resources and closes the
   arena, so no admitted call sees a closed arena.

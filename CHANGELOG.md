@@ -8,6 +8,13 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.215-SNAPSHOT
+
+- **I174-B.** Typed native pointers and original-owner provenance.
+- Add typed native pointer capabilities, nullable and borrowed pointer results and outputs, and addressOf for existing owned resources.
+- Preserve pointee identity, session and original-owner provenance across independently authorized libraries; reject stale, incompatible and nontransferable capabilities before native entry.
+- Add C pointer fixtures and JVM, RootActor and Native runner coverage without exposing Integer addresses or public pointer dereferencing.
+
 ## 0.4.214-SNAPSHOT
 
 - **I174-A.** Fixed-width scalars, declarative layouts and RootActor native admission.
