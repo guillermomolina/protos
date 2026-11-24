@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.211-SNAPSHOT
+
+- **PERF045.** Reconcile Bytecode API PE baseline with numeric helper and diagnostic topology.
+
 ## 0.4.210-SNAPSHOT
 
 - **PERF045.** Pass high-arity constant Array arguments through one prepared vector.

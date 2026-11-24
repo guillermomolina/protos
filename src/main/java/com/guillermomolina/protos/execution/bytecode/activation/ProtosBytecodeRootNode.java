@@ -1044,11 +1044,11 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     public static final class LoadCell {
         @Specialization
         public static Object perform(
-                LocalAccessor cellLocal,
+                LocalAccessor cell,
                 @Bind VirtualFrame frame,
                 @Bind BytecodeNode bytecode) {
-            ProtosLexicalCell cell = (ProtosLexicalCell) cellLocal.getObject(bytecode, frame);
-            Object value = cell.valueOrNullForRuntime();
+            ProtosLexicalCell lexicalCell = (ProtosLexicalCell) cell.getObject(bytecode, frame);
+            Object value = lexicalCell.valueOrNullForRuntime();
             if (value == null) {
                 throw uninitializedCellError(frame.getArguments());
             }
@@ -1069,15 +1069,15 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     public static final class StoreCell {
         @Specialization
         public static void perform(
-                LocalAccessor cellLocal,
+                LocalAccessor cell,
                 Object value,
                 @Bind VirtualFrame frame,
                 @Bind BytecodeNode bytecode) {
-            ProtosLexicalCell cell = (ProtosLexicalCell) cellLocal.getObject(bytecode, frame);
-            if (cell.isDiscardedParallelCaptureForRuntime()) {
+            ProtosLexicalCell lexicalCell = (ProtosLexicalCell) cell.getObject(bytecode, frame);
+            if (lexicalCell.isDiscardedParallelCaptureForRuntime()) {
                 throw uninitializedCellError(frame.getArguments());
             }
-            cell.setForRuntime(value);
+            lexicalCell.setForRuntime(value);
         }
     }
 
@@ -1094,12 +1094,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     public static final class StoreCellFromLocal {
         @Specialization
         public static void perform(
-                LocalAccessor cellLocal,
-                LocalAccessor valueLocal,
+                LocalAccessor cell,
+                LocalAccessor value,
                 @Bind VirtualFrame frame,
                 @Bind BytecodeNode bytecode) {
-            Object value = LoadAndClearTempLocal.doObject(valueLocal, frame, bytecode);
-            StoreCell.perform(cellLocal, value, frame, bytecode);
+            Object completedValue =
+                    LoadAndClearTempLocal.doObject(value, frame, bytecode);
+            StoreCell.perform(cell, completedValue, frame, bytecode);
         }
     }
 
@@ -2019,146 +2020,33 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
-     * Admission of the native iteration of a literal {@code each} callback.
+     * The single association snapshot of a standard Map, IdentityMap or
+     * Environment {@code each}, taken when the iteration starts, exactly as
+     * the standard behavior takes it, and stored in the constant
+     * {@code snapshot} local.
      *
-     * <p>True only when the behavior actually selected for {@code each} on
-     * the receiver is exactly the standard Array behavior and the root
-     * Object's inherited {@code call} selection is the canonical
-     * {@code Object.call}, so a fresh Closure literal argument passes the
-     * standard callability validation and its ordinary invocation reaches
-     * its own body. Any other receiver or selection answers false and the
-     * lowering selects {@code each} with GetMethod and dispatches it.
-     * Nothing is invoked here.
-     *
-     * <p>The cached path uses the same inherited structural selection as
-     * {@link StandardIndexedSelectionNode}: a later override, removal or
-     * reassignment of {@code each} along the delegation chain, or of the
-     * root {@code call}, misses the cache.
+     * <p>The snapshot is taken only when {@code each} on the receiver
+     * selects that receiver's standard behavior at its canonical home and
+     * the root {@code call} selection is canonical; the operation then
+     * answers true. Any other receiver or selection stores nothing and
+     * answers false, and the lowering keeps ordinary selection. Nothing is
+     * invoked here.
      */
-    @Operation(storeBytecodeIndex = false)
-    public static final class IsStandardArrayEachSelection {
-        @Specialization(
-                guards = {
-                    "receiver.usesObjectStorageForRuntime()",
-                    "receiverShape.check(receiver)",
-                    "selection != null",
-                    "hasSelectionParent(receiver, selection)",
-                    "selection.isValid()",
-                    "callSelection != null",
-                    "callSelection.isValid()"
-                },
-                limit = "3")
-        public static boolean doCached(
-                ProtosArrayValue receiver,
-                @Cached("receiver.getShape()") Shape receiverShape,
-                @Cached("selectInherited(receiver, receiverShape)")
-                        ProtosValueLookup.StructuralSelection selection,
-                @Cached("rootCallSelection()")
-                        ProtosStandardObjectProtocol.CanonicalRootCallSelection callSelection) {
-            return ProtosStandardArrayProtocol.isStandardEachBehavior(selection.read());
-        }
-
-        @Specialization(replaces = "doCached")
-        public static boolean doGeneric(
-                ProtosArrayValue receiver,
-                @Bind VirtualFrame frame) {
-            return selectsStandard(
-                    receiver,
-                    ProtosFrameArguments.admittedPreludeOrNull(frame.getArguments()));
-        }
-
-        /* Bytes iterate their octets exactly as an Array iterates its elements. */
+    @Operation(storeBytecodeIndex = true)
+    @ConstantOperand(type = LocalAccessor.class, name = "snapshot")
+    public static final class GetAssociationEachSnapshot {
         @Specialization
-        public static boolean doBytes(
-                com.guillermomolina.protos.runtime.ProtosBytesValue receiver,
-                @Bind VirtualFrame frame) {
-            return selectsStandardBytes(
-                    receiver,
-                    ProtosFrameArguments.admittedPreludeOrNull(frame.getArguments()));
-        }
-
-        @TruffleBoundary
-        static boolean selectsStandardBytes(
-                com.guillermomolina.protos.runtime.ProtosBytesValue receiver, ProtosPrelude prelude) {
-            if (prelude == null
-                    || ProtosStandardObjectProtocol.canonicalRootCallSelectionOrNullForRuntime() == null) {
+        public static boolean perform(
+                LocalAccessor snapshot,
+                Object receiver,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode) {
+            Object[] arguments = frame.getArguments();
+            if (!selectsStandard(receiver, ProtosFrameArguments.admittedPreludeOrNull(arguments))) {
                 return false;
             }
-            try {
-                ProtosObjectValue canonicalHome = prelude.bytesPrototypeForRuntime();
-                return ProtosValueLookup.lookup(receiver, "each", prelude)
-                        .map(found -> found.value() instanceof ProtosClosureValue closure
-                                && ProtosStandardBytesProtocol.isStandardEachImplementation(closure)
-                                && found.home() == canonicalHome)
-                        .orElse(false);
-            } catch (IllegalStateException | UnsupportedOperationException unavailable) {
-                return false;
-            }
-        }
-
-        @Fallback
-        public static boolean doOther(Object receiver) {
-            return false;
-        }
-
-        static boolean hasSelectionParent(
-                ProtosObjectValue receiver,
-                ProtosValueLookup.StructuralSelection selection) {
-            return ProtosValueLookup.hasSelectionParent(receiver, selection);
-        }
-
-        static ProtosStandardObjectProtocol.CanonicalRootCallSelection rootCallSelection() {
-            return ProtosStandardObjectProtocol.canonicalRootCallSelectionOrNullForRuntime();
-        }
-
-        /* Specialization-time only: null when the receiver owns the slot. */
-        @TruffleBoundary
-        static ProtosValueLookup.StructuralSelection selectInherited(
-                ProtosObjectValue receiver, Shape receiverShape) {
-            if (!receiver.usesObjectStorageForRuntime()
-                    || ProtosValueLookup.hasProperty(receiverShape, "each")) {
-                return null;
-            }
-            Object parent = receiver.parent().orElse(null);
-            if (parent == null) {
-                return null;
-            }
-            return ProtosValueLookup.selectStructural(parent, "each");
-        }
-
-        /*
-         * The complete selections, observed without invoking anything. A
-         * missing or unsupported selection is not standard: the dispatched
-         * GetMethod then raises its own Error.
-         */
-        @TruffleBoundary
-        static boolean selectsStandard(ProtosArrayValue receiver, ProtosPrelude prelude) {
-            if (ProtosStandardObjectProtocol.canonicalRootCallSelectionOrNullForRuntime() == null) {
-                return false;
-            }
-            try {
-                return ProtosValueLookup.lookup(receiver, "each", prelude)
-                        .map(found -> ProtosStandardArrayProtocol
-                                .isStandardEachBehavior(found.value()))
-                        .orElse(false);
-            } catch (UnsupportedOperationException unsupportedRepresentation) {
-                return false;
-            }
-        }
-    }
-
-    /**
-     * Whether {@code each} on a Map, IdentityMap or Environment receiver
-     * selects that receiver's standard behavior and the root {@code call}
-     * selection is canonical, observed without invoking anything. Any other
-     * receiver or selection keeps ordinary selection.
-     */
-    @Operation(storeBytecodeIndex = false)
-    public static final class IsStandardAssociationEachSelection {
-        @Specialization
-        public static boolean doGeneric(Object receiver, @Bind VirtualFrame frame) {
-            return selectsStandard(
-                    receiver, ProtosFrameArguments.admittedPreludeOrNull(frame.getArguments()));
+            snapshot.setObject(bytecode, frame, snapshot(receiver, arguments));
+            return true;
         }
 
         @TruffleBoundary
@@ -2195,19 +2083,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return ProtosStandardEnvironmentProtocol.isStandardEachImplementation(closure)
                     && ProtosStandardEnvironmentProtocol.isCanonicalStandardEachHome(receiver, home);
         }
-    }
-
-    /**
-     * The single association snapshot of a standard Map, IdentityMap or
-     * Environment {@code each}, taken when the iteration starts, exactly as
-     * the standard behavior takes it.
-     */
-    @Operation(storeBytecodeIndex = true)
-    public static final class GetAssociationEachSnapshot {
-        @Specialization
-        public static AssociationEachSnapshot perform(Object receiver, @Bind VirtualFrame frame) {
-            return snapshot(receiver, frame.getArguments());
-        }
 
         @TruffleBoundary
         static AssociationEachSnapshot snapshot(Object receiver, Object[] arguments) {
@@ -2234,7 +2109,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return new AssociationEachSnapshot(keys.toArray(), values.toArray());
         }
     }
-
     /**
      * One step of a native standard association {@code each}: stores the next
      * snapshot key and value, in snapshot order, directly into the locals of
@@ -2325,32 +2199,189 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
-     * Establishes the single shallow snapshot of a standard {@code each}
-     * receiver. Emitted only behind {@link IsStandardArrayEachSelection},
-     * after the receiver and the literal callback have been evaluated and
-     * the callability of that callback is proven by the same selection.
+     * The single shallow snapshot of a standard Array or Bytes {@code each}
+     * receiver, stored in the constant {@code snapshot} local.
+     *
+     * <p>The operation specializes on the behavior actually selected for
+     * {@code each}: it stores the snapshot and answers true only when that
+     * selection is exactly the standard Array (or Bytes) behavior and the
+     * root Object's inherited {@code call} selection is the canonical
+     * {@code Object.call}, so a fresh Closure literal argument would pass the
+     * standard callability validation and its ordinary invocation would reach
+     * its own body. Any other receiver or selection stores nothing and
+     * answers false; the lowering then selects {@code each} with GetMethod
+     * and dispatches it. Nothing is invoked here.
+     *
+     * <p>The cached path uses the same inherited structural selection as
+     * {@link StandardIndexedSelectionNode}: a later override, removal or
+     * reassignment of {@code each} along a mutable delegation chain, or of
+     * the root {@code call}, misses the cache. A chain whose owners are all
+     * FROZEN is classified once, when the entry is installed.
      */
     @Operation(storeBytecodeIndex = false)
+    @ConstantOperand(type = LocalAccessor.class, name = "snapshot")
     public static final class GetArrayEachSnapshot {
-        @Specialization
-        public static ArrayEachSnapshot perform(ProtosArrayValue receiver) {
-            return snapshot(receiver);
+        @Specialization(
+                guards = {
+                    "receiver.usesObjectStorageForRuntime()",
+                    "receiverShape.check(receiver)",
+                    "selection != null",
+                    "hasSelectionParent(receiver, selection)",
+                    "frozen || selection.isValid()",
+                    "callSelection != null",
+                    "callSelection.isValid()"
+                },
+                limit = "3",
+                excludeForUncached = true)
+        public static boolean doCached(
+                LocalAccessor snapshot,
+                ProtosArrayValue receiver,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode,
+                @Cached("receiver.getShape()") Shape receiverShape,
+                @Cached("selectInherited(receiver, receiverShape)")
+                        ProtosValueLookup.StructuralSelection selection,
+                @Cached("allOwnersFrozen(selection)") boolean frozen,
+                @Cached("frozenStandardEach(frozen, selection)") boolean frozenStandard,
+                @Cached("rootCallSelection()")
+                        ProtosStandardObjectProtocol.CanonicalRootCallSelection callSelection) {
+            if (frozen
+                    ? !frozenStandard
+                    : !ProtosStandardArrayProtocol.isStandardEachBehavior(selection.read())) {
+                return false;
+            }
+            snapshot.setObject(bytecode, frame, snapshot(receiver));
+            return true;
         }
 
+        /*
+         * The generic selection. It replaces no cached entry, so a site that
+         * also sees an overriding or uncached receiver keeps its standard
+         * entries.
+         */
         @Specialization
+        @InliningCutoff
+        public static boolean doGeneric(
+                LocalAccessor snapshot,
+                ProtosArrayValue receiver,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode) {
+            if (!selectsStandard(
+                    receiver,
+                    ProtosFrameArguments.admittedPreludeOrNull(frame.getArguments()))) {
+                return false;
+            }
+            snapshot.setObject(bytecode, frame, snapshot(receiver));
+            return true;
+        }
+
+        /* Bytes iterate their octets exactly as an Array iterates its elements. */
+        @Specialization
+        public static boolean doBytes(
+                LocalAccessor snapshot,
+                com.guillermomolina.protos.runtime.ProtosBytesValue receiver,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode) {
+            if (!selectsStandardBytes(
+                    receiver,
+                    ProtosFrameArguments.admittedPreludeOrNull(frame.getArguments()))) {
+                return false;
+            }
+            snapshot.setObject(bytecode, frame, bytesSnapshot(receiver));
+            return true;
+        }
+
+        @Fallback
+        public static boolean doOther(LocalAccessor snapshot, Object receiver) {
+            return false;
+        }
+
+        static ArrayEachSnapshot snapshot(ProtosArrayValue receiver) {
+            return new ArrayEachSnapshot(receiver.indexedGenerationSnapshot());
+        }
+
         @TruffleBoundary
-        public static ArrayEachSnapshot bytes(com.guillermomolina.protos.runtime.ProtosBytesValue receiver) {
+        static ArrayEachSnapshot bytesSnapshot(com.guillermomolina.protos.runtime.ProtosBytesValue receiver) {
             List<Object> octets = receiver.indexedSnapshot();
             return new ArrayEachSnapshot(
                     com.guillermomolina.protos.runtime.ProtosIndexedSnapshot.elements(
                             octets.toArray(), octets.size()));
         }
 
-        static ArrayEachSnapshot snapshot(ProtosArrayValue receiver) {
-            return new ArrayEachSnapshot(receiver.indexedGenerationSnapshot());
+        static boolean hasSelectionParent(
+                ProtosObjectValue receiver,
+                ProtosValueLookup.StructuralSelection selection) {
+            return ProtosValueLookup.hasSelectionParent(receiver, selection);
+        }
+
+        static ProtosStandardObjectProtocol.CanonicalRootCallSelection rootCallSelection() {
+            return ProtosStandardObjectProtocol.canonicalRootCallSelectionOrNullForRuntime();
+        }
+
+        static boolean allOwnersFrozen(ProtosValueLookup.StructuralSelection selection) {
+            return selection != null && selection.allOwnersFrozen();
+        }
+
+        /* Specialization time only: the classification of an all-FROZEN chain. */
+        static boolean frozenStandardEach(
+                boolean frozen, ProtosValueLookup.StructuralSelection selection) {
+            return frozen && ProtosStandardArrayProtocol.isStandardEachBehavior(selection.read());
+        }
+
+        /* Specialization-time only: null when the receiver owns the slot. */
+        @TruffleBoundary
+        static ProtosValueLookup.StructuralSelection selectInherited(
+                ProtosObjectValue receiver, Shape receiverShape) {
+            if (!receiver.usesObjectStorageForRuntime()
+                    || ProtosValueLookup.hasProperty(receiverShape, "each")) {
+                return null;
+            }
+            Object parent = receiver.parent().orElse(null);
+            if (parent == null) {
+                return null;
+            }
+            return ProtosValueLookup.selectStructural(parent, "each");
+        }
+
+        @TruffleBoundary
+        static boolean selectsStandardBytes(
+                com.guillermomolina.protos.runtime.ProtosBytesValue receiver, ProtosPrelude prelude) {
+            if (prelude == null
+                    || ProtosStandardObjectProtocol.canonicalRootCallSelectionOrNullForRuntime() == null) {
+                return false;
+            }
+            try {
+                ProtosObjectValue canonicalHome = prelude.bytesPrototypeForRuntime();
+                return ProtosValueLookup.lookup(receiver, "each", prelude)
+                        .map(found -> found.value() instanceof ProtosClosureValue closure
+                                && ProtosStandardBytesProtocol.isStandardEachImplementation(closure)
+                                && found.home() == canonicalHome)
+                        .orElse(false);
+            } catch (IllegalStateException | UnsupportedOperationException unavailable) {
+                return false;
+            }
+        }
+
+        /*
+         * The complete selections, observed without invoking anything. A
+         * missing or unsupported selection is not standard: the dispatched
+         * GetMethod then raises its own Error.
+         */
+        @TruffleBoundary
+        static boolean selectsStandard(ProtosArrayValue receiver, ProtosPrelude prelude) {
+            if (ProtosStandardObjectProtocol.canonicalRootCallSelectionOrNullForRuntime() == null) {
+                return false;
+            }
+            try {
+                return ProtosValueLookup.lookup(receiver, "each", prelude)
+                        .map(found -> ProtosStandardArrayProtocol
+                                .isStandardEachBehavior(found.value()))
+                        .orElse(false);
+            } catch (UnsupportedOperationException unsupportedRepresentation) {
+                return false;
+            }
         }
     }
-
     /**
      * Advances an admitted Array snapshot or Range cursor before executing the
      * callback, writing its parameter through a {@link LocalAccessor}. Array
@@ -2469,33 +2500,46 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
-     * Admission of the internal iteration of a standard {@code Range} or
+     * The internal iteration of a standard {@code Range} or
      * {@code InvertedRange} {@code each} ({@code stepped} false) or
      * {@code eachStep} ({@code stepped} true) send whose receiver and
-     * operands are already evaluated.
+     * operands are already evaluated: stores the cursor in the constant
+     * {@code cursor} local and answers true, or stores nothing and answers
+     * false.
      *
-     * <p>True only when the receiver is a FROZEN direct child of the exact
-     * {@code Range} or {@code InvertedRange} binding of the admitted Prelude,
-     * that FROZEN prototype owns the selected {@code each} and
-     * {@code eachStep} (so the {@code this.eachStep} delegation of
-     * {@code each} selects the same canonical source-backed behavior), the
-     * receiver owns neither selector, its bounds are Integers, an explicit
-     * step is an Integer of the direction of the prototype, the
-     * {@code Integer.recognizes} selection is FROZEN, the SmallInteger
-     * {@code <}, {@code >} and {@code +} selections are the standard ones
-     * and the root {@code call} selection is canonical. When a bound or the
-     * step is a large Integer, or the cursor may leave the signed-64 range,
-     * the {@code <}, {@code >} and {@code +} selections of the large Integer
-     * family must also be FROZEN and standard, because the canonical loop
-     * then compares and advances large receivers. Every other receiver,
-     * representation or step answers false, and the lowering invokes the
-     * ordinarily selected behavior with the same already evaluated operands,
-     * which signals any step Error in its source order. Nothing is invoked
-     * here.
+     * <p>The cursor is established only when the receiver is a FROZEN direct
+     * child of the exact {@code Range} or {@code InvertedRange} binding of
+     * the admitted Prelude, that FROZEN prototype owns the selected
+     * {@code each} and {@code eachStep} (so the {@code this.eachStep}
+     * delegation of {@code each} selects the same canonical source-backed
+     * behavior), the receiver owns neither selector, its bounds are
+     * Integers, an explicit step is an Integer of the direction of the
+     * prototype, the {@code Integer.recognizes} selection is FROZEN, the
+     * SmallInteger {@code <}, {@code >} and {@code +} selections are the
+     * standard ones and the root {@code call} selection is canonical. When a
+     * bound or the step is a large Integer, or the cursor may leave the
+     * signed-64 range, the {@code <}, {@code >} and {@code +} selections of
+     * the large Integer family must also be FROZEN and standard, because the
+     * canonical loop then compares and advances large receivers. Every other
+     * receiver, representation or step answers false, and the lowering
+     * invokes the ordinarily selected behavior with the same already
+     * evaluated operands, which signals any step Error in its source order.
+     * Nothing is invoked here.
+     *
+     * <p>The cursor starts at the start bound, ends before the exclusive stop
+     * bound and advances by the step: for {@code each}, {@code +1} when the
+     * selected canonical prototype is {@code Range} and {@code -1} when it is
+     * {@code InvertedRange}, exactly as the inherited source methods delegate
+     * to {@code eachStep}; for {@code eachStep}, the explicit step. The order
+     * of the bounds never chooses the direction; it only decides whether the
+     * traversal is empty. Signed-64 operands establish the primitive cursor;
+     * any large bound or step establishes the exact cursor, which keeps the
+     * published Integer representations of every visited value.
      */
     @Operation(storeBytecodeIndex = false)
     @ConstantOperand(type = boolean.class, name = "stepped")
-    public static final class IsStandardRangeIterationSelection {
+    @ConstantOperand(type = LocalAccessor.class, name = "cursor")
+    public static final class PrepareRangeIteration {
         static final String START = "start";
         static final String STOP = "stop";
 
@@ -2504,16 +2548,16 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         static final String PLUS = "+";
 
         /*
-         * The cached admission of a FROZEN receiver Shape that owns neither
+         * The cached iteration of a FROZEN receiver Shape that owns neither
          * selector, whose immutable parent is the exact canonical prototype
-         * of the cached Prelude. That prototype is FROZEN and owns the
-         * canonical each and eachStep, and the Integer.recognizes selection
-         * is FROZEN, all proven when the entry is installed, so only the
-         * bounds read through the receiver Shape, the step, the root call
-         * certificate and the numeric selections are observed here.
-         * Signed-64 operands whose cursor cannot leave the signed-64 range
-         * are decided without leaving compiled code; any other operand takes
-         * the complete selection.
+         * of the cached Prelude. That prototype owns the canonical each and
+         * eachStep, the Integer.recognizes selection is FROZEN and, for
+         * frozenLongIterationOperators, the signed-64 operator chains are
+         * FROZEN and standard, all proven when the entry is installed; the
+         * root call selection is an assumption. Signed-64 operands whose
+         * cursor stays in the signed-64 range therefore initialize the
+         * primitive cursor directly from the bounds read through the
+         * receiver Shape. Any other operand takes the complete selection.
          */
         @Specialization(
                 guards = {
@@ -2522,15 +2566,18 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     "eachSelection != null",
                     "hasSelectionParent(receiver, eachSelection)",
                     "callSelection != null",
-                    "callSelection.isValid()"
+                    "callSelection.isValid()",
+                    "frozenLongIterationOperators"
                 },
                 limit = "3",
                 excludeForUncached = true)
         public static boolean doCached(
                 boolean stepped,
+                LocalAccessor cursor,
                 ProtosObjectValue receiver,
                 Object step,
                 @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode,
                 @Bind("admittedPrelude(frame)") ProtosPrelude prelude,
                 @Cached("prelude") ProtosPrelude cachedPrelude,
                 @Cached("receiver.getShape()") Shape receiverShape,
@@ -2541,62 +2588,110 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("boundGetter(receiverShape, STOP)") PropertyGetter stopGetter,
                 @Cached("rootCallSelection()")
                         ProtosStandardObjectProtocol.CanonicalRootCallSelection callSelection,
-                @Cached ProtosNumericSelectionNode less,
-                @Cached ProtosNumericSelectionNode greater,
-                @Cached ProtosNumericSelectionNode plus,
                 @Cached("frozenStandardLongOperators(cachedPrelude, LESS, GREATER, PLUS)")
                         boolean frozenLongIterationOperators) {
             Object start = startGetter.get(receiver);
             Object stop = stopGetter.get(receiver);
-            if (start instanceof Long && stop instanceof Long last
+            if (start instanceof Long first
+                    && stop instanceof Long last
                     && (!stepped || step instanceof Long)) {
                 long delta = stepped ? (Long) step : (ascending ? 1L : -1L);
                 if (ascending ? delta <= 0 : delta >= 0) {
                     return false;
                 }
-                if (delta > 0 ? last > Long.MAX_VALUE - delta + 1 : last < Long.MIN_VALUE - delta - 1) {
-                    // The canonical loop may compare a large cursor.
-                    if (!selectsStandard(stepped, receiver, step, cachedPrelude)) {
-                        return false;
-                    }
+                if (staysSigned64(last, delta)) {
+                    cursor.setObject(bytecode, frame, new RangeIterationState(first, last, delta));
+                    return true;
                 }
-            } else if (!selectsStandard(stepped, receiver, step, cachedPrelude)) {
-                return false;
             }
-            // Signed-64 operands under a Prelude whose operator chains were
-            // proven FROZEN and standard when this entry was installed.
-            if (start instanceof Long && stop instanceof Long
-                    && (!stepped || step instanceof Long)
-                    && frozenLongIterationOperators) {
-                return true;
-            }
-            return less.execute(frame, LESS, 0L)
-                    && greater.execute(frame, GREATER, 0L)
-                    && plus.execute(frame, PLUS, 0L);
+            // A large bound or step, or a cursor that may leave the signed-64
+            // range: the signed-64 operators are already proven; only the
+            // large operand selections remain, behind the exact boundary.
+            return prepareExact(stepped, cursor, receiver, step, cachedPrelude, frame, bytecode);
         }
 
-        @Specialization(replaces = "doCached")
+        /*
+         * Any other receiver or Prelude. It replaces no cached entry, so a
+         * site that also sees a custom receiver keeps its standard entries.
+         */
+        @Specialization
+        @InliningCutoff
         public static boolean doObject(
                 boolean stepped,
+                LocalAccessor cursor,
                 ProtosObjectValue receiver,
                 Object step,
                 @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode,
                 @Cached ProtosNumericSelectionNode less,
                 @Cached ProtosNumericSelectionNode greater,
                 @Cached ProtosNumericSelectionNode plus) {
-            if (!selectsStandard(
-                    stepped, receiver, step,
-                    ProtosFrameArguments.admittedPreludeOrNull(frame.getArguments()))) {
-                return false;
-            }
-            return less.execute(frame, LESS, 0L)
-                    && greater.execute(frame, GREATER, 0L)
-                    && plus.execute(frame, PLUS, 0L);
+            return prepareSelected(
+                    stepped, cursor, receiver, step, admittedPrelude(frame),
+                    frame, bytecode, less, greater, plus);
         }
 
         @Fallback
-        public static boolean doOther(boolean stepped, Object receiver, Object step) {
+        public static boolean doOther(
+                boolean stepped, LocalAccessor cursor, Object receiver, Object step) {
             return false;
+        }
+
+        /*
+         * The cold exact path of a cached canonical receiver: the complete
+         * selection decides the step and any large operand selections, whose
+         * signed-64 operators the cached entry already proved standard.
+         */
+        private static boolean prepareExact(
+                boolean stepped,
+                LocalAccessor cursor,
+                ProtosObjectValue receiver,
+                Object step,
+                ProtosPrelude prelude,
+                VirtualFrame frame,
+                BytecodeNode bytecode) {
+            if (!selectsStandard(stepped, receiver, step, prelude)) {
+                return false;
+            }
+            cursor.setObject(bytecode, frame, prepare(stepped, receiver, step, prelude));
+            return true;
+        }
+
+        /*
+         * The complete selection over the evaluated operands, then the general
+         * or exact cursor. Arbitrary precision stays behind the boundaries of
+         * selectsStandard and prepare.
+         */
+        private static boolean prepareSelected(
+                boolean stepped,
+                LocalAccessor cursor,
+                ProtosObjectValue receiver,
+                Object step,
+                ProtosPrelude prelude,
+                VirtualFrame frame,
+                BytecodeNode bytecode,
+                ProtosNumericSelectionNode less,
+                ProtosNumericSelectionNode greater,
+                ProtosNumericSelectionNode plus) {
+            if (!selectsStandard(stepped, receiver, step, prelude)
+                    || !less.execute(frame, LESS, 0L)
+                    || !greater.execute(frame, GREATER, 0L)
+                    || !plus.execute(frame, PLUS, 0L)) {
+                return false;
+            }
+            cursor.setObject(bytecode, frame, prepare(stepped, receiver, step, prelude));
+            return true;
+        }
+
+        /*
+         * Whether a signed-64 cursor advancing by {@code delta} toward the
+         * exclusive {@code stop} stays in the signed-64 range for every value
+         * the canonical loop compares.
+         */
+        static boolean staysSigned64(long stop, long delta) {
+            return delta > 0
+                    ? stop <= Long.MAX_VALUE - delta + 1
+                    : stop >= Long.MIN_VALUE - delta - 1;
         }
 
         static ProtosPrelude admittedPrelude(VirtualFrame frame) {
@@ -2753,9 +2848,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     return operand;
                 }
             }
-            long limit = (Long) stop;
-            long delta = (Long) increment;
-            if (delta > 0 ? limit <= Long.MAX_VALUE - delta + 1 : limit >= Long.MIN_VALUE - delta - 1) {
+            if (staysSigned64((Long) stop, (Long) increment)) {
                 return null;
             }
             return ProtosNumericValueSupport.addIntegers(Long.MAX_VALUE, 1L, prelude);
@@ -2805,101 +2898,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     && selection.allOwnersFrozen()
                     && selection.read() instanceof ProtosClosureValue;
         }
-    }
 
-    /**
-     * Establishes the cursor of an iteration admitted by
-     * {@link IsStandardRangeIterationSelection}: the start bound, the
-     * exclusive stop bound and the step: for {@code each}, {@code +1} when
-     * the selected canonical prototype is {@code Range} and {@code -1} when it
-     * is {@code InvertedRange}, exactly as the inherited source methods
-     * delegate to {@code eachStep}; for {@code eachStep}, the explicit step
-     * whose sign was validated for that prototype. The order of the bounds
-     * never chooses the direction; it only decides whether the traversal is
-     * empty. Signed-64 operands establish the primitive cursor;
-     * any large bound or step establishes the exact cursor, which keeps the
-     * published Integer representations of every visited value.
-     */
-    @Operation(storeBytecodeIndex = false)
-    @ConstantOperand(type = boolean.class, name = "stepped")
-    public static final class PrepareRangeIteration {
-        static final String START = "start";
-        static final String STOP = "stop";
-
-        /*
-         * The cached preparation of a receiver admitted through the same
-         * Shape, parent and Prelude: signed-64 operands initialize the
-         * primitive cursor directly in compiled code; a large bound or step
-         * takes the exact preparation.
-         */
-        @Specialization(
-                guards = {
-                    "prelude == cachedPrelude",
-                    "receiverShape.check(receiver)",
-                    "eachSelection != null",
-                    "hasSelectionParent(receiver, eachSelection)"
-                },
-                limit = "3",
-                excludeForUncached = true)
-        public static RangeIterationState doCached(
-                boolean stepped, ProtosObjectValue receiver, Object step,
-                @Bind VirtualFrame frame,
-                @Bind("admittedPrelude(frame)") ProtosPrelude prelude,
-                @Cached("prelude") ProtosPrelude cachedPrelude,
-                @Cached("receiver.getShape()") Shape receiverShape,
-                @Cached("selectCanonicalEach(receiver, receiverShape, cachedPrelude)")
-                        ProtosValueLookup.StructuralSelection eachSelection,
-                @Cached("isAscending(eachSelection, cachedPrelude)") boolean ascending,
-                @Cached("boundGetter(receiverShape, START)") PropertyGetter startGetter,
-                @Cached("boundGetter(receiverShape, STOP)") PropertyGetter stopGetter) {
-            Object start = startGetter.get(receiver);
-            Object stop = stopGetter.get(receiver);
-            if (start instanceof Long first && stop instanceof Long last) {
-                if (!stepped) {
-                    return new RangeIterationState(first, last, ascending ? 1L : -1L);
-                }
-                if (step instanceof Long delta) {
-                    return new RangeIterationState(first, last, delta);
-                }
-            }
-            return prepare(stepped, receiver, step, cachedPrelude);
-        }
-
-        @Specialization(replaces = "doCached")
-        public static RangeIterationState perform(
-                boolean stepped, ProtosObjectValue receiver, Object step,
-                @Bind VirtualFrame frame) {
-            return prepare(stepped, receiver, step,
-                    ProtosFrameArguments.admittedPreludeOrNull(frame.getArguments()));
-        }
-
-        static ProtosPrelude admittedPrelude(VirtualFrame frame) {
-            return IsStandardRangeIterationSelection.admittedPrelude(frame);
-        }
-
-        static boolean hasSelectionParent(
-                ProtosObjectValue receiver,
-                ProtosValueLookup.StructuralSelection selection) {
-            return IsStandardRangeIterationSelection.hasSelectionParent(receiver, selection);
-        }
-
-        static ProtosValueLookup.StructuralSelection selectCanonicalEach(
-                ProtosObjectValue receiver, Shape receiverShape, ProtosPrelude prelude) {
-            return IsStandardRangeIterationSelection.selectCanonicalEach(
-                    receiver, receiverShape, prelude);
-        }
-
-        static boolean isAscending(
-                ProtosValueLookup.StructuralSelection eachSelection, ProtosPrelude prelude) {
-            return IsStandardRangeIterationSelection.isAscending(eachSelection, prelude);
-        }
-
-        static PropertyGetter boundGetter(Shape receiverShape, String name) {
-            return IsStandardRangeIterationSelection.boundGetter(receiverShape, name);
-        }
-
-        /* The general and exact preparation; arbitrary precision is cold. */
-
+        /* The general and exact cursor; arbitrary precision is cold. */
         @TruffleBoundary
         static RangeIterationState prepare(
                 boolean stepped, ProtosObjectValue receiver, Object step, ProtosPrelude prelude) {
@@ -3022,17 +3022,18 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
-     * Admission of the internal construction of a call of the evaluated
-     * {@code factory} with the two evaluated bounds {@code start} and
-     * {@code stop}.
+     * The internal construction of a call of the evaluated {@code factory}
+     * with the two evaluated bounds {@code start} and {@code stop}: stores a
+     * fresh canonical Range in the constant {@code range} local and answers
+     * true, or stores nothing and answers false.
      *
-     * <p>True only when the factory is exactly the {@code Range} or
-     * {@code InvertedRange} binding of the admitted Prelude and the complete
-     * source-backed construction would run, without signaling, through only
-     * standard selections: both canonical prototypes are FROZEN ordinary
-     * objects whose immediate parent is the root Object, each owns its
-     * source-backed {@code construct} and {@code init} and owns no
-     * {@code call}, {@code parent} or {@code freeze}; the root Object
+     * <p>The Range is constructed only when the factory is exactly the
+     * {@code Range} or {@code InvertedRange} binding of the admitted Prelude
+     * and the complete source-backed construction would run, without
+     * signaling, through only standard selections: both canonical prototypes
+     * are FROZEN ordinary objects whose immediate parent is the root Object,
+     * each owns its source-backed {@code construct} and {@code init} and owns
+     * no {@code call}, {@code parent} or {@code freeze}; the root Object
      * selects the standard {@code call}, {@code construct}, {@code parent}
      * and {@code freeze}; the {@code Integer.recognizes} selection and the
      * Array {@code size} and {@code at} selections over the forwarded
@@ -3044,15 +3045,24 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * operands, which produces its own result or Error in source order.
      * Nothing is invoked here.
      *
-     * <p>The cached entry is keyed by the exact factory identity and the
-     * Prelude identity. The FROZEN facts are proven when the entry is
-     * installed; the root selections are guarded by their structural
-     * selections, and a mutable root reads and classifies the selected
-     * slots on every execution, so a reassignment that preserves the Shape
-     * is observed.
+     * <p>The constructed Range is a fresh ordinary object whose immediate
+     * parent is the factory when the bounds are in its direction, and the
+     * opposite canonical prototype otherwise ({@code Range}: start &lt;=
+     * stop; {@code InvertedRange}: start &gt;= stop; equal bounds keep the
+     * factory), with exactly the local slots {@code start} and {@code stop}
+     * holding the supplied Integers unchanged, then FROZEN, through the same
+     * object mutation path as the source initialization.
+     *
+     * <p>The cached entry specializes on the selected callable: the exact
+     * factory identity and the Prelude identity. Every FROZEN fact is proven
+     * when the entry is installed; a mutable root is guarded by its
+     * structural selections and reads and classifies the selected slots on
+     * every execution, so a reassignment that preserves the Shape is
+     * observed.
      */
     @Operation(storeBytecodeIndex = false)
-    public static final class IsStandardRangeConstructionSelection {
+    @ConstantOperand(type = LocalAccessor.class, name = "range")
+    public static final class MakeRange {
         static final String CALL = "call";
         static final String CONSTRUCT = "construct";
         static final String PARENT = "parent";
@@ -3064,98 +3074,131 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         static final String LESS_EQUAL = "<=";
         static final String GREATER_EQUAL = ">=";
 
+        /*
+         * Signed-64 bounds of a cached canonical factory. Every fact of the
+         * canonical construction (canonical prototypes, FROZEN standard root
+         * call, construct, parent and freeze, FROZEN standard signed-64
+         * comparisons) is classified once, when the entry is installed; a
+         * FROZEN chain keeps it for good. Only the factory and Prelude
+         * identities are compared, then the bounds choose the prototype and
+         * the Range is constructed through cached object operations.
+         */
         @Specialization(
                 guards = {
                     "factory == cachedFactory",
                     "prelude == cachedPrelude",
-                    "callSelection != null",
-                    "constructSelection != null",
-                    "parentSelection != null",
-                    "freezeSelection != null",
-                    "rootFrozen || callSelection.isValid()",
-                    "rootFrozen || constructSelection.isValid()",
-                    "rootFrozen || parentSelection.isValid()",
-                    "rootFrozen || freezeSelection.isValid()"
+                    "opposite != null",
+                    "standard"
                 },
                 limit = "2",
                 excludeForUncached = true)
-        public static boolean doCached(
+        public static boolean doLong(
+                LocalAccessor range,
                 ProtosObjectValue factory,
-                Object start,
-                Object stop,
+                long start,
+                long stop,
                 @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode,
                 @Bind("admittedPrelude(frame)") ProtosPrelude prelude,
                 @Cached("prelude") ProtosPrelude cachedPrelude,
-                @Cached("canonicalFactoryOrNull(factory, cachedPrelude)")
-                        ProtosObjectValue cachedFactory,
-                @Cached("selectRoot(cachedFactory, CALL)")
-                        ProtosValueLookup.StructuralSelection callSelection,
-                @Cached("selectRoot(cachedFactory, CONSTRUCT)")
-                        ProtosValueLookup.StructuralSelection constructSelection,
-                @Cached("selectRoot(cachedFactory, PARENT)")
-                        ProtosValueLookup.StructuralSelection parentSelection,
-                @Cached("selectRoot(cachedFactory, FREEZE)")
-                        ProtosValueLookup.StructuralSelection freezeSelection,
-                @Cached("allOwnersFrozen(callSelection, constructSelection, parentSelection, freezeSelection)")
-                        boolean rootFrozen,
-                @Cached("frozenStandard(rootFrozen, callSelection, constructSelection, parentSelection, freezeSelection)")
-                        boolean frozenStandard,
-                @Shared("less") @Cached ProtosNumericSelectionNode less,
-                @Shared("greater") @Cached ProtosNumericSelectionNode greater,
-                @Shared("lessEqual") @Cached ProtosNumericSelectionNode lessEqual,
-                @Shared("greaterEqual") @Cached ProtosNumericSelectionNode greaterEqual,
-                @Cached("frozenStandardLongOperators(cachedPrelude, LESS, GREATER, LESS_EQUAL, GREATER_EQUAL)")
-                        boolean frozenLongComparisons) {
-            if (!(start instanceof Long && stop instanceof Long)
-                    && !(ProtosNumericValueSupport.isCurrentInteger(start)
-                            && ProtosNumericValueSupport.isCurrentInteger(stop))) {
-                return false;
-            }
-            if (rootFrozen
-                    ? !frozenStandard
-                    : !standardRoot(callSelection, constructSelection, parentSelection, freezeSelection)) {
-                return false;
-            }
-            // Signed-64 bounds under a Prelude whose comparison chains were
-            // proven FROZEN and standard when this entry was installed.
-            if (start instanceof Long && stop instanceof Long && frozenLongComparisons) {
-                return true;
-            }
-            return standardComparisons(
-                    frame, start, less, greater, lessEqual, greaterEqual);
+                @Cached("factory") ProtosObjectValue cachedFactory,
+                @Cached("oppositeOrNull(cachedFactory, cachedPrelude)") ProtosObjectValue opposite,
+                @Cached("isRange(cachedFactory, cachedPrelude)") boolean ascending,
+                @Cached("frozenStandardConstruction(cachedFactory, cachedPrelude)") boolean standard,
+                @Shared("startGet") @Cached DynamicObject.GetNode startGet,
+                @Shared("startPut") @Cached DynamicObject.PutNode startPut,
+                @Shared("stopGet") @Cached DynamicObject.GetNode stopGet,
+                @Shared("stopPut") @Cached DynamicObject.PutNode stopPut,
+                @Shared("freeze") @Cached DynamicObject.SetShapeFlagsNode freeze) {
+            boolean keep = ascending ? start <= stop : start >= stop;
+            range.setObject(bytecode, frame, construct(keep ? cachedFactory : opposite, start, stop,
+                    startGet, startPut, stopGet, stopPut, freeze));
+            return true;
         }
 
         /*
-         * The generic selection. It replaces no cached entry, so a site that
-         * also sees another factory keeps its cached entries eligible. Any
-         * representation other than an exact ordinary object is declined
-         * before the complete selection is observed.
+         * Any other factory or bounds, including large Integer bounds of a
+         * canonical factory, whose exact comparison is cold. It replaces no
+         * cached entry, so a site that also sees another factory keeps its
+         * cached entries eligible. Any representation other than an exact
+         * ordinary object is declined before the complete selection is
+         * observed.
          */
         @Specialization
         @InliningCutoff
         public static boolean doGeneric(
+                LocalAccessor range,
                 Object factory,
                 Object start,
                 Object stop,
                 @Bind VirtualFrame frame,
-                @Shared("less") @Cached ProtosNumericSelectionNode less,
-                @Shared("greater") @Cached ProtosNumericSelectionNode greater,
-                @Shared("lessEqual") @Cached ProtosNumericSelectionNode lessEqual,
-                @Shared("greaterEqual") @Cached ProtosNumericSelectionNode greaterEqual) {
+                @Bind BytecodeNode bytecode,
+                @Cached ProtosNumericSelectionNode less,
+                @Cached ProtosNumericSelectionNode greater,
+                @Cached ProtosNumericSelectionNode lessEqual,
+                @Cached ProtosNumericSelectionNode greaterEqual,
+                @Shared("startGet") @Cached DynamicObject.GetNode startGet,
+                @Shared("startPut") @Cached DynamicObject.PutNode startPut,
+                @Shared("stopGet") @Cached DynamicObject.GetNode stopGet,
+                @Shared("stopPut") @Cached DynamicObject.PutNode stopPut,
+                @Shared("freeze") @Cached DynamicObject.SetShapeFlagsNode freeze) {
             if (!ProtosValueLookup.isOrdinaryObject(factory)
                     || !ProtosNumericValueSupport.isCurrentInteger(start)
                     || !ProtosNumericValueSupport.isCurrentInteger(stop)) {
                 return false;
             }
-            if (!selectsStandard((ProtosObjectValue) factory, admittedPrelude(frame))) {
+            ProtosObjectValue candidate = (ProtosObjectValue) factory;
+            ProtosPrelude prelude = admittedPrelude(frame);
+            if (!selectsStandard(candidate, prelude)
+                    || !standardComparisons(frame, start, less, greater, lessEqual, greaterEqual)) {
                 return false;
             }
-            return standardComparisons(
-                    frame, start, less, greater, lessEqual, greaterEqual);
+            range.setObject(bytecode, frame, construct(
+                    exactPrototype(candidate, start, stop, prelude), start, stop,
+                    startGet, startPut, stopGet, stopPut, freeze));
+            return true;
         }
 
         static ProtosPrelude admittedPrelude(VirtualFrame frame) {
             return ProtosFrameArguments.admittedPreludeOrNull(frame.getArguments());
+        }
+
+        private static ProtosObjectValue construct(
+                ProtosObjectValue prototype,
+                Object start,
+                Object stop,
+                DynamicObject.GetNode startGet,
+                DynamicObject.PutNode startPut,
+                DynamicObject.GetNode stopGet,
+                DynamicObject.PutNode stopPut,
+                DynamicObject.SetShapeFlagsNode freeze) {
+            ProtosObjectValue instance = new ProtosObjectValue(prototype);
+            instance.createLocalSlotCanonical("start", ProtosNumericValueSupport.guestValue(start),
+                    startGet, startPut);
+            instance.createLocalSlotCanonical("stop", ProtosNumericValueSupport.guestValue(stop),
+                    stopGet, stopPut);
+            return instance.freeze(freeze);
+        }
+
+        /*
+         * Specialization time only: whether the factory is canonical and the
+         * root call, construct, parent and freeze selections and the
+         * signed-64 comparisons are FROZEN standard selections.
+         */
+        @TruffleBoundary
+        static boolean frozenStandardConstruction(ProtosObjectValue factory, ProtosPrelude prelude) {
+            if (canonicalFactoryOrNull(factory, prelude) == null) {
+                return false;
+            }
+            ProtosValueLookup.StructuralSelection call = selectRoot(factory, CALL);
+            ProtosValueLookup.StructuralSelection construct = selectRoot(factory, CONSTRUCT);
+            ProtosValueLookup.StructuralSelection parent = selectRoot(factory, PARENT);
+            ProtosValueLookup.StructuralSelection freeze = selectRoot(factory, FREEZE);
+            return frozenStandard(
+                            allOwnersFrozen(call, construct, parent, freeze),
+                            call, construct, parent, freeze)
+                    && frozenStandardLongOperators(
+                            prelude, LESS, GREATER, LESS_EQUAL, GREATER_EQUAL);
         }
 
         /* Specialization time only: the FROZEN standard signed-64 operator proof. */
@@ -3337,78 +3380,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     ProtosValueLookup.selectStructural(root, "freeze");
             return call != null && construct != null && parent != null && freeze != null
                     && standardRoot(call, construct, parent, freeze);
-        }
-    }
-
-    /**
-     * The canonical construction of a call admitted by
-     * {@link IsStandardRangeConstructionSelection}: a fresh ordinary object
-     * whose immediate parent is the factory when the bounds are in its
-     * direction, and the opposite canonical prototype otherwise
-     * ({@code Range}: start &lt;= stop; {@code InvertedRange}: start &gt;=
-     * stop; equal bounds keep the factory), with exactly the local slots
-     * {@code start} and {@code stop} holding the supplied Integers unchanged,
-     * then FROZEN, through the same object mutation path as the source
-     * initialization. Each execution answers a fresh object.
-     */
-    @Operation(storeBytecodeIndex = false)
-    public static final class MakeRange {
-        /* Signed-64 bounds: the comparison and the construction stay compiled. */
-        @Specialization(guards = {"factory == cachedFactory", "opposite != null"}, limit = "2")
-        public static ProtosObjectValue doLong(
-                ProtosObjectValue factory,
-                long start,
-                long stop,
-                @Bind VirtualFrame frame,
-                @Bind("admittedPrelude(frame)") ProtosPrelude prelude,
-                @Cached("factory") ProtosObjectValue cachedFactory,
-                @Cached("oppositeOrNull(cachedFactory, prelude)") ProtosObjectValue opposite,
-                @Cached("isRange(cachedFactory, prelude)") boolean ascending,
-                @Shared("startGet") @Cached DynamicObject.GetNode startGet,
-                @Shared("startPut") @Cached DynamicObject.PutNode startPut,
-                @Shared("stopGet") @Cached DynamicObject.GetNode stopGet,
-                @Shared("stopPut") @Cached DynamicObject.PutNode stopPut,
-                @Shared("freeze") @Cached DynamicObject.SetShapeFlagsNode freeze) {
-            boolean keep = ascending ? start <= stop : start >= stop;
-            return construct(keep ? cachedFactory : opposite, start, stop,
-                    startGet, startPut, stopGet, stopPut, freeze);
-        }
-
-        /* Any Integer bounds: the exact comparison is cold. */
-        @Specialization(replaces = "doLong")
-        public static ProtosObjectValue doExact(
-                ProtosObjectValue factory,
-                Object start,
-                Object stop,
-                @Bind VirtualFrame frame,
-                @Shared("startGet") @Cached DynamicObject.GetNode startGet,
-                @Shared("startPut") @Cached DynamicObject.PutNode startPut,
-                @Shared("stopGet") @Cached DynamicObject.GetNode stopGet,
-                @Shared("stopPut") @Cached DynamicObject.PutNode stopPut,
-                @Shared("freeze") @Cached DynamicObject.SetShapeFlagsNode freeze) {
-            return construct(exactPrototype(factory, start, stop, admittedPrelude(frame)), start, stop,
-                    startGet, startPut, stopGet, stopPut, freeze);
-        }
-
-        static ProtosPrelude admittedPrelude(VirtualFrame frame) {
-            return ProtosFrameArguments.admittedPreludeOrNull(frame.getArguments());
-        }
-
-        private static ProtosObjectValue construct(
-                ProtosObjectValue prototype,
-                Object start,
-                Object stop,
-                DynamicObject.GetNode startGet,
-                DynamicObject.PutNode startPut,
-                DynamicObject.GetNode stopGet,
-                DynamicObject.PutNode stopPut,
-                DynamicObject.SetShapeFlagsNode freeze) {
-            ProtosObjectValue instance = new ProtosObjectValue(prototype);
-            instance.createLocalSlotCanonical("start", ProtosNumericValueSupport.guestValue(start),
-                    startGet, startPut);
-            instance.createLocalSlotCanonical("stop", ProtosNumericValueSupport.guestValue(stop),
-                    stopGet, stopPut);
-            return instance.freeze(freeze);
         }
 
         @TruffleBoundary
@@ -3858,121 +3829,234 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /*
-     * Constant signed-64 Array construction. Emitted only behind
-     * IsStandardArrayConstructionSelection: the dynamic operand is the
-     * already admitted factory receiver, which becomes the delegation
-     * parent. The long[] constant is copied on every evaluation, so each
-     * Array has a fresh identity and an independent primitive backing.
+     * Constant signed-64 Array construction. The operation specializes on
+     * the evaluated factory: a factory whose call and construct selections
+     * are FROZEN and standard (the canonical root Object.call reaching the
+     * original Array construct of the cached Prelude's Array prototype) is
+     * classified once, when its entry is installed, and afterwards only its
+     * identity and the Prelude identity are compared. Any other factory
+     * takes the complete selection. When the standard construction is
+     * selected, the fresh Array is stored in the constant result local and
+     * the operation answers true; otherwise it stores nothing and answers
+     * false, and the lowering performs the ordinary call. The compiler-owned
+     * long[] constant is never mutated: the Array constructor copies it once.
      */
     @Operation(storeBytecodeIndex = false)
     @ConstantOperand(type = long[].class, dimensions = 0)
+    @ConstantOperand(type = LocalAccessor.class, name = "result")
     public static final class MakeConstantLongArray {
-
-        /*
-         * The cached constant's elements are stable for this site only; the
-         * Array still receives a private copy of them.
-         */
         @Specialization(
-                guards = "values == cachedValues",
-                limit = "1",
+                guards = {
+                    "factory == cachedFactory",
+                    "prelude == cachedPrelude",
+                    "standard"
+                },
+                limit = "3",
                 excludeForUncached = true)
-        public static ProtosArrayValue performCached(
+        public static boolean doStandard(
                 long[] values,
-                Object factory,
-                @Cached(value = "values", dimensions = 1)
-                        long[] cachedValues) {
-            return new ProtosArrayValue(factory, cachedValues);
+                LocalAccessor result,
+                ProtosObjectValue factory,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode,
+                @Bind("admittedPrelude(frame)") ProtosPrelude prelude,
+                @Cached("prelude") ProtosPrelude cachedPrelude,
+                @Cached("factory") ProtosObjectValue cachedFactory,
+                @Cached("frozenStandardFactory(cachedFactory, cachedPrelude)") boolean standard) {
+            result.setObject(bytecode, frame, new ProtosArrayValue(cachedFactory, values));
+            return true;
         }
 
-        @Specialization(replaces = "performCached")
-        public static ProtosArrayValue performGeneric(
+        @Specialization
+        @InliningCutoff
+        public static boolean doSelected(
                 long[] values,
-                Object factory) {
-            return new ProtosArrayValue(factory, values);
+                LocalAccessor result,
+                Object factory,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode) {
+            if (!MakeArray.selectsStandardFactory(factory, frame)) {
+                return false;
+            }
+            result.setObject(bytecode, frame, new ProtosArrayValue(factory, values));
+            return true;
+        }
+
+        @NonIdempotent
+        static ProtosPrelude admittedPrelude(VirtualFrame frame) {
+            return MakeArray.admittedPrelude(frame);
+        }
+
+        static boolean frozenStandardFactory(ProtosObjectValue factory, ProtosPrelude prelude) {
+            return MakeArray.frozenStandardFactory(factory, prelude);
         }
     }
 
     /*
-     * Constant Float Array construction, under the same admission as
-     * MakeConstantLongArray. The double[] constant is copied on every
-     * evaluation.
+     * Constant Float Array construction, specialized on the evaluated
+     * factory exactly as MakeConstantLongArray. The double[] constant is
+     * copied once per evaluation.
      */
     @Operation(storeBytecodeIndex = false)
     @ConstantOperand(type = double[].class, dimensions = 0)
+    @ConstantOperand(type = LocalAccessor.class, name = "result")
     public static final class MakeConstantDoubleArray {
-
-        /*
-         * The cached constant's elements are stable for this site only; the
-         * Array still receives a private copy of them.
-         */
         @Specialization(
-                guards = "values == cachedValues",
-                limit = "1",
+                guards = {
+                    "factory == cachedFactory",
+                    "prelude == cachedPrelude",
+                    "standard"
+                },
+                limit = "3",
                 excludeForUncached = true)
-        public static ProtosArrayValue performCached(
+        public static boolean doStandard(
                 double[] values,
-                Object factory,
-                @Cached(value = "values", dimensions = 1)
-                        double[] cachedValues) {
-            return new ProtosArrayValue(factory, cachedValues);
+                LocalAccessor result,
+                ProtosObjectValue factory,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode,
+                @Bind("admittedPrelude(frame)") ProtosPrelude prelude,
+                @Cached("prelude") ProtosPrelude cachedPrelude,
+                @Cached("factory") ProtosObjectValue cachedFactory,
+                @Cached("frozenStandardFactory(cachedFactory, cachedPrelude)") boolean standard) {
+            result.setObject(bytecode, frame, new ProtosArrayValue(cachedFactory, values));
+            return true;
         }
 
-        @Specialization(replaces = "performCached")
-        public static ProtosArrayValue performGeneric(
+        @Specialization
+        @InliningCutoff
+        public static boolean doSelected(
                 double[] values,
-                Object factory) {
-            return new ProtosArrayValue(factory, values);
+                LocalAccessor result,
+                Object factory,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode) {
+            if (!MakeArray.selectsStandardFactory(factory, frame)) {
+                return false;
+            }
+            result.setObject(bytecode, frame, new ProtosArrayValue(factory, values));
+            return true;
+        }
+
+        @NonIdempotent
+        static ProtosPrelude admittedPrelude(VirtualFrame frame) {
+            return MakeArray.admittedPrelude(frame);
+        }
+
+        static boolean frozenStandardFactory(ProtosObjectValue factory, ProtosPrelude prelude) {
+            return MakeArray.frozenStandardFactory(factory, prelude);
         }
     }
 
     /*
-     * Constant Boolean Array construction, under the same admission as
-     * MakeConstantLongArray. The boolean[] constant is copied on every
-     * evaluation.
+     * Constant Boolean Array construction, specialized on the evaluated
+     * factory exactly as MakeConstantLongArray. The boolean[] constant is
+     * copied once per evaluation.
      */
     @Operation(storeBytecodeIndex = false)
     @ConstantOperand(type = boolean[].class, dimensions = 0)
+    @ConstantOperand(type = LocalAccessor.class, name = "result")
     public static final class MakeConstantBooleanArray {
-
-        /*
-         * The cached constant's elements are stable for this site only; the
-         * Array still receives a private copy of them.
-         */
         @Specialization(
-                guards = "values == cachedValues",
-                limit = "1",
+                guards = {
+                    "factory == cachedFactory",
+                    "prelude == cachedPrelude",
+                    "standard"
+                },
+                limit = "3",
                 excludeForUncached = true)
-        public static ProtosArrayValue performCached(
+        public static boolean doStandard(
                 boolean[] values,
-                Object factory,
-                @Cached(value = "values", dimensions = 1)
-                        boolean[] cachedValues) {
-            return new ProtosArrayValue(factory, cachedValues);
+                LocalAccessor result,
+                ProtosObjectValue factory,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode,
+                @Bind("admittedPrelude(frame)") ProtosPrelude prelude,
+                @Cached("prelude") ProtosPrelude cachedPrelude,
+                @Cached("factory") ProtosObjectValue cachedFactory,
+                @Cached("frozenStandardFactory(cachedFactory, cachedPrelude)") boolean standard) {
+            result.setObject(bytecode, frame, new ProtosArrayValue(cachedFactory, values));
+            return true;
         }
 
-        @Specialization(replaces = "performCached")
-        public static ProtosArrayValue performGeneric(
+        @Specialization
+        @InliningCutoff
+        public static boolean doSelected(
                 boolean[] values,
-                Object factory) {
-            return new ProtosArrayValue(factory, values);
+                LocalAccessor result,
+                Object factory,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode) {
+            if (!MakeArray.selectsStandardFactory(factory, frame)) {
+                return false;
+            }
+            result.setObject(bytecode, frame, new ProtosArrayValue(factory, values));
+            return true;
+        }
+
+        @NonIdempotent
+        static ProtosPrelude admittedPrelude(VirtualFrame frame) {
+            return MakeArray.admittedPrelude(frame);
+        }
+
+        static boolean frozenStandardFactory(ProtosObjectValue factory, ProtosPrelude prelude) {
+            return MakeArray.frozenStandardFactory(factory, prelude);
         }
     }
 
     /*
      * Positional Array construction over the already evaluated argument
-     * vector (CollectClosureCallArguments or SnapshotClosureCallArguments).
-     * Emitted only behind IsStandardArrayConstructionSelection; the factory
-     * receiver becomes the delegation parent and the values its shallow
+     * vector (CollectClosureCallArguments or SnapshotClosureCallArguments),
+     * specialized on the evaluated factory exactly as MakeConstantLongArray:
+     * the factory becomes the delegation parent and the values its shallow
      * elements, materialized as guest values.
+     *
+     * It also owns the factory classification shared by the constant
+     * constructions: a cached entry is installed only for a factory whose
+     * call and construct selections are FROZEN and standard, which a FROZEN
+     * chain keeps for good; a factory with a mutable chain, a Closure or any
+     * other representation is selected completely on every execution, so a
+     * reassignment that preserves the Shape is observed.
      */
     @Operation(storeBytecodeIndex = false)
+    @ConstantOperand(type = LocalAccessor.class, name = "result")
     public static final class MakeArray {
+        @Specialization(
+                guards = {
+                    "factory == cachedFactory",
+                    "prelude == cachedPrelude",
+                    "standard"
+                },
+                limit = "3",
+                excludeForUncached = true)
+        public static boolean doStandard(
+                LocalAccessor result,
+                ProtosObjectValue factory,
+                Object[] values,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode,
+                @Bind("admittedPrelude(frame)") ProtosPrelude prelude,
+                @Cached("prelude") ProtosPrelude cachedPrelude,
+                @Cached("factory") ProtosObjectValue cachedFactory,
+                @Cached("frozenStandardFactory(cachedFactory, cachedPrelude)") boolean standard) {
+            result.setObject(bytecode, frame,
+                    new ProtosArrayValue(cachedFactory, guestElements(values)));
+            return true;
+        }
 
         @Specialization
-        public static ProtosArrayValue perform(
+        @InliningCutoff
+        public static boolean doSelected(
+                LocalAccessor result,
                 Object factory,
-                Object[] values) {
-            return new ProtosArrayValue(factory, guestElements(values));
+                Object[] values,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode) {
+            if (!selectsStandardFactory(factory, frame)) {
+                return false;
+            }
+            result.setObject(bytecode, frame, new ProtosArrayValue(factory, guestElements(values)));
+            return true;
         }
 
         private static List<Object> guestElements(Object[] values) {
@@ -3982,82 +4066,11 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             }
             return java.util.Arrays.asList(elements);
         }
-    }
 
-    /*
-     * Array construction admission. Answers whether calling the evaluated
-     * factory selects the canonical root Object.call and, through it, the
-     * original standard Array construct of the executing Prelude's
-     * canonical Array prototype. Only then does the lowering take
-     * MakeArray/MakeConstantLongArray; any other factory, including one with
-     * a nearer call or construct, goes through the ordinary Call*Method
-     * with the same evaluated receiver and arguments. Nothing is invoked
-     * here.
-     *
-     * The cached entry is keyed by the exact factory identity and holds the
-     * structural selections of call and construct starting at it. A
-     * structural change of any examined object misses the cache; a mutable
-     * selected slot is read again on every execution, so a reassignment that
-     * preserves Shape is observed. Only an all-FROZEN chain caches its
-     * classification.
-     */
-    @Operation(storeBytecodeIndex = false)
-    public static final class IsStandardArrayConstructionSelection {
-        @Specialization(
-                guards = {
-                    "factory == cachedFactory",
-                    "prelude == cachedPrelude",
-                    "callSelection != null",
-                    "frozen || callSelection.isValid()",
-                    "constructSelection != null",
-                    "frozen || constructSelection.isValid()"
-                },
-                limit = "3",
-                excludeForUncached = true)
-        public static boolean doCached(
-                ProtosObjectValue factory,
-                @Bind VirtualFrame frame,
-                @Bind("admittedPrelude(frame)") ProtosPrelude prelude,
-                @Cached("prelude") ProtosPrelude cachedPrelude,
-                @Cached("ordinaryFactoryOrNull(factory)") ProtosObjectValue cachedFactory,
-                @Cached("selectCall(cachedFactory)")
-                        ProtosValueLookup.StructuralSelection callSelection,
-                @Cached("selectConstruct(cachedFactory)")
-                        ProtosValueLookup.StructuralSelection constructSelection,
-                @Cached("allOwnersFrozen(callSelection, constructSelection)") boolean frozen,
-                @Cached("frozenStandard(frozen, callSelection, constructSelection)")
-                        boolean frozenStandard,
-                @Cached("frozenArrayForPrelude(frozen, frozenStandard, cachedPrelude)")
-                        ProtosObjectValue cachedArrayPrototype) {
-            if (prelude == null) {
-                return false;
-            }
-            if (frozen) {
-                return frozenStandard
-                        && cachedArrayPrototype == constructSelection.home();
-            }
-            return ProtosStandardObjectProtocol.isCanonicalStandardCallSelection(
-                            callSelection.read(), callSelection.home())
-                    && ProtosStandardArrayProtocol.isCanonicalStandardConstructSelection(
-                            constructSelection.read(), constructSelection.home(), prelude);
-        }
-
-        /*
-         * The generic selection. It replaces no cached entry, so a site that
-         * also sees another factory keeps its cached entries eligible.
-         * Closures, numbers and every other representation keep dispatch.
-         */
-        @Specialization
-        @InliningCutoff
-        public static boolean doGeneric(
-                Object factory,
-                @Bind VirtualFrame frame) {
-            if (!isOrdinaryFactory(factory)) {
-                return false;
-            }
-            return selectsStandard(
-                    (ProtosObjectValue) factory,
-                    ProtosFrameArguments.admittedPreludeOrNull(frame.getArguments()));
+        /* The caller's Prelude may differ between executions of one site. */
+        @NonIdempotent
+        static ProtosPrelude admittedPrelude(VirtualFrame frame) {
+            return ProtosFrameArguments.admittedPreludeOrNull(frame.getArguments());
         }
 
         /*
@@ -4069,64 +4082,42 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     && ((ProtosObjectValue) factory).usesObjectStorageForRuntime();
         }
 
-        /* The caller's Prelude may differ between executions of one site. */
-        @NonIdempotent
-        static ProtosPrelude admittedPrelude(VirtualFrame frame) {
-            return ProtosFrameArguments.admittedPreludeOrNull(frame.getArguments());
-        }
-
         /*
-         * Specialization time only: the Array prototype of the cached Prelude,
-         * read only for a FROZEN standard selection, exactly where the
-         * per-execution read used to happen. The Prelude's Array binding is
-         * fixed for its identity, which guards the entry.
+         * Specialization time only: whether the factory's call and construct
+         * selections are owned by FROZEN chains and select the canonical
+         * Object.call and the original standard construct of the Prelude's
+         * Array prototype. A FROZEN chain can change neither its slots nor
+         * its parents, so the classification holds for the cached identity.
          */
-        static ProtosObjectValue frozenArrayForPrelude(
-                boolean frozen,
-                boolean frozenStandard,
-                ProtosPrelude prelude) {
-            if (!frozen || !frozenStandard || prelude == null) {
-                return null;
+        @TruffleBoundary
+        static boolean frozenStandardFactory(ProtosObjectValue factory, ProtosPrelude prelude) {
+            if (prelude == null || !isOrdinaryFactory(factory)) {
+                return false;
             }
-            return prelude.arrayPrototype();
+            try {
+                ProtosValueLookup.StructuralSelection call =
+                        ProtosValueLookup.selectStructural(factory, "call");
+                ProtosValueLookup.StructuralSelection construct =
+                        ProtosValueLookup.selectStructural(factory, "construct");
+                return call != null
+                        && construct != null
+                        && call.allOwnersFrozen()
+                        && construct.allOwnersFrozen()
+                        && ProtosStandardObjectProtocol.isCanonicalStandardCallSelection(
+                                call.read(), call.home())
+                        && ProtosStandardArrayProtocol.isInstalledStandardConstruct(
+                                construct.read(), construct.home())
+                        && prelude.arrayPrototype() == construct.home();
+            } catch (IllegalStateException | UnsupportedOperationException unavailable) {
+                return false;
+            }
         }
 
-        static ProtosObjectValue ordinaryFactoryOrNull(ProtosObjectValue factory) {
-            return isOrdinaryFactory(factory) ? factory : null;
-        }
-
-        static ProtosValueLookup.StructuralSelection selectCall(ProtosObjectValue factory) {
-            return factory == null ? null : ProtosValueLookup.selectStructural(factory, "call");
-        }
-
-        static ProtosValueLookup.StructuralSelection selectConstruct(ProtosObjectValue factory) {
-            return factory == null ? null : ProtosValueLookup.selectStructural(factory, "construct");
-        }
-
-        static boolean allOwnersFrozen(
-                ProtosValueLookup.StructuralSelection callSelection,
-                ProtosValueLookup.StructuralSelection constructSelection) {
-            return callSelection != null
-                    && constructSelection != null
-                    && callSelection.allOwnersFrozen()
-                    && constructSelection.allOwnersFrozen();
-        }
-
-        /*
-         * Specialization-time classification of an all-FROZEN chain: while
-         * both selections stay valid their selected behaviors cannot change.
-         * The Prelude's canonical Array prototype is still checked per
-         * execution.
-         */
-        static boolean frozenStandard(
-                boolean frozen,
-                ProtosValueLookup.StructuralSelection callSelection,
-                ProtosValueLookup.StructuralSelection constructSelection) {
-            return frozen
-                    && ProtosStandardObjectProtocol.isCanonicalStandardCallSelection(
-                            callSelection.read(), callSelection.home())
-                    && ProtosStandardArrayProtocol.isInstalledStandardConstruct(
-                            constructSelection.read(), constructSelection.home());
+        /* The complete selection of any other factory. */
+        static boolean selectsStandardFactory(Object factory, VirtualFrame frame) {
+            return isOrdinaryFactory(factory)
+                    && selectsStandard(
+                            (ProtosObjectValue) factory, admittedPrelude(frame));
         }
 
         /*

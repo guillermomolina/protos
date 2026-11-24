@@ -61,7 +61,9 @@ import java.util.Set;
  * passed as a value, not admitted inline, or nested in a materialized
  * Closure, a parameter default or an inline object body) keeps the cell.
  * So does a capture by an inline callback that the custom-selection branch
- * of the same site also creates as a genuine Closure.
+ * of the same site also creates as a genuine Closure transporting cells; a
+ * callback that branch creates over the live frame reaches the same locals
+ * by name, so its captures need no cell.
  * The decision is keyed by {@link CanonicalBindingIdentity}, never by name,
  * and is derived deterministically from the canonical tree, so it is the
  * same on every Bytecode DSL reparse.
@@ -86,7 +88,8 @@ final class CanonicalInlineStoragePlan {
         /**
          * Whether the inline callback at operand {@code position} is also
          * created as a genuine Closure transporting its cells when ordinary
-         * dispatch selects a custom method for the receiver.
+         * dispatch selects a custom method for the receiver; false when that
+         * branch creates it over the live frame or never creates it.
          */
         boolean materializesInlineCallback(CanonicalSend send, int position);
     }
@@ -223,7 +226,7 @@ final class CanonicalInlineStoragePlan {
                 && policy.admitsInlineCallback(send, position, closure)) {
             if (policy.materializesInlineCallback(send, position)) {
                 // The custom-selection branch creates this callback as a
-                // genuine Closure: every cell it transports stays a cell.
+                // genuine Closure transporting cells: each stays a cell.
                 blockTransportedCells(closure);
             }
             walkInline(closure);

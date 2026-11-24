@@ -342,16 +342,15 @@ final class ProtosPerf045RangeEachInlineTest {
                         assertInternalLiteralFrames(module, 64);
                     }
                     List<String> names = module.instructions();
-                    int selection = indexAfter(names, "c.IsStandardRangeConstructionSelection", -1);
-                    int make = indexAfter(names, "c.MakeRange", selection);
-                    int iteration = indexAfter(names, "c.IsStandardRangeIterationSelection", make);
-                    int prepare = indexAfter(names, "c.PrepareRangeIteration", iteration);
-                    assertTrue(selection >= 0 && make > selection && iteration > make
-                            && prepare > iteration && indexAfter(names, "c.IterationNext", prepare) > prepare,
+                    int make = indexAfter(names, "c.MakeRange", -1);
+                    int prepare = indexAfter(names, "c.PrepareRangeIteration", make);
+                    assertTrue(make >= 0 && prepare > make
+                            && indexAfter(names, "c.IterationNext", prepare) > prepare,
                             () -> "construction precedes the internal loop: " + names);
-                    assertFalse(names.subList(selection, make + 1).stream()
+                    assertFalse(names.subList(0, make + 1).stream()
                                     .anyMatch(name -> name.contains("CallBinaryMethod")),
-                            "the admitted constructor branch has no dispatched call");
+                            "the selected constructor has no dispatched call before it");
+                    assertNoStandaloneAdmission(names);
 
                     // Positive control: the observer must see the source constructor
                     // when it is explicitly selected by an ordinary member send.
@@ -797,7 +796,7 @@ final class ProtosPerf045RangeEachInlineTest {
                 assertEquals(List.of(2L, 3L, 4L, 5L, 6L), module.visits);
                 assertFalse(entered.isEmpty(), "spread construction must enter the source implementation");
                 assertFalse(module.instructions().stream()
-                        .anyMatch(name -> name.contains("IsStandardRangeConstructionSelection")),
+                        .anyMatch(name -> name.contains("c.MakeRange")),
                         "neither named nor spread arguments are constructor candidates");
             }
         });
@@ -878,13 +877,13 @@ final class ProtosPerf045RangeEachInlineTest {
             assertInstanceOf(ProtosNullValue.class, outcome, "Range.each answers null");
             assertEquals(List.of(0L, 1L, 2L, 3L), module.visits);
             List<String> names = module.instructions();
-            int selection = indexAfter(names, "c.IsStandardRangeIterationSelection", -1);
-            int prepare = indexAfter(names, "c.PrepareRangeIteration", selection);
+            int prepare = indexAfter(names, "c.PrepareRangeIteration", -1);
             int next = indexAfter(names, "c.IterationNext", prepare);
-            assertTrue(selection >= 0 && prepare > selection && next > prepare,
+            assertTrue(prepare >= 0 && next > prepare,
                     () -> "the standard Range iteration must be internal: " + names);
-            assertTrue(names.stream().anyMatch(name -> name.contains("c.GetArrayEachSnapshot")),
-                    () -> "the native Array preparation is still emitted: " + names);
+            assertEquals(0, count(names, "c.GetArrayEachSnapshot"),
+                    () -> "a constructed Range receiver observes no Array selection: " + names);
+            assertNoStandaloneAdmission(names);
         });
     }
 
@@ -1281,6 +1280,10 @@ final class ProtosPerf045RangeEachInlineTest {
             assertInstanceOf(com.guillermomolina.protos.runtime.ProtosArrayValue.class, outcome,
                     "Array.each answers its receiver");
             assertSingleSharedLoop(module);
+            List<String> names = module.instructions();
+            assertEquals(1, count(names, "c.GetArrayEachSnapshot"));
+            assertEquals(0, count(names, "c.PrepareRangeIteration"),
+                    "an established Array needs no Range preparation");
         });
     }
 
@@ -2516,7 +2519,32 @@ final class ProtosPerf045RangeEachInlineTest {
         return new CanonicalToBytecodeLowerer(LANGUAGE_REF.get(null), source).lowerRoot(sequence);
     }
 
-    /* One shared loop, with protocol admission and state selection outside it. */
+    /*
+     * No captured binding of the root is transported through a lexical cell:
+     * the inline callback and the live-frame fallback reach the same locals.
+     */
+    private static void assertNoCaptureTransport(List<String> names) {
+        for (String operation : List.of(
+                "LoadCell", "StoreCell", "StoreCellFromLocal",
+                "BinarySubscriptCellLocal", "CaptureClosureCells")) {
+            assertFalse(names.stream().anyMatch(name -> isOperation(name, operation)),
+                    () -> operation + " transports a promotable capture: " + names);
+        }
+    }
+
+    /*
+     * Standard construction and iteration select inside the operation that
+     * establishes the value, cursor or snapshot; no standalone admission
+     * operation precedes it.
+     */
+    private static void assertNoStandaloneAdmission(List<String> names) {
+        assertFalse(names.stream().anyMatch(name -> name.contains("IsStandard")
+                        && (name.contains("Range") || name.contains("Array")
+                                || name.contains("Association"))),
+                () -> "no standalone construction or iteration admission: " + names);
+    }
+
+    /* One shared loop, with state preparation and its selection outside it. */
     private static void assertSingleSharedLoop(Module module) {
         ProtosBytecodeRootNode root = module.runRoot();
         BytecodeNode bytecode = root.getBytecodeNode();
@@ -2532,8 +2560,14 @@ final class ProtosPerf045RangeEachInlineTest {
         List<Instruction> snapshot = named(instructions, "GetArrayEachSnapshot");
         List<Instruction> prepare = named(instructions, "PrepareRangeIteration");
         assertEquals(1, next.size(), () -> instructions.toString());
-        assertEquals(1, snapshot.size(), () -> instructions.toString());
-        assertEquals(1, prepare.size(), () -> instructions.toString());
+        // A known collection family needs only its own preparation.
+        // A polymorphic receiver may have both preparations.
+        assertTrue(snapshot.size() <= 1, () -> instructions.toString());
+        assertTrue(prepare.size() <= 1, () -> instructions.toString());
+        assertTrue(!snapshot.isEmpty() || !prepare.isEmpty(),
+                "the shared loop must have an iteration-state producer");
+        assertNoStandaloneAdmission(instructions.stream()
+                .map(ProtosInstructionNames::of).toList());
         int advance = next.get(0).getBytecodeIndex();
         assertTrue(advance < enter, "the iterator advances before the callback body");
         // Constant operands follow declaration order: element, then cursor.
@@ -2547,7 +2581,15 @@ final class ProtosPerf045RangeEachInlineTest {
         assertNotEquals(accessors.get(0), accessors.get(1),
                 "the element target and the iteration cursor are distinct locals");
 
-        int prepared = Math.max(snapshot.get(0).getBytecodeIndex(), prepare.get(0).getBytecodeIndex());
+        int prepared = Math.max(
+                prepare.stream()
+                        .mapToInt(Instruction::getBytecodeIndex)
+                        .max()
+                        .orElse(-1),
+                snapshot.stream()
+                        .mapToInt(Instruction::getBytecodeIndex)
+                        .max()
+                        .orElse(-1));
         // Continuation composition has its own back edges. Only an edge
         // returning past IterationNext, after state preparation, repeats visits.
         List<Instruction> backward = instructions.stream()
@@ -2563,15 +2605,8 @@ final class ProtosPerf045RangeEachInlineTest {
                 .filter(argument -> argument.getKind() == Instruction.Argument.Kind.BYTECODE_INDEX)
                 .findFirst().orElseThrow().asBytecodeIndex();
         assertTrue(condition <= advance && backward.get(0).getBytecodeIndex() > enter);
-        assertTrue(snapshot.get(0).getBytecodeIndex() < condition
-                        && prepare.get(0).getBytecodeIndex() < condition,
-                "both state preparations are outside the repeated condition");
-        for (String selection : List.of(
-                "IsStandardArrayEachSelection", "IsStandardRangeIterationSelection")) {
-            List<Instruction> selected = named(instructions, selection);
-            assertEquals(1, selected.size());
-            assertTrue(selected.get(0).getBytecodeIndex() < condition);
-        }
+        assertTrue(prepared < condition,
+                "every state preparation, which owns its selection, is outside the repeated condition");
         List<Instruction> repeated = instructions.stream()
                 .filter(instruction -> instruction.getBytecodeIndex() >= condition
                         && instruction.getBytecodeIndex() < enter)
@@ -2630,13 +2665,16 @@ final class ProtosPerf045RangeEachInlineTest {
                     c: run(custom)
                     fresh: [5, 6]
                     e: run(fresh)
-                    ((a === values) && (b === null) && (d === null) && (c == 99) && (e === fresh))
+                    f: run(Range(10, 12))
+                    ((a === values) && (b === null) && (d === null) && (c == 99) && (e === fresh) && (f === null))
                         .ifTrueIfFalse(() => { 1 }, () => { 0 })
                     """);
             assertEquals("1", ProtosNumericValueSupport.integerDecimalText(result));
             assertEquals(List.of(3L, 4L, 7L, 1L, 2L, 3L, 3L, 2L, 5L,
-                    90L, 7L, 7L, 5L, 6L, 11L), module.visits);
-            for (int index : List.of(0, 1, 3, 4, 6, 7, 12, 13)) {
+                    90L, 7L, 7L, 5L, 6L, 11L, 10L, 11L, 21L), module.visits);
+            // Array and Range visits after the custom selection stay internal:
+            // the custom receiver replaced no standard specialization.
+            for (int index : List.of(0, 1, 3, 4, 6, 7, 12, 13, 15, 16)) {
                 assertSame(module.runRoot(), module.stacks.get(index).get(1),
                         "standard callbacks stay in run after selection changes");
             }
@@ -2702,32 +2740,21 @@ final class ProtosPerf045RangeEachInlineTest {
                 assertCompositionGuardedByCompletion(
                         module.runRoot().getBytecodeNode().getInstructionsAsList(), operation);
             }
-            assertEquals(1, count(names, "c.IsStandardRangeIterationSelection"),
-                    "numeric for retains ordinary Range.each selection");
+            // Numeric for converges on the standard Range construction and
+            // iteration operations, each owning its own selection.
+            assertEquals(1, count(names, "c.MakeRange"), () -> names.toString());
+            assertEquals(1, count(names, "c.PrepareRangeIteration"), () -> names.toString());
+            assertEquals(0, count(names, "c.GetArrayEachSnapshot"),
+                    "a constructed Range receiver observes no Array selection");
+            assertNoStandaloneAdmission(names);
             List<Instruction> listed = module.runRoot().getBytecodeNode().getInstructionsAsList();
-            assertCellLocalSubscriptReadsItsOwnOperands(listed);
             ProtosI115MCompactLoweringTest.assertConstantArrayFallbackCleanup(
                     module.runRoot(), "MakeConstantLongArray", "c.CallVarargsMethod", 64);
-            // The indexed outcome is consumed by addition, which owns the cell commit.
+            // The indexed outcome is consumed by addition.
             assertCompletedResultConsumedBy(listed, "BinarySubscript", "NumberAdd");
-            assertProducerCommitsCapturedCell(listed, "NumberAdd");
-            GuardedComposition addition = guardedComposition(listed, "NumberAdd");
-            assertTrue(addition.names().get(addition.completion()).startsWith("branch.backward"),
-                    "normal completion goes straight to the shared loop back edge");
-            LocalAccessor totalCell = localAccessors(
-                    addition.instructions().get(addition.producer())).get(1);
-            int indexed = indexAfter(addition.names(), "c.BinarySubscript", -1);
-            int left = indexed - 1;
-            assertTrue(isOperation(addition.names().get(left), "LoadCell"),
-                    "the accumulator is evaluated before the indexed operand");
-            assertTrue(sameLocal(totalCell,
-                    localAccessors(addition.instructions().get(left)).get(0)),
-                    "the producer commits to the captured total cell it read before indexing");
-            // Only the creations of values and total use StoreCell; none follows the sum.
-            int sum = indexAfter(names, "c.NumberAdd", -1);
-            assertEquals(0, names.subList(sum, names.size()).stream()
-                            .filter(name -> isOperation(name, "StoreCell")).count(),
-                    () -> "the sum reaches the captured cell without a stack-valued store: " + names);
+            // The ordinary-dispatch branch creates the callback over the live
+            // frame, so total and values stay directly accessible locals.
+            assertNoCaptureTransport(names);
             // The completed size result is consumed through its own outcome local too.
             assertCompositionGuardedByCompletion(listed, "GetLen");
             // Producer-owned results keep the instrumentation: the run root
@@ -2735,6 +2762,167 @@ final class ProtosPerf045RangeEachInlineTest {
             TagTree tree = module.runRoot().getBytecodeNode().getTagTree();
             assertTrue(tree != null && rootTags(tree) >= 1,
                     "run keeps its RootTag instrumentation");
+        });
+    }
+
+    /*
+     * Every standard spelling of an indexed or element sum converges on the
+     * same internal iteration: one IterationNext loop with one inline
+     * callback region, its selection owned by the state preparation, no
+     * standalone admission, no physical root other than the module and run
+     * (no source-backed construction or iteration method, no callback root),
+     * and no capture transported through a cell.
+     */
+    @Test
+    void everyStandardIterationSpellingConvergesOnOneInternalLoop() throws Exception {
+        String[] spellings = {
+            "for(i, 0, n) {\n total = total + values[i]\n }",
+            "for(i, 0, n, 1) {\n total = total + values[i]\n }",
+            "Range(0, n).each(i => {\n total = total + values[i]\n })",
+            "Range(0, n).eachStep(1, i => {\n total = total + values[i]\n })",
+            "r: Range(0, n)\n r.each(i => {\n total = total + values[i]\n })",
+            "values.each(value => {\n total = total + value\n })",
+            "for(value in values) {\n total = total + value\n }",
+            "for(i in Range(0, n)) {\n total = total + values[i]\n }",
+        };
+        for (String spelling : spellings) {
+            inContext(() -> {
+                Module module = new Module();
+                List<RootNode> entered = new ArrayList<>();
+                Object result;
+                try (ExecutionListener listener = ExecutionListener.newBuilder().roots(true)
+                        .sourceFilter(source -> true)
+                        .onEnter(event -> Truffle.getRuntime().iterateFrames(frame -> {
+                            entered.add(((RootCallTarget) frame.getCallTarget()).getRootNode());
+                            return Boolean.TRUE;
+                        }))
+                        .attach(Context.getCurrent().getEngine())) {
+                    result = module.run("""
+                            run: () => {
+                                values: [13, 18, 6, 42, 43, 1, 58, 4]
+                                total: 0
+                                n: values.size()
+                                %s
+                                total
+                            }
+                            run()
+                            """.formatted(spelling));
+                }
+                assertEquals("185", ProtosNumericValueSupport.integerDecimalText(result), spelling);
+                assertTrue(entered.stream()
+                                .allMatch(root -> root == module.lastRoot || root == module.runRoot()),
+                        () -> spelling + ": only the module and run roots may execute: " + entered);
+                assertSingleSharedLoop(module);
+                List<String> names = module.instructions();
+                assertNoStandaloneAdmission(names);
+                assertNoCaptureTransport(names);
+                assertFalse(names.stream().anyMatch(name -> isOperation(name, "MaterializeClosure")),
+                        () -> spelling + ": the inline callback is never a transported Closure: " + names);
+                assertTrue(count(names, "c.MaterializeSelectedCallback") <= 1,
+                        () -> spelling + ": only the ordinary-dispatch branch creates the callback: " + names);
+                assertEquals(1, count(names, "c.IterationNext"), () -> spelling + ": " + names);
+            });
+        }
+    }
+
+    /*
+     * A capture that genuinely escapes the inline callback keeps its cell:
+     * the escaping reader observes the same binding the inline sum assigns.
+     */
+    @Test
+    void escapingCaptureOfTheIndexedSumKeepsItsCell() throws Exception {
+        inContext(() -> {
+            Module module = new Module();
+            Object result = module.run("""
+                    run: () => {
+                        values: [13, 18, 6, 42]
+                        total: 0
+                        peek: () => total * 1000 + values.size()
+                        for(i, 0, values.size()) {
+                            total = total + values[i]
+                        }
+                        peek()
+                    }
+                    run()
+                    """);
+            assertEquals("79004", ProtosNumericValueSupport.integerDecimalText(result));
+            assertSingleSharedLoop(module);
+            List<Instruction> listed = module.runRoot().getBytecodeNode().getInstructionsAsList();
+            assertCellLocalSubscriptReadsItsOwnOperands(listed);
+            assertProducerCommitsCapturedCell(listed, "NumberAdd");
+        });
+    }
+
+    /*
+     * A user-defined each is selected and invoked with a genuine callback
+     * created over the live frame: its writes reach the same local the
+     * inline execution would update, and the selected result is answered.
+     */
+    @Test
+    void userDefinedEachReceivesALiveFrameCallback() throws Exception {
+        java.util.Map<String, List<String>> spellings = java.util.Map.of(
+                "result: bag.each(v => {\n total = total + v\n })\n hook(result)", List.of("99", "6"),
+                "for(v in bag) {\n total = total + v\n }", List.of("6"));
+        for (var entry : spellings.entrySet()) {
+            String spelling = entry.getKey();
+            inContext(() -> {
+                Module module = new Module();
+                Object outcome = module.run("""
+                        run: () => {
+                            total: 0
+                            bag: { each: (block) => {
+                                block(1)
+                                block(2)
+                                block(3)
+                                99
+                            } }
+                            %s
+                            hook(total)
+                            total
+                        }
+                        run()
+                        """.formatted(spelling));
+                assertEquals("6", ProtosNumericValueSupport.integerDecimalText(outcome), spelling);
+                assertEquals(entry.getValue(), module.visitTexts(), spelling);
+                List<String> names = module.instructions();
+                assertEquals(1, count(names, "c.MaterializeSelectedCallback"), () -> names.toString());
+                assertNoCaptureTransport(names);
+            });
+        }
+    }
+
+    /*
+     * A user-defined each that retains its live-frame callback after run has
+     * returned: every later invocation reaches the same lexical binding of
+     * that run activation and observes its latest value.
+     */
+    @Test
+    void userDefinedEachRetainsItsLiveFrameCallbackAfterReturning() throws Exception {
+        inContext(() -> {
+            Module module = new Module();
+            Object outcome = module.run("""
+                    keeper: { block: null }
+                    bag: { each: (block) => {
+                        keeper.block = block
+                        block(1)
+                    } }
+                    run: () => {
+                        total: 10
+                        bag.each(v => {
+                            total = total + v
+                        })
+                        total
+                    }
+                    hook(run())
+                    hook(keeper.block(5))
+                    hook(keeper.block(7))
+                    keeper.block(0)
+                    """);
+            assertEquals("23", ProtosNumericValueSupport.integerDecimalText(outcome));
+            assertEquals(List.of("11", "16", "23"), module.visitTexts());
+            List<String> names = module.instructions();
+            assertEquals(1, count(names, "c.MaterializeSelectedCallback"), () -> names.toString());
+            assertNoCaptureTransport(names);
         });
     }
 

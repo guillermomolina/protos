@@ -103,19 +103,19 @@ final class ProtosPerf025InlineCallbackPreparationTest {
 
                 List<String> names = instructionNames(physicalRun(module));
 
-                int selection =
-                        indexOfContainingAfter(names, "c.IsStandardArrayEachSelection", -1);
                 int snapshot =
-                        indexOfContainingAfter(names, "c.GetArrayEachSnapshot", selection);
+                        indexOfContainingAfter(names, "c.GetArrayEachSnapshot", -1);
                 int next =
                         indexOfContainingAfter(names, "c.IterationNext", snapshot);
                 int backward =
                         indexOfContainingAfter(names, "branch.backward", next);
 
-                assertTrue(selection >= 0,
-                        () -> "missing standard each selection guard: " + names);
-                assertTrue(snapshot > selection,
-                        () -> "snapshot must follow the selection guard: " + names);
+                assertTrue(snapshot >= 0,
+                        () -> "missing standard each snapshot, which owns its selection: "
+                                + names);
+                assertTrue(names.stream().noneMatch(
+                                name -> name.contains("IsStandardArrayEachSelection")),
+                        () -> "no standalone each admission precedes the snapshot: " + names);
                 assertTrue(next > snapshot,
                         () -> "missing native iteration step: " + names);
                 assertTrue(backward > next,
@@ -404,7 +404,6 @@ final class ProtosPerf025InlineCallbackPreparationTest {
                 List<String> names = instructionNames(physicalRun(module));
                 assertOrdered(
                         names,
-                        "c.IsStandardArrayEachSelection",
                         "c.GetArrayEachSnapshot",
                         "c.IterationNext",
                         "c.ResetInlineCallbackLocal",
