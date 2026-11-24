@@ -473,11 +473,7 @@ public final class ProtosTlsBackendFacility {
     }
 
     private static ProtosBytesValue bytes(ProtosActivation activation, byte[] octets) {
-        ProtosBytesValue result = new ProtosBytesValue(prelude(activation).bytesPrototypeForRuntime());
-        for (byte octet : octets) {
-            result.indexedAdd(ProtosNumericValueSupport.octet(octet & 255));
-        }
-        return result;
+        return new ProtosBytesValue(prelude(activation).bytesPrototypeForRuntime(), octets);
     }
 
     private static ProtosBytesValue frozenBytes(ProtosActivation activation, byte[] octets) {

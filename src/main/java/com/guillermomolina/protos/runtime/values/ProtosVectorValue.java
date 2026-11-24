@@ -24,14 +24,19 @@ import java.util.Objects;
 /**
  * A Standard Library {@code std:math/linear_algebra} Vector (D214 C1/S1, LIB024).
  *
- * <p>An ordinary Protos object whose dense, fixed-length numeric payload is private R1 storage of
- * element references: it is not a slot, so reflection and slot copying never see it. Every
- * stored element is a genuine Core Number, admitted by {@link
- * ProtosNumericValueSupport#isCurrentNumber} without conversion or guest code. No operation here
- * changes the length.
+ * <p>An ordinary Protos object whose dense, fixed-length numeric payload is private storage: it is
+ * not a slot, so reflection and slot copying never see it. Every stored element is a genuine Core
+ * Number, admitted by {@link ProtosNumericValueSupport#isCurrentNumber} without conversion or
+ * guest code. No operation here changes the length.
+ *
+ * <p>The storage is exactly one of a {@code long[]} of signed-64 Integers, a {@code double[]} of
+ * Floats, or an {@code Object[]} of element references for any other or mixed content. Writing a
+ * value its primitive array cannot hold exactly first generalizes to element references. The
+ * active array is invisible: reads reify semantic Numbers and snapshots are independent.
  */
 public final class ProtosVectorValue extends ProtosObjectValue {
-    private final Object[] elements;
+    /* A long[], a double[] or an Object[]; never escapes. */
+    private Object storage;
 
     /**
      * A Vector holding exactly {@code elements}, in order. Throws {@link IllegalArgumentException}
@@ -44,17 +49,18 @@ public final class ProtosVectorValue extends ProtosObjectValue {
         for (Object element : owned) {
             requireNumber(element);
         }
-        this.elements = owned;
+        this.storage = specializedStorage(owned);
     }
 
     private ProtosVectorValue(Object parent, Object[] owned) {
         super(parent);
-        this.elements = owned;
+        this.storage = owned;
     }
 
     /**
      * A transfer shell of {@code size} elements, each a genuine Integer {@code 0} placeholder that
-     * transfer population replaces before the shell becomes observable.
+     * transfer population replaces before the shell becomes observable. Its storage is element
+     * references so population may hold transfer descriptors.
      */
     public static ProtosVectorValue transferShellForRuntime(Object parent, int size) {
         Object[] placeholders = new Object[size];
@@ -63,7 +69,7 @@ public final class ProtosVectorValue extends ProtosObjectValue {
     }
 
     public int indexedSize() {
-        return elements.length;
+        return physicalLength(storage);
     }
 
     /**
@@ -71,32 +77,60 @@ public final class ProtosVectorValue extends ProtosObjectValue {
      * for a non-Integer and {@link IndexOutOfBoundsException} for an Integer outside the Vector.
      */
     public Object indexedAt(Object index) {
-        return elements[existingIndex(index)];
+        Object current = storage;
+        int existing = existingIndex(index, current);
+        if (current instanceof long[] integers) {
+            return ProtosNumericValueSupport.integer(integers[existing]);
+        }
+        if (current instanceof double[] floats) {
+            return ProtosNumericValueSupport.floating(floats[existing]);
+        }
+        return ((Object[]) current)[existing];
     }
 
     /**
      * Replaces one element, validating frozen state, then bounds, then numeric admission, before
-     * any write; a failure leaves the storage unchanged. Answers the assigned value.
+     * any write; a failure leaves the storage unchanged. A value the active primitive array cannot
+     * hold exactly first generalizes the storage to element references. Answers the assigned
+     * value.
      */
     public Object indexedPut(Object index, Object value) {
         if (isFrozen()) {
             throw new IllegalStateException("vector is frozen");
         }
-        int existing = existingIndex(index);
+        Object current = storage;
+        int existing = existingIndex(index, current);
         requireNumber(value);
-        elements[existing] = value;
+        if (current instanceof long[] integers) {
+            if (value instanceof Long integer) {
+                integers[existing] = integer.longValue();
+                return value;
+            }
+        } else if (current instanceof double[] floats) {
+            if (ProtosNumericValueSupport.isCurrentFloat(value)) {
+                floats[existing] = ProtosNumericValueSupport.currentFloatValue(value);
+                return value;
+            }
+        } else {
+            ((Object[]) current)[existing] = value;
+            return value;
+        }
+        Object[] generalized = references(current);
+        generalized[existing] = value;
+        storage = generalized;
         return value;
     }
 
     /** An independent copy of the current elements, unaffected by later writes. */
     public List<Object> indexedSnapshot() {
-        return List.of(elements.clone());
+        Object current = storage;
+        return List.of(current instanceof Object[] elements ? elements.clone() : references(current));
     }
 
     /**
      * Transfer population only: stores a genuine Number or an inert Fraction/Complex transfer
      * descriptor of a detached snapshot, which destination materialization replaces by a Number
-     * before guest code can observe the Vector.
+     * before guest code can observe the Vector. Transfer shells hold element references.
      */
     public void transferPutForRuntime(int index, Object value) {
         Objects.requireNonNull(value, "value");
@@ -105,10 +139,85 @@ public final class ProtosVectorValue extends ProtosObjectValue {
                 && !ProtosComplexNumericSupport.isTransferDescriptor(value)) {
             throw new IllegalArgumentException("vector transfer element is not numeric");
         }
+        if (!(storage instanceof Object[] elements)) {
+            throw new IllegalStateException("vector transfer population requires a transfer shell");
+        }
         elements[Objects.checkIndex(index, elements.length)] = value;
     }
 
-    private int existingIndex(Object index) {
+    /**
+     * Transfer population only, once every element of a transfer shell is in place: replaces
+     * element references by the primitive storage their Number family admits, in this same
+     * Vector. References that hold a rich, mixed or not yet materialized element stay as they
+     * are. No element, identity, slot or state changes.
+     */
+    public void completeTransferForRuntime() {
+        if (storage instanceof Object[] elements) {
+            storage = specializedStorage(elements);
+        }
+    }
+
+    /*
+     * The storage for validated Numbers: a long[] when every element is a signed-64 Integer, a
+     * double[] when every element is a Float, otherwise the references themselves.
+     */
+    private static Object specializedStorage(Object[] owned) {
+        if (owned.length == 0) {
+            return owned;
+        }
+        boolean allIntegers = true;
+        boolean allFloats = true;
+        for (Object element : owned) {
+            allIntegers &= element instanceof Long;
+            allFloats &= ProtosNumericValueSupport.isCurrentFloat(element);
+        }
+        if (allIntegers) {
+            long[] integers = new long[owned.length];
+            for (int index = 0; index < integers.length; index++) {
+                integers[index] = (Long) owned[index];
+            }
+            return integers;
+        }
+        if (allFloats) {
+            double[] floats = new double[owned.length];
+            for (int index = 0; index < floats.length; index++) {
+                floats[index] = ProtosNumericValueSupport.currentFloatValue(owned[index]);
+            }
+            return floats;
+        }
+        return owned;
+    }
+
+    /* Fresh element references reifying every lane of a primitive storage. */
+    private static Object[] references(Object current) {
+        if (current instanceof long[] integers) {
+            Object[] result = new Object[integers.length];
+            for (int index = 0; index < result.length; index++) {
+                result[index] = ProtosNumericValueSupport.integer(integers[index]);
+            }
+            return result;
+        }
+        if (current instanceof double[] floats) {
+            Object[] result = new Object[floats.length];
+            for (int index = 0; index < result.length; index++) {
+                result[index] = ProtosNumericValueSupport.floating(floats[index]);
+            }
+            return result;
+        }
+        return ((Object[]) current).clone();
+    }
+
+    private static int physicalLength(Object current) {
+        if (current instanceof long[] integers) {
+            return integers.length;
+        }
+        if (current instanceof double[] floats) {
+            return floats.length;
+        }
+        return ((Object[]) current).length;
+    }
+
+    private static int existingIndex(Object index, Object current) {
         if (!ProtosNumericValueSupport.isCurrentInteger(index)) {
             throw new IllegalArgumentException("vector index is not an Integer");
         }
@@ -117,7 +226,7 @@ public final class ProtosVectorValue extends ProtosObjectValue {
             throw new IndexOutOfBoundsException("vector index out of bounds");
         }
         int exact = ProtosNumericValueSupport.exactInt(index);
-        if (exact < 0 || exact >= elements.length) {
+        if (exact < 0 || exact >= physicalLength(current)) {
             throw new IndexOutOfBoundsException("vector index out of bounds: " + exact);
         }
         return exact;

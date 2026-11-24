@@ -23,7 +23,6 @@ import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosIoOperation;
-import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosEntropyCapabilityValue;
 import java.util.Objects;
@@ -190,13 +189,8 @@ public final class ProtosEntropyFlow {
                 bytes = new ProtosBytesValue(
                         activation.prelude()
                                 .orElseThrow()
-                                .bytesPrototypeForRuntime());
-
-                for (byte octet : octets) {
-                    bytes.indexedAdd(
-                            ProtosNumericValueSupport.integer(
-                                    Byte.toUnsignedInt(octet)));
-                }
+                                .bytesPrototypeForRuntime(),
+                        octets);
             } catch (RuntimeException invalidHostResult) {
                 return publishFailure();
             }

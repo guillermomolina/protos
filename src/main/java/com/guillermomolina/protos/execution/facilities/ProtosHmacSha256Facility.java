@@ -20,7 +20,6 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
-import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.callables.ProtosNativeClosureBody;
@@ -129,12 +128,8 @@ public final class ProtosHmacSha256Facility {
                     new ProtosBytesValue(
                             activation.prelude()
                                     .orElseThrow(() -> invalid(activation))
-                                    .bytesPrototypeForRuntime());
-
-            for (byte octet : calculated) {
-                result.indexedAdd(
-                        ProtosNumericValueSupport.octet(octet & 255));
-            }
+                                    .bytesPrototypeForRuntime(),
+                            calculated);
 
             return result;
         } catch (GeneralSecurityException | IllegalArgumentException | IllegalStateException | ProviderException failure) {

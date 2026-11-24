@@ -25,6 +25,7 @@ import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.ProtosIdentityMapValue;
 import com.guillermomolina.protos.runtime.ProtosIndexedSnapshot;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.guillermomolina.protos.runtime.ProtosVectorValue;
 import com.guillermomolina.protos.runtime.ProtosMatrixValue;
@@ -395,7 +396,7 @@ final class ProtosStructuredEachCalls {
 
     static final class PreparedBytesEachCall implements PreparedIndexedEachCall {
         private final ProtosBytesValue bytes;
-        private final Object[] snapshot;
+        private final byte[] snapshot;
         private final Object block;
         private final ProtosActivation activation;
         private int index;
@@ -416,7 +417,7 @@ final class ProtosStructuredEachCalls {
             ProtosStandardBytesProtocol.requireInvokableForStructured(
                     block,
                     activation);
-            this.snapshot = value.indexedSnapshotForRuntime();
+            this.snapshot = value.octetSnapshot();
         }
 
         @Override
@@ -432,7 +433,7 @@ final class ProtosStructuredEachCalls {
             }
             return ProtosCallRequest.call(
                     block,
-                    new Object[] {snapshot[index]},
+                    new Object[] {ProtosNumericValueSupport.octet(snapshot[index] & 0xff)},
                     activation);
         }
 

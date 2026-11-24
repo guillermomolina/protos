@@ -307,20 +307,51 @@ final class ProtosTextReaderLineProtocolTest {
     }
 
     @Test
-    void invalidOctetInSourceBytesFailsWithIOErrorWithoutRereading() throws Exception {
+    void invalidSourceResultTypeFailsWithIOErrorWithoutRereading() throws Exception {
         Fixture f = fixture("UTF8");
         Pending pending = f.source.pending(true);
 
         ProtosFutureValue line = readLine(f.reader, f.activation);
         assertEquals(ProtosFutureValue.State.PENDING, line.state());
 
-        ProtosBytesValue invalid = bytes(f.prelude, 'a');
-        invalid.indexedAdd(Long.valueOf(256L));
-        invalid.indexedAdd(Long.valueOf('\n'));
-        pending.resolve(invalid, f.activation);
+        pending.resolve(new ProtosStringValue("not Bytes"), f.activation);
 
         assertEquals(ProtosFutureValue.State.FAILED, line.state());
         assertErrorParent(f.prelude, line.failedError().orElseThrow(), "IOError");
+        assertEquals(1, f.source.reads);
+    }
+
+    @Test
+    void emptySourceBytesFailsWithIOErrorWithoutRereading() throws Exception {
+        Fixture f = fixture("UTF8");
+        Pending pending = f.source.pending(true);
+
+        ProtosFutureValue line = readLine(f.reader, f.activation);
+        assertEquals(ProtosFutureValue.State.PENDING, line.state());
+
+        pending.resolve(bytes(f.prelude), f.activation);
+
+        assertEquals(ProtosFutureValue.State.FAILED, line.state());
+        assertErrorParent(f.prelude, line.failedError().orElseThrow(), "IOError");
+        assertEquals(1, f.source.reads);
+    }
+
+    @Test
+    void invalidOctetNeverEntersSourceBytesAndTheReadCompletesWithoutRereading()
+            throws Exception {
+        Fixture f = fixture("UTF8");
+        Pending pending = f.source.pending(true);
+
+        ProtosFutureValue line = readLine(f.reader, f.activation);
+        assertEquals(ProtosFutureValue.State.PENDING, line.state());
+
+        ProtosBytesValue source = bytes(f.prelude, 'a');
+        assertThrows(IllegalArgumentException.class, () -> source.indexedAdd(Long.valueOf(256L)));
+        source.indexedAdd(Long.valueOf('\n'));
+        assertEquals(2, source.indexedSize());
+        pending.resolve(source, f.activation);
+
+        assertEquals("a", stringResult(line));
         assertEquals(1, f.source.reads);
     }
 

@@ -16,7 +16,9 @@
  */
 package com.guillermomolina.protos.execution;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -27,6 +29,9 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
+import com.guillermomolina.protos.runtime.ProtosIdentity;
+import com.guillermomolina.protos.runtime.ProtosNullValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -97,8 +102,8 @@ class ProtosStandardBytesProtocolTest {
         assertDirectError(fixture, () -> fixture.send(bytes, "removeAt", integer(2)));
 
         assertEquals(2, bytes.indexedSize());
-        assertSame(ten, fixture.send(bytes, "at", integer(0)));
-        assertSame(twenty, fixture.send(bytes, "at", integer(1)));
+        assertSameInteger(ten, fixture.send(bytes, "at", integer(0)));
+        assertSameInteger(twenty, fixture.send(bytes, "at", integer(1)));
     }
 
     // Preserve the already-closed I012 lifecycle contract without pretending
@@ -116,7 +121,7 @@ class ProtosStandardBytesProtocolTest {
         assertDirectError(fixture, () -> fixture.send(closed, "add", integer(3)));
         assertDirectError(fixture, () -> fixture.send(closed, "removeAt", integer(0)));
         assertEquals("1", intValue(fixture.send(closed, "size")));
-        assertSame(two, fixture.send(closed, "at", integer(0)));
+        assertSameInteger(two, fixture.send(closed, "at", integer(0)));
 
         ProtosBytesValue frozen = fixture.create();
         Long four = integer(4);
@@ -133,7 +138,7 @@ class ProtosStandardBytesProtocolTest {
                                 new ProtosStringValue("bad-value")));
         assertDirectError(fixture, () -> fixture.send(frozen, "add", integer(5)));
         assertDirectError(fixture, () -> fixture.send(frozen, "removeAt", integer(0)));
-        assertSame(four, fixture.send(frozen, "at", integer(0)));
+        assertSameInteger(four, fixture.send(frozen, "at", integer(0)));
         assertEquals("1", intValue(fixture.send(frozen, "size")));
     }
 
@@ -186,20 +191,20 @@ class ProtosStandardBytesProtocolTest {
             assertDirectError(fixture, () -> fixture.send(bytes, "atPut", integer(0), octet));
         }
 
-        // No failed operation changed the content, which still holds the exact objects given.
+        // No failed operation changed the content, which still holds the same Integers.
         assertEquals(2, bytes.indexedSize());
-        assertSame(zero, fixture.send(bytes, "at", integer(0)));
-        assertSame(max, fixture.send(bytes, "at", integer(1)));
+        assertSameInteger(zero, fixture.send(bytes, "at", integer(0)));
+        assertSameInteger(max, fixture.send(bytes, "at", integer(1)));
         assertEquals(List.of((byte) 0, (byte) 0xff),
                 List.of(bytes.octetSnapshot()[0], bytes.octetSnapshot()[1]));
 
         Long one = integer(1);
         assertSame(one, fixture.send(bytes, "atPut", integer(1), one));
-        assertSame(one, fixture.send(bytes, "at", integer(1)));
+        assertSameInteger(one, fixture.send(bytes, "at", integer(1)));
     }
 
     @Test
-    void eachObservesTheExactStoredOctetsThroughTheCallback() throws IOException {
+    void eachObservesTheStoredOctetIntegersThroughTheCallback() throws IOException {
         Fixture fixture = fixture();
         ProtosBytesValue bytes = fixture.create();
         List<Object> stored = List.of(integer(0), integer(128), integer(255));
@@ -215,12 +220,12 @@ class ProtosStandardBytesProtocolTest {
         assertSame(bytes, result);
         assertEquals(stored.size(), observed.size());
         for (int index = 0; index < stored.size(); index++) {
-            assertSame(stored.get(index), observed.get(index));
+            assertSameInteger(stored.get(index), observed.get(index));
         }
     }
 
     @Test
-    void runtimeSnapshotIsAnIndependentArrayOfTheStoredOctetReferences()
+    void runtimeSnapshotIsAnIndependentArrayOfTheStoredOctetIntegers()
             throws IOException {
         Fixture fixture = fixture();
         ProtosBytesValue bytes = fixture.create();
@@ -235,13 +240,13 @@ class ProtosStandardBytesProtocolTest {
         Object[] second = bytes.indexedSnapshotForRuntime();
         assertNotSame(first, second);
         assertEquals(3, first.length);
-        assertSame(zero, first[0]);
-        assertSame(middle, first[1]);
-        assertSame(max, first[2]);
+        assertSameInteger(zero, first[0]);
+        assertSameInteger(middle, first[1]);
+        assertSameInteger(max, first[2]);
 
         // Writing the array does not reach the Bytes receiver.
         second[0] = integer(7);
-        assertSame(zero, bytes.indexedAt(0));
+        assertSameInteger(zero, bytes.indexedAt(0));
 
         // Later receiver mutation does not reach an earlier snapshot.
         Long replacement = integer(9);
@@ -249,19 +254,198 @@ class ProtosStandardBytesProtocolTest {
         bytes.indexedRemoveAt(0);
         bytes.indexedAdd(integer(42));
         assertEquals(3, first.length);
-        assertSame(zero, first[0]);
-        assertSame(middle, first[1]);
-        assertSame(max, first[2]);
-        assertSame(replacement, bytes.indexedAt(0));
+        assertSameInteger(zero, first[0]);
+        assertSameInteger(middle, first[1]);
+        assertSameInteger(max, first[2]);
+        assertSameInteger(replacement, bytes.indexedAt(0));
 
         // The public list snapshot keeps its previous immutable copy contract.
         List<Object> listed = bytes.indexedSnapshot();
         assertEquals(3, listed.size());
-        assertSame(replacement, listed.get(0));
-        assertSame(max, listed.get(1));
+        assertSameInteger(replacement, listed.get(0));
+        assertSameInteger(max, listed.get(1));
         assertThrows(UnsupportedOperationException.class, () -> listed.set(0, zero));
         bytes.indexedAdd(integer(1));
         assertEquals(3, listed.size());
+    }
+
+    @Test
+    void emptyBytesHasNoOctets() throws IOException {
+        Fixture fixture = fixture();
+        ProtosBytesValue bytes = fixture.create();
+        assertEquals(0, bytes.indexedSize());
+        assertEquals(0, bytes.octetSnapshot().length);
+        assertEquals(0, bytes.indexedSnapshotForRuntime().length);
+        assertTrue(bytes.indexedSnapshot().isEmpty());
+        assertThrows(IndexOutOfBoundsException.class, () -> bytes.indexedAt(0));
+    }
+
+    @Test
+    void highOctetsReadAsUnsignedIntegers() throws IOException {
+        Fixture fixture = fixture();
+        ProtosBytesValue bytes = fixture.create();
+        long[] octets = {0, 127, 128, 255};
+        for (long octet : octets) {
+            fixture.add(bytes, integer(octet));
+        }
+        for (int index = 0; index < octets.length; index++) {
+            assertSameInteger(integer(octets[index]), fixture.send(bytes, "at", integer(index)));
+            assertSameInteger(integer(octets[index]), bytes.indexedAt(index));
+            assertSameInteger(integer(octets[index]), bytes.indexedSnapshot().get(index));
+            assertSameInteger(integer(octets[index]), bytes.indexedSnapshotForRuntime()[index]);
+        }
+        assertArrayEquals(new byte[] {0, 0x7f, (byte) 0x80, (byte) 0xff}, bytes.octetSnapshot());
+        ProtosBytesValue copied =
+                new ProtosBytesValue(fixture.factory, new byte[] {(byte) 0x80, (byte) 0xff});
+        assertSameInteger(integer(128), copied.indexedAt(0));
+        assertSameInteger(integer(255), copied.indexedAt(1));
+    }
+
+    @Test
+    void growthReplacementAndRemovalKeepTheLogicalOctets() throws IOException {
+        Fixture fixture = fixture();
+        ProtosBytesValue bytes = fixture.create();
+        int count = 1000;
+        for (int index = 0; index < count; index++) {
+            fixture.add(bytes, integer(index & 0xff));
+        }
+        assertEquals(count, bytes.indexedSize());
+        for (int index = 0; index < count; index++) {
+            assertSameInteger(integer(index & 0xff), bytes.indexedAt(index));
+        }
+        Long first = integer(0xff);
+        Long last = integer(0x80);
+        assertSame(first, fixture.send(bytes, "atPut", integer(0), first));
+        assertSame(last, fixture.send(bytes, "atPut", integer(count - 1), last));
+        assertSameInteger(first, bytes.indexedAt(0));
+        assertSameInteger(last, bytes.indexedAt(count - 1));
+
+        assertSameInteger(integer(0xff), fixture.send(bytes, "removeAt", integer(0)));
+        assertEquals(count - 1, bytes.indexedSize());
+        assertSameInteger(integer(1), bytes.indexedAt(0));
+        assertSameInteger(integer(0x80), bytes.indexedAt(count - 2));
+        assertSameInteger(integer(0x80), fixture.send(bytes, "removeAt", integer(count - 2)));
+        assertEquals(count - 2, bytes.indexedSize());
+        assertSameInteger(integer((count - 2) & 0xff), bytes.indexedAt(count - 3));
+        assertSameInteger(integer(0x80), bytes.indexedRemoveAt(127));
+        assertSameInteger(integer(0x81), bytes.indexedAt(127));
+        byte[] snapshot = bytes.octetSnapshot();
+        assertEquals(count - 3, snapshot.length);
+        assertEquals((byte) 0xff, snapshot[254 - 1]);
+    }
+
+    @Test
+    void directJavaInsertionRejectsNonOctetsBeforeMutation() throws IOException {
+        Fixture fixture = fixture();
+        ProtosBytesValue bytes = fixture.create();
+        bytes.indexedAdd(integer(7));
+        Object big =
+                ProtosNumericValueSupport.integerFromHost(BigInteger.ONE.shiftLeft(70), fixture.prelude);
+        java.util.ArrayList<Object> invalid = new java.util.ArrayList<>();
+        invalid.add(null);
+        invalid.addAll(
+                List.of(
+                        new Object(), Boolean.TRUE, new ProtosFloatValue(1.0), 1.0d,
+                        new ProtosStringValue("1"), ProtosNullValue.INSTANCE, integer(-1),
+                        integer(256), big, (byte) 1, 1));
+        for (Object value : invalid) {
+            assertThrows(RuntimeException.class, () -> bytes.indexedAdd(value));
+            assertThrows(RuntimeException.class, () -> bytes.indexedPut(0, value));
+        }
+        assertThrows(IndexOutOfBoundsException.class, () -> bytes.indexedPut(1, integer(1)));
+        assertThrows(IndexOutOfBoundsException.class, () -> bytes.indexedPut(-1, integer(1)));
+        assertThrows(IndexOutOfBoundsException.class, () -> bytes.indexedRemoveAt(1));
+        assertEquals(1, bytes.indexedSize());
+        assertArrayEquals(new byte[] {7}, bytes.octetSnapshot());
+    }
+
+    @Test
+    void closedAndFrozenJavaMutationsFailInOrderWithoutMutation() throws IOException {
+        Fixture fixture = fixture();
+        ProtosBytesValue closed = fixture.create();
+        closed.indexedAdd(integer(1));
+        closed.close();
+        assertThrows(IllegalStateException.class, () -> closed.indexedAdd(integer(2)));
+        assertThrows(IllegalStateException.class, () -> closed.indexedAdd(integer(256)));
+        assertThrows(IllegalStateException.class, () -> closed.indexedRemoveAt(5));
+        assertThrows(
+                IllegalStateException.class, () -> closed.appendOctetsForRuntime(new byte[] {1}));
+        Long two = integer(2);
+        assertSame(two, closed.indexedPut(0, two));
+        assertArrayEquals(new byte[] {2}, closed.octetSnapshot());
+
+        ProtosBytesValue frozen = fixture.create();
+        frozen.indexedAdd(integer(3));
+        frozen.freeze();
+        // Frozen is checked before the index and the value.
+        assertThrows(IllegalStateException.class, () -> frozen.indexedPut(9, "bad"));
+        assertThrows(IllegalStateException.class, () -> frozen.indexedPut(0, integer(4)));
+        assertThrows(IllegalStateException.class, () -> frozen.indexedAdd(integer(4)));
+        assertArrayEquals(new byte[] {3}, frozen.octetSnapshot());
+    }
+
+    @Test
+    void eachIsStableAgainstLaterReceiverMutation() throws IOException {
+        Fixture fixture = fixture();
+        ProtosBytesValue bytes = fixture.create();
+        for (long octet : new long[] {0x80, 0xff, 1}) {
+            fixture.add(bytes, integer(octet));
+        }
+        fixture.send(bytes, "atPut", integer(2), integer(0xff));
+        fixture.send(bytes, "removeAt", integer(0));
+        fixture.add(bytes, integer(0x80));
+        java.util.ArrayList<Object> observed = new java.util.ArrayList<>();
+        Object result =
+                fixture.send(
+                        bytes,
+                        "each",
+                        ProtosClosureValue.nativeClosure(
+                                (activation, supplied) -> {
+                                    observed.add(supplied.get(0));
+                                    if (observed.size() == 1) {
+                                        bytes.indexedPut(1, integer(9));
+                                        bytes.indexedAdd(integer(10));
+                                    }
+                                    return supplied.get(0);
+                                }));
+        assertSame(bytes, result);
+        assertEquals(3, observed.size());
+        assertSameInteger(integer(0xff), observed.get(0));
+        assertSameInteger(integer(0xff), observed.get(1));
+        assertSameInteger(integer(0x80), observed.get(2));
+        assertArrayEquals(new byte[] {(byte) 0xff, 9, (byte) 0x80, 10}, bytes.octetSnapshot());
+    }
+
+    @Test
+    void snapshotsAndHostSourcesAreIndependentOfTheStorage() throws IOException {
+        Fixture fixture = fixture();
+        byte[] source = {1, (byte) 0x80, (byte) 0xff};
+        ProtosBytesValue bytes = new ProtosBytesValue(fixture.factory, source);
+        source[0] = 42;
+        assertSameInteger(integer(1), bytes.indexedAt(0));
+
+        byte[] octets = bytes.octetSnapshot();
+        Object[] runtime = bytes.indexedSnapshotForRuntime();
+        List<Object> listed = bytes.indexedSnapshot();
+        octets[1] = 0;
+        runtime[1] = integer(0);
+        assertSameInteger(integer(0x80), bytes.indexedAt(1));
+        assertNotSame(octets, bytes.octetSnapshot());
+
+        byte[] appended = {5, 6};
+        bytes.appendOctetsForRuntime(appended);
+        appended[0] = 0;
+        assertArrayEquals(new byte[] {1, (byte) 0x80, (byte) 0xff, 5, 6}, bytes.octetSnapshot());
+
+        bytes.indexedPut(2, integer(7));
+        assertEquals(3, listed.size());
+        assertSameInteger(integer(0xff), listed.get(2));
+        assertThrows(UnsupportedOperationException.class, () -> listed.set(0, integer(1)));
+        assertFalse(listed.contains(integer(5)));
+    }
+
+    private static void assertSameInteger(Object expected, Object actual) {
+        assertTrue(ProtosIdentity.identical(expected, actual), expected + " vs " + actual);
     }
 
     private static Long integer(long value) {

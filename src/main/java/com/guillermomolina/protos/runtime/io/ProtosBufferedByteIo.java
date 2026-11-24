@@ -1389,10 +1389,6 @@ public final class ProtosBufferedByteIo {
     }
 
     private ProtosBytesValue bytes(byte[] values) {
-        ProtosBytesValue bytes = new ProtosBytesValue(bytesPrototype);
-        for (byte value : values) {
-            bytes.indexedAdd(ProtosNumericValueSupport.octet(value & 255));
-        }
-        return bytes;
+        return new ProtosBytesValue(bytesPrototype, values);
     }
 }

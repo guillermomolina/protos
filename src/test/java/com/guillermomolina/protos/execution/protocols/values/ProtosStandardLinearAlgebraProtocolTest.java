@@ -162,7 +162,7 @@ final class ProtosStandardLinearAlgebraProtocolTest {
         assertEquals(0, empty.indexedSize());
         ProtosVectorValue three = vector(a, prelude, integer(3));
         assertEquals(1, three.indexedSize());
-        assertSame(three.indexedAt(integer(0)), three.indexedSnapshot().get(0));
+        assertTrue(ProtosIdentity.identical(three.indexedAt(integer(0)), three.indexedSnapshot().get(0)));
         assertTrue(ProtosIdentity.identical(integer(3), three.indexedAt(integer(0))));
 
         Object[] mixed = {integer(1), big, half, new ProtosFloatValue(2.5d), complex};
@@ -1085,6 +1085,296 @@ final class ProtosStandardLinearAlgebraProtocolTest {
         return List.of(dot, matvec, matmul);
     }
 
+    /* ---- J. Primitive Vector and Matrix storage ---- */
+
+    @Test
+    void constructorsSelectThePrimitiveStorageOfTheirNumberFamily() throws Exception {
+        ProtosPrelude prelude = prelude();
+        ProtosActivation a = prelude.newModuleActivation();
+        Object big = big(BigInteger.ONE.shiftLeft(70), prelude);
+        Object half = fraction(1, 2, prelude);
+        Object complex = complex(integer(1), integer(2), prelude);
+
+        assertInstanceOf(long[].class, storage(vector(a, prelude, integer(1), integer(-2))));
+        assertInstanceOf(double[].class, storage(vector(a, prelude, floats(1.5d, -0.0d))));
+        for (Object[] rich :
+                new Object[][] {
+                    {integer(1), big}, {half, integer(2)}, {complex},
+                    {integer(1), new ProtosFloatValue(1.0d)}
+                }) {
+            assertInstanceOf(Object[].class, storage(vector(a, prelude, rich)));
+            assertInstanceOf(Object[].class, storage(matrix(a, prelude, 1, rich.length, rich)));
+        }
+        assertInstanceOf(Object[].class, storage(vector(a, prelude)));
+
+        ProtosMatrixValue integers = matrix(a, prelude, 2, 1, integer(3), integer(4));
+        assertInstanceOf(long[].class, storage(integers));
+        // The ordinary Float constructor stays R1 until a Float kernel packs it.
+        ProtosMatrixValue floats = matrix(a, prelude, 1, 2, floats(0.5d, 2.0d));
+        assertInstanceOf(Object[].class, storage(floats));
+        assertNotNull(floats.readonlyPackedFloatsForRuntime());
+        assertInstanceOf(double[].class, storage(floats));
+        assertSame(floats.readonlyPackedFloatsForRuntime(), storage(floats));
+
+        // Integer storage is never offered to the Float kernel and never cast.
+        assertNull(integers.readonlyPackedFloatsForRuntime());
+        assertInstanceOf(long[].class, storage(integers));
+        integers.freeze();
+        assertNull(integers.readonlyPackedFloatsForRuntime());
+
+        // Booleans are rejected, never stored.
+        assertSignals(() -> vector(a, prelude, Boolean.TRUE, Boolean.FALSE));
+        assertSignals(() -> matrix(a, prelude, 1, 1, Boolean.TRUE));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new ProtosVectorValue(vectorPrototype(prelude), List.of(Boolean.TRUE)));
+    }
+
+    @Test
+    void primitiveStorageKeepsExtremeIntegersAndFloatBits() throws Exception {
+        ProtosPrelude prelude = prelude();
+        ProtosActivation a = prelude.newModuleActivation();
+        ProtosVectorValue extremes =
+                vector(a, prelude, integer(Long.MIN_VALUE), integer(Long.MAX_VALUE));
+        assertInstanceOf(long[].class, storage(extremes));
+        assertContents(extremes, integer(Long.MIN_VALUE), integer(Long.MAX_VALUE));
+        ProtosVectorValue sum =
+                assertInstanceOf(
+                        ProtosVectorValue.class,
+                        invoke(extremes, "add", a, vector(a, prelude, integer(0), integer(1))));
+        assertContents(
+                sum,
+                integer(Long.MIN_VALUE),
+                big(BigInteger.valueOf(Long.MAX_VALUE).add(BigInteger.ONE), prelude));
+        assertInstanceOf(Object[].class, storage(sum));
+        ProtosMatrixValue matrixExtremes =
+                matrix(a, prelude, 1, 2, integer(Long.MIN_VALUE), integer(Long.MAX_VALUE));
+        assertInstanceOf(long[].class, storage(matrixExtremes));
+        assertContents(matrixExtremes, integer(Long.MIN_VALUE), integer(Long.MAX_VALUE));
+
+        double[] special = {
+            -0.0d, 0.0d, Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY,
+            Double.MIN_VALUE
+        };
+        ProtosVectorValue floats = vector(a, prelude, floats(special));
+        assertInstanceOf(double[].class, storage(floats));
+        for (int index = 0; index < special.length; index++) {
+            Object element = floats.indexedAt(integer(index));
+            assertTrue(ProtosNumericValueSupport.isCurrentFloat(element));
+            assertEquals(
+                    Double.doubleToRawLongBits(special[index]),
+                    Double.doubleToRawLongBits(ProtosNumericValueSupport.currentFloatValue(element)));
+        }
+    }
+
+    @Test
+    void primitiveWritesStayInLaneOrGeneralizeKeepingEveryOtherElement() throws Exception {
+        ProtosPrelude prelude = prelude();
+        ProtosActivation a = prelude.newModuleActivation();
+        Object half = fraction(1, 2, prelude);
+        Object seven = integer(7);
+
+        ProtosVectorValue integers = vector(a, prelude, integer(1), integer(2), integer(3));
+        long[] lanes = (long[]) storage(integers);
+        assertSame(seven, invoke(integers, "atPut", a, integer(2), seven));
+        assertSame(lanes, storage(integers));
+        assertContents(integers, integer(1), integer(2), integer(7));
+        // A Float is never coerced into an Integer lane.
+        Object onePointFive = new ProtosFloatValue(1.5d);
+        assertSame(onePointFive, invoke(integers, "atPut", a, integer(0), onePointFive));
+        assertInstanceOf(Object[].class, storage(integers));
+        assertContents(integers, onePointFive, integer(2), integer(7));
+
+        ProtosVectorValue floats = vector(a, prelude, floats(1.0d, 2.0d));
+        double[] floatLanes = (double[]) storage(floats);
+        Object quarter = new ProtosFloatValue(0.25d);
+        assertSame(quarter, invoke(floats, "atPut", a, integer(1), quarter));
+        assertSame(floatLanes, storage(floats));
+        // An Integer is never coerced into a Float lane.
+        assertSame(seven, invoke(floats, "atPut", a, integer(0), seven));
+        assertInstanceOf(Object[].class, storage(floats));
+        assertContents(floats, seven, new ProtosFloatValue(0.25d));
+
+        ProtosMatrixValue matrix = matrix(a, prelude, 2, 2, integer(1), integer(2), integer(3), integer(4));
+        long[] matrixLanes = (long[]) storage(matrix);
+        assertSame(seven, invoke(matrix, "atPut", a, integer(1), integer(1), seven));
+        assertSame(matrixLanes, storage(matrix));
+        assertSame(half, invoke(matrix, "atPut", a, integer(0), integer(1), half));
+        assertInstanceOf(Object[].class, storage(matrix));
+        assertContents(matrix, integer(1), half, integer(3), integer(7));
+        assertSame(half, matrix.indexedAt(integer(0), integer(1)));
+        assertNull(matrix.readonlyPackedFloatsForRuntime());
+
+        // A Float written into Integer storage generalizes without packing or coercion.
+        ProtosMatrixValue single = matrix(a, prelude, 1, 1, integer(5));
+        Object floatValue = new ProtosFloatValue(2.0d);
+        assertSame(floatValue, invoke(single, "atPut", a, integer(0), integer(0), floatValue));
+        assertInstanceOf(Object[].class, storage(single));
+        assertNotNull(single.readonlyPackedFloatsForRuntime());
+        assertInstanceOf(double[].class, storage(single));
+    }
+
+    @Test
+    void primitiveWritesValidateFrozenThenBoundsThenNumberWithoutMutation() throws Exception {
+        ProtosPrelude prelude = prelude();
+        ProtosActivation a = prelude.newModuleActivation();
+        ProtosStringValue notNumber = new ProtosStringValue("x");
+        ProtosVectorValue integers = vector(a, prelude, integer(1), integer(2));
+        ProtosVectorValue floats = vector(a, prelude, floats(1.0d, 2.0d));
+        ProtosMatrixValue matrix = matrix(a, prelude, 1, 2, integer(1), integer(2));
+
+        assertThrows(IndexOutOfBoundsException.class, () -> integers.indexedPut(integer(2), notNumber));
+        assertThrows(IllegalArgumentException.class, () -> integers.indexedPut(integer(0), notNumber));
+        assertThrows(IllegalArgumentException.class, () -> floats.indexedPut(integer(0), Boolean.TRUE));
+        assertThrows(
+                IndexOutOfBoundsException.class,
+                () -> matrix.indexedPut(integer(1), integer(0), notNumber));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> matrix.indexedPut(integer(0), integer(0), Boolean.TRUE));
+        assertInstanceOf(long[].class, storage(integers));
+        assertInstanceOf(double[].class, storage(floats));
+        assertInstanceOf(long[].class, storage(matrix));
+        assertContents(integers, integer(1), integer(2));
+        assertContents(matrix, integer(1), integer(2));
+
+        integers.freeze();
+        matrix.freeze();
+        assertThrows(IllegalStateException.class, () -> integers.indexedPut(integer(9), notNumber));
+        assertThrows(
+                IllegalStateException.class,
+                () -> matrix.indexedPut(integer(9), integer(9), notNumber));
+        assertContents(integers, integer(1), integer(2));
+        assertContents(matrix, integer(1), integer(2));
+    }
+
+    @Test
+    void primitiveStorageSnapshotsAndCopiesAreIndependent() throws Exception {
+        ProtosPrelude prelude = prelude();
+        ProtosActivation a = prelude.newModuleActivation();
+        ProtosVectorValue integers = vector(a, prelude, integer(1), integer(2));
+        ProtosVectorValue floats = vector(a, prelude, floats(1.0d, 2.0d));
+        ProtosMatrixValue matrix = matrix(a, prelude, 1, 2, integer(1), integer(2));
+
+        List<Object> integerSnapshot = integers.indexedSnapshot();
+        List<Object> floatSnapshot = floats.indexedSnapshot();
+        List<Object> matrixSnapshot = matrix.indexedSnapshot();
+        ProtosVectorValue integerCopy = assertInstanceOf(ProtosVectorValue.class, invoke(integers, "copy", a));
+        ProtosMatrixValue matrixCopy = assertInstanceOf(ProtosMatrixValue.class, invoke(matrix, "copy", a));
+        assertNotSame(storage(integers), storage(integerCopy));
+        assertNotSame(storage(matrix), storage(matrixCopy));
+
+        integers.indexedPut(integer(0), integer(9));
+        floats.indexedPut(integer(0), new ProtosFloatValue(9.0d));
+        matrix.indexedPut(integer(0), integer(0), integer(9));
+        assertContents(integerSnapshot, integer(1), integer(2));
+        assertContents(floatSnapshot, new ProtosFloatValue(1.0d), new ProtosFloatValue(2.0d));
+        assertContents(matrixSnapshot, integer(1), integer(2));
+        assertContents(integerCopy, integer(1), integer(2));
+        assertContents(matrixCopy, integer(1), integer(2));
+        assertThrows(UnsupportedOperationException.class, () -> integerSnapshot.set(0, integer(5)));
+    }
+
+    @Test
+    void zeroVolumeShapesKeepExactDimensionsWithoutIntegerStorage() throws Exception {
+        ProtosPrelude prelude = prelude();
+        Object huge = big(BigInteger.ONE.shiftLeft(80), prelude);
+        ProtosMatrixValue wide =
+                new ProtosMatrixValue(matrixPrototype(prelude), integer(0), huge, List.of());
+        ProtosMatrixValue tall =
+                new ProtosMatrixValue(matrixPrototype(prelude), huge, integer(0), List.of());
+        for (ProtosMatrixValue empty : List.of(wide, tall)) {
+            assertInstanceOf(Object[].class, storage(empty));
+            assertTrue(empty.indexedSnapshot().isEmpty());
+            // An empty Matrix is vacuously all-Float: R2 may pack it, never into Integer storage.
+            assertNotNull(empty.readonlyPackedFloatsForRuntime());
+            assertFalse(storage(empty) instanceof long[]);
+        }
+        assertTrue(ProtosIdentity.identical(huge, wide.columnsValue()));
+        assertTrue(ProtosIdentity.identical(huge, tall.rowsValue()));
+    }
+
+    @Test
+    void integerStorageKeepsExactAlgebraAndTransferShellsStayReferences() throws Exception {
+        ProtosPrelude prelude = prelude();
+        ProtosActivation a = prelude.newModuleActivation();
+        ProtosMatrixValue left = matrix(a, prelude, 2, 2, integer(1), integer(2), integer(3), integer(4));
+        ProtosMatrixValue product = assertInstanceOf(ProtosMatrixValue.class, invoke(left, "matmul", a, left));
+        assertContents(product, integer(7), integer(10), integer(15), integer(22));
+        assertInstanceOf(long[].class, storage(product));
+        ProtosVectorValue image =
+                assertInstanceOf(
+                        ProtosVectorValue.class,
+                        invoke(left, "matvec", a, vector(a, prelude, integer(1), integer(1))));
+        assertContents(image, integer(3), integer(7));
+        Object dot = invoke(vector(a, prelude, integer(2), integer(3)), "dot", a, vector(a, prelude, integer(4), integer(5)));
+        assertTrue(ProtosIdentity.identical(integer(23), dot));
+
+        ProtosVectorValue vectorShell = ProtosVectorValue.transferShellForRuntime(vectorPrototype(prelude), 2);
+        ProtosMatrixValue matrixShell =
+                ProtosMatrixValue.transferShellForRuntime(matrixPrototype(prelude), integer(1), integer(2));
+        assertInstanceOf(Object[].class, storage(vectorShell));
+        assertInstanceOf(Object[].class, storage(matrixShell));
+        Object half = fraction(1, 2, prelude);
+        vectorShell.transferPutForRuntime(0, half);
+        matrixShell.transferPutForRuntime(1, half);
+        assertSame(half, vectorShell.indexedAt(integer(0)));
+        assertSame(half, matrixShell.indexedAt(integer(0), integer(1)));
+    }
+
+    @Test
+    void completedTransferShellsAdoptTheirFamilyStorageInPlace() throws Exception {
+        ProtosPrelude prelude = prelude();
+        Object half = fraction(1, 2, prelude);
+        Object[][] contents = {
+            {integer(Long.MIN_VALUE), integer(Long.MAX_VALUE)},
+            {new ProtosFloatValue(-0.0d), new ProtosFloatValue(2.5d)},
+            {half, integer(1)},
+            {integer(1), new ProtosFloatValue(1.0d)},
+        };
+        Class<?>[] vectorStorage = {long[].class, double[].class, Object[].class, Object[].class};
+        Class<?>[] matrixStorage = {long[].class, Object[].class, Object[].class, Object[].class};
+        for (int kind = 0; kind < contents.length; kind++) {
+            Object[] values = contents[kind];
+            ProtosVectorValue vector =
+                    ProtosVectorValue.transferShellForRuntime(vectorPrototype(prelude), values.length);
+            ProtosMatrixValue matrix =
+                    ProtosMatrixValue.transferShellForRuntime(
+                            matrixPrototype(prelude), integer(1), integer(values.length));
+            for (int index = 0; index < values.length; index++) {
+                vector.transferPutForRuntime(index, values[index]);
+                matrix.transferPutForRuntime(index, values[index]);
+                // Never packed while population is incomplete.
+                assertInstanceOf(Object[].class, storage(vector));
+                assertInstanceOf(Object[].class, storage(matrix));
+            }
+            ProtosVectorValue sameVector = vector;
+            ProtosMatrixValue sameMatrix = matrix;
+            vector.completeTransferForRuntime();
+            matrix.completeTransferForRuntime();
+            assertSame(sameVector, vector);
+            assertSame(sameMatrix, matrix);
+            assertInstanceOf(vectorStorage[kind], storage(vector), "vector " + kind);
+            assertInstanceOf(matrixStorage[kind], storage(matrix), "matrix " + kind);
+            assertContents(vector, values);
+            assertContents(matrix, values);
+            assertSame(vectorPrototype(prelude), vector.parent().orElseThrow());
+        }
+        // A completed all-Float Matrix enters R2 only through the existing packing.
+        ProtosMatrixValue floats =
+                ProtosMatrixValue.transferShellForRuntime(matrixPrototype(prelude), integer(1), integer(2));
+        floats.transferPutForRuntime(0, new ProtosFloatValue(1.0d));
+        floats.transferPutForRuntime(1, new ProtosFloatValue(2.0d));
+        floats.completeTransferForRuntime();
+        assertInstanceOf(Object[].class, storage(floats));
+        assertNotNull(floats.readonlyPackedFloatsForRuntime());
+        assertInstanceOf(double[].class, storage(floats));
+        // Completing an empty shell keeps a valid empty storage.
+        ProtosVectorValue empty = ProtosVectorValue.transferShellForRuntime(vectorPrototype(prelude), 0);
+        empty.completeTransferForRuntime();
+        assertEquals(0, empty.indexedSize());
+    }
+
     /* matmul of a 1 × n by n × 1 all-Float pair through the packed kernel, then again packed. */
     private static List<Object> packedProducts(
             ProtosActivation a, ProtosPrelude prelude, Object[] left, Object[] right) {
@@ -1112,10 +1402,18 @@ final class ProtosStandardLinearAlgebraProtocolTest {
     }
 
     private static Object storage(ProtosMatrixValue matrix) {
+        return privateStorage(ProtosMatrixValue.class, matrix);
+    }
+
+    private static Object storage(ProtosVectorValue vector) {
+        return privateStorage(ProtosVectorValue.class, vector);
+    }
+
+    private static Object privateStorage(Class<?> owner, Object value) {
         try {
-            Field field = ProtosMatrixValue.class.getDeclaredField("storage");
+            Field field = owner.getDeclaredField("storage");
             field.setAccessible(true);
-            return field.get(matrix);
+            return field.get(value);
         } catch (ReflectiveOperationException unavailable) {
             throw new AssertionError(unavailable);
         }

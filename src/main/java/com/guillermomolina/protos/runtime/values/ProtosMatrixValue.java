@@ -40,9 +40,13 @@ import java.util.Objects;
  * too, since packing changes no element. The state is invisible: reads reify semantic Floats and
  * snapshots are independent, so no guest operation observes which is active.
  *
- * <p>The state is one volatile reference, either an {@code Object[]} (R1) or a {@code double[]}
- * (R2), so a transition is a single atomic store that safely publishes the completely filled
- * array. Readers load it once per operation. Packing installs its array by compare-and-set, so
+ * <p>A non-empty Matrix constructed from signed-64 Integers only keeps them in a third exclusive
+ * state, a {@code long[]}; writing any other Number there first generalizes to R1, keeping every
+ * other element as an Integer. Float packing never applies to it.
+ *
+ * <p>The state is one volatile reference, an {@code Object[]} (R1), a {@code double[]} (R2) or a
+ * {@code long[]}, so a transition is a single atomic store that safely publishes the completely
+ * filled array. Readers load it once per operation. Packing installs its array by compare-and-set, so
  * concurrent first readers of a frozen Matrix agree on one persistent packing. Writes stay
  * confined to the owning Actor, as for every mutable object.
  */
@@ -62,8 +66,9 @@ public final class ProtosMatrixValue extends ProtosObjectValue {
     }
 
     /*
-     * R1 element references (Object[]) or R2 binary64 values (double[]). An R2 array never
-     * escapes except as trusted read-only kernel input.
+     * R1 element references (Object[]), R2 binary64 values (double[]) or signed-64 Integers
+     * (long[]). An R2 array never escapes except as trusted read-only kernel input; a long[]
+     * never escapes.
      */
     private volatile Object storage;
     /*
@@ -91,7 +96,7 @@ public final class ProtosMatrixValue extends ProtosObjectValue {
         }
         this.rows = rows;
         this.columns = columns;
-        this.storage = owned;
+        this.storage = allIntegers(owned) ? packedIntegers(owned) : owned;
     }
 
     private ProtosMatrixValue(Object parent, Object rows, Object columns, Object[] owned) {
@@ -199,9 +204,13 @@ public final class ProtosMatrixValue extends ProtosObjectValue {
     public Object indexedAt(Object row, Object column) {
         Object current = storage;
         int index = linearIndex(row, column, current);
-        return current instanceof double[] packed
-                ? Double.valueOf(packed[index])
-                : ((Object[]) current)[index];
+        if (current instanceof double[] packed) {
+            return Double.valueOf(packed[index]);
+        }
+        if (current instanceof long[] integers) {
+            return ProtosNumericValueSupport.integer(integers[index]);
+        }
+        return ((Object[]) current)[index];
     }
 
     /**
@@ -228,6 +237,17 @@ public final class ProtosMatrixValue extends ProtosObjectValue {
             storage = unpacked;
             return value;
         }
+        if (current instanceof long[] integers) {
+            if (value instanceof Long integer) {
+                integers[existing] = integer.longValue();
+                return value;
+            }
+            Object[] unpacked = unpackedIntegers(integers);
+            unpacked[existing] = value;
+            knownNotAllFloat = !ProtosNumericValueSupport.isCurrentFloat(value);
+            storage = unpacked;
+            return value;
+        }
         ((Object[]) current)[existing] = value;
         knownNotAllFloat = false;
         return value;
@@ -236,10 +256,13 @@ public final class ProtosMatrixValue extends ProtosObjectValue {
     /** An independent row-major copy of the current elements, unaffected by later writes. */
     public List<Object> indexedSnapshot() {
         Object current = storage;
-        return List.of(
-                current instanceof double[] packed
-                        ? unpackedFloats(packed)
-                        : ((Object[]) current).clone());
+        if (current instanceof double[] packed) {
+            return List.of(unpackedFloats(packed));
+        }
+        if (current instanceof long[] integers) {
+            return List.of(unpackedIntegers(integers));
+        }
+        return List.of(((Object[]) current).clone());
     }
 
     /**
@@ -255,10 +278,9 @@ public final class ProtosMatrixValue extends ProtosObjectValue {
         if (current instanceof double[] packed) {
             return packed;
         }
-        if (knownNotAllFloat) {
+        if (knownNotAllFloat || !(current instanceof Object[] references)) {
             return null;
         }
-        Object[] references = (Object[]) current;
         double[] packed = new double[references.length];
         for (int index = 0; index < packed.length; index++) {
             if (!ProtosNumericValueSupport.isCurrentFloat(references[index])) {
@@ -269,7 +291,11 @@ public final class ProtosMatrixValue extends ProtosObjectValue {
         }
         // A concurrent first reader of a frozen Matrix may have packed it already; keep its array.
         Object witness = STORAGE.compareAndExchange(this, current, packed);
-        return witness == current ? packed : (double[]) witness;
+        if (witness == current) {
+            return packed;
+        }
+        // Only an equal concurrent packing is reusable; any other state is not offered as Floats.
+        return witness instanceof double[] published ? published : null;
     }
 
     /**
@@ -291,6 +317,18 @@ public final class ProtosMatrixValue extends ProtosObjectValue {
         knownNotAllFloat = false;
     }
 
+    /**
+     * Transfer population only, once every element of a transfer shell is in place: a non-empty
+     * Matrix of signed-64 Integers publishes its Integer storage in this same Matrix. Floats stay
+     * R1 for the lazy Float packing; rich, mixed or not yet materialized elements stay R1. No
+     * element, dimension, identity, slot or state changes.
+     */
+    public void completeTransferForRuntime() {
+        if (storage instanceof Object[] references && allIntegers(references)) {
+            storage = packedIntegers(references);
+        }
+    }
+
     /* Fresh R1 references reifying every R2 lane as a genuine Float. */
     private static Object[] unpackedFloats(double[] packed) {
         Object[] unpacked = new Object[packed.length];
@@ -300,8 +338,44 @@ public final class ProtosMatrixValue extends ProtosObjectValue {
         return unpacked;
     }
 
+    /* Fresh R1 references reifying every signed-64 lane as a genuine Integer. */
+    private static Object[] unpackedIntegers(long[] integers) {
+        Object[] unpacked = new Object[integers.length];
+        for (int index = 0; index < unpacked.length; index++) {
+            unpacked[index] = ProtosNumericValueSupport.integer(integers[index]);
+        }
+        return unpacked;
+    }
+
+    /* Whether a non-empty validated element sequence holds only signed-64 Integers. */
+    private static boolean allIntegers(Object[] owned) {
+        if (owned.length == 0) {
+            return false;
+        }
+        for (Object element : owned) {
+            if (!(element instanceof Long)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static long[] packedIntegers(Object[] owned) {
+        long[] integers = new long[owned.length];
+        for (int index = 0; index < integers.length; index++) {
+            integers[index] = (Long) owned[index];
+        }
+        return integers;
+    }
+
     private static int physicalLength(Object current) {
-        return current instanceof double[] packed ? packed.length : ((Object[]) current).length;
+        if (current instanceof double[] packed) {
+            return packed.length;
+        }
+        if (current instanceof long[] integers) {
+            return integers.length;
+        }
+        return ((Object[]) current).length;
     }
 
     /*

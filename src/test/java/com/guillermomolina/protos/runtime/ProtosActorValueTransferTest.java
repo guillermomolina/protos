@@ -1518,6 +1518,168 @@ final class ProtosActorValueTransferTest {
         }
     }
 
+    @Test
+    void primitiveBytesVectorAndMatrixPayloadsCopyWithoutAliasingAndKeepGraphShape()
+            throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosActivation source = prelude.newModuleActivation();
+        ProtosObjectValue bytesPrototype = prelude.bytesPrototypeForRuntime();
+        ProtosObjectValue vectorPrototype = linearAlgebraMember(prelude, "Vector");
+        ProtosObjectValue matrixPrototype = linearAlgebraMember(prelude, "Matrix");
+
+        ProtosBytesValue octets =
+                new ProtosBytesValue(bytesPrototype, new byte[] {0, (byte) 0x80, (byte) 0xff});
+        ProtosBytesValue twin =
+                new ProtosBytesValue(bytesPrototype, new byte[] {0, (byte) 0x80, (byte) 0xff});
+        ProtosVectorValue integers =
+                new ProtosVectorValue(
+                        vectorPrototype, List.of(Long.valueOf(Long.MIN_VALUE), Long.valueOf(Long.MAX_VALUE)));
+        ProtosVectorValue floats =
+                new ProtosVectorValue(
+                        vectorPrototype, List.of(new ProtosFloatValue(-0.0d), new ProtosFloatValue(Double.NaN)));
+        Object half =
+                ProtosNumericValueSupport.divideIntegersExactly(Long.valueOf(1), Long.valueOf(2), prelude);
+        ProtosVectorValue mixed =
+                new ProtosVectorValue(vectorPrototype, List.of(Long.valueOf(1), half, new ProtosFloatValue(1.5d)));
+        ProtosMatrixValue matrix =
+                new ProtosMatrixValue(
+                        matrixPrototype, Long.valueOf(1), Long.valueOf(2), List.of(Long.valueOf(3), Long.valueOf(4)));
+        ProtosObjectValue holder = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        holder.createLocalSlot("bytes", octets);
+        holder.createLocalSlot("matrix", matrix);
+        octets.createLocalSlot("holder", holder);
+        matrix.createLocalSlot("holder", holder);
+        integers.createLocalSlot("bytes", octets);
+        twin.freeze();
+        floats.close();
+
+        List<Object> result =
+                ProtosActorValueTransfer.snapshotArguments(
+                        List.of(holder, octets, twin, integers, floats, mixed, octets), source);
+        List<?> delivered =
+                ProtosActorValueTransfer.requiresMaterialization(result)
+                        ? ProtosActorValueTransfer.materializeArguments(result, prelude.newModuleActivation())
+                        : result;
+
+        ProtosObjectValue copiedHolder = assertInstanceOf(ProtosObjectValue.class, delivered.get(0));
+        ProtosBytesValue copiedOctets = assertInstanceOf(ProtosBytesValue.class, delivered.get(1));
+        ProtosBytesValue copiedTwin = assertInstanceOf(ProtosBytesValue.class, delivered.get(2));
+        ProtosVectorValue copiedIntegers = assertInstanceOf(ProtosVectorValue.class, delivered.get(3));
+        ProtosVectorValue copiedFloats = assertInstanceOf(ProtosVectorValue.class, delivered.get(4));
+        ProtosVectorValue copiedMixed = assertInstanceOf(ProtosVectorValue.class, delivered.get(5));
+        ProtosMatrixValue copiedMatrix =
+                assertInstanceOf(ProtosMatrixValue.class, copiedHolder.readLocalSlot("matrix").orElseThrow());
+
+        // Aliases stay one object; equal content in distinct objects stays distinct.
+        assertNotSame(octets, copiedOctets);
+        assertSame(copiedOctets, delivered.get(6));
+        assertSame(copiedOctets, copiedHolder.readLocalSlot("bytes").orElseThrow());
+        assertSame(copiedOctets, copiedIntegers.readLocalSlot("bytes").orElseThrow());
+        assertSame(copiedHolder, copiedOctets.readLocalSlot("holder").orElseThrow());
+        assertSame(copiedHolder, copiedMatrix.readLocalSlot("holder").orElseThrow());
+        assertNotSame(copiedOctets, copiedTwin);
+        assertSame(bytesPrototype, copiedOctets.parent().orElseThrow());
+        assertSame(vectorPrototype, copiedIntegers.parent().orElseThrow());
+        assertSame(matrixPrototype, copiedMatrix.parent().orElseThrow());
+        assertTrue(copiedTwin.isFrozen());
+        assertTrue(copiedFloats.isClosed());
+
+        // Values are unsigned Integers and exact Numbers.
+        assertArrayEquals(new byte[] {0, (byte) 0x80, (byte) 0xff}, copiedOctets.octetSnapshot());
+        assertTrue(ProtosIdentity.identical(Long.valueOf(255), copiedOctets.indexedAt(2)));
+        assertTrue(ProtosIdentity.identical(Long.valueOf(Long.MIN_VALUE), copiedIntegers.indexedAt(Long.valueOf(0))));
+        assertTrue(ProtosIdentity.identical(Long.valueOf(Long.MAX_VALUE), copiedIntegers.indexedAt(Long.valueOf(1))));
+        assertEquals(
+                Double.doubleToRawLongBits(-0.0d),
+                Double.doubleToRawLongBits(
+                        ProtosNumericValueSupport.currentFloatValue(copiedFloats.indexedAt(Long.valueOf(0)))));
+        assertTrue(Double.isNaN(ProtosNumericValueSupport.currentFloatValue(copiedFloats.indexedAt(Long.valueOf(1)))));
+        assertTrue(ProtosNumericValueSupport.isFraction(copiedMixed.indexedAt(Long.valueOf(1))));
+        assertTrue(ProtosIdentity.identical(half, copiedMixed.indexedAt(Long.valueOf(1))));
+        assertTrue(ProtosIdentity.identical(Long.valueOf(4), copiedMatrix.indexedAt(Long.valueOf(0), Long.valueOf(1))));
+
+        // Completed destinations hold the storage of their Number family.
+        assertInstanceOf(long[].class, linearAlgebraStorage(copiedIntegers));
+        assertInstanceOf(double[].class, linearAlgebraStorage(copiedFloats));
+        assertInstanceOf(Object[].class, linearAlgebraStorage(copiedMixed));
+        assertInstanceOf(long[].class, linearAlgebraStorage(copiedMatrix));
+
+        // Later mutation on either side never reaches the other payload.
+        octets.indexedPut(0, Long.valueOf(7));
+        copiedOctets.indexedPut(1, Long.valueOf(9));
+        integers.indexedPut(Long.valueOf(0), Long.valueOf(5));
+        copiedIntegers.indexedPut(Long.valueOf(1), Long.valueOf(6));
+        matrix.indexedPut(Long.valueOf(0), Long.valueOf(0), Long.valueOf(8));
+        copiedMatrix.indexedPut(Long.valueOf(0), Long.valueOf(1), half);
+        assertArrayEquals(new byte[] {7, (byte) 0x80, (byte) 0xff}, octets.octetSnapshot());
+        assertArrayEquals(new byte[] {0, 9, (byte) 0xff}, copiedOctets.octetSnapshot());
+        assertTrue(ProtosIdentity.identical(Long.valueOf(5), integers.indexedAt(Long.valueOf(0))));
+        assertTrue(ProtosIdentity.identical(Long.valueOf(Long.MAX_VALUE), integers.indexedAt(Long.valueOf(1))));
+        assertTrue(ProtosIdentity.identical(Long.valueOf(Long.MIN_VALUE), copiedIntegers.indexedAt(Long.valueOf(0))));
+        assertTrue(ProtosIdentity.identical(Long.valueOf(4), matrix.indexedAt(Long.valueOf(0), Long.valueOf(1))));
+        assertTrue(ProtosIdentity.identical(Long.valueOf(3), copiedMatrix.indexedAt(Long.valueOf(0), Long.valueOf(0))));
+    }
+
+    @Test
+    void richElementDescriptorsCrossBothPhasesWithoutPrematurePacking() throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosActivation source = prelude.newModuleActivation();
+        ProtosObjectValue vectorPrototype = linearAlgebraMember(prelude, "Vector");
+        ProtosObjectValue matrixPrototype = linearAlgebraMember(prelude, "Matrix");
+        Object half =
+                ProtosNumericValueSupport.divideIntegersExactly(Long.valueOf(1), Long.valueOf(2), prelude);
+        Object complex =
+                ProtosComplexNumericSupport.normalize(Long.valueOf(1), Long.valueOf(2), prelude);
+        ProtosVectorValue rich = new ProtosVectorValue(vectorPrototype, List.of(half, complex));
+        ProtosVectorValue integers =
+                new ProtosVectorValue(vectorPrototype, List.of(Long.valueOf(1), Long.valueOf(2)));
+        ProtosMatrixValue floats =
+                new ProtosMatrixValue(
+                        matrixPrototype, Long.valueOf(1), Long.valueOf(2),
+                        List.of(new ProtosFloatValue(1.0d), new ProtosFloatValue(2.0d)));
+        ProtosMatrixValue mixedMatrix =
+                new ProtosMatrixValue(
+                        matrixPrototype, Long.valueOf(2), Long.valueOf(1), List.of(Long.valueOf(3), complex));
+        rich.createLocalSlot("peer", integers);
+
+        List<Object> snapshot =
+                ProtosActorValueTransfer.snapshotArguments(
+                        List.of(rich, integers, floats, mixedMatrix), source);
+        assertTrue(ProtosActorValueTransfer.requiresMaterialization(snapshot));
+
+        List<?> delivered =
+                ProtosActorValueTransfer.materializeArguments(snapshot, prelude.newModuleActivation());
+        ProtosVectorValue copiedRich = assertInstanceOf(ProtosVectorValue.class, delivered.get(0));
+        ProtosVectorValue copiedIntegers = assertInstanceOf(ProtosVectorValue.class, delivered.get(1));
+        ProtosMatrixValue copiedFloats = assertInstanceOf(ProtosMatrixValue.class, delivered.get(2));
+        ProtosMatrixValue copiedMixed = assertInstanceOf(ProtosMatrixValue.class, delivered.get(3));
+
+        assertSame(copiedIntegers, copiedRich.readLocalSlot("peer").orElseThrow());
+        assertInstanceOf(Object[].class, linearAlgebraStorage(copiedRich));
+        assertInstanceOf(long[].class, linearAlgebraStorage(copiedIntegers));
+        assertInstanceOf(Object[].class, linearAlgebraStorage(copiedFloats));
+        assertInstanceOf(Object[].class, linearAlgebraStorage(copiedMixed));
+        assertTrue(ProtosNumericValueSupport.isFraction(copiedRich.indexedAt(Long.valueOf(0))));
+        assertTrue(ProtosIdentity.identical(half, copiedRich.indexedAt(Long.valueOf(0))));
+        assertTrue(ProtosIdentity.identical(complex, copiedRich.indexedAt(Long.valueOf(1))));
+        assertTrue(ProtosIdentity.identical(complex, copiedMixed.indexedAt(Long.valueOf(1), Long.valueOf(0))));
+        assertTrue(ProtosIdentity.identical(Long.valueOf(2), copiedIntegers.indexedAt(Long.valueOf(1))));
+        // The Float Matrix enters R2 only through the existing packing.
+        assertNotNull(copiedFloats.readonlyPackedFloatsForRuntime());
+        assertInstanceOf(double[].class, linearAlgebraStorage(copiedFloats));
+    }
+
+    /* Test-side inspection of the private Vector/Matrix storage; no production API exposes it. */
+    private static Object linearAlgebraStorage(ProtosObjectValue value) {
+        try {
+            java.lang.reflect.Field field = value.getClass().getDeclaredField("storage");
+            field.setAccessible(true);
+            return field.get(value);
+        } catch (ReflectiveOperationException unavailable) {
+            throw new AssertionError(unavailable);
+        }
+    }
+
     private static ProtosObjectValue linearAlgebraMember(ProtosPrelude prelude, String name) {
         ProtosObjectValue context = prelude.newExecutionContext();
         prelude.installStandardModuleMembersForRuntime(

@@ -104,10 +104,7 @@ final class ProtosFileFlowResourceCalls {
             return;
         }
 
-        ProtosBytesValue result = new ProtosBytesValue(flow.bytesPrototype);
-        for (byte octet : bytes) {
-            result.indexedAdd(ProtosNumericValueSupport.octet(octet & 0xff));
-        }
+        ProtosBytesValue result = new ProtosBytesValue(flow.bytesPrototype, bytes);
         flow.setLogicalPosition(flow.advanced(request.startPosition, bytes.length));
         request.operation.resolve(result);
         flow.finish(request);

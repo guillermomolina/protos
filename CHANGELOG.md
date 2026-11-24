@@ -8,6 +8,23 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.193-SNAPSHOT
+
+- **I171 / I172 / PLAT068-R3.** Give Bytes, Vector and Matrix their primitive private storage.
+  - **Bytes** now stores its octets in a growable `byte[]`; there is no list of element objects. Reads, snapshots, `each` and interop answer unsigned Integers 0..255.
+  - `add` and `atPut` reject every non-octet value (including `null`, host objects, Booleans, Floats, Strings and Integers outside 0..255) at the Java boundary before mutating, and answer the exact argument.
+  - Host producers (byte I/O, file and process streams, Entropy, text writer, encodings, HMAC, Argon2, TLS, embedding and catalog acquisition) copy their source arrays into new Bytes. Actor, P and detached transfers copy the octets into the already-memoized destination shell.
+  - The structured Bytecode DSL `Bytes.each` path captures a `byte[]` snapshot and keeps its internal callback path.
+- **Vector** stores `long[]` when every element is a signed-64 Integer, `double[]` when every element is a Float, and element references otherwise.
+- **Matrix** adds non-empty `long[]` storage for signed-64 Integers to its existing R1/R2-Float states. Float packing stays lazy, and `readonlyPackedFloatsForRuntime` never casts Integer storage.
+- Writing a Number that the active primitive storage cannot hold exactly generalizes Vector or Matrix to element references, keeping every other element, with no coercion.
+- Actor and P transfer shells stay element references while they are being populated. Once every element is in place, they adopt their family's storage in place, without changing identity, aliasing, cycles, slots or state.
+- Add regressions for physical storage, unsigned octets, failure atomicity, snapshot and buffer independence, Latin1 binary round trips, and Actor/P transfer of primitive, rich and descriptor payloads.
+- Replace two tests that injected invalid octets into Bytes:
+  - one now checks that the invalid octet is rejected;
+  - the other is replaced by text-reader tests for an `IOError` when the source answers a non-Bytes value or empty Bytes.
+- No specification, syntax or guest-visible behavior changes.
+
 ## 0.4.192-SNAPSHOT
 
 - **I170 / PLAT077-A.** Integrate the existing generic Java 25 FFM provider into the standalone Native Image executable. `protos --allow-library sqlite3=libsqlite3.so.0 app.protos` now works with the installed Native `protos` alone: no JDK, GraalVM or provider JAR is needed, and the operating system supplies the library. The `native` Maven profile compiles `providers/ffm` into a Native-only `target/native-classes` staging directory, together with the application classes and the provider's service declaration. `target/classes` and the portable JAR stay free of the provider, and the provider package is initialized at run time. The provider is registered through the existing SPI only in the Native image and only when the host has authorized libraries for it. Without `--allow-library` nothing is registered, and authorization alone loads nothing: a library is loaded only when the program first imports its `ffi:<alias>`. On the portable JVM, `--allow-library` alone still registers no provider. `--foreign-provider-path` is a usage error on the Native executable. The Native executable links a finite set of 27 physical C signatures, registered identically in the provider and in the reachability metadata. The set covers every `std:sqlite` declaration and the FFM fixtures. Any other exact signature is refused with an ordinary `Error` before linking, so C is never entered; the JVM keeps full dynamic signature support. Native detection uses `ImageInfo.inImageRuntimeCode()`. `dist/build_ffm_provider.py` compiles the provider against `lib/protos.jar` plus the distribution's single Native Image SDK API JAR, a compile-time dependency only; no GraalVM class is packaged. Mark foreign stable-identity comparison and the `each` capability check as Truffle boundaries so runtime compilation does not reach provider-supplied values. Add Native smoke cases (SQLite memory, persistent reopen, TEXT/BLOB, two C fixtures, refusals, unsupported signature) and installed-distribution FFM checks: no bundled SQLite, no SQLite `DT_NEEDED`, default-off. Add the builder and validator Python tests, an inventory synchronization test and JVM no-implicit-provider regressions. Update the FFM, FFI, SQLite and CLI guides. No public `std:ffi`/`std:sqlite` API, specification or guest-visible type changes; no third-party C library is bundled or linked.

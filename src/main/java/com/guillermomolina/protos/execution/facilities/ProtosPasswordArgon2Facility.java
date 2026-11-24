@@ -23,7 +23,6 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosEntropyCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
-import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -562,12 +561,8 @@ public final class ProtosPasswordArgon2Facility {
                 new ProtosBytesValue(
                         activation.prelude()
                                 .orElseThrow()
-                                .bytesPrototypeForRuntime());
-
-        for (byte octet : contents) {
-            value.indexedAdd(
-                    ProtosNumericValueSupport.octet(octet & 255));
-        }
+                                .bytesPrototypeForRuntime(),
+                        contents);
 
         return value;
     }

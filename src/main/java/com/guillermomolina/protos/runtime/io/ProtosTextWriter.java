@@ -29,7 +29,6 @@ import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosIoLifecycle;
 import com.guillermomolina.protos.runtime.ProtosIoOperation;
 import com.guillermomolina.protos.runtime.ProtosIoReleaseExecution;
-import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import java.util.ArrayDeque;
 import java.util.Objects;
@@ -676,10 +675,8 @@ public final class ProtosTextWriter {
     private ProtosBytesValue bytes(byte[] encoded, ProtosActivation activation) {
         ProtosBytesValue bytes =
                 new ProtosBytesValue(
-                        activation.prelude().orElseThrow().bytesPrototypeForRuntime());
-        for (byte value : encoded) {
-            bytes.indexedAdd(ProtosNumericValueSupport.octet(value & 0xff));
-        }
+                        activation.prelude().orElseThrow().bytesPrototypeForRuntime(),
+                        encoded);
         return bytes;
     }
 

@@ -186,8 +186,9 @@ final class ProtosI091CompactIntegerSupportTest {
         bytes.indexedAdd(Long.valueOf(255L));
         assertArrayEquals(new byte[] {0, (byte) 255}, bytes.octetSnapshot());
 
-        bytes.indexedAdd(Long.valueOf(256L));
-        assertThrows(IllegalStateException.class, bytes::octetSnapshot);
+        // A non-octet Integer never enters Bytes, so the invariant cannot be violated.
+        assertThrows(IllegalArgumentException.class, () -> bytes.indexedAdd(Long.valueOf(256L)));
+        assertArrayEquals(new byte[] {0, (byte) 255}, bytes.octetSnapshot());
     }
 
     @Test

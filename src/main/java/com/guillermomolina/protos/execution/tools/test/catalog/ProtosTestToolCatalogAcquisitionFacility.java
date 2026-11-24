@@ -20,7 +20,6 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
-import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
@@ -131,11 +130,7 @@ public final class ProtosTestToolCatalogAcquisitionFacility {
                                         new IllegalStateException(
                                                 "catalog acquisition requires caller Core prelude"));
         ProtosBytesValue bytes =
-                new ProtosBytesValue(prelude.bytesPrototypeForRuntime());
-        for (byte octet : content) {
-            bytes.indexedAdd(
-                    ProtosNumericValueSupport.octet(octet & 0xff));
-        }
+                new ProtosBytesValue(prelude.bytesPrototypeForRuntime(), content);
         bytes.freeze();
         return bytes;
     }

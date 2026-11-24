@@ -503,6 +503,114 @@ class ProtosParallelExecutionTest{
   }
  }
 
+ /*
+  * P transfer of primitive Bytes, Vector and Matrix payloads: definitive memoized shells keep
+  * aliases, cycles and slots; the payload is captured at transfer time and never shared.
+  */
+ @Test void primitivePayloadsTransferIndependentlyThroughP()throws Exception{
+  var p=core();
+  var source=p.newModuleActivation();
+  var vectorPrototype=linearAlgebraMember(p,"Vector");
+  var matrixPrototype=linearAlgebraMember(p,"Matrix");
+  var bytes=new ProtosBytesValue(p.bytesPrototypeForRuntime(),new byte[]{0,(byte)0x80,(byte)0xff});
+  var twin=new ProtosBytesValue(p.bytesPrototypeForRuntime(),new byte[]{0,(byte)0x80,(byte)0xff});
+  var integers=new ProtosVectorValue(vectorPrototype,List.of(Long.valueOf(Long.MIN_VALUE),Long.valueOf(Long.MAX_VALUE)));
+  var floats=new ProtosVectorValue(vectorPrototype,List.of(new ProtosFloatValue(-0.0d),new ProtosFloatValue(Double.POSITIVE_INFINITY)));
+  var matrix=new ProtosMatrixValue(matrixPrototype,Long.valueOf(2),Long.valueOf(1),List.of(Long.valueOf(3),Long.valueOf(4)));
+  bytes.createLocalSlot("matrix",matrix);
+  matrix.createLocalSlot("bytes",bytes);
+  integers.createLocalSlot("self",integers);
+  bytes.close();
+
+  boolean[] semanticRecords=new boolean[1];
+  var captured=ProtosParallelRuntime.captureValuesForTesting(
+      List.of(bytes,twin,integers,floats,matrix,bytes),source,semanticRecords);
+  // The capture is a snapshot: later source mutation does not reach the delivered values.
+  integers.indexedPut(Long.valueOf(0),Long.valueOf(1));
+  matrix.indexedPut(Long.valueOf(0),Long.valueOf(0),Long.valueOf(9));
+  bytes.indexedPut(0,Long.valueOf(7));
+  var delivered=ProtosParallelRuntime.materializeValuesForTesting(captured,p.newModuleActivation());
+
+  var copiedBytes=assertInstanceOf(ProtosBytesValue.class,delivered.get(0));
+  var copiedTwin=assertInstanceOf(ProtosBytesValue.class,delivered.get(1));
+  var copiedIntegers=assertInstanceOf(ProtosVectorValue.class,delivered.get(2));
+  var copiedFloats=assertInstanceOf(ProtosVectorValue.class,delivered.get(3));
+  var copiedMatrix=assertInstanceOf(ProtosMatrixValue.class,delivered.get(4));
+  assertSame(copiedBytes,delivered.get(5));
+  assertNotSame(bytes,copiedBytes);
+  assertNotSame(copiedBytes,copiedTwin);
+  assertSame(copiedMatrix,copiedBytes.readLocalSlot("matrix").orElseThrow());
+  assertSame(copiedBytes,copiedMatrix.readLocalSlot("bytes").orElseThrow());
+  assertSame(copiedIntegers,copiedIntegers.readLocalSlot("self").orElseThrow());
+  assertTrue(copiedBytes.isClosed());
+
+  assertArrayEquals(new byte[]{0,(byte)0x80,(byte)0xff},copiedBytes.octetSnapshot());
+  assertArrayEquals(new byte[]{0,(byte)0x80,(byte)0xff},copiedTwin.octetSnapshot());
+  assertTrue(ProtosIdentity.identical(Long.valueOf(255),copiedBytes.indexedAt(2)));
+  assertTrue(ProtosIdentity.identical(Long.valueOf(Long.MIN_VALUE),copiedIntegers.indexedAt(Long.valueOf(0))));
+  assertTrue(ProtosIdentity.identical(Long.valueOf(Long.MAX_VALUE),copiedIntegers.indexedAt(Long.valueOf(1))));
+  assertEquals(Double.doubleToRawLongBits(-0.0d),Double.doubleToRawLongBits(
+      ProtosNumericValueSupport.currentFloatValue(copiedFloats.indexedAt(Long.valueOf(0)))));
+  assertTrue(ProtosIdentity.identical(Long.valueOf(3),copiedMatrix.indexedAt(Long.valueOf(0),Long.valueOf(0))));
+
+  // Completed destinations hold the storage of their Number family.
+  assertInstanceOf(long[].class,linearAlgebraStorage(copiedIntegers));
+  assertInstanceOf(double[].class,linearAlgebraStorage(copiedFloats));
+  assertInstanceOf(long[].class,linearAlgebraStorage(copiedMatrix));
+
+  // Destination mutation never reaches the source payload.
+  copiedBytes.indexedPut(1,Long.valueOf(1));
+  copiedFloats.indexedPut(Long.valueOf(1),Long.valueOf(2));
+  assertArrayEquals(new byte[]{7,(byte)0x80,(byte)0xff},bytes.octetSnapshot());
+  assertTrue(ProtosNumericValueSupport.isCurrentFloat(floats.indexedAt(Long.valueOf(1))));
+ }
+
+ @Test void richNumberPayloadsKeepReferenceStorageThroughP()throws Exception{
+  var p=core();
+  var source=p.newModuleActivation();
+  var vectorPrototype=linearAlgebraMember(p,"Vector");
+  var matrixPrototype=linearAlgebraMember(p,"Matrix");
+  Object half=ProtosNumericValueSupport.divideIntegersExactly(Long.valueOf(1),Long.valueOf(2),p);
+  Object complex=ProtosComplexNumericSupport.normalize(Long.valueOf(1),Long.valueOf(2),p);
+  var rich=new ProtosVectorValue(vectorPrototype,List.of(half,complex));
+  var mixed=new ProtosVectorValue(vectorPrototype,List.of(Long.valueOf(1),new ProtosFloatValue(1.5d)));
+  var integers=new ProtosVectorValue(vectorPrototype,List.of(Long.valueOf(1),Long.valueOf(2)));
+  var matrix=new ProtosMatrixValue(matrixPrototype,Long.valueOf(1),Long.valueOf(2),List.of(Long.valueOf(3),half));
+  rich.createLocalSlot("peer",integers);
+
+  boolean[] semanticRecords=new boolean[1];
+  var captured=ProtosParallelRuntime.captureValuesForTesting(List.of(rich,mixed,integers,matrix),source,semanticRecords);
+  assertTrue(semanticRecords[0]);
+  assertInstanceOf(Object[].class,linearAlgebraStorage((ProtosObjectValue)captured.get(0)));
+  assertInstanceOf(Object[].class,linearAlgebraStorage((ProtosObjectValue)captured.get(3)));
+  var delivered=ProtosParallelRuntime.materializeValuesForTesting(captured,p.newModuleActivation());
+
+  var copiedRich=assertInstanceOf(ProtosVectorValue.class,delivered.get(0));
+  var copiedMixed=assertInstanceOf(ProtosVectorValue.class,delivered.get(1));
+  var copiedIntegers=assertInstanceOf(ProtosVectorValue.class,delivered.get(2));
+  var copiedMatrix=assertInstanceOf(ProtosMatrixValue.class,delivered.get(3));
+  assertSame(copiedIntegers,copiedRich.readLocalSlot("peer").orElseThrow());
+  assertInstanceOf(Object[].class,linearAlgebraStorage(copiedRich));
+  assertInstanceOf(Object[].class,linearAlgebraStorage(copiedMixed));
+  assertInstanceOf(long[].class,linearAlgebraStorage(copiedIntegers));
+  assertInstanceOf(Object[].class,linearAlgebraStorage(copiedMatrix));
+  assertTrue(ProtosIdentity.identical(half,copiedRich.indexedAt(Long.valueOf(0))));
+  assertTrue(ProtosIdentity.identical(complex,copiedRich.indexedAt(Long.valueOf(1))));
+  assertTrue(ProtosIdentity.identical(half,copiedMatrix.indexedAt(Long.valueOf(0),Long.valueOf(1))));
+  assertTrue(ProtosNumericValueSupport.isCurrentFloat(copiedMixed.indexedAt(Long.valueOf(1))));
+ }
+
+ /* Test-side inspection of the private Vector/Matrix storage; no production API exposes it. */
+ private static Object linearAlgebraStorage(ProtosObjectValue value){
+  try{
+   var field=value.getClass().getDeclaredField("storage");
+   field.setAccessible(true);
+   return field.get(value);
+  }catch(ReflectiveOperationException unavailable){
+   throw new AssertionError(unavailable);
+  }
+ }
+
  /* Names the standard Error family of a FAILED Future, for an assertion message only. */
  private static String standardErrorName(ProtosActivation a,ProtosFutureValue f){
   Object kind=f.failedError().map(e->e.parent().orElse(null)).orElse(null);

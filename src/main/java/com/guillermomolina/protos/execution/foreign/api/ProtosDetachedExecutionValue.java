@@ -224,9 +224,7 @@ public final class ProtosDetachedExecutionValue {
                 } else if (source instanceof ProtosBytesValue sourceBytes) {
                     ProtosBytesValue destinationBytes =
                             (ProtosBytesValue) destinationObject;
-                    for (Object octet : sourceBytes.indexedSnapshot()) {
-                        destinationBytes.indexedAdd(copy(octet));
-                    }
+                    destinationBytes.appendOctetsForRuntime(sourceBytes.octetSnapshot());
                 }
 
                 java.util.ArrayList<String> slotNames = new java.util.ArrayList<>();

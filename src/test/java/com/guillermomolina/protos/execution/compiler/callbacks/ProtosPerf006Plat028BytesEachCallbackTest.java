@@ -126,7 +126,9 @@ final class ProtosPerf006Plat028BytesEachCallbackTest {
                     List.of(1L, 2L, 3L),
                     observed);
             for (int index = 0; index < captured.size(); index++) {
-                assertSame(captured.get(index), observedReferences.get(index));
+                assertTrue(
+                        com.guillermomolina.protos.runtime.ProtosIdentity.identical(
+                                captured.get(index), observedReferences.get(index)));
             }
             assertEquals(3, bytes.indexedSize());
             assertEquals("55", com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(bytes.indexedAt(2)));

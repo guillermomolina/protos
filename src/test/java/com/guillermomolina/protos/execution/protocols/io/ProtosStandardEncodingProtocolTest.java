@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -86,15 +87,48 @@ final class ProtosStandardEncodingProtocolTest {
             new ProtosFloatValue(65.0d),
         };
         for (Object bad : invalid) {
-            ProtosBytesValue bytes = bytes(bytesPrototype, Long.valueOf(65), bad);
-            ProtosSignalException signal =
-                    assertThrows(
-                            ProtosSignalException.class,
-                            () -> ProtosInvocation.invokeMessage(latin1, "decode", List.of(bytes), a),
-                            String.valueOf(bad));
-            // A malformed octet is an argument Error, not a text conversion failure.
-            assertSame(prelude.errorPrototype(), signal.error().parent().orElseThrow());
+            // A malformed octet can never enter Bytes, so decode only ever sees exact octets.
+            ProtosBytesValue bytes = bytes(bytesPrototype, Long.valueOf(65));
+            assertThrows(IllegalArgumentException.class, () -> bytes.indexedAdd(bad), String.valueOf(bad));
+            assertEquals("A", decode(latin1, bytes, a));
         }
+    }
+
+    @Test
+    void binaryOctetsRoundTripThroughLatin1() throws Exception {
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
+        ProtosActivation a = prelude.newModuleActivation();
+        Object latin1 = descriptor(prelude, "Latin1");
+        ProtosObjectValue bytesPrototype = bytesPrototype(prelude, a);
+        ProtosBytesValue binary =
+                bytes(bytesPrototype, Long.valueOf(0), Long.valueOf(0x7f), Long.valueOf(0x80), Long.valueOf(0xff));
+        String text = decode(latin1, binary, a);
+        assertEquals("\u0000\u007f\u0080\u00ff", text);
+        ProtosBytesValue encoded =
+                assertInstanceOf(
+                        ProtosBytesValue.class,
+                        ProtosInvocation.invokeMessage(latin1, "encode", List.of(new ProtosStringValue(text)), a));
+        assertArrayEquals(new byte[] {0, 0x7f, (byte) 0x80, (byte) 0xff}, encoded.octetSnapshot());
+        assertEquals(
+                List.of("0", "127", "128", "255"),
+                encoded.indexedSnapshot().stream()
+                        .map(com.guillermomolina.protos.runtime.ProtosNumericValueSupport::integerDecimalText)
+                        .toList());
+    }
+
+    @Test
+    void hostOctetBuffersAreNeverSharedWithBytes() throws Exception {
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
+        ProtosActivation a = prelude.newModuleActivation();
+        Object latin1 = descriptor(prelude, "Latin1");
+        byte[] source = {0x41, (byte) 0xff};
+        ProtosBytesValue bytes = new ProtosBytesValue(bytesPrototype(prelude, a), source);
+        source[0] = 0x42;
+        assertEquals("A\u00ff", decode(latin1, bytes, a));
+        byte[] snapshot = bytes.octetSnapshot();
+        snapshot[1] = 0x43;
+        assertEquals("A\u00ff", decode(latin1, bytes, a));
+        assertArrayEquals(new byte[] {0x41, (byte) 0xff}, bytes.octetSnapshot());
     }
 
     @Test

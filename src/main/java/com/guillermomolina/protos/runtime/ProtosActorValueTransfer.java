@@ -554,21 +554,21 @@ public final class ProtosActorValueTransfer {
                     }
                 } else if (sourceObject instanceof ProtosBytesValue sourceBytes) {
                     ProtosBytesValue destinationBytes = (ProtosBytesValue) destination;
-                    for (Object octet : sourceBytes.indexedSnapshot()) {
-                        destinationBytes.indexedAdd(copy(octet));
-                    }
+                    destinationBytes.appendOctetsForRuntime(sourceBytes.octetSnapshot());
                 } else if (sourceObject instanceof ProtosVectorValue sourceVector) {
                     ProtosVectorValue destinationVector = (ProtosVectorValue) destination;
                     List<Object> elements = sourceVector.indexedSnapshot();
                     for (int index = 0; index < elements.size(); index++) {
                         destinationVector.transferPutForRuntime(index, copy(elements.get(index)));
                     }
+                    destinationVector.completeTransferForRuntime();
                 } else if (sourceObject instanceof ProtosMatrixValue sourceMatrix) {
                     ProtosMatrixValue destinationMatrix = (ProtosMatrixValue) destination;
                     List<Object> elements = sourceMatrix.indexedSnapshot();
                     for (int index = 0; index < elements.size(); index++) {
                         destinationMatrix.transferPutForRuntime(index, copy(elements.get(index)));
                     }
+                    destinationMatrix.completeTransferForRuntime();
                 }
 
                 copyLocalSlots(sourceObject, destination);

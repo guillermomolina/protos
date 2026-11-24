@@ -400,8 +400,7 @@ public final class ProtosByteIoFlow {
             synchronized(this){if(!r.shutdownDiscard)for(int i=bytes.length-1;i>=0;i--)unread.addFirst(bytes[i]);}
             finish(r);return;
         }
-        ProtosBytesValue result=new ProtosBytesValue(bytesPrototype);
-        for(byte b:bytes)result.indexedAdd(ProtosNumericValueSupport.octet(b&0xff));
+        ProtosBytesValue result=new ProtosBytesValue(bytesPrototype,bytes);
         r.op.resolve(result);finish(r);
     }
 

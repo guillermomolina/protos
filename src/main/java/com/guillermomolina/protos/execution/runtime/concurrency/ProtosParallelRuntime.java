@@ -563,7 +563,7 @@ public final class ProtosParallelRuntime {
                 // The definitive destination shell is already memoized.
                 // Defer indexed/keyed content and local slots together.
                 defer(memo,() -> {
-                    for(Object e:x.indexedSnapshot())y.indexedAdd(copy(e,a,memo));
+                    y.appendOctetsForRuntime(x.octetSnapshot());
                     slots(x,y,a,memo);
                     state(x,y);
                 });
@@ -632,6 +632,7 @@ public final class ProtosParallelRuntime {
                     for(int index=0;index<elements.size();index++){
                         y.transferPutForRuntime(index,copy(elements.get(index),a,memo));
                     }
+                    y.completeTransferForRuntime();
                     slots(x,y,a,memo);
                     state(x,y);
                 });
@@ -651,6 +652,7 @@ public final class ProtosParallelRuntime {
                     for(int index=0;index<elements.size();index++){
                         y.transferPutForRuntime(index,copy(elements.get(index),a,memo));
                     }
+                    y.completeTransferForRuntime();
                     slots(x,y,a,memo);
                     state(x,y);
                 });

@@ -25,6 +25,7 @@ import com.oracle.truffle.api.interop.UnsupportedMessageException;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -50,12 +51,19 @@ final class ProtosAdditionalIndexedInteropTest {
 
         assertTrue(interop.hasArrayElements(bytes));
         assertEquals(1L, interop.getArraySize(bytes));
-        assertSame(first, interop.readArrayElement(bytes, 0));
+        assertEquals(first, interop.readArrayElement(bytes, 0));
         assertEquals(BigInteger.ONE, interop.asBigInteger(
                 interop.readArrayElement(bytes, 0)));
 
-        bytes.indexedPut(0, replacement);
-        assertSame(replacement, interop.readArrayElement(bytes, 0));
+        assertSame(replacement, bytes.indexedPut(0, replacement));
+        assertEquals(replacement, interop.readArrayElement(bytes, 0));
+
+        // High octets project as unsigned Integers, never as negative host bytes.
+        bytes.indexedAdd(octet(255));
+        bytes.indexedAdd(octet(128));
+        assertEquals(255L, interop.asLong(interop.readArrayElement(bytes, 1)));
+        assertEquals(128L, interop.asLong(interop.readArrayElement(bytes, 2)));
+        assertFalse(interop.readArrayElement(bytes, 1) instanceof Byte);
 
         assertFalse(interop.isArrayElementWritable(bytes, 0));
         assertThrows(
@@ -74,14 +82,33 @@ final class ProtosAdditionalIndexedInteropTest {
         ProtosBytesValue bytes =
                 new ProtosBytesValue(ProtosObjectValue.rootObject());
         Object hostOnly = new Object();
-        bytes.indexedAdd(hostOnly);
+        assertThrows(IllegalArgumentException.class, () -> bytes.indexedAdd(hostOnly));
 
-        assertEquals(1L, interop.getArraySize(bytes));
+        assertEquals(0, bytes.indexedSize());
+        assertEquals(0L, interop.getArraySize(bytes));
         assertFalse(interop.isArrayElementReadable(bytes, 0));
         assertThrows(
                 InvalidArrayIndexException.class,
                 () -> interop.readArrayElement(bytes, 0));
-        assertSame(hostOnly, bytes.indexedAt(0));
+    }
+
+    @Test
+    void bytesDirectInsertionOfNonOctetsLeavesReceiverUntouched() throws Exception {
+        ProtosBytesValue bytes =
+                new ProtosBytesValue(ProtosObjectValue.rootObject());
+        bytes.indexedAdd(octet(7));
+        List<Object> invalid = new ArrayList<>();
+        invalid.add(null);
+        invalid.addAll(List.of(Boolean.TRUE, 1.5d, "1", Long.valueOf(-1), Long.valueOf(256)));
+        for (Object value : invalid) {
+            assertThrows(IllegalArgumentException.class, () -> bytes.indexedAdd(value));
+            assertThrows(IllegalArgumentException.class, () -> bytes.indexedPut(0, value));
+            assertEquals(1, bytes.indexedSize());
+            assertEquals(7L, interop.asLong(interop.readArrayElement(bytes, 0)));
+        }
+        assertThrows(
+                InvalidArrayIndexException.class,
+                () -> interop.readArrayElement(bytes, 1));
     }
 
     @Test

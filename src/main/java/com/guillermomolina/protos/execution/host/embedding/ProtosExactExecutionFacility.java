@@ -16,7 +16,6 @@
  */
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.*;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.callables.ProtosNativeClosureBody;
@@ -379,11 +378,7 @@ public final class ProtosExactExecutionFacility {
             ProtosPrelude prelude,
             byte[] bytes) {
         ProtosBytesValue value =
-                new ProtosBytesValue(prelude.bytesPrototypeForRuntime());
-        for (byte octet : bytes) {
-            value.indexedAdd(
-                    ProtosNumericValueSupport.octet(octet & 0xff));
-        }
+                new ProtosBytesValue(prelude.bytesPrototypeForRuntime(), bytes);
         value.freeze();
         return value;
     }

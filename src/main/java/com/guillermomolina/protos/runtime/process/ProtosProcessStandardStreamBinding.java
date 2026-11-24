@@ -327,11 +327,7 @@ public final class ProtosProcessStandardStreamBinding {
             return;
         }
 
-        ProtosBytesValue result = new ProtosBytesValue(bytesPrototype);
-        for (byte value : bytes) {
-            result.indexedAdd(
-                    ProtosNumericValueSupport.octet(value & 0xff));
-        }
+        ProtosBytesValue result = new ProtosBytesValue(bytesPrototype, bytes);
         request.operation.resolve(result);
         finish(request);
     }

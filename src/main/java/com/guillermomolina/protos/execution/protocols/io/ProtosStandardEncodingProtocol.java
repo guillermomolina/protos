@@ -17,7 +17,6 @@
 
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.*;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import java.util.List;
@@ -71,12 +70,7 @@ public final class ProtosStandardEncodingProtocol {
                             } catch (ProtosEncodingValue.ConversionFailure failure) {
                                 throw encodingError(activation);
                             }
-                            ProtosBytesValue result = new ProtosBytesValue(bytesPrototype);
-                            for (byte value : converted) {
-                                result.indexedAdd(
-                                        ProtosNumericValueSupport.octet(value & 0xff));
-                            }
-                            return result;
+                            return new ProtosBytesValue(bytesPrototype, converted);
                         }));
 
         encodingPrototype.createLocalSlot(
@@ -90,7 +84,7 @@ public final class ProtosStandardEncodingProtocol {
                             }
                             final String converted;
                             try {
-                                converted = encoding.decodeForRuntime(exactOctets(bytes, activation));
+                                converted = encoding.decodeForRuntime(bytes.octetSnapshot());
                             } catch (ProtosEncodingValue.ConversionFailure failure) {
                                 throw encodingError(activation);
                             }
@@ -105,23 +99,6 @@ public final class ProtosStandardEncodingProtocol {
             throw invalid(activation);
         }
         return encoding;
-    }
-
-    private static byte[] exactOctets(ProtosBytesValue bytes, ProtosActivation activation) {
-        List<Object> values = bytes.indexedSnapshot();
-        byte[] result = new byte[values.size()];
-        for (int i = 0; i < values.size(); i++) {
-            Object candidate = values.get(i);
-            if (!ProtosNumericValueSupport.isIntegerInIntRange(candidate)) {
-                throw invalid(activation);
-            }
-            int value = ProtosNumericValueSupport.exactInt(candidate);
-            if (value < 0 || value > 255) {
-                throw invalid(activation);
-            }
-            result[i] = (byte) value;
-        }
-        return result;
     }
 
     private static ProtosSignalException invalid(ProtosActivation activation) {

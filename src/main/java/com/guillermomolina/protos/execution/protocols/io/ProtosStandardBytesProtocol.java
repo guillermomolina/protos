@@ -193,9 +193,10 @@ public final class ProtosStandardBytesProtocol {
         }
         Object block = supplied.get(0);
         requireInvokableForStructured(block, activation);
-        List<Object> snapshot = bytes.indexedSnapshot();
-        for (Object octet : snapshot) {
-            ProtosInvocation.invoke(block, List.of(octet), activation);
+        byte[] snapshot = bytes.octetSnapshot();
+        for (byte octet : snapshot) {
+            ProtosInvocation.invoke(
+                    block, List.of(ProtosNumericValueSupport.octet(octet & 0xff)), activation);
         }
         return bytes;
     }
