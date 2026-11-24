@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.212-SNAPSHOT
+
+- **PERF045.** Complete Array and Range construction in one producer and release Range operands before the internal loop.
+
 ## 0.4.211-SNAPSHOT
 
 - **PERF045.** Reconcile Bytecode API PE baseline with numeric helper and diagnostic topology.

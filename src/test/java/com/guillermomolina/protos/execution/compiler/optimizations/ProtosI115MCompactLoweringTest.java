@@ -303,9 +303,7 @@ final class ProtosI115MCompactLoweringTest {
                 List<Instruction> instructions = root.getBytecodeNode().getInstructionsAsList();
                 int lookup = -1;
                 int construction = -1;
-                int ordinaryCall = -1;
-                String ordinaryOperation = entry.getKey().equals("mixed")
-                        ? "c.CallTernaryMethod" : "c.CallBinaryMethod";
+                int constructions = 0;
                 for (int index = 2; index < instructions.size(); index++) {
                     String operation = names.get(index);
                     if (operation.equals("c.Lookup")) {
@@ -320,9 +318,7 @@ final class ProtosI115MCompactLoweringTest {
                     }
                     if (operation.contains(entry.getValue())) {
                         construction = index;
-                    }
-                    if (operation.equals(ordinaryOperation)) {
-                        ordinaryCall = index;
+                        constructions++;
                     }
                 }
                 assertTrue(names.stream().noneMatch(
@@ -330,10 +326,11 @@ final class ProtosI115MCompactLoweringTest {
                         "The construction owns its factory selection: " + names);
                 assertTrue(lookup >= 0 && construction > lookup,
                         "The actual factory lookup must precede the selecting construction: " + names);
-                assertTrue(ordinaryCall > construction,
-                        "Both standard construction and the nonstandard factory call must remain: " + names);
+                assertEquals(1, constructions,
+                        "One producer completes both the standard and any selected construction: " + names);
+                assertNoConstructorCall(names);
                 if (entry.getKey().endsWith("Staged")) {
-                    assertConstantArrayFallbackCleanup(root, entry.getValue(), ordinaryOperation, 2);
+                    assertSingleProducerConstruction(root, entry.getValue());
                 }
             }
         }
@@ -342,9 +339,9 @@ final class ProtosI115MCompactLoweringTest {
     /*
      * One construction site sees a custom factory, then the standard Array,
      * then a custom factory again, then the standard Array: each evaluation
-     * follows its actual selection, the custom factory is invoked ordinarily,
-     * and the standard construction stays direct and fresh after a custom
-     * factory was observed.
+     * follows its actual selection, the custom factory is invoked by the
+     * construction producer itself, and the standard construction stays
+     * direct and fresh after a custom factory was observed.
      */
     @Test
     void standardArrayConstructionAfterACustomFactoryAtTheSameSite() throws Exception {
@@ -366,66 +363,184 @@ final class ProtosI115MCompactLoweringTest {
             ProtosBytecodeRootNode root = selectedRoot(session.prepareTopLevel("build"));
             List<String> names = root.getBytecodeNode().getInstructionsAsList().stream()
                     .map(ProtosInstructionNames::of).toList();
-            assertTrue(names.stream().anyMatch(name -> name.contains("MakeConstantLongArray")),
+            assertEquals(1, names.stream()
+                            .filter(name -> name.contains("MakeConstantLongArray")).count(),
                     names.toString());
-            assertTrue(names.stream().anyMatch(name ->
-                            name.equals("c.CallBinaryMethod")
-                                    || name.startsWith("c.CallBinaryMethod$")),
-                    "the custom factory keeps its ordinary call: " + names);
+            assertNoConstructorCall(names);
         }
     }
 
     /*
-     * Follow the selecting construction's actual edges: it stores the Array
-     * and answers whether the standard construction was selected. Block
-     * scoping is disabled in this root; require a unique metadata mapping
-     * before resolving physical operands to logical locals.
+     * The long, Float and Boolean constant producers at composed sites that
+     * alternate a custom factory and the standard Array: each standard
+     * evaluation yields a fresh Array with its elements in source order,
+     * independent of every earlier result, and each custom evaluation the
+     * factory's own result.
      */
-    static void assertConstantArrayFallbackCleanup(
-            ProtosBytecodeRootNode root, String constructor, String call, int argumentCount) {
+    @Test
+    void constantProducersAlternateCustomAndStandardFactoriesAtOneSite() throws Exception {
+        try (ProtosStandaloneHostedSession session = openSession(
+                "array-construction-constant-families", """
+                buildLongs: (Array) => {
+                    values: Array(1, 2)
+                    values
+                }
+                buildDoubles: (Array) => {
+                    values: Array(1.5, 2.5)
+                    values
+                }
+                buildBooleans: (Array) => {
+                    values: Array(true, false)
+                    values
+                }
+                longs: () => {
+                    custom: buildLongs((a, b) => a * 100 + b)
+                    standard: buildLongs(Array)
+                    again: buildLongs((a, b) => a - b)
+                    last: buildLongs(Array)
+                    last[0] = 7
+                    (custom == 102) && (again == -1) && (standard.size() == 2) && (standard[0] == 1) && (standard[1] == 2) && (last[0] == 7) && (last[1] == 2) && !(last === standard) && (buildLongs(Array)[0] == 1)
+                }
+                doubles: () => {
+                    custom: buildDoubles((a, b) => a + b)
+                    standard: buildDoubles(Array)
+                    again: buildDoubles((a, b) => b - a)
+                    last: buildDoubles(Array)
+                    last[0] = 9.5
+                    (custom == 4.0) && (again == 1.0) && (standard.size() == 2) && (standard[0] == 1.5) && (standard[1] == 2.5) && (last[0] == 9.5) && !(last === standard) && (buildDoubles(Array)[0] == 1.5)
+                }
+                booleans: () => {
+                    custom: buildBooleans((a, b) => a && !b)
+                    standard: buildBooleans(Array)
+                    again: buildBooleans((a, b) => b)
+                    last: buildBooleans(Array)
+                    last[1] = true
+                    custom && !again && (standard.size() == 2) && standard[0] && !standard[1] && last[1] && !(last === standard) && !(buildBooleans(Array)[1])
+                }
+                """)) {
+            for (String check : List.of("longs", "doubles", "booleans")) {
+                for (int round = 0; round < 3; round++) {
+                    assertTrue(session.prepareTopLevel(check).executable().execute().asBoolean(),
+                            check + " round " + round);
+                }
+            }
+            for (var entry : java.util.Map.of(
+                    "buildLongs", "MakeConstantLongArray",
+                    "buildDoubles", "MakeConstantDoubleArray",
+                    "buildBooleans", "MakeConstantBooleanArray").entrySet()) {
+                assertSingleProducerConstruction(
+                        selectedRoot(session.prepareTopLevel(entry.getKey())), entry.getValue());
+            }
+        }
+    }
+
+    /*
+     * A selected factory's result is the construction's value whatever it
+     * is; its Error propagates from the construction; a terminal site
+     * returns the factory's result; and a constant list wider than four
+     * arguments supplies every element, in order, to the selected factory
+     * while the standard construction keeps its typed constant.
+     */
+    @Test
+    void customFactoriesCompleteInsideTheConstructionProducer() throws Exception {
+        try (ProtosStandaloneHostedSession session = openSession(
+                "array-construction-custom-results", """
+                build: (Array) => {
+                    values: Array(1, 2)
+                    values
+                }
+                terminal: (Array) => Array(1.5, 2.5)
+                wide: (Array) => {
+                    values: Array(1, 2, 3, 4, 5, 6)
+                    values
+                }
+                marker: { tag: 7 }
+                arbitrary: () => {
+                    text: build((a, b) => "built")
+                    same: build((a, b) => marker)
+                    (text == "built") && (same === marker) && (same.tag == 7)
+                }
+                signals: () => {
+                    caught: Error.handle(() => { build((a, b) => { Error().signal() }); false }, (error) => true)
+                    caught && (build(Array).size() == 2)
+                }
+                terminals: () => {
+                    custom: terminal((a, b) => a * b)
+                    standard: terminal(Array)
+                    (custom == 3.75) && (standard.size() == 2) && (standard[1] == 2.5) && !(terminal(Array) === standard)
+                }
+                wides: () => {
+                    custom: wide((a, b, c, d, e, f) => a * 100000 + b * 10000 + c * 1000 + d * 100 + e * 10 + f)
+                    standard: wide(Array)
+                    (custom == 123456) && (standard.size() == 6) && (standard[0] == 1) && (standard[5] == 6)
+                }
+                """)) {
+            for (String check : List.of("arbitrary", "signals", "terminals", "wides")) {
+                for (int round = 0; round < 3; round++) {
+                    assertTrue(session.prepareTopLevel(check).executable().execute().asBoolean(),
+                            check + " round " + round);
+                }
+            }
+            assertSingleProducerConstruction(
+                    selectedRoot(session.prepareTopLevel("build")), "MakeConstantLongArray");
+            assertSingleProducerConstruction(
+                    selectedRoot(session.prepareTopLevel("wide")), "MakeConstantLongArray");
+            List<String> terminalNames = selectedRoot(session.prepareTopLevel("terminal"))
+                    .getBytecodeNode().getInstructionsAsList().stream()
+                    .map(ProtosInstructionNames::of).toList();
+            assertEquals(1, terminalNames.stream()
+                            .filter(name -> name.contains("MakeConstantDoubleArray")).count(),
+                    terminalNames.toString());
+            assertNoConstructorCall(terminalNames);
+        }
+    }
+
+    /*
+     * Follow the single construction producer's actual edges: exactly one
+     * producer stores the completed value in its own outcome local and
+     * answers whether it is suspended; that answer feeds the conditional
+     * whose taken path alone composes the continuation (IsContinuation,
+     * ResumeDispatchedContinuation and the back edge repeating only the
+     * continuation test), while the other path only clears staging. No
+     * separate constructor Call*Method, fallback argument local or prepared
+     * argument vector belongs to the construction.
+     */
+    static void assertSingleProducerConstruction(
+            ProtosBytecodeRootNode root, String constructor) {
         var bytecode = root.getBytecodeNode();
         List<Instruction> instructions = bytecode.getInstructionsAsList().stream()
                 .filter(instruction -> !instruction.getName().startsWith("trace.")
                         && !instruction.getName().startsWith("tag."))
                 .toList();
-        Instruction standard = instructions.stream()
+        List<String> names = instructions.stream().map(ProtosInstructionNames::of).toList();
+        List<Instruction> producers = instructions.stream()
                 .filter(instruction -> ProtosInstructionNames.of(instruction).contains(constructor))
+                .toList();
+        assertEquals(1, producers.size(),
+                () -> "exactly one construction producer: " + names);
+        Instruction producer = producers.get(0);
+        assertEquals(1, producer.getArguments().stream()
+                        .filter(argument -> argument.getKind() == Instruction.Argument.Kind.CONSTANT)
+                        .map(Instruction.Argument::asConstant)
+                        .filter(com.oracle.truffle.api.bytecode.LocalAccessor.class::isInstance)
+                        .count(),
+                "the producer stores its value through its own outcome local");
+        Instruction pending = instructions.stream()
+                .filter(instruction -> instruction.getBytecodeIndex() > producer.getBytecodeIndex())
                 .findFirst().orElseThrow();
-        Instruction selection = instructions.stream()
-                .filter(instruction -> instruction.getBytecodeIndex() > standard.getBytecodeIndex())
-                .findFirst().orElseThrow();
-        assertTrue(selection.getName().contains("branch.false"),
-                () -> "the selecting construction must feed its false branch: "
-                        + standard + " -> " + selection);
-        int alternative = branchDestination(selection);
-        Instruction jump = instructions.stream()
-                .filter(instruction -> instruction.getBytecodeIndex() > selection.getBytecodeIndex()
-                        && instruction.getBytecodeIndex() < alternative
-                        && instruction.getName().equals("branch"))
-                .findFirst().orElseThrow();
-        int merge = branchDestination(jump);
-        Instruction invocation = instructions.stream()
-                .filter(instruction -> ProtosInstructionNames.of(instruction).equals(call)
-                        && instruction.getBytecodeIndex() >= alternative
-                        && instruction.getBytecodeIndex() < merge)
-                .findFirst().orElseThrow();
-        assertTrue(merge > alternative, "the standard branch skips the entire fallback");
+        assertTrue(pending.getName().contains("branch.false"),
+                () -> "the producer's pending answer must feed its conditional: "
+                        + producer + " -> " + pending);
+        int completed = branchDestination(pending);
         Instruction continuationTest = instructions.stream()
-                .filter(instruction -> instruction.getBytecodeIndex() > invocation.getBytecodeIndex()
-                        && instruction.getBytecodeIndex() < merge
+                .filter(instruction -> instruction.getBytecodeIndex() > pending.getBytecodeIndex()
+                        && instruction.getBytecodeIndex() < completed
                         && ProtosInstructionNames.of(instruction).equals("c.IsContinuation"))
                 .findFirst().orElseThrow();
-        Instruction completionGuard = instructions.stream()
-                .filter(instruction -> instruction.getBytecodeIndex() > continuationTest.getBytecodeIndex())
-                .findFirst().orElseThrow();
-        assertTrue(completionGuard.getName().contains("branch.false"),
-                () -> "continuation test must feed its loop exit: " + completionGuard);
-        int completed = branchDestination(completionGuard);
-        assertTrue(completed > completionGuard.getBytecodeIndex() && completed < merge);
         Instruction resume = instructions.stream()
                 .filter(instruction -> ProtosInstructionNames.of(instruction)
                                 .contains("ResumeDispatchedContinuation")
-                        && instruction.getBytecodeIndex() > completionGuard.getBytecodeIndex()
+                        && instruction.getBytecodeIndex() > continuationTest.getBytecodeIndex()
                         && instruction.getBytecodeIndex() < completed)
                 .findFirst().orElseThrow();
         Instruction repeat = instructions.stream()
@@ -434,99 +549,46 @@ final class ProtosI115MCompactLoweringTest {
                         && instruction.getBytecodeIndex() < completed)
                 .findFirst().orElseThrow();
         int loopStart = branchDestination(repeat);
-        assertTrue(loopStart > invocation.getBytecodeIndex()
+        assertTrue(loopStart > producer.getBytecodeIndex()
                         && loopStart <= continuationTest.getBytecodeIndex(),
-                "resumption repeats the continuation test without repeating the invocation");
+                "resumption repeats the continuation test without repeating the construction");
+        Instruction skip = instructions.stream()
+                .filter(instruction -> instruction.getName().equals("branch")
+                        && instruction.getBytecodeIndex() > repeat.getBytecodeIndex()
+                        && instruction.getBytecodeIndex() < completed)
+                .findFirst().orElseThrow();
+        int merge = branchDestination(skip);
+        List<Instruction> region = instructions.stream()
+                .filter(instruction -> instruction.getBytecodeIndex() >= producer.getBytecodeIndex()
+                        && instruction.getBytecodeIndex() < merge)
+                .toList();
+        assertNoConstructorCall(region.stream().map(ProtosInstructionNames::of).toList());
+        assertTrue(region.stream()
+                        .filter(instruction -> instruction.getBytecodeIndex() >= completed)
+                        .allMatch(instruction -> instruction.getName().equals("clear.local")),
+                () -> "the completed path only clears staging: " + region);
 
         var locals = bytecode.getLocals();
-        assertEquals(locals.size(), locals.stream().map(local -> local.getLocalOffset()).distinct().count(),
-                "physical operands must map uniquely to logical local metadata");
-        boolean vectorArguments = argumentCount > 4;
-        String argumentLocalName = vectorArguments
-                ? "constantArguments" : "invocationArgument";
-        int expectedLocals = vectorArguments ? 1 : argumentCount;
-        var staged = instructions.stream()
-                .filter(instruction -> instruction.getName().startsWith("store.local")
-                        && instruction.getBytecodeIndex() >= alternative
-                        && instruction.getBytecodeIndex() < invocation.getBytecodeIndex())
-                .map(instruction -> locals.stream()
-                        .filter(local -> local.getLocalOffset() == localOperand(instruction))
-                        .findFirst().orElseThrow())
-                .filter(local -> "invocationArgument".equals(local.getName())
-                        || "constantArguments".equals(local.getName()))
-                .toList();
-        assertEquals(expectedLocals, staged.size());
-        assertEquals(expectedLocals,
-                staged.stream().map(local -> local.getLocalIndex()).distinct().count());
-        assertTrue(staged.stream().allMatch(
-                        local -> argumentLocalName.equals(local.getName())),
-                "constant arguments must use the expected staging representation");
+        assertTrue(instructions.stream()
+                        .filter(instruction -> instruction.getName().startsWith("store.local"))
+                        .map(instruction -> locals.stream()
+                                .filter(local -> local.getLocalOffset() == localOperand(instruction))
+                                .findFirst().orElseThrow())
+                        .noneMatch(local -> "constantArguments".equals(local.getName())),
+                "no fallback-only constant argument staging remains");
+        assertTrue(instructions.stream()
+                        .flatMap(instruction -> instruction.getArguments().stream())
+                        .filter(argument -> argument.getKind() == Instruction.Argument.Kind.CONSTANT)
+                        .map(Instruction.Argument::asConstant)
+                        .noneMatch(ProtosPreparedCalls.PreparedArgumentVector.class::isInstance),
+                "no prepared fallback argument vector remains");
+    }
 
-        if (vectorArguments) {
-            assertEquals("c.CallVarargsMethod", call);
-            var vectors = instructions.stream()
-                    .filter(instruction -> instruction.getBytecodeIndex() >= alternative
-                            && instruction.getBytecodeIndex() < invocation.getBytecodeIndex())
-                    .flatMap(instruction -> instruction.getArguments().stream())
-                    .filter(argument -> argument.getKind() == Instruction.Argument.Kind.CONSTANT)
-                    .map(Instruction.Argument::asConstant)
-                    .filter(ProtosPreparedCalls.PreparedArgumentVector.class::isInstance)
-                    .map(ProtosPreparedCalls.PreparedArgumentVector.class::cast)
-                    .toList();
-            assertEquals(1, vectors.size(),
-                    "wide constant construction uses one prepared argument vector");
-
-            var vector = vectors.get(0);
-            assertFalse(vector.hasNamedArguments());
-            Object[] supplied = vector.positionalArray();
-            assertEquals(argumentCount, supplied.length);
-
-            Object constantValues = standard.getArguments().stream()
-                    .filter(argument -> argument.getKind() == Instruction.Argument.Kind.CONSTANT)
-                    .map(Instruction.Argument::asConstant)
-                    .filter(value -> value instanceof long[]
-                            || value instanceof double[]
-                            || value instanceof boolean[])
-                    .findFirst().orElseThrow();
-            assertEquals(argumentCount,
-                    java.lang.reflect.Array.getLength(constantValues));
-
-            for (int index = 0; index < argumentCount; index++) {
-                assertEquals(java.lang.reflect.Array.get(constantValues, index),
-                        supplied[index],
-                        "constant argument order at index " + index);
-            }
-
-            int vectorOffset = staged.get(0).getLocalOffset();
-            assertTrue(instructions.stream().anyMatch(instruction ->
-                            instruction.getName().startsWith("load.local")
-                            && instruction.getBytecodeIndex() >= alternative
-                            && instruction.getBytecodeIndex() < invocation.getBytecodeIndex()
-                            && localOperand(instruction) == vectorOffset),
-                    "the alternative invocation consumes the staged constant vector");
-        }
-
-        for (var local : staged) {
-            var accesses = instructions.stream()
-                    .filter(instruction -> instruction.getName().startsWith("store.local")
-                            || instruction.getName().equals("clear.local"))
-                    .filter(instruction -> locals.stream()
-                            .filter(candidate -> candidate.getLocalOffset() == localOperand(instruction))
-                            .findFirst().orElseThrow().getLocalIndex() == local.getLocalIndex())
-                    .toList();
-            assertEquals(1, accesses.stream()
-                    .filter(instruction -> instruction.getName().startsWith("store.local")).count());
-            assertEquals(1, accesses.stream()
-                    .filter(instruction -> instruction.getName().equals("clear.local")).count());
-            for (Instruction access : accesses) {
-                assertTrue(access.getBytecodeIndex() >= alternative && access.getBytecodeIndex() < merge,
-                        "argument writes and clears belong exclusively to the alternative branch");
-                if (access.getName().equals("clear.local")) {
-                    assertTrue(access.getBytecodeIndex() >= completed,
-                            "argument cleanup follows the invocation's complete continuation composition");
-                }
-            }
-        }
+    /* No Call*Method invocation, in any quickened form, is emitted. */
+    static void assertNoConstructorCall(List<String> names) {
+        assertTrue(names.stream().noneMatch(
+                        name -> name.matches("c\\.Call[A-Za-z]*Method(\\$.*)?")),
+                () -> "the construction emits no separate constructor call: " + names);
     }
 
     private static int branchDestination(Instruction instruction) {
@@ -1194,13 +1256,10 @@ final class ProtosI115MCompactLoweringTest {
                 assertTrue(names.stream().noneMatch(name -> name.equals("c.MakeArray")),
                         "Admitted constant construction must not use the general vector: "
                                 + names);
-                if (wide) {
-                    assertTrue(names.stream().anyMatch(name -> name.startsWith("c.CallVarargsMethod")),
-                            "the wide ordinary path uses CallVarargsMethod: " + names);
-                    assertTrue(names.stream()
-                                    .anyMatch(name -> name.startsWith("c.SnapshotClosureCallArguments")),
-                            "the wide ordinary path snapshots its constant vector: " + names);
-                }
+                assertNoConstructorCall(names);
+                assertTrue(names.stream()
+                                .noneMatch(name -> name.startsWith("c.SnapshotClosureCallArguments")),
+                        "no argument vector is prepared for a constant construction: " + names);
                 Value first = prepared.executable().execute();
                 Value second = prepared.executable().execute();
                 assertEquals(size, first.getArraySize());
@@ -1269,11 +1328,10 @@ final class ProtosI115MCompactLoweringTest {
             assertTrue(names.stream().noneMatch(
                             name -> name.contains("IsStandardArrayConstructionSelection")),
                     "the constant construction owns its factory selection: " + names);
-            assertTrue(names.stream().anyMatch(name -> name.startsWith("c.CallVarargsMethod")),
-                    "the high-arity ordinary path uses CallVarargsMethod: " + names);
+            assertSingleProducerConstruction(root, "MakeConstantLongArray");
             assertTrue(names.stream()
-                            .anyMatch(name -> name.startsWith("c.SnapshotClosureCallArguments")),
-                    "the high-arity ordinary path snapshots the constant vector: " + names);
+                            .noneMatch(name -> name.startsWith("c.SnapshotClosureCallArguments")),
+                    "no argument vector is prepared for the constant construction: " + names);
             assertTrue(names.stream().filter(name -> name.startsWith("store.local")).count() < 64,
                     "the literal's elements are not stored into argument locals: " + names);
             int slots = root.getFrameDescriptor().getNumberOfSlots();

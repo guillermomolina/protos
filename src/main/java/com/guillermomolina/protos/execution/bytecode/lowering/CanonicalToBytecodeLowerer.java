@@ -8640,36 +8640,6 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /*
-     * The ordinary-call argument vector of a constant collection, prepared
-     * once at lowering time and held as a bytecode constant. It is never
-     * handed to guest code: SnapshotClosureCallArguments copies its
-     * positional prefix into a fresh Object[] on every invocation.
-     */
-    private static ProtosPreparedCalls.PreparedArgumentVector constantArgumentVector(
-            ConstantCollection constant) {
-        ProtosPreparedCalls.PreparedArgumentVector vector =
-                new ProtosPreparedCalls.PreparedArgumentVector();
-        switch (constant.type()) {
-            case LONG -> {
-                for (long value : (long[]) constant.values()) {
-                    vector.append(Long.valueOf(value));
-                }
-            }
-            case DOUBLE -> {
-                for (double value : (double[]) constant.values()) {
-                    vector.append(Double.valueOf(value));
-                }
-            }
-            case BOOLEAN -> {
-                for (boolean value : (boolean[]) constant.values()) {
-                    vector.append(Boolean.valueOf(value));
-                }
-            }
-        }
-        return vector;
-    }
-
-    /*
      * The constant collection of a non-empty argument list made only of
      * literals of one primitive family, in source order, or null:
      * signed-64 Integer literals (long[]), Float literals (double[]) or
@@ -8735,8 +8705,14 @@ final class CanonicalToBytecodeLowerer {
         };
     }
 
-    /* Stage all operands before selection, sharing ordinary call composition
-     * with the fallback so suspension never repeats an operand's effects. */
+    /*
+     * Range construction (composed contexts): the factory and both bounds
+     * are evaluated and staged once, in source order; MakeRange is then the
+     * single producer of the value, which completes the standard
+     * construction or invokes the selected factory, and only a suspended
+     * invocation is composed. An explicit step and the callback of an
+     * iteration are evaluated by the consumer after this completes.
+     */
     private void emitStandardRangeConstruction(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalExpression receiver,
@@ -8758,27 +8734,21 @@ final class CanonicalToBytecodeLowerer {
             stageOperand(builder, argument, value, scratch, childResult, resumeValue, stager);
             values.add(value);
         }
-        // MakeRange stores the canonical Range in result when the standard
-        // construction is selected; otherwise the ordinary call runs.
-        builder.beginIfThenElse();
-        emitStandardRangeValue(builder, result, factory, values);
-        builder.beginBlock();
-        builder.endBlock();
-        builder.beginBlock();
-        emitDispatchedCall(builder, factory, values, null, childResult, result,
-                resumeValue, primitiveCarrierResult);
-        builder.endBlock();
-        builder.endIfThenElse();
-        for (BytecodeLocal value : values) {
-            builder.emitClearLocal(value);
-        }
-        builder.emitClearLocal(factory);
+        java.util.List<BytecodeLocal> staging = new java.util.ArrayList<>(values);
+        staging.add(factory);
+        emitCompletedConstruction(
+                builder,
+                () -> emitStandardRangeValue(builder, false, childResult, factory, values),
+                childResult, resumeValue, staging, result, primitiveCarrierResult);
         builder.endBlock();
         builder.endTag(StandardTags.CallTag.class);
     }
 
-    /* Terminal construction uses the same construction operation; the
-     * unselected branch retains the existing terminal call transport. */
+    /*
+     * Terminal Range construction: the single producer completes the value
+     * or leaves a suspended selected factory in its terminal transport; the
+     * stored value is the value of the root.
+     */
     private void emitTerminalStandardRangeConstruction(
             ProtosBytecodeRootNodeGen.Builder builder, CanonicalCall call) {
         noteDynamicInvocation();
@@ -8795,24 +8765,24 @@ final class CanonicalToBytecodeLowerer {
             values.add(value);
         }
         BytecodeLocal range = builder.createLocal("terminalRange", null);
-        builder.beginConditional();
-        emitStandardRangeValue(builder, range, factory, values);
+        emitStandardRangeValue(builder, true, range, factory, values);
+        for (BytecodeLocal value : values) {
+            builder.emitClearLocal(value);
+        }
+        builder.emitClearLocal(factory);
         builder.emitLoadLocal(range);
-        builder.beginBlock();
-        emitCallOperation(builder, true, factory, values, null);
-        builder.endBlock();
-        builder.endConditional();
         builder.endBlock();
         builder.endTag(StandardTags.CallTag.class);
     }
 
-    /* MakeRange over the evaluated factory and bounds, storing into target. */
+    /* MakeRange over the evaluated factory and bounds, producing into outcome. */
     private static void emitStandardRangeValue(
             ProtosBytecodeRootNodeGen.Builder builder,
-            BytecodeLocal target,
+            boolean terminal,
+            BytecodeLocal outcome,
             BytecodeLocal factory,
             java.util.List<BytecodeLocal> values) {
-        builder.beginMakeRange(target);
+        builder.beginMakeRange(terminal, outcome);
         builder.emitLoadLocal(factory);
         builder.emitLoadLocal(values.get(0));
         builder.emitLoadLocal(values.get(1));
@@ -8820,19 +8790,65 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /*
+     * The single construction producer of a composed site, as
+     * emitCompletedNumericResult: the producer stores the completed value in
+     * outcome and answers whether it is a suspended invocation, which only
+     * then is composed. The staging locals are cleared after their last use,
+     * the producer, before any composition; the completed value is then
+     * delivered to result exactly as a dispatched call's.
+     */
+    private void emitCompletedConstruction(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            Runnable producer,
+            BytecodeLocal outcome,
+            BytecodeLocal resumeValue,
+            java.util.List<BytecodeLocal> staging,
+            BytecodeLocal result,
+            boolean primitiveCarrierResult) {
+        builder.beginIfThenElse();
+        producer.run();
+        builder.beginBlock();
+        for (BytecodeLocal local : staging) {
+            builder.emitClearLocal(local);
+        }
+        emitDispatchedContinuationComposition(builder, outcome, resumeValue);
+        builder.endBlock();
+        builder.beginBlock();
+        for (BytecodeLocal local : staging) {
+            builder.emitClearLocal(local);
+        }
+        builder.endBlock();
+        builder.endIfThenElse();
+
+        // The outcome is read and cleared at its only use.
+        if (result != null) {
+            builder.beginStoreLocal(result);
+            if (primitiveCarrierResult) {
+                builder.emitLoadAndClearTempLocal(outcome);
+            } else {
+                builder.beginMaterializePrimitiveNumericCarrier(true);
+                builder.emitLoadAndClearTempLocal(outcome);
+                builder.endMaterializePrimitiveNumericCarrier();
+            }
+            builder.endStoreLocal();
+        } else {
+            builder.emitClearLocal(outcome);
+        }
+    }
+
+    /*
      * Standard Array construction (composed contexts).
      *
      * <ol>
      *   <li>Evaluate and stage the factory receiver once.
-     *   <li>Evaluate the arguments once, left to right, into the ordinary
-     *       positional locals or spread vector. A constant primitive list has
-     *       no evaluation effects and is staged only on the ordinary path.
-     *   <li>After the packet is formed, MakeConstant{Long,Double,Boolean}Array
-     *       or MakeArray stores the native Array in the result local when
-     *       the factory selects the standard construction, without any send,
-     *       call packet or continuation composition (it cannot suspend).
-     *   <li>Otherwise: the existing Call*Method with the same receiver and
-     *       arguments, composed with Yield/ResumeDispatchedContinuation.
+     *   <li>Evaluate the arguments once, left to right, into positional
+     *       locals or the spread vector. A constant primitive list has no
+     *       evaluation effects and is never staged: its typed elements are
+     *       the constant operand of the producer.
+     *   <li>MakeConstant{Long,Double,Boolean}Array or MakeArray is the single
+     *       producer: it completes the native Array, or invokes the selected
+     *       factory with the same arguments, and only a suspended invocation
+     *       is composed with Yield/ResumeDispatchedContinuation.
      * </ol>
      */
     private void emitStandardArrayConstruction(
@@ -8871,69 +8887,29 @@ final class CanonicalToBytecodeLowerer {
                     argumentValues.add(argumentValue);
                 }
             }
-        } else if (arguments.size() <= 4) {
-            // Created here, staged only on the ordinary path below.
-            for (int index = 0; index < arguments.size(); index++) {
-                argumentValues.add(builder.createLocal("invocationArgument", null));
-            }
         }
-        // A wider constant list reserves no per-element locals: its ordinary
-        // path passes one prepared constant vector to CallVarargsMethod.
-        boolean constantVector = constant != null && arguments.size() > 4;
 
-        builder.beginIfThenElse();
-        emitStandardArrayValue(builder, result, factory, constant, argumentValues, suppliedVector);
-        builder.beginBlock();
-        builder.endBlock();
-
-        builder.beginBlock();
-        BytecodeLocal constantArguments = null;
-        if (constantVector) {
-            constantArguments = builder.createLocal("constantArguments", null);
-            builder.beginStoreLocal(constantArguments);
-            builder.emitLoadConstant(constantArgumentVector(constant));
-            builder.endStoreLocal();
-        } else if (constant != null) {
-            for (int index = 0; index < arguments.size(); index++) {
-                stageOperand(
-                        builder, arguments.get(index), argumentValues.get(index),
-                        scratch, childResult, resumeValue, stager);
-            }
-        }
-        emitDispatchedCall(
-                builder, factory, argumentValues,
-                constantVector ? constantArguments : suppliedVector,
-                childResult, result, resumeValue,
-                primitiveCarrierResult);
-        if (constantVector) {
-            builder.emitClearLocal(constantArguments);
-        }
-        if (constant != null) {
-            // Only the fallback initializes these locals; retain them through call composition.
-            for (BytecodeLocal argumentValue : argumentValues) {
-                builder.emitClearLocal(argumentValue);
-            }
-        }
-        builder.endBlock();
-        builder.endIfThenElse();
-
-        if (constant == null) {
-            for (BytecodeLocal argumentValue : argumentValues) {
-                builder.emitClearLocal(argumentValue);
-            }
-        }
+        java.util.List<BytecodeLocal> staging = new java.util.ArrayList<>(argumentValues);
         if (suppliedVector != null) {
-            builder.emitClearLocal(suppliedVector);
+            staging.add(suppliedVector);
         }
-        builder.emitClearLocal(factory);
+        staging.add(factory);
+        BytecodeLocal vector = suppliedVector;
+        emitCompletedConstruction(
+                builder,
+                () -> emitStandardArrayValue(
+                        builder, false, childResult, factory, constant, argumentValues, vector),
+                childResult, resumeValue, staging, result, primitiveCarrierResult);
 
         builder.endBlock();
         builder.endTag(StandardTags.CallTag.class);
     }
 
     /*
-     * Standard Array construction in terminal position: the value is either
-     * the native Array or the terminal call's result or transport.
+     * Standard Array construction in terminal position: the single producer
+     * completes the native Array or the selected factory's result, or leaves
+     * a suspended selected factory in its terminal transport; the stored
+     * value is the value of the root.
      */
     private void emitTerminalStandardArrayConstruction(
             ProtosBytecodeRootNodeGen.Builder builder,
@@ -8949,39 +8925,22 @@ final class CanonicalToBytecodeLowerer {
         builder.endStoreLocal();
 
         ConstantCollection constant = constantCollectionOrNull(arguments);
-        // A wider constant list reserves no per-element locals: its ordinary
-        // path passes one prepared constant vector to CallVarargsMethod.
-        boolean constantVector = constant != null && arguments.size() > 4;
         java.util.List<BytecodeLocal> argumentValues = new java.util.ArrayList<>(arguments.size());
-        for (CanonicalExpression argument : constantVector ? java.util.List.<CanonicalExpression>of() : arguments) {
-            BytecodeLocal argumentValue = builder.createLocal("terminalArgument", null);
-            if (constant == null) {
+        if (constant == null) {
+            for (CanonicalExpression argument : arguments) {
+                BytecodeLocal argumentValue = builder.createLocal("terminalArgument", null);
                 stageTerminalArgument(builder, argument, argumentValue);
+                argumentValues.add(argumentValue);
             }
-            argumentValues.add(argumentValue);
         }
 
         BytecodeLocal array = builder.createLocal("terminalArray", null);
-        builder.beginConditional();
-        emitStandardArrayValue(builder, array, factory, constant, argumentValues, null);
-        builder.emitLoadLocal(array);
-
-        builder.beginBlock();
-        BytecodeLocal constantArguments = null;
-        if (constantVector) {
-            constantArguments = builder.createLocal("constantArguments", null);
-            builder.beginStoreLocal(constantArguments);
-            builder.emitLoadConstant(constantArgumentVector(constant));
-            builder.endStoreLocal();
-        } else if (constant != null) {
-            for (int index = 0; index < arguments.size(); index++) {
-                stageTerminalArgument(builder, arguments.get(index), argumentValues.get(index));
-            }
+        emitStandardArrayValue(builder, true, array, factory, constant, argumentValues, null);
+        for (BytecodeLocal argumentValue : argumentValues) {
+            builder.emitClearLocal(argumentValue);
         }
-        // The block's value: the terminal call result or transport.
-        emitCallOperation(builder, true, factory, argumentValues, constantArguments);
-        builder.endBlock();
-        builder.endConditional();
+        builder.emitClearLocal(factory);
+        builder.emitLoadLocal(array);
 
         builder.endBlock();
         builder.endTag(StandardTags.CallTag.class);
@@ -8997,12 +8956,16 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /*
-     * The native Array construction of the evaluated factory, storing into
-     * target and answering whether the standard construction was selected.
+     * The single Array construction producer over the evaluated factory and
+     * arguments: it stores the completed value, the native Array or the
+     * selected factory's own result, into outcome and answers whether that
+     * value is a suspended invocation. A terminal producer leaves such a
+     * suspension in its terminal transport instead.
      */
     private static void emitStandardArrayValue(
             ProtosBytecodeRootNodeGen.Builder builder,
-            BytecodeLocal target,
+            boolean terminal,
+            BytecodeLocal outcome,
             BytecodeLocal factory,
             ConstantCollection constant,
             java.util.List<BytecodeLocal> argumentValues,
@@ -9010,24 +8973,27 @@ final class CanonicalToBytecodeLowerer {
         if (constant != null) {
             switch (constant.type()) {
                 case LONG -> {
-                    builder.beginMakeConstantLongArray((long[]) constant.values(), target);
+                    builder.beginMakeConstantLongArray(
+                            (long[]) constant.values(), terminal, outcome);
                     builder.emitLoadLocal(factory);
                     builder.endMakeConstantLongArray();
                 }
                 case DOUBLE -> {
-                    builder.beginMakeConstantDoubleArray((double[]) constant.values(), target);
+                    builder.beginMakeConstantDoubleArray(
+                            (double[]) constant.values(), terminal, outcome);
                     builder.emitLoadLocal(factory);
                     builder.endMakeConstantDoubleArray();
                 }
                 case BOOLEAN -> {
-                    builder.beginMakeConstantBooleanArray((boolean[]) constant.values(), target);
+                    builder.beginMakeConstantBooleanArray(
+                            (boolean[]) constant.values(), terminal, outcome);
                     builder.emitLoadLocal(factory);
                     builder.endMakeConstantBooleanArray();
                 }
             }
             return;
         }
-        builder.beginMakeArray(target);
+        builder.beginMakeArray(terminal, outcome);
         builder.emitLoadLocal(factory);
         if (suppliedVector != null) {
             builder.beginSnapshotClosureCallArguments();
@@ -11107,6 +11073,10 @@ final class CanonicalToBytecodeLowerer {
      *   <li>Otherwise {@link #emitIterationDispatch} invokes the selected
      *       behavior with the already evaluated operands.
      * </ol>
+     * The receiver and step are compiler-owned staging locals. The cursor
+     * holds every value the standard loop needs, so they are cleared once it
+     * is established, before the loop; the selected behavior retains them
+     * until its invocation and composition finish.
      */
     private void emitRangeIterationOrDispatch(
             ProtosBytecodeRootNodeGen.Builder builder,
@@ -11128,6 +11098,7 @@ final class CanonicalToBytecodeLowerer {
         builder.endPrepareRangeIteration();
 
         builder.beginBlock();
+        emitClearRangeOperands(builder, receiver, step);
         emitInternalIteration(
                 builder, state, inlineCallback, callbackValue, scratch, childResult, resumeValue);
         builder.emitClearLocal(state);
@@ -11140,9 +11111,19 @@ final class CanonicalToBytecodeLowerer {
         emitIterationDispatch(
                 builder, selector, receiver, step, inlineCallback, callbackValue,
                 result, scratch, childResult, resumeValue);
+        emitClearRangeOperands(builder, receiver, step);
         builder.endBlock();
 
         builder.endIfThenElse();
+    }
+
+    /* Clears the staged Range receiver and the explicit step, when present. */
+    private static void emitClearRangeOperands(
+            ProtosBytecodeRootNodeGen.Builder builder, BytecodeLocal receiver, BytecodeLocal step) {
+        builder.emitClearLocal(receiver);
+        if (step != null) {
+            builder.emitClearLocal(step);
+        }
     }
 
     /* The explicit step operand, or an unused Integer placeholder for each. */

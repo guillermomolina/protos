@@ -2619,6 +2619,160 @@ final class ProtosPerf045RangeEachInlineTest {
             return name.contains("merge.conditional") || name.contains("IsStandard")
                     || (name.contains("branch") && instruction.getBytecodeIndex() < advance);
         }), "no Array/Range decision precedes advancement in the repeated condition");
+        assertFalse(repeated.stream().map(ProtosInstructionNames::of).anyMatch(name ->
+                        name.contains("c.Make") || name.matches("c\\.Call[A-Za-z]*Method(\\$.*)?")),
+                "construction producers and invocations stay outside the repeated condition");
+    }
+
+    /*
+     * The successful Range preparation clears the compiler-owned Range
+     * receiver, and the staged explicit step, before the loop condition: the
+     * cursor alone carries the iteration, so neither stays live during the
+     * loop. Resolved from instruction indices and local metadata.
+     */
+    private static void assertRangeOperandsClearedBeforeLoop(
+            ProtosBytecodeRootNode root, boolean stepped) {
+        BytecodeNode bytecode = root.getBytecodeNode();
+        List<Instruction> instructions = logicalInstructions(bytecode.getInstructionsAsList());
+        List<Instruction> prepares = named(instructions, "PrepareRangeIteration");
+        assertEquals(1, prepares.size(), () -> instructions.toString());
+        Instruction prepare = prepares.get(0);
+        Instruction guard = instructions.stream()
+                .filter(instruction -> instruction.getBytecodeIndex() > prepare.getBytecodeIndex())
+                .findFirst().orElseThrow();
+        assertTrue(guard.getName().contains("branch.false"),
+                () -> "the preparation answer guards the standard loop: " + guard);
+        int alternative = bytecodeIndexOperand(guard);
+        List<Instruction> next = named(instructions, "IterationNext");
+        assertEquals(1, next.size(), () -> instructions.toString());
+        int advance = next.get(0).getBytecodeIndex();
+        int condition = instructions.stream()
+                .filter(instruction -> instruction.getName().contains("branch.backward"))
+                .mapToInt(ProtosPerf045RangeEachInlineTest::bytecodeIndexOperand)
+                .filter(target -> target > guard.getBytecodeIndex() && target <= advance)
+                .min().orElseThrow();
+        List<String> operands = stepped
+                ? List.of("rangeReceiver", "rangeStep") : List.of("rangeReceiver");
+        for (String name : operands) {
+            java.util.Set<Integer> offsets = new java.util.HashSet<>();
+            bytecode.getLocals().stream()
+                    .filter(local -> name.equals(local.getName()))
+                    .forEach(local -> offsets.add(local.getLocalOffset()));
+            assertFalse(offsets.isEmpty(), () -> name + " is a staged local");
+            assertTrue(instructions.stream().anyMatch(instruction ->
+                            instruction.getName().equals("clear.local")
+                                    && instruction.getBytecodeIndex() > guard.getBytecodeIndex()
+                                    && instruction.getBytecodeIndex() < condition
+                                    && offsets.stream().anyMatch(offset -> readsOffset(instruction, offset))),
+                    () -> name + " is cleared before the loop condition: " + instructions);
+            assertTrue(instructions.stream()
+                            .filter(instruction -> instruction.getBytecodeIndex() >= condition
+                                    && instruction.getBytecodeIndex() < alternative)
+                            .filter(instruction -> !instruction.getName().equals("clear.local"))
+                            .noneMatch(instruction -> offsets.stream()
+                                    .anyMatch(offset -> readsOffset(instruction, offset))),
+                    () -> name + " is not used by the standard loop: " + instructions);
+        }
+    }
+
+    private static int bytecodeIndexOperand(Instruction instruction) {
+        return instruction.getArguments().stream()
+                .filter(argument -> argument.getKind() == Instruction.Argument.Kind.BYTECODE_INDEX)
+                .findFirst().orElseThrow().asBytecodeIndex();
+    }
+
+    @Test
+    void successfulRangePreparationReleasesItsStagedOperandsBeforeTheLoop() throws Exception {
+        inContext(() -> {
+            Module each = new Module();
+            each.run("run: () => {\nframe: 0\nRange(0, 8).each(i => { hook(i) })\n}\nrun()");
+            assertEquals(8, each.visits.size());
+            assertRangeOperandsClearedBeforeLoop(each.runRoot(), false);
+            ProtosI115MCompactLoweringTest.assertSingleProducerConstruction(each.runRoot(), "c.MakeRange");
+
+            Module stepped = new Module(each.prelude);
+            stepped.run("run: () => {\nframe: 0\nInvertedRange(8, 0).eachStep(-2, i => { hook(i) })\n}\nrun()");
+            assertEquals(List.of("8", "6", "4", "2"), stepped.visitTexts());
+            assertRangeOperandsClearedBeforeLoop(stepped.runRoot(), true);
+        });
+    }
+
+    /*
+     * A selected Array or Range factory that suspends inside the construction
+     * producer resumes without repeating any effect; the producer's value is
+     * the factory's own result, at composed and terminal sites, and a
+     * suspended Range construction evaluates the explicit step only after it
+     * completes.
+     */
+    @Test
+    void suspendedArrayFactoryResumesInsideTheConstructionProducer() throws Exception {
+        assertSuspendedRun(
+                """
+                build: (Array) => {
+                    frame: 0
+                    values: Array(1, 2)
+                    values + 10
+                }
+                build((a, b) => {
+                    hook(a)
+                    gate.value()
+                    hook(b)
+                    a + b
+                })
+                """,
+                List.of(1L), List.of(1L, 2L), "13");
+        assertSuspendedRun(
+                """
+                build: (Array) => Array(1, 2)
+                build((a, b) => {
+                    hook(a)
+                    gate.value()
+                    hook(b)
+                    a + b
+                }) + 10
+                """,
+                List.of(1L), List.of(1L, 2L), "13");
+    }
+
+    @Test
+    void suspendedRangeFactoryResumesBeforeTheStepIsEvaluated() throws Exception {
+        assertSuspendedRun(
+                """
+                note: (value) => {
+                    hook(value)
+                    value
+                }
+                custom: {
+                    eachStep: (step, block) => {
+                        block(step)
+                        null
+                    }
+                }
+                build: (Range) => {
+                    frame: 0
+                    seen: 0
+                    Range(0, 3).eachStep(note(5), (i) => { seen = i })
+                    seen
+                }
+                build((a, b) => {
+                    hook(a)
+                    gate.value()
+                    hook(b)
+                    custom
+                })
+                """,
+                List.of(0L), List.of(0L, 3L, 5L), "5");
+        assertSuspendedRun(
+                """
+                build: (Range) => Range(4, 6)
+                build((a, b) => {
+                    hook(a)
+                    gate.value()
+                    hook(b)
+                    a * b
+                })
+                """,
+                List.of(4L), List.of(4L, 6L), "24");
     }
 
     @Test
@@ -2748,8 +2902,13 @@ final class ProtosPerf045RangeEachInlineTest {
                     "a constructed Range receiver observes no Array selection");
             assertNoStandaloneAdmission(names);
             List<Instruction> listed = module.runRoot().getBytecodeNode().getInstructionsAsList();
-            ProtosI115MCompactLoweringTest.assertConstantArrayFallbackCleanup(
-                    module.runRoot(), "MakeConstantLongArray", "c.CallVarargsMethod", 64);
+            // Each construction has one producer that completes the value
+            // and composes only a suspended selected factory.
+            ProtosI115MCompactLoweringTest.assertSingleProducerConstruction(
+                    module.runRoot(), "MakeConstantLongArray");
+            ProtosI115MCompactLoweringTest.assertSingleProducerConstruction(
+                    module.runRoot(), "c.MakeRange");
+            assertRangeOperandsClearedBeforeLoop(module.runRoot(), false);
             // The indexed outcome is consumed by addition.
             assertCompletedResultConsumedBy(listed, "BinarySubscript", "NumberAdd");
             // The ordinary-dispatch branch creates the callback over the live
@@ -3036,17 +3195,45 @@ final class ProtosPerf045RangeEachInlineTest {
      * returns without clearing the prefix scratch locals.
      */
     private static void assertNoTerminalScratchClears(ProtosBytecodeRootNode root) {
-        List<Instruction> instructions = root.getBytecodeNode().getInstructionsAsList();
+        BytecodeNode bytecode = root.getBytecodeNode();
+        List<Instruction> instructions = bytecode.getInstructionsAsList();
         int last = instructions.size() - 1;
         while (last >= 0 && !instructions.get(last).getName().equals("return")) {
             last--;
         }
         assertTrue(last > 0, () -> "run ends with a return: " + instructions);
+        // The alternative Range dispatch releases its own staged receiver
+        // and step after its invocation completes; that is not a clear of
+        // the terminal read's scratch.
+        // Block scoping is disabled in this root: each exempted physical
+        // offset must resolve to exactly one logical local, which must be
+        // the compiler-owned rangeReceiver or rangeStep.
+        var locals = bytecode.getLocals();
+        java.util.Set<Integer> iterationStaging = new java.util.HashSet<>();
+        locals.stream()
+                .filter(local -> "rangeReceiver".equals(local.getName())
+                        || "rangeStep".equals(local.getName()))
+                .forEach(local -> iterationStaging.add(local.getLocalOffset()));
+        for (int offset : iterationStaging) {
+            List<?> owners = locals.stream()
+                    .filter(local -> local.getLocalOffset() == offset)
+                    .map(local -> local.getName())
+                    .toList();
+            assertEquals(1, owners.size(),
+                    () -> "offset " + offset + " maps to exactly one logical local: " + owners);
+            assertTrue("rangeReceiver".equals(owners.get(0)) || "rangeStep".equals(owners.get(0)),
+                    () -> "offset " + offset + " is Range iteration staging: " + owners);
+        }
         List<String> tail = new ArrayList<>();
         for (int index = last - 1; index >= 0; index--) {
-            String name = instructions.get(index).getName();
+            Instruction instruction = instructions.get(index);
+            String name = instruction.getName();
             if (name.contains("branch")) {
                 break;
+            }
+            if (name.equals("clear.local") && iterationStaging.stream()
+                    .anyMatch(offset -> readsOffset(instruction, offset))) {
+                continue;
             }
             tail.add(name);
         }
