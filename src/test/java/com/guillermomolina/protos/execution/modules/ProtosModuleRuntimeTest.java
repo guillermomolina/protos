@@ -393,6 +393,186 @@ class ProtosModuleRuntimeTest {
     }
 
     @Test
+    void i173ReflectiveModuleCreationSeparatesPrivateAndPublicSlots()
+            throws Exception {
+        MemoryResolver resolver =
+                new MemoryResolver()
+                        .publicModule(
+                                "reflective-module",
+                                """
+                                context.createSlot("hidden", 41)
+                                this.createSlot("published", 42)
+                                this.createSlot("readHidden", () => hidden)
+                                """);
+
+        ProtosPrelude prelude =
+                new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+        ProtosActivation actor = prelude.newModuleActivation();
+
+        ProtosObjectValue module =
+                assertInstanceOf(
+                        ProtosObjectValue.class,
+                        eval("import(\"reflective-module\")", actor));
+
+        assertEquals(
+                java.util.Set.of("published", "readHidden"),
+                module.localSlotsSnapshot().keySet());
+
+        assertFalse(module.hasLocalSlot("hidden"));
+
+        assertProtosTrue(
+                """
+                module: import("reflective-module")
+                (module.published == 42) &&
+                    (module.readHidden() == 41) &&
+                    (module.hasSlot("hidden") === false)
+                """,
+                actor);
+    }
+
+    @Test
+    void i173ReflectiveModuleSlotsWithEqualNamesRemainIndependent()
+            throws Exception {
+        MemoryResolver resolver =
+                new MemoryResolver()
+                        .publicModule(
+                                "reflective-shadow",
+                                """
+                                context.createSlot("shared", "private")
+                                this.createSlot("shared", "public")
+                                this.createSlot("readPrivate", () => shared)
+                                this.createSlot("readPublic", () => this.shared)
+                                """);
+
+        ProtosPrelude prelude =
+                new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+
+        assertProtosTrue(
+                """
+                module: import("reflective-shadow")
+                (module.shared == "public") &&
+                    (module.readPrivate() == "private") &&
+                    (module.readPublic() == "public")
+                """,
+                prelude.newModuleActivation());
+    }
+
+    @Test
+    void i173ReflectiveModuleUpdatePreservesPrivateCapture()
+            throws Exception {
+        MemoryResolver resolver =
+                new MemoryResolver()
+                        .publicModule(
+                                "reflective-private-update",
+                                """
+                                initializer: context
+                                context.createSlot("hidden", 10)
+                                this.createSlot("read", () => hidden)
+                                this.createSlot(
+                                    "write",
+                                    (value) => initializer.updateSlot("hidden", value)
+                                )
+                                """);
+
+        ProtosPrelude prelude =
+                new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+
+        assertProtosTrue(
+                """
+                module: import("reflective-private-update")
+                before: module.read()
+                payload: {}
+                result: module.write(payload)
+                (before == 10) &&
+                    (result === payload) &&
+                    (module.read() === payload) &&
+                    (module.hasSlot("hidden") === false) &&
+                    (module.hasSlot("initializer") === false)
+                """,
+                prelude.newModuleActivation());
+    }
+
+    @Test
+    void i173ReflectiveModulePublicUpdateIsVisibleToCapturedLookup()
+            throws Exception {
+        MemoryResolver resolver =
+                new MemoryResolver()
+                        .publicModule(
+                                "reflective-public-update",
+                                """
+                                this.createSlot("published", 10)
+                                this.createSlot("read", () => published)
+                                """);
+
+        ProtosPrelude prelude =
+                new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+
+        assertProtosTrue(
+                """
+                module: import("reflective-public-update")
+                before: module.read()
+                payload: {}
+                result: module.updateSlot("published", payload)
+                (before == 10) &&
+                    (result === payload) &&
+                    (module.published === payload) &&
+                    (module.read() === payload)
+                """,
+                prelude.newModuleActivation());
+    }
+
+    @Test
+    void i173ReflectiveModuleMutationNeverCrossesVisibilityBoundary()
+            throws Exception {
+        MemoryResolver resolver =
+                new MemoryResolver()
+                        .publicModule(
+                                "reflective-local-only",
+                                """
+                                initializer: context
+                                context.createSlot("hidden", 11)
+                                this.createSlot("published", 22)
+                                this.createSlot("readHidden", () => hidden)
+                                this.createSlot(
+                                    "updatePrivate",
+                                    (name, value) =>
+                                        initializer.updateSlot(name, value)
+                                )
+                                """);
+
+        ProtosPrelude prelude =
+                new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+
+        assertProtosTrue(
+                """
+                module: import("reflective-local-only")
+
+                rejectedPublicUpdate: Error.handle(
+                    () => {
+                        module.updateSlot("hidden", 99)
+                        false
+                    },
+                    (error) => error.parent() === Error
+                )
+
+                rejectedPrivateUpdate: Error.handle(
+                    () => {
+                        module.updatePrivate("published", 99)
+                        false
+                    },
+                    (error) => error.parent() === Error
+                )
+
+                rejectedPublicUpdate &&
+                    rejectedPrivateUpdate &&
+                    (module.readHidden() == 11) &&
+                    (module.published == 22) &&
+                    (module.hasSlot("hidden") === false)
+                """,
+                prelude.newModuleActivation());
+    }
+
+    @Test
     void d242PublishedObjectsKeepMethodHomeAndSuper() throws Exception {
         MemoryResolver resolver =
                 new MemoryResolver()

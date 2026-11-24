@@ -28,6 +28,32 @@ _coreObjectMatch: (subject) => {
     this == subject
 }
 
+/// Creates an absent local slot on an open object and returns the supplied value.
+_coreObjectCreateSlot: (
+    name: _coreArgumentCountError(),
+    value: _coreArgumentCountError(),
+    ...extra
+) => {
+    (extra.size() == 0).ifFalse(() => {
+        _coreArgumentCountError()
+    })
+
+    _coreCreateLocalSlot(this, name, value)
+}
+
+/// Updates an existing writable local slot and returns the supplied value.
+_coreObjectUpdateSlot: (
+    name: _coreArgumentCountError(),
+    value: _coreArgumentCountError(),
+    ...extra
+) => {
+    (extra.size() == 0).ifFalse(() => {
+        _coreArgumentCountError()
+    })
+
+    _coreUpdateLocalSlot(this, name, value)
+}
+
 /// Invokes `block()` exactly when the receiver is canonical `null`.
 ifNull: (...args) => {
     (args.size() == 1).ifFalse(() => { _coreArgumentCountError() })

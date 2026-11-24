@@ -545,6 +545,65 @@ public final class ProtosStandardObjectProtocol {
         }
     }
 
+    /**
+     * Private Core bootstrap primitive behind the source-backed standard
+     * {@code Object.createSlot(name, value)}. The source behavior owns the
+     * public signature and argument association and passes its own receiver
+     * explicitly as {@code supplied[0]}; this primitive's activation receiver
+     * is never the mutation target. The receiver's structural authority
+     * performs the open-state and local-absence checks and the creation as
+     * one operation, so no delegated lookup and no overridable reflective
+     * message participates.
+     */
+    static Object createLocalSlot(
+            ProtosActivation activation,
+            List<?> supplied) {
+        if (supplied.size() != 3
+                || !(supplied.get(1) instanceof ProtosStringValue name)) {
+            throw invalid(activation);
+        }
+        if (!(supplied.get(0) instanceof ProtosObjectValue receiver)
+                || !ordinaryReceiver(receiver)) {
+            throw invalid(activation);
+        }
+
+        Object value = supplied.get(2);
+        try {
+            receiver.createLocalSlot(name.value(), value);
+            return value;
+        } catch (IllegalStateException invalidMutation) {
+            throw invalid(activation);
+        }
+    }
+
+    /**
+     * Private Core bootstrap primitive behind the source-backed standard
+     * {@code Object.updateSlot(name, value)}, with the same explicit-receiver
+     * layout as {@link #createLocalSlot}. The structural authority admits
+     * open and closed receivers, rejects frozen ones and never creates a
+     * slot or writes to a delegation ancestor.
+     */
+    static Object updateLocalSlot(
+            ProtosActivation activation,
+            List<?> supplied) {
+        if (supplied.size() != 3
+                || !(supplied.get(1) instanceof ProtosStringValue name)) {
+            throw invalid(activation);
+        }
+        if (!(supplied.get(0) instanceof ProtosObjectValue receiver)
+                || !ordinaryReceiver(receiver)) {
+            throw invalid(activation);
+        }
+
+        Object value = supplied.get(2);
+        try {
+            receiver.assignLocalSlot(name.value(), value);
+            return value;
+        } catch (IllegalStateException invalidMutation) {
+            throw invalid(activation);
+        }
+    }
+
     private static Object close(ProtosActivation activation, List<?> supplied) {
         if (!supplied.isEmpty()) {
             throw invalid(activation);

@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
@@ -31,6 +32,7 @@ import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
+import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.guillermomolina.protos.semantic.Canonicalizer;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
@@ -38,6 +40,8 @@ import com.oracle.truffle.api.bytecode.BytecodeConfig;
 import com.oracle.truffle.api.bytecode.BytecodeRootNodes;
 import com.oracle.truffle.api.bytecode.ContinuationResult;
 import com.oracle.truffle.api.source.Source;
+import java.nio.file.Path;
+import java.util.List;
 import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.Test;
 
@@ -288,6 +292,149 @@ final class ProtosPerf025D179LexicalMembershipStabilityReadTest {
                 context.leave();
             }
         }
+    }
+
+    /*
+     * D262-A: the public reflective createSlot/updateSlot messages mutate the
+     * same live bindings that repeated lookup sites read; a selected owner is
+     * never stale and an update never replaces the selected owner.
+     */
+    @Test
+    void reflectiveMutationRetargetsRepeatedLookupSite() throws Exception {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                ProtosPrelude prelude = corePrelude();
+                String characters =
+                        "x: \"outer\"\n"
+                                + "inner: () => {\n"
+                                + "    here: context\n"
+                                + "    read: () => x\n"
+                                + "    log: read() + read()\n"
+                                + "    here.createSlot(\"x\", \"nearer\")\n"
+                                + "    log = log + \",\" + read() + read()\n"
+                                + "    here.updateSlot(\"x\", \"updated\")\n"
+                                + "    log = log + \",\" + read()\n"
+                                + "    here.removeSlot(\"x\")\n"
+                                + "    log = log + \",\" + read()\n"
+                                + "    here.createSlot(\"x\", \"recreated\")\n"
+                                + "    log + \",\" + read()\n"
+                                + "}\n"
+                                + "inner()";
+                ProtosBytecodeRootNode root = lowerModule(characters, "perf025-d262-retarget.protos");
+                String expected = "outerouter,nearernearer,updated,outer,recreated";
+                for (int round = 0; round < 3; round++) {
+                    Object result = root.getCallTarget().call(prelude.newModuleActivation());
+                    assertEquals(
+                            expected,
+                            assertInstanceOf(ProtosStringValue.class, result).value());
+                }
+            } finally {
+                context.leave();
+            }
+        }
+    }
+
+    @Test
+    void suspendedLookupObservesPublicReflectiveMutation() {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                ProtosPrelude prelude = corePrelude();
+                ProtosBytecodeRootNode root = yieldingLookupRoot(LANGUAGE_REF.get(null), "x");
+
+                ProtosActivation createdModule = prelude.newModuleActivation();
+                ContinuationResult created = suspend(root, createdModule);
+                ProtosObjectValue first = new ProtosObjectValue(ProtosObjectValue.rootObject());
+                ProtosObjectValue second = new ProtosObjectValue(ProtosObjectValue.rootObject());
+                assertSame(first, reflect(createdModule, "createSlot", "x", first));
+                assertSame(second, reflect(createdModule, "updateSlot", "x", second));
+                assertSame(second, created.continueWith(ProtosNullValue.INSTANCE));
+
+                ProtosActivation recreatedModule = prelude.newModuleActivation();
+                ContinuationResult recreated = suspend(root, recreatedModule);
+                reflect(recreatedModule, "createSlot", "x", first);
+                recreatedModule.context().removeLocalSlot("x");
+                assertSame(
+                        ProtosNullValue.INSTANCE,
+                        reflect(recreatedModule, "createSlot", "x", ProtosNullValue.INSTANCE));
+                assertSame(
+                        ProtosNullValue.INSTANCE,
+                        recreated.continueWith(ProtosNullValue.INSTANCE),
+                        "PRESENT(null) created reflectively is presence, not absence");
+
+                ProtosActivation absentModule = prelude.newModuleActivation();
+                ContinuationResult absent = suspend(root, absentModule);
+                assertThrows(
+                        ProtosSignalException.class,
+                        () -> reflect(absentModule, "updateSlot", "x", first),
+                        "update never creates a binding");
+                assertThrows(
+                        ProtosSignalException.class,
+                        () -> absent.continueWith(ProtosNullValue.INSTANCE));
+            } finally {
+                context.leave();
+            }
+        }
+    }
+
+    @Test
+    void reflectiveMembershipSurvivesBytecodeReparse() throws Exception {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                ProtosPrelude prelude = corePrelude();
+                ProtosBytecodeRootNode root =
+                        lowerModule("x: null\ncontext\nx", "perf025-d262-reparse.protos");
+
+                ProtosActivation module = prelude.newModuleActivation();
+                assertSame(ProtosNullValue.INSTANCE, root.getCallTarget().call(module));
+
+                root.getRootNodes().ensureComplete();
+
+                ProtosObjectValue marker = new ProtosObjectValue(ProtosObjectValue.rootObject());
+                assertSame(marker, reflect(module, "updateSlot", "x", marker));
+                assertSame(marker, module.context().readLocalSlot("x").orElseThrow());
+                assertSame(marker, module.context().removeLocalSlot("x"));
+                assertSame(ProtosNullValue.INSTANCE, root.getCallTarget().call(module),
+                        "the reparsed root re-establishes the removed binding");
+                assertThrows(
+                        ProtosSignalException.class,
+                        () -> reflect(module, "createSlot", "x", marker),
+                        "a re-established binding is a duplicate for reflective creation");
+                assertSame(
+                        ProtosNullValue.INSTANCE,
+                        module.context().readLocalSlot("x").orElseThrow());
+            } finally {
+                context.leave();
+            }
+        }
+    }
+
+    private static ProtosPrelude corePrelude() {
+        try {
+            return new ProtosCoreBootstrap().bootstrap(Path.of("protos", "lib", "core"));
+        } catch (java.io.IOException failure) {
+            throw new java.io.UncheckedIOException(failure);
+        }
+    }
+
+    private static Object reflect(
+            ProtosActivation module, String selector, String name, Object value) {
+        return ProtosInvocation.invokeMessage(
+                module.context(),
+                selector,
+                List.of(new ProtosStringValue(name), value),
+                module);
+    }
+
+    private static ProtosBytecodeRootNode lowerModule(String characters, String sourceName) {
+        Source source = Source.newBuilder(ProtosLanguage.ID, characters, sourceName).build();
+        return new CanonicalToBytecodeLowerer(LANGUAGE_REF.get(null), source)
+                .lowerRoot(canonicalize(characters));
     }
 
     private static ContinuationResult suspend(

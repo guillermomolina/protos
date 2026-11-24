@@ -121,6 +121,20 @@ tests: [
         Assertions.require(import("./fixtures/range/Range.protos") === first)
         null
     }),
+    Test("source top-level context acquires a dynamic public binding", () => {
+        source: import("./fixtures/reflective/Dynamic.protos")
+        Assertions.require(source.hasSlot("dynamic binding"))
+        Assertions.require(source.slotValue("dynamic binding") == "created")
+        null
+    }),
+    Test("reflective update of a source binding is observed by captured lookup", () => {
+        source: import("./fixtures/reflective/Dynamic.protos")
+        source.updateSlot("counter", 5)
+        Assertions.require(source.readCounter() == 5)
+        source.updateSlot("counter", 1)
+        Assertions.require(source.readCounter() == 1)
+        null
+    }),
     Test("extracted module closure rebinds its receiver normally", () => {
         Assertions: import("std:test/assertions")
         require: Assertions.require

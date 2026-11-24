@@ -309,15 +309,27 @@ class ProtosCoreBootstrapTest {
                 assertSourceBackedObjectClosure(object, "ifNull");
         ProtosClosureValue ifNotNull =
                 assertSourceBackedObjectClosure(object, "ifNotNull");
+        ProtosClosureValue createSlot =
+                assertSourceBackedObjectClosure(object, "createSlot");
+        ProtosClosureValue updateSlot =
+                assertSourceBackedObjectClosure(object, "updateSlot");
+        assertTrue(createSlot.requiresContextLocalExecutionProjectionForRuntime());
+        assertTrue(updateSlot.requiresContextLocalExecutionProjectionForRuntime());
 
         assertFalse(object.hasLocalSlot("!="));
+        for (String primitive : java.util.List.of(
+                "_coreCreateLocalSlot", "_coreUpdateLocalSlot")) {
+            assertFalse(object.hasLocalSlot(primitive), primitive);
+            assertFalse(prelude.bindings().hasLocalSlot(primitive), primitive);
+        }
 
         // PLAT066-C: a Closure that does not use its creator captures no lexical
         // Context of it; a captured definition Context, if any, is shared, frozen and
         // exposes none of the Core's private helper bindings.
         java.util.Set<ProtosObjectValue> definitionContexts =
                 java.util.Collections.newSetFromMap(new IdentityHashMap<>());
-        for (ProtosClosureValue behavior : java.util.List.of(init, equals, match, ifNull, ifNotNull)) {
+        for (ProtosClosureValue behavior : java.util.List.of(
+                init, equals, match, ifNull, ifNotNull, createSlot, updateSlot)) {
             assertTrue(behavior.capturedLexicalContexts().size() <= 1);
             definitionContexts.addAll(behavior.capturedLexicalContexts());
         }
@@ -326,9 +338,34 @@ class ProtosCoreBootstrapTest {
             assertTrue(sourceContext.isFrozen());
             for (String helper : java.util.List.of(
                     "_coreObjectInit", "_coreObjectEquals", "_coreObjectMatch",
-                    "_coreObjectNotEquals", "ifNull", "ifNotNull")) {
+                    "_coreObjectNotEquals", "ifNull", "ifNotNull",
+                    "_coreObjectCreateSlot", "_coreObjectUpdateSlot")) {
                 assertFalse(sourceContext.hasLocalSlot(helper), helper);
             }
+        }
+
+        // D262-A: the source-backed reflective mutators reach their structural
+        // primitives through the retained private definition Context, which
+        // holds exactly the native bootstrap helpers and is frozen.
+        assertEquals(1, definitionContexts.size());
+        for (ProtosObjectValue sourceContext : definitionContexts) {
+            assertEquals(
+                    Set.of(
+                            "_coreArgumentCountError",
+                            "_coreCreateLocalSlot",
+                            "_coreUpdateLocalSlot"),
+                    sourceContext.localSlotsSnapshot().keySet());
+            for (String primitive : java.util.List.of(
+                    "_coreArgumentCountError",
+                    "_coreCreateLocalSlot",
+                    "_coreUpdateLocalSlot")) {
+                ProtosClosureValue nativePrimitive =
+                        assertInstanceOf(
+                                ProtosClosureValue.class,
+                                sourceContext.readLocalSlot(primitive).orElseThrow());
+                assertTrue(nativePrimitive.nativeBody().isPresent(), primitive);
+            }
+            assertTrue(sourceContext.isFrozen());
         }
 
         ProtosObjectValue receiver = new ProtosObjectValue(object);
@@ -368,6 +405,24 @@ class ProtosCoreBootstrapTest {
         assertSame(Boolean.TRUE, result);
     }
 
+
+    @Test
+    void sharedRootReflectiveSlotMutatorsExecuteInTheEnteredContext() throws Exception {
+        ProtosPrelude prelude =
+                new ProtosCoreBootstrap()
+                        .bootstrap(Path.of("protos", "lib", "core"));
+
+        Object result =
+                ProtosTestExecutionSupport.evaluate(
+                        "target: {}\n"
+                                + "created: target.createSlot(\"a b\", 1)\n"
+                                + "updated: target.updateSlot(value: 2, name: \"a b\")\n"
+                                + "(created == 1) && (updated == 2) && "
+                                + "(target.slotValue(\"a b\") == 2)",
+                        prelude.newModuleActivation());
+
+        assertSame(Boolean.TRUE, result);
+    }
 
     @Test
     void publishesTheCompleteSharedStandardGraphFrozen() throws Exception {
@@ -424,6 +479,13 @@ class ProtosCoreBootstrapTest {
                         ProtosObjectValue.rootObject(),
                         prelude.bindings().readLocalSlot("Object").orElseThrow());
                 assertFrozenStandardGraph(prelude);
+                for (String selector : java.util.List.of("createSlot", "updateSlot")) {
+                    assertTrue(
+                            assertSourceBackedObjectClosure(
+                                            ProtosObjectValue.rootObject(), selector)
+                                    .requiresContextLocalExecutionProjectionForRuntime(),
+                            selector);
+                }
             }
         } finally {
             start.countDown();

@@ -145,7 +145,9 @@ final class ProtosTestToolRepositoryCompletenessSupport {
                     "conformance/modules/fixtures/range/Range.protos",
                     "D242 conformance module import fixture",
                     "conformance/modules/fixtures/range/module.protos",
-                    "D242 conformance module import fixture");
+                    "D242 conformance module import fixture",
+                    "conformance/modules/fixtures/reflective/Dynamic.protos",
+                    "D262-A conformance source import fixture");
 
     /**
      * A JUnit-owned boundary: a source under {@code directory} that declares no suite-native

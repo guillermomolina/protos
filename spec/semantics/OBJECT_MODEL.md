@@ -553,7 +553,9 @@ This publication rule is **shallow**, exactly like ordinary `freeze()`. It does 
 
 An open object permits local slot creation, modification, and removal subject to the normal rules. Slot removal never delegates.
 
-`Object` is the standard root prototype for ordinary objects and provides the ordinary reflective messages `removeSlot(name)`, `close()`, and `freeze()`. These are normal message sends backed by runtime primitives; they are not special grammar forms.
+`Object` is the standard root prototype for ordinary objects and provides the ordinary structural messages `createSlot(name, value)`, `updateSlot(name, value)`, `removeSlot(name)`, `close()`, and `freeze()`. These are normal message sends whose standard behavior performs the corresponding structural operation; they are not special grammar forms, and a receiver or delegation parent may override them like any other inherited slot.
+
+Introducing `createSlot` and `updateSlot` (D262-A) adds exactly two ordinary local slots to the standard root `Object`. The standard root remains subject to the shared-object publication rule above: it is completely established and `FROZEN` before any guest observation, so `Object.createSlot(...)` and `Object.updateSlot(...)` on the root itself fail through the ordinary frozen-object rules.
 
 Default object construction reached by parenthesized invocation is an ordinary inherited message, not an object-model category: the standard root owns an ordinary local `construct` slot (D239-C1) whose standard behavior creates a fresh object whose immutable delegation parent is exactly its receiver and then sends `init` to it. Invocation, the `call` → `construct` → `init` ordering and custom `construct` results are owned by `CALLABLES.md` (Polymorphic Invocation and Object Construction). Introducing `Object.construct` adds one observable root-local slot under the ordinary reflection rules below; it introduces no privileged prototype category, constructor flag, or additional per-object state, and delegation parents, slot creation, object state and reflection are otherwise unchanged.
 
@@ -563,10 +565,18 @@ The standard structural messages inherited from `Object` have the following
 normal-result contracts:
 
 ```text
-receiver.removeSlot(name)  -> exact value removed from the local slot
-receiver.close()           -> receiver
-receiver.freeze()          -> receiver
+receiver.createSlot(name, value)  -> exact supplied value
+receiver.updateSlot(name, value)  -> exact supplied value
+receiver.removeSlot(name)         -> exact value removed from the local slot
+receiver.close()                  -> receiver
+receiver.freeze()                 -> receiver
 ```
+
+A successful `createSlot(name, value)` or `updateSlot(name, value)` returns the
+exact object supplied as `value`, including canonical `null`. It performs no
+copy, coercion, or second read of the slot to determine that result. If the
+operation fails under the rules of Core Reflection below, no normal result is
+produced.
 
 A successful `removeSlot(name)` returns the exact object that occupied the
 removed local slot immediately before removal. It performs no copy, coercion, or
@@ -655,27 +665,108 @@ Core v0.1 provides a deliberately small reflective protocol through ordinary mes
 object.hasSlot("name")
 object.slotNames()
 object.slotValue("name")
+object.createSlot("name", value)
+object.updateSlot("name", value)
 object.parent()
 ```
 
-The slot-oriented reflective operations inspect only slots local to the receiver.
+The slot-oriented reflective operations inspect or mutate only slots local to the receiver.
 
 For every standard Object operation in this local-slot-name family whose public
-parameter is named `name` — `hasSlot(name)`, `slotValue(name)`, and
-`removeSlot(name)` — the argument must be a semantic `String` value. No implicit
+parameter is named `name` — `hasSlot(name)`, `slotValue(name)`,
+`createSlot(name, value)`, `updateSlot(name, value)`, and `removeSlot(name)` —
+the argument must be a semantic `String` value. No implicit
 conversion, stringification, selector coercion, delegation-based String-like
 acceptance, or host-name adaptation is performed. After ordinary argument
 evaluation, an invalid non-String `name` signals an `Error` before the operation
-inspects the receiver's local slot table and, for `removeSlot`, before any
-structural mutation.
+inspects the receiver's local slot table and, for `createSlot`, `updateSlot`,
+and `removeSlot`, before any structural mutation.
 
 A valid String denotes exactly its semantic Unicode scalar-value sequence as the
-slot name to test, read, or remove. Argument validation does not itself perform
+slot name to test, read, create, update, or remove. Argument validation does not itself perform
 delegated slot lookup. After that validation, the existing local-only contracts
 apply: `hasSlot` returns canonical `false` for a valid String naming no local
 slot, while `slotValue` and `removeSlot` signal their ordinary missing-local-slot
 Error. A delegated slot with the same name never satisfies these local
 operations.
+
+### Reflective local slot creation and update (D262-A)
+
+`createSlot(name, value)` and `updateSlot(name, value)` are the reflective,
+dynamically named counterparts of the explicit member forms `object.x: value`
+and `object.x = value`. Their standard behavior is defined entirely by the
+ordinary local slot model of §3 and the open/closed/frozen rules of §§22–24:
+
+- **Signature.** Each operation has exactly two public named parameters,
+  `name` and `value`, and exactly two arguments must be supplied. Arguments
+  associate with those parameters under the ordinary positional, named, and spread
+  association rules owned by `CALLABLES.md`, so `name:` and `value:` labels may
+  be used in either source order and mixed with positional arguments. A missing
+  argument, an excess argument, an unknown label, or a positional/named
+  collision signals an `Error`. An explicitly supplied canonical `null` is a
+  supplied argument, never absence.
+- **Name domain.** `name` follows the semantic-String rule above. Any valid
+  semantic Unicode scalar-value sequence is a slot name, including the empty
+  String, Strings containing whitespace or punctuation, reserved-word spellings,
+  and other Strings that are not identifiers in the source grammar. No identifier
+  restriction, Unicode normalization, case folding, or conversion applies; two
+  Strings name the same slot exactly when their scalar-value sequences are equal.
+- **Receiver domain.** The receiver must be an ordinary object under the
+  receiver-domain rules of this document. A represented Number value signals an
+  `Error`, exactly as for the other structural mutators; an ordinary object that
+  merely delegates to such a value remains ordinary.
+- **Creation.** `createSlot` succeeds only when the receiver is OPEN and has no
+  local slot with that name. It creates exactly one local slot holding exactly
+  `value`. It never searches the delegation chain for a destination and never
+  overwrites an existing local slot; when only an ancestor has the name, it
+  creates a local override and leaves the ancestor unchanged. A duplicate local
+  name or a CLOSED or FROZEN receiver signals an `Error` and leaves the receiver
+  unchanged.
+- **Update.** `updateSlot` succeeds only when the receiver already has a local
+  slot with that name and is not FROZEN; OPEN and CLOSED receivers are both
+  admitted. It replaces only that local slot's value with exactly `value`. It
+  never creates a slot and never writes to a delegation ancestor: a name that is
+  absent locally, including a name available only through delegation, signals an
+  `Error`. A FROZEN receiver signals an `Error`.
+- **No upsert.** Neither operation falls back to the other.
+- **Errors.** Invalid argument association, invalid arity, an invalid name, an
+  invalid receiver, an invalid mutation state, or local-slot membership failure
+  signals a fresh generic `Error` under `ERRORS.md`. No new Error prototype or
+  category is introduced. An Error or other control transfer originating during
+  receiver or argument evaluation retains its existing ordinary semantics and is
+  not replaced by a generic `Error`.
+- **Stored values.** The stored value is the exact supplied object. Storing a
+  Closure does not invoke it, bind it to the receiver, or otherwise transform it;
+  later member extraction and invocation of that slot follow the ordinary
+  receiver and `methodHome` rules of `CALLABLES.md`, exactly as for a slot
+  created by `:`. No setter, conversion, or callback is invoked.
+- **Evaluation and suspension.** These are ordinary message sends: the receiver
+  and all argument expressions are evaluated and associated under ordinary
+  invocation semantics before the standard behavior attempts any mutation. The
+  standard behavior introduces no suspension point, implicit await, or rollback
+  of effects produced by argument evaluation.
+- **Overriding.** `createSlot` and `updateSlot` are ordinary inherited slots of
+  `Object`; a receiver or ancestor may override them. The standard behavior does
+  not consult other overridable reflective messages such as `hasSlot`,
+  `slotValue`, `parent`, `close`, or `freeze` to perform its checks.
+- **Indexing and delegation.** A slot created or updated reflectively is an
+  ordinary slot, indistinguishable from one created by `:` or assigned by `=`:
+  it participates identically in member lookup, `slotNames()`, `removeSlot`,
+  composition, `without`, and `alias`. These operations do not create indexed
+  associations, do not send `at` or `atPut`, and do not change delegation.
+
+```js
+key: "na" + "me"
+record: {}
+record.createSlot(key, "Rex")     // "Rex"
+record.name                       // "Rex"
+record.updateSlot(key, "Max")     // "Max"
+record.createSlot("name", 1)      // Error: local slot already exists
+{}.updateSlot("missing", 1)       // Error: no local slot
+```
+
+The consequences of these operations for genuine execution contexts are owned by
+`EXECUTION_AND_CONTROL.md` §4 and §6.
 
 ```text
 hasSlot(name)

@@ -8,6 +8,14 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.194-SNAPSHOT
+
+- **I173 / D262-A.** Add ordinary reflective `Object.createSlot(name, value)` and `Object.updateSlot(name, value)` messages for runtime-computed semantic String slot names, including names that cannot be expressed as source identifiers. Creation requires an absent local slot on an open object; updating requires an existing writable local slot. Both return the exact supplied value, support ordinary named argument association, and never mutate delegation ancestors or perform implicit upsert.
+- Implement both public behaviors as source-backed Core Closures in `Object.protos`, reusing the existing bootstrap and structural mutation authority through two private native primitives. Preserve static slot access, Bytecode DSL lowering, frame-native lexical bindings and captured-cell identity without introducing new production Java classes or storage mechanisms.
+- Preserve live reflective mutation of execution contexts, lexical shadowing, removal and recreation, MODULE private/public separation, Actor transfer rules and read-only host interoperability.
+- Extend guest and Java conformance coverage for reflection, lexical membership, named arguments, suspension, module initialization, shared Core publication and Actor transfer.
+- Publish the corresponding normative contract in specification revision 0.1.508.
+
 ## 0.4.193-SNAPSHOT
 
 - **I171 / I172 / PLAT068-R3.** Give Bytes, Vector and Matrix their primitive private storage.

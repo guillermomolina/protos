@@ -53,6 +53,63 @@ tests: [
             })
         }
         Assertions.require(tool009LegacyCase().value() === true)
+    }),
+    // D262-A: slots created or updated reflectively are ordinary slots for
+    // Actor transfer; transferability and copy isolation are unchanged.
+    Test("reflectively populated object transfers by value", () => {
+        worker: Actor.spawn("workers", "echo")
+        original: {}
+        original.createSlot("dynamic name", 7)
+        original.createSlot("count", 1)
+        original.updateSlot("count", 2)
+        copy: worker.request("echo", original).value()
+        worker.stop()
+        Assertions.require(copy !== original)
+        Assertions.require(copy.slotNames().size() == 2)
+        Assertions.require(copy.slotValue("dynamic name") == 7)
+        Assertions.require(copy.count == 2)
+    }),
+    Test("reflectively stored aliases keep graph aliasing on transfer", () => {
+        worker: Actor.spawn("workers", "echo")
+        shared: { marker: 1 }
+        original: {}
+        original.createSlot("first", shared)
+        original.createSlot("second", shared)
+        copy: worker.request("echo", original).value()
+        worker.stop()
+        Assertions.require(copy.first === copy.second)
+        Assertions.require(copy.first !== shared)
+        Assertions.require(copy.first.marker == 1)
+    }),
+    Test("reflectively stored Closure remains non transferable", () => {
+        worker: Actor.spawn("workers", "echo")
+        created: {}
+        created.createSlot("hook", () => { 1 })
+        updated: { hook: 1 }
+        updated.updateSlot("hook", () => { 2 })
+        Assertions.signals(NonTransferableValue, () => {
+            worker.request("echo", created)
+        })
+        Assertions.signals(NonTransferableValue, () => {
+            worker.request("echo", updated)
+        })
+        worker.stop()
+        Assertions.require(created.hook() == 1)
+        Assertions.require(updated.hook() == 2)
+    }),
+    Test("mutating a transferred copy does not mutate the sender object", () => {
+        worker: Actor.spawn("workers", "mailbox")
+        original: {}
+        original.createSlot("count", 1)
+        worker.request("set", original).value()
+        original.updateSlot("count", 2)
+        stored: worker.request("get").value()
+        snapshot: stored.count
+        stored.updateSlot("count", 3)
+        worker.stop()
+        Assertions.require(snapshot == 1)
+        Assertions.require(stored.count == 3)
+        Assertions.require(original.count == 2)
     })
 ]
 tests.freeze()

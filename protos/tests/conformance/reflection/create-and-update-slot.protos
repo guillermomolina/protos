@@ -1,0 +1,544 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// D262-A explicit reflective local slot creation and update through the
+// ordinary inherited Object messages createSlot(name, value) and
+// updateSlot(name, value).
+
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+
+// Closures defined in an object body bind `this` dynamically when later
+// reached through a message send.
+methods: {
+    who: () => this
+    describe: () => "child:" + super.describe()
+    call: (argument) => [this, argument]
+    otherCall: (argument) => [argument, this]
+    init: (value) => {
+        this.stored: value
+    }
+    otherInit: (value) => {
+        this.stored: value * 2
+    }
+}
+
+digits: ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
+
+tests: [
+    Test("dynamically computed name creates a local slot", () => {
+        target: {}
+        name: "dyn" + "amic"
+        target.createSlot(name, 7)
+        Assertions.require(target.hasSlot("dynamic"))
+        Assertions.require(target.slotNames().size() == 1)
+    }),
+    Test("created slot is observed by member access hasSlot and slotValue", () => {
+        target: {}
+        target.createSlot("count", 3)
+        Assertions.require(target.count == 3)
+        Assertions.require(target.hasSlot("count"))
+        Assertions.require(target.slotValue("count") == 3)
+    }),
+    Test("reflective update is observed by member access", () => {
+        target: {}
+        target.createSlot("count", 3)
+        target.updateSlot("count", 4)
+        Assertions.require(target.count == 4)
+    }),
+    Test("static creation then reflective update", () => {
+        target: { count: 1 }
+        target.updateSlot("count", 2)
+        Assertions.require(target.count == 2)
+    }),
+    Test("reflective creation then static update", () => {
+        target: {}
+        target.createSlot("count", 1)
+        target.count = 2
+        Assertions.require(target.slotValue("count") == 2)
+    }),
+    Test("create and update results are the exact supplied values", () => {
+        target: {}
+        first: {}
+        second: {}
+        Assertions.require(target.createSlot("item", first) === first)
+        Assertions.require(target.updateSlot("item", second) === second)
+    }),
+    Test("identity-bearing value is stored without copying", () => {
+        target: {}
+        payload: { marker: 1 }
+        target.createSlot("payload", payload)
+        payload.marker = 2
+        Assertions.require(target.payload === payload)
+        Assertions.require(target.payload.marker == 2)
+    }),
+    Test("canonical null is stored and remains present", () => {
+        target: {}
+        Assertions.require(target.createSlot("empty", null) === null)
+        Assertions.require(target.hasSlot("empty"))
+        Assertions.require(target.slotValue("empty") === null)
+    }),
+    Test("a present null slot updates normally", () => {
+        target: { empty: null }
+        Assertions.require(target.updateSlot("empty", 5) == 5)
+        Assertions.require(target.empty == 5)
+    }),
+    Test("duplicate local creation fails without modifying the old value", () => {
+        old: {}
+        target: { item: old }
+        Assertions.signals(Error, () => { target.createSlot("item", 2) })
+        Assertions.require(target.item === old)
+    }),
+    Test("updating an absent local slot fails without creating it", () => {
+        target: {}
+        Assertions.signals(Error, () => { target.updateSlot("missing", 1) })
+        Assertions.require(target.hasSlot("missing") === false)
+    }),
+    Test("updating an inherited-only slot fails", () => {
+        base: { shared: 1 }
+        child: base {}
+        Assertions.signals(Error, () => { child.updateSlot("shared", 2) })
+        Assertions.require(child.hasSlot("shared") === false)
+        Assertions.require(base.shared == 1)
+    }),
+    Test("creation makes a local override of an inherited slot", () => {
+        base: { shared: 1 }
+        child: base {}
+        child.createSlot("shared", 2)
+        Assertions.require(child.hasSlot("shared"))
+        Assertions.require(child.shared == 2)
+    }),
+    Test("the delegation ancestor remains unchanged", () => {
+        base: { shared: 1 }
+        child: base {}
+        child.createSlot("shared", 2)
+        child.updateSlot("shared", 3)
+        Assertions.require(base.shared == 1)
+        Assertions.require(base.slotNames().size() == 1)
+        Assertions.require(child.parent() === base)
+    }),
+    Test("creation on a closed receiver fails", () => {
+        target: { kept: 1 }
+        target.close()
+        Assertions.signals(Error, () => { target.createSlot("added", 2) })
+        Assertions.require(target.hasSlot("added") === false)
+    }),
+    Test("update of an existing local slot on a closed receiver succeeds", () => {
+        target: { kept: 1 }
+        target.close()
+        Assertions.require(target.updateSlot("kept", 2) == 2)
+        Assertions.require(target.kept == 2)
+    }),
+    Test("creation and update on a frozen receiver fail", () => {
+        target: { kept: 1 }
+        target.freeze()
+        Assertions.signals(Error, () => { target.createSlot("added", 2) })
+        Assertions.signals(Error, () => { target.updateSlot("kept", 2) })
+        Assertions.require(target.kept == 1)
+        Assertions.require(target.hasSlot("added") === false)
+    }),
+    Test("creation and update on the frozen standard Object fail", () => {
+        Assertions.signals(Error, () => { Object.createSlot("d262Probe", 1) })
+        Assertions.signals(Error, () => { Object.updateSlot("createSlot", 1) })
+        Assertions.require(Object.hasSlot("d262Probe") === false)
+        Assertions.require(Object.hasSlot("createSlot"))
+        Assertions.require(Object.hasSlot("updateSlot"))
+    }),
+    Test("represented Number receivers reject structural mutation", () => {
+        Assertions.signals(Error, () => { (42).createSlot("added", 1) })
+        Assertions.signals(Error, () => { (42).updateSlot("added", 1) })
+        Assertions.signals(Error, () => { (1.5).createSlot("added", 1) })
+    }),
+    Test("an ordinary object delegating to a Number admits both operations", () => {
+        numeric: (3) {}
+        numeric.createSlot("added", 1)
+        numeric.updateSlot("added", 2)
+        Assertions.require(numeric.added == 2)
+        Assertions.require(numeric.hasSlot("added"))
+    }),
+    Test("the empty String is a valid name", () => {
+        target: {}
+        target.createSlot("", 1)
+        target.updateSlot("", 2)
+        Assertions.require(target.hasSlot(""))
+        Assertions.require(target.slotValue("") == 2)
+    }),
+    Test("names containing whitespace and punctuation are valid", () => {
+        target: {}
+        target.createSlot(" a b ", 1)
+        target.createSlot("a.b-c!", 2)
+        target.createSlot("line\nbreak", 3)
+        Assertions.require(target.slotValue(" a b ") == 1)
+        Assertions.require(target.slotValue("a.b-c!") == 2)
+        Assertions.require(target.slotValue("line\nbreak") == 3)
+        Assertions.require(target.hasSlot("ab") === false)
+    }),
+    Test("reserved-word spellings are valid names", () => {
+        target: {}
+        target.createSlot("this", 1)
+        target.createSlot("super", 2)
+        target.createSlot("context", 3)
+        target.createSlot("null", 4)
+        Assertions.require(target.slotValue("this") == 1)
+        Assertions.require(target.slotValue("super") == 2)
+        Assertions.require(target.slotValue("context") == 3)
+        Assertions.require(target.slotValue("null") == 4)
+    }),
+    Test("supplementary Unicode scalar values are valid names", () => {
+        target: {}
+        target.createSlot("\u{1F600}", 1)
+        target.updateSlot("\u{1F600}", 2)
+        Assertions.require(target.slotValue("😀") == 2)
+    }),
+    Test("canonically equivalent but different scalar sequences are distinct names", () => {
+        target: {}
+        target.createSlot("\u{E9}", "composed")
+        target.createSlot("e\u{301}", "decomposed")
+        Assertions.require(target.slotNames().size() == 2)
+        Assertions.require(target.slotValue("\u{E9}") == "composed")
+        Assertions.require(target.slotValue("e\u{301}") == "decomposed")
+    }),
+    Test("separately constructed equal Strings select the same slot", () => {
+        target: {}
+        target.createSlot("a" + "b", 1)
+        target.updateSlot("ab", 2)
+        Assertions.require(target.slotValue("" + "a" + "b") == 2)
+        Assertions.require(target.slotNames().size() == 1)
+    }),
+    Test("non-String names are rejected without conversion", () => {
+        target: {}
+        Assertions.signals(Error, () => { target.createSlot(1, 1) })
+        Assertions.signals(Error, () => { target.createSlot(null, 1) })
+        Assertions.signals(Error, () => { target.createSlot(true, 1) })
+        Assertions.signals(Error, () => { target.updateSlot(1, 1) })
+        Assertions.require(target.slotNames().size() == 0)
+    }),
+    Test("an object delegating to a String is not a name", () => {
+        target: {}
+        fake: String {}
+        Assertions.signals(Error, () => { target.createSlot(fake, 1) })
+        Assertions.signals(Error, () => { target.updateSlot(fake, 1) })
+        Assertions.require(target.slotNames().size() == 0)
+    }),
+    Test("slotNames ordering is deterministic after mixed creation", () => {
+        target: { b: 1 }
+        target.createSlot("a", 2)
+        target.c: 3
+        target.createSlot("aa", 4)
+        names: target.slotNames()
+        Assertions.require(names.size() == 4)
+        Assertions.require(names[0] == "a")
+        Assertions.require(names[1] == "aa")
+        Assertions.require(names[2] == "b")
+        Assertions.require(names[3] == "c")
+    }),
+    Test("an earlier slotNames snapshot remains unchanged", () => {
+        target: { b: 1 }
+        before: target.slotNames()
+        target.createSlot("a", 2)
+        Assertions.require(before.size() == 1)
+        Assertions.require(before[0] == "b")
+        Assertions.require(target.slotNames().size() == 2)
+    }),
+    Test("removeSlot observes a dynamically created slot", () => {
+        target: {}
+        payload: {}
+        target.createSlot("item", payload)
+        Assertions.require(target.removeSlot("item") === payload)
+        Assertions.require(target.hasSlot("item") === false)
+        target.createSlot("item", 1)
+        Assertions.require(target.item == 1)
+    }),
+    Test("alias without and composition observe dynamic slots", () => {
+        marker: {}
+        source: {}
+        source.createSlot("dyn", marker)
+        source.createSlot("other", 1)
+        aliased: source.alias("dyn", "copy")
+        Assertions.require(aliased.copy === marker)
+        Assertions.require(aliased.dyn === marker)
+        remaining: source.without("dyn")
+        Assertions.require(remaining.hasSlot("dyn") === false)
+        Assertions.require(remaining.other == 1)
+        composed: {
+            ...source
+        }
+        Assertions.require(composed.dyn === marker)
+    }),
+    Test("zero one and three positional arguments are rejected", () => {
+        target: {}
+        Assertions.signals(Error, () => { target.createSlot() })
+        Assertions.signals(Error, () => { target.createSlot("a") })
+        Assertions.signals(Error, () => { target.createSlot("a", 1, 2) })
+        Assertions.signals(Error, () => { target.updateSlot() })
+        Assertions.signals(Error, () => { target.updateSlot("a") })
+        target.a: 0
+        Assertions.signals(Error, () => { target.updateSlot("a", 1, 2) })
+        Assertions.require(target.a == 0)
+        Assertions.require(target.slotNames().size() == 1)
+    }),
+    Test("exactly two arguments with a null value are accepted", () => {
+        target: {}
+        target.createSlot("a", null)
+        target.updateSlot("a", null)
+        Assertions.require(target.hasSlot("a"))
+        Assertions.require(target.a === null)
+    }),
+    Test("named arguments associate in either source order", () => {
+        target: {}
+        target.createSlot(name: "a", value: 1)
+        target.createSlot(value: 2, name: "b")
+        target.updateSlot(value: 3, name: "a")
+        Assertions.require(target.a == 3)
+        Assertions.require(target.b == 2)
+    }),
+    Test("positional name with a named value", () => {
+        target: {}
+        target.createSlot("a", value: 1)
+        target.updateSlot("a", value: 2)
+        Assertions.require(target.a == 2)
+    }),
+    Test("a positional spread supplies both arguments", () => {
+        target: {}
+        target.createSlot(...["a", 1])
+        target.updateSlot(...["a", 2])
+        Assertions.require(target.a == 2)
+    }),
+    Test("an unknown named label is rejected", () => {
+        target: {}
+        Assertions.signals(Error, () => { target.createSlot("a", other: 1) })
+        Assertions.signals(Error, () => { target.createSlot("a", 1, other: 1) })
+        Assertions.require(target.slotNames().size() == 0)
+    }),
+    Test("positional and named collisions are rejected", () => {
+        target: {}
+        Assertions.signals(Error, () => { target.createSlot("a", 1, name: "b") })
+        Assertions.signals(Error, () => { target.createSlot(...["a", 1], value: 2) })
+        Assertions.require(target.slotNames().size() == 0)
+    }),
+    Test("the rest parameter cannot be supplied by name", () => {
+        target: {}
+        Assertions.signals(Error, () => { target.createSlot("a", 1, extra: []) })
+        Assertions.signals(Error, () => { target.updateSlot("a", 1, extra: []) })
+        Assertions.require(target.slotNames().size() == 0)
+    }),
+    Test("receiver name and value evaluate once left to right", () => {
+        trace: { text: "" }
+        step: (label, result) => {
+            trace.text = trace.text + label
+            result
+        }
+        target: {}
+        step("r", target).createSlot(step("n", "a"), step("v", 1))
+        step("R", target).updateSlot(step("N", "a"), step("V", 2))
+        Assertions.require(trace.text == "rnvRNV")
+        Assertions.require(target.a == 2)
+    }),
+    Test("the value completes before invalid name or state is rejected", () => {
+        trace: { count: 0 }
+        mark: (result) => {
+            trace.count = trace.count + 1
+            result
+        }
+        target: { kept: 1 }
+        Assertions.signals(Error, () => { target.createSlot(1, mark(2)) })
+        Assertions.require(trace.count == 1)
+        target.freeze()
+        Assertions.signals(Error, () => { target.updateSlot("kept", mark(3)) })
+        Assertions.require(trace.count == 2)
+        Assertions.require(target.kept == 1)
+    }),
+    Test("an Error during argument evaluation prevents mutation", () => {
+        target: {}
+        Assertions.signals(Error, () => {
+            target.createSlot("a", Error().signal())
+        })
+        Assertions.require(target.hasSlot("a") === false)
+    }),
+    Test("a non-local return during argument evaluation prevents mutation", () => {
+        target: {}
+        marker: {}
+        attempt: () => {
+            target.createSlot("a", (() => {
+                ^marker
+                null
+            })())
+            null
+        }
+        Assertions.require(attempt() === marker)
+        Assertions.require(target.hasSlot("a") === false)
+    }),
+    Test("each failed structural mutation signals a fresh generic Error", () => {
+        target: { kept: 1 }
+        first: Assertions.signals(Error, () => { target.createSlot("kept", 2) })
+        second: Assertions.signals(Error, () => { target.createSlot("kept", 2) })
+        third: Assertions.signals(Error, () => { target.updateSlot("missing", 2) })
+        Assertions.require(first !== second)
+        Assertions.require(second !== third)
+        Assertions.require(first.parent() === Error)
+        Assertions.require(third.parent() === Error)
+    }),
+    Test("selector replacement during argument evaluation is observed", () => {
+        target: {}
+        replace: () => {
+            target.createSlot: (name, value) => "custom"
+            1
+        }
+        Assertions.require(target.createSlot("a", replace()) == "custom")
+        Assertions.require(target.hasSlot("a") === false)
+    }),
+    Test("storing a Closure does not activate it", () => {
+        trace: { count: 0 }
+        target: {}
+        behavior: () => {
+            trace.count = trace.count + 1
+            null
+        }
+        target.createSlot("behavior", behavior)
+        target.updateSlot("behavior", behavior)
+        Assertions.require(trace.count == 0)
+    }),
+    Test("slotValue returns the exact stored Closure", () => {
+        target: {}
+        behavior: () => 1
+        target.createSlot("behavior", behavior)
+        Assertions.require(target.slotValue("behavior") === behavior)
+    }),
+    Test("a stored Closure invoked as a method binds dynamic this", () => {
+        target: {}
+        target.createSlot("who", methods.slotValue("who"))
+        Assertions.require(target.who() === target)
+        child: target {}
+        Assertions.require(child.who() === child)
+    }),
+    Test("delegated invocation and super use ordinary methodHome", () => {
+        base: { describe: () => "base" }
+        child: base {}
+        child.createSlot("describe", methods.slotValue("describe"))
+        leaf: child {}
+        Assertions.require(child.describe() == "child:base")
+        Assertions.require(leaf.describe() == "child:base")
+    }),
+    Test("dynamically created and updated call drives invocation", () => {
+        callable: {}
+        callable.createSlot("call", methods.slotValue("call"))
+        first: callable(5)
+        Assertions.require(first[0] === callable)
+        Assertions.require(first[1] == 5)
+        callable.updateSlot("call", methods.slotValue("otherCall"))
+        second: callable(6)
+        Assertions.require(second[0] == 6)
+        Assertions.require(second[1] === callable)
+    }),
+    Test("dynamically created construct and init drive construction", () => {
+        prototype: {}
+        prototype.createSlot("init", methods.slotValue("init"))
+        first: prototype(7)
+        Assertions.require(first.parent() === prototype)
+        Assertions.require(first.stored == 7)
+        prototype.updateSlot("init", methods.slotValue("otherInit"))
+        Assertions.require(prototype(7).stored == 14)
+        marker: {}
+        prototype.createSlot("construct", (value) => marker)
+        Assertions.require(prototype(1) === marker)
+        other: {}
+        prototype.updateSlot("construct", (value) => other)
+        Assertions.require(prototype(1) === other)
+    }),
+    Test("an overriding createSlot is selected by ordinary dispatch", () => {
+        custom: {
+            createSlot: (name, value) => "custom:" + name
+        }
+        Assertions.require(custom.createSlot("a", 1) == "custom:a")
+        Assertions.require(custom.hasSlot("a") === false)
+    }),
+    Test("an overriding updateSlot is selected by ordinary dispatch", () => {
+        custom: {
+            kept: 1
+            updateSlot: (name, value) => "custom:" + name
+        }
+        Assertions.require(custom.updateSlot("kept", 2) == "custom:kept")
+        Assertions.require(custom.kept == 1)
+    }),
+    Test("hasSlot and slotValue overrides do not affect the standard primitive", () => {
+        target: {
+            hasSlot: (name) => true
+            slotValue: (name) => 99
+        }
+        Assertions.signals(Error, () => { target.updateSlot("missing", 1) })
+        Assertions.require(target.createSlot("missing", 2) == 2)
+        Assertions.require(target.missing == 2)
+        Assertions.require(target.slotNames().size() == 3)
+    }),
+    Test("dynamic String slot names do not become indexed associations", () => {
+        log: { count: 0 }
+        indexed: {
+            at: (key) => "indexed"
+            atPut: (key, value) => {
+                log.count = log.count + 1
+                value
+            }
+        }
+        indexed.createSlot("k", 1)
+        indexed.updateSlot("k", 2)
+        Assertions.require(log.count == 0)
+        Assertions.require(indexed["k"] == "indexed")
+        Assertions.require(indexed.k == 2)
+    }),
+    Test("custom at and atPut behavior remains unaffected", () => {
+        store: { last: null }
+        indexed: {
+            at: (key) => store.last
+            atPut: (key, value) => {
+                store.last = value
+                value
+            }
+        }
+        indexed.createSlot("k", 1)
+        indexed["k"] = 5
+        Assertions.require(indexed["k"] == 5)
+        Assertions.require(indexed.k == 1)
+        Assertions.require(indexed.hasSlot("last") === false)
+    }),
+    Test("many runtime-generated names round-trip through reconstructed Strings", () => {
+        target: {}
+        i: 0
+        while(i < 10) {
+            j: 0
+            while(j < 10) {
+                target.createSlot("k" + digits[i] + digits[j], i * 10 + j)
+                j = j + 1
+            }
+            i = i + 1
+        }
+        i = 0
+        while(i < 10) {
+            j: 0
+            while(j < 10) {
+                name: "k" + digits[i] + digits[j]
+                target.updateSlot(name, (i * 10 + j) * 2)
+                j = j + 1
+            }
+            i = i + 1
+        }
+        Assertions.require(target.slotNames().size() == 100)
+        Assertions.require(target.slotValue("k00") == 0)
+        Assertions.require(target.slotValue("k37") == 74)
+        Assertions.require(target.slotValue("k99") == 198)
+        Assertions.require(target.slotNames()[0] == "k00")
+        Assertions.require(target.slotNames()[99] == "k99")
+    })
+]
+tests.freeze()

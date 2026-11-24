@@ -23,6 +23,38 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.508] - 2026-11-24
+
+### D262-A / I173 — Explicit reflective local slot creation and update
+
+- Primary owner `semantics/OBJECT_MODEL.md`: records the owner-selected D262-A
+  contract. The standard root `Object` gains two ordinary local slots,
+  `createSlot(name, value)` and `updateSlot(name, value)`, and remains frozen
+  before guest observation. Core Reflection extends the semantic-String
+  name-domain rule to both operations and defines exactly two formals `name`
+  and `value` under ordinary positional/named/spread association; arbitrary
+  Unicode scalar-value sequences as names without identifier restriction,
+  normalization or coercion; OPEN-only creation of an absent local slot;
+  update of an existing local slot on OPEN or CLOSED receivers; FROZEN,
+  duplicate-creation, missing-local-update and represented-Number receiver
+  failures as fresh ordinary Errors; no upsert, delegation search, Closure
+  activation or binding, extra suspension point, or dependence on other
+  overridable reflective messages. The structural return-contract table gains
+  `createSlot`/`updateSlot -> exact supplied value`.
+- `semantics/EXECUTION_AND_CONTROL.md`: §4 applies both operations to genuine
+  execution contexts without exception, preserving live lexical membership,
+  creation after capture, dynamic shadowing, captured-binding update,
+  PRESENT(null) versus absence, removal and recreation, and SOURCE/MODULE
+  ownership; `context.updateSlot` targets exactly that context. §6 states that
+  lookup observes reflective mutation. §8.1 distinguishes the reflective
+  message send (complete ordinary evaluation and association before mutation,
+  explicit receiver target) from bare assignment, whose §7 early destination
+  selection is unchanged.
+- Unchanged: grammar, indexed access and `at`/`atPut`, object delegation,
+  Error taxonomy, Closure capture, Actor transferability, host interoperation,
+  FFM, MODULE export policy, `slotNames()` ordering and snapshot rules, and
+  `removeSlot`, `close`, `freeze`, composition, `without` and `alias`.
+
 ## [0.1.507] - 2026-11-22
 
 ### D256-C1R — Ratified SQLite Standard Library contract

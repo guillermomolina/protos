@@ -957,6 +957,8 @@ public final class ProtosCoreBootstrap {
             requireContextLocalRootExecutionProjection(object, "init");
             requireContextLocalRootExecutionProjection(object, "==");
             requireContextLocalRootExecutionProjection(object, "match");
+            requireContextLocalRootExecutionProjection(object, "createSlot");
+            requireContextLocalRootExecutionProjection(object, "updateSlot");
             freezeSharedStandardGraph(object);
             validatePublishedRoot(object);
         }
@@ -986,7 +988,9 @@ public final class ProtosCoreBootstrap {
                         "caseOf",
                         "init",
                         "==",
-                        "match");
+                        "match",
+                        "createSlot",
+                        "updateSlot");
         if (!object.localSlotsSnapshot().keySet().containsAll(expected)) {
             throw new IllegalStateException(
                     "standard Object root publication surface is incomplete");
@@ -998,6 +1002,8 @@ public final class ProtosCoreBootstrap {
         validateExistingSourceBackedClosure(object, "init");
         validateExistingSourceBackedClosure(object, "==");
         validateExistingSourceBackedClosure(object, "match");
+        validateExistingSourceBackedClosure(object, "createSlot");
+        validateExistingSourceBackedClosure(object, "updateSlot");
     }
 
     private static void requireContextLocalRootExecutionProjection(
@@ -1038,6 +1044,8 @@ public final class ProtosCoreBootstrap {
         validateContextLocalRootExecutionProjection(object, "init");
         validateContextLocalRootExecutionProjection(object, "==");
         validateContextLocalRootExecutionProjection(object, "match");
+        validateContextLocalRootExecutionProjection(object, "createSlot");
+        validateContextLocalRootExecutionProjection(object, "updateSlot");
         /*
          * A lowered Boolean control site whose receiver is canonical true or
          * false runs the standard behavior internally; it relies on these
@@ -1206,6 +1214,8 @@ public final class ProtosCoreBootstrap {
 
 
     private static final String OBJECT_ARGUMENT_COUNT_ERROR = "_coreArgumentCountError";
+    private static final String OBJECT_CREATE_LOCAL_SLOT_PRIMITIVE = "_coreCreateLocalSlot";
+    private static final String OBJECT_UPDATE_LOCAL_SLOT_PRIMITIVE = "_coreUpdateLocalSlot";
 
     private void installSourceBackedObjectBehavior(Path coreDirectory)
             throws IOException {
@@ -1227,6 +1237,20 @@ public final class ProtosCoreBootstrap {
                             throw new ProtosSignalException(
                                     ProtosCoreErrors.newError(activation));
                         }));
+        /*
+         * The source-backed createSlot/updateSlot behaviors own their public
+         * signature and pass their receiver explicitly; only the dynamic-name
+         * structural mutation is native. Like the argument-count helper, these
+         * primitives stay private to the frozen source context.
+         */
+        sourceContext.createLocalSlot(
+                OBJECT_CREATE_LOCAL_SLOT_PRIMITIVE,
+                ProtosClosureValue.nativeClosure(
+                        ProtosStandardObjectProtocol::createLocalSlot));
+        sourceContext.createLocalSlot(
+                OBJECT_UPDATE_LOCAL_SLOT_PRIMITIVE,
+                ProtosClosureValue.nativeClosure(
+                        ProtosStandardObjectProtocol::updateLocalSlot));
 
         sourceLoader
                 .load(coreDirectory.resolve("Object.protos"))
@@ -1242,14 +1266,23 @@ public final class ProtosCoreBootstrap {
                 requireSourceBackedClosure(sourceContext, "ifNull");
         ProtosClosureValue ifNotNull =
                 requireSourceBackedClosure(sourceContext, "ifNotNull");
+        ProtosClosureValue createSlot =
+                requireSourceBackedClosure(sourceContext, "_coreObjectCreateSlot");
+        ProtosClosureValue updateSlot =
+                requireSourceBackedClosure(sourceContext, "_coreObjectUpdateSlot");
 
         sourceContext.removeLocalSlot("_coreObjectInit");
         sourceContext.removeLocalSlot("_coreObjectEquals");
         sourceContext.removeLocalSlot("_coreObjectMatch");
         sourceContext.removeLocalSlot("ifNull");
         sourceContext.removeLocalSlot("ifNotNull");
+        sourceContext.removeLocalSlot("_coreObjectCreateSlot");
+        sourceContext.removeLocalSlot("_coreObjectUpdateSlot");
         if (!sourceContext.localSlotsSnapshot().keySet().equals(
-                java.util.Set.of(OBJECT_ARGUMENT_COUNT_ERROR))) {
+                java.util.Set.of(
+                        OBJECT_ARGUMENT_COUNT_ERROR,
+                        OBJECT_CREATE_LOCAL_SLOT_PRIMITIVE,
+                        OBJECT_UPDATE_LOCAL_SLOT_PRIMITIVE))) {
             throw new IllegalStateException(
                     "Core object source left unexpected bootstrap bindings");
         }
@@ -1262,6 +1295,8 @@ public final class ProtosCoreBootstrap {
             validateExistingSourceBackedClosure(object, "match");
             validateExistingSourceBackedClosure(object, "ifNull");
             validateExistingSourceBackedClosure(object, "ifNotNull");
+            validateExistingSourceBackedClosure(object, "createSlot");
+            validateExistingSourceBackedClosure(object, "updateSlot");
             if (!object.hasLocalSlot("init")) {
                 object.createLocalSlot("init", init);
             }
@@ -1276,6 +1311,12 @@ public final class ProtosCoreBootstrap {
             }
             if (!object.hasLocalSlot("ifNotNull")) {
                 object.createLocalSlot("ifNotNull", ifNotNull);
+            }
+            if (!object.hasLocalSlot("createSlot")) {
+                object.createLocalSlot("createSlot", createSlot);
+            }
+            if (!object.hasLocalSlot("updateSlot")) {
+                object.createLocalSlot("updateSlot", updateSlot);
             }
         }
     }

@@ -542,6 +542,114 @@ final class ProtosI115PublishedLexicalContextTest {
         });
     }
 
+    // D262-A guest reflective createSlot/updateSlot enter the same frame-backed
+    // authority as lexical execution: no second store, no duplicate binding.
+
+    @Test
+    void reflectiveCreationOutsideLayoutDoesNotOverwriteLocalOrCell() throws Exception {
+        withFixture(f -> {
+            ProtosObjectValue context = observed(f,
+                    "(() => { x: 1\n y: 2\n reader: (() => y)\n saved: context\n"
+                            + " saved.createSlot(\"additional\", 7)\n context })");
+            ProtosLexicalCell cell = callable(context, "reader").capturedCellsForRuntime()[0];
+            assertEquals(1L, local(context, "x"));
+            assertEquals(2L, local(context, "y"));
+            assertEquals(2L, cell.valueOrNullForRuntime());
+            assertEquals(2L, execute(f, callable(context, "reader")));
+            assertEquals(7L, local(context, "additional"));
+        });
+    }
+
+    @Test
+    void reflectiveUpdateChangesDeclaredLocalPhysicalValue() throws Exception {
+        withFixture(f -> {
+            ProtosClosureValue closure = closure(f,
+                    "((replacement) => { x: 1\n saved: context\n"
+                            + " saved.updateSlot(\"x\", replacement)\n x })");
+            Object replacement = newObject();
+            assertSame(replacement, execute(f, closure, replacement));
+            assertTrue(operations(activationNode(closure)).contains("LoadLexicalLocal"));
+        });
+    }
+
+    @Test
+    void reflectiveUpdateOfCapturedBindingKeepsSharedCell() throws Exception {
+        withFixture(f -> {
+            ProtosObjectValue context = observed(f,
+                    "(() => { x: 1\n first: (() => x)\n second: (() => x)\n saved: context\n"
+                            + " update: ((v) => saved.updateSlot(\"x\", v))\n context })");
+            ProtosClosureValue first = callable(context, "first");
+            ProtosClosureValue second = callable(context, "second");
+            ProtosLexicalCell cell = first.capturedCellsForRuntime()[0];
+            Object replacement = newObject();
+            assertSame(replacement, execute(f, callable(context, "update"), replacement));
+            assertSame(cell, first.capturedCellsForRuntime()[0]);
+            assertSame(cell, second.capturedCellsForRuntime()[0]);
+            assertSame(replacement, cell.valueOrNullForRuntime());
+            assertSame(replacement, execute(f, first));
+            assertSame(replacement, execute(f, second));
+            assertSame(replacement, local(context, "x"));
+        });
+    }
+
+    @Test
+    void reflectiveRecreationAfterRemovalReusesOriginalBinding() throws Exception {
+        withFixture(f -> {
+            ProtosObjectValue context = observed(f,
+                    "(() => { y: {}\n reader: (() => y)\n saved: context\n"
+                            + " recreate: ((v) => { saved.removeSlot(\"y\")\n"
+                            + " saved.createSlot(\"y\", v) })\n context })");
+            ProtosClosureValue reader = callable(context, "reader");
+            ProtosLexicalCell cell = reader.capturedCellsForRuntime()[0];
+            Object replacement = newObject();
+            assertSame(replacement, execute(f, callable(context, "recreate"), replacement));
+            assertSame(cell, reader.capturedCellsForRuntime()[0]);
+            assertSame(replacement, cell.valueOrNullForRuntime());
+            assertSame(replacement, local(context, "y"));
+            assertSame(replacement, execute(f, reader));
+        });
+    }
+
+    @Test
+    void reflectionAndLexicalExecutionObserveOneValueAndMembership() throws Exception {
+        withFixture(f -> assertSame(Boolean.TRUE, execute(f, closure(f,
+                "(() => { saved: context\n saved.createSlot(\"late\", 5)\n a: late\n"
+                        + " saved.updateSlot(\"late\", 6)\n"
+                        + " (a == 5) && (late == 6) && saved.hasSlot(\"late\")"
+                        + " && (saved.slotValue(\"late\") == 6) })"))));
+    }
+
+    @Test
+    void separatelyConstructedEqualNameSelectsTheDeclaredBinding() throws Exception {
+        withFixture(f -> {
+            ProtosObjectValue context = observed(f,
+                    "(() => { xy: 1\n saved: context\n"
+                            + " saved.updateSlot(\"x\" + \"y\", 2)\n context })");
+            assertEquals(2L, local(context, "xy"));
+            assertEquals(
+                    1L,
+                    context.localSlotsSnapshot().keySet().stream()
+                            .filter("xy"::equals)
+                            .count());
+        });
+    }
+
+    @Test
+    void reflectiveSendToOrdinaryObjectKeepsDirectLocalInstructions() throws Exception {
+        withFixture(f -> {
+            ProtosClosureValue closure = closure(f,
+                    "((o) => { x: 1\n o.createSlot(\"k\", x)\n x = 2\n x })");
+            ProtosObjectValue target = newObject();
+            assertEquals(2L, execute(f, closure, target));
+            assertEquals(1L, local(target, "k"));
+            List<String> names = operations(activationNode(closure));
+            assertTrue(names.stream().anyMatch(n -> n.startsWith("load.local")));
+            assertTrue(names.stream().anyMatch(n -> n.startsWith("store.local")));
+            assertFalse(names.contains("PublishCurrentClosureContext"));
+            assertFalse(names.contains("EnsureCurrentClosureLexicalView"));
+        });
+    }
+
     /* Instruction names without the custom-operation prefix and quickening suffix. */
     private static List<String> operations(BytecodeNode node) {
         return node.getInstructionsAsList().stream()

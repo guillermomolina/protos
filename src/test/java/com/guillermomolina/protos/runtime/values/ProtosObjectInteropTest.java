@@ -149,4 +149,38 @@ final class ProtosObjectInteropTest {
         assertEquals("Object", interop.toDisplayString(value, true));
         assertSame(answer, value.readLocalSlot("answer").orElseThrow());
     }
+
+    /*
+     * D262-A guest reflective createSlot/updateSlot enter the existing
+     * structural authority (createLocalSlot/assignLocalSlot); the host member
+     * projection of such slots is unchanged and stays read-only.
+     */
+    @Test
+    void structurallyCreatedAndUpdatedSlotsKeepReadOnlyMemberProjection() throws Exception {
+        ProtosObjectValue value = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        Long created = Long.valueOf(1L);
+        Long updated = Long.valueOf(2L);
+        value.createLocalSlot("", created);
+        value.createLocalSlot("a b", created);
+        value.assignLocalSlot("a b", updated);
+
+        Object members = interop.getMembers(value, false);
+        InteropLibrary memberInterop = InteropLibrary.getUncached(members);
+        assertEquals(2L, memberInterop.getArraySize(members));
+        assertEquals("", memberInterop.readArrayElement(members, 0));
+        assertEquals("a b", memberInterop.readArrayElement(members, 1));
+
+        assertTrue(interop.isMemberReadable(value, "a b"));
+        assertSame(updated, interop.readMember(value, "a b"));
+        assertFalse(interop.isMemberModifiable(value, "a b"));
+        assertFalse(interop.isMemberInsertable(value, "c"));
+        assertFalse(interop.isMemberRemovable(value, "a b"));
+        assertThrows(
+                UnsupportedMessageException.class,
+                () -> interop.writeMember(value, "a b", created));
+        assertThrows(
+                UnsupportedMessageException.class,
+                () -> interop.removeMember(value, "a b"));
+        assertSame(updated, value.readLocalSlot("a b").orElseThrow());
+    }
 }

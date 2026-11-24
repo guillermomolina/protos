@@ -75,6 +75,41 @@ the ordinary structural `Object` contract owned by `OBJECT_MODEL.md` §22:
 4. `close()` and `freeze()` retain the ordinary structural restrictions defined
    for objects: a closed or frozen execution context rejects structural
    removal, and a frozen execution context also rejects value mutation.
+5. The reflective `createSlot(name, value)` and `updateSlot(name, value)`
+   operations (D262-A, `OBJECT_MODEL.md` Core Reflection) apply to an
+   execution context exactly as to any ordinary object. `createSlot` makes an
+   ABSENT local slot PRESENT while the context is open, under the same rules as
+   bare or explicit member creation; `updateSlot` changes the value of an
+   existing writable local slot, including one that is closed but not frozen.
+   No execution-context exception, extra state rule, or name restriction
+   applies: a reflectively created name need not appear as a declaration in
+   the source of the executing Closure, need not be a source identifier, and
+   is a slot of exactly that context.
+
+A reflectively created or updated execution-context slot is the same slot that
+bare lookup, bare assignment, bare creation, `slotValue`, and `removeSlot`
+observe. In particular, `context.updateSlot(name, value)` changes the binding
+that later bare reads of `name` in that context, and in every Closure that
+captured that context, observe; `context.createSlot(name, value)` after a
+Closure captured the context is observed by that Closure's later bare reads; a
+reflectively created nearer binding shadows an outer lexical binding and the
+receiver fallback for subsequent lookups; and removing it again reveals the
+outer binding. Creating a name reflectively before a later bare creation of the
+same name in that context makes the later bare creation fail under the ordinary
+duplicate-slot rule. Independent invocations of the same Closure have distinct
+execution contexts and do not share reflectively created bindings.
+
+`context.createSlot(...)` and `context.updateSlot(...)` target exactly the
+receiver object, which for `context` is the current execution context. They do
+not search lexical parents for a destination: `updateSlot` on a context that
+lacks a local slot signals an `Error` even when an outer lexical context has
+that name, and the same operation on an escaped or aliased reference to a
+context has exactly the same effect as on `context` itself. SOURCE and MODULE
+ownership is unchanged: at SOURCE top level `context` is the `moduleContext`,
+so a reflectively created binding there is an ordinary binding of that SOURCE's
+context; in a MODULE initializer `context.createSlot(...)` creates a private
+initializer binding while `this.createSlot(...)` creates an ordinary own slot
+of the public module object (`MODULES.md`).
 
 Removing a local slot changes semantic presence, not the lexical topology of
 the activation. A subsequent bare read therefore performs the ordinary lookup
@@ -201,6 +236,8 @@ The order above is fixed. In particular:
 - an explicit member read such as `context.name` or `object.name` is a different operation: it follows the ordinary member-lookup rules of `OBJECT_MODEL.md`, including ordinary delegation.
 
 Closure capture does not snapshot these slot values. Closures capture their genuine lexical execution contexts by reference under `CALLABLES.md`, so later mutation of an existing captured slot, and later creation of a slot in a still-captured context where creation is otherwise valid, is observed by subsequent bare lookup through that same context.
+
+This live-membership rule is independent of how the slot was created, updated, or removed. Every lookup performed under steps 1–6 observes the state produced by reflective `createSlot`, `updateSlot`, and `removeSlot` (§4) exactly as it observes the state produced by bare or explicit member forms, including a PRESENT slot whose value is `null`. Repeated evaluation of the same bare identifier may therefore observe, in turn, an outer binding, a nearer reflectively created binding, its updated value, the outer binding again after removal, and a recreated nearer binding.
 
 At SOURCE top level, the current lexical context is the SOURCE's `moduleContext` and its lexical parent is the frozen standard prelude. Consequently the SOURCE top-level bare-name path is exactly: local module binding, then local prelude binding, then absence.
 
@@ -439,6 +476,20 @@ argument expression is evaluated again. A selected custom `construct` or
 `super.construct` preserves the current receiver and starts lookup after the
 current `methodHome`, and its argument expressions are evaluated once as for any
 super send.
+
+Reflective slot creation and update are message sends, not slot-write forms.
+In `target.createSlot(nameExpression, valueExpression)` and
+`target.updateSlot(nameExpression, valueExpression)`, the receiver expression
+and every argument expression are evaluated once, left to right, under the
+ordinary invocation rules above, and the selected implementation associates the
+completed packet under `CALLABLES.md`. The standard behavior attempts its
+structural mutation only after evaluation and association have completed
+normally; if any of them transfers control, no mutation is attempted. The
+standard mutation targets exactly the evaluated receiver: it is not a bare
+assignment, performs no §7 destination selection, and is never redirected to
+the nearest lexical owner of the name. Conversely, a bare `x = value` keeps its
+§7 early destination selection even when right-hand-side evaluation reflectively
+creates a nearer binding named `x`.
 
 ### Normal result of slot creation and assignment expressions
 
