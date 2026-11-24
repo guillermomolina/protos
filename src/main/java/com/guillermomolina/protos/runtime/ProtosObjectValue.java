@@ -261,8 +261,12 @@ public class ProtosObjectValue extends DynamicObject implements TruffleObject {
     }
 
     public ProtosObjectValue freeze() {
-        DynamicObject.SetShapeFlagsNode.getUncached()
-                .executeRemoveAndAdd(this, CLOSED_FLAG, FROZEN_FLAG);
+        return freeze(DynamicObject.SetShapeFlagsNode.getUncached());
+    }
+
+    /** {@link #freeze()} through the caller's cached {@code setShapeFlagsNode}. */
+    public ProtosObjectValue freeze(DynamicObject.SetShapeFlagsNode setShapeFlagsNode) {
+        setShapeFlagsNode.executeRemoveAndAdd(this, CLOSED_FLAG, FROZEN_FLAG);
         return this;
     }
 
@@ -588,6 +592,44 @@ public class ProtosObjectValue extends DynamicObject implements TruffleObject {
 
         ProtosLexicalBindingAuthorityCalls.put(
                 writableLexicalBindingAuthority(), name, value);
+    }
+
+    /**
+     * Backend-only {@link #createLocalSlot(String, Object)} for an object whose
+     * slots are its own {@code DynamicObject} properties: the same validations
+     * in the same order, then the presence query and the write performed by
+     * the object authority through the caller's cached nodes. The first
+     * creation installs the object authority exactly as the general operation
+     * does. An object whose installed authority is not backed by itself is
+     * rejected; no other write path exists here.
+     */
+    public void createLocalSlot(
+            String name,
+            Object value,
+            DynamicObject.GetNode getNode,
+            DynamicObject.PutNode putNode) {
+        Objects.requireNonNull(name, "name");
+        Objects.requireNonNull(value, "value");
+
+        if (isFrozen()) {
+            throw new IllegalStateException("object is frozen");
+        }
+        if (isClosed()) {
+            throw new IllegalStateException("object is closed");
+        }
+        ProtosLexicalBindingAuthority current = lexicalBindingAuthority;
+        if (current != EMPTY_LEXICAL_BINDINGS && !isObjectAuthority(current)) {
+            throw new IllegalStateException(
+                    "cached slot creation requires the object authority");
+        }
+        if (current != EMPTY_LEXICAL_BINDINGS
+                && ((ProtosMapBackedLexicalBindingAuthority) current)
+                        .containsBinding(name, getNode)) {
+            throw new IllegalStateException("local slot already exists: " + name);
+        }
+
+        ((ProtosMapBackedLexicalBindingAuthority) writableLexicalBindingAuthority())
+                .putBinding(name, value, putNode);
     }
 
     public void assignLocalSlot(String name, Object value) {

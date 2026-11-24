@@ -394,12 +394,135 @@ final class ProtosPerf045RangeEachInlineTest {
                                             first.readLocalSlot(slot).orElseThrow()));
                         }
                         assertEquals(java.util.Set.of("start", "stop"), first.localSlotsSnapshot().keySet());
+                        assertCanonicalRangeObject(ordinary, first);
+                        assertCanonicalRangeObject(ordinary, second);
                         assertTrue(entered.isEmpty(), "terminal construction must also be internal");
                         assertTrue(module.instructions().stream().anyMatch(name -> name.contains("c.MakeRange")));
                     }
                 }
             }
         });
+    }
+
+    @Test
+    void oneConstructionSiteRepeatedlyBuildsFreshCanonicalRanges() throws Exception {
+        inContext(() -> {
+            String[][] cases = {
+                {"Range", "0", "3"}, {"Range", "3", "0"}, {"Range", "4", "4"},
+                {"Range", "0", "9223372036854775809"},
+                {"InvertedRange", "3", "0"}, {"InvertedRange", "0", "3"},
+                {"InvertedRange", "4", "4"},
+                {"InvertedRange", "9223372036854775809", "-9223372036854775810"},
+                {"Range", "1", "2"}, {"InvertedRange", "2", "1"}
+            };
+            StringBuilder built = new StringBuilder();
+            StringBuilder ordinary = new StringBuilder();
+            for (String[] entry : cases) {
+                built.append("    hook(build").append(entry[0]).append("(")
+                        .append(entry[1]).append(", ").append(entry[2]).append("))\n");
+                ordinary.append("    hook(").append(entry[0]).append(".construct(")
+                        .append(entry[1]).append(", ").append(entry[2]).append("))\n");
+            }
+            Module seed = new Module();
+            Module reference = new Module(seed.prelude);
+            reference.run("run: () => {\n" + ordinary + "}\nrun()\n");
+            Module module = new Module(seed.prelude);
+            List<List<RootNode>> entered = new ArrayList<>();
+            try (ExecutionListener listener = observeRangeRoots(entered)) {
+                module.run(
+                        "run: () => {\n"
+                                + "    buildRange: (a, b) => { Range(a, b) }\n"
+                                + "    buildInvertedRange: (a, b) => { InvertedRange(a, b) }\n"
+                                + "    shadowed: (a, b) => {\n"
+                                + "        Range: { call: (x, y) => { x + y } }\n"
+                                + "        first: Range(a, b)\n"
+                                + "        Range.call = (x, y) => { x * y }\n"
+                                + "        hook(first)\n"
+                                + "        Range(a, b)\n"
+                                + "    }\n"
+                                + built
+                                + "    hook(shadowed(2, 3))\n"
+                                + built
+                                + "}\nrun()\n");
+                assertTrue(entered.isEmpty(), "canonical constructions at one site stay internal");
+            }
+            int count = cases.length;
+            assertEquals(2 * count + 2, module.visits.size());
+            assertEquals(5L, module.visits.get(count));
+            assertEquals(6L, module.visits.get(count + 1));
+            java.util.Set<Object> identities =
+                    java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+            for (int round = 0; round < 2; round++) {
+                int offset = round == 0 ? 0 : count + 2;
+                for (int index = 0; index < count; index++) {
+                    ProtosObjectValue expected =
+                            assertInstanceOf(ProtosObjectValue.class, reference.visits.get(index));
+                    ProtosObjectValue actual =
+                            assertInstanceOf(ProtosObjectValue.class, module.visits.get(offset + index));
+                    assertCanonicalRangeObject(expected, actual);
+                    assertTrue(identities.add(actual), "each construction answers a fresh object");
+                }
+            }
+        });
+    }
+
+    @Test
+    void frozenCanonicalRangeRejectsMutationLikeTheSourceConstruction() throws Exception {
+        inContext(() -> {
+            Module module = new Module();
+            module.run(
+                    """
+                    run: () => {
+                        frame: 0
+                        internal: Range(0, 2)
+                        ordinary: Range.construct(0, 2)
+                        hook(Error.handle(() => { internal.start = 9 }, (caught) => caught))
+                        hook(Error.handle(() => { ordinary.start = 9 }, (caught) => caught))
+                        hook(Error.handle(() => { internal.extra: 9 }, (caught) => caught))
+                        hook(Error.handle(() => { ordinary.extra: 9 }, (caught) => caught))
+                        hook(internal)
+                        hook(ordinary)
+                    }
+                    run()
+                    """);
+            assertEquals(6, module.visits.size());
+            for (int index = 0; index < 4; index += 2) {
+                ProtosObjectValue internalError =
+                        assertInstanceOf(ProtosObjectValue.class, module.visits.get(index));
+                ProtosObjectValue ordinaryError =
+                        assertInstanceOf(ProtosObjectValue.class, module.visits.get(index + 1));
+                assertSame(ordinaryError.parent().orElseThrow(), internalError.parent().orElseThrow());
+                assertEquals(ordinaryError.localSlotsSnapshot().keySet(),
+                        internalError.localSlotsSnapshot().keySet());
+            }
+            ProtosObjectValue internal = assertInstanceOf(ProtosObjectValue.class, module.visits.get(4));
+            ProtosObjectValue ordinary = assertInstanceOf(ProtosObjectValue.class, module.visits.get(5));
+            assertCanonicalRangeObject(ordinary, internal);
+        });
+    }
+
+    /*
+     * A canonical internal construction is an ordinary FROZEN object whose
+     * start and stop are real properties of its own Shape, observably equal
+     * to the source construction of the same bounds.
+     */
+    private static void assertCanonicalRangeObject(ProtosObjectValue expected, ProtosObjectValue actual) {
+        assertNotSame(expected, actual);
+        assertSame(expected.parent().orElseThrow(), actual.parent().orElseThrow());
+        assertTrue(actual.usesObjectStorageForRuntime());
+        assertEquals(2, actual.getShape().getPropertyCount());
+        assertTrue(actual.getShape().getProperty("start") != null
+                && actual.getShape().getProperty("stop") != null);
+        assertEquals(java.util.Set.of("start", "stop"), actual.localSlotsSnapshot().keySet());
+        assertTrue(actual.isFrozen());
+        assertFalse(actual.isClosed());
+        assertEquals(expected.mutationState(), actual.mutationState());
+        for (String slot : List.of("start", "stop")) {
+            assertEquals(ProtosNumericValueSupport.integerDecimalText(
+                            expected.readLocalSlot(slot).orElseThrow()),
+                    ProtosNumericValueSupport.integerDecimalText(
+                            actual.readLocalSlot(slot).orElseThrow()));
+        }
     }
 
     @Test

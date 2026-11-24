@@ -3285,9 +3285,15 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Bind("admittedPrelude(frame)") ProtosPrelude prelude,
                 @Cached("factory") ProtosObjectValue cachedFactory,
                 @Cached("oppositeOrNull(cachedFactory, prelude)") ProtosObjectValue opposite,
-                @Cached("isRange(cachedFactory, prelude)") boolean ascending) {
+                @Cached("isRange(cachedFactory, prelude)") boolean ascending,
+                @Shared("startGet") @Cached DynamicObject.GetNode startGet,
+                @Shared("startPut") @Cached DynamicObject.PutNode startPut,
+                @Shared("stopGet") @Cached DynamicObject.GetNode stopGet,
+                @Shared("stopPut") @Cached DynamicObject.PutNode stopPut,
+                @Shared("freeze") @Cached DynamicObject.SetShapeFlagsNode freeze) {
             boolean keep = ascending ? start <= stop : start >= stop;
-            return construct(keep ? cachedFactory : opposite, start, stop);
+            return construct(keep ? cachedFactory : opposite, start, stop,
+                    startGet, startPut, stopGet, stopPut, freeze);
         }
 
         /* Any Integer bounds: the exact comparison is cold. */
@@ -3296,19 +3302,35 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosObjectValue factory,
                 Object start,
                 Object stop,
-                @Bind VirtualFrame frame) {
-            return construct(exactPrototype(factory, start, stop, admittedPrelude(frame)), start, stop);
+                @Bind VirtualFrame frame,
+                @Shared("startGet") @Cached DynamicObject.GetNode startGet,
+                @Shared("startPut") @Cached DynamicObject.PutNode startPut,
+                @Shared("stopGet") @Cached DynamicObject.GetNode stopGet,
+                @Shared("stopPut") @Cached DynamicObject.PutNode stopPut,
+                @Shared("freeze") @Cached DynamicObject.SetShapeFlagsNode freeze) {
+            return construct(exactPrototype(factory, start, stop, admittedPrelude(frame)), start, stop,
+                    startGet, startPut, stopGet, stopPut, freeze);
         }
 
         static ProtosPrelude admittedPrelude(VirtualFrame frame) {
             return ProtosFrameArguments.admittedPreludeOrNull(frame.getArguments());
         }
 
-        private static ProtosObjectValue construct(ProtosObjectValue prototype, Object start, Object stop) {
+        private static ProtosObjectValue construct(
+                ProtosObjectValue prototype,
+                Object start,
+                Object stop,
+                DynamicObject.GetNode startGet,
+                DynamicObject.PutNode startPut,
+                DynamicObject.GetNode stopGet,
+                DynamicObject.PutNode stopPut,
+                DynamicObject.SetShapeFlagsNode freeze) {
             ProtosObjectValue instance = new ProtosObjectValue(prototype);
-            instance.createLocalSlot("start", ProtosNumericValueSupport.guestValue(start));
-            instance.createLocalSlot("stop", ProtosNumericValueSupport.guestValue(stop));
-            return instance.freeze();
+            instance.createLocalSlot("start", ProtosNumericValueSupport.guestValue(start),
+                    startGet, startPut);
+            instance.createLocalSlot("stop", ProtosNumericValueSupport.guestValue(stop),
+                    stopGet, stopPut);
+            return instance.freeze(freeze);
         }
 
         @TruffleBoundary

@@ -91,6 +91,17 @@ final class ProtosMapBackedLexicalBindingAuthority
                 .execute(storage, key(name));
     }
 
+    /**
+     * Presence of one binding in this authority's single storage, read through
+     * the caller's cached {@code getNode} under the same canonical key. A
+     * present binding always holds a non-null Java value here, because
+     * {@link #putBinding(String, Object, DynamicObject.PutNode)} rejects
+     * {@code null}; a {@code null} read therefore means absence.
+     */
+    boolean containsBinding(String name, DynamicObject.GetNode getNode) {
+        return getNode.execute(storage, key(name), null) != null;
+    }
+
     @Override
     public Optional<Object> readBinding(String name) {
         return Optional.ofNullable(DynamicObject.GetNode.getUncached()
@@ -168,15 +179,24 @@ final class ProtosMapBackedLexicalBindingAuthority
      */
     @Override
     public void putBinding(String name, Object value) {
+        putBinding(name, value, DynamicObject.PutNode.getUncached());
+    }
+
+    /**
+     * {@link #putBinding(String, Object)} written through the caller's
+     * {@code putNode} into the same single storage, with the same root
+     * {@code call} invalidation rule.
+     */
+    void putBinding(String name, Object value, DynamicObject.PutNode putNode) {
         Objects.requireNonNull(value, "value");
         if (storage == ProtosObjectValue.rootObject() && "call".equals(name)) {
             synchronized (storage) {
                 ProtosObjectValue.invalidateRootCallSelectionForRuntime();
-                DynamicObject.PutNode.getUncached().execute(storage, key(name), value);
+                putNode.execute(storage, key(name), value);
             }
             return;
         }
-        DynamicObject.PutNode.getUncached().execute(storage, key(name), value);
+        putNode.execute(storage, key(name), value);
     }
 
     /**
