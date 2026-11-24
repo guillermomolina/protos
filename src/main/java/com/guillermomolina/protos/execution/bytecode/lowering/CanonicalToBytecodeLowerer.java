@@ -8638,6 +8638,36 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /*
+     * The ordinary-call argument vector of a constant collection, prepared
+     * once at lowering time and held as a bytecode constant. It is never
+     * handed to guest code: SnapshotClosureCallArguments copies its
+     * positional prefix into a fresh Object[] on every invocation.
+     */
+    private static ProtosPreparedCalls.PreparedArgumentVector constantArgumentVector(
+            ConstantCollection constant) {
+        ProtosPreparedCalls.PreparedArgumentVector vector =
+                new ProtosPreparedCalls.PreparedArgumentVector();
+        switch (constant.type()) {
+            case LONG -> {
+                for (long value : (long[]) constant.values()) {
+                    vector.append(Long.valueOf(value));
+                }
+            }
+            case DOUBLE -> {
+                for (double value : (double[]) constant.values()) {
+                    vector.append(Double.valueOf(value));
+                }
+            }
+            case BOOLEAN -> {
+                for (boolean value : (boolean[]) constant.values()) {
+                    vector.append(Boolean.valueOf(value));
+                }
+            }
+        }
+        return vector;
+    }
+
+    /*
      * The constant collection of a non-empty argument list made only of
      * literals of one primitive family, in source order, or null:
      * signed-64 Integer literals (long[]), Float literals (double[]) or
@@ -8862,12 +8892,15 @@ final class CanonicalToBytecodeLowerer {
                     argumentValues.add(argumentValue);
                 }
             }
-        } else {
+        } else if (arguments.size() <= 4) {
             // Created here, staged only on the ordinary path below.
             for (int index = 0; index < arguments.size(); index++) {
                 argumentValues.add(builder.createLocal("invocationArgument", null));
             }
         }
+        // A wider constant list reserves no per-element locals: its ordinary
+        // path passes one prepared constant vector to CallVarargsMethod.
+        boolean constantVector = constant != null && arguments.size() > 4;
 
         builder.beginIfThenElse();
         builder.beginIsStandardArrayConstructionSelection();
@@ -8881,7 +8914,13 @@ final class CanonicalToBytecodeLowerer {
         builder.endBlock();
 
         builder.beginBlock();
-        if (constant != null) {
+        BytecodeLocal constantArguments = null;
+        if (constantVector) {
+            constantArguments = builder.createLocal("constantArguments", null);
+            builder.beginStoreLocal(constantArguments);
+            builder.emitLoadConstant(constantArgumentVector(constant));
+            builder.endStoreLocal();
+        } else if (constant != null) {
             for (int index = 0; index < arguments.size(); index++) {
                 stageOperand(
                         builder, arguments.get(index), argumentValues.get(index),
@@ -8890,7 +8929,13 @@ final class CanonicalToBytecodeLowerer {
         }
         // Array keeps its existing fast branch; a shadowing Range factory
         // with the same lexical name is still eligible after Array declines.
-        if (isRangeConstructionCall(receiver, arguments)) {
+        if (constantVector) {
+            emitDispatchedCall(
+                    builder, factory, java.util.List.of(), constantArguments,
+                    childResult, result, resumeValue,
+                    primitiveCarrierResult);
+            builder.emitClearLocal(constantArguments);
+        } else if (isRangeConstructionCall(receiver, arguments)) {
             emitStagedRangeConstruction(
                     builder, factory, argumentValues, result, childResult,
                     resumeValue, primitiveCarrierResult);
@@ -8941,8 +8986,11 @@ final class CanonicalToBytecodeLowerer {
         builder.endStoreLocal();
 
         ConstantCollection constant = constantCollectionOrNull(arguments);
+        // A wider constant list reserves no per-element locals: its ordinary
+        // path passes one prepared constant vector to CallVarargsMethod.
+        boolean constantVector = constant != null && arguments.size() > 4;
         java.util.List<BytecodeLocal> argumentValues = new java.util.ArrayList<>(arguments.size());
-        for (CanonicalExpression argument : arguments) {
+        for (CanonicalExpression argument : constantVector ? java.util.List.<CanonicalExpression>of() : arguments) {
             BytecodeLocal argumentValue = builder.createLocal("terminalArgument", null);
             if (constant == null) {
                 stageTerminalArgument(builder, argument, argumentValue);
@@ -8958,13 +9006,21 @@ final class CanonicalToBytecodeLowerer {
         emitStandardArrayValue(builder, factory, constant, argumentValues, null);
 
         builder.beginBlock();
-        if (constant != null) {
+        BytecodeLocal constantArguments = null;
+        if (constantVector) {
+            constantArguments = builder.createLocal("constantArguments", null);
+            builder.beginStoreLocal(constantArguments);
+            builder.emitLoadConstant(constantArgumentVector(constant));
+            builder.endStoreLocal();
+        } else if (constant != null) {
             for (int index = 0; index < arguments.size(); index++) {
                 stageTerminalArgument(builder, arguments.get(index), argumentValues.get(index));
             }
         }
         // The block's value: a constructed Range or the terminal call transport.
-        if (isRangeConstructionCall(call.receiver(), arguments)) {
+        if (constantVector) {
+            emitCallOperation(builder, true, factory, java.util.List.of(), constantArguments);
+        } else if (isRangeConstructionCall(call.receiver(), arguments)) {
             emitTerminalStagedRangeConstruction(builder, factory, argumentValues);
         } else {
             emitCallOperation(builder, true, factory, argumentValues, null);

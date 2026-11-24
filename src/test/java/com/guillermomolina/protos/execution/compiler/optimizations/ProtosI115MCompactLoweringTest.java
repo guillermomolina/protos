@@ -1073,11 +1073,19 @@ final class ProtosI115MCompactLoweringTest {
                 longs: () => [1, 2, 3]
                 doubles: () => [1.5, 0.0, 2.5]
                 booleans: () => [true, false, true]
+                wideLongs: () => [1, 2, 3, 4, 5, 6]
+                wideDoubles: () => [1.5, 0.0, 2.5, 3.5, 4.5, 5.5]
+                wideBooleans: () => [true, false, true, false, true, true]
                 """)) {
             for (var entry : java.util.Map.of(
                     "longs", long[].class,
                     "doubles", double[].class,
-                    "booleans", boolean[].class).entrySet()) {
+                    "booleans", boolean[].class,
+                    "wideLongs", long[].class,
+                    "wideDoubles", double[].class,
+                    "wideBooleans", boolean[].class).entrySet()) {
+                boolean wide = entry.getKey().startsWith("wide");
+                long size = wide ? 6L : 3L;
                 ProtosStandaloneHostedSession.PreparedTopLevel prepared =
                         session.prepareTopLevel(entry.getKey());
                 ProtosBytecodeRootNode root = selectedRoot(prepared);
@@ -1101,10 +1109,17 @@ final class ProtosI115MCompactLoweringTest {
                 assertTrue(names.stream().noneMatch(name -> name.equals("c.MakeArray")),
                         "Admitted constant construction must not use the general vector: "
                                 + names);
+                if (wide) {
+                    assertTrue(names.stream().anyMatch(name -> name.startsWith("c.CallVarargsMethod")),
+                            "the wide ordinary path uses CallVarargsMethod: " + names);
+                    assertTrue(names.stream()
+                                    .anyMatch(name -> name.startsWith("c.SnapshotClosureCallArguments")),
+                            "the wide ordinary path snapshots its constant vector: " + names);
+                }
                 Value first = prepared.executable().execute();
                 Value second = prepared.executable().execute();
-                assertEquals(3L, first.getArraySize());
-                assertEquals(3L, second.getArraySize());
+                assertEquals(size, first.getArraySize());
+                assertEquals(size, second.getArraySize());
             }
         }
     }
@@ -1158,6 +1173,17 @@ final class ProtosI115MCompactLoweringTest {
                     assertEquals(49L, constant[63]);
                 }
             }
+            assertTrue(names.stream().anyMatch(name -> name.startsWith("c.CallVarargsMethod")),
+                    "the high-arity ordinary path uses CallVarargsMethod: " + names);
+            assertTrue(names.stream()
+                            .anyMatch(name -> name.startsWith("c.SnapshotClosureCallArguments")),
+                    "the high-arity ordinary path snapshots the constant vector: " + names);
+            assertTrue(names.stream().filter(name -> name.startsWith("store.local")).count() < 64,
+                    "the literal's elements are not stored into argument locals: " + names);
+            int slots = root.getFrameDescriptor().getNumberOfSlots();
+            assertTrue(slots < 64,
+                    "no per-element argument locals are reserved (previously 121 slots): "
+                            + slots);
             for (String forbidden : List.of("c.MakeArray", "PublishCurrentClosureContext",
                     "CurrentActivation", "EnsureCurrentClosureLexicalView")) {
                 assertTrue(names.stream().noneMatch(name -> name.contains(forbidden)),

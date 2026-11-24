@@ -548,11 +548,12 @@ class ProtosI145AConstructProtocolTest {
                     Array: { construct: (...args) => 7 }
                     a: [1, 2]
                     b: Array(1, 2)
-                    a + b
+                    c: [1, 2, 3, 4, 5, 6]
+                    a + b + c
                 }
                 f()
                 """);
-        assertEquals("14", ProtosNumericValueSupport.integerDecimalText(result));
+        assertEquals("21", ProtosNumericValueSupport.integerDecimalText(result));
     }
 
     @Test
@@ -574,11 +575,11 @@ class ProtosI145AConstructProtocolTest {
                 Base: Array
                 f: () => {
                     Array: Base { construct: (...args) => args.size() }
-                    [1, 2] + Array(3)
+                    [1, 2] + Array(3) + [1.5, 2.5, 3.5, 4.5, 5.5, 6.5]
                 }
                 f()
                 """);
-        assertEquals("3", ProtosNumericValueSupport.integerDecimalText(result));
+        assertEquals("9", ProtosNumericValueSupport.integerDecimalText(result));
     }
 
     @Test
@@ -588,16 +589,25 @@ class ProtosI145AConstructProtocolTest {
                 Factory: Base { construct: (...args) => 1 }
                 build: (Array) => [7, 8]
                 buildExplicit: (Array, n) => Array(n, 8)
+                buildWide: (Array) => [1, 2, 3, 4, 5, 6, 7, 8]
                 first: build(Factory)
                 firstExplicit: buildExplicit(Factory, 7)
+                firstWide: buildWide(Factory)
+                standardWideBefore: buildWide(Base)
                 Factory.construct = (...args) => 2
                 second: build(Factory)
                 secondExplicit: buildExplicit(Factory, 7)
+                secondWide: buildWide(Factory)
                 standard: build(Base)
                 standardExplicit: buildExplicit(Base, 7)
+                standardWide: buildWide(Base)
                 [first == 1, firstExplicit == 1, second == 2, secondExplicit == 2,
                     standard[1] == 8, standard.parent() === Base,
-                    standardExplicit[0] == 7, standardExplicit.parent() === Base]
+                    standardExplicit[0] == 7, standardExplicit.parent() === Base,
+                    firstWide == 1, secondWide == 2,
+                    standardWideBefore.size() == 8, standardWideBefore[7] == 8,
+                    standardWide.size() == 8, standardWide[0] == 1,
+                    standardWide.parent() === Base]
                 """);
     }
 
@@ -734,6 +744,108 @@ class ProtosI145AConstructProtocolTest {
                 caught: Error.handle(() => { build(Failing); false }, (error) => true)
                 after: build(Base)
                 [caught, after.size() == 2]
+                """);
+    }
+
+    @Test
+    void highArityConstantListsReachSelectedConstructInOrder() throws IOException {
+        StringBuilder literal = new StringBuilder();
+        StringBuilder checks = new StringBuilder();
+        for (int index = 0; index < 64; index++) {
+            long value = (index * 37L) % 64L + 100L;
+            literal.append(index == 0 ? "" : ", ").append(value);
+            checks.append(", composed[").append(index).append("] == ").append(value)
+                    .append(", terminal[").append(index).append("] == ").append(value);
+        }
+        assertAllTrue("""
+                Base: Array
+                Derived: Array {}
+                Recording: Base { construct: (...args) => Array(...args) }
+                build: (Array) => {
+                    values: [%1$s]
+                    values
+                }
+                buildTerminal: (Array) => [%1$s]
+                buildDoubles: (Array) => {
+                    values: [1.5, 2.5, 3.5, 4.5, 5.5, 6.5]
+                    values
+                }
+                buildDoublesTerminal: (Array) => [1.5, 2.5, 3.5, 4.5, 5.5, 6.5]
+                buildFlags: (Array) => {
+                    values: [true, false, false, true, true, false]
+                    values
+                }
+                buildFlagsTerminal: (Array) => [true, false, false, true, true, false]
+                composed: build(Recording)
+                terminal: buildTerminal(Recording)
+                again: build(Recording)
+                againTerminal: buildTerminal(Recording)
+                composed2: build(Recording)
+                composed2[0] = 1
+                terminal2: buildTerminal(Recording)
+                terminal2[63] = 1
+                third: build(Recording)
+                thirdTerminal: buildTerminal(Recording)
+                standard: build(Derived)
+                custom: build(Recording)
+                standardAgain: build(Derived)
+                standardTerminal: buildTerminal(Derived)
+                customTerminal: buildTerminal(Recording)
+                doubles: buildDoubles(Recording)
+                doublesTerminal: buildDoublesTerminal(Recording)
+                flags: buildFlags(Recording)
+                flagsTerminal: buildFlagsTerminal(Recording)
+                [composed.size() == 64, terminal.size() == 64,
+                    composed[0] == %2$d, composed[63] == %3$d,
+                    terminal[0] == %2$d, terminal[63] == %3$d,
+                    composed !== again, terminal !== againTerminal,
+                    third[0] == %2$d, thirdTerminal[63] == %3$d,
+                    again[0] == %2$d, againTerminal[63] == %3$d,
+                    standard.parent() === Derived, standard.size() == 64,
+                    custom.parent() === Array, custom[63] == %3$d,
+                    standardAgain.parent() === Derived, standardAgain[0] == %2$d,
+                    standardTerminal.parent() === Derived, standardTerminal.size() == 64,
+                    customTerminal.parent() === Array, customTerminal[0] == %2$d,
+                    doubles.size() == 6, doubles[0] == 1.5, doubles[5] == 6.5,
+                    doublesTerminal.size() == 6, doublesTerminal[0] == 1.5,
+                    doublesTerminal[5] == 6.5, doubles !== doublesTerminal,
+                    flags.size() == 6, flags[0] === true, flags[2] === false,
+                    flags[5] === false,
+                    flagsTerminal.size() == 6, flagsTerminal[0] === true,
+                    flagsTerminal[3] === true, flagsTerminal[5] === false%4$s]
+                """.formatted(literal, 100L, (63L * 37L) % 64L + 100L, checks));
+    }
+
+    @Test
+    void highArityConstantConstructKeepsEffectOrderAndErrors() throws IOException {
+        assertAllTrue("""
+                Base: Array
+                order: { value: 0 }
+                step: (n) => {
+                    order.value = order.value * 10 + n
+                    n
+                }
+                Counting: Base { construct: (...args) => step(args.size()) }
+                Failing: Base { construct: (...args) => Error().signal() }
+                build: (Array) => {
+                    values: [1, 2, 3, 4, 5]
+                    values
+                }
+                buildTerminal: (Array) => [1, 2, 3, 4, 5]
+                sequence: [step(1), build(Counting), step(3)]
+                composedOrder: order.value
+                order.value = 0
+                terminalSequence: [step(1), buildTerminal(Counting), step(3)]
+                terminalOrder: order.value
+                caught: Error.handle(() => { build(Failing); false }, (error) => true)
+                caughtTerminal: Error.handle(() => { buildTerminal(Failing); false }, (e) => true)
+                after: build(Base)
+                afterTerminal: buildTerminal(Base)
+                [composedOrder == 153, terminalOrder == 153,
+                    sequence[1] == 5, terminalSequence[1] == 5,
+                    caught, caughtTerminal,
+                    after.size() == 5, after[4] == 5,
+                    afterTerminal.size() == 5, afterTerminal[0] == 1]
                 """);
     }
 
