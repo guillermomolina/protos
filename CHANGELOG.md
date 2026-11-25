@@ -8,6 +8,13 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.219-SNAPSHOT
+
+- **I174-F.** Ordinary prototype snapshots and native aggregate writeback.
+- Add readAs snapshots of exactly associated ordinary prototypes and writeFrom aggregate writeback through canonical ordinary reflection.
+- Preserve normal construction, slot shadowing and delegation behavior; reject inaccessible or overridden reflective routes before native mutation instead of introducing privileged slot access.
+- Extend nested snapshot, prototype identity, member-name collision, pointer-provenance and staged writeback regressions; reconcile the exact 42-member public FFI inventory.
+
 ## 0.4.218-SNAPSHOT
 
 - **I174-E.** Explicit union selection and staged Map/Array projection.

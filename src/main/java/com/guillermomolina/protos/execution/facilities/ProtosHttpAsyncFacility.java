@@ -142,12 +142,15 @@ public final class ProtosHttpAsyncFacility {
     }
 
     /**
-     * The exact ordinary-object recognition operation alone, for std:ffi prototype association.
-     * It carries no authority and retains no runtime state.
+     * The exact ordinary-object recognition operation, for std:ffi prototype association, and
+     * the canonical reflective-selection admission of its ordinary object snapshots. It carries
+     * no authority and retains no runtime state.
      */
     static ProtosObjectValue createObjectRecognitionFacility() {
         ProtosObjectValue facility = new ProtosObjectValue(ProtosObjectValue.rootObject());
         operation(facility, "ordinaryObject", 1, ProtosHttpAsyncFacility::ordinaryObject);
+        operation(facility, "selectsCanonicalObjectMethod", 2,
+                ProtosHttpAsyncFacility::selectsCanonicalObjectMethod);
         return facility.freeze();
     }
 
@@ -225,6 +228,36 @@ public final class ProtosHttpAsyncFacility {
     static Object ordinaryObject(ProtosActivation activation, List<?> supplied) {
         Object value = supplied.get(0);
         return bool(value != null && value.getClass() == ProtosObjectValue.class);
+    }
+
+    /**
+     * Whether the ordinary lookup of a reflective selector ({@code createSlot}, {@code slotValue}
+     * or {@code parent}) from an exact ordinary object selects the exact Closure stored in the
+     * canonical root {@code Object}. The stored selection is compared by identity before any
+     * bound extraction; no Closure is executed and nothing is answered but a Boolean. An absent
+     * or shadowing selection answers false; the result is never cached, so a later prototype
+     * mutation is observed by the next admission.
+     */
+    private static Object selectsCanonicalObjectMethod(
+            ProtosActivation activation, List<?> supplied) {
+        Object receiver = supplied.get(0);
+        if (ordinaryObject(activation, supplied) != Boolean.TRUE
+                || !(supplied.get(1) instanceof ProtosStringValue selector)) {
+            throw invalid(activation);
+        }
+        String name = selector.value();
+        if (!name.equals("createSlot") && !name.equals("slotValue") && !name.equals("parent")) {
+            throw invalid(activation);
+        }
+        ProtosObjectValue root = ProtosObjectValue.rootObject();
+        Object canonical = root.readLocalSlot(name).orElse(null);
+        ProtosPrelude prelude = activation.prelude().orElseThrow(() -> invalid(activation));
+        return bool(
+                canonical != null
+                        && ProtosValueLookup.lookupOrdinaryChain(receiver, name, prelude)
+                                .filter(result -> result.home() == root)
+                                .filter(result -> result.value() == canonical)
+                                .isPresent());
     }
 
     static Object isBytes(ProtosActivation activation, List<?> supplied) {

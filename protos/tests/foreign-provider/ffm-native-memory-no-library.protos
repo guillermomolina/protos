@@ -132,6 +132,186 @@ check("root union read", FFI.readFields(alone, Array(rootWhole))["whole"] == 5)
 check("projection releases", (FFI.release(record) === null) && (FFI.release(alone) === null))
 ordinaryError("a released region is refused", () => FFI.readFields(alone, Array(rootWhole)))
 
+// ---- ordinary object snapshots of an exactly associated prototype
+
+PointShape: {
+    doubled: () => this.x * 2
+}
+check("association answers the prototype", FFI.prototype(Point, PointShape) === PointShape)
+shapeSlots: PointShape.slotNames().size()
+located: FFI.allocate(Point)
+located["x"] = 10
+located["y"] = 2.5
+asObject: FFI.readAs(PointShape, located, Array())
+check("readAs answers an ordinary object",
+    (isMap(asObject) == false) && (Array.recognizes(asObject) == false))
+check("snapshot parent is the exact prototype", asObject.parent() === PointShape)
+check("snapshot local slots",
+    asObject.hasSlot("x") && asObject.hasSlot("y") && (asObject.slotNames().size() == 2))
+check("snapshot values", (asObject.x == 10) && (asObject.y == 2.5))
+check("snapshot delegates", asObject.doubled() == 20)
+check("the prototype gains no slot", PointShape.slotNames().size() == shapeSlots)
+asAgain: FFI.readAs(PointShape, located, Array())
+check("every readAs answers a fresh object", asAgain !== asObject)
+asObject.x = 11
+check("a snapshot write leaves native memory", located["x"] == 10)
+check("snapshots are independent", asAgain.x == 10)
+located["x"] = 12
+check("a snapshot ignores later native writes", (asObject.x == 11) && (asAgain.x == 10))
+check("writeFrom answers the region", FFI.writeFrom(located, asObject, Array()) === located)
+check("writeFrom wrote the slots", FFI.readFields(located, Array())["x"] == 11)
+built: PointShape { x: -4; y: 0.75 }
+check("a user-built object writes", FFI.writeFrom(located, built, Array()) === located)
+check("user-built values", (located["x"] == -4) && (located["y"] == 0.75))
+
+// Construction never calls the prototype.
+constructionHits: { count: 0 }
+Guarded: {
+    call: (...arguments) => {
+        constructionHits.count = constructionHits.count + 1
+        Error().signal()
+    }
+    construct: (...arguments) => {
+        constructionHits.count = constructionHits.count + 1
+        Error().signal()
+    }
+    init: (...arguments) => {
+        constructionHits.count = constructionHits.count + 1
+        Error().signal()
+    }
+}
+FFI.prototype(Point, Guarded)
+guarded: FFI.readAs(Guarded, located, Array())
+check("guarded projection", (guarded.x == -4) && (guarded.parent() === Guarded))
+check("call, construct and init never run", constructionHits.count == 0)
+
+// Nested structs, unions and arrays become fresh ordinary objects and Arrays.
+Cell: FFI.union(Array(FFI.field("whole", FFI.i64), FFI.field("half", FFI.array(FFI.i32, 2))))
+DeepCell: FFI.union(Array(FFI.field("cell", Cell), FFI.field("plain", FFI.f64)))
+Nest: FFI.struct(Array(
+    FFI.field("origin", Point),
+    FFI.field("cell", Cell),
+    FFI.field("points", FFI.array(Point, 2)),
+    FFI.field("cells", FFI.array(Cell, 2)),
+    FFI.field("deep", DeepCell),
+    FFI.field("counts", FFI.array(FFI.u8, 3))))
+NestShape: {}
+FFI.prototype(Nest, NestShape)
+nestArms: Array(
+    FFI.unionArm(Array("deep", "cell"), "half"),
+    FFI.unionArm(Array("cell"), "whole"),
+    FFI.unionArm(Array("cells", 1), "whole"),
+    FFI.unionArm(Array("deep"), "cell"),
+    FFI.unionArm(Array("cells", 0), "half"))
+nest: FFI.allocate(Nest)
+FFI.writeFields(nest, %{
+    "origin": %{ "x": 1; "y": 0.5 }
+    "cell": %{ "whole": 9 }
+    "points": Array(%{ "x": 2; "y": 1.5 }, %{ "x": 3; "y": 2.5 })
+    "cells": Array(%{ "half": Array(4, 5) }, %{ "whole": 6 })
+    "deep": %{ "cell": %{ "half": Array(7, 8) } }
+    "counts": Array(1, 2, 3)
+}, nestArms)
+nested: FFI.readAs(NestShape, nest, nestArms)
+check("nested struct is an object of Object",
+    (nested.origin.parent() === Object) && (nested.origin.x == 1))
+check("nested union holds its selected member",
+    nested.cell.hasSlot("whole") && (nested.cell.hasSlot("half") == false))
+check("array of structs", Array.recognizes(nested.points) && (nested.points[1].y == 2.5))
+check("array of unions", (nested.cells[0].half[1] == 5) && (nested.cells[1].whole == 6))
+check("union inside a union", nested.deep.cell.half[0] == 7)
+check("array of scalars", Array.recognizes(nested.counts) && (nested.counts[2] == 3))
+nestedAgain: FFI.readAs(NestShape, nest, nestArms)
+fresh: (nestedAgain.origin !== nested.origin) && (nestedAgain.points !== nested.points)
+fresh = fresh && (nestedAgain.points[0] !== nested.points[0])
+fresh = fresh && (nestedAgain.cells[0].half !== nested.cells[0].half)
+check("every nested container is fresh", fresh && (nestedAgain.counts !== nested.counts))
+nested.origin.x = 99
+nested.points[1].y = 4.5
+nested.cells[0].half[1] = 50
+nested.deep.cell.half[0] = -7
+nested.counts[2] = 200
+check("snapshot writes leave native memory", nest["counts"][2] == 3)
+check("snapshot writes leave other snapshots",
+    (nestedAgain.counts[2] == 3) && (nestedAgain.origin.x == 1))
+check("nested writeFrom", FFI.writeFrom(nest, nested, nestArms) === nest)
+roundtrip: FFI.readFields(nest, nestArms)
+check("nested roundtrip struct", roundtrip["origin"]["x"] == 99)
+check("nested roundtrip array of structs", roundtrip["points"][1]["y"] == 4.5)
+check("nested roundtrip array of unions", roundtrip["cells"][0]["half"][1] == 50)
+check("nested roundtrip union in union", roundtrip["deep"]["cell"]["half"][0] == -7)
+check("nested roundtrip scalars", roundtrip["counts"][2] == 200)
+
+// Open, frozen and deeply delegating prototypes; open, closed and frozen inputs.
+FrozenShape: {}
+FrozenShape.freeze()
+FFI.prototype(Point, FrozenShape)
+check("frozen prototype", FFI.readAs(FrozenShape, located, Array()).parent() === FrozenShape)
+Base: { kind: "base" }
+Middle: Base {}
+Leaf: Middle {}
+FFI.prototype(Point, Leaf)
+leaf: FFI.readAs(Leaf, located, Array())
+check("deep delegation", (leaf.parent() === Leaf) && (leaf.kind == "base"))
+closedInput: PointShape { x: 5; y: 0.5 }
+closedInput.close()
+check("closed input", FFI.writeFrom(located, closedInput, Array()) === located)
+frozenInput: Leaf { x: 6; y: 0.5 }
+frozenInput.freeze()
+check("frozen input", FFI.writeFrom(located, frozenInput, Array()) === located)
+check("frozen input written", located["x"] == 6)
+Mutable: {}
+FFI.prototype(Point, Mutable)
+addToMutable: Mutable.createSlot
+check("mutable prototype admitted", FFI.readAs(Mutable, located, Array()).x == 6)
+addToMutable("createSlot", (name, value) => value)
+ordinaryError("a later shadowing createSlot is observed",
+    () => FFI.readAs(Mutable, located, Array()))
+check("an unrelated object still writes",
+    FFI.writeFrom(located, Mutable { x: 7; y: 0.5 }, Array()) === located)
+addToMutable("slotValue", (name) => 0)
+ordinaryError("a later shadowing slotValue is observed",
+    () => FFI.writeFrom(located, Mutable { x: 8; y: 0.5 }, Array()))
+check("refused writes left the region", located["x"] == 7)
+
+// Nominal rejections.
+Unregistered: {}
+Elsewhere: {}
+FFI.prototype(Shape, Elsewhere)
+PointTwin: FFI.struct(Array(FFI.field("x", FFI.i32), FFI.field("y", FFI.f64)))
+TwinShape: {}
+FFI.prototype(PointTwin, TwinShape)
+Descendant: PointShape {}
+gone: FFI.allocate(Point)
+FFI.release(gone)
+readOnlyPoint: FFI.view(FFI.assumeExtent(FFI.addressOf(located), 16, located, "read"), Point)
+check("readAs admits a read-only view", FFI.readAs(PointShape, readOnlyPoint, Array()).x == 7)
+pointBytes: FFI.slice(located, 0, 16)
+nonPrototypes: Array(Unregistered, Elsewhere, TwinShape, Descendant, %{ "x": 1 }, Array(1),
+    FFI.addressOf(located), located, null, 3, (x) => x)
+for(candidate in nonPrototypes) {
+    ordinaryError("readAs refuses a non-associated prototype",
+        () => FFI.readAs(candidate, located, Array()))
+}
+nonObjects: Array(Unregistered { x: 1; y: 0.5 }, TwinShape { x: 1; y: 0.5 },
+    Descendant { x: 1; y: 0.5 }, { x: 1; y: 0.5 }, %{ "x": 1; "y": 0.5 }, Array(1, 0.5),
+    FFI.addressOf(located), located, null, 3, (x) => x)
+for(candidate in nonObjects) {
+    ordinaryError("writeFrom refuses an object of no exact association",
+        () => FFI.writeFrom(located, candidate, Array()))
+}
+ordinaryError("readAs arity", () => FFI.readAs(PointShape, located))
+ordinaryError("readAs extra argument", () => FFI.readAs(PointShape, located, Array(), 1))
+ordinaryError("writeFrom arity", () => FFI.writeFrom(located, built))
+ordinaryError("writeFrom extra argument", () => FFI.writeFrom(located, built, Array(), 1))
+ordinaryError("readAs of a released region", () => FFI.readAs(PointShape, gone, Array()))
+ordinaryError("writeFrom to a released region", () => FFI.writeFrom(gone, built, Array()))
+ordinaryError("writeFrom to a read-only view", () => FFI.writeFrom(readOnlyPoint, built, Array()))
+ordinaryError("readAs of a byte slice", () => FFI.readAs(PointShape, pointBytes, Array()))
+ordinaryError("writeFrom to a byte slice", () => FFI.writeFrom(pointBytes, built, Array()))
+check("rejections left the region", (located["x"] == 7) && (located["y"] == 0.5))
+check("snapshot release", (FFI.release(located) === null) && (FFI.release(nest) === null))
+
 refused: null
 ForeignError.handle(() => import("ffi:first"), (error) => {
     refused = error

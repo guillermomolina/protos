@@ -296,6 +296,28 @@ class ProtosI144FfmFixtureAbiTest {
     }
 
     /**
+     * The exact program of the external runner's no-library case, on the JVM: native memory and
+     * projection with the provider configured but no library granted. Every semantic assertion,
+     * including the refusal of an unauthorized library import, is in the program.
+     */
+    @Test
+    void nativeMemoryWithoutLibraryProgramRunsWithoutLibraryGrant() throws Exception {
+        String source = withoutMarker(
+                "ffm-native-memory-no-library.protos",
+                "FFM-NATIVE-MEMORY-NO-LIBRARY-PASS");
+        try (ProtosExternalForeignProviderTest.Fixture fixture = distributable(Map.of())) {
+            ProtosExecutionOutcome outcome = fixture.run(source);
+            assertEquals(
+                    ProtosExecutionOutcome.State.COMPLETED,
+                    outcome.state(),
+                    () -> "ffm-native-memory-no-library.protos failed with "
+                            + describe(fixture, outcome.error()));
+            assertEquals(1, fixture.context.foreignProviderCompartmentCountForTesting());
+            assertEquals(1, fixture.context.foreignProviderSessionCountForTesting());
+        }
+    }
+
+    /**
      * Importing std:ffi stays inert, and the private native-context facility is neither part of
      * the MODULE surface nor of the Prelude or the canonical Object prototype.
      */
@@ -1390,6 +1412,264 @@ class ProtosI144FfmFixtureAbiTest {
             }
             assertEquals(0, fixture.context.foreignProviderCompartmentCountForTesting());
             assertEquals(0, fixture.context.foreignProviderSessionCountForTesting());
+        }
+    }
+
+    /**
+     * Ordinary object snapshots reuse the existing custody: readAs acquires no root, a valid
+     * writeFrom releases its temporary root, a writeFrom refused before value preparation
+     * acquires none, one refused during ABI admission releases its temporary root, and the
+     * destination stays live until its own release returns the count to zero.
+     */
+    @Test
+    void ordinarySnapshotsUseExistingAllocationCustody() throws Exception {
+        try (ProtosExternalForeignProviderTest.Fixture fixture = distributable(Map.of())) {
+            ProtosObjectValue state =
+                    (ProtosObjectValue)
+                            fixture.eval("FFI: import(\"std:ffi\")\n"
+                                    + "Choice: FFI.union(Array(FFI.field(\"integer\", FFI.i64),"
+                                    + " FFI.field(\"real\", FFI.f64)))\n"
+                                    + "Pair: FFI.struct(Array(FFI.field(\"a\", FFI.i32),"
+                                    + " FFI.field(\"choice\", Choice)))\n"
+                                    + "P: {}\n"
+                                    + "FFI.prototype(Pair, P)\n"
+                                    + "arms: Array(FFI.unionArm(Array(\"choice\"), \"integer\"))\n"
+                                    + "region: FFI.allocate(Pair)\n"
+                                    + "{\n region: region\n"
+                                    + " read: () => FFI.readAs(P, region, arms)\n"
+                                    + " write: (value) => FFI.writeFrom(region,"
+                                    + " P { a: value; choice: { integer: 1 } }, arms)\n"
+                                    + " early: () => FFI.writeFrom(region,"
+                                    + " { a: 1; choice: { integer: 1 } }, arms)\n"
+                                    + " invalid: () => FFI.writeFrom(region,"
+                                    + " P { a: 1; choice: { integer: 1.5 } }, arms)\n"
+                                    + " at: () => region[\"a\"]\n"
+                                    + " release: () => FFI.release(region)\n}");
+            Object region = slot(state, "region");
+            Object session = pluginSession(region);
+            int base = ownedCount(session);
+            assertEquals(1, base);
+            for (int round = 0; round < 3; round++) {
+                call(fixture, state, "read");
+                assertEquals(base, ownedCount(session));
+            }
+            for (int round = 0; round < 3; round++) {
+                Object written =
+                        call(fixture, state, "write",
+                                com.guillermomolina.protos.runtime.ProtosNumericValueSupport
+                                        .integer(round + 10));
+                assertSame(region, written);
+                assertEquals(base, ownedCount(session));
+                assertEquals(String.valueOf(round + 10), integer(call(fixture, state, "at")));
+            }
+            assertOrdinary(fixture, invoke(fixture, slot(state, "early")));
+            assertEquals(base, ownedCount(session));
+            assertOrdinary(fixture, invoke(fixture, slot(state, "invalid")));
+            assertEquals(base, ownedCount(session));
+            assertEquals("12", integer(call(fixture, state, "at")));
+            assertSame(
+                    com.guillermomolina.protos.runtime.ProtosNullValue.INSTANCE,
+                    call(fixture, state, "release"));
+            assertEquals(0, ownedCount(session));
+        }
+    }
+
+    /** Shared Protos declarations of the snapshot programs below. */
+    private static final String SNAPSHOT_PRELUDE =
+            "FFI: import(\"std:ffi\")\n"
+                    + "Pair: FFI.struct(Array(FFI.field(\"a\", FFI.i32),"
+                    + " FFI.field(\"b\", FFI.f64)))\n"
+                    + "region: FFI.allocate(Pair)\n"
+                    + "region[\"a\"] = 4\n"
+                    + "region[\"b\"] = 0.5\n"
+                    + "hits: { count: 0 }\n"
+                    + "hit: () => { hits.count = hits.count + 1 }\n"
+                    + "rejects: (body) => {\n"
+                    + " error: null\n"
+                    + " Error.handle(body, (e) => {\n  error = e\n  e\n })\n"
+                    + " error !== null\n"
+                    + "}\n";
+
+    /** Runs a program whose answer is an object of Boolean checks, each of which must hold. */
+    private static void assertChecks(
+            ProtosExternalForeignProviderTest.Fixture fixture, String program) throws Exception {
+        ProtosObjectValue checks = (ProtosObjectValue) fixture.eval(program);
+        Map<String, Object> results = checks.localSlotsSnapshot();
+        assertTrue(!results.isEmpty());
+        for (Map.Entry<String, Object> result : results.entrySet()) {
+            assertSame(Boolean.TRUE, result.getValue(), result.getKey());
+        }
+    }
+
+    /**
+     * Real Protos programs: the canonical reflective selections are admitted, a shadowing
+     * createSlot, slotValue or parent (locally or in an ancestor, or installed between two
+     * operations) is refused, no forged method runs, and unrelated methods are not refused.
+     */
+    @Test
+    void ordinarySnapshotsRequireCanonicalReflection() throws Exception {
+        try (ProtosExternalForeignProviderTest.Fixture fixture = distributable(Map.of())) {
+            assertChecks(
+                    fixture,
+                    SNAPSHOT_PRELUDE
+                            + "Canonical: {\n describe: () => \"pair\"\n at: (k) => 0\n}\n"
+                            + "FFI.prototype(Pair, Canonical)\n"
+                            + "Create: { createSlot: (n, v) => { hit()\n v } }\n"
+                            + "FFI.prototype(Pair, Create)\n"
+                            + "Read: { slotValue: (n) => { hit()\n 1 } }\n"
+                            + "FFI.prototype(Pair, Read)\n"
+                            + "Lying: { parent: () => { hit()\n Lying } }\n"
+                            + "FFI.prototype(Pair, Lying)\n"
+                            + "Upper: { slotValue: (n) => { hit()\n 1 } }\n"
+                            + "Lower: Upper {}\n"
+                            + "FFI.prototype(Pair, Lower)\n"
+                            + "Later: {}\n"
+                            + "FFI.prototype(Pair, Later)\n"
+                            + "add: Later.createSlot\n"
+                            + "first: FFI.readAs(Later, region, Array()).a == 4\n"
+                            + "add(\"createSlot\", (n, v) => { hit()\n v })\n"
+                            + "snapshot: FFI.readAs(Canonical, region, Array())\n"
+                            + "{\n"
+                            + " admitted: (snapshot.a == 4) && (snapshot.describe() == \"pair\")\n"
+                            + " written: FFI.writeFrom(region, Canonical { a: 5; b: 0.5 },"
+                            + " Array()) === region\n"
+                            + " createRefused: rejects(() => FFI.readAs(Create, region,"
+                            + " Array()))\n"
+                            + " slotValueRefused: rejects(() => FFI.writeFrom(region,"
+                            + " Read { a: 6; b: 0.5 }, Array()))\n"
+                            + " parentRefused: rejects(() => FFI.writeFrom(region,"
+                            + " Lying { a: 6; b: 0.5 }, Array()))\n"
+                            + " ancestorRefused: rejects(() => FFI.writeFrom(region,"
+                            + " Lower { a: 6; b: 0.5 }, Array()))\n"
+                            + " firstAdmitted: first\n"
+                            + " mutationObserved: rejects(() => FFI.readAs(Later, region,"
+                            + " Array()))\n"
+                            + " regionKept: region[\"a\"] == 5\n"
+                            + " noForgedMethodRan: hits.count == 0\n"
+                            + "}");
+        }
+    }
+
+    /**
+     * Identity, not structure: two prototypes of one layout keep their own exact parents, a
+     * physically identical layout is a different association, an association reachable only by
+     * delegation is refused, user-built objects need no FFI registration, and call, construct
+     * and init never run.
+     */
+    @Test
+    void ordinarySnapshotsPreserveExactPrototypeIdentity() throws Exception {
+        try (ProtosExternalForeignProviderTest.Fixture fixture = distributable(Map.of())) {
+            assertChecks(
+                    fixture,
+                    SNAPSHOT_PRELUDE
+                            + "Twin: FFI.struct(Array(FFI.field(\"a\", FFI.i32),"
+                            + " FFI.field(\"b\", FFI.f64)))\n"
+                            + "First: {\n call: (...x) => hit()\n construct: (...x) => hit()\n"
+                            + " init: (...x) => hit()\n}\n"
+                            + "Second: {}\n"
+                            + "TwinShape: {}\n"
+                            + "Child: First {}\n"
+                            + "FFI.prototype(Pair, First)\n"
+                            + "FFI.prototype(Pair, Second)\n"
+                            + "FFI.prototype(Twin, TwinShape)\n"
+                            + "one: FFI.readAs(First, region, Array())\n"
+                            + "two: FFI.readAs(Second, region, Array())\n"
+                            + "{\n"
+                            + " firstParent: one.parent() === First\n"
+                            + " secondParent: two.parent() === Second\n"
+                            + " distinct: one !== two\n"
+                            + " twinRefused: rejects(() => FFI.readAs(TwinShape, region,"
+                            + " Array()))\n"
+                            + " twinObjectRefused: rejects(() => FFI.writeFrom(region,"
+                            + " TwinShape { a: 1; b: 0.5 }, Array()))\n"
+                            + " delegatedRefused: rejects(() => FFI.readAs(Child, region,"
+                            + " Array()))\n"
+                            + " delegatedObjectRefused: rejects(() => FFI.writeFrom(region,"
+                            + " Child { a: 1; b: 0.5 }, Array()))\n"
+                            + " userBuilt: FFI.writeFrom(region, Second { a: 9; b: 0.25 },"
+                            + " Array()) === region\n"
+                            + " userBuiltWritten: region[\"a\"] == 9\n"
+                            + " layoutKept: FFI.layoutOf(First) === Pair\n"
+                            + " neverCalled: hits.count == 0\n"
+                            + "}");
+        }
+    }
+
+    /**
+     * The canonical-selection admission stays private, no public operation runs the root
+     * Object reflection directly, slots outside the layout are never projected, and an
+     * incompatible redefinition is refused instead of being bypassed.
+     */
+    @Test
+    void ordinarySnapshotsDoNotExposePrivilegedReflection() throws Exception {
+        try (ProtosExternalForeignProviderTest.Fixture fixture = distributable(Map.of())) {
+            ProtosObjectValue module = (ProtosObjectValue) fixture.eval("import(\"std:ffi\")");
+            Map<String, Object> members = module.localSlotsSnapshot();
+            java.util.Set<String> surface = members.keySet();
+            java.util.Set<String> descriptors =
+                    java.util.Set.of("void", "i8", "u8", "i16", "u16", "i32", "u32", "i64",
+                            "u64", "f32", "f64", "sizeT", "utf8z");
+            java.util.Set<String> operations =
+                    java.util.Set.of("opaque", "nullable", "owned", "out", "bind",
+                            "bindPreserving", "release", "field", "struct", "union", "array",
+                            "pointer", "borrowedPointer", "addressOf", "sizeOf", "alignOf",
+                            "offsetOf", "prototype", "layoutOf", "cType", "allocate", "slice",
+                            "view", "assumeExtent", "unionArm", "readFields", "writeFields",
+                            "readAs", "writeFrom");
+            java.util.Set<String> inventory = new java.util.HashSet<>(descriptors);
+            inventory.addAll(operations);
+            assertEquals(13, descriptors.size());
+            assertEquals(29, operations.size());
+            assertEquals(42, inventory.size());
+            assertEquals(inventory, new java.util.HashSet<>(surface));
+            for (String name : operations) {
+                assertTrue(
+                        members.get(name)
+                                instanceof com.guillermomolina.protos.runtime.ProtosClosureValue,
+                        name);
+            }
+            for (String name : descriptors) {
+                assertTrue(
+                        !(members.get(name)
+                                instanceof com.guillermomolina.protos.runtime.ProtosClosureValue),
+                        name);
+            }
+            ProtosObjectValue object =
+                    (ProtosObjectValue) fixture.prelude.bindings().readLocalSlot("Object")
+                            .orElseThrow();
+            for (String name :
+                    List.of("_ffiObjectRecognitionFacility", "selectsCanonicalObjectMethod",
+                            "requireCanonicalMethod", "recognition", "snapshotGroup",
+                            "captureSlots", "commitPrepared", "createSlot", "slotValue")) {
+                assertTrue(!surface.contains(name), name);
+                assertTrue(fixture.prelude.bindings().readLocalSlot(name).isEmpty(), name);
+            }
+            assertTrue(!object.localSlotsSnapshot().containsKey("selectsCanonicalObjectMethod"));
+            assertChecks(
+                    fixture,
+                    SNAPSHOT_PRELUDE
+                            + "P: {}\n"
+                            + "FFI.prototype(Pair, P)\n"
+                            + "input: P { a: 7; b: 1.5; secret: \"hidden\" }\n"
+                            + "FFI.writeFrom(region, input, Array())\n"
+                            + "fields: FFI.readFields(region, Array())\n"
+                            + "snapshot: FFI.readAs(P, region, Array())\n"
+                            + "Shadow: { slotValue: (n) => { hit()\n \"leak\" } }\n"
+                            + "FFI.prototype(Pair, Shadow)\n"
+                            + "{\n"
+                            + " onlyLayoutFields: fields.size() == 2\n"
+                            + " snapshotHasNoForeignSlot: snapshot.hasSlot(\"secret\") == false\n"
+                            + " snapshotLocalSlots: snapshot.slotNames().size() == 2\n"
+                            + " noFallback: rejects(() => FFI.writeFrom(region,"
+                            + " Shadow { a: 1; b: 0.5 }, Array()))\n"
+                            + " regionKept: region[\"a\"] == 7\n"
+                            + " noRecognitionMember: FFI.hasSlot(\"recognition\") == false\n"
+                            + " noPrivateFacility:"
+                            + " FFI.hasSlot(\"_ffiObjectRecognitionFacility\") == false\n"
+                            + " noPrivateOperation:"
+                            + " FFI.hasSlot(\"selectsCanonicalObjectMethod\") == false\n"
+                            + " noForgedMethodRan: hits.count == 0\n"
+                            + "}");
         }
     }
 

@@ -782,6 +782,415 @@ refusedSnapshot: caught(NonParallelValue, () => ((x) => 1).parallel(pointerSnaps
 check("a snapshot holding a pointer never crosses P", (refusedSnapshot === null) == false)
 check("nested groups are Maps, not regions", isMap(pointerSnapshot["inner"]))
 
+// ---- ordinary object snapshots of C results
+
+InnerShape: {
+    succ: () => this.a + 1
+}
+FFI.prototype(Inner, InnerShape)
+ChoiceShape: {}
+FFI.prototype(Choice, ChoiceShape)
+OuterShape: {}
+FFI.prototype(Outer, OuterShape)
+NestedShape: {}
+FFI.prototype(Nested, NestedShape)
+LateShape: {}
+FFI.prototype(Late, LateShape)
+PaddedShape: {}
+FFI.prototype(PaddedUnion, PaddedShape)
+
+snapshotCalls: calls()
+madeObject: FFI.readAs(InnerShape, made, Array())
+check("C struct result as an object", (madeObject.a == 17) && (madeObject.b == 2.5))
+check("C struct object parent", madeObject.parent() === InnerShape)
+integralObject: FFI.readAs(ChoiceShape, integral, Array(rootInteger))
+check("C union result as an object", integralObject.integer == 101)
+check("C union object holds one member", integralObject.slotNames().size() == 1)
+transformedObject: FFI.readAs(OuterShape, transformed, Array())
+check("C nested struct object", transformedObject.inner.a == 12)
+check("C nested struct parent is Object", transformedObject.inner.parent() === Object)
+check("C nested array", Array.recognizes(transformedObject.values) &&
+    (transformedObject.values[2] == 33))
+reshapedObject: FFI.readAs(NestedShape, reshaped, Array(FFI.unionArm(Array("choice"), "integer")))
+check("C nested union object", reshapedObject.choice.integer == 45)
+check("C nested f32 array", reshapedObject.ratios[1] == 0.75)
+check("readAs never entered C", calls() == snapshotCalls)
+objectOuts: mixed(seed, 4)
+outObject: FFI.readAs(InnerShape, objectOuts[1], Array())
+outUnion: FFI.readAs(ChoiceShape, objectOuts[2], Array(rootInteger))
+for(root in objectOuts) {
+    check("object out release", FFI.release(root) === null)
+}
+check("out snapshots outlive their roots", (outObject.a == 6) && (outUnion.integer == 1007))
+check("out snapshot delegates", outObject.succ() == 7)
+// A snapshot of its own independent C result, observed after that root's release.
+standalone: outer(complex)
+standaloneObject: FFI.readAs(OuterShape, standalone, Array())
+standaloneInner: standaloneObject.inner
+standaloneValues: standaloneObject.values
+standalonePointer: standaloneObject.next
+expectedTag: standalone["tag"]
+expectedInnerA: standalone["inner"]["a"]
+expectedLast: standalone["values"][2]
+check("standalone pointer passes before release", innerA(standalonePointer) == 77)
+check("standalone root release", FFI.release(standalone) === null)
+ordinary("a snapshot keeps no region alive", () => standalone["tag"])
+check("the snapshot stays ordinary", (standaloneObject.tag == expectedTag) &&
+    (standaloneObject.parent() === OuterShape))
+check("the nested object keeps its scalars", (standaloneInner.a == expectedInnerA) &&
+    (standaloneObject.inner === standaloneInner))
+check("the nested Array keeps its elements", (standaloneValues.size() == 3) &&
+    (standaloneValues[2] == expectedLast))
+standaloneObject.tag = 1
+standaloneInner.a = 2
+standaloneValues[0] = 3
+check("released snapshot slots stay mutable", (standaloneObject.tag == 1) &&
+    (standaloneInner.a == 2) && (standaloneValues[0] == 3))
+ordinary("a contained pointer follows its region's revocation",
+    () => innerA(standalonePointer))
+ordinary("a snapshot is not a region", () => FFI.readFields(standaloneObject, Array()))
+ordinary("a snapshot is not an owned root", () => FFI.release(standaloneObject))
+
+// Writes observed by C.
+writable: make()
+writableObject: FFI.readAs(InnerShape, writable, Array())
+writableObject.a = 40
+writeCalls: calls()
+check("writeFrom over a C result", FFI.writeFrom(writable, writableObject, Array()) === writable)
+check("writeFrom never entered C", calls() == writeCalls)
+check("C reads the written object", measure(writable) == 40)
+rewrittenFromObject: transform(writable)
+check("C transforms the written object",
+    (rewrittenFromObject["a"] == 47) && (rewrittenFromObject["b"] == 2.5 * 2.0))
+for(root in Array(writable, rewrittenFromObject)) {
+    check("written object release", FFI.release(root) === null)
+}
+
+// ---- field names that are also reflective messages
+
+hookNames: Array("createSlot", "call", "init", "construct", "slotValue", "parent", "plain", "",
+    "with space", "a.b", "ñandú π")
+hookFields: Array()
+for(name in hookNames) {
+    hookFields = Arrays.append(hookFields, field(name, FFI.i32))
+}
+Hooked: FFI.struct(hookFields)
+hookHits: { count: 0 }
+HookedShape: {
+    call: (...arguments) => {
+        hookHits.count = hookHits.count + 1
+        null
+    }
+    init: (...arguments) => {
+        hookHits.count = hookHits.count + 1
+        null
+    }
+    construct: (...arguments) => {
+        hookHits.count = hookHits.count + 1
+        null
+    }
+}
+FFI.prototype(Hooked, HookedShape)
+hookedRegion: FFI.allocate(Hooked)
+hookedInput: Map()
+hookIndex: 0
+for(name in hookNames) {
+    hookedInput[name] = hookIndex + 1
+    hookIndex = hookIndex + 1
+}
+FFI.writeFields(hookedRegion, hookedInput, Array())
+hooked: FFI.readAs(HookedShape, hookedRegion, Array())
+check("every colliding name became a slot, even after createSlot",
+    hooked.hasSlot("plain") && hooked.hasSlot("ñandú π") && hooked.hasSlot(""))
+check("hasSlot sees the odd names", hooked.hasSlot("with space") && hooked.hasSlot("a.b"))
+check("createSlot field", hooked.createSlot == 1)
+check("call field", hooked.call == 2)
+check("init and construct fields", (hooked.init == 3) && (hooked.construct == 4))
+check("slotValue and parent fields", (hooked.slotValue == 5) && (hooked.parent == 6))
+check("plain field", hooked.plain == 7)
+check("prototype behavior never ran", hookHits.count == 0)
+check("a call field makes the snapshot not invocable", (caught(Error, () => hooked()) === null) == false)
+check("a failed invocation ran no prototype behavior", hookHits.count == 0)
+// A layout without slotValue inspects the odd names through ordinary reflection.
+Named: FFI.struct(Array(field("", FFI.i32), field("with space", FFI.i32), field("a.b", FFI.i32),
+    field("ñandú π", FFI.i32)))
+NamedShape: {}
+FFI.prototype(Named, NamedShape)
+namedRegion: FFI.allocate(Named)
+FFI.writeFields(namedRegion, %{ "": 1; "with space": 2; "a.b": 3; "ñandú π": 4 }, Array())
+namedObject: FFI.readAs(NamedShape, namedRegion, Array())
+check("exact odd names", (namedObject.slotValue("") == 1) && (namedObject.slotValue("with space") == 2))
+check("exact odd names 2", (namedObject.slotValue("a.b") == 3) &&
+    (namedObject.slotValue("ñandú π") == 4))
+namedObject.updateSlot("a.b", 30)
+FFI.writeFrom(namedRegion, namedObject, Array())
+check("odd names write back", namedRegion["a.b"] == 30)
+check("a snapshot is not a native region", FFI.release(namedRegion) === null)
+ordinary("a snapshot is not an owned region", () => FFI.release(namedObject))
+check("a snapshot outlives its region", namedObject.slotValue("") == 1)
+hookedBytes: octets(hookedRegion, FFI.sizeOf(Hooked))
+ordinary("writeFrom refuses a shadowed parent and slotValue",
+    () => FFI.writeFrom(hookedRegion, hooked, Array()))
+SlotValued: FFI.struct(Array(field("slotValue", FFI.i32), field("v", FFI.i32)))
+SlotValuedShape: {}
+FFI.prototype(SlotValued, SlotValuedShape)
+slotValuedRegion: FFI.allocate(SlotValued)
+slotValued: FFI.readAs(SlotValuedShape, slotValuedRegion, Array())
+ordinary("writeFrom refuses a shadowed slotValue",
+    () => FFI.writeFrom(slotValuedRegion, slotValued, Array()))
+Parented: FFI.struct(Array(field("parent", FFI.i32), field("v", FFI.i32)))
+ParentedShape: {}
+FFI.prototype(Parented, ParentedShape)
+parentedRegion: FFI.allocate(Parented)
+parented: FFI.readAs(ParentedShape, parentedRegion, Array())
+ordinary("writeFrom refuses a shadowed parent",
+    () => FFI.writeFrom(parentedRegion, parented, Array()))
+check("shadowed refusals left the bytes",
+    sameOctets(hookedBytes, octets(hookedRegion, FFI.sizeOf(Hooked))))
+hookedInput["call"] = 20
+check("writeFields still serves colliding layouts",
+    FFI.writeFields(hookedRegion, hookedInput, Array()) === hookedRegion)
+check("readFields still serves colliding layouts",
+    FFI.readFields(hookedRegion, Array())["call"] == 20)
+for(root in Array(hookedRegion, slotValuedRegion, parentedRegion)) {
+    check("colliding root release", FFI.release(root) === null)
+}
+
+// ---- redefined reflection is refused without being executed
+
+forgery: { hits: 0 }
+forged: () => {
+    forgery.hits = forgery.hits + 1
+}
+ForgedCreate: {
+    createSlot: (name, value) => {
+        forged()
+        value
+    }
+}
+FFI.prototype(Inner, ForgedCreate)
+ordinary("readAs refuses a redefined createSlot", () => FFI.readAs(ForgedCreate, made, Array()))
+ForgedRead: {
+    slotValue: (name) => {
+        forged()
+        5
+    }
+}
+FFI.prototype(Inner, ForgedRead)
+forgedTarget: FFI.allocate(Inner)
+forgedTarget["a"] = 1
+forgedBytes: octets(forgedTarget, 16)
+ordinary("writeFrom refuses a redefined slotValue",
+    () => FFI.writeFrom(forgedTarget, ForgedRead { a: 2; b: 0.5 }, Array()))
+ordinary("writeFrom refuses a slotValue forging a missing field",
+    () => FFI.writeFrom(forgedTarget, ForgedRead { a: 2 }, Array()))
+Impostor: {
+    parent: () => {
+        forged()
+        InnerShape
+    }
+}
+ordinary("writeFrom refuses a parent forging a registered prototype",
+    () => FFI.writeFrom(forgedTarget, Impostor { a: 2; b: 0.5 }, Array()))
+ForgedParent: {
+    parent: () => {
+        forged()
+        ForgedParent
+    }
+}
+FFI.prototype(Inner, ForgedParent)
+ordinary("writeFrom refuses a parent answering the truth",
+    () => FFI.writeFrom(forgedTarget, ForgedParent { a: 2; b: 0.5 }, Array()))
+truthful: { a: 2; b: 0.5 }
+HonestRead: {
+    slotValue: (name) => {
+        forged()
+        truthful.slotValue(name)
+    }
+}
+FFI.prototype(Inner, HonestRead)
+ordinary("writeFrom refuses a slotValue that would delegate correctly",
+    () => FFI.writeFrom(forgedTarget, HonestRead { a: 2; b: 0.5 }, Array()))
+Top: {}
+MiddleForger: Top {
+    slotValue: (name) => {
+        forged()
+        2
+    }
+}
+Bottom: MiddleForger {}
+FFI.prototype(Inner, Bottom)
+ordinary("a redefinition in an intermediate ancestor is observed",
+    () => FFI.writeFrom(forgedTarget, Bottom { a: 2; b: 0.5 }, Array()))
+NotAClosure: { slotValue: 3 }
+FFI.prototype(Inner, NotAClosure)
+ordinary("a non-Closure shadowing slotValue is refused",
+    () => FFI.writeFrom(forgedTarget, NotAClosure { a: 2; b: 0.5 }, Array()))
+NullCreate: { createSlot: null }
+FFI.prototype(Inner, NullCreate)
+ordinary("a non-Closure shadowing createSlot is refused",
+    () => FFI.readAs(NullCreate, made, Array()))
+check("no forged method ran", forgery.hits == 0)
+check("forged refusals left the bytes", sameOctets(forgedBytes, octets(forgedTarget, 16)))
+
+// ---- local slots, never delegated ones
+
+Defaulted: { b: 0.5 }
+FFI.prototype(Inner, Defaulted)
+partial: Defaulted { a: 3 }
+ordinary("a delegated field is not a local slot",
+    () => FFI.writeFrom(forgedTarget, partial, Array()))
+check("the delegated refusal left the bytes", sameOctets(forgedBytes, octets(forgedTarget, 16)))
+partial.createSlot("b", 1.5)
+check("a local slot is written", FFI.writeFrom(forgedTarget, partial, Array()) === forgedTarget)
+check("local values written", (forgedTarget["a"] == 3) && (forgedTarget["b"] == 1.5))
+partial.b = 2.5
+check("the snapshot slot is not the prototype slot", Defaulted.b == 0.5)
+check("the forged target release", FFI.release(forgedTarget) === null)
+
+// ---- preflight: a rejected writeFrom changes nothing
+
+lentObjects: lend(1)
+lateObjectRejected: (label, change, arms) => {
+    input: FFI.readAs(LateShape, late, lateArms)
+    change(input)
+    before: calls()
+    bytes: octets(late, lateSize)
+    ordinary(label, () => FFI.writeFrom(late, input, arms))
+    check(label + " did not enter C", calls() == before)
+    check(label + " left every byte", sameOctets(bytes, octets(late, lateSize)))
+    check(label + " kept the borrow epoch", first.isLive(lentObjects) == true)
+    check(label + " kept the region live", late["first"] == 1)
+}
+SlotForger: {
+    slotValue: (name) => {
+        forged()
+        4
+    }
+}
+lateObjectRejected("last local slot missing", (o) => { o.removeSlot("real") }, lateArms)
+lateObjectRejected("scalar out of range", (o) => { o.small = 128 }, lateArms)
+lateObjectRejected("Integer for the last Float", (o) => { o.real = 1 }, lateArms)
+lateObjectRejected("incompatible pointer", (o) => { o.target = FFI.addressOf(wide) }, lateArms)
+lateObjectRejected("expired pointer", (o) => { o.target = expired }, lateArms)
+lateObjectRejected("short Array", (o) => { o.list = Array(1, 2) }, lateArms)
+lateObjectRejected("invalid last element", (o) => { o.list[2] = 40000 }, lateArms)
+lateObjectRejected("nested Map", (o) => { o.choice = %{ "integer": 4 } }, lateArms)
+lateObjectRejected("nested redefined slotValue", (o) => { o.choice = SlotForger { integer: 4 } },
+    lateArms)
+lateObjectRejected("missing selection", (o) => null, Array())
+lateObjectRejected("duplicate selection", (o) => null,
+    Arrays.append(lateArms, FFI.unionArm(Array("choice"), "real")))
+lateObjectRejected("extraneous selection", (o) => null,
+    Arrays.append(lateArms, FFI.unionArm(Array("nowhere"), "real")))
+check("no nested forger ran", forgery.hits == 0)
+overflowing: FFI.readAs(LateShape, late, lateArms)
+overflowing.ratio = 1.0e300
+FFI.writeFrom(late, overflowing, lateArms)
+check("f32 overflow from an object rounds to infinity", late["ratio"] == (1.0 / 0.0))
+overflowing.ratio = 0.5
+check("valid object write", FFI.writeFrom(late, overflowing, lateArms) === late)
+check("valid object write kept the borrow epoch", first.isLive(lentObjects) == true)
+
+// ---- padding and unselected union bytes keep their contents
+
+pattern(paddedStruct, 16)
+FFI.writeFrom(paddedStruct, InnerShape { a: 5; b: 4.0 }, Array())
+check("object write keeps struct padding",
+    sameOctets(Arrays.take(Arrays.drop(octets(paddedStruct, 16), 4), 4), Array(164, 165, 166, 167)))
+check("object write fields", (paddedStruct["a"] == 5) && (paddedStruct["b"] == 4.0))
+pattern(paddedUnion, 16)
+FFI.writeFrom(paddedUnion, PaddedShape { wide: 0 }, Array(whole("wide")))
+check("object write keeps union bytes beyond the member",
+    sameOctets(Arrays.drop(octets(paddedUnion, 16), 8), Array(168, 169, 170, 171, 172, 173, 174, 175)))
+Tail: FFI.struct(Array(field("wide", FFI.i64), field("last", FFI.u8)))
+check("tail-padded struct size", FFI.sizeOf(Tail) == 16)
+check("tail-padded struct alignment", FFI.alignOf(Tail) == 8)
+TailShape: {}
+FFI.prototype(Tail, TailShape)
+tail: FFI.allocate(Tail)
+pattern(tail, 16)
+tailBefore: octets(tail, 16)
+check("tail object write answers the region",
+    FFI.writeFrom(tail, TailShape { wide: -2; last: 200 }, Array()) === tail)
+check("tail object fields", (tail["wide"] == -2) && (tail["last"] == 200))
+check("tail padding keeps its pattern",
+    sameOctets(Arrays.drop(octets(tail, 16), 9), Arrays.drop(tailBefore, 9)))
+tailWritten: octets(tail, 16)
+ordinary("a late out-of-range u8 is refused",
+    () => FFI.writeFrom(tail, TailShape { wide: 9; last: 256 }, Array()))
+check("the late refusal left every byte", sameOctets(tailWritten, octets(tail, 16)))
+check("tail release", FFI.release(tail) === null)
+
+// A nested object needs canonical slotValue only: its parent is never observed.
+ChildLayout: FFI.struct(Array(field("parent", FFI.i32), field("v", FFI.i32)))
+HolderLayout: FFI.struct(Array(field("head", FFI.i32), field("child", ChildLayout)))
+HolderShape: {}
+FFI.prototype(HolderLayout, HolderShape)
+holderRegion: FFI.allocate(HolderLayout)
+FFI.writeFields(holderRegion, %{ "head": 1; "child": %{ "parent": 2; "v": 3 } }, Array())
+holderObject: FFI.readAs(HolderShape, holderRegion, Array())
+check("nested parent field is a slot",
+    holderObject.child.hasSlot("parent") && holderObject.child.hasSlot("v"))
+check("nested parent field value", (holderObject.child.parent == 2) && (holderObject.child.v == 3))
+holderObject.child.parent = 20
+check("a nested parent field writes",
+    FFI.writeFrom(holderRegion, holderObject, Array()) === holderRegion)
+check("nested parent field written", holderRegion["child"]["parent"] == 20)
+loudHits: { count: 0 }
+LoudParent: {
+    parent: () => {
+        loudHits.count = loudHits.count + 1
+        Error().signal()
+    }
+}
+WrappedLayout: FFI.struct(Array(field("head", FFI.i32), field("inner", Inner)))
+WrappedShape: {}
+FFI.prototype(WrappedLayout, WrappedShape)
+wrappedRegion: FFI.allocate(WrappedLayout)
+check("an inherited nested parent redefinition is not observed",
+    FFI.writeFrom(wrappedRegion, WrappedShape { head: 4; inner: LoudParent { a: 7; b: 0.5 } },
+        Array()) === wrappedRegion)
+check("nested values written", (wrappedRegion["head"] == 4) && (wrappedRegion["inner"]["a"] == 7))
+check("the nested parent redefinition never ran", loudHits.count == 0)
+for(root in Array(holderRegion, wrappedRegion)) {
+    check("nested parent root release", FFI.release(root) === null)
+}
+
+// ---- pointers inside object snapshots stay capabilities
+
+pointerObject: FFI.readAs(OuterShape, complex, Array())
+check("object pointer is not an Integer", Integer.recognizes(pointerObject.next) == false)
+check("object pointer passes to C", innerA(pointerObject.next) == 77)
+ordinary("object pointer has no inferred extent", () => FFI.view(pointerObject.next, Inner))
+ordinary("object pointer is not an owned resource", () => FFI.release(pointerObject.next))
+FFI.writeFrom(complex, pointerObject, Array())
+check("writeFrom keeps the pointer address", innerA(complex["next"]) == 77)
+emptyObject: FFI.readAs(OuterShape, emptyNext, Array())
+check("nullable pointer null slot", emptyObject.hasSlot("next") && (emptyObject.next === null))
+check("null pointer writes back", FFI.writeFrom(emptyNext, emptyObject, Array()) === emptyNext)
+// A pointer read from a region keeps that region as provenance, so the one in
+// holderNext is still live; an expired capability is one of a released root.
+danglingObject: FFI.readAs(OuterShape, holderNext, Array())
+check("a read pointer of a live region writes",
+    FFI.writeFrom(holderNext, danglingObject, Array()) === holderNext)
+expiredObject: FFI.readAs(OuterShape, emptyNext, Array())
+expiredObject.next = expired
+emptyBytes: octets(emptyNext, FFI.sizeOf(Outer))
+ordinary("writeFrom never revives an expired pointer",
+    () => FFI.writeFrom(emptyNext, expiredObject, Array()))
+check("expired refusal left the bytes", sameOctets(emptyBytes, octets(emptyNext, FFI.sizeOf(Outer))))
+refusedObject: caught(NonParallelValue, () => ((x) => 1).parallel(pointerObject).value())
+check("an object holding a pointer never crosses P", (refusedObject === null) == false)
+PlainShape: {}
+FFI.prototype(Inner, PlainShape)
+plainSource: make()
+plainSnapshot: FFI.readAs(PlainShape, plainSource, Array())
+check("a plain snapshot crosses P", ((x) => x.a + 1).parallel(plainSnapshot).value() == 18)
+check("plain source release", FFI.release(plainSource) === null)
+check("a plain snapshot crosses P after release",
+    ((x) => x.a + 1).parallel(plainSnapshot).value() == 18)
+
 for(root in Array(selector, keyed, colliding, lateTarget, late, paddedUnion, paddedStruct, owner,
         holderNext, emptyNext)) {
     check("projection release", FFI.release(root) === null)

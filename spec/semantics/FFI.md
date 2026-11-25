@@ -109,10 +109,12 @@ Protos API.
 
 The MODULE exports exactly thirteen scalar descriptors (`void`, `i8`, `u8`,
 `i16`, `u16`, `i32`, `u32`, `i64`, `u64`, `f32`, `f64`, `sizeT`, `utf8z`)
-and nineteen ordinary Closures (`opaque`, `nullable`, `owned`, `out`, `bind`,
-`bindPreserving`, `release`, `field`, `struct`, `union`, `array`, `pointer`,
-`borrowedPointer`, `addressOf`, `sizeOf`, `alignOf`, `offsetOf`, `prototype`,
-`layoutOf`). Helpers, descriptor adaptation metadata, layout metadata, the
+and twenty-nine ordinary Closures (`opaque`, `nullable`, `owned`, `out`,
+`bind`, `bindPreserving`, `release`, `field`, `struct`, `union`, `array`,
+`pointer`, `borrowedPointer`, `addressOf`, `sizeOf`, `alignOf`, `offsetOf`,
+`prototype`, `layoutOf`, `cType`, `allocate`, `slice`, `view`,
+`assumeExtent`, `unionArm`, `readFields`, `writeFields`, `readAs`,
+`writeFrom`). Helpers, descriptor adaptation metadata, layout metadata, the
 pointee-to-provider pointer descriptor map and release dispatch metadata are
 private and Actor-local. No public descriptor
 slot layout is defined. Descriptors are immutable ordinary frozen Protos
@@ -333,13 +335,13 @@ associations.
 
 ### Not yet implemented
 
-The following capabilities are not provided by this revision. They are not
-rejected design directions: passing or returning a C array directly by value,
-and conversion of native aggregates to or from ordinary Protos Objects or
-associated prototypes (`readAs`, `writeFrom`). Struct and union by-value
-invocation is specified in By-value struct and union invocation, native memory
-in Native memory, and the explicit projection of native aggregates to and from
-ordinary Maps and Arrays in Explicit native aggregate projection below.
+The following capability is not provided by this revision. It is not a
+rejected design direction: passing or returning a C array directly by value.
+Struct and union by-value invocation is specified in By-value struct and union
+invocation, native memory in Native memory, and the explicit projection of
+native aggregates to and from ordinary Maps and Arrays, and to and from
+ordinary objects of associated prototypes (`readAs`, `writeFrom`), in Explicit
+native aggregate projection below.
 
 
 
@@ -728,9 +730,11 @@ library authorization remains independently required.
 `FFI.readFields(region, arms)` and `FFI.writeFields(region, fields, arms)`
 convert between a live native struct or union region and fresh ordinary Protos
 Maps and Arrays. `FFI.unionArm(path, memberName)` declares the explicit member
-selection of one union that such a conversion reaches. These are the only
-projection operations of this revision; `readAs`, `writeFrom` and every
-conversion through ordinary Objects or associated prototypes remain pending.
+selection of one union that such a conversion reaches.
+`FFI.readAs(prototype, region, arms)` and `FFI.writeFrom(region, value, arms)`
+perform the same conversion through ordinary objects of a prototype exactly
+associated with the region's layout (see Ordinary object snapshots). These
+four are the projection operations of this revision.
 
 ### Union selections
 
@@ -838,6 +842,115 @@ transfer rules; a Map or Array containing a native pointer capability does
 not make that capability transferable, and no region is ever transferred
 implicitly.
 
+### Ordinary object snapshots
+
+```protos
+FFI.readAs(prototype, region, arms)
+FFI.writeFrom(region, value, arms)
+```
+
+Each operation requires exactly three arguments; any other count is an
+ordinary Error. `region` is admitted as for `readFields` (`readAs`) or
+`writeFields` (`writeFrom`), and `arms` is planned exactly as for those
+operations: every reached union has exactly one selection and every selection
+is consumed, before a snapshot is built or the destination is changed.
+
+**Association.** `readAs` requires `prototype` to be an ordinary object
+(specialized values, Maps, Arrays, Closures, regions, pointers and `null` are
+not) that is itself directly associated by `FFI.prototype` with the exact
+layout identity of `region`. `writeFrom` requires `value` to be an ordinary
+object whose immediate delegation parent is directly associated with the exact
+layout identity of `region`. Associations are compared by exact prototype and
+layout identity: an association of a delegation ancestor, of a descendant, or
+with a layout of identical size, alignment and fields does not satisfy it, and
+no layout is inferred from the structure of an object or of a nested
+prototype. Several prototypes may be associated with one layout; each answers
+snapshots of its own exact identity. The admission is complete before the
+root snapshot is created or any destination byte is changed.
+
+**Reading.** `readAs` reads the region exactly as `readFields` does, through
+the same typed reads, and answers a fresh ordinary object whose immediate
+parent is exactly `prototype`. Every nested struct and union is a fresh
+ordinary object whose parent is `Object`, holding exactly its planned members
+(one, for a union), and every nested fixed array is a fresh ordinary Array of
+exactly its element count. Each object is created by ordinary object creation
+with that parent; `call`, `construct` and `init` of the prototype are never
+invoked. Its local slots are exactly the planned member names, as the exact
+Strings (empty, Unicode and non-identifier names included), inserted in
+declaration order through the object's ordinary `createSlot` behavior. Leaves
+are the values of the existing typed reads: scalars by value and pointer
+members as pointer capabilities, as specified in Reading above. A snapshot is
+open and mutable; no object, Array or prototype is frozen, closed or otherwise
+changed, the prototype gains no slot, and no per-snapshot association or
+registration is retained. A snapshot owns no native memory, is not a region,
+view or resource, and is not accepted by `FFI.release`. Its ordinary objects,
+Arrays and copied scalar values stay usable after the region is released; this
+independence does not extend the lifetime of a native pointer capability it
+contains, which keeps the provenance and revocation rules of the region it was
+read from. Changing it does not write native memory and later
+native writes do not change it.
+
+**Writing.** `writeFrom` captures, for every planned struct or union position,
+the planned members of an ordinary object through its ordinary `slotValue`
+behavior: only local slots satisfy a member, so a member present only in a
+delegation ancestor is the ordinary missing-local-slot Error, and slots that
+the plan does not name, including unselected union members, are never read and
+never written. Every planned fixed array position must be a standard Array of
+exactly its element count; a nested struct or union must itself be an ordinary
+object (a Map, an Array or a region is an ordinary Error), but its parent is
+not constrained. The captured values are then admitted and written exactly as
+`writeFields` admits and writes captured values, through the same prepared
+transfer: every value is admitted before the destination changes, a rejected
+selection, structure or value leaves every destination byte unchanged, a
+successful write updates the region as one whole and answers the exact
+`region`, and padding and union bytes outside the selected members keep their
+contents. "Unchanged" describes only the physical writes of the prepared
+transfer itself: ordinary effects already performed while evaluating the
+arguments or by permitted user operations (such as Map or Array operations on
+the input) are not rolled back, and no guarantee of atomicity or isolation
+with respect to concurrently running C code is provided. The pointer, permission, provenance, custody and borrow-epoch
+rules of `writeFields` apply unchanged; `writeFrom` never revives an expired
+pointer. No other coercion of `value` is performed; any shape that ordinary
+reflection cannot serve is projected with `writeFields` instead.
+
+**Canonical reflection.** Snapshot conversion uses ordinary reflection, never a
+privileged path. Before creating an object, `readAs` requires the ordinary
+selection of `createSlot` from the object's parent to be the standard root
+`Object` behavior; it then obtains the object's bound `createSlot` once,
+before any member is inserted, and creates every member through that bound
+Closure, so a member named `createSlot` is created like any other and shadows
+the method only for later senders. `writeFrom` requires the ordinary
+selections of `parent` and `slotValue` from `value`, and of `slotValue` from
+every nested object, to be the standard root `Object` behaviors, observes the
+parent through the ordinary `parent` message and reads members through the
+bound `slotValue`. A selection that is absent or that resolves to any other
+value, whether a redefined Closure or a non-Closure slot, locally or in any
+ancestor, is an ordinary Error raised before the destination is changed;
+the redefinition is not executed and is never bypassed, even when it would
+answer apparently valid results. Selections are checked at each operation, so
+a prototype mutated between two operations is observed by the next one.
+
+**Member names.** Member names are not reserved and follow the ordinary slot
+rules of the snapshot: a member named `call` can make the snapshot not
+invocable; members named `init` or `construct` are ordinary slots; members
+named `createSlot`, `slotValue` or `parent` shadow those messages for later
+senders. The root object of `writeFrom` requires canonical `parent` and
+`slotValue` selections, so a root holding a `slotValue` or `parent` member is
+refused. A nested struct or union object requires only a canonical
+`slotValue` selection: its layout comes from the native plan, never from its
+prototype or from a `parent` message, so a nested member named `parent`, or a
+nested object inheriting a redefined `parent`, is not by itself a reason for
+refusal, while a nested object holding or inheriting a non-canonical
+`slotValue` is refused. `readFields` and `writeFields` remain available for
+every layout.
+
+**Isolation.** Neither operation acquires a C library, enters C code, acquires
+native memory other than the temporary preparation root of `writeFrom`, or
+advances the borrow epoch. Snapshots follow ordinary Actor and P transfer
+rules; an object holding a native pointer capability does not make that
+capability transferable, and the capability keeps its own lifetime,
+provenance and restrictions independently of the snapshot.
+
 ## Custody, identity and release
 
 Every non-null owned acquisition enters provider custody before publication,
@@ -922,9 +1035,7 @@ not make an otherwise forbidden transfer valid.
 ## Exclusions
 
 R1 excludes numeric pointers, pointer arithmetic (byte slices excepted),
-direct C array-by-value invocation, aggregate conversion to or from ordinary
-Objects or associated prototypes (`readAs`, `writeFrom`; projection to and from
-ordinary Maps and Arrays is specified above), packed layouts, bitfields, flexible array members, callbacks and
+direct C array-by-value invocation, packed layouts, bitfields, flexible array members, callbacks and
 upcalls (including function-pointer upcalls), variadic functions, C++, arbitrary library paths, `SQLITE_TRANSIENT`,
 a mandatory binding generator, external plugin execution in Native Image,
 and a second semantics of invocation. It defines no SQLite connection,

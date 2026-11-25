@@ -23,6 +23,13 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.514] - 2026-11-25
+
+### D261-R2 / I174-F — Ordinary prototype snapshots and native aggregate writeback
+
+- Primary owner `semantics/FFI.md`: define readAs/writeFrom exact arities, direct prototype/layout association, detached ordinary objects and nested Arrays, local-slot admission and complete preflight.
+- Specify canonical createSlot/slotValue/parent selection, ordinary member shadowing, snapshot lifetime independence and unchanged native pointer restrictions; record thirteen scalar descriptors and twenty-nine public operations.
+
 ## [0.1.513] - 2026-11-25
 
 ### D261-R2 / I174-E — Explicit union selection and staged Map/Array projection

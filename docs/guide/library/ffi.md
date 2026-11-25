@@ -219,6 +219,11 @@ The aggregate projection members (see
 | `FFI.unionArm(path, memberName)` | A frozen declaration selecting the member of the union reached by an Array path of names and indices; needs no native session. |
 | `FFI.readFields(region, arms)` | Fresh ordinary Maps and Arrays read from a live struct or union region. |
 | `FFI.writeFields(region, fields, arms)` | Writes Maps and Arrays into a live writable struct or union region, all or nothing, and answers the region. |
+| `FFI.readAs(prototype, region, arms)` | A fresh ordinary object whose parent is the prototype exactly associated with the region's layout (see [Ordinary object snapshots](#ordinary-object-snapshots)). |
+| `FFI.writeFrom(region, value, arms)` | Writes the local slots of an ordinary object whose parent is exactly associated with the region's layout, all or nothing, and answers the region. |
+
+In total the module publishes thirteen scalar descriptors and twenty-nine
+Closures: every member listed in the tables above.
 
 These are the public members, not a public descriptor record layout. Descriptor
 objects are ordinary frozen Protos objects; structurally similar objects do not
@@ -272,7 +277,9 @@ FFI.layoutOf(Vector2) === Point          // true
 ```
 
 The association is exact: a descendant of `Vector2` has no layout until it is
-registered itself, and the prototype is neither mutated nor called.
+registered itself, and the prototype is neither mutated nor called. The
+association is what `FFI.readAs` and `FFI.writeFrom` use (see
+[Ordinary object snapshots](#ordinary-object-snapshots)).
 
 Declaring a layout never allocates memory. Native memory (`FFI.allocate`,
 regions, slices and views) and `FFI.cType` are described in
@@ -650,6 +657,144 @@ region as it was; there is no partial write. Bytes not written, such as
 padding or the part of a union outside the selected member, keep their
 previous contents. The update is not atomic with respect to C code running
 at the same time on the same memory.
+
+## Ordinary object snapshots
+
+`FFI.readAs(prototype, region, arms)` copies a live struct or union region into
+a new ordinary object whose parent is `prototype`, and
+`FFI.writeFrom(region, value, arms)` copies an ordinary object back. The
+prototype must be associated with the region's exact layout through
+`FFI.prototype`. Like `readFields` and `writeFields`, neither needs a C
+library, enters C or revokes borrowed pointers.
+
+```protos
+FFI: import("std:ffi")
+
+PointLayout: FFI.struct(Array(
+    FFI.field("x", FFI.i32),
+    FFI.field("y", FFI.i32)
+))
+
+Point: {
+    total: () => this.x + this.y
+}
+
+FFI.prototype(PointLayout, Point)
+
+region: FFI.allocate(PointLayout)
+region["x"] = 10
+region["y"] = 20
+
+point: FFI.readAs(Point, region, Array())
+print(point.total())        // 30: the snapshot delegates to Point
+
+point.x = 40
+FFI.writeFrom(region, point, Array())
+region["x"]                 // 40
+
+FFI.release(region)
+```
+
+The snapshot is a new open object whose own slots are exactly the members of
+the layout. It is made with ordinary object creation, like `Point {}`: the
+prototype's `call`, `construct` and `init` never run, and the prototype itself
+is not changed.
+
+Any ordinary object whose immediate parent is the associated prototype can be
+written, also one that never came from `readAs`:
+
+```protos
+target: FFI.allocate(PointLayout)
+mine: Point { x: 3; y: 4 }
+FFI.writeFrom(target, mine, Array())
+FFI.readFields(target, Array())   // a Map with "x": 3 and "y": 4
+FFI.release(target)
+```
+
+Only the members of the layout are written, and only from the object's own
+slots: an extra slot such as `label` in `Point { x: 3; y: 4; label: "a" }` is
+ignored, and a member that the object inherits from a parent instead of
+holding itself is an Error. The parent must be exactly the associated
+prototype: an object of a descendant of `Point`, an object of a prototype
+registered for another layout, or a plain `{ x: 3; y: 4 }` is rejected, even
+if its layout has identical fields.
+
+### Unions and nested groups
+
+Nested structs and unions become ordinary objects whose parent is `Object`,
+and fixed arrays become Arrays. Every union still needs its explicit
+`FFI.unionArm` selection:
+
+```protos
+Value: FFI.union(Array(FFI.field("integer", FFI.i64), FFI.field("real", FFI.f64)))
+Sample: FFI.struct(Array(
+    FFI.field("origin", PointLayout),
+    FFI.field("value", Value),
+    FFI.field("history", FFI.array(FFI.i16, 3))))
+SampleShape: {}
+FFI.prototype(Sample, SampleShape)
+arms: Array(FFI.unionArm(Array("value"), "real"))
+
+sample: FFI.allocate(Sample)
+sample["value"]["real"] = 2.5
+snapshot: FFI.readAs(SampleShape, sample, arms)
+snapshot.origin.parent() === Object   // true
+snapshot.value.real                   // 2.5: only the selected member
+snapshot.history[2] = 7
+FFI.writeFrom(sample, snapshot, arms)
+FFI.release(sample)
+```
+
+### Member names that are also messages
+
+Member names are ordinary slot names, so the usual slot rules apply to them.
+A member named `call` can make the snapshot impossible to invoke. Members
+named `init` or `construct` are plain slots. `readAs` still creates every
+member when one is named `createSlot`, because it takes the object's
+`createSlot` method once before inserting any member; afterwards that member
+hides the method for everyone else.
+
+`writeFrom` checks the prototype of the object you pass through the standard
+`parent`, and reads members of that object and of every nested object through
+the standard `slotValue`. If the object you pass redefines or inherits a
+redefined `slotValue` or `parent`, or holds a member with one of those names,
+`writeFrom` raises an Error and writes nothing; the redefined method is not
+called. Nested objects are only read, never asked for their parent: a nested
+member named `parent` is projected and written like any other, while a nested
+object whose `slotValue` is hidden or redefined cannot be read and is refused.
+`readAs` likewise refuses a prototype that redefines `createSlot`. Maps always
+work, whatever the member names:
+
+```protos
+Hooks: FFI.struct(Array(FFI.field("slotValue", FFI.i32), FFI.field("parent", FFI.i32)))
+HookShape: {}
+FFI.prototype(Hooks, HookShape)
+hooks: FFI.allocate(Hooks)
+copy: FFI.readAs(HookShape, hooks, Array())   // works
+copy.slotValue                                // 0: a slot now, not the method
+// FFI.writeFrom(hooks, copy, Array())        // Error: slotValue and parent are hidden
+FFI.writeFields(hooks, %{ "slotValue": 1; "parent": 2 }, Array())   // works
+FFI.release(hooks)
+```
+
+### Memory and ownership
+
+- A snapshot does not own the region and is not a region: do not pass it to
+  `FFI.release`. Its objects, Arrays and copied numbers stay usable after the
+  region is released, but a pointer it holds keeps its own rules: releasing
+  the region the pointer was read from revokes it.
+- Changing a snapshot does not change C memory; copy changes back explicitly
+  with `FFI.writeFrom`.
+- Pointer members stay pointer capabilities with their own lifetime and
+  transfer restrictions; holding one in a snapshot does not keep its memory
+  alive, and `writeFrom` does not revive an expired pointer.
+- `writeFrom` checks every member before changing the region; if anything is
+  wrong it raises an Error and leaves every byte as it was. Padding and the
+  bytes of a union outside the selected member are kept. This covers only the
+  region write itself: effects your own code already had, for example while
+  building the arguments, are not undone.
+- The update is not atomic with respect to C code running at the same time on
+  the same memory.
 
 ## Owned resources
 

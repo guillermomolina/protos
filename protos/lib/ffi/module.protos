@@ -26,8 +26,9 @@
 //! region of the exact layout, copied for the call; a result, or an out of
 //! that layout, is a fresh independently owned allocation root.
 //! readFields and writeFields project a struct or union region to and from
-//! fresh ordinary Maps and Arrays; every reached union names its member
-//! through an explicit unionArm selection.
+//! fresh ordinary Maps and Arrays; readAs and writeFrom do so through ordinary
+//! objects of an exactly associated prototype. Every reached union names its
+//! member through an explicit unionArm selection.
 
 Interop: import("std:interop")
 Arrays: import("std:collections/array")
@@ -43,6 +44,13 @@ pointerTypes: IdentityMap()
 recognition: _ffiObjectRecognitionFacility
 context.removeSlot("_ffiObjectRecognitionFacility")
 isOrdinaryObject: (value) => recognition.ordinaryObject(value)
+// Whether the ordinary selection of `createSlot`, `slotValue` or `parent` from
+// an exact ordinary object is the canonical root Object behavior; a shadowing
+// or absent selection is refused, never bypassed. Checked where it is used.
+requireCanonicalMethod: (receiver, selector) => {
+    (recognition.selectsCanonicalObjectMethod(receiver, selector) === true)
+        .ifFalse(() => fail())
+}
 // Private acquisition of the RootActor's provider-session context; never
 // part of the MODULE surface and never used during module initialization.
 nativeContextFacility: _ffiNativeContextFacility
@@ -980,17 +988,11 @@ writeGroup: (target, nodes, captured) => {
     }
 }
 
-/// Write fresh ordinary containers into a live writable struct or union
-/// region and answer the region. `fields` must match the selected shape
-/// exactly. Every selection and value is admitted before the destination is
-/// changed: a rejected write leaves every destination byte unchanged. Bytes
-/// outside the written members, padding included, keep their contents. The
-/// write is not atomic with respect to concurrently running C code.
-this.writeFields: (region: fail(), fields: fail(), arms: fail(), ...extra) => {
-    requireArity(extra)
-    layout: projectionLayout(region, true)
-    nodes: projectionPlan(layout, arms)
-    captured: captureGroup(layout, nodes, fields)
+// Phases 2 to 4, shared by writeFields and writeFrom: values already captured
+// are admitted by the indexed writes on a temporary root holding the
+// destination's bytes, then committed by one physical copy. The temporary
+// root is always released; the destination changes only on success.
+commitPrepared: (region, layout, nodes, captured) => {
     temporary: allocateRoot(layout)
     (() => {
         native: providerContext()
@@ -1003,4 +1005,118 @@ this.writeFields: (region: fail(), fields: fail(), arms: fail(), ...extra) => {
         releaseOwned(temporary)
     })
     region
+}
+
+/// Write fresh ordinary containers into a live writable struct or union
+/// region and answer the region. `fields` must match the selected shape
+/// exactly. Every selection and value is admitted before the destination is
+/// changed: a rejected write leaves every destination byte unchanged. Bytes
+/// outside the written members, padding included, keep their contents. The
+/// write is not atomic with respect to concurrently running C code.
+this.writeFields: (region: fail(), fields: fail(), arms: fail(), ...extra) => {
+    requireArity(extra)
+    layout: projectionLayout(region, true)
+    nodes: projectionPlan(layout, arms)
+    commitPrepared(region, layout, nodes, captureGroup(layout, nodes, fields))
+}
+
+// ---- ordinary object snapshots of an exactly associated prototype
+
+// The projected values of `readGroup` as ordinary objects: a fresh object of
+// `parentPrototype` per struct or union, created by the ordinary literal
+// (no call, construct or init), and a fresh Array per fixed array. The bound
+// `createSlot` is extracted once, before any field is inserted, so a field
+// named `createSlot` shadows it only for later senders.
+snapshotGroup: (parentPrototype, layout, nodes, values) => {
+    if(storage(layout).layoutKind == "array") {
+        elements: slots(nodes.size())
+        index: 0
+        for(node in nodes) {
+            elements[index] = snapshotValue(node, values[index])
+            index = index + 1
+        }
+        ^elements
+    }
+    requireCanonicalMethod(parentPrototype, "createSlot")
+    answer: parentPrototype {}
+    create: answer.createSlot
+    for(node in nodes) {
+        create(node.key, snapshotValue(node, values.at(node.key)))
+    }
+    answer
+}
+// A nested struct or union is an ordinary object of Object; leaves keep the
+// value of the existing typed read.
+snapshotValue: (node, value) => {
+    if(node.children === null) { ^value }
+    snapshotGroup(Object, node.layout, node.children, value)
+}
+
+/// Read a live struct or union region into a fresh open ordinary object whose
+/// immediate parent is `prototype`, exactly associated with the region's
+/// layout. Its local slots are exactly the projected member names; nested
+/// structs and unions are ordinary objects of Object and fixed arrays are
+/// Arrays. `arms` selects every reached union. The object owns no native
+/// memory; prototype's call, construct and init are never invoked.
+this.readAs: (prototype: fail(), region: fail(), arms: fail(), ...extra) => {
+    requireArity(extra)
+    (isOrdinaryObject(prototype) === true).ifFalse(() => fail())
+    associations.containsKey(prototype).ifFalse(() => fail())
+    layout: projectionLayout(region, false)
+    (associations.at(prototype) === layout).ifFalse(() => fail())
+    requireCanonicalMethod(prototype, "createSlot")
+    nodes: projectionPlan(layout, arms)
+    snapshotGroup(prototype, layout, nodes, readGroup(region, layout, nodes))
+}
+
+// The local slots an ordinary object holds for the planned members, captured
+// through its canonical bound `slotValue` into a private Map (an Array per
+// fixed array) of exactly the shape captureGroup admits. A missing local slot
+// is the ordinary Error; delegated slots are never consulted and slots
+// outside the plan are never read.
+captureSlots: (layout, nodes, input) => {
+    if(storage(layout).layoutKind == "array") {
+        Array.recognizes(input).ifFalse(() => fail())
+        ordered: Array(...input)
+        (ordered.size() == nodes.size()).ifFalse(() => fail())
+        elements: slots(nodes.size())
+        index: 0
+        for(node in nodes) {
+            elements[index] = captureSlotValue(node, ordered[index])
+            index = index + 1
+        }
+        ^elements
+    }
+    (isOrdinaryObject(input) === true).ifFalse(() => fail())
+    requireCanonicalMethod(input, "slotValue")
+    read: input.slotValue
+    fields: Map()
+    for(node in nodes) {
+        fields[node.key] = captureSlotValue(node, read(node.key))
+    }
+    fields
+}
+captureSlotValue: (node, value) => {
+    if(node.children === null) { ^value }
+    captureSlots(node.layout, node.children, value)
+}
+
+/// Write the local slots of an ordinary object into a live writable struct or
+/// union region and answer the region. The object's immediate parent, observed
+/// through the canonical `parent`, must be exactly associated with the
+/// region's layout; members are read through the canonical `slotValue` as
+/// local slots only. Every value is admitted before the destination changes,
+/// exactly as writeFields admits it.
+this.writeFrom: (region: fail(), value: fail(), arms: fail(), ...extra) => {
+    requireArity(extra)
+    layout: projectionLayout(region, true)
+    (isOrdinaryObject(value) === true).ifFalse(() => fail())
+    requireCanonicalMethod(value, "parent")
+    prototype: value.parent()
+    associations.containsKey(prototype).ifFalse(() => fail())
+    (associations.at(prototype) === layout).ifFalse(() => fail())
+    requireCanonicalMethod(value, "slotValue")
+    nodes: projectionPlan(layout, arms)
+    fields: captureSlots(layout, nodes, value)
+    commitPrepared(region, layout, nodes, captureGroup(layout, nodes, fields))
 }
