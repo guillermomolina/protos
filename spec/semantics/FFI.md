@@ -335,10 +335,11 @@ associations.
 
 The following capabilities are not provided by this revision. They are not
 rejected design directions: passing or returning a C array directly by value,
-and projection (snapshot conversion) of native aggregates to or from ordinary
-Protos Maps or Objects. Struct and union by-value invocation is specified in
-By-value struct and union invocation, and native memory in Native memory
-below.
+and conversion of native aggregates to or from ordinary Protos Objects or
+associated prototypes (`readAs`, `writeFrom`). Struct and union by-value
+invocation is specified in By-value struct and union invocation, native memory
+in Native memory, and the explicit projection of native aggregates to and from
+ordinary Maps and Arrays in Explicit native aggregate projection below.
 
 
 
@@ -722,6 +723,121 @@ share a registered shape, as do separately declared layouts of identical
 physical structure. A registered shape grants no library authorization: host
 library authorization remains independently required.
 
+## Explicit native aggregate projection
+
+`FFI.readFields(region, arms)` and `FFI.writeFields(region, fields, arms)`
+convert between a live native struct or union region and fresh ordinary Protos
+Maps and Arrays. `FFI.unionArm(path, memberName)` declares the explicit member
+selection of one union that such a conversion reaches. These are the only
+projection operations of this revision; `readAs`, `writeFrom` and every
+conversion through ordinary Objects or associated prototypes remain pending.
+
+### Union selections
+
+`FFI.unionArm(path, memberName)` requires exactly two arguments: an ordinary
+Array `path` whose elements are each a semantic String (a member name) or a
+non-negative Integer (an array index), and a String `memberName`. Any other
+argument, including a negative Integer, a Float, `null` or an extra argument,
+is an ordinary Error. The path is copied and the copy is frozen: later
+mutation of the supplied Array does not change the selection. The empty path
+designates a union at the projection root. The operation answers a fresh
+frozen ordinary declaration whose metadata is associated with it by exact
+identity; a structurally similar object does not forge one. A selection is
+not an ABI descriptor: it is not a storage layout, field layout, pointee,
+binding parameter, return or `out` target. Declaring a selection acquires no
+provider session, library or native memory; whether its path and member exist
+is checked only against the layout of a concrete projection.
+
+Two paths are equal when they have the same length and, position by position,
+components of the same kind (String or Integer) that are equal. A path is
+never encoded as one String: `Array("a.b")`, `Array("a", "b")`, `Array("0")`
+and `Array(0)` are four distinct paths.
+
+### Selection planning
+
+`arms` must be an ordinary Array of selections, admitted by exact declaration
+identity, whose paths are pairwise distinct. Before any field is read and
+before the destination is changed, the projection walks the layout metadata
+from the root: every struct member in declaration order, every element of a
+fixed array (its path component is the exact Integer index), and, for every
+union reached, exactly the member named by the one selection whose path equals
+the union's path. A reached union without a selection, a selected member that
+the union does not declare, and a selection that the walk does not consume
+(an unknown path, a path through a scalar or pointer member, an index outside
+the array, a path naming a struct, or a path inside an unselected union
+member) are each an ordinary Error. The active member of a union is never
+inferred from its value, type, bytes, first member or last write, and no
+active-member tag is stored in a region.
+
+### Admitted regions
+
+The `region` must be a live struct or union region of the calling Actor's
+`std:ffi` native session, identified by its exact layout identity: an
+allocation root, a group result, a typed view or a nested struct or union
+region. `writeFields` additionally requires write permission. A byte slice,
+an array region, a scalar or pointer region, a pointer capability, a released
+or revoked region, a borrowed view whose epoch has ended, a region of another
+session, `null`, a Map, a descriptor and any other value are ordinary Errors.
+A read-only view admits `readFields` and rejects `writeFields`. Projection
+acquires no C library and enters no C code; it never advances the borrow
+epoch, so it revokes no borrowed region or pointer.
+
+### Reading
+
+`readFields` answers a fresh ordinary Map for the root and for every nested
+struct, a fresh ordinary Map holding exactly the selected member for every
+union, and a fresh ordinary Array of exactly the element count for every
+nested fixed array. Map keys are the exact member-name Strings; no member
+name is looked up as a slot or message, so a member named `call`, `init`,
+`createSlot`, `slotValue`, `at`, `size` or any other String is an ordinary
+key. Each scalar is copied by the existing typed read of that member. Each
+pointer member is answered by the existing typed read: a pointer capability
+(never an Integer) retaining the original region as provenance, with no known
+extent, never dereferenced and never an owned resource; native NULL is `null`
+for a nullable member and a `ForeignError` for a non-nullable one. Unselected
+union members and padding are not read. Every answered container is new,
+open and independent of native memory: later native writes do not change it,
+and changing it does not write native memory.
+
+### Writing
+
+`writeFields` requires `fields` to have exactly the planned shape: a standard
+Map for every struct and union, whose actual keys, as enumerated, are exactly
+the required member names (a union Map has exactly its selected member), and a
+standard Array of exactly the element count for every fixed array. A missing
+member, an extra entry, a non-String key, an ordinary Object in place of a
+Map, any value other than a standard Array in place of an Array, and a wrong
+length are ordinary Errors. A present key whose value is `null` is distinct
+from an absent key. The complete input is admitted structurally and its values
+captured before any native byte is changed; ordinary Map and Array operations
+performed on the input during this admission keep their ordinary effects and
+Errors. Each captured leaf value is then admitted exactly as the existing
+indexed write of that member admits it (exact Integer range, signedness, no
+Integer-to-Float coercion, one binary32 rounding for `f32`, pointer session,
+liveness, provenance, nominal pointee and nullability).
+
+If any selection, structure or value is rejected, the Error propagates and
+every byte of the destination is unchanged. Otherwise the destination is
+updated as one whole region and the operation answers the exact `region`.
+Bytes the input does not designate, including internal and tail padding and
+the bytes of a union outside its selected member, keep their previous
+contents uninterpreted. Writing a pointer member stores its address only and
+extends no lifetime. No guarantee of atomicity or isolation with respect to
+C code running concurrently on the same memory is provided. A rejection leaves
+the session's custody, the borrow epoch and every earlier borrowed region and
+pointer unchanged.
+
+### Errors and isolation
+
+Projection rejections are ordinary Errors; a `ForeignError` arises only from
+an existing typed read that already signals one. The RootActor-only native
+authority, host library authorization, session independence, nominal layout
+identity, permissions, revocation and pointer provenance are unchanged.
+Scalars copied into ordinary containers follow their ordinary Actor and P
+transfer rules; a Map or Array containing a native pointer capability does
+not make that capability transferable, and no region is ever transferred
+implicitly.
+
 ## Custody, identity and release
 
 Every non-null owned acquisition enters provider custody before publication,
@@ -806,8 +922,9 @@ not make an otherwise forbidden transfer valid.
 ## Exclusions
 
 R1 excludes numeric pointers, pointer arithmetic (byte slices excepted),
-direct C array-by-value invocation, aggregate projection to ordinary Maps or
-Objects, packed layouts, bitfields, flexible array members, callbacks and
+direct C array-by-value invocation, aggregate conversion to or from ordinary
+Objects or associated prototypes (`readAs`, `writeFrom`; projection to and from
+ordinary Maps and Arrays is specified above), packed layouts, bitfields, flexible array members, callbacks and
 upcalls (including function-pointer upcalls), variadic functions, C++, arbitrary library paths, `SQLITE_TRANSIENT`,
 a mandatory binding generator, external plugin execution in Native Image,
 and a second semantics of invocation. It defines no SQLite connection,

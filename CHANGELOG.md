@@ -8,6 +8,13 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.218-SNAPSHOT
+
+- **I174-E.** Explicit union selection and staged Map/Array projection.
+- Add frozen unionArm declarations and explicit readFields/writeFields conversion between native aggregates and detached ordinary Maps and Arrays.
+- Validate complete union-selection plans, input shapes, scalars, pointers and permissions before prepared native writes; preserve padding, unselected storage, custody and borrow epochs.
+- Add nested aggregate, union, failure-atomicity and no-library projection coverage using the existing generic FFM transfer path.
+
 ## 0.4.217-SNAPSHOT
 
 - **I174-D.** Aggregate-by-value calls and exact Native Image group admission.

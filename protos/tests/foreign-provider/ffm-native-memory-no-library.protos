@@ -31,6 +31,19 @@ check: (label, condition) => {
 }
 
 Point: FFI.struct(Array(FFI.field("x", FFI.i32), FFI.field("y", FFI.f64)))
+// Union selections are declarative: declared before any native memory exists.
+Shape: FFI.union(Array(FFI.field("whole", FFI.i64), FFI.field("parts", FFI.array(FFI.i32, 2))))
+Record: FFI.struct(Array(
+    FFI.field("id", FFI.u16),
+    FFI.field("origin", Point),
+    FFI.field("samples", FFI.array(FFI.i16, 3)),
+    FFI.field("shape", Shape)))
+partsPath: Array("shape")
+partsArm: FFI.unionArm(partsPath, "parts")
+wholeArm: FFI.unionArm(Array("shape"), "whole")
+rootWhole: FFI.unionArm(Array(), "whole")
+// The declaration copied its path: this mutation selects nothing.
+partsPath[0] = "elsewhere"
 check("cType", FFI.cType("long long") === FFI.i64)
 point: FFI.allocate(Point)
 check("zeroed", (point["x"] == 0) && (point["y"] == 0.0))
@@ -41,6 +54,83 @@ bytes: FFI.slice(point, 0, 4)
 check("byte alias", (bytes[0] == 251) && (bytes[3] == 255))
 check("view", FFI.view(FFI.addressOf(point), Point)["y"] == 1.5)
 check("release", FFI.release(point) === null)
+
+// ---- explicit aggregate projection, also without any library
+
+ordinaryError: (label, body) => {
+    error: null
+    Error.handle(body, (e) => {
+        error = e
+        e
+    })
+    check(label, (error === null) == false)
+    check(label + " is ordinary", error.parent() === Error)
+}
+mapShape: %{}
+isMap: (value) => mapShape.match(value) === true
+
+// A selection is never an ABI descriptor.
+for(selection in Array(partsArm, rootWhole)) {
+    ordinaryError("selection has no size", () => FFI.sizeOf(selection))
+    ordinaryError("selection is not allocated", () => FFI.allocate(selection))
+    ordinaryError("selection is not a field layout", () => FFI.field("f", selection))
+    ordinaryError("selection is not a pointee", () => FFI.pointer(selection))
+    ordinaryError("selection is not an out target", () => FFI.out(selection))
+    ordinaryError("selection is not nullable", () => FFI.nullable(selection))
+    ordinaryError("selection is frozen", () => { selection.extra = 1 })
+}
+
+record: FFI.allocate(Record)
+fields: %{
+    "id": 7
+    "origin": %{ "x": -3; "y": 0.25 }
+    "samples": Array(1, -2, 3)
+    "shape": %{ "parts": Array(10, -20) }
+}
+check("writeFields answers the region", FFI.writeFields(record, fields, Array(partsArm)) === record)
+check("scalar field written", record["id"] == 7)
+check("nested struct written", (record["origin"]["x"] == -3) && (record["origin"]["y"] == 0.25))
+samplesWritten: (record["samples"][0] == 1) && (record["samples"][1] == -2)
+check("nested array written", samplesWritten && (record["samples"][2] == 3))
+check("selected union member written",
+    (record["shape"]["parts"][0] == 10) && (record["shape"]["parts"][1] == -20))
+
+snapshot: FFI.readFields(record, Array(partsArm))
+check("struct reads as a Map", isMap(snapshot) && (snapshot.size() == 4))
+check("scalar read", snapshot["id"] == 7)
+origin: snapshot["origin"]
+check("nested struct reads as a Map", isMap(origin) && (origin.size() == 2))
+check("nested struct values", (origin["x"] == -3) && (origin["y"] == 0.25))
+samples: snapshot["samples"]
+check("nested array reads as an Array", Array.recognizes(samples) && (samples.size() == 3))
+check("nested array values", (samples[0] == 1) && (samples[1] == -2) && (samples[2] == 3))
+shape: snapshot["shape"]
+check("union reads only its selected member",
+    isMap(shape) && (shape.size() == 1) && shape.containsKey("parts"))
+check("union member values", (shape["parts"][0] == 10) && (shape["parts"][1] == -20))
+whole: FFI.readFields(record, Array(wholeArm))["shape"]
+check("another selection reads the same bytes",
+    (whole.size() == 1) && (whole["whole"] == -85899345910))
+
+again: FFI.readFields(record, Array(partsArm))
+check("every read answers a fresh Map", again !== snapshot)
+check("nested Maps are fresh", again["origin"] !== origin)
+check("nested Arrays are fresh", (again["samples"] !== samples) && (samples !== fields["samples"]))
+record["id"] = 8
+record["samples"][0] = 100
+check("a snapshot ignores later native writes", (snapshot["id"] == 7) && (samples[0] == 1))
+samples[1] = 55
+check("a snapshot write leaves native memory", record["samples"][1] == -2)
+ordinaryError("an unselected union is refused", () => FFI.readFields(record, Array()))
+ordinaryError("an unused selection is refused",
+    () => FFI.readFields(record, Array(partsArm, rootWhole)))
+
+alone: FFI.allocate(Shape)
+check("a root union is selected by the empty path",
+    FFI.writeFields(alone, %{ "whole": 5 }, Array(rootWhole)) === alone)
+check("root union read", FFI.readFields(alone, Array(rootWhole))["whole"] == 5)
+check("projection releases", (FFI.release(record) === null) && (FFI.release(alone) === null))
+ordinaryError("a released region is refused", () => FFI.readFields(alone, Array(rootWhole)))
 
 refused: null
 ForeignError.handle(() => import("ffi:first"), (error) => {

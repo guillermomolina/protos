@@ -163,7 +163,7 @@ The public sample is
 
 ## The public members
 
-The MODULE exports thirteen scalar descriptor values and twenty-four ordinary
+The MODULE exports thirteen scalar descriptor values and twenty-seven ordinary
 Closures. The R1 binding members:
 
 | Member | Signature or value | Meaning and restrictions |
@@ -210,6 +210,15 @@ provider but no C library (see [Native memory](#native-memory)):
 | `FFI.slice(region, byteOffset, byteLength)` | A byte view of part of a region; nothing is copied. A zero length gives an empty view. |
 | `FFI.view(pointer, layout)` | A typed region over a pointer with a known, sufficient extent. |
 | `FFI.assumeExtent(pointer, byteLength, anchor, access)` | A trusted extent for a pointer, anchored by an allocation, an owned C handle, a borrowed pointer itself, or a library's static storage. |
+
+The aggregate projection members (see
+[Reading and writing aggregate fields](#reading-and-writing-aggregate-fields)):
+
+| Member | Meaning |
+|---|---|
+| `FFI.unionArm(path, memberName)` | A frozen declaration selecting the member of the union reached by an Array path of names and indices; needs no native session. |
+| `FFI.readFields(region, arms)` | Fresh ordinary Maps and Arrays read from a live struct or union region. |
+| `FFI.writeFields(region, fields, arms)` | Writes Maps and Arrays into a live writable struct or union region, all or nothing, and answers the region. |
 
 These are the public members, not a public descriptor record layout. Descriptor
 objects are ordinary frozen Protos objects; structurally similar objects do not
@@ -478,7 +487,8 @@ declared layout: an allocation, a returned region, or a typed view of one
 (read-only views included). It is copied for the call, so C cannot change the
 caller's region. Maps, Objects, Arrays, pointers, byte slices and regions of a
 structurally identical but separately declared layout are rejected before C
-is entered; nothing converts an ordinary Protos value into a C struct.
+is entered; no argument converts an ordinary Protos value into a C struct. To
+fill a region from a Map, call `FFI.writeFields` explicitly first.
 
 ```protos
 FFI: import("std:ffi")
@@ -536,6 +546,110 @@ borrow rules: a call declared with `bind` revokes earlier borrowed pointers,
 while a `bindPreserving` call keeps them; a rejected call changes nothing and
 never enters C. Packed structs, bitfields, flexible array members, passing a C
 array directly, callbacks and variadic functions are not supported.
+
+## Reading and writing aggregate fields
+
+`FFI.readFields(region, arms)` copies a live struct or union region into new
+ordinary Maps and Arrays, and `FFI.writeFields(region, fields, arms)` writes
+Maps and Arrays into a live writable one. Neither needs a C library, enters C
+or revokes borrowed pointers.
+
+```protos
+FFI: import("std:ffi")
+
+Point: FFI.struct(Array(FFI.field("x", FFI.i32), FFI.field("y", FFI.f64)))
+Track: FFI.struct(Array(
+    FFI.field("start", Point),
+    FFI.field("steps", FFI.array(FFI.i16, 3))))
+
+track: FFI.allocate(Track)
+FFI.writeFields(track, %{
+    "start": %{ "x": 1; "y": 0.5 }
+    "steps": Array(10, 20, 30)
+}, Array())
+fields: FFI.readFields(track, Array())
+fields["start"]["y"]   // 0.5: a struct is a Map
+fields["steps"][2]     // 30: a fixed array is an Array of exactly its count
+FFI.release(track)
+```
+
+The containers are new each time and independent of native memory: writing
+the region later does not change `fields`, and changing `fields` does not
+write the region. Every member must be present exactly once, with no extra
+entries, every key must be a String, and every Array must have exactly the
+array's count; an ordinary Object is not accepted in place of a Map.
+
+A union has no active member that Protos could detect, so every union the
+projection reaches must be selected with `FFI.unionArm(path, memberName)`.
+The path is an Array of member names and array indices from the region to the
+union; the empty path selects a union at the root. Only the selected member is
+read or written:
+
+```protos
+Choice: FFI.union(Array(FFI.field("integer", FFI.i64), FFI.field("real", FFI.f64)))
+choice: FFI.allocate(Choice)
+rootReal: FFI.unionArm(Array(), "real")
+FFI.writeFields(choice, %{ "real": 2.5 }, Array(rootReal))
+FFI.readFields(choice, Array(rootReal))   // a Map with only "real"
+FFI.release(choice)
+
+// Unions inside a struct field "0" and inside element 1 of an array.
+Cells: FFI.struct(Array(
+    FFI.field("0", Choice),
+    FFI.field("cells", FFI.array(Choice, 2))))
+cells: FFI.allocate(Cells)
+arms: Array(
+    FFI.unionArm(Array("0"), "integer"),          // the field named "0"
+    FFI.unionArm(Array("cells", 0), "integer"),   // the Integer index 0
+    FFI.unionArm(Array("cells", 1), "real"))
+FFI.writeFields(cells, %{
+    "0": %{ "integer": 7 }
+    "cells": Array(%{ "integer": 1 }, %{ "real": 0.5 })
+}, arms)
+FFI.readFields(cells, arms)["cells"][1]["real"]   // 0.5
+FFI.release(cells)
+```
+
+Paths are compared component by component: `Array("0")` and `Array(0)` are
+different, and so are `Array("a.b")` and `Array("a", "b")`. A missing, repeated,
+unknown or unused selection is an Error, raised before anything is read or
+written.
+
+Member names are only Map keys, never messages, so any name works:
+
+```protos
+Hooks: FFI.struct(Array(
+    FFI.field("call", FFI.i32), FFI.field("init", FFI.i32),
+    FFI.field("createSlot", FFI.i32), FFI.field("slotValue", FFI.i32)))
+hooks: FFI.allocate(Hooks)
+FFI.writeFields(hooks, %{ "call": 1; "init": 2; "createSlot": 3; "slotValue": 4 }, Array())
+FFI.readFields(hooks, Array())["slotValue"]   // 4
+FFI.release(hooks)
+```
+
+A region returned by C is projected like any other:
+
+```protos
+native: import("ffi:mylib")
+// C: typedef struct { int32_t x; double y; } point;  point point_make(void);
+makePoint: FFI.bind(native, "point_make", Point, Array())
+made: makePoint()
+FFI.readFields(made, Array())   // a Map with "x" and "y"
+FFI.release(made)
+```
+
+A pointer member is read as a pointer capability, not as an Integer address.
+It still points to native memory, is not dereferenced, has no known extent and
+cannot cross into isolated parallel execution, even inside a Map. Scalars
+copied into Maps and Arrays follow the ordinary transfer rules.
+
+`writeFields` checks the whole input, every selection and every value (ranges,
+Float types, pointer types, nullability, liveness) before the region is
+changed. If anything is wrong it raises an Error and leaves every byte of the
+region as it was; there is no partial write. Bytes not written, such as
+padding or the part of a union outside the selected member, keep their
+previous contents. The update is not atomic with respect to C code running
+at the same time on the same memory.
 
 ## Owned resources
 

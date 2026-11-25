@@ -23,6 +23,13 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.513] - 2026-11-25
+
+### D261-R2 / I174-E — Explicit union selection and staged Map/Array projection
+
+- Primary owner `semantics/FFI.md`: define unionArm path identity, exactly one selection per reached union, and readFields/writeFields admitted regions and detached Map/Array shapes.
+- Specify complete preflight before native mutation, unchanged destination bytes on rejection, pointer provenance and ordinary Actor/P transfer restrictions without implicit capability transfer.
+
 ## [0.1.512] - 2026-11-25
 
 ### D261-R2 / I174-D — Aggregate-by-value calls and exact Native Image group admission

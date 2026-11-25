@@ -422,6 +422,371 @@ refused: caught(NonParallelValue, () => ((x) => 1).parallel(paired).value())
 check("group root never crosses P", (refused === null) == false)
 check("scalar read from a group crosses P", ((x) => x + 1).parallel(paired["a"]).value() == 12)
 
+// ---- explicit aggregate projection to and from ordinary Maps and Arrays
+
+mapShape: %{}
+isMap: (value) => mapShape.match(value) === true
+whole: (name) => FFI.unionArm(Array(), name)
+rootInteger: whole("integer")
+rootReal: whole("real")
+
+// C results by value, projected.
+madeFields: FFI.readFields(made, Array())
+check("C struct result as a Map", isMap(madeFields) && (madeFields.size() == 2))
+check("C struct result values", (madeFields["a"] == 17) && (madeFields["b"] == 2.5))
+integralFields: FFI.readFields(integral, Array(rootInteger))
+check("C union result as a Map", (integralFields.size() == 1) && (integralFields["integer"] == 101))
+check("C union result, other selection", FFI.readFields(scaled, Array(rootReal))["real"] == 1.0)
+reshapedFields: FFI.readFields(reshaped, Array(FFI.unionArm(Array("choice"), "integer")))
+check("C nested union", reshapedFields["choice"]["integer"] == 45)
+ratios: reshapedFields["ratios"]
+check("C nested array",
+    Array.recognizes(ratios) && (ratios[0] == 3.0) && (ratios[1] == 0.75))
+transformedFields: FFI.readFields(transformed, Array())
+transformedHead: (transformedFields["tag"] == 251) && (transformedFields["inner"]["a"] == 12)
+check("C struct with nested struct and array",
+    transformedHead && (transformedFields["values"][2] == 33))
+outs: mixed(seed, 4)
+outFields: FFI.readFields(outs[1], Array())
+check("struct out projected", (outFields["a"] == 6) && (outFields["b"] == 0.0))
+check("union out projected", FFI.readFields(outs[2], Array(rootInteger))["integer"] == 1007)
+for(root in outs) {
+    check("out release", FFI.release(root) === null)
+}
+firstMade: make()
+secondMade: make()
+firstFields: FFI.readFields(firstMade, Array())
+secondFields: FFI.readFields(secondMade, Array())
+check("snapshots of distinct calls are distinct", firstFields !== secondFields)
+firstFields["a"] = 0
+check("snapshots of distinct calls are independent", secondFields["a"] == 17)
+check("writeFields over a C result",
+    FFI.writeFields(firstMade, %{ "a": 40; "b": 0.5 }, Array()) === firstMade)
+check("C reads the written group", measure(firstMade) == 40)
+rewritten: transform(firstMade)
+check("C transforms the written group", (rewritten["a"] == 47) && (rewritten["b"] == 1.0))
+for(root in Array(firstMade, secondMade, rewritten)) {
+    check("projection result release", FFI.release(root) === null)
+}
+
+// ---- union selections
+
+Deep: FFI.union(Array(field("inner", Choice), field("plain", FFI.i64)))
+Selector: FFI.struct(Array(
+    field("count", FFI.i32),
+    field("choice", Choice),
+    field("link", FFI.nullable(FFI.pointer(Inner))),
+    field("cells", FFI.array(Choice, 2)),
+    field("deep", Deep)))
+choicePath: Array("choice")
+choiceArm: FFI.unionArm(choicePath, "integer")
+choicePath[0] = "count"
+cell0: FFI.unionArm(Array("cells", 0), "integer")
+cell1: FFI.unionArm(Array("cells", 1), "real")
+deepArm: FFI.unionArm(Array("deep"), "inner")
+deepInner: FFI.unionArm(Array("deep", "inner"), "real")
+// Deliberately not in traversal order.
+selections: Array(deepInner, cell1, choiceArm, deepArm, cell0)
+selector: FFI.allocate(Selector)
+selectorFields: %{
+    "count": 3
+    "choice": %{ "integer": -9 }
+    "link": null
+    "cells": Array(%{ "integer": 1 }, %{ "real": 2.5 })
+    "deep": %{ "inner": %{ "real": 0.5 } }
+}
+check("selector write", FFI.writeFields(selector, selectorFields, selections) === selector)
+selected: FFI.readFields(selector, selections)
+check("struct-nested union", selected["choice"]["integer"] == -9)
+check("array-nested unions",
+    (selected["cells"][0]["integer"] == 1) && (selected["cells"][1]["real"] == 2.5))
+check("union inside a selected union member", selected["deep"]["inner"]["real"] == 0.5)
+check("nullable pointer member null", selected.containsKey("link") && (selected["link"] === null))
+check("selections read the native bytes", selector["cells"][1]["real"] == 2.5)
+
+selectorRejected: (label, body) => {
+    before: calls()
+    bytes: octets(selector, FFI.sizeOf(Selector))
+    ordinary(label, body)
+    check(label + " did not enter C", calls() == before)
+    check(label + " left every byte", sameOctets(bytes, octets(selector, FFI.sizeOf(Selector))))
+}
+withSelections: (extra) => Arrays.concat(selections, extra)
+badSelections: Array(
+    Array("missing", Array(deepInner, cell1, choiceArm, deepArm)),
+    Array("duplicate", withSelections(Array(FFI.unionArm(Array("cells", 0), "real")))),
+    Array("unknown", withSelections(Array(FFI.unionArm(Array("nowhere"), "integer")))),
+    Array("through a scalar", withSelections(Array(FFI.unionArm(Array("count", "x"), "y")))),
+    Array("through a pointer", withSelections(Array(FFI.unionArm(Array("link", "a"), "b")))),
+    Array("index beyond the array", withSelections(Array(FFI.unionArm(Array("cells", 2), "real")))),
+    Array("unknown member", Array(deepInner, cell1, FFI.unionArm(Array("choice"), "nope"), deepArm,
+        cell0)),
+    Array("struct as a union", withSelections(Array(FFI.unionArm(Array(), "count")))),
+    Array("inside an unselected member", Array(deepInner, cell1, choiceArm,
+        FFI.unionArm(Array("deep"), "plain"), cell0)),
+    Array("unconsumed", withSelections(Array(FFI.unionArm(Array("choice", "integer"), "x")))),
+    Array("String index of an array", Array(deepInner, cell1, choiceArm, deepArm,
+        FFI.unionArm(Array("cells", "0"), "integer"))),
+    Array("forged selection", withSelections(Array({ path: Array("choice") }))),
+    Array("not an Array", deepArm))
+for(entry in badSelections) {
+    selectorRejected("read " + entry[0], () => FFI.readFields(selector, entry[1]))
+    selectorRejected("write " + entry[0],
+        () => FFI.writeFields(selector, selectorFields, entry[1]))
+}
+ordinary("negative index", () => FFI.unionArm(Array("cells", -1), "integer"))
+ordinary("Float index", () => FFI.unionArm(Array("cells", 1.0), "integer"))
+ordinary("null component", () => FFI.unionArm(Array(null), "integer"))
+ordinary("member name not a String", () => FFI.unionArm(Array("choice"), 1))
+ordinary("path not an Array", () => FFI.unionArm("choice", "integer"))
+ordinary("unionArm arity", () => FFI.unionArm(Array()))
+
+// Names: "0" is not 0, "a.b" is not ("a", "b"), "" and Unicode are names.
+Keyed: FFI.struct(Array(
+    field("0", Choice),
+    field("list", FFI.array(Choice, 1)),
+    field("a.b", Choice),
+    field("a", FFI.struct(Array(field("b", Choice)))),
+    field("", Choice),
+    field("ñandú π", Choice)))
+keyedArms: Array(
+    FFI.unionArm(Array("ñandú π"), "real"),
+    FFI.unionArm(Array(""), "integer"),
+    FFI.unionArm(Array("a", "b"), "real"),
+    FFI.unionArm(Array("a.b"), "integer"),
+    FFI.unionArm(Array("list", 0), "real"),
+    FFI.unionArm(Array("0"), "integer"))
+keyed: FFI.allocate(Keyed)
+keyedFields: %{
+    "0": %{ "integer": 1 }
+    "list": Array(%{ "real": 2.5 })
+    "a.b": %{ "integer": 3 }
+    "a": %{ "b": %{ "real": 4.5 } }
+    "": %{ "integer": 5 }
+    "ñandú π": %{ "real": 6.5 }
+}
+FFI.writeFields(keyed, keyedFields, keyedArms)
+keyedRead: FFI.readFields(keyed, keyedArms)
+check("String \"0\" member", keyedRead["0"]["integer"] == 1)
+check("Integer 0 index", keyedRead["list"][0]["real"] == 2.5)
+check("dotted name", keyedRead["a.b"]["integer"] == 3)
+check("nested path", keyedRead["a"]["b"]["real"] == 4.5)
+check("empty name", keyedRead[""]["integer"] == 5)
+check("Unicode name", keyedRead["ñandú π"]["real"] == 6.5)
+ordinary("Integer 0 does not name member \"0\"", () => FFI.readFields(keyed, Array(
+    FFI.unionArm(Array(0), "integer"), keyedArms[1], keyedArms[2], keyedArms[3], keyedArms[4],
+    keyedArms[0])))
+ordinary("String \"0\" does not index an array", () => FFI.readFields(keyed, Array(
+    keyedArms[5], keyedArms[1], keyedArms[2], keyedArms[3], FFI.unionArm(Array("list", "0"),
+    "real"), keyedArms[0])))
+ordinary("\"a.b\" is not a path", () => FFI.readFields(keyed, Array(keyedArms[0], keyedArms[1],
+    FFI.unionArm(Array("a.b"), "real"), keyedArms[3], keyedArms[4], keyedArms[5])))
+
+// ---- field names that are also message names
+
+collisions: Array("call", "construct", "init", "createSlot", "updateSlot", "slotValue", "parent",
+    "hasSlot", "at", "atPut", "size", "with space", "x-y", "[0]", "a.b.c")
+collisionFields: Array()
+for(name in collisions) {
+    collisionFields = Arrays.append(collisionFields, field(name, FFI.i32))
+}
+Collisions: FFI.struct(collisionFields)
+colliding: FFI.allocate(Collisions)
+collidingInput: Map()
+index: 0
+for(name in collisions) {
+    collidingInput[name] = index * 3
+    index = index + 1
+}
+check("colliding names write", FFI.writeFields(colliding, collidingInput, Array()) === colliding)
+collidingRead: FFI.readFields(colliding, Array())
+check("colliding names read every field", collidingRead.size() == collisions.size())
+index = 0
+for(name in collisions) {
+    check("colliding name " + name, collidingRead[name] == (index * 3))
+    check("colliding native field " + name, colliding[name] == (index * 3))
+    index = index + 1
+}
+
+// ---- staged writes: a rejected value never changes the destination
+
+Late: FFI.struct(Array(
+    field("first", FFI.i32),
+    field("list", FFI.array(FFI.i16, 3)),
+    field("choice", Choice),
+    field("ratio", FFI.f32),
+    field("target", FFI.pointer(Inner)),
+    field("maybe", FFI.nullable(FFI.pointer(Inner))),
+    field("small", FFI.i8),
+    field("real", FFI.f64)))
+lateArms: Array(FFI.unionArm(Array("choice"), "integer"))
+lateTarget: FFI.allocate(Inner)
+lateTarget["a"] = 21
+lateFields: () => {
+    %{
+        "first": 1
+        "list": Array(1, 2, 3)
+        "choice": %{ "integer": 4 }
+        "ratio": 0.5
+        "target": FFI.addressOf(lateTarget)
+        "maybe": null
+        "small": -128
+        "real": 2.5
+    }
+}
+late: FFI.allocate(Late)
+FFI.writeFields(late, lateFields(), lateArms)
+check("late initial write", (late["first"] == 1) && (late["small"] == -128))
+lentLate: lend(1)
+lateSize: FFI.sizeOf(Late)
+lateRejected: (label, change) => {
+    input: lateFields()
+    change(input)
+    before: calls()
+    bytes: octets(late, lateSize)
+    ordinary(label, () => FFI.writeFields(late, input, lateArms))
+    check(label + " did not enter C", calls() == before)
+    check(label + " left every byte", sameOctets(bytes, octets(late, lateSize)))
+    check(label + " kept the borrowed pointer", first.isLive(lentLate) == true)
+}
+expiring: FFI.allocate(Inner)
+expired: FFI.addressOf(expiring)
+FFI.release(expiring)
+lateRejected("Integer range", (m) => { m["small"] = 128 })
+lateRejected("Integer for f64", (m) => { m["real"] = 1 })
+lateRejected("String for f64", (m) => { m["real"] = "1.0" })
+lateRejected("incompatible pointer", (m) => { m["target"] = FFI.addressOf(wide) })
+lateRejected("expired pointer", (m) => { m["target"] = expired })
+lateRejected("null pointer", (m) => { m["target"] = null })
+lateRejected("Integer pointer", (m) => { m["maybe"] = 0 })
+lateRejected("missing field", (m) => { m.remove("real") })
+lateRejected("extra field", (m) => { m["extra"] = 1 })
+lateRejected("non-String key", (m) => {
+    m.remove("real")
+    m[7] = 2.5
+})
+lateRejected("short Array", (m) => { m["list"] = Array(1, 2) })
+lateRejected("long Array", (m) => { m["list"] = Array(1, 2, 3, 4) })
+lateRejected("invalid last element", (m) => { m["list"] = Array(1, 2, 40000) })
+lateRejected("Object for Array", (m) => { m["list"] = { size: 3 } })
+lateRejected("Object for Map", (m) => { m["choice"] = { integer: 4 } })
+lateRejected("wrong union member", (m) => { m["choice"] = %{ "real": 1.5 } })
+lateRejected("extra union member", (m) => { m["choice"] = %{ "integer": 4; "real": 1.5 } })
+lateRejected("region for a Map", (m) => { m["choice"] = choice })
+// f32 rounds once (FFI.md): overflow is binary32 infinity, not a rejection.
+huge: lateFields()
+huge["ratio"] = 1.0e300
+FFI.writeFields(late, huge, lateArms)
+check("f32 overflow rounds to infinity", late["ratio"] == (1.0 / 0.0))
+validBefore: calls()
+check("valid write", FFI.writeFields(late, lateFields(), lateArms) === late)
+check("valid write did not enter C", calls() == validBefore)
+check("valid write kept the borrow epoch", first.isLive(lentLate) == true)
+check("valid write committed", (late["ratio"] == 0.5) && (late["list"][2] == 3))
+check("valid pointer written", innerA(late["target"]) == 21)
+
+// ---- padding and unselected union bytes keep their contents
+
+pattern: (region, length) => {
+    view: FFI.slice(region, 0, length)
+    index: 0
+    while(index < length) {
+        view[index] = 160 + index
+        index = index + 1
+    }
+}
+paddedUnion: FFI.allocate(PaddedUnion)
+pattern(paddedUnion, 16)
+FFI.writeFields(paddedUnion, %{ "wide": 0 }, Array(whole("wide")))
+unionBytes: octets(paddedUnion, 16)
+check("written member bytes", sameOctets(Arrays.take(unionBytes, 8), Array(0, 0, 0, 0, 0, 0, 0, 0)))
+check("bytes beyond the member keep their pattern", sameOctets(Arrays.drop(unionBytes, 8),
+    Array(168, 169, 170, 171, 172, 173, 174, 175)))
+paddedBytes: FFI.readFields(paddedUnion, Array(whole("bytes")))["bytes"]
+check("other member reads the kept byte", (paddedBytes.size() == 9) && (paddedBytes[8] == 168))
+paddedStruct: FFI.allocate(Inner)
+pattern(paddedStruct, 16)
+FFI.writeFields(paddedStruct, %{ "a": 1; "b": 2.0 }, Array())
+check("struct padding keeps its pattern",
+    sameOctets(Arrays.take(Arrays.drop(octets(paddedStruct, 16), 4), 4), Array(164, 165, 166, 167)))
+check("struct fields around padding", FFI.readFields(paddedStruct, Array())["b"] == 2.0)
+
+// ---- ownership, permissions and lifetime
+
+owner: FFI.allocate(Inner)
+FFI.writeFields(owner, %{ "a": 2; "b": 0.5 }, Array())
+typedView: FFI.view(FFI.addressOf(owner), Inner)
+check("typed view read", FFI.readFields(typedView, Array())["a"] == 2)
+FFI.writeFields(typedView, %{ "a": 3; "b": 0.5 }, Array())
+check("typed view write", owner["a"] == 3)
+check("nested view read", FFI.readFields(holder["inner"], Array())["a"] == 30)
+FFI.writeFields(holder["inner"], %{ "a": 31; "b": 0.5 }, Array())
+check("nested view write", holder["inner"]["a"] == 31)
+holder["next"] = FFI.addressOf(owner)
+readOnlyView: FFI.view(FFI.assumeExtent(holder["next"], 16, owner, "read"), Inner)
+check("read-only view read", FFI.readFields(readOnlyView, Array())["a"] == 3)
+ownerBytes: octets(owner, 16)
+ordinary("read-only view write",
+    () => FFI.writeFields(readOnlyView, %{ "a": 4; "b": 0.5 }, Array()))
+check("read-only refusal left the bytes", sameOctets(ownerBytes, octets(owner, 16)))
+ordinary("array region is not a projection root", () => FFI.readFields(holder["values"], Array()))
+ordinary("raw pointer is not a region", () => FFI.readFields(FFI.addressOf(owner), Array()))
+ordinary("byte slice is not a group", () => FFI.readFields(FFI.slice(owner, 0, 16), Array()))
+ordinary("Map is not a region", () => FFI.readFields(plainMap, Array()))
+ordinary("null is not a region", () => FFI.readFields(null, Array()))
+ordinary("descriptor is not a region", () => FFI.readFields(Inner, Array()))
+ordinary("readFields arity", () => FFI.readFields(owner))
+ordinary("writeFields arity", () => FFI.writeFields(owner, %{ "a": 1; "b": 1.0 }))
+lentInner: lendInner(1)
+lentView: FFI.view(FFI.assumeExtent(lentInner, 16, lentInner, "read"), Inner)
+lentA: FFI.readFields(lentView, Array())["a"]
+check("borrowed view read", lentA == lentView["a"])
+touch()
+ordinary("borrowed view expired by a downcall", () => FFI.readFields(lentView, Array()))
+temporaryRoot: FFI.allocate(Inner)
+temporaryView: FFI.view(FFI.addressOf(temporaryRoot), Inner)
+FFI.release(temporaryRoot)
+ordinary("released region", () => FFI.readFields(temporaryRoot, Array()))
+ordinary("released region write",
+    () => FFI.writeFields(temporaryRoot, %{ "a": 1; "b": 1.0 }, Array()))
+ordinary("view revoked by its root release", () => FFI.readFields(temporaryView, Array()))
+
+// ---- pointers inside snapshots stay capabilities
+
+complexFields: FFI.readFields(complex, Array())
+next: complexFields["next"]
+check("pointer member is not an Integer", Integer.recognizes(next) == false)
+check("pointer member passes to C", innerA(next) == 77)
+ordinary("pointer member has no inferred extent", () => FFI.view(next, Inner))
+ordinary("pointer member is not an owned resource", () => FFI.release(next))
+check("projection read no pointee", pointee["a"] == 77)
+FFI.writeFields(complex, complexFields, Array())
+check("writeFields keeps the original pointer capability", innerA(next) == 77)
+check("written pointer is the same address", innerA(complex["next"]) == 77)
+dangling: FFI.allocate(Inner)
+holderNext: FFI.allocate(Outer)
+holderNext["next"] = FFI.addressOf(dangling)
+FFI.release(dangling)
+check("a pointer member is never dereferenced",
+    (FFI.readFields(holderNext, Array())["next"] === null) == false)
+emptyNext: FFI.allocate(Outer)
+check("nullable pointer null value", FFI.readFields(emptyNext, Array())["next"] === null)
+
+// ---- transfer: snapshots follow ordinary rules, capabilities never cross
+
+scalarSnapshot: FFI.readFields(made, Array())
+check("scalar snapshot crosses P",
+    ((fields) => fields["a"] + fields["b"]).parallel(scalarSnapshot).value() == 19.5)
+pointerSnapshot: FFI.readFields(complex, Array())
+refusedSnapshot: caught(NonParallelValue, () => ((x) => 1).parallel(pointerSnapshot).value())
+check("a snapshot holding a pointer never crosses P", (refusedSnapshot === null) == false)
+check("nested groups are Maps, not regions", isMap(pointerSnapshot["inner"]))
+
+for(root in Array(selector, keyed, colliding, lateTarget, late, paddedUnion, paddedStruct, owner,
+        holderNext, emptyNext)) {
+    check("projection release", FFI.release(root) === null)
+}
+
 // ---- cleanup: every remaining allocation root is released explicitly
 
 for(root in Array(made, again, wide, widened, pointee, complex, transformed, shaped, reshaped,

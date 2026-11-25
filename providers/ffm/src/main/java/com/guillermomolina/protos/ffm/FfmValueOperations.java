@@ -40,7 +40,9 @@ import java.util.Set;
  * session's private context (member read) exposes only the numeric scalar descriptors, the typed
  * pointer descriptors and the session-scoped memory operations: physical storage composition
  * from Protos-computed metadata, allocation, allocation-root release,
- * region address, slicing, typed views and trusted extent assertions. Native regions are indexed
+ * region address, slicing, typed views and trusted extent assertions, plus two private physical
+ * supports of the Protos-source aggregate projection: the exact storage of a live region and one
+ * whole-region copy between regions of the exact same layout identity. Native regions are indexed
  * (read and write) by exact member name or exact position, never through foreign members, and
  * every indexed access is admitted completely by {@link #acceptsElementRead} or {@link
  * #acceptsElementWrite} before entry.
@@ -125,7 +127,11 @@ final class FfmValueOperations implements ProtosForeignValueOperations {
         REGION_ADDRESS("regionAddress", 2, Scope.CONTEXT),
         SLICE("slice", 3, Scope.CONTEXT),
         VIEW("view", 2, Scope.CONTEXT),
-        ASSUME_EXTENT("assumeExtent", 4, Scope.CONTEXT);
+        ASSUME_EXTENT("assumeExtent", 4, Scope.CONTEXT),
+        /** The exact retained storage of a live layout region; never an address. */
+        REGION_STORAGE("regionStorage", 2, Scope.CONTEXT),
+        /** One whole copy between live regions of one exact layout identity. */
+        COPY_REGION("copyRegion", 2, Scope.CONTEXT);
 
         final String member;
         final int arity;
@@ -374,8 +380,42 @@ final class FfmValueOperations implements ProtosForeignValueOperations {
             case SLICE -> sliceRange(session, v) != null;
             case VIEW -> admitsView(session, v[0], v[1]);
             case ASSUME_EXTENT -> admitsAssertion(session, v);
+            case REGION_STORAGE ->
+                    v[0] instanceof FfmHandles.Region region
+                            && region.session() == session
+                            && region.isLive()
+                            && v[1] instanceof Boolean write
+                            && region.storage().identity() != null
+                            && (!write || region.isWritable());
+            case COPY_REGION -> admitsCopy(session, v[0], v[1]);
             default -> false;
         };
+    }
+
+    /**
+     * A whole-region copy needs two live regions of this session, a writable destination, the
+     * exact same non-null layout identity and size, segments spanning exactly that size, and the
+     * native alignment of both segments. A structurally equal layout of another identity and a
+     * byte view without layout identity are refused.
+     */
+    private static boolean admitsCopy(FfmSession session, Object targetValue, Object sourceValue) {
+        if (!(targetValue instanceof FfmHandles.Region target)
+                || !(sourceValue instanceof FfmHandles.Region source)) {
+            return false;
+        }
+        FfmTypes.Storage storage = target.storage();
+        return target.session() == session
+                && source.session() == session
+                && target.isLive()
+                && source.isLive()
+                && target.isWritable()
+                && storage.identity() != null
+                && source.storage().identity() == storage.identity()
+                && source.storage().size() == storage.size()
+                && target.segment().byteSize() == storage.size()
+                && source.segment().byteSize() == storage.size()
+                && target.segment().address() % storage.align() == 0
+                && source.segment().address() % storage.align() == 0;
     }
 
     /**
@@ -751,6 +791,27 @@ final class FfmValueOperations implements ProtosForeignValueOperations {
                             accreditC(pointer, v[1], v[3], resource, session);
                     default -> accreditC(pointer, v[1], v[3], null, session);
                 };
+            }
+            case REGION_STORAGE -> ((FfmHandles.Region) v[0]).storage();
+            case COPY_REGION -> {
+                session.beginCall();
+                try {
+                    // Re-checked inside the admitted operation; only a concurrent close fails here.
+                    if (!admitsCopy(session, v[0], v[1])) {
+                        throw new FfmFailure(
+                                "invalid-argument", "the native regions reject the copy");
+                    }
+                    FfmHandles.Region target = (FfmHandles.Region) v[0];
+                    MemorySegment.copy(
+                            ((FfmHandles.Region) v[1]).segment(),
+                            0,
+                            target.segment(),
+                            0,
+                            target.storage().size());
+                    yield target;
+                } finally {
+                    session.endCall();
+                }
             }
             default -> throw new FfmFailure("not-executable", "not a context operation");
         };

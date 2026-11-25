@@ -25,6 +25,9 @@
 //! Struct and union layouts pass and return by value: an argument is a live
 //! region of the exact layout, copied for the call; a result, or an out of
 //! that layout, is a fresh independently owned allocation root.
+//! readFields and writeFields project a struct or union region to and from
+//! fresh ordinary Maps and Arrays; every reached union names its member
+//! through an explicit unionArm selection.
 
 Interop: import("std:interop")
 Arrays: import("std:collections/array")
@@ -48,6 +51,9 @@ nativeContext: null
 // Exact storage layout identity -> provider-side physical access metadata,
 // composed lazily from the record below; never a second descriptor map.
 storages: IdentityMap()
+// The inverse: exact provider-side storage identity -> exact layout descriptor,
+// only for storages composed by `physical` below; never a region or a value.
+layouts: IdentityMap()
 
 fail: () => Error().signal()
 requireString: (value) => {
@@ -414,6 +420,7 @@ physical: (layout) => {
             record.parts.count, record.parts.stride, identity)
     }
     storages[layout] = composed
+    layouts[composed] = layout
     composed
 }
 
@@ -598,16 +605,20 @@ this.bindPreserving: (library: fail(), symbol: fail(), returnDescriptor: fail(),
     declareBinding(library, symbol, returnDescriptor, argumentDescriptors, true)
 }
 
+// Shared by release and the temporary roots of writeFields: one custody path.
+releaseOwned: (ownedHandle) => {
+    owners.containsKey(ownedHandle).ifFalse(() => fail())
+    library: owners.at(ownedHandle)
+    owners.remove(ownedHandle)
+    operation(library, "release", ownedHandle)
+}
 /// Retire an owned handle before attempting its destructor, without retries.
 /// Answers the exact native destructor result, including an error status.
 /// An allocated native region root is retired, revoking every view, slice
 /// and pointer derived from it, and its storage freed; that answers null.
 this.release: (ownedHandle, ...extra) => {
     (extra.size() == 0).ifFalse(() => fail())
-    owners.containsKey(ownedHandle).ifFalse(() => fail())
-    library: owners.at(ownedHandle)
-    owners.remove(ownedHandle)
-    operation(library, "release", ownedHandle)
+    releaseOwned(ownedHandle)
 }
 
 /// Answer a pointer capability without an Integer address. For a live owned
@@ -651,16 +662,21 @@ this.cType: (name: fail(), ...extra) => {
     cTypes.at(name)
 }
 
-/// Allocate zero-initialized native storage of exactly a storage layout's
-/// size and alignment, independently owned until FFI.release. Answers a
-/// typed native region indexed by field name or element position.
-this.allocate: (layout: fail(), ...extra) => {
-    requireArity(extra)
+// One allocation root of the session's existing custody, released by FFI.release.
+allocateRoot: (layout) => {
     storage(layout)
     native: providerContext()
     region: operation(native, "allocate", physical(layout))
     owners[region] = native
     region
+}
+
+/// Allocate zero-initialized native storage of exactly a storage layout's
+/// size and alignment, independently owned until FFI.release. Answers a
+/// typed native region indexed by field name or element position.
+this.allocate: (layout: fail(), ...extra) => {
+    requireArity(extra)
+    allocateRoot(layout)
 }
 
 /// A non-owning byte view (indexed as u8) of byteLength bytes starting at
@@ -706,4 +722,285 @@ this.assumeExtent: (pointer: fail(), byteLength: fail(), anchor: fail(), access:
     // pointer's own session is recognized, before any foreign member is read.
     (nativeContextFacility.isLibraryAnchor(pointer, anchor) === true).ifFalse(() => fail())
     operation(anchor, "assumeStaticExtent", pointer, byteLength, access)
+}
+
+// ---- explicit aggregate projection to and from ordinary Maps and Arrays
+
+/// Declare the explicit member selection of the union reached by an Array
+/// path of member names (Strings) and array indices (non-negative Integers);
+/// the empty path names a root union. The path is copied and frozen. The
+/// declaration is checked against a concrete layout only when it is used; it
+/// is never an ABI descriptor and acquires no provider.
+this.unionArm: (path: fail(), memberName: fail(), ...extra) => {
+    requireArity(extra)
+    Array.recognizes(path).ifFalse(() => fail())
+    components: Array(...path)
+    for(component in components) {
+        if(String.recognizes(component) == false) {
+            requireNonnegative(component)
+        }
+    }
+    requireString(memberName)
+    components.freeze()
+    parts: {
+        path: components
+        member: memberName
+    }
+    parts.freeze()
+    // A kind no storage, binding or out position admits.
+    register("unionArm", "unionArm", null, null, null, null, null, parts)
+}
+
+// An empty matcher Map recognizes exactly standard Maps without invoking any
+// behavior of the candidate.
+mapMatcher: %{}
+requireMap: (value) => {
+    (mapMatcher.match(value) === true).ifFalse(() => fail())
+}
+
+// Path components are Strings or Integers; equal only within the same kind,
+// so "0" and 0, or "a.b" and ("a", "b"), stay distinct.
+samePath: (left, right) => {
+    if((left.size() == right.size()) == false) { ^false }
+    index: 0
+    while(index < left.size()) {
+        if((String.recognizes(left[index]) == String.recognizes(right[index])) == false) {
+            ^false
+        }
+        if((left[index] == right[index]) == false) { ^false }
+        index = index + 1
+    }
+    true
+}
+
+// Snapshot an ordinary Array of unionArm declarations, admitted by exact
+// identity, with pairwise distinct paths. Answers a selection state: the
+// frozen selection metadata and a fresh consumption flag per selection.
+admitArms: (arms) => {
+    Array.recognizes(arms).ifFalse(() => fail())
+    snapshot: Array(...arms)
+    selections: Array(...snapshot)
+    consumed: Array(...snapshot)
+    index: 0
+    for(arm in snapshot) {
+        isRegistered(arm).ifFalse(() => fail())
+        record: descriptors.at(arm)
+        (record.layoutKind == "unionArm").ifFalse(() => fail())
+        for(earlier in Arrays.take(selections, index)) {
+            samePath(earlier.path, record.parts.path).ifTrue(() => fail())
+        }
+        selections[index] = record.parts
+        consumed[index] = false
+        index = index + 1
+    }
+    state: {
+        selections: selections
+        consumed: consumed
+    }
+    state
+}
+
+// The member selected for the union reached at `path`, consuming exactly
+// one selection; a missing selection or an unknown member is an Error.
+selectArm: (state, record, path) => {
+    index: 0
+    for(selection in state.selections) {
+        if(samePath(selection.path, path)) {
+            record.parts.byName.containsKey(selection.member).ifFalse(() => fail())
+            state.consumed[index] = true
+            ^record.parts.byName.at(selection.member)
+        }
+        index = index + 1
+    }
+    fail()
+}
+
+// A fresh open Array of exactly `count` (positive) placeholder elements,
+// built by doubling so that its cost stays linear in `count`.
+slots: (count) => {
+    filled: Array(null)
+    while(filled.size() < count) {
+        filled = Arrays.concat(filled, filled)
+    }
+    Arrays.take(filled, count)
+}
+
+// One selected position: its existing descriptor, its member name or array
+// index, and its selected children (null for a scalar or pointer leaf).
+selectedPosition: (layout, key, children) => {
+    node: {
+        layout: layout
+        key: key
+        children: children
+    }
+    node.freeze()
+    node
+}
+
+// The selected positions under `layout` reached at `path`: every struct
+// member in declaration order, exactly the selected member of a union, and
+// every array element; null for a leaf. Purely Protos metadata: no region
+// is read or written while the plan is built.
+plan: (layout, path, state) => {
+    record: storage(layout)
+    kind: record.layoutKind
+    if(kind == "struct") {
+        nodes: slots(record.parts.members.size())
+        index: 0
+        for(entry in record.parts.members) {
+            nodes[index] = selectedPosition(entry.layout, entry.name,
+                plan(entry.layout, Arrays.append(path, entry.name), state))
+            index = index + 1
+        }
+        ^nodes
+    }
+    if(kind == "union") {
+        entry: selectArm(state, record, path)
+        ^Array(selectedPosition(entry.layout, entry.name,
+            plan(entry.layout, Arrays.append(path, entry.name), state)))
+    }
+    if(kind == "array") {
+        element: record.parts.element
+        nodes: slots(record.parts.count)
+        index: 0
+        while(index < record.parts.count) {
+            nodes[index] = selectedPosition(element, index,
+                plan(element, Arrays.append(path, index), state))
+            index = index + 1
+        }
+        ^nodes
+    }
+    null
+}
+
+// The complete selection plan of a group layout: every reached union has
+// exactly one selection and every selection is consumed.
+projectionPlan: (layout, arms) => {
+    state: admitArms(arms)
+    nodes: plan(layout, Array(), state)
+    for(used in state.consumed) {
+        (used === true).ifFalse(() => fail())
+    }
+    nodes
+}
+
+// The exact layout of a live struct or union region of this session (writable
+// when required), recovered from the storage the region retains.
+projectionLayout: (region, writable) => {
+    native: providerContext()
+    retained: operation(native, "regionStorage", region, writable)
+    layouts.containsKey(retained).ifFalse(() => fail())
+    layout: layouts.at(retained)
+    isGroup(storage(layout)).ifFalse(() => fail())
+    layout
+}
+
+// A leaf is the existing indexed read of the original region; a nested group
+// is read through the existing non-owning nested view of that region.
+readGroup: (region, layout, nodes) => {
+    values: slots(nodes.size())
+    index: 0
+    for(node in nodes) {
+        value: region[node.key]
+        if((node.children === null) == false) {
+            value = readGroup(value, node.layout, node.children)
+        }
+        values[index] = value
+        index = index + 1
+    }
+    if(storage(layout).layoutKind == "array") { ^values }
+    fields: Map()
+    index = 0
+    for(node in nodes) {
+        fields[node.key] = values[index]
+        index = index + 1
+    }
+    fields
+}
+
+/// Read a live struct or union region into fresh ordinary containers: a Map
+/// per struct, a Map holding only the selected member per union, an Array per
+/// fixed array. Scalars are copied by value; pointer members stay pointer
+/// capabilities and are not dereferenced. `arms` selects every reached union.
+this.readFields: (region: fail(), arms: fail(), ...extra) => {
+    requireArity(extra)
+    layout: projectionLayout(region, false)
+    readGroup(region, layout, projectionPlan(layout, arms))
+}
+
+// Phase 1: the complete structural admission of `input` against the plan,
+// capturing every value into fresh private Arrays aligned with the plan. Map
+// keys are checked through the ordinary enumeration of the actual entries.
+captureGroup: (layout, nodes, input) => {
+    ordered: null
+    if(storage(layout).layoutKind == "array") {
+        Array.recognizes(input).ifFalse(() => fail())
+        ordered = Array(...input)
+        (ordered.size() == nodes.size()).ifFalse(() => fail())
+    } else {
+        requireMap(input)
+        entries: Map()
+        input.each((key, value) => {
+            requireString(key)
+            entries[key] = value
+        })
+        (entries.size() == nodes.size()).ifFalse(() => fail())
+        ordered = slots(nodes.size())
+        index: 0
+        for(node in nodes) {
+            entries.containsKey(node.key).ifFalse(() => fail())
+            ordered[index] = entries.at(node.key)
+            index = index + 1
+        }
+    }
+    captured: slots(nodes.size())
+    position: 0
+    for(node in nodes) {
+        value: ordered[position]
+        if((node.children === null) == false) {
+            value = captureGroup(node.layout, node.children, value)
+        }
+        captured[position] = value
+        position = position + 1
+    }
+    captured
+}
+
+// Phase 3: the existing indexed writes, applied only to the temporary root
+// and its nested views; they own every ABI admission.
+writeGroup: (target, nodes, captured) => {
+    index: 0
+    for(node in nodes) {
+        if(node.children === null) {
+            target[node.key] = captured[index]
+        } else {
+            writeGroup(target[node.key], node.children, captured[index])
+        }
+        index = index + 1
+    }
+}
+
+/// Write fresh ordinary containers into a live writable struct or union
+/// region and answer the region. `fields` must match the selected shape
+/// exactly. Every selection and value is admitted before the destination is
+/// changed: a rejected write leaves every destination byte unchanged. Bytes
+/// outside the written members, padding included, keep their contents. The
+/// write is not atomic with respect to concurrently running C code.
+this.writeFields: (region: fail(), fields: fail(), arms: fail(), ...extra) => {
+    requireArity(extra)
+    layout: projectionLayout(region, true)
+    nodes: projectionPlan(layout, arms)
+    captured: captureGroup(layout, nodes, fields)
+    temporary: allocateRoot(layout)
+    (() => {
+        native: providerContext()
+        // Phase 2: the destination's current bytes, uninterpreted.
+        operation(native, "copyRegion", temporary, region)
+        writeGroup(temporary, nodes, captured)
+        // Phase 4: one physical commit of the whole prepared region.
+        operation(native, "copyRegion", region, temporary)
+    }).ensure(() => {
+        releaseOwned(temporary)
+    })
+    region
 }

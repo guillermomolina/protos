@@ -1155,6 +1155,244 @@ class ProtosI144FfmFixtureAbiTest {
         }
     }
 
+    /**
+     * Aggregate projection uses only the existing allocation custody: reads add no root, and
+     * each write's temporary root leaves custody when the write completes, also when a final
+     * field is rejected; the destination stays live and its release returns the count to zero.
+     */
+    @Test
+    void projectionUsesExistingAllocationCustody() throws Exception {
+        try (ProtosExternalForeignProviderTest.Fixture fixture = distributable(Map.of())) {
+            ProtosObjectValue state =
+                    (ProtosObjectValue)
+                            fixture.eval("FFI: import(\"std:ffi\")\n"
+                                    + "Choice: FFI.union(Array(FFI.field(\"integer\", FFI.i64),"
+                                    + " FFI.field(\"real\", FFI.f64)))\n"
+                                    + "Pair: FFI.struct(Array(FFI.field(\"a\", FFI.i32),"
+                                    + " FFI.field(\"choice\", Choice)))\n"
+                                    + "arms: Array(FFI.unionArm(Array(\"choice\"), \"integer\"))\n"
+                                    + "region: FFI.allocate(Pair)\n"
+                                    + "{\n region: region\n"
+                                    + " read: () => FFI.readFields(region, arms)\n"
+                                    + " write: (value) => FFI.writeFields(region,"
+                                    + " %{ \"a\": value; \"choice\": %{ \"integer\": 1 } }, arms)\n"
+                                    + " invalid: () => FFI.writeFields(region,"
+                                    + " %{ \"a\": 1; \"choice\": %{ \"integer\": 1.5 } }, arms)\n"
+                                    + " at: () => region[\"a\"]\n"
+                                    + " release: () => FFI.release(region)\n}");
+            Object region = slot(state, "region");
+            Object session = pluginSession(region);
+            // The destination is the only root of the fresh session.
+            int base = ownedCount(session);
+            assertEquals(1, base);
+            for (int round = 0; round < 3; round++) {
+                call(fixture, state, "read");
+                assertEquals(base, ownedCount(session));
+            }
+            for (int round = 0; round < 3; round++) {
+                Object written =
+                        call(fixture, state, "write",
+                                com.guillermomolina.protos.runtime.ProtosNumericValueSupport
+                                        .integer(round + 10));
+                assertSame(region, written);
+                assertEquals(base, ownedCount(session));
+                assertEquals(String.valueOf(round + 10), integer(call(fixture, state, "at")));
+            }
+            assertOrdinary(fixture, invoke(fixture, slot(state, "invalid")));
+            assertEquals(base, ownedCount(session));
+            assertEquals("12", integer(call(fixture, state, "at")));
+            assertSame(
+                    com.guillermomolina.protos.runtime.ProtosNullValue.INSTANCE,
+                    call(fixture, state, "release"));
+            assertEquals(0, ownedCount(session));
+        }
+    }
+
+    /** Protos declarations reaching the private native context through std:interop. */
+    private static final String PRIVATE_CONTEXT_OPERATIONS =
+            "Interop: import(\"std:interop\")\n"
+                    + "storageOf: (native, region, write) =>"
+                    + " Interop.invoke(Interop.readMember(native, \"regionStorage\"), region,"
+                    + " write)\n"
+                    + "copy: (native, target, source) =>"
+                    + " Interop.invoke(Interop.readMember(native, \"copyRegion\"), target,"
+                    + " source)\n";
+
+    /**
+     * The session's private context, admitted through the existing value admission exactly as
+     * the provider answers it to the std:ffi MODULE; the region names the session.
+     */
+    private static Object privateContext(
+            ProtosExternalForeignProviderTest.Fixture fixture, Object region) throws Exception {
+        ProtosForeignHandle handle = handle(region);
+        return ProtosForeignValueAdmission.admit(
+                handle.session(),
+                handle.adapter(),
+                handle.session().sessionForRuntime(),
+                pluginSession(region),
+                fixture.prelude);
+    }
+
+    /**
+     * Two separately declared layouts of identical physical structure keep distinct exact
+     * storages in the private projection support: the retained storage is stable and shared
+     * only by regions of the same layout identity, a copy between the two layouts is refused
+     * with the destination unchanged, a copy within one identity is admitted, and byte slices,
+     * released regions and read-only destinations are refused.
+     */
+    @Test
+    void projectionPreservesPhysicalLayoutIdentity() throws Exception {
+        try (ProtosExternalForeignProviderTest.Fixture fixture = distributable(Map.of())) {
+            ProtosObjectValue state =
+                    (ProtosObjectValue)
+                            fixture.eval("FFI: import(\"std:ffi\")\n"
+                                    + PRIVATE_CONTEXT_OPERATIONS
+                                    + "Inner: FFI.struct(Array(FFI.field(\"a\", FFI.i32),"
+                                    + " FFI.field(\"b\", FFI.f64)))\n"
+                                    + "Twin: FFI.struct(Array(FFI.field(\"a\", FFI.i32),"
+                                    + " FFI.field(\"b\", FFI.f64)))\n"
+                                    + "inner: FFI.allocate(Inner)\n"
+                                    + "other: FFI.allocate(Inner)\n"
+                                    + "twin: FFI.allocate(Twin)\n"
+                                    + "gone: FFI.allocate(Inner)\n"
+                                    + "FFI.release(gone)\n"
+                                    + "inner[\"a\"] = 5\n"
+                                    + "other[\"a\"] = 9\n"
+                                    + "twin[\"a\"] = 7\n"
+                                    + "{\n inner: inner\n other: other\n twin: twin\n gone: gone\n"
+                                    + " slice: FFI.slice(inner, 0, 16)\n"
+                                    + " readOnly: FFI.view(FFI.assumeExtent(FFI.addressOf(inner),"
+                                    + " 16, inner, \"read\"), Inner)\n"
+                                    + " storageOf: storageOf\n copy: copy\n"
+                                    + " read: (region) => region[\"a\"]\n}");
+            Object inner = slot(state, "inner");
+            Object other = slot(state, "other");
+            Object twin = slot(state, "twin");
+            Object gone = slot(state, "gone");
+            Object context = privateContext(fixture, inner);
+            Object storageOf = slot(state, "storageOf");
+            Object copy = slot(state, "copy");
+
+            Object first =
+                    ProtosInvocation.invoke(storageOf, List.of(context, inner, Boolean.FALSE),
+                            fixture.root);
+            Object again =
+                    ProtosInvocation.invoke(storageOf, List.of(context, inner, Boolean.TRUE),
+                            fixture.root);
+            Object sameLayout =
+                    ProtosInvocation.invoke(storageOf, List.of(context, other, Boolean.FALSE),
+                            fixture.root);
+            Object twinLayout =
+                    ProtosInvocation.invoke(storageOf, List.of(context, twin, Boolean.FALSE),
+                            fixture.root);
+            assertSame(handle(first).target(), handle(again).target());
+            assertSame(handle(first).target(), handle(sameLayout).target());
+            assertNotSame(handle(first).target(), handle(twinLayout).target());
+
+            assertOrdinary(fixture, invoke(fixture, copy, context, inner, twin));
+            assertEquals("5", integer(call(fixture, state, "read", inner)));
+            Object copied =
+                    ProtosInvocation.invoke(copy, List.of(context, inner, other), fixture.root);
+            assertSame(handle(inner).target(), handle(copied).target());
+            assertEquals("9", integer(call(fixture, state, "read", inner)));
+
+            assertOrdinary(
+                    fixture, invoke(fixture, storageOf, context, slot(state, "slice"),
+                            Boolean.FALSE));
+            assertOrdinary(fixture, invoke(fixture, storageOf, context, gone, Boolean.FALSE));
+            assertOrdinary(fixture, invoke(fixture, copy, context, gone, inner));
+            assertOrdinary(fixture, invoke(fixture, copy, context, inner, gone));
+            Object readOnly = slot(state, "readOnly");
+            ProtosInvocation.invoke(storageOf, List.of(context, readOnly, Boolean.FALSE),
+                    fixture.root);
+            assertOrdinary(fixture, invoke(fixture, storageOf, context, readOnly, Boolean.TRUE));
+            assertOrdinary(fixture, invoke(fixture, copy, context, readOnly, other));
+            assertEquals("9", integer(call(fixture, state, "read", inner)));
+        }
+    }
+
+    /**
+     * Regions of another session of the same provider are refused by both private projection
+     * supports, as source or destination, with both custodies, all bytes, the entry counter and
+     * the receiver's borrow epoch unchanged.
+     */
+    @Test
+    void projectionRejectsForeignSessionRegions() throws Exception {
+        Map<String, String> grant = Map.of("library.first", library.toAbsolutePath().toString());
+        try (ProtosExternalForeignProviderTest.Fixture receiver = distributable(grant);
+                ProtosExternalForeignProviderTest.Fixture other = distributable(grant)) {
+            ProtosObjectValue mine = groupSession(receiver, 7);
+            ProtosObjectValue theirs = groupSession(other, 9);
+            ProtosObjectValue operations =
+                    (ProtosObjectValue)
+                            receiver.eval(PRIVATE_CONTEXT_OPERATIONS
+                                    + "{\n storageOf: storageOf\n copy: copy\n}");
+            Object ownRegion = slot(mine, "region");
+            Object foreignRegion = slot(theirs, "region");
+            Object receiverSession = pluginSession(ownRegion);
+            Object otherSession = pluginSession(foreignRegion);
+            Object context = privateContext(receiver, ownRegion);
+            Object storageOf = slot(operations, "storageOf");
+            Object copy = slot(operations, "copy");
+            Object lent = call(receiver, mine, "lendBytes");
+            String entries = integer(call(receiver, mine, "entries"));
+            int receiverOwned = ownedCount(receiverSession);
+            int otherOwned = ownedCount(otherSession);
+
+            ProtosInvocation.invoke(storageOf, List.of(context, ownRegion, Boolean.TRUE),
+                    receiver.root);
+            assertOrdinary(
+                    receiver, invoke(receiver, storageOf, context, foreignRegion, Boolean.FALSE));
+            assertOrdinary(receiver, invoke(receiver, copy, context, ownRegion, foreignRegion));
+            assertOrdinary(receiver, invoke(receiver, copy, context, foreignRegion, ownRegion));
+
+            assertEquals(receiverOwned, ownedCount(receiverSession));
+            assertEquals(otherOwned, ownedCount(otherSession));
+            assertEquals("7", integer(call(receiver, mine, "read", ownRegion)));
+            assertEquals("9", integer(call(other, theirs, "read", foreignRegion)));
+            assertEquals(entries, integer(call(receiver, mine, "entries")));
+            assertEquals(Boolean.TRUE, call(receiver, mine, "alive", lent));
+            assertSame(
+                    com.guillermomolina.protos.runtime.ProtosNullValue.INSTANCE,
+                    call(receiver, mine, "release", ownRegion));
+            assertSame(
+                    com.guillermomolina.protos.runtime.ProtosNullValue.INSTANCE,
+                    call(other, theirs, "release", foreignRegion));
+        }
+    }
+
+    /** Union selections, valid or rejected, are declarative: no session, library or memory. */
+    @Test
+    void projectionDeclarationsDoNotAcquireNativeContext() throws Exception {
+        try (ProtosExternalForeignProviderTest.Fixture fixture = distributable(Map.of())) {
+            ProtosExecutionOutcome outcome =
+                    fixture.run("FFI: import(\"std:ffi\")\n"
+                            + "root: FFI.unionArm(Array(), \"integer\")\n"
+                            + "nested: FFI.unionArm(Array(\"cells\", 0, \"a.b\", \"\"), \"real\")\n"
+                            + "Array(root, nested).freeze()");
+            assertEquals(
+                    ProtosExecutionOutcome.State.COMPLETED,
+                    outcome.state(),
+                    () -> describe(fixture, outcome.error()));
+            for (String rejected :
+                    List.of(
+                            "FFI.unionArm(Array(-1), \"x\")",
+                            "FFI.unionArm(Array(1.5), \"x\")",
+                            "FFI.unionArm(Array(null), \"x\")",
+                            "FFI.unionArm(Array(\"a\"), 3)",
+                            "FFI.unionArm(\"a\", \"x\")",
+                            "FFI.unionArm(Array())",
+                            "FFI.unionArm(Array(), \"x\", 1)",
+                            "FFI.sizeOf(FFI.unionArm(Array(), \"x\"))",
+                            "FFI.out(FFI.unionArm(Array(), \"x\"))")) {
+                assertOrdinary(
+                        fixture, fixture.run("FFI: import(\"std:ffi\")\n" + rejected).error());
+            }
+            assertEquals(0, fixture.context.foreignProviderCompartmentCountForTesting());
+            assertEquals(0, fixture.context.foreignProviderSessionCountForTesting());
+        }
+    }
+
     /** The provider-side count of allocation roots and owned resources in custody. */
     private static int ownedCount(Object session) throws Exception {
         return ((Number) diagnostic(session, "ownedCountForDiagnostics")).intValue();
