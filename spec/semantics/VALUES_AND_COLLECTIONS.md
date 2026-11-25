@@ -4753,10 +4753,14 @@ unbounded time; this is an observable consequence of choosing to suspend inside
 a protocol whose dynamic extent protects that Map, not permission for the
 runtime to block unrelated Actor work.
 
-## Standard Library FFI values (LIB028)
+## Standard Library FFI values (LIB028, D261-R2)
 
-`FFI.md` owns ordinary frozen ABI descriptors, fresh ordinary result Arrays,
-and opaque native references of `std:ffi`. They introduce no Core value family.
+`FFI.md` owns ordinary frozen ABI descriptors, native allocation roots and
+views, pointer capabilities, opaque native references, and ordinary
+Map/Array/Object snapshots of `std:ffi`. They introduce no Core value family.
+Snapshots are ordinary values; native capabilities contained in them retain
+their applicable transfer restrictions. `FFI.md` owns the detailed memory,
+nominality, revocation and projection rules.
 Foreign admission, identity, equality, hashing and projection continue to follow
 Foreign Values below; native acquisition/generation and resource lifetime are
 specialized by `FFI.md` without exposing numeric addresses.

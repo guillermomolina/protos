@@ -23,6 +23,13 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.515] - 2026-11-25
+
+### D261-R2 / I174-G — Integrated FFM R2 conformance and normative reconciliation
+
+- Primary owner `semantics/FFI.md`: reconcile the unified R1/R2 contract, supported JVM and integrated Native Image profiles, independent host authorization and exact signature admission, and current exclusions without changing the 42-member API.
+- Update `semantics/SQLITE.md` only for the supported native execution profiles and `semantics/VALUES_AND_COLLECTIONS.md` for FFI descriptors, native regions, pointer capabilities and ordinary snapshots; retain existing transfer and SQLite behavior.
+
 ## [0.1.514] - 2026-11-25
 
 ### D261-R2 / I174-F — Ordinary prototype snapshots and native aggregate writeback

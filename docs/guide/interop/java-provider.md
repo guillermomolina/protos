@@ -142,8 +142,8 @@ usable flow.
 ## References
 
 - Fixture: [`JavaProvider.java`](../../../protos/tests/foreign-provider/plugins/java/src/i085b/java/JavaProvider.java);
-- programs: [`java-math.protos`](../../../protos/tests/foreign-provider/java-math.protos)
-  and [`java-date.protos`](../../../protos/tests/foreign-provider/java-date.protos);
+- programs: [`java-math.protos`](../../../protos/tests/foreign-provider/providers/java-math.protos)
+  and [`java-date.protos`](../../../protos/tests/foreign-provider/providers/java-date.protos);
 - harness: [`dist/test_external_foreign_providers.py`](../../../dist/test_external_foreign_providers.py);
 - host-Java catalogue provider:
   [`ProtosHostJavaProvider.java`](../../../src/main/java/com/guillermomolina/protos/execution/foreign/host/ProtosHostJavaProvider.java)

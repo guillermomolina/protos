@@ -103,8 +103,9 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
             Map.ofEntries(
                     Map.entry("execution/facilities/ProtosCommandLineArrayConstructionFacility.java", 3),
                     Map.entry("execution/host/embedding/ProtosExactExecutionFacility.java", 2),
-                    // LIB021-A std:interop explicit foreign operations.
-                    Map.entry("execution/foreign/api/ProtosForeignInteropFacility.java", 4),
+                    // LIB021-A: four explicit interop operations; I174 adds private
+                    // RootActor session acquisition and library-anchor recognition for std:ffi.
+                    Map.entry("execution/foreign/api/ProtosForeignInteropFacility.java", 6),
                     // I082-D2 adds the projected pull each to call/at/atPut.
                     Map.entry("execution/foreign/api/ProtosForeignProjectedOperations.java", 4),
                     Map.entry("execution/facilities/ProtosLoggingFacility.java", 3),

@@ -2,8 +2,9 @@
 
 `std:ffi` is the Protos-first public API for declaring supported C functions as
 ordinary Protos Closures. It is an optional, explicitly authorized native-code
-path, not a SQLite library or a general-purpose memory API. The normative
-contract is [`spec/semantics/FFI.md`](../../../spec/semantics/FFI.md).
+path supporting scalar and aggregate ABI declarations, typed pointers,
+bounded native memory and explicit ordinary snapshots. SQLite remains a
+separate library. The normative contract is [`spec/semantics/FFI.md`](../../../spec/semantics/FFI.md).
 
 ## Three separate layers
 
@@ -46,7 +47,7 @@ protos --allow-library sqlite3=libsqlite3.so.0 app.protos
 The operating system must provide the authorized library; Java, GraalVM and a
 provider JAR are not needed. A library is loaded only when the program imports
 its `ffi:<alias>`. The Native executable links a finite set of physical
-signatures that covers `std:sqlite`; any other signature is refused with an
+signatures, including those used by `std:sqlite`; an unregistered signature is refused with an
 ordinary `Error` before C is entered. See
 [Native Image: integrated provider](../interop/ffm-provider.md#native-image-integrated-provider).
 
@@ -77,6 +78,21 @@ Use the archive name actually present in `target/distributions/`. Building the
 JAR grants nothing. Each run must explicitly load it with
 `--foreign-provider-path` and, separately, authorize each native library with
 `--allow-library alias=target`. No library is authorized by default.
+
+## Execution profiles and ABI coverage
+
+Both profiles use the same Protos module and generic provider on Linux x86-64
+LP64. The portable JVM admits valid signatures supported by its native linker.
+Native Image admits only exactly registered physical shapes, including aggregate
+structure and padding. This is not a library allowlist built into the executable:
+each library still requires independent host authorization. See the
+[signature admission contract](../../../spec/semantics/FFI.md#native-image-signature-admission).
+
+A native region can exist without acquiring a C library. Provider availability
+is separate: the portable JVM host supplies the provider JAR; the current Native
+CLI activates its integrated provider through `--allow-library`. An unused alias
+with a nonexistent target can activate that infrastructure without loading a
+library. Activation without host options is host policy, not a `std:ffi` promise.
 
 ## Imports and authority
 
@@ -834,20 +850,21 @@ as resolving a missing symbol, signals `ForeignError` under the existing
 foreign-value rules. Native crashes, memory corruption and process termination
 are not recoverable Protos errors.
 
-## Borrowed memory is not public in R1
+## Private borrowed copying and SQLite
 
 There is no public borrowed-memory descriptor or public `FFI.copy`,
 `FFI.borrowed` or `FFI.preserving` operation. SQLite TEXT and BLOB column
-readers return pointers into memory owned by SQLite. Because R1 does not expose
-the required lifetime-bounded copying operation, those functions cannot be
-taught as available public `std:ffi` calls. The private I144 guide retains its
+readers return pointers into memory owned by SQLite. The private borrowed/copy
+adapter used by SQLite remains distinct from public R2 pointer capabilities,
+bounded native regions and aggregate projections. The private I144 guide retains its
 historical borrowed-memory material for backend authors and existing tests;
 that private contract is not an application API.
 
-R1 also does not expose a SQLite connection abstraction, TEXT/BLOB input
-binding, callbacks, passing or returning structs by value, conversion of
-native structs to or from Maps and Objects, variadic calls, C++, arbitrary
-allocators or `SQLITE_TRANSIENT`. Public `std:ffi` itself has no SQLite Connection or
+The current API does not expose a SQLite connection abstraction, TEXT/BLOB
+input binding, native callbacks/upcalls, variadic ABI, C++ class ABI, arbitrary
+allocators or `SQLITE_TRANSIENT`. It supports verified struct/union by-value
+calls and explicit Map/Array/Object projection; Native Image still requires
+exact physical signature registration. Public `std:ffi` itself has no SQLite Connection or
 Statement objects. Those abstractions are implemented separately in ordinary
 Protos as [`std:sqlite`](sqlite.md), which application developers
 should use for SQLite. Its SQLite-specific borrowed-memory adaptation remains

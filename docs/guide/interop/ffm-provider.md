@@ -1,11 +1,11 @@
-# The optional external FFM provider (`ffi:`)
+# The generic FFM provider (`ffi:`)
 
 > **Status:** Non-normative developer guide. The provider operations
 > described here are external support machinery, not the public `std:ffi`
 > library implemented in Protos. Applications declaring C functions
-> supported by R1 should start with the
+> and typed native memory should start with the
 > [public `std:ffi` guide](../library/ffi.md). This guide remains useful for
-> authors of the generic backend and for private operations not published by R1.
+> authors of the generic backend and for its private support operations.
 
 The FFM provider (`providers/ffm`) is a generic I085 provider that calls C
 functions of host-authorized shared libraries through the Java 25 Foreign
@@ -112,22 +112,27 @@ protos --allow-library sqlite3=libsqlite3.so.0 app.protos
 - The operating system must provide `libsqlite3.so.0` (or whichever library is
   authorized). Java, GraalVM and a separate Protos FFM provider JAR are not
   needed. No third-party C library is bundled into or linked by `protos`.
-- Without `--allow-library` no `ffi:` provider is registered. Authorization
-  alone loads nothing: a library is loaded only when the program first imports
-  its `ffi:<alias>` module, and only from the exact authorized target.
+- The current Native CLI activates the integrated provider through
+  `--allow-library`; activation without host options is host policy.
+  Authorization alone loads nothing: a library is loaded only on acquisition
+  of its `ffi:<alias>` module, from the exact authorized target. Native memory
+  operations can acquire a provider session without acquiring any library.
 - `--foreign-provider-path` is refused by the Native executable: it never loads
   Java code dynamically and never falls back to the JVM.
-- The Native executable links only a finite, registered set of physical C
-  signatures. Letters name the carrier: `I` 32-bit int, `L` 64-bit integer
-  (`i64`, `sizeT`), `D` double, `P` address (`utf8z`, opaque, owned, borrowed,
-  `out`, private inputs), `V` void return. The set is:
-  `I()`, `I(I)`, `I(I,I)`, `I(P)`, `I(P,I)`, `I(P,P)`, `I(P,I,L)`, `I(P,I,D)`, `I(P,I,P)`, `I(P,P,L)`, `I(L,I,P)`, `I(I,I,P,P)`, `I(P,P,I,P)`, `I(P,P,I,P,P)`, `I(P,I,P,I,P)`, `L()`, `L(L)`, `L(P)`, `L(P,I)`, `D(P,I)`, `D(D,D)`, `P(I)`, `P(L)`, `P(P,I)`, `V()`, `V(L)`, `V(P)`.
-  It covers every current `std:sqlite` declaration and owned destructor. Any
-  other exact signature is valid on the portable JVM but is refused on the
-  Native executable with an ordinary `Error` before linking, so C is never
-  entered.
-- Linux x86-64 LP64 only. No callbacks, structs by value, variadic functions,
-  C++ ABI, platform portability or native sandboxing.
+- Native Image uses the N1 finite set of exact physical signatures registered
+  in the image. Admission includes carriers and recursive aggregate structure,
+  including physical padding. Signed/unsigned types share carriers where
+  appropriate; layout nominal identity remains independent. An independently
+  host-authorized library can reuse a shape registered for another integration.
+  A missing registration signals an ordinary `Error` before linking or C entry,
+  without an ABI fallback. The JVM admits valid signatures its linker supports.
+- The maintained catalog is in
+  [reachability metadata](../../../src/main/resources/META-INF/native-image/com.guillermomolina/protos/reachability-metadata.json)
+  and [FfmTypes](../../../providers/ffm/src/main/java/com/guillermomolina/protos/ffm/FfmTypes.java).
+  These are physical registrations, not a built-in library allowlist.
+- Linux x86-64 LP64 only. Verified structs and unions by value are supported;
+  Native calls additionally require exact signature registration. No native
+  callbacks/upcalls, variadic ABI, C++ class ABI or native sandboxing.
 
 ## Build the provider JAR
 
@@ -250,8 +255,8 @@ and their symbols, native initializers run by the loader, global state
 observable across Actors, indefinite blocking, memory corruption from a wrong
 ABI signature, and process termination. `--allow-library` is an
 authorization, **not a sandbox**. Authorizing a C++ library does not make
-Protos implement the C++ ABI, Qt, Boost, callbacks, arbitrary structs or
-virtual methods.
+Protos implement C++ class ABI, Qt, Boost, native callbacks, unverified
+aggregate ABI or virtual methods.
 
 ## Protos-first flow
 
@@ -325,13 +330,13 @@ the per-call arena: they exist only during the call, so the callee must copy
 them before returning (`copyDestructor`). A remainder is measured while that
 input is still alive; a tail outside the input is a `ForeignError`. These
 descriptors are private provider machinery for `std:sqlite`, not public
-`std:ffi` R1 descriptors. Size policies such as the 16 MiB `std:sqlite` input
+`std:ffi` descriptors. Size policies such as the 16 MiB `std:sqlite` input
 bound belong to the consuming library, not to the provider.
 
 ### Operations
 These `signature`, `param`, `preserving`, `bind` and `copy` operations are
 **private to the I144 provider**, retained for backend authors and boundaries
-that are not public in R1. Protos applications should use
+that are provider-private. Protos applications should use
 [`std:ffi`](../library/ffi.md) for supported C declarations.
 
 | Operation | Purpose |
@@ -447,7 +452,7 @@ connection library; applications can use
 
 `borrowed`, `preserving` and `copy` are private I144 provider machinery, not
 public `std:ffi` operations. The existing public examples deliberately avoid
-SQLite TEXT/BLOB readers; use the [public guide](../library/ffi.md) for the R1
+SQLite TEXT/BLOB readers; use the [public guide](../library/ffi.md) for the public
 boundary and the
 [public examples](../../../protos/examples/ffi/README.md) for supported calls.
 
@@ -490,14 +495,15 @@ while(index < copied.size) {
 
 - **Epochs.** Each borrowed region belongs to the session's current borrow
   epoch. Calling any binding not declared `preserving` advances the epoch
-  immediately before entering C; so do `release` and session close. A region
+  immediately before entering C; so do C-resource destructor calls and session
+  close. Releasing an R2 native allocation root does not advance the epoch. A region
   from an earlier epoch can no longer be copied.
 - **`preserving`.** It declares that a call leaves borrowed regions valid,
   as `sqlite3_column_bytes` does after `sqlite3_column_text`. It is a
   **trusted** ABI statement, not a physical check; a wrong one is as unsafe
   as a wrong C signature.
-- **Bounds.** A copy is limited to 16 MiB (a provider safeguard, not a
-  Protos rule).
+- **Bounds.** This private borrowed copy is limited to 16 MiB; it is not
+  a general limit on public R2 native regions.
 - **Bytes, not text.** The copy preserves octets; Java never decodes UTF-8.
   Protos code rebuilds `Bytes` (from `Encoding.UTF8.encode("")` and `add`)
   and decodes if it wants a String.
@@ -595,11 +601,14 @@ symbol whitelist and none would be an isolation guarantee.
   by address. Owned references enter custody before they are published, are
   released at most once (`release`, or session close), and are rejected after
   release.
-- Typed pointer capabilities (`std:ffi` `FFI.pointer`, `FFI.nullable`,
-  `FFI.borrowedPointer`, `FFI.addressOf`) are pass-only: no address, no
-  extent, no `copy`, no `release`, never in custody. Each is admissible only
-  while its session is open, its retained owner (from `addressOf`) is live, and,
-  for a borrowed result, the borrow epoch is unchanged.
+- Public typed pointers are non-Integer capabilities, not indexed regions.
+  A pass-only C result has no known extent. `addressOf` retains provenance;
+  an accredited extent permits `FFI.view` to provide typed indexed access.
+  `FFI.assumeExtent` explicitly asserts unknown C bounds and lifetime; it
+  does not physically verify an allocation or widen existing permissions.
+  Allocation roots own storage; views and bounded byte slices borrow it.
+  Session, source retirement and applicable borrow epochs revoke derived
+  capabilities permanently. See the [public memory and projection guide](../library/ffi.md).
 - Borrowed pointers (`borrowed`) are readable only through
   `copy(borrowed, length)` and only until the next non-`preserving` call. The
   SQLite pattern is: `sqlite3_column_text` / `sqlite3_column_blob`, then a
@@ -609,12 +618,13 @@ symbol whitelist and none would be an isolation guarantee.
 - Invalidating operations: any call of a binding not declared `preserving`
   (the epoch advances just before entering C, so a later native failure
   never restores earlier regions; a call rejected before entry changes
-  nothing), any `release` (before the destructor runs), and session close. `copy` is rejected before entry once
-  validity is no longer accredited by the declared contract. `preserving` is
+  nothing), C-resource release (before the destructor runs), and session close.
+  Releasing a native allocation root does not advance the epoch. `copy` is
+  rejected before entry once validity is no longer accredited by the declared contract. `preserving` is
   a trusted ABI declaration, not a physical liveness check; a wrong one is as
   unsafe as a wrong C signature.
-- Copies are bounded by a private 16 MiB limit; this is a provider safeguard,
-  not a Protos rule.
+- Private borrowed copies are bounded by 16 MiB; that bound is not a
+  general R2 allocation limit.
 - `sqlite3_open_v2`'s `zVfs` is `const char *`. To pass `NULL`, use
   a nullable opaque pointer of a private type that no binding produces, so
   only `null` is admitted: a limited NULL-pointer adaptation, not a
@@ -629,8 +639,13 @@ symbol whitelist and none would be an isolation guarantee.
 - `SymbolLookup.libraryLookup` also resolves symbols of the library's
   dependencies; there is no whitelist, and none would be a security
   isolation.
-- Not supported: callbacks/upcalls, general structs, variadic functions,
-  C++, Native Image, Windows, macOS, and pointers as Integers. Public
+- Current exclusions are owned by [FFI.md](../../../spec/semantics/FFI.md#exclusions):
+  Integer-to-pointer conversion, arbitrary pointer arithmetic, direct C arrays
+  by value, packed layouts, bitfields, flexible array members, variadic ABI,
+  `long double`, native callbacks/upcalls and retained callbacks, C-thread guest
+  ingress, C++ class ABI, mandatory binding generators, external providers in
+  Native Image, unverified platforms, guest-supplied library paths and native
+  sandboxing. Host-authorized absolute targets remain valid. Public
   `std:ffi` has no TEXT/BLOB input descriptor; `std:sqlite` supports typed
   TEXT/BLOB parameters through its private library adapter.
 - C calls are **synchronous**: they introduce no implicit suspension, and a
@@ -641,9 +656,10 @@ symbol whitelist and none would be an isolation guarantee.
 ## Relationship to `std:ffi` and `std:sqlite`
 
 - **`std:ffi`** defines the public Protos API: ordinary
-  descriptor values, Array-based signatures, `FFI.bind/opaque/owned/out/release`,
-  and construction of final Arrays from provider results, implemented in
-  Protos over these provider operations.
+  frozen scalar/layout descriptors, Array-based signatures, typed pointers,
+  bounded memory, group arguments/results by value, custody and explicit
+  Map/Array/Object projections and snapshots, implemented in Protos over
+  these provider operations. See the [public guide](../library/ffi.md).
 - **`std:sqlite`** provides the ordinary Protos SQLite library:
   memory and persistent file connections, prepared Integer/Float/TEXT/BLOB/null
   parameters, copied rows, explicit transactions, native busy timeout and
@@ -652,8 +668,9 @@ symbol whitelist and none would be an isolation guarantee.
   start with the [SQLite guide](../library/sqlite.md).
 
 `std:sqlite` is implemented above `std:ffi` and this provider; its borrowed-memory
-adaptation is private to `std:sqlite`. Public R1 has no
-borrowed-memory descriptor or copying operation.
+adaptation is private to `std:sqlite`. It remains separate from public R2
+pointers and regions: there is no public private-style `FFI.borrowed` or
+`FFI.copy` operation. Ordinary FFI snapshots do not change the SQLite adapter.
 
 | | FFM provider | `std:ffi` | `std:sqlite` |
 |---|---|---|---|
@@ -665,8 +682,11 @@ borrowed-memory descriptor or copying operation.
 
 ## Limits
 
-Linux x86-64 portable JVM only; no Native Image, Windows, macOS, structs,
-callbacks, variadic functions, C++, or native sandbox. Public `std:ffi` has no
+Linux x86-64 LP64 only: portable JVM with the external provider, or installed
+Native Image with the same backend integrated. Verified structs/unions by value
+are supported; Native Image additionally requires the exact physical signature
+to be registered. Neither profile provides native callbacks/upcalls, variadic
+ABI, C++ class ABI or a native sandbox. Public `std:ffi` has no
 TEXT/BLOB input binding with `SQLITE_TRANSIENT`; `std:sqlite` supplies typed
 TEXT/BLOB binding through its private adapter, without additional public FFI
 API or SQLite-specific Java infrastructure.

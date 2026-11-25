@@ -52,10 +52,13 @@ files and SQL file operations remain native effects. This library promises no
 SQLite sandbox, kernel confinement or protection against arbitrary native
 faults. Guest Filesystem and other guest APIs retain their own authority rules.
 
-The initial execution profile is the portable JVM on Linux x86-64 LP64,
-JDK 25, the supported GraalVM toolchain and the optional generic FFM provider,
-with an authorized shared SQLite library. Other ABIs, platforms and Native
-Image external provider loading acquire no support promise here.
+The execution profiles are Linux x86-64 LP64: the portable JVM with JDK 25,
+the supported GraalVM toolchain and the external generic FFM provider; and the
+installed Native Image with the same generic provider integrated. Both use
+OS-provided shared SQLite, explicitly authorized as `sqlite3` by the host.
+The Native executable admits only its exact registered physical signatures
+(`FFI.md`, Native Image signature admission), without dynamic provider JAR
+loading. Other ABIs and platforms acquire no support promise here.
 
 ## Public module and acquisition
 

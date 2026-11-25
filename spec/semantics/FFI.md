@@ -1,8 +1,9 @@
-# Standard Library FFI R1 (D238-B1-SQL-R1)
+# Standard Library FFI (D238-B1-SQL-R1, D261-R2)
 
 ## Scope and authority
 
-This document owns the public `std:ffi` R1 contract. It is a Standard Library
+This document owns the public `std:ffi` contract, incorporating the historical
+R1 contract and its implemented D261-R2 extensions. It is a Standard Library
 MODULE implemented with ordinary Protos objects and Closures over the existing
 foreign-value boundary (D188, `VALUES_AND_COLLECTIONS.md`, Foreign Values).
 It introduces no Core value family, syntax, privileged prototype, or second
@@ -16,9 +17,15 @@ is an already acquired foreign library facade, not a path, String alias,
 Boolean, null, Integer address, or ordinary object imitating its members.
 A program cannot expand the host's authorization by declaring a descriptor.
 
-The initial native execution profile is trusted in-process execution on Linux
-x86-64 LP64, the JVM, JDK 25 and the supported GraalVM 25.5 toolchain. This is
-not a portability promise for other ABIs or Native Image plugin loading.
+Both native execution profiles are trusted in-process execution on Linux
+x86-64 LP64: the portable JVM with JDK 25, the supported GraalVM 25.5 toolchain
+and the external generic FFM provider; and the installed Native Image with the
+same generic provider integrated. Native Image admits only exact physical
+signatures registered in that image (see Native Image signature admission).
+It never loads external Java providers. There is no portability promise for
+other ABIs or platforms. Activating the integrated provider without host
+options is host policy; library authorization and physical signature
+registration are independent.
 An incorrect ABI signature can corrupt memory or terminate the process.
 A C library is not confined by Protos `Filesystem` authority. No recovery from
 arbitrary native faults, memory corruption, or process termination is promised.
@@ -1034,9 +1041,15 @@ not make an otherwise forbidden transfer valid.
 
 ## Exclusions
 
-R1 excludes numeric pointers, pointer arithmetic (byte slices excepted),
-direct C array-by-value invocation, packed layouts, bitfields, flexible array members, callbacks and
-upcalls (including function-pointer upcalls), variadic functions, C++, arbitrary library paths, `SQLITE_TRANSIENT`,
-a mandatory binding generator, external plugin execution in Native Image,
-and a second semantics of invocation. It defines no SQLite connection,
-statement, TEXT/BLOB input, transaction or row-mapping API (LIB029).
+The current API excludes Integer-to-pointer conversion, arbitrary pointer
+arithmetic (bounded byte slices excepted), direct C array-by-value invocation,
+packed layouts, bitfields, flexible array members, variadic ABI, `long double`,
+native callbacks and upcalls (including retained callbacks and function-pointer
+upcalls), ingress from C threads, C++ class ABI, and a mandatory binding generator.
+It excludes library paths supplied by Protos programs; absolute targets explicitly
+authorized by the host remain valid. External Java provider loading in Native
+Image, unverified platforms, a sandbox for C code and a second invocation
+semantics are outside this contract. `SQLITE_TRANSIENT` is not a public FFI
+descriptor. Typed native memory does not make `std:ffi` a SQLite library: it
+defines no SQLite connection, statement, TEXT/BLOB input, transaction or
+row-mapping API (LIB029).

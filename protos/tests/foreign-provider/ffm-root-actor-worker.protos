@@ -24,6 +24,24 @@ worker: () => {
             FFI: import("std:ffi")
             FFI.sizeOf(FFI.struct(Array(FFI.field("a", FFI.i8), FFI.field("b", FFI.i64))))
         }
+        projectionDeclarations: () => {
+            FFI: import("std:ffi")
+            Cell: FFI.struct(Array(FFI.field("value", FFI.i32)))
+            Choice: FFI.union(Array(FFI.field("cell", Cell), FFI.field("number", FFI.i64)))
+            Container: FFI.struct(Array(FFI.field("choice", Choice)))
+            Shape: {}
+            associated: FFI.prototype(Container, Shape) === Shape
+            exact: FFI.layoutOf(Shape) === Container
+            selection: FFI.unionArm(Array("choice"), "cell")
+            frozen: false
+            Error.handle(() => selection.createSlot("extra", 1), (error) => {
+                frozen = true
+                error
+            })
+            associated && exact && frozen && (FFI.sizeOf(Cell) == 4) &&
+                (FFI.sizeOf(Choice) == 8) && (FFI.sizeOf(Container) == 8) &&
+                this.nativeMemoryRefused()
+        }
         // Native acquisition outside the RootActor is an ordinary pre-entry Error.
         nativeImportRefused: () => {
             refused: null
@@ -39,7 +57,11 @@ worker: () => {
         nativeMemoryRefused: () => {
             FFI: import("std:ffi")
             refusals: 0
-            for(body in Array(() => FFI.allocate(FFI.i32), () => FFI.cType("int"))) {
+            for(body in Array(() => FFI.allocate(FFI.i32), () => FFI.cType("int"),
+                    () => FFI.readFields({}, Array()),
+                    () => FFI.writeFields({}, %{}, Array()),
+                    () => FFI.readAs({}, {}, Array()),
+                    () => FFI.writeFrom({}, {}, Array()))) {
                 refused: null
                 Error.handle(body, (error) => {
                     refused = error
@@ -49,7 +71,7 @@ worker: () => {
                     if(refused.parent() === Error) { refusals = refusals + 1 }
                 }
             }
-            refusals == 2
+            refusals == 6
         }
         echo: (value) => value
     }

@@ -829,6 +829,11 @@ print(error.foreignCategory)'
 # Declarative std:ffi layouts: no library grant, no SQLite or C compiler needed.
 run_ffm_case LAYOUTS 0 'FFM-LAYOUTS-PASS' "${ffm_cases_dir}/ffm-layouts.protos"
 
+# Activate the integrated provider with an unused grant; no library is acquired.
+run_ffm_case NATIVE_MEMORY_NO_LIBRARY 0 'FFM-NATIVE-MEMORY-NO-LIBRARY-PASS' \
+    --allow-library "unused=${tmp_dir}/absent/libunused.so" \
+    "${ffm_cases_dir}/ffm-native-memory-no-library.protos"
+
 # SQLite: the OS-provided libsqlite3.so.0 only.
 ffm_sqlite_status="EXECUTED"
 if ! { ldconfig -p 2>/dev/null | grep -Fq 'libsqlite3.so.0'; }; then
@@ -876,10 +881,41 @@ elif ! "${ffm_cc}" -shared -fPIC -O2 -std=c11 -Wall -Werror \
     echo "NATIVE_I170_CASE_FAILURE=FIXTURE_COMPILE" >&2
     ffm_failures=$((ffm_failures + 1))
 else
+    if python3 - "${root}/dist" "${ffm_cases_dir}/ffm-public-api.protos" \
+            "${tmp_dir}/ffm-r1-public-api.protos" <<'PY_R1'
+from pathlib import Path
+import sys
+sys.path.insert(0, sys.argv[1])
+from test_external_foreign_providers import prepare_r1_public_api
+prepare_r1_public_api(Path(sys.argv[2]), Path(sys.argv[3]))
+PY_R1
+    then
+        run_ffm_case R1_PUBLIC_API 0 'FFM-R1-PUBLIC-API-PASS' \
+            --allow-library "first=${tmp_dir}/libffi_test.so" \
+            "${tmp_dir}/ffm-r1-public-api.protos"
+    else
+        echo "NATIVE_I170_CASE_FAILURE=R1_PUBLIC_API_PREPARATION" >&2
+        ffm_failures=$((ffm_failures + 1))
+    fi
     run_ffm_case TWO_LIBRARIES 0 'FFM-LIBRARY-ALLOWLIST-PASS' \
         --allow-library "first=${tmp_dir}/libffi_test.so" \
         --allow-library "second=${tmp_dir}/libffi_second.so" \
         "${ffm_cases_dir}/ffm-library-allowlist.protos" "${tmp_dir}/i170-second-marker.txt"
+    if python3 - "${root}/dist" "${tmp_dir}/i170-second-marker.txt" <<'PY_MARKER'
+from pathlib import Path
+import sys
+sys.path.insert(0, sys.argv[1])
+from test_external_foreign_providers import SECOND_MARKER_TEXT
+actual = Path(sys.argv[2]).read_bytes()
+if actual != SECOND_MARKER_TEXT.encode("utf-8"):
+    raise ValueError("second C library marker content differs: " + repr(actual))
+PY_MARKER
+    then
+        echo "NATIVE_I170_TWO_LIBRARIES_NATIVE_EFFECT=PASS"
+    else
+        echo "NATIVE_I170_CASE_FAILURE=TWO_LIBRARIES_NATIVE_EFFECT" >&2
+        ffm_failures=$((ffm_failures + 1))
+    fi
     run_ffm_case SCALAR_LAYOUT_ABI 0 'FFM-SCALAR-LAYOUT-ABI-PASS' \
         --allow-library "first=${tmp_dir}/libffi_test.so" \
         --allow-library "second=${tmp_dir}/libffi_second.so" \

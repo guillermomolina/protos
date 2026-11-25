@@ -211,7 +211,7 @@ boundary carries no Bytes, so the library's private ABI adapter snapshots the
 Bytes as a String through Latin-1, the bijection between the 256 octets and
 U+0000..U+00FF. A provider-private input descriptor turns each character back
 into exactly one octet. This is a lossless binary transport, not a text
-decoding. The FFM provider does not accept Bytes, and the public `std:ffi` R1
+decoding. The FFM provider does not accept Bytes, and the public `std:ffi`
 contract has no TEXT/BLOB input descriptor.
 
 ## Reusing a Statement
@@ -631,7 +631,8 @@ interprets SQLite failure statuses as fresh ordinary `SQLite.SQLiteError`
 occurrences with safe `operation` and `code` fields. No native error text, host
 paths, native address or Java exception is included. Failed acquisition cleans up
 any non-null owned output before signaling the primary error. `sqlite3_errmsg`
-is omitted because R1 supplies no bounded C-string length operation.
+is omitted because the existing SQLite adapter supplies no bounded C-string
+length operation; R2 aggregate snapshots do not change that adapter.
 
 ## Known limitations
 
@@ -639,8 +640,10 @@ is omitted because R1 supplies no bounded C-string length operation.
 - Exactly one SQL statement per `prepare`; no script execution.
 - Each TEXT/BLOB input and each TEXT/BLOB result value is limited to 16 MiB;
   there is no streaming or incremental BLOB API.
-- Linux x86-64 LP64, JDK 25 portable JVM and the generic optional FFM
-  provider only; no Native Image loading of external provider JARs.
+- Linux x86-64 LP64: JDK 25 portable JVM with the generic optional FFM
+  provider, or installed Native Image with that provider integrated and exact
+  registered signatures; no dynamic provider JAR loading in Native Image.
+- SQLite is OS-provided and explicitly host-authorized, never bundled.
 - Native authority must be granted explicitly by the host.
 - SQLite runs as trusted in-process native code: there is no native C sandbox,
   and Protos Filesystem authority does not confine it.

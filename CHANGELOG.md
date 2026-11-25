@@ -8,6 +8,14 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.220-SNAPSHOT
+
+- **I174-G.** Integrated FFM R2 conformance and normative reconciliation.
+- Reuse the complete public R1 regression through a checked temporary import adaptation in portable and Native CLI runners; retain specialized JVM custody diagnostics.
+- Add Actor snapshot-transfer and capability-rejection coverage, Native memory without library acquisition, exact host-side C marker verification, installed SQLite regressions and fixture-bundling guards.
+- Extend Python validator tests, reconcile stale Java and Protos public-surface guards, and relocate generic provider fixtures to preserve the direct-file directory limit.
+- Reconcile FFI and SQLite guides and provider documentation with R2 bounded memory, projection, execution profiles and exact Native signature admission.
+
 ## 0.4.219-SNAPSHOT
 
 - **I174-F.** Ordinary prototype snapshots and native aggregate writeback.

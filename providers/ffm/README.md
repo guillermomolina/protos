@@ -62,10 +62,12 @@ protos --allow-library sqlite3=libsqlite3.so.0 \
 
 ## For Protos application authors
 
-For application code that declares C functions supported by R1, start with the
+For application code declaring C functions and typed native memory, start with the
 [public `std:ffi` guide](../../docs/guide/library/ffi.md). `FFI.bind` accepts an
 authorized library facade, a symbol, a return descriptor and an Array of public
 parameter descriptors; declarations and control flow remain ordinary Protos.
+The public guide covers scalars, layouts, pointers, bounded memory, group
+arguments/results by value, projections, snapshots, custody and errors.
 
 The provider's `signature`/`param`/`bind` contract documented below is private
 I144 backend machinery. It remains relevant to provider implementers and the
@@ -95,10 +97,13 @@ Next steps:
 The Java provider knows no SQLite function. It supplies generic ABI
 descriptors and operations; every C function is declared by name and
 signature in Protos source, which also owns all control flow. Only the
-Process's RootActor can acquire the provider: its session opens on its first
-`ffi:` import and closes with the RootActor or Process, releasing any owned
-resources it still holds. The same import in any other Actor fails with an
-ordinary Error before a session is opened or a library is loaded.
+Process's RootActor can acquire the provider: an `ffi:` import or a native
+memory operation needing the backend can acquire its session. Importing `std:ffi`
+is inert. Session acquisition is distinct from acquisition of a host-authorized
+library; `allocate`, `cType` and projection do not load one. Closing the RootActor
+or Process retires remaining native roots and owned C resources. Native
+acquisition in any other Actor fails with an ordinary Error before a session
+is opened or a library is loaded.
 
 > **Trusted C only.** An authorized library runs `TRUSTED_IN_PROCESS`, inside
 > the operating-system process with its full authority: native file and
@@ -106,7 +111,7 @@ ordinary Error before a session is opened or a library is loaded.
 > global state shared by every Actor, indefinite blocking, memory corruption
 > from a wrong ABI signature, and process termination. `--allow-library` is
 > not a sandbox. Authorizing a C++ library does not add C++ ABI, Qt, Boost,
-> callbacks, arbitrary structs or virtual methods to R1.
+> native callbacks, unverified aggregate ABI or virtual methods.
 
 ## Requirements and limits
 
@@ -116,9 +121,15 @@ ordinary Error before a session is opened or a library is loaded.
 - Native Image: integrated into the installed executable, without dynamic
   provider loading and with a finite signature set; see
   [Native Image: integrated provider](#native-image-integrated-provider).
-- Not available: Windows, macOS,
-  C structs, callbacks/upcalls, variadic functions, C++ ABI, arbitrary
-  allocators, unbounded native memory, and any sandboxing of native code.
+- Verified structs/unions by value, bounded native memory and explicit
+  projections are available. The current API exclusions are owned by
+  [FFI.md](../../spec/semantics/FFI.md#exclusions): no Integer-to-pointer
+  conversion, arbitrary pointer arithmetic, direct arrays by value, packed
+  layouts, bitfields, flexible array members, variadic ABI, `long double`,
+  callbacks/upcalls or retained callbacks, C-thread guest ingress, C++ class
+  ABI, mandatory binding generator, unverified platforms or native sandbox.
+  Guest-supplied library paths are excluded; host-authorized absolute targets
+  remain valid. `SQLITE_TRANSIENT` is not a public FFI descriptor.
 
 ## Native Image: integrated provider
 
@@ -132,22 +143,27 @@ protos --allow-library sqlite3=libsqlite3.so.0 app.protos
 - The operating system must provide `libsqlite3.so.0` (or whichever library is
   authorized). Java, GraalVM and a separate Protos FFM provider JAR are not
   needed. No third-party C library is bundled into or linked by `protos`.
-- Without `--allow-library` no `ffi:` provider is registered. Authorization
-  alone loads nothing: a library is loaded only when the program first imports
-  its `ffi:<alias>` module, and only from the exact authorized target.
+- The current Native CLI activates the integrated provider through
+  `--allow-library`; activation without host options is host policy.
+  Authorization alone loads nothing: a library is loaded only on acquisition
+  of its `ffi:<alias>` module, from the exact authorized target. Native memory
+  operations can acquire a provider session without acquiring any library.
 - `--foreign-provider-path` is refused by the Native executable: it never loads
   Java code dynamically and never falls back to the JVM.
-- The Native executable links only a finite, registered set of physical C
-  signatures. Letters name the carrier: `I` 32-bit int, `L` 64-bit integer
-  (`i64`, `sizeT`), `D` double, `P` address (`utf8z`, opaque, owned, borrowed,
-  `out`, private inputs), `V` void return. The set is:
-  `I()`, `I(I)`, `I(I,I)`, `I(P)`, `I(P,I)`, `I(P,P)`, `I(P,I,L)`, `I(P,I,D)`, `I(P,I,P)`, `I(P,P,L)`, `I(L,I,P)`, `I(I,I,P,P)`, `I(P,P,I,P)`, `I(P,P,I,P,P)`, `I(P,I,P,I,P)`, `L()`, `L(L)`, `L(P)`, `L(P,I)`, `D(P,I)`, `D(D,D)`, `P(I)`, `P(L)`, `P(P,I)`, `V()`, `V(L)`, `V(P)`.
-  It covers every current `std:sqlite` declaration and owned destructor. Any
-  other exact signature is valid on the portable JVM but is refused on the
-  Native executable with an ordinary `Error` before linking, so C is never
-  entered.
-- Linux x86-64 LP64 only. No callbacks, structs by value, variadic functions,
-  C++ ABI, platform portability or native sandboxing.
+- Native Image uses the N1 finite set of exact physical signatures registered
+  in the image. Admission includes carriers and recursive aggregate structure,
+  including physical padding. Signed/unsigned types share carriers where
+  appropriate; layout nominal identity remains independent. An independently
+  host-authorized library can reuse a shape registered for another integration.
+  A missing registration signals an ordinary `Error` before linking or C entry,
+  without an ABI fallback. The JVM admits valid signatures its linker supports.
+- The maintained catalog is in
+  [reachability metadata](../../src/main/resources/META-INF/native-image/com.guillermomolina/protos/reachability-metadata.json)
+  and [FfmTypes](../../providers/ffm/src/main/java/com/guillermomolina/protos/ffm/FfmTypes.java).
+  These are physical registrations, not a built-in library allowlist.
+- Linux x86-64 LP64 only. Verified structs and unions by value are supported;
+  Native calls additionally require exact signature registration. No native
+  callbacks/upcalls, variadic ABI, C++ class ABI or native sandboxing.
 
 ## Build and load
 
@@ -315,7 +331,9 @@ payload never contains host objects, addresses, paths, or stacks.
 
 - One session, owned by the RootActor; other Actors cannot acquire one, and no
   global registry exists.
-  Nothing is loaded and no `Linker` is created until the first import.
+  Importing `std:ffi` acquires nothing. A native-memory operation can acquire
+  the session/backend without a library; libraries load only on their own
+  separately authorized acquisition.
 - Reference identity is per session and acquisition, never the address; no
   address is ever visible, and no Integer converts to an address.
 - An owned result (including an `out` result accompanied by an error status)
@@ -344,15 +362,22 @@ payload never contains host objects, addresses, paths, or stacks.
   is a trusted ABI declaration (for example for `sqlite3_column_bytes`), not a
   physical check of memory lifetime: a wrong declaration has the same
   consequences as a wrong C signature.
-- Typed pointer results are pass-only capabilities: no address, extent,
-  member or indexed access, no destructor, never in custody, rejected by
-  `copy` and `release`. A capability is admitted only while its session is
-  usable, its retained owner (from `addressOf`) is live, and, for a borrowed
-  result, the borrow epoch is unchanged; it is marshalled before the epoch
-  advances, so a non-preserving call still receives it. A NULL non-nullable
-  pointer result is a `null-result` failure after owned outputs were adopted.
-  A borrowed pointer passed to a preserving function stays valid, but this
-  never lets Protos dereference it (`std:ffi` documentation).
+- A typed pointer is a non-Integer capability, never itself an indexed
+  region or an independently releasable owner. C pointer results can be
+  pass-only with unknown extent; `addressOf` retains source provenance and
+  may carry accredited bounds. `view` supplies indexed typed access when
+  extent, alignment, nominal layout, permissions and lifetime are admitted.
+  `assumeExtent` is an explicit trusted assertion, not a physical check of
+  an unknown C allocation; it cannot extend existing lifetime or permissions.
+  Allocation roots own storage, typed views borrow it, and byte slices stay
+  within source bounds. Source retirement, session close and applicable borrow
+  epochs permanently revoke derived capabilities. No Integer address forging
+  or implicit dereference is provided. A non-nullable NULL result remains a
+  `null-result` failure after owned outputs are adopted.
+- Releasing an R2 allocation root frees its storage without advancing the
+  borrow epoch. Releasing a C-owned resource invokes its destructor and does
+  advance the epoch. The private R1 `borrowed/copy` mechanism used by SQLite
+  remains separate; its 16 MiB limit is not a general R2 memory-region limit.
 - Close never holds the session monitor during a C call; it waits for
   admitted calls without holding it, then releases resources and closes the
   arena, so no admitted call sees a closed arena.

@@ -28,10 +28,15 @@ worker: Actor.spawn("./ffm-root-actor-worker.protos", "worker")
     Assertions.require(worker.request("nativeImportRefused").value() == true)
     Assertions.require(worker.request("nativeMemoryRefused").value() == true)
 
+    Assertions.require(worker.request("projectionDeclarations").value() == true)
+
     // Native memory of the RootActor never crosses an Actor boundary.
     Inner: FFI.struct(Array(FFI.field("a", FFI.i32), FFI.field("b", FFI.f64)))
     region: FFI.allocate(Inner)
+    Shape: {}
+    Assertions.require(FFI.prototype(Inner, Shape) === Shape)
     region["a"] = 12
+    region["b"] = 2.5
     for(value in Array(region, FFI.slice(region, 0, 4), FFI.addressOf(region),
             FFI.view(FFI.addressOf(region), Inner))) {
         Assertions.signals(NonTransferableValue, () => worker.request("echo", value))
@@ -39,7 +44,65 @@ worker: Actor.spawn("./ffm-root-actor-worker.protos", "worker")
     // Copied scalar values read from native memory remain transferable.
     Assertions.require(worker.request("echo", region["a"]).value() == 12)
     Assertions.require(region["a"] == 12)
+    fields: FFI.readFields(region, Array())
+    object: FFI.readAs(Shape, region, Array())
+    copiedFields: worker.request("echo", fields).value()
+    copiedObject: worker.request("echo", object).value()
+    mapShape: %{}
+    Assertions.require(mapShape.match(copiedFields) === true)
+    Assertions.require((mapShape.match(copiedObject) == false) &&
+        (Array.recognizes(copiedObject) == false) && copiedObject.hasSlot("a") &&
+        copiedObject.hasSlot("b"))
+    Assertions.require((copiedFields["a"] == 12) && (copiedFields["b"] == 2.5))
+    Assertions.require((copiedObject.a == 12) && (copiedObject.b == 2.5))
+    copiedFields["a"] = 99
+    copiedFields["b"] = 9.5
+    copiedObject.a = -1
+    copiedObject.b = -0.5
+    Assertions.require((region["a"] == 12) && (region["b"] == 2.5))
+    Assertions.require((fields["a"] == 12) && (fields["b"] == 2.5))
+    Assertions.require((object.a == 12) && (object.b == 2.5))
     Assertions.require(FFI.release(region) === null)
+    afterFields: worker.request("echo", fields).value()
+    afterObject: worker.request("echo", object).value()
+    Assertions.require((afterFields["a"] == 12) && (afterFields["b"] == 2.5))
+    Assertions.require((afterObject.a == 12) && (afterObject.b == 2.5))
+
+    // Ordinary containers never launder native pointer authority.
+    Holder: FFI.struct(Array(FFI.field("tag", FFI.i32),
+        FFI.field("next", FFI.nullable(FFI.pointer(Inner)))))
+    HolderShape: {}
+    FFI.prototype(Holder, HolderShape)
+    pointed: FFI.allocate(Inner)
+    holder: FFI.allocate(Holder)
+    pointed["a"] = 21
+    pointed["b"] = 1.5
+    holder["tag"] = 7
+    holder["next"] = FFI.addressOf(pointed)
+    pointerFields: FFI.readFields(holder, Array())
+    pointerObject: FFI.readAs(HolderShape, holder, Array())
+    for(snapshot in Array(pointerFields, pointerObject)) {
+        Assertions.signals(NonTransferableValue, () => worker.request("echo", snapshot))
+    }
+    Assertions.require((holder["tag"] == 7) && (pointerFields["tag"] == 7) &&
+        (pointerObject.tag == 7))
+    Assertions.require((pointed["a"] == 21) && (pointed["b"] == 1.5))
+    // Each pointer remains a capability, rather than an Integer address.
+    for(pointer in Array(holder["next"], pointerFields["next"], pointerObject.next)) {
+        Assertions.signals(NonTransferableValue, () => worker.request("echo", pointer))
+        Assertions.signals(Error, () => { pointed["a"] = pointer })
+    }
+    Assertions.require(pointed["a"] == 21)
+    holder["next"] = null
+    nullFields: worker.request("echo", FFI.readFields(holder, Array())).value()
+    nullObject: worker.request("echo", FFI.readAs(HolderShape, holder, Array())).value()
+    Assertions.require(mapShape.match(nullFields) === true)
+    Assertions.require((nullFields["tag"] == 7) && (nullFields["next"] === null))
+    Assertions.require((nullObject.tag == 7) && (nullObject.next === null))
+    Assertions.require((mapShape.match(nullObject) == false) &&
+        (Array.recognizes(nullObject) == false) && nullObject.hasSlot("next"))
+    Assertions.require(FFI.release(holder) === null)
+    Assertions.require(FFI.release(pointed) === null)
     Assertions.require(worker.request("nativeMemoryRefused").value() == true)
 
     first: import("ffi:first")

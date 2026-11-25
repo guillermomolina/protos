@@ -39,6 +39,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -314,12 +315,21 @@ class ProtosStandardLibraryModuleResolverTest {
         ProtosActivation actor = prelude.newModuleActivation();
         ProtosObjectValue module = (ProtosObjectValue)
                 ProtosTestExecutionSupport.evaluate("import(\"std:ffi\")", actor);
-        assertEquals(12, module.localSlotsSnapshot().size());
-        for (String name : List.of("void", "i32", "i64", "f64", "sizeT", "utf8z",
-                "opaque", "nullable", "owned", "out", "bind", "release")) {
-            org.junit.jupiter.api.Assertions.assertTrue(module.hasLocalSlot(name), name);
-        }
-        for (String name : List.of("descriptors", "owners", "Interop", "Arrays", "nativeType")) {
+        // The exact D261-R2 public surface remains source-backed and needs no provider.
+        assertEquals(
+                Set.of(
+                        "void", "i8", "u8", "i16", "u16", "i32", "u32", "i64", "u64",
+                        "f32", "f64", "sizeT", "utf8z",
+                        "opaque", "nullable", "owned", "out", "bind", "bindPreserving",
+                        "release", "field", "struct", "union", "array", "pointer",
+                        "borrowedPointer", "addressOf", "sizeOf", "alignOf", "offsetOf",
+                        "prototype", "layoutOf", "cType", "allocate", "slice", "view",
+                        "assumeExtent", "unionArm", "readFields", "writeFields", "readAs",
+                        "writeFrom"),
+                module.localSlotsSnapshot().keySet());
+        for (String name : List.of("descriptors", "owners", "Interop", "Arrays", "nativeType",
+                "nativeContextFacility", "nativeContext", "recognition", "storages", "layouts",
+                "_ffiNativeContextFacility", "_ffiObjectRecognitionFacility")) {
             assertFalse(module.hasLocalSlot(name), name);
         }
         assertSame(module, ProtosTestExecutionSupport.evaluate("import(\"std:ffi\")", actor));

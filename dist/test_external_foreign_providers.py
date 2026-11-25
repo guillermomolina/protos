@@ -150,6 +150,25 @@ USAGE_TIMEOUT = 30
 # Exact load name the host authorizes for SQLite cases; passed unchanged to the loader.
 SQLITE_GRANT = ("sqlite3=libsqlite3.so.0",)
 SECOND_MARKER_TEXT = "PROTOS-FFI-SECOND-MARKER\n"
+R1_PUBLIC_API_MARKER = "FFM-R1-PUBLIC-API-PASS"
+
+
+def prepare_r1_public_api(source: Path, target: Path) -> Path:
+    """Adapt the complete R1 fixture in runner-owned temporary storage only.
+
+    Keep the final retained-resource object and every assertion. The specialized
+    JVM host remains responsible for its separate session-close diagnostics.
+    """
+    original = source.read_bytes().decode("utf-8")
+    declaration = 'native: import("ffi-test:ffi_test")'
+    if original.count(declaration) != 1:
+        raise ValueError("R1 fixture must contain exactly one test-provider import")
+    if source.resolve() == target.resolve():
+        raise ValueError("R1 adaptation must not overwrite its source fixture")
+    adapted = original.replace(declaration, 'native: import("ffi:first")', 1)
+    target.write_bytes((adapted + '\nprint("' + R1_PUBLIC_API_MARKER + '")\n').encode("utf-8"))
+    return target
+
 
 PASS, FAIL, UNSUPPORTED = "PASS", "FAIL", "UNSUPPORTED"
 RESULT_KEYS = (
@@ -190,6 +209,7 @@ RESULT_KEYS = (
     "I169_TOOLS_DENIED",
     "I169_TWO_LIBRARIES",
     "I174_FFM_LAYOUTS",
+    "I174_FFM_R1_PUBLIC_API",
     "I174_FFM_SCALAR_LAYOUT_ABI",
     "I174_FFM_ROOT_ACTOR",
     "I174_FFM_POINTERS",
@@ -680,7 +700,7 @@ def plan_i144(runner: Runner, install: Path, protos_jar: Path, plugins: Path,
                   ["--foreign-provider-path", str(provider), str(CASES / "ffm-abi.protos")],
                   "i144-alias-denied", "I144-FFM-ABI-PASS", []))
     # Configured but never imported: the program runs and nothing else happens.
-    plan.append(lambda: check_program(runner, "I144_UNUSED_NO_SESSION", install, "unused-provider.protos",
+    plan.append(lambda: check_program(runner, "I144_UNUSED_NO_SESSION", install, "providers/unused-provider.protos",
                   [provider], "I085-B-UNUSED-PASS", []))
     # Presence on CLASSPATH or in the working directory authorizes nothing, not even
     # together with a library grant: the provider itself was never loaded.
@@ -696,6 +716,7 @@ def plan_i144(runner: Runner, install: Path, protos_jar: Path, plugins: Path,
 # Cases that need the two compiled C fixtures; without them none of these passes.
 COMPILED_FIXTURE_KEYS = (
     "I169_TWO_LIBRARIES",
+    "I174_FFM_R1_PUBLIC_API",
     "I174_FFM_SCALAR_LAYOUT_ABI",
     "I174_FFM_ROOT_ACTOR",
     "I174_FFM_POINTERS",
@@ -774,6 +795,19 @@ def plan_i169(runner: Runner, install: Path, provider: Path, plan: list) -> None
             runner.record("I169_TWO_LIBRARIES", FAIL, f"native marker file content {written!r}")
 
     plan.append(two_libraries)
+
+    def r1_public_api() -> None:
+        try:
+            program = prepare_r1_public_api(
+                CASES / "ffm-public-api.protos", native / "ffm-r1-public-api.protos")
+        except (OSError, ValueError) as error:
+            runner.record("I174_FFM_R1_PUBLIC_API", FAIL, "R1 preparation failed: " + str(error))
+            return
+        check_ffm_program(runner, "I174_FFM_R1_PUBLIC_API", install, str(program),
+                          provider, R1_PUBLIC_API_MARKER,
+                          (f"first={libraries['first']}",))
+
+    plan.append(r1_public_api)
     # Fixed-width scalars and C-measured layouts; the u8(u8) shape is also called
     # through the second, independently authorized library.
     plan.append(lambda: check_ffm_program(runner, "I174_FFM_SCALAR_LAYOUT_ABI", install,
@@ -1037,7 +1071,7 @@ def main() -> int:
     java_jar = build_plugin(runner, "java", 21, protos_jar, plugins)
 
     if opaque is not None:
-        plan.append(lambda: check_program(runner, "PROTOS_OPAQUE_PROVIDER", install, "opaque-provider.protos",
+        plan.append(lambda: check_program(runner, "PROTOS_OPAQUE_PROVIDER", install, "providers/opaque-provider.protos",
                       [opaque], "I085-B-OPAQUE-PASS",
                       [f"provider-loaded {OPAQUE}", f"session-open {OPAQUE}"]))
     else:
@@ -1050,10 +1084,10 @@ def main() -> int:
         runner.record("PROTOS_NATIVE_FFM_PROVIDER", FAIL, "plugin JAR not built")
         runner.record("PROTOS_MULTIPLE_PROVIDERS", FAIL, "plugin JAR not built")
     else:
-        plan.append(lambda: check_program(runner, "PROTOS_NATIVE_FFM_PROVIDER", install, "native-ffm-provider.protos",
+        plan.append(lambda: check_program(runner, "PROTOS_NATIVE_FFM_PROVIDER", install, "providers/native-ffm-provider.protos",
                       [libc], "I085-B-FFM-PASS",
                       [f"provider-loaded {LIBC}", f"session-open {LIBC}"]))
-        plan.append(lambda: check_program(runner, "PROTOS_MULTIPLE_PROVIDERS", install, "multiple-providers.protos",
+        plan.append(lambda: check_program(runner, "PROTOS_MULTIPLE_PROVIDERS", install, "providers/multiple-providers.protos",
                       [opaque, libc], "I085-B-MULTIPLE-PASS",
                       [f"provider-loaded {OPAQUE}", f"provider-loaded {LIBC}",
                        f"session-open {OPAQUE}", f"session-open {LIBC}"]))
@@ -1061,8 +1095,8 @@ def main() -> int:
     java_session = [f"provider-loaded {JAVA}", f"session-open {JAVA}",
                     "jdk-origin java.base java.base"]
     for key, program, marker in (
-        ("PROTOS_JAVA_MATH_PROVIDER", "java-math.protos", "I085-B-JAVA-MATH-PASS"),
-        ("PROTOS_JAVA_DATE_PROVIDER", "java-date.protos", "I085-B-JAVA-DATE-PASS"),
+        ("PROTOS_JAVA_MATH_PROVIDER", "providers/java-math.protos", "I085-B-JAVA-MATH-PASS"),
+        ("PROTOS_JAVA_DATE_PROVIDER", "providers/java-date.protos", "I085-B-JAVA-DATE-PASS"),
     ):
         if java_jar is None:
             runner.record(key, FAIL, "plugin JAR not built")
@@ -1075,14 +1109,14 @@ def main() -> int:
     loaded = [f"provider-loaded {ids[jar]}" for jar in configured]
 
     # The handled form: the Error is observed inside Protos.
-    plan.append(lambda: check_program(runner, "NO_PROVIDER_NEGATIVE", install, "missing-provider.protos",
+    plan.append(lambda: check_program(runner, "NO_PROVIDER_NEGATIVE", install, "providers/missing-provider.protos",
                   [], "I085-B-MISSING-PASS", []))
     if configured:
-        plan.append(lambda: check_program(runner, "NO_PROVIDER_NEGATIVE", install, "missing-provider.protos",
+        plan.append(lambda: check_program(runner, "NO_PROVIDER_NEGATIVE", install, "providers/missing-provider.protos",
                       configured, "I085-B-MISSING-PASS", loaded))
     # The unhandled form must fail the process, never report false success.
     plan.append(lambda: check_failure(runner, "NO_PROVIDER_NEGATIVE", install,
-                  [str(CASES / "missing-provider-direct.protos")], "no-provider-direct",
+                  [str(CASES / "providers/missing-provider-direct.protos")], "no-provider-direct",
                   "I085-B-MISSING-DIRECT-UNREACHABLE", []))
 
     # Without --foreign-provider-path nothing is discovered, even when the plugin
@@ -1092,18 +1126,18 @@ def main() -> int:
             shutil.copy2(jar, work / jar.name)
         exposed = runner.environment({"CLASSPATH": os.pathsep.join(str(j) for j in configured)})
         plan.append(lambda: check_failure(runner, "DEFAULT_ZERO_DISCOVERY", install,
-                      [str(CASES / "opaque-provider.protos")], "zero-discovery-opaque",
+                      [str(CASES / "providers/opaque-provider.protos")], "zero-discovery-opaque",
                       "I085-B-OPAQUE-PASS", [], exposed))
         if libc is not None:
             plan.append(lambda: check_failure(runner, "DEFAULT_ZERO_DISCOVERY", install,
-                          [str(CASES / "native-ffm-provider.protos")], "zero-discovery-libc",
+                          [str(CASES / "providers/native-ffm-provider.protos")], "zero-discovery-libc",
                           "I085-B-FFM-PASS", [], exposed))
         if java_jar is not None:
             for program in ("java-math", "java-date"):
                 plan.append(lambda program=program: check_failure(runner, "DEFAULT_ZERO_DISCOVERY", install,
-                              [str(CASES / f"{program}.protos")], f"zero-discovery-{program}",
+                              [str(CASES / "providers" / f"{program}.protos")], f"zero-discovery-{program}",
                               "-PASS", [], exposed))
-        plan.append(lambda: check_program(runner, "UNUSED_PROVIDER_NO_SESSION", install, "unused-provider.protos",
+        plan.append(lambda: check_program(runner, "UNUSED_PROVIDER_NO_SESSION", install, "providers/unused-provider.protos",
                       configured, "I085-B-UNUSED-PASS", loaded))
     else:
         runner.record("DEFAULT_ZERO_DISCOVERY", FAIL, "no plugin JAR built")

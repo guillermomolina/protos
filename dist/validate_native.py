@@ -40,6 +40,7 @@ import time
 import zipfile
 
 from native_elf import NativeElfError, inspect_native_elf
+from test_external_foreign_providers import SECOND_MARKER_TEXT, prepare_r1_public_api
 
 
 PUBLIC_NATIVE_TARGET_OS = "linux"
@@ -521,6 +522,9 @@ FFM_UNSUPPORTED_SIGNATURE = (
 FFM_CASES = Path(__file__).resolve().parents[1] / "protos" / "tests" / "foreign-provider"
 FFM_FIXTURES = (("first", "ffi_test"), ("second", "ffi_second"))
 FFM_LAYOUTS_MARKER = "FFM-LAYOUTS-PASS"
+FFM_NATIVE_MEMORY_NO_LIBRARY_MARKER = "FFM-NATIVE-MEMORY-NO-LIBRARY-PASS"
+FFM_R1_PUBLIC_API_MARKER = "FFM-R1-PUBLIC-API-PASS"
+FFM_TWO_LIBRARIES_MARKER = "FFM-LIBRARY-ALLOWLIST-PASS"
 FFM_SCALAR_LAYOUT_ABI_MARKER = "FFM-SCALAR-LAYOUT-ABI-PASS"
 FFM_ROOT_ACTOR_MARKER = "FFM-ROOT-ACTOR-PASS"
 FFM_POINTERS_MARKER = "FFM-POINTERS-PASS"
@@ -698,6 +702,14 @@ def validate_native_ffm(
     if "sqlite" in dt_needed.lower():
         fail("the Native executable has a DT_NEEDED SQLite dependency: " + dt_needed)
     print("NATIVE_DIST_FFM_NO_SQLITE_DT_NEEDED_CHECK: PASS")
+    for stem in ("libffi_test.so", "libffi_second.so"):
+        bundled = bundled_shared_objects(dist, stem)
+        if bundled:
+            fail("the Native distribution bundles C fixtures: " + ", ".join(map(str, bundled)))
+        if stem in dt_needed:
+            fail("the Native executable has a DT_NEEDED fixture dependency: " + dt_needed)
+    print("NATIVE_DIST_FFM_NO_BUNDLED_C_FIXTURES_CHECK: PASS")
+    print("NATIVE_DIST_FFM_NO_C_FIXTURE_DT_NEEDED_CHECK: PASS")
 
     run_ffm_case(
         "FFM_DEFAULT_OFF",
@@ -755,12 +767,44 @@ def validate_native_ffm(
         env=env,
         expected_stdout=FFM_LAYOUTS_MARKER,
     )
+    # This unused grant activates the integrated provider without acquiring a library.
+    run_ffm_case(
+        "FFM_NATIVE_MEMORY_NO_LIBRARY",
+        [str(launcher), "--allow-library", "unused=" + str(temp / "absent" / "libunused.so"),
+         str(FFM_CASES / "ffm-native-memory-no-library.protos")],
+        cwd=cwd, env=env,
+        expected_stdout=FFM_NATIVE_MEMORY_NO_LIBRARY_MARKER, exact_stdout=True,
+    )
     fixtures = temp / "ffm-fixtures"
     fixtures.mkdir()
     libraries = compile_ffm_fixtures(ffm_fixture_compiler(), fixtures)
+    try:
+        r1_program = prepare_r1_public_api(
+            FFM_CASES / "ffm-public-api.protos", temp / "ffm-r1-public-api.protos")
+    except (OSError, ValueError) as error:
+        fail("R1 public API preparation failed: " + str(error))
+    run_ffm_case(
+        "FFM_R1_PUBLIC_API",
+        [str(launcher), "--allow-library", "first=" + str(libraries["first"]), str(r1_program)],
+        cwd=cwd, env=env, expected_stdout=FFM_R1_PUBLIC_API_MARKER, exact_stdout=True,
+    )
     fixture_grants: list[str] = []
     for alias, library in libraries.items():
         fixture_grants += ["--allow-library", alias + "=" + str(library)]
+    marker_file = temp / "ffm-second-marker.txt"
+    run_ffm_case(
+        "FFM_TWO_LIBRARIES",
+        [str(launcher), *fixture_grants, str(FFM_CASES / "ffm-library-allowlist.protos"),
+         str(marker_file)],
+        cwd=cwd, env=env, expected_stdout=FFM_TWO_LIBRARIES_MARKER, exact_stdout=True,
+    )
+    try:
+        written = marker_file.read_bytes()
+    except OSError as error:
+        fail("the second C library did not create its marker file: " + str(error))
+    if written != SECOND_MARKER_TEXT.encode("utf-8"):
+        fail("the second C library marker file has incorrect content: " + repr(written))
+    print("NATIVE_DIST_FFM_TWO_LIBRARIES_NATIVE_EFFECT_CHECK: PASS")
     # Real fixed-width scalars, outputs and C-measured layouts; the same u8(u8)
     # shape is also called through the second, independently authorized library.
     run_ffm_case(
@@ -834,6 +878,20 @@ def validate_native_ffm(
     if not os_library_available(FFM_SQLITE_TARGET, ldconfig):
         fail("the validation host provides no OS " + FFM_SQLITE_TARGET)
     sqlite_grant = ["--allow-library", "sqlite3=" + FFM_SQLITE_TARGET]
+    for label, program, marker, arguments in (
+        ("FFM_SQLITE_QUERY", "sqlite-query.protos", "LIB029-QUERY-PASS", ()),
+        ("FFM_SQLITE_TEXT_BLOB", "sqlite-bind-text-blob.protos", "LIB030-BIND-TEXT-BLOB-PASS", ()),
+        ("FFM_SQLITE_LOCAL_TRANSACTIONS", "sqlite-durable.protos", "LIB031-DURABLE-PASS",
+         ("local", str(temp / "ffm-local.sqlite"))),
+        ("FFM_SQLITE_SEED", "sqlite-durable.protos", "LIB031-DURABLE-PASS",
+         ("seed", str(temp / "ffm-durable.sqlite"))),
+        ("FFM_SQLITE_REOPEN", "sqlite-durable.protos", "LIB031-DURABLE-PASS",
+         ("verify", str(temp / "ffm-durable.sqlite"))),
+    ):
+        run_ffm_case(
+            label, [str(launcher), *sqlite_grant, str(FFM_CASES / program), *arguments],
+            cwd=cwd, env=env, expected_stdout=marker, exact_stdout=True,
+        )
     run_ffm_case(
         "FFM_SQLITE_MEMORY",
         [str(launcher), *sqlite_grant, "-e", FFM_SQLITE_MEMORY],

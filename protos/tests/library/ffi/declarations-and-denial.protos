@@ -51,7 +51,9 @@ tests: [
             "field", "struct", "union", "array", "pointer",
             "borrowedPointer", "addressOf",
             "sizeOf", "alignOf", "offsetOf",
-            "prototype", "layoutOf")
+            "prototype", "layoutOf", "cType",
+            "allocate", "slice", "view", "assumeExtent",
+            "unionArm", "readFields", "writeFields", "readAs", "writeFrom")
         names: FFI.slotNames()
         Assertions.require(names.size() == expected.size())
         for(name in expected) {

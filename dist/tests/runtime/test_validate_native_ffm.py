@@ -23,6 +23,7 @@ import io
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 DIST = Path(__file__).resolve().parents[2]
 if str(DIST) not in sys.path:
@@ -386,6 +387,123 @@ class UnregisteredGroupSignatureTest(unittest.TestCase):
         self.assertIn("calls() == before", text)
 
 
+class IntegratedMarkersTest(unittest.TestCase):
+    def test_new_markers_require_clean_exact_success(self) -> None:
+        for marker in (validate_native.FFM_NATIVE_MEMORY_NO_LIBRARY_MARKER,
+                       validate_native.FFM_R1_PUBLIC_API_MARKER,
+                       validate_native.FFM_TWO_LIBRARIES_MARKER):
+            for status, stdout, stderr, expected in (
+                (0, marker + "\n", "", "PASS"),
+                (1, marker + "\n", "", "FAIL"),
+                (0, "", "", "FAIL"),
+                (0, marker + "\n" + marker + "\n", "", "FAIL"),
+                (0, marker + "\nextra\n", "", "FAIL"),
+                (0, marker + "\n", "MissingForeignRegistrationError", "FAIL"),
+                (0, marker + "\n", "UnsatisfiedLinkError", "FAIL"),
+                (0, marker + "\n", "Internal error", "FAIL"),
+            ):
+                with self.subTest(marker=marker, status=status, stdout=stdout, stderr=stderr):
+                    self.assertEqual(expected, classify_ffm_case(
+                        status, stdout, stderr, expected_status=0,
+                        expected_stdout=marker, exact_stdout=True)[0])
+
+
+class R1PreparationTest(unittest.TestCase):
+    def test_complete_fixture_is_preserved_except_import_and_final_marker(self) -> None:
+        source = validate_native.FFM_CASES / "ffm-public-api.protos"
+        original = source.read_bytes()
+        with tempfile.TemporaryDirectory() as raw:
+            target = Path(raw) / "r1.protos"
+            self.assertEqual(target, validate_native.prepare_r1_public_api(source, target))
+            adapted = target.read_text(encoding="utf-8")
+            expected = original.decode("utf-8").replace(
+                'native: import("ffi-test:ffi_test")', 'native: import("ffi:first")', 1)
+            self.assertEqual(expected + '\nprint("' + validate_native.FFM_R1_PUBLIC_API_MARKER
+                             + '")\n', adapted)
+            self.assertEqual(1, adapted.count(validate_native.FFM_R1_PUBLIC_API_MARKER))
+            self.assertIn("retained: succeeded[1]", adapted)
+            self.assertIn("increment: increment", adapted)
+        self.assertEqual(original, source.read_bytes())
+
+    def test_missing_or_ambiguous_import_is_rejected_without_output(self) -> None:
+        declaration = 'native: import("ffi-test:ffi_test")\n'
+        with tempfile.TemporaryDirectory() as raw:
+            source, target = Path(raw) / "source.protos", Path(raw) / "target.protos"
+            for text in ("null\n", declaration * 2):
+                source.write_text(text, encoding="utf-8")
+                with self.assertRaises(ValueError):
+                    validate_native.prepare_r1_public_api(source, target)
+                self.assertFalse(target.exists())
+                self.assertEqual(text, source.read_text(encoding="utf-8"))
+
+    def test_source_cannot_be_overwritten(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            source = Path(raw) / "source.protos"
+            original = 'native: import("ffi-test:ffi_test")\n'
+            source.write_text(original, encoding="utf-8")
+            with self.assertRaises(ValueError):
+                validate_native.prepare_r1_public_api(source, source)
+            self.assertEqual(original, source.read_text(encoding="utf-8"))
+
+
+class InstalledRunnerPlanTest(unittest.TestCase):
+    def test_sqlite_fixtures_and_markers_exist(self) -> None:
+        for name, marker in (("sqlite-query.protos", "LIB029-QUERY-PASS"),
+                             ("sqlite-bind-text-blob.protos", "LIB030-BIND-TEXT-BLOB-PASS"),
+                             ("sqlite-durable.protos", "LIB031-DURABLE-PASS"),
+                             ("ffm-native-memory-no-library.protos",
+                              validate_native.FFM_NATIVE_MEMORY_NO_LIBRARY_MARKER)):
+            self.assertIn('print("' + marker + '")',
+                          (validate_native.FFM_CASES / name).read_text(encoding="utf-8"))
+
+    def test_installed_invocations_and_native_effect_check(self) -> None:
+        # This checks runner wiring only. No launcher, C compiler or SQLite executes.
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            launcher, cwd = root / "installed" / "bin" / "protos", root / "unrelated"
+            env = {"PATH": "/restricted"}
+
+            def case(label, command, **kwargs):
+                if label == "FFM_TWO_LIBRARIES":
+                    Path(command[-1]).write_bytes(validate_native.SECOND_MARKER_TEXT.encode("utf-8"))
+
+            with mock.patch.object(validate_native, "run_ffm_case", side_effect=case) as run, \
+                    mock.patch.object(validate_native, "ffm_fixture_compiler", return_value="cc"), \
+                    mock.patch.object(validate_native, "compile_ffm_fixtures", return_value={
+                        "first": root / "libffi_test.so", "second": root / "libffi_second.so"}), \
+                    mock.patch.object(validate_native, "os_library_available", return_value=True), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                validate_native.validate_native_ffm(launcher, root / "dist", "libc.so.6",
+                                                    root, cwd, env, "ldconfig")
+            cases = {call.args[0]: call for call in run.call_args_list}
+            for call in run.call_args_list:
+                self.assertEqual(str(launcher), call.args[1][0])
+                self.assertEqual(cwd, call.kwargs["cwd"])
+                self.assertEqual(env, call.kwargs["env"])
+                self.assertNotIn("--foreign-provider-path", call.args[1])
+            no_library = cases["FFM_NATIVE_MEMORY_NO_LIBRARY"]
+            self.assertEqual([str(launcher), "--allow-library",
+                              "unused=" + str(root / "absent" / "libunused.so"),
+                              str(validate_native.FFM_CASES / "ffm-native-memory-no-library.protos")],
+                             no_library.args[1])
+            self.assertTrue(no_library.kwargs["exact_stdout"])
+            r1 = cases["FFM_R1_PUBLIC_API"]
+            self.assertEqual(1, r1.args[1].count("--allow-library"))
+            self.assertEqual("first=" + str(root / "libffi_test.so"), r1.args[1][2])
+            self.assertTrue(r1.kwargs["exact_stdout"])
+            self.assertTrue(cases["FFM_TWO_LIBRARIES"].kwargs["exact_stdout"])
+            local = cases["FFM_SQLITE_LOCAL_TRANSACTIONS"].args[1]
+            seed = cases["FFM_SQLITE_SEED"].args[1]
+            verify = cases["FFM_SQLITE_REOPEN"].args[1]
+            self.assertEqual(("local", "seed", "verify"), (local[-2], seed[-2], verify[-2]))
+            self.assertEqual(seed[-1], verify[-1])
+            self.assertNotEqual(local[-1], seed[-1])
+            for label in ("FFM_SQLITE_QUERY", "FFM_SQLITE_TEXT_BLOB",
+                          "FFM_SQLITE_LOCAL_TRANSACTIONS", "FFM_SQLITE_SEED", "FFM_SQLITE_REOPEN"):
+                self.assertIn("sqlite3=libsqlite3.so.0", cases[label].args[1])
+                self.assertTrue(cases[label].kwargs["exact_stdout"])
+
+
 class DistributionContentTest(unittest.TestCase):
     def test_bundled_sqlite_is_detected(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
@@ -404,6 +522,34 @@ class DistributionContentTest(unittest.TestCase):
                     validate_native.validate_native_ffm(
                         root / "absent-launcher", root,
                         "libc.so.6,libsqlite3.so.0", root, root, {}, None)
+
+    def test_fixture_libraries_are_detected(self) -> None:
+        for stem in ("libffi_test.so", "libffi_second.so"):
+            with self.subTest(stem=stem), tempfile.TemporaryDirectory() as raw:
+                root = Path(raw)
+                self.assertEqual([], bundled_shared_objects(root, stem))
+                (root / "lib").mkdir()
+                (root / "lib" / stem).write_bytes(b"\x7fELF")
+                self.assertEqual([root / "lib" / stem], bundled_shared_objects(root, stem))
+                with mock.patch.object(validate_native, "run_ffm_case") as run, \
+                        contextlib.redirect_stderr(io.StringIO()):
+                    with self.assertRaises(SystemExit):
+                        validate_native.validate_native_ffm(
+                            root / "absent-launcher", root, "libc.so.6", root, root, {}, None)
+                    run.assert_not_called()
+
+    def test_fixture_dt_needed_fails_before_launcher_execution(self) -> None:
+        for stem in ("libffi_test.so", "libffi_second.so"):
+            with self.subTest(stem=stem), tempfile.TemporaryDirectory() as raw:
+                root = Path(raw)
+                with mock.patch.object(validate_native, "run_ffm_case") as run, \
+                        contextlib.redirect_stdout(io.StringIO()), \
+                        contextlib.redirect_stderr(io.StringIO()):
+                    with self.assertRaises(SystemExit):
+                        validate_native.validate_native_ffm(
+                            root / "absent-launcher", root, "libc.so.6," + stem,
+                            root, root, {}, None)
+                    run.assert_not_called()
 
     def test_missing_os_sqlite_is_never_reported_as_pass(self) -> None:
         self.assertFalse(validate_native.os_library_available("libsqlite3.so.0", None))
