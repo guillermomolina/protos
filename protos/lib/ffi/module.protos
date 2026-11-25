@@ -20,6 +20,8 @@
 //! profile; declaring or querying one never enters a foreign provider.
 //! Typed pointer results are pass-only capabilities: they carry no readable
 //! extent and are never converted to or from Integer addresses.
+//! Native regions (allocate, slice, view) are bounded typed native memory of
+//! the RootActor's provider session; allocation acquires no C library.
 
 Interop: import("std:interop")
 Arrays: import("std:collections/array")
@@ -35,6 +37,14 @@ pointerTypes: IdentityMap()
 recognition: _ffiObjectRecognitionFacility
 context.removeSlot("_ffiObjectRecognitionFacility")
 isOrdinaryObject: (value) => recognition.ordinaryObject(value)
+// Private acquisition of the RootActor's provider-session context; never
+// part of the MODULE surface and never used during module initialization.
+nativeContextFacility: _ffiNativeContextFacility
+context.removeSlot("_ffiNativeContextFacility")
+nativeContext: null
+// Exact storage layout identity -> provider-side physical access metadata,
+// composed lazily from the record below; never a second descriptor map.
+storages: IdentityMap()
 
 fail: () => Error().signal()
 requireString: (value) => {
@@ -87,20 +97,24 @@ this.u8: scalar("u8", 1, 1)
 this.i16: scalar("i16", 2, 2)
 /// Immutable unsigned 16-bit Integer descriptor; inputs must fit exactly.
 this.u16: scalar("u16", 2, 2)
+i32Descriptor: scalar("i32", 4, 4)
 /// Immutable signed 32-bit Integer descriptor; inputs must fit exactly.
-this.i32: scalar("i32", 4, 4)
+this.i32: i32Descriptor
 /// Immutable unsigned 32-bit Integer descriptor; inputs must fit exactly.
 this.u32: scalar("u32", 4, 4)
+i64Descriptor: scalar("i64", 8, 8)
 /// Immutable signed 64-bit Integer descriptor; inputs must fit exactly.
-this.i64: scalar("i64", 8, 8)
+this.i64: i64Descriptor
 /// Immutable unsigned 64-bit Integer descriptor; inputs must fit exactly.
 this.u64: scalar("u64", 8, 8)
 /// Immutable IEEE binary32 descriptor; a Float input is rounded once to binary32.
 this.f32: scalar("f32", 4, 4)
+f64Descriptor: scalar("f64", 8, 8)
 /// Immutable IEEE binary64 Float descriptor; no Integer coercion is performed.
-this.f64: scalar("f64", 8, 8)
+this.f64: f64Descriptor
+sizeTDescriptor: scalar("sizeT", 8, 8)
 /// Immutable unsigned 64-bit Integer descriptor for the initial LP64 profile.
-this.sizeT: scalar("sizeT", 8, 8)
+this.sizeT: sizeTDescriptor
 /// Immutable input-only strict UTF-8 String descriptor; interior NUL is rejected.
 this.utf8z: scalar("utf8z", null, null)
 
@@ -338,14 +352,63 @@ this.offsetOf: (layout: fail(), path: fail(), ...extra) => {
     offset
 }
 
+// The session context, acquired on the first operation that needs the
+// provider. It verifies the platform but opens no library.
+providerContext: () => {
+    if(nativeContext === null) {
+        nativeContext = nativeContextFacility.acquire()
+    }
+    nativeContext
+}
+
 // The canonical provider descriptor of one exact pointee layout, created on
-// first use through an authorized library and reused by every library of
-// this session. Distinct pointee layouts never share a descriptor.
+// first use through an authorized library or the session context and reused
+// by every library of this session and by native regions. Distinct pointee
+// layouts never share a descriptor.
 pointerType: (library, pointee) => {
     if(pointerTypes.containsKey(pointee)) { ^pointerTypes.at(pointee) }
     native: operation(library, "pointerType", pointee === voidDescriptor)
     pointerTypes[pointee] = native
     native
+}
+
+// Provider physical metadata of one storage layout, composed incrementally
+// from the sizes, alignments, member names, offsets, counts and strides this
+// module computed. The provider validates it; it never computes a layout.
+physical: (layout) => {
+    if(storages.containsKey(layout)) { ^storages.at(layout) }
+    record: storage(layout)
+    native: providerContext()
+    identity: pointerType(native, layout)
+    kind: record.layoutKind
+    composed: null
+    if(kind == "scalar") {
+        composed = operation(native, "scalarStorage", Interop.readMember(native, record.kind),
+            record.size, record.align, identity)
+    }
+    if(kind == "pointer") {
+        composed = operation(native, "pointerStorage",
+            pointerType(native, record.parts.pointee), identity)
+    }
+    if(kind == "nullablePointer") {
+        composed = operation(native, "pointerStorage",
+            operation(native, "nullablePointerType", pointerType(native, record.parts.pointee)),
+            identity)
+    }
+    if((kind == "struct") || (kind == "union")) {
+        composed = operation(native, "aggregateStorage", kind, record.size, record.align,
+            identity)
+        for(entry in record.parts.members) {
+            composed = operation(native, "memberStorage", composed, entry.name, entry.offset,
+                physical(entry.layout))
+        }
+    }
+    if(kind == "array") {
+        composed = operation(native, "arrayStorage", physical(record.parts.element),
+            record.parts.count, record.parts.stride, identity)
+    }
+    storages[layout] = composed
+    composed
 }
 
 nativeType: (library, descriptor) => {
@@ -517,6 +580,8 @@ this.bindPreserving: (library: fail(), symbol: fail(), returnDescriptor: fail(),
 
 /// Retire an owned handle before attempting its destructor, without retries.
 /// Answers the exact native destructor result, including an error status.
+/// An allocated native region root is retired, revoking every view, slice
+/// and pointer derived from it, and its storage freed; that answers null.
 this.release: (ownedHandle, ...extra) => {
     (extra.size() == 0).ifFalse(() => fail())
     owners.containsKey(ownedHandle).ifFalse(() => fail())
@@ -525,13 +590,100 @@ this.release: (ownedHandle, ...extra) => {
     operation(library, "release", ownedHandle)
 }
 
-/// Answer a pass-only void pointer capability to a live owned C handle
-/// acquired through this module. The handle keeps its custody, destructor
-/// and release; the capability is revoked when the handle is released or
-/// the native session ends. No Integer address is ever produced.
-this.addressOf: (ownedHandle: fail(), ...extra) => {
+/// Answer a pointer capability without an Integer address. For a live owned
+/// C handle of this module: a pass-only void pointer that retains the handle
+/// (which keeps its custody, destructor and release). For a live native
+/// region or view: a pointer to its exact layout (void for a byte slice)
+/// with its known extent, its permission and its provenance, and no
+/// destructor authority.
+this.addressOf: (value: fail(), ...extra) => {
     requireArity(extra)
-    owners.containsKey(ownedHandle).ifFalse(() => fail())
-    library: owners.at(ownedHandle)
-    operation(library, "addressOf", ownedHandle, pointerType(library, voidDescriptor))
+    if(owners.containsKey(value)) {
+        owner: owners.at(value)
+        if((owner === nativeContext) == false) {
+            ^operation(owner, "addressOf", value, pointerType(owner, voidDescriptor))
+        }
+    }
+    native: providerContext()
+    operation(native, "regionAddress", value, pointerType(native, voidDescriptor))
+}
+
+// ---- native memory (RootActor provider session; no C library is acquired)
+
+// Exact C spellings of the LP64 profile -> the existing descriptor singletons.
+cTypes: Map()
+cTypes["int"] = i32Descriptor
+cTypes["long"] = i64Descriptor
+cTypes["long long"] = i64Descriptor
+cTypes["size_t"] = sizeTDescriptor
+cTypes["double"] = f64Descriptor
+cTypes.freeze()
+
+/// The exact existing descriptor of a supported C type spelling: "int",
+/// "long", "long long", "size_t" or "double". Any other String is an Error.
+/// The native platform is verified; no library is acquired or called.
+this.cType: (name: fail(), ...extra) => {
+    requireArity(extra)
+    requireString(name)
+    cTypes.containsKey(name).ifFalse(() => fail())
+    // Context acquisition verifies the native platform once per session.
+    providerContext()
+    cTypes.at(name)
+}
+
+/// Allocate zero-initialized native storage of exactly a storage layout's
+/// size and alignment, independently owned until FFI.release. Answers a
+/// typed native region indexed by field name or element position.
+this.allocate: (layout: fail(), ...extra) => {
+    requireArity(extra)
+    storage(layout)
+    native: providerContext()
+    region: operation(native, "allocate", physical(layout))
+    owners[region] = native
+    region
+}
+
+/// A non-owning byte view (indexed as u8) of byteLength bytes starting at
+/// byteOffset of a live region; nothing is copied and nothing is extended.
+/// An empty view (byteLength 0) is admitted and has no valid index.
+this.slice: (region: fail(), byteOffset: fail(), byteLength: fail(), ...extra) => {
+    requireArity(extra)
+    checkedSize(byteOffset)
+    checkedSize(byteLength)
+    checkedAdd(byteOffset, byteLength)
+    operation(providerContext(), "slice", region, byteOffset, byteLength)
+}
+
+/// A borrowed typed region of a storage layout over a live pointer whose
+/// known extent covers it, natively aligned, whose pointee is that exact
+/// layout or void. A pointer of unknown extent is never viewed.
+this.view: (pointer: fail(), layout: fail(), ...extra) => {
+    requireArity(extra)
+    storage(layout)
+    native: providerContext()
+    operation(native, "view", pointer, physical(layout))
+}
+
+/// A bounded pointer for byteLength bytes at pointer, with access "read" or
+/// "readWrite", anchored by: a live allocation root containing the whole
+/// range, a live owned C handle of this module, the pointer itself when it
+/// is borrowed, or an authorized library facade for its static storage.
+/// Assertions over C storage are trusted, not proven; none widens a known
+/// extent, upgrades a read-only pointer or revives an expired one.
+this.assumeExtent: (pointer: fail(), byteLength: fail(), anchor: fail(), access: fail(),
+        ...extra) => {
+    requireArity(extra)
+    requirePositive(byteLength)
+    checkedSize(byteLength)
+    requireString(access)
+    ((access == "read") || (access == "readWrite")).ifFalse(() => fail())
+    if((anchor === pointer) || owners.containsKey(anchor)) {
+        native: providerContext()
+        (anchor === native).ifTrue(() => fail())
+        ^operation(native, "assumeExtent", pointer, byteLength, anchor, access)
+    }
+    // Library-static storage: only an attached native library facade of the
+    // pointer's own session is recognized, before any foreign member is read.
+    (nativeContextFacility.isLibraryAnchor(pointer, anchor) === true).ifFalse(() => fail())
+    operation(anchor, "assumeStaticExtent", pointer, byteLength, access)
 }

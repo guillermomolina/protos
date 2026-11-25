@@ -55,6 +55,40 @@ interface ProtosForeignValueAdapter {
     }
 
     /**
+     * Indexed-read pre-entry admission: pure validation of {@code index} against {@code target}.
+     * {@code false} or a thrown exception is the ordinary pre-entry Error; {@link #readElement} is
+     * not reached. The default admits everything.
+     */
+    default boolean acceptsElementRead(
+            ProtosForeignProviderSession session, Object target, ProtosForeignArgument index)
+            throws Exception {
+        return true;
+    }
+
+    /**
+     * Indexed-write pre-entry admission: pure validation of the complete write. {@code false} or
+     * a thrown exception is the ordinary pre-entry Error; {@link #writeElement} is not reached.
+     * The default admits everything.
+     */
+    default boolean acceptsElementWrite(
+            ProtosForeignProviderSession session,
+            Object target,
+            ProtosForeignArgument index,
+            ProtosForeignArgument value)
+            throws Exception {
+        return true;
+    }
+
+    /**
+     * The private context capability of {@code session} itself, for a trusted Standard Library
+     * module; never an importable module. A thrown exception is an entered foreign failure. The
+     * default refuses.
+     */
+    default Object acquireSessionContext(ProtosForeignProviderSession session) throws Exception {
+        throw new UnsupportedOperationException("foreign session context");
+    }
+
+    /**
      * Whether reading member {@code name} of {@code target} is faithful to an ordinary Protos
      * member read: no material side effects incompatible with a read, and receiver binding of a
      * method-like result preserved. Readability alone is not fidelity.

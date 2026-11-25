@@ -71,6 +71,32 @@ public interface ProtosForeignValueOperations {
     }
 
     /**
+     * Whole indexed-read admission, run by Protos after the index was exported and before the
+     * element read is entered. It sees the receiver and the exact index, so it can validate key
+     * kind, bounds, liveness and permissions. Answering {@code false}, or throwing, rejects the
+     * read with the ordinary Protos {@code Error}: {@link #readElement} is not called. It must be
+     * pure: no foreign memory is read or written. The default admits everything.
+     */
+    default boolean acceptsElementRead(
+            ProtosForeignPluginSession session, Object handle, ProtosForeignArgumentValue index) {
+        return true;
+    }
+
+    /**
+     * Whole indexed-write admission with the receiver, the exact index and the exact value, run
+     * before the element write is entered. Answering {@code false}, or throwing, rejects the
+     * write with the ordinary Protos {@code Error}: {@link #writeElement} is not called. It must
+     * be pure. The default admits everything.
+     */
+    default boolean acceptsElementWrite(
+            ProtosForeignPluginSession session,
+            Object handle,
+            ProtosForeignArgumentValue index,
+            ProtosForeignArgumentValue value) {
+        return true;
+    }
+
+    /**
      * Whether reading member {@code name} is faithful to an ordinary Protos member read: no
      * material side effects, and receiver binding of a method-like result preserved.
      */

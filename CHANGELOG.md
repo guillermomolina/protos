@@ -8,6 +8,13 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.216-SNAPSHOT
+
+- **I174-C.** Bounded native memory, typed views and explicit extent assertions.
+- Add RootActor-owned native allocation roots, typed indexed regions, bounded byte slices, typed views, canonical C type queries and explicit trusted extent assertions.
+- Retain bounds, alignment, permissions, session and source provenance through derived capabilities; retire allocation roots once and revoke descendants without advancing unrelated borrow epochs.
+- Extend the existing foreign boundary and generic FFM backend with lazy session-context acquisition and prepared native-memory operations; add memory, pointer, no-library and Actor regressions.
+
 ## 0.4.215-SNAPSHOT
 
 - **I174-B.** Typed native pointers and original-owner provenance.

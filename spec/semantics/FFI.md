@@ -327,12 +327,10 @@ associations.
 ### Not yet implemented
 
 The following capabilities are not provided by this revision. They are not
-rejected design directions: `FFI.cType` (a public C-type query
-of the active ABI profile), native region allocation, bounded native regions
-and their views or slices, reading or writing native memory through a layout
-or a pointer (including indexed access), extent assertions, aggregate-by-value
-invocation, aggregate projection, and `FFI.addressOf` for anything other than
-an owned C handle.
+rejected design directions: aggregate-by-value invocation (passing or
+returning a struct, union or array by value) and projection of native
+aggregates to or from ordinary Protos Maps or Objects. Native memory itself is
+specified in Native memory below.
 
 
 
@@ -429,14 +427,205 @@ the call receives it and later uses are rejected. Revocation is permanent;
 reuse of the same machine address by a later result or acquisition never
 restores an earlier capability.
 
-`FFI.addressOf(ownedHandle)` requires exactly one active registered owned
-handle of this MODULE instance and answers a fresh pass-only capability with
+`FFI.addressOf(ownedHandle)` with an active registered owned C handle of this
+MODULE instance answers a fresh pass-only capability with
 pointee `FFI.void` that retains that original owned resource. The handle keeps
 its custody, destructor authority, release dispatch and exact destructor
 result; the capability is revoked when the handle is released or its session
 ends. Arbitrary values, unregistered or released handles, non-owned references
 and pointer capabilities are rejected with an ordinary Error. No other library
-is acquired.
+is acquired. `FFI.addressOf` of a live native region is specified in Native
+memory below.
+
+## Native memory
+
+Native memory is bounded, typed native storage of the RootActor's native
+provider session. It is described by storage layouts (Declarative layouts),
+whose sizes, alignments, member offsets, counts and strides are computed by
+the `std:ffi` MODULE; the provider receives them as immutable physical access
+metadata, checks their physical consistency, and never computes a layout of
+its own.
+
+### Native context and authority
+
+Every operation in this section except argument validation needs the
+production native FFM provider to be available to the host and the current
+Actor to be the Process's RootActor (RootActor-only native authority). The
+first such operation acquires the RootActor's existing provider session, the
+same session that `ffi:` imports of that Actor use, and verifies the native
+platform. It resolves no library authorization, loads no library and performs
+no symbol lookup. Allocation therefore requires an available provider but no
+acquired, authorized or loaded C library, and grants no library authority.
+Importing `std:ffi`, declaring layouts and querying them still acquire
+nothing. Whether a Native Image executable activates its integrated provider
+without any host provider option is host policy outside this contract.
+
+A refusal before a native operation is entered, including a non-RootActor
+caller, an unavailable provider, a closed session and every argument
+rejection below, is an ordinary Error. A failure of an admitted native
+operation after entry (for example an allocation the platform cannot satisfy,
+or NULL read from a non-nullable pointer field) is a fresh `ForeignError`.
+
+### C type spellings
+
+`FFI.cType(name)` requires exactly one String and answers the exact existing
+descriptor singleton for these exact spellings of the LP64 profile: `"int"`
+answers `FFI.i32`; `"long"` and `"long long"` answer `FFI.i64`; `"size_t"`
+answers `FFI.sizeT`; `"double"` answers `FFI.f64`. Every other String,
+including other C types (`"float"`, `"char"`, `"_Bool"`, `"long double"`),
+typedef names and spellings with additional or different whitespace or case,
+is an ordinary Error, as is a non-String or a wrong arity. A supported
+spelling verifies the native platform through the native context; no library
+is acquired and no native function is called.
+
+### Native regions
+
+A native region is a foreign reference to bounded native memory of one exact
+storage layout or, for a slice, of a byte range. It has no readable member and
+no numeric address. Its only access is typed indexed access (Typed access).
+
+`FFI.allocate(layout)` requires exactly one storage layout (a scalar, struct,
+union, fixed array or typed pointer layout; not `FFI.void`, `FFI.utf8z`, a
+field, a borrowed pointer or an R1 declaration), validated before the native
+context is acquired. It allocates zero-initialized native storage, padding
+included, of exactly the layout's size and alignment and answers a fresh
+allocation root: an independently owned region registered in the session's
+resource custody before it is answered. Each allocation is independent of
+every other allocation and of every C library. Allocation does not change any
+layout identity or association.
+
+`FFI.slice(region, byteOffset, byteLength)` requires a live region, an exact
+nonnegative Integer offset and an exact nonnegative Integer length whose sum
+does not exceed the region's size. It answers a non-owning byte view of that
+range, indexed by position as `u8` octets. Nothing is copied or allocated: the
+view aliases the region's storage, and it never extends the source's extent,
+permission or lifetime. A zero length answers an empty view, also at the
+exact end of the region; it has no admissible index, cannot be released, and
+is revoked with its source like any other view.
+
+A view, slice or nested region retains the effective lifetime of its source
+directly (the owning allocation root, or the borrowed pointer or C anchor the
+source was derived from), not each intermediate view, so a long chain of
+slices keeps only that original lifetime alive.
+
+`FFI.addressOf(region)`, for a live region or view of this MODULE instance's
+session, answers a fresh pointer capability whose pointee is the region's
+exact layout identity (`FFI.void` for a byte view), whose known extent is the
+region's size, which keeps the region's permission and retains the region as
+its provenance. It carries no destructor authority and is never released. A
+region is never implicitly converted to a pointer argument: passing it to a
+bound function requires `FFI.addressOf`.
+
+`FFI.view(pointer, layout)` requires a live pointer capability of the session
+whose known extent is at least the layout's size, whose address is aligned to
+the layout's alignment, and whose pointee is the layout's exact identity or
+`FFI.void`. It answers a borrowed region of that layout over the pointer's
+memory, with the pointer's permission and lifetime. A pointer without a known
+extent, including every pointer returned by C and every pointer read from a
+pointer field, is never viewed: `view` is never an implicit extent assertion.
+
+### Typed access
+
+A region answers `at` and `atPut` through the existing foreign indexed
+projection; no field is a foreign member, so a field named `at`, `call`,
+`init`, `slotValue`, `createSlot` or `size` is reached only by its String
+index and ordinary lookup is unchanged. A struct or union region is indexed by
+the exact String name of an existing member; an array region or byte view by
+an exact Integer from zero to its count minus one; a scalar or pointer region
+by exactly `0`. Any other index is an ordinary Error.
+
+The whole access is admitted before entry: the session, the region's
+liveness and provenance, the index, the bounds and native alignment of the
+addressed member, and, for `atPut`, write permission and the complete value.
+Admission reads and writes no native memory; a rejected access leaves every
+byte unchanged and does not change the session's borrow epoch.
+
+Reading a scalar member answers its exact value by the descriptor's existing
+conversion (signed and unsigned widths, unsigned 64-bit values beyond the
+signed range, `f32` widening with signed zero and NaN). Reading a nested
+struct, union or array member answers a non-owning region over that member,
+with the source's permission and lifetime. Reading a typed pointer member
+answers a fresh pass-only pointer capability that retains the region as
+provenance, has no known extent and is admitted as a C-origin pointer by
+`assumeExtent`; native NULL answers `null` for a nullable member and is a
+`ForeignError` for a non-nullable one. A pointer loaded from native memory
+does not prove whether its pointee was allocated by C or by Protos, nor how
+long the pointee lives: it keeps only the lifetime of the region it was read
+from, which does not guarantee the pointee's lifetime. Giving it an extent
+requires an explicit `assumeExtent`; an allocation-root anchor checks the
+complete physical range against that allocation, and every C-managed anchor
+remains a trusted declaration.
+
+Writing a scalar member admits exactly the values its descriptor admits as an
+argument (exact range, no Integer to Float coercion, one binary32 rounding for
+`f32`) and performs exactly one typed store. Writing a struct, union or array
+member admits only a live region of the same exact layout identity and copies
+exactly that many bytes; a structurally equal layout of another identity, a
+byte view, null or an ordinary object is rejected, and ordinary Objects are
+never interpreted as C aggregates. Writing a pointer member admits a live
+pointer capability of the session with the member's pointee identity (any
+pointee for a `FFI.void` member) or, for a nullable member, `null`; Integers
+are never pointers. Storing a pointer stores its address only: it extends no
+lifetime. `atPut` answers the exact supplied value.
+
+### Extent assertions
+
+`FFI.assumeExtent(pointer, byteLength, anchor, access)` requires exactly four
+arguments: a live pointer capability of the session, an exact positive
+Integer length within the signed-addressable range, an anchor, and exactly
+the String `"read"` or `"readWrite"`. It answers a fresh pointer capability
+with that known extent; it is neither an allocation nor an owner. The admitted
+anchors are exactly:
+
+1. a live allocation root of this MODULE instance, when the complete asserted
+   range lies inside that root's actual allocation;
+2. a live owned C handle of this MODULE instance, a trusted claim that the
+   memory lives as long as that C resource;
+3. the pointer itself, when it is a borrowed pointer, a trusted claim
+   governed by its borrow epoch; and
+4. an authorized C library facade, a trusted claim that the memory is static
+   storage of that library. Only an actually acquired native library facade
+   of the pointer's own open session is recognized as this anchor; the
+   recognition reads no member and enters no foreign code, so another
+   provider's facade, a facade of another session, a raw foreign reference
+   or an ordinary object with a matching slot is refused before any of its
+   members is read.
+
+Any other anchor, including the session context, ordinary objects, Strings,
+Integers, pointers other than the asserted one, views, slices and released
+roots, is an ordinary Error. Anchors 2 to 4 admit only pointers that do not
+originate solely in Protos allocations. An assertion never widens a known
+extent, never upgrades a read-only pointer to `"readWrite"`, and never revives
+an expired pointer; the result's permission is the intersection of the
+pointer's permission and the requested access, and its lifetime is the
+conjunction of every condition the pointer already retains with the anchor's
+lifetime.
+
+Assertions over C-managed memory (anchors 2 to 4, and pointers read from
+native memory) are trusted declarations with the same safety limits as an ABI
+signature: they do not prove that the C storage exists, has that extent,
+permits writing or lives that long. An incorrect assertion can corrupt memory
+or terminate the process.
+
+### Ownership, provenance and revocation
+
+Only an allocation root owns native memory. `FFI.release(root)` requires an
+active root of this MODULE instance: it removes the release dispatch, retires
+the root before freeing its storage, and answers `null`. A duplicate release,
+and the release of a slice, view, nested region, pointer or any other value,
+is an ordinary Error. Releasing a root does not advance the session's borrow
+epoch and does not affect any other allocation.
+
+Every region and pointer derived from a root, a C resource, a borrowed
+pointer or another derived capability retains its source, and it is live
+only while the session is open and every retained condition holds. Releasing
+a root therefore revokes every view, slice, nested region and pointer derived
+from it; releasing an owned C handle revokes everything accredited through it;
+a non-preserving call, a destructor call or session close revokes everything
+governed by the borrow epoch. Revocation is permanent; reuse of the same
+native address never restores an earlier region or pointer. Session close
+retires and frees every remaining allocation root together with the remaining
+owned C resources, and nothing reopens the session.
 
 ### Native Image scalar admission
 
@@ -477,8 +666,9 @@ revive retired references or make new acquisitions identical.
 ## Borrowed memory and isolation
 
 Borrowed native memory must be copied within its accredited lifetime window.
-The existing private provider mechanism uses `borrowed` declarations,
-`preserving` signatures, bounded `copy` (at most 16777216 bytes), and epoch
+The existing private R1 provider mechanism uses `borrowed` declarations,
+`preserving` signatures, bounded `copy` (at most 16777216 bytes, a limit of
+that private R1 copy only, not of native memory), and epoch
 revocation. A validated non-preserving native call or destructor invalidates
 earlier regions before native entry; a rejected pre-entry call does not.
 Session close revokes all such regions. A preserving declaration is a trusted
@@ -517,8 +707,9 @@ are not Protos Actors and are not confined by this restriction. Other foreign
 providers keep their own existing contracts.
 
 Live native sessions, library authority, bindings capturing such authority,
-resources, borrowed regions and native pointer capabilities (plain, borrowed
-or owner-backed) have no automatic Actor or P transfer contract
+resources, borrowed regions, native regions (allocation roots, views and
+slices) and native pointer capabilities (plain, borrowed, owner-backed or
+with a known extent) have no automatic Actor or P transfer contract
 (`../concurrency/ACTORS.md`, `../concurrency/PARALLEL_EXECUTION.md`). Importing
 `std:ffi` in another Actor creates its ordinary local MODULE instance, not
 inherited or delegated authority. No native call implicitly spawns work,
@@ -528,8 +719,9 @@ not make an otherwise forbidden transfer valid.
 
 ## Exclusions
 
-R1 excludes numeric pointers, pointer arithmetic, native C structure values
-and aggregate invocation (declarative layouts excepted), callbacks and
+R1 excludes numeric pointers, pointer arithmetic (byte slices excepted),
+aggregate invocation, aggregate projection to ordinary Maps or Objects,
+callbacks and
 upcalls, variadic functions, C++, arbitrary library paths, `SQLITE_TRANSIENT`,
 a mandatory binding generator, external plugin execution in Native Image,
 and a second semantics of invocation. It defines no SQLite connection,

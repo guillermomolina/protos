@@ -18,6 +18,7 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.execution.ProtosForeignAdmissionDescriptor.Capability;
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosActor;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -26,6 +27,7 @@ import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Private runtime facility of {@code std:interop} (D193, LIB021-A): the explicit foreign
@@ -49,6 +51,9 @@ import java.util.List;
 public final class ProtosForeignInteropFacility {
     public static final ProtosModuleKey MODULE_KEY = ProtosModuleKey.module("std:interop");
     public static final String BOOTSTRAP_SLOT = "_interopFacility";
+
+    /** Private bootstrap slot of {@code std:ffi}; never part of {@code std:interop}. */
+    public static final String FFI_NATIVE_CONTEXT_SLOT = "_ffiNativeContextFacility";
 
     @FunctionalInterface
     private interface Construction {
@@ -77,6 +82,123 @@ public final class ProtosForeignInteropFacility {
                 "writeMember",
                 ProtosClosureValue.nativeClosure(ProtosForeignInteropFacility::writeMember));
         return facility.freeze();
+    }
+
+    /**
+     * Creates the frozen private native-context facility of {@code std:ffi}. Like {@link
+     * #createFacility} it holds no session, provider or native-memory state: its {@code acquire}
+     * operation resolves, on each use, the current RootActor's existing native provider session
+     * and answers that same session's private context capability, and its {@code
+     * isLibraryAnchor} operation recognizes an attached native library facade without entering
+     * foreign code.
+     */
+    public static ProtosObjectValue createNativeContextFacility() {
+        ProtosObjectValue facility = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        facility.createLocalSlot(
+                "acquire",
+                ProtosClosureValue.nativeClosure(
+                        ProtosForeignInteropFacility::acquireNativeContext));
+        facility.createLocalSlot(
+                "isLibraryAnchor",
+                ProtosClosureValue.nativeClosure(ProtosForeignInteropFacility::isLibraryAnchor));
+        return facility.freeze();
+    }
+
+    /**
+     * Pure representation recognition of a library-static extent anchor: {@code true} only for
+     * an actually attached foreign MODULE facade of the native FFM provider, in the current
+     * RootActor, whose open session binding and adapter are exactly those of the supplied raw
+     * foreign pointer, and whose target declares member read. It performs no foreign operation:
+     * it acquires no session, reads no member, invokes no provider hook and evaluates no guest
+     * code, so an ordinary object, a raw foreign reference or another provider's facade is
+     * refused without any side effect. Provider admission of the anchored operation still
+     * applies afterwards.
+     */
+    @TruffleBoundary
+    private static Object isLibraryAnchor(ProtosActivation activation, List<?> supplied) {
+        ProtosPrelude prelude = ProtosForeignProjectedOperations.prelude(activation);
+        if (supplied.size() != 2) {
+            throw ProtosForeignOperation.ordinaryError(prelude);
+        }
+        ProtosActor actor = activation.executionDomain().currentActorForRuntime().orElse(null);
+        if (actor == null || !actor.isRootActorForRuntime()) {
+            return Boolean.FALSE;
+        }
+        if (!(supplied.get(0) instanceof com.guillermomolina.protos.runtime.ProtosRawForeignValue)
+                || !(supplied.get(1) instanceof ProtosForeignModuleFacadeValue facade)) {
+            return Boolean.FALSE;
+        }
+        ProtosForeignHandle pointer = ProtosForeignHandle.of(supplied.get(0));
+        ProtosForeignModuleFacadeValue.Attachment attachment =
+                facade.attachmentForRuntime().orElse(null);
+        if (pointer == null || attachment == null) {
+            return Boolean.FALSE;
+        }
+        ProtosForeignHandle library = attachment.handle();
+        ProtosForeignProviderSessionBinding session = library.session();
+        return Boolean.valueOf(
+                session == pointer.session()
+                        && library.adapter() == pointer.adapter()
+                        && ProtosExternalProviderPluginLoader.INTEGRATED_PROVIDER_ID.equals(
+                                session.providerId().value())
+                        && session.isOpenForRuntime()
+                        && library.has(Capability.MEMBER_READ));
+    }
+
+    /**
+     * Runtime authority is established before any provider code runs: the current Actor must be
+     * its Process's RootActor, the hosting Process must register the native provider, and that
+     * provider must pass the existing admission. Each refusal is the ordinary pre-entry Error.
+     * The session is the one {@code ffi:} imports of the same Actor use; the context request
+     * itself is an entered foreign operation and its result crosses the ordinary value admission.
+     */
+    @TruffleBoundary
+    private static Object acquireNativeContext(ProtosActivation activation, List<?> supplied) {
+        ProtosPrelude prelude = ProtosForeignProjectedOperations.prelude(activation);
+        if (!supplied.isEmpty()) {
+            throw ProtosForeignOperation.ordinaryError(prelude);
+        }
+        ProtosActor actor = activation.executionDomain().currentActorForRuntime().orElse(null);
+        if (actor == null || !actor.isRootActorForRuntime()) {
+            throw ProtosForeignOperation.ordinaryError(prelude);
+        }
+        if (!(actor.processForRuntime()
+                        .flatMap(process -> process.executionHostForRuntime())
+                        .orElse(null)
+                instanceof ProtosPolyglotProcessContext host)) {
+            throw ProtosForeignOperation.ordinaryError(prelude);
+        }
+        ProtosForeignProviderDescriptor descriptor =
+                host.foreignProviderRegistryForRuntime()
+                        .lookup(
+                                new ProtosForeignProviderId(
+                                        ProtosExternalProviderPluginLoader.INTEGRATED_PROVIDER_ID))
+                        .orElse(null);
+        if (descriptor == null
+                || ProtosForeignProviderAdmission.rejection(descriptor).isPresent()) {
+            throw ProtosForeignOperation.ordinaryError(prelude);
+        }
+        ProtosForeignProviderSessionBinding session;
+        try {
+            session = host.foreignSessionForRuntime(actor, descriptor.id());
+        } catch (RuntimeException refused) {
+            throw ProtosForeignOperation.ordinaryError(prelude);
+        }
+        ProtosForeignValueAdapter values = descriptor.values();
+        return ProtosForeignOperation.enter(
+                session,
+                values,
+                "nativeContext",
+                prelude,
+                live ->
+                        ProtosForeignValueAdmission.admit(
+                                session,
+                                values,
+                                live,
+                                Objects.requireNonNull(
+                                        values.acquireSessionContext(live),
+                                        "foreign session context"),
+                                prelude));
     }
 
     private static Object invoke(ProtosActivation activation, List<?> supplied) {

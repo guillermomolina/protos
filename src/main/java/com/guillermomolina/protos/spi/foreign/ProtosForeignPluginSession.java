@@ -33,6 +33,19 @@ public interface ProtosForeignPluginSession extends AutoCloseable {
      */
     Object acquireModule(String canonicalTarget) throws Exception;
 
+    /**
+     * Answers this same session's private context capability: an opaque provider value through
+     * which a trusted Standard Library module performs session-scoped operations that need no
+     * acquired module. It is never an importable module and opens no library. A thrown exception
+     * is an entered foreign failure. The default refuses, preserving every existing provider.
+     *
+     * @return the non-null opaque context handle, classified by the provider's {@link
+     *     ProtosForeignValueOperations}
+     */
+    default Object acquireSessionContext() throws Exception {
+        throw new UnsupportedOperationException("foreign session context");
+    }
+
     @Override
     void close() throws Exception;
 }

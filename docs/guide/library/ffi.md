@@ -163,7 +163,7 @@ The public sample is
 
 ## The public members
 
-The MODULE exports thirteen scalar descriptor values and nineteen ordinary
+The MODULE exports thirteen scalar descriptor values and twenty-four ordinary
 Closures. The R1 binding members:
 
 | Member | Signature or value | Meaning and restrictions |
@@ -185,7 +185,7 @@ Closures. The R1 binding members:
 | `FFI.bindPreserving(library, symbol, returnDescriptor, argumentDescriptors)` | Closure | Like `bind`, plus the trusted declaration that the C function leaves earlier borrowed native regions valid. |
 | `FFI.release(ownedHandle)` | Closure | Irreversibly retires a registered owned handle, calls its destructor at most once and returns the exact C result. |
 | `FFI.borrowedPointer(pointer)` | Closure | Declares a borrowed result of a plain typed pointer, for return and `out` positions only. |
-| `FFI.addressOf(ownedHandle)` | Closure | Answers a pass-only `void` pointer capability to a live owned handle acquired through `std:ffi`; the handle keeps its destructor and release. |
+| `FFI.addressOf(value)` | Closure | For a live owned handle acquired through `std:ffi`: a pass-only `void` pointer capability (the handle keeps its destructor and release). For a live native region: a pointer to its layout with its known extent. |
 
 The declarative layout members, which need no library and no native
 authority:
@@ -199,6 +199,17 @@ authority:
 | `FFI.sizeOf(layout)`, `FFI.alignOf(layout)` | Exact size and alignment. |
 | `FFI.offsetOf(layout, path)` | Byte offset reached by an Array of field names and array indices; pointers are never followed. |
 | `FFI.prototype(layout, prototype)` / `FFI.layoutOf(prototype)` | Associate an exact ordinary prototype with an exact layout, and look it up. |
+
+The native memory members, which need the RootActor and an available native
+provider but no C library (see [Native memory](#native-memory)):
+
+| Member | Meaning |
+|---|---|
+| `FFI.cType(name)` | The existing descriptor of `"int"`, `"long"`, `"long long"`, `"size_t"` or `"double"`; any other spelling is an Error. |
+| `FFI.allocate(layout)` | Zero-initialized native storage of a layout, owned until `FFI.release`. |
+| `FFI.slice(region, byteOffset, byteLength)` | A byte view of part of a region; nothing is copied. A zero length gives an empty view. |
+| `FFI.view(pointer, layout)` | A typed region over a pointer with a known, sufficient extent. |
+| `FFI.assumeExtent(pointer, byteLength, anchor, access)` | A trusted extent for a pointer, anchored by an allocation, an owned C handle, a borrowed pointer itself, or a library's static storage. |
 
 These are the public members, not a public descriptor record layout. Descriptor
 objects are ordinary frozen Protos objects; structurally similar objects do not
@@ -305,6 +316,80 @@ untyped pointer to it. In this release that is its only domain. The handle
 keeps its custody and destructor; once the handle is released (or the session
 ends), the capability is rejected before entry, even if C later reuses the
 same address.
+
+## Native memory
+
+Native memory is bounded, typed storage of the RootActor's native session.
+Allocating needs an available FFM provider but no C library: the program can
+allocate before (or without) importing any `ffi:` alias.
+
+```protos
+FFI: import("std:ffi")
+
+Inner: FFI.struct(Array(FFI.field("a", FFI.i32), FFI.field("b", FFI.f64)))
+Outer: FFI.struct(Array(
+    FFI.field("tag", FFI.u8),
+    FFI.field("inner", Inner),
+    FFI.field("values", FFI.array(FFI.i16, 3)),
+    FFI.field("next", FFI.nullable(FFI.pointer(Inner)))))
+
+outer: FFI.allocate(Outer)     // zero-initialized, padding included
+outer["tag"] = 7               // exact u8 range, or an Error
+outer["inner"]["b"] = 2.5      // nested members are views, not copies
+outer["values"][2] = -1        // exact Integer index, bounds checked
+bytes: FFI.slice(outer, 0, 8)  // octets of the same storage
+```
+
+A region is indexed with `at`/`atPut`: struct and union members by their exact
+String name (a field may be called `size`, `at` or `init`), arrays and byte
+slices by exact Integer position, and a scalar allocation by `0`. Reading a
+nested aggregate answers a view of the same memory. Assigning an aggregate
+copies the bytes of another region of the *same* layout; a structurally equal
+layout or an ordinary object is rejected. Every rejected access is an ordinary
+Error that leaves the memory unchanged.
+
+To give a region to C, ask for its address explicitly; a region is never
+passed as a pointer by itself:
+
+```protos
+native: import("ffi:mylib")
+fill: FFI.bind(native, "my_fill", FFI.i32, Array(FFI.pointer(Outer)))
+fill(FFI.addressOf(outer))     // C sees the same bytes; Protos sees C's writes
+```
+
+`FFI.view(pointer, layout)` reads memory through a pointer only when the
+pointer has a known extent covering the layout (for example one answered by
+`FFI.addressOf`), is suitably aligned, and points to that layout or to
+`FFI.void`. Pointers returned by C, or read from a pointer field, have no known
+extent. When C documents that such memory is valid, assert it explicitly:
+
+```protos
+lookup: FFI.bind(native, "my_static_inner", FFI.pointer(Inner), Array())
+inner: FFI.view(FFI.assumeExtent(lookup(), FFI.sizeOf(Inner), native, "read"), Inner)
+```
+
+The anchor states what keeps the memory alive: an allocation that contains it,
+an owned C handle, the borrowed pointer itself, or the library (static
+storage). The library anchor must be the facade you got from
+`import("ffi:<alias>")` in the same Actor; other objects, even with an
+`assumeStaticExtent` member, are rejected without being touched.
+
+A pointer read from a pointer field only keeps the region it was read from
+alive. It says nothing about who allocated the memory it points to or how long
+that memory lives, so it has no extent until you assert one. Assertions about C memory are trusted, like a C signature, and are
+not checked against the real C storage. An assertion never widens a known
+extent, never turns read-only access into `"readWrite"` and never revives an
+expired pointer.
+
+Slices may be empty (`FFI.slice(region, 8, 0)`); an empty view has no valid
+index. Views and slices keep only the original allocation (or C anchor)
+alive, not every intermediate view, so long chains of slices are cheap.
+
+`FFI.release(region)` frees an allocation and answers `null`; every view,
+slice and pointer derived from it becomes unusable, even if C later reuses
+the address. Slices, views and pointers cannot be released themselves.
+Remaining allocations are freed when the native session ends. Releasing an
+allocation does not invalidate borrowed pointers or other allocations.
 
 ## First binding
 
@@ -414,8 +499,9 @@ historical borrowed-memory material for backend authors and existing tests;
 that private contract is not an application API.
 
 R1 also does not expose a SQLite connection abstraction, TEXT/BLOB input
-binding, callbacks, structs, variadic calls, C++, arbitrary allocators or
-`SQLITE_TRANSIENT`. Public `std:ffi` itself has no SQLite Connection or
+binding, callbacks, passing or returning structs by value, conversion of
+native structs to or from Maps and Objects, variadic calls, C++, arbitrary
+allocators or `SQLITE_TRANSIENT`. Public `std:ffi` itself has no SQLite Connection or
 Statement objects. Those abstractions are implemented separately in ordinary
 Protos as [`std:sqlite`](sqlite.md), which application developers
 should use for SQLite. Its SQLite-specific borrowed-memory adaptation remains
@@ -441,15 +527,17 @@ limited to Linux x86-64 LP64.
 
 ## Actors and isolated parallel execution
 
-Closures that capture a native binding, live native resources and native
-authority do not automatically cross Actor boundaries or isolated P execution.
+Closures that capture a native binding, live native resources, native
+regions, pointers and native authority do not automatically cross Actor
+boundaries or isolated P execution.
 Importing `std:ffi` in another Actor produces that Actor's ordinary local
 MODULE; it does not transfer a provider session or host grant. That MODULE's
 declarations, layout queries and prototype associations work in every Actor
 because they need no native authority. Acquiring a native library is
 different: only the Process's RootActor can import `ffi:<alias>`, and the
 same import in any other Actor fails with an ordinary Error before any native
-code runs. The host must still authorize each library explicitly. Native calls
+code runs, and so do native memory operations such as `FFI.allocate` and
+`FFI.cType`. The host must still authorize each library explicitly. Native calls
 are synchronous and do not implicitly schedule parallel work.
 
 ## Troubleshooting

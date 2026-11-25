@@ -38,7 +38,10 @@ declarative layout program (``ffm-layouts.protos``, no library grant) and the
 fixed-width scalar and C-measured layout program
 (``ffm-scalar-layout-abi.protos``), which authorizes both compiled fixtures
 and calls the same registered scalar shape through each of them, and the
-typed native pointer program (``ffm-pointers.protos``) under the same grants. The ``ffi-test`` ABI fixture (``ffm-abi.protos``) is run by
+typed native pointer program (``ffm-pointers.protos``) and the bounded native
+memory program (``ffm-native-memory.protos``) under the same grants, and a
+native allocation program (``ffm-native-memory-no-library.protos``) with the
+provider configured and no library grant. The ``ffi-test`` ABI fixture (``ffm-abi.protos``) is run by
 the Java test host ``ProtosI144FfmFixtureAbiTest``. Missing platform support or
 shared SQLite is reported as UNSUPPORTED, never as PASS. The I144 tutorials
 and examples (``protos/tutorials``, ``protos/examples/ffi``) run from their
@@ -188,6 +191,8 @@ RESULT_KEYS = (
     "I174_FFM_SCALAR_LAYOUT_ABI",
     "I174_FFM_ROOT_ACTOR",
     "I174_FFM_POINTERS",
+    "I174_FFM_NATIVE_MEMORY",
+    "I174_FFM_NATIVE_MEMORY_NO_LIBRARY",
     *(key for key, _, _ in LIB029_CASES),
     *(key for key, _, _ in LIB030_CASES),
     *(key for key, _ in LIB031_CASES),
@@ -712,12 +717,16 @@ def plan_i169(runner: Runner, install: Path, provider: Path, plan: list) -> None
     # Declarative layouts need no library grant at all.
     plan.append(lambda: check_ffm_program(runner, "I174_FFM_LAYOUTS", install,
                   "ffm-layouts.protos", provider, "FFM-LAYOUTS-PASS"))
+    # Native memory needs the configured provider but no library grant.
+    plan.append(lambda: check_ffm_program(runner, "I174_FFM_NATIVE_MEMORY_NO_LIBRARY", install,
+                  "ffm-native-memory-no-library.protos", provider,
+                  "FFM-NATIVE-MEMORY-NO-LIBRARY-PASS"))
 
     compiler = next((found for found in (shutil.which(name) for name in ("cc", "gcc", "clang"))
                      if found is not None), None)
     if compiler is None:
         for key in ("I169_TWO_LIBRARIES", "I174_FFM_SCALAR_LAYOUT_ABI", "I174_FFM_ROOT_ACTOR",
-                    "I174_FFM_POINTERS"):
+                    "I174_FFM_POINTERS", "I174_FFM_NATIVE_MEMORY"):
             runner.record(key, UNSUPPORTED, "no C compiler (cc, gcc, or clang) on PATH")
         return
     native = runner.work / "i169-native"
@@ -732,7 +741,7 @@ def plan_i169(runner: Runner, install: Path, provider: Path, plan: list) -> None
             runner.work, runner.environment())
         if completed.returncode != 0:
             for key in ("I169_TWO_LIBRARIES", "I174_FFM_SCALAR_LAYOUT_ABI", "I174_FFM_ROOT_ACTOR",
-                        "I174_FFM_POINTERS"):
+                        "I174_FFM_POINTERS", "I174_FFM_NATIVE_MEMORY"):
                 runner.record(key, FAIL, f"{source} did not compile")
             return
         libraries[alias] = target
@@ -761,6 +770,9 @@ def plan_i169(runner: Runner, install: Path, provider: Path, plan: list) -> None
     # Typed native pointer capabilities, reusing the same compiled fixtures.
     plan.append(lambda: check_ffm_program(runner, "I174_FFM_POINTERS", install,
                   "ffm-pointers.protos", provider, "FFM-POINTERS-PASS", grants))
+    # Bounded native memory; the program allocates before it imports a library.
+    plan.append(lambda: check_ffm_program(runner, "I174_FFM_NATIVE_MEMORY", install,
+                  "ffm-native-memory.protos", provider, "FFM-NATIVE-MEMORY-PASS", grants))
 
 
 def plan_i169_cli(runner: Runner, install: Path, plan: list) -> None:

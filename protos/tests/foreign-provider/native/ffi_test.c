@@ -449,3 +449,99 @@ int32_t ffi_test_pointer_counter_value(const void *data) {
 }
 
 int32_t ffi_test_pointer_calls_count(void) { return ffi_test_pointer_calls; }
+
+/*
+ * ---- native memory: Protos-allocated regions observed and mutated by C
+ *
+ * The structures mirror layouts declared in ffm-native-memory.protos; Protos
+ * computes their offsets independently and the program cross-checks them with
+ * ffi_test_memory_layout. Every function counts its entries, so a call
+ * rejected before native entry leaves the counter unchanged. Only registered
+ * physical shapes are used: I(I), I(P), I(P,I), L(P,I), D(P,I), P(I), L().
+ */
+
+typedef struct ffi_test_memory_inner {
+    int32_t a;
+    double b;
+} ffi_test_memory_inner;
+
+typedef struct ffi_test_memory_outer {
+    uint8_t tag;
+    ffi_test_memory_inner inner;
+    int16_t values[3];
+    const ffi_test_memory_inner *next;
+} ffi_test_memory_outer;
+
+static int32_t ffi_test_memory_calls;
+
+/* Mutable library-static storage, accredited only by an explicit assertion. */
+static ffi_test_memory_inner ffi_test_memory_static_inner = {7, 2.5};
+
+/* 0 sizeof outer, 1 offsetof inner, 2 offsetof values, 3 offsetof next, 4 sizeof inner. */
+int32_t ffi_test_memory_layout(int32_t query) {
+    ffi_test_memory_calls++;
+    switch (query) {
+    case 0: return (int32_t)sizeof(ffi_test_memory_outer);
+    case 1: return (int32_t)offsetof(ffi_test_memory_outer, inner);
+    case 2: return (int32_t)offsetof(ffi_test_memory_outer, values);
+    case 3: return (int32_t)offsetof(ffi_test_memory_outer, next);
+    case 4: return (int32_t)sizeof(ffi_test_memory_inner);
+    default: return -1;
+    }
+}
+
+/*
+ * Reads one integer of an outer structure: 0 tag, 1 inner.a, 2..4
+ * values[0..2], 5 next->a (-1 when next is NULL).
+ */
+int64_t ffi_test_memory_read(const ffi_test_memory_outer *outer, int32_t field) {
+    ffi_test_memory_calls++;
+    switch (field) {
+    case 0: return outer->tag;
+    case 1: return outer->inner.a;
+    case 2: case 3: case 4: return outer->values[field - 2];
+    case 5: return outer->next == NULL ? -1 : outer->next->a;
+    default: return -2;
+    }
+}
+
+/* 0 inner.b, 1 next->b (NaN when next is NULL). */
+double ffi_test_memory_double(const ffi_test_memory_outer *outer, int32_t which) {
+    ffi_test_memory_calls++;
+    if (which == 0) {
+        return outer->inner.b;
+    }
+    return outer->next == NULL ? 0.0 / 0.0 : outer->next->b;
+}
+
+/* Writes tag, inner.a, inner.b and values from one seed; answers 1. */
+int32_t ffi_test_memory_write(ffi_test_memory_outer *outer, int32_t seed) {
+    ffi_test_memory_calls++;
+    outer->tag = (uint8_t)seed;
+    outer->inner.a = seed;
+    outer->inner.b = seed * 0.5;
+    for (int index = 0; index < 3; index++) {
+        outer->values[index] = (int16_t)(seed + index);
+    }
+    return 1;
+}
+
+/* Reads the a member of an inner structure received through a typed pointer. */
+int32_t ffi_test_memory_inner_a(const ffi_test_memory_inner *inner) {
+    ffi_test_memory_calls++;
+    return inner == NULL ? -1 : inner->a;
+}
+
+/* Answers the mutable static inner structure, or NULL when present is zero. */
+ffi_test_memory_inner *ffi_test_memory_static(int32_t present) {
+    ffi_test_memory_calls++;
+    return present ? &ffi_test_memory_static_inner : NULL;
+}
+
+/* The current a member of the static inner structure. */
+int64_t ffi_test_memory_static_a(void) {
+    ffi_test_memory_calls++;
+    return ffi_test_memory_static_inner.a;
+}
+
+int32_t ffi_test_memory_calls_count(void) { return ffi_test_memory_calls; }

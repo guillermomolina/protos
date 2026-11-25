@@ -33,9 +33,12 @@ import java.util.Objects;
  * <p>The session owns, exclusively and without any process-wide registry: the authorized
  * libraries it opened and their {@link SymbolLookup}s, a shared {@link Arena} bounding their
  * lifetime (shared because an Actor may resume on another host thread), the cache of linked
- * bindings, the custody of owned resources, and the borrow epoch. Symbols are resolved only in
- * the authorized library through {@link SymbolLookup#libraryLookup}; never through the default or
- * loader lookups and never through a fallback chain.
+ * bindings, the custody of owned resources and independently allocated native regions (each
+ * with its own shared arena), and the borrow epoch. The session itself is the private context
+ * capability of {@code std:ffi} ({@link #acquireSessionContext}); it is never a module.
+ * Symbols are resolved only in the authorized library through {@link
+ * SymbolLookup#libraryLookup}; never through the default or loader lookups and never through a
+ * fallback chain.
  *
  * <p>Close is a cut: once it starts, no new call is admitted; calls already admitted finish
  * before owned resources are released and the arena is closed. Revocation is permanent and a
@@ -64,9 +67,13 @@ final class FfmSession implements ProtosForeignPluginSession {
 
     private volatile long borrowEpoch;
 
-    /** Created on first library acquisition; never at session open. */
+    /**
+     * Library arena: created on first library acquisition; never at session open and never by
+     * the private context or an allocation, whose roots each own a separate arena.
+     */
     private Arena arena;
 
+    /** Published on first native use, only after platform verification. */
     private Linker linker;
 
     private record BindingKey(String library, String symbol, FfmBinding.Signature signature) {}
@@ -86,10 +93,8 @@ final class FfmSession implements ProtosForeignPluginSession {
                 if (existing != null) {
                     return existing;
                 }
-                if (linker == null) {
-                    Linker candidate = Linker.nativeLinker();
-                    FfmTypes.requireSupportedPlatform(candidate);
-                    linker = candidate;
+                ensureLinker();
+                if (arena == null) {
                     arena = Arena.ofShared();
                 }
             }
@@ -107,6 +112,96 @@ final class FfmSession implements ProtosForeignPluginSession {
             }
         } finally {
             endCall();
+        }
+    }
+
+    /**
+     * The session's private context capability: the session itself. It verifies the platform and
+     * publishes the Linker on first use, but resolves no host authorization, loads no library,
+     * performs no symbol lookup, and creates neither the library arena nor any allocation.
+     */
+    @Override
+    public Object acquireSessionContext() {
+        beginCall();
+        try {
+            synchronized (lifecycle) {
+                ensureLinker();
+            }
+            return this;
+        } finally {
+            endCall();
+        }
+    }
+
+    /** Publishes the Linker only after the platform was verified; guarded by the monitor. */
+    private void ensureLinker() {
+        if (linker == null) {
+            Linker candidate = Linker.nativeLinker();
+            FfmTypes.requireSupportedPlatform(candidate);
+            linker = candidate;
+        }
+    }
+
+    /**
+     * Allocates one independently owned, zero-initialized region of exactly the supplied size and
+     * alignment in its own shared arena, independent of the library arena. The root enters
+     * custody before it is published; an arena that was not adopted is closed.
+     */
+    FfmHandles.Region allocate(FfmTypes.Storage storage) {
+        beginCall();
+        try {
+            synchronized (lifecycle) {
+                ensureLinker();
+            }
+            Arena owned = Arena.ofShared();
+            boolean adopted = false;
+            try {
+                MemorySegment segment = owned.allocate(storage.size(), storage.align());
+                segment.fill((byte) 0);
+                FfmHandles.Region root =
+                        new FfmHandles.Region(this, custody.nextSerial(), owned, segment, storage);
+                custody.register(root);
+                adopted = true;
+                return root;
+            } finally {
+                if (!adopted) {
+                    owned.close();
+                }
+            }
+        } finally {
+            endCall();
+        }
+    }
+
+    /**
+     * Releases one allocation root: retires it irreversibly (revoking every view, slice and
+     * pointer derived from it), then closes its arena once. The borrow epoch is unchanged.
+     */
+    Object releaseAllocation(FfmHandles.Region root) {
+        if (root.session() != this || !root.isRoot()) {
+            throw new FfmFailure("invalid-argument", "not an allocation of this session");
+        }
+        beginCall();
+        try {
+            if (!root.markReleased()) {
+                throw new FfmFailure("released-resource", "the region was already released");
+            }
+            custody.forget(root);
+            closeArena(root);
+            return FfmHandles.Absent.INSTANCE;
+        } finally {
+            endCall();
+        }
+    }
+
+    private void closeArena(FfmHandles.Region root) {
+        try {
+            root.arenaForRelease().close();
+        } catch (RuntimeException failure) {
+            // The physical release state is unknown; it is recorded, never retried.
+            root.markUncertain();
+            custody.recordUncertain();
+            throw failure;
         }
     }
 
@@ -267,13 +362,16 @@ final class FfmSession implements ProtosForeignPluginSession {
             }
         }
         advanceBorrowEpoch();
-        List<FfmHandles.Resource> pending = custody.drainForClose();
-        for (FfmHandles.Resource resource : pending) {
-            if (resource.markReleased()) {
+        List<FfmHandles.Owned> pending = custody.drainForClose();
+        for (FfmHandles.Owned entry : pending) {
+            if (entry.markReleased()) {
                 try {
-                    destroy(resource);
+                    switch (entry) {
+                        case FfmHandles.Resource resource -> destroy(resource);
+                        case FfmHandles.Region root -> closeArena(root);
+                    }
                 } catch (Throwable ignored) {
-                    // Recorded as uncertain by destroy; no recovery is attempted.
+                    // Recorded as uncertain by destroy or closeArena; no recovery is attempted.
                 }
             }
         }

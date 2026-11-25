@@ -892,6 +892,11 @@ else
         --allow-library "first=${tmp_dir}/libffi_test.so" \
         --allow-library "second=${tmp_dir}/libffi_second.so" \
         "${ffm_cases_dir}/ffm-pointers.protos"
+    # Bounded native memory: the program allocates before importing a library.
+    run_ffm_case NATIVE_MEMORY 0 'FFM-NATIVE-MEMORY-PASS' \
+        --allow-library "first=${tmp_dir}/libffi_test.so" \
+        --allow-library "second=${tmp_dir}/libffi_second.so" \
+        "${ffm_cases_dir}/ffm-native-memory.protos"
     run_ffm_case MISSING_SYMBOL 0 'symbol-not-found' \
         --allow-library "first=${tmp_dir}/libffi_test.so" \
         -e 'FFI: import("std:ffi")

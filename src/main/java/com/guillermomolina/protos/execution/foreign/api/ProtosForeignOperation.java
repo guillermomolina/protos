@@ -147,6 +147,45 @@ final class ProtosForeignOperation {
         }
     }
 
+    /**
+     * Pre-entry indexed-read admission, with the same shape as {@link
+     * #requireAdmissibleExecution}: a closed session, a refusal, or a failure of the pure hook is
+     * the ordinary Protos Error and the read is not entered.
+     */
+    @TruffleBoundary
+    static void requireAdmissibleElementRead(
+            ProtosForeignHandle handle, ProtosForeignArgument index, ProtosPrelude prelude) {
+        ProtosForeignProviderSession live = requireLiveSession(handle.session(), prelude);
+        boolean admitted;
+        try {
+            admitted = handle.adapter().acceptsElementRead(live, handle.target(), index);
+        } catch (Exception rejected) {
+            admitted = false;
+        }
+        if (!admitted) {
+            throw ordinaryError(prelude);
+        }
+    }
+
+    /** Pre-entry whole indexed-write admission; see {@link #requireAdmissibleElementRead}. */
+    @TruffleBoundary
+    static void requireAdmissibleElementWrite(
+            ProtosForeignHandle handle,
+            ProtosForeignArgument index,
+            ProtosForeignArgument value,
+            ProtosPrelude prelude) {
+        ProtosForeignProviderSession live = requireLiveSession(handle.session(), prelude);
+        boolean admitted;
+        try {
+            admitted = handle.adapter().acceptsElementWrite(live, handle.target(), index, value);
+        } catch (Exception rejected) {
+            admitted = false;
+        }
+        if (!admitted) {
+            throw ordinaryError(prelude);
+        }
+    }
+
     /** The live session, or the ordinary pre-entry Error once the generation closed. */
     private static ProtosForeignProviderSession requireLiveSession(
             ProtosForeignProviderSessionBinding session, ProtosPrelude prelude) {

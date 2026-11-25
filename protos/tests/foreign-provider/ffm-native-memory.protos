@@ -1,0 +1,660 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// Bounded native memory: FFI.cType, FFI.allocate, FFI.release of allocation
+// roots, FFI.addressOf of regions, FFI.slice, FFI.view, FFI.assumeExtent and
+// typed native-region at/atPut over real native memory. The program allocates
+// and accesses memory before it imports any C library. The host authorizes:
+//   first=<absolute libffi_test.so>   (native/ffi_test.c)
+//   second=<absolute libffi_second.so> (native/ffi_second.c, unused here)
+// Run by ProtosI144FfmFixtureAbiTest, dist/test_external_foreign_providers.py,
+// scripts/native-test.sh and dist/validate_native.py.
+
+FFI: import("std:ffi")
+Arrays: import("std:collections/array")
+
+CheckFailure: Error {}
+
+check: (label, condition) => {
+    (condition === true).ifFalse(() => {
+        failure: CheckFailure { label: label }
+        failure.signal()
+    })
+    null
+}
+
+caught: (prototype, body) => {
+    result: null
+    prototype.handle(body, (error) => {
+        result = error
+        error
+    })
+    result
+}
+
+/// The ordinary pre-entry Error, never a ForeignError.
+ordinary: (label, body) => {
+    error: caught(Error, body)
+    check(label, (error === null) == false)
+    check(label + " is ordinary", error.parent() === Error)
+}
+
+/// A ForeignError signalled after entry.
+foreign: (label, body) => {
+    error: caught(ForeignError, body)
+    check(label, (error === null) == false)
+}
+
+/// Any Error: the operation is not available on the value at all.
+failed: (label, body) => {
+    check(label, (caught(Error, body) === null) == false)
+}
+
+// Every octet of a region, as an ordinary Array of Integers.
+octets: (region, length) => {
+    view: FFI.slice(region, 0, length)
+    answer: Array()
+    index: 0
+    while(index < length) {
+        answer = Arrays.append(answer, view[index])
+        index = index + 1
+    }
+    answer
+}
+
+sameOctets: (left, right) => {
+    if((left.size() == right.size()) == false) { ^false }
+    index: 0
+    while(index < left.size()) {
+        if((left[index] == right[index]) == false) { ^false }
+        index = index + 1
+    }
+    true
+}
+
+// A rejected operation is an ordinary Error and leaves every octet unchanged.
+unchanged: (label, region, length, body) => {
+    before: octets(region, length)
+    ordinary(label, body)
+    check(label + " left the bytes unchanged", sameOctets(before, octets(region, length)))
+}
+
+power: (exponent) => {
+    value: 1.0
+    factor: 2.0
+    count: exponent
+    if(exponent < 0) {
+        factor = 0.5
+        count = 0 - exponent
+    }
+    while(count > 0) {
+        value = value * factor
+        count = count - 1
+    }
+    value
+}
+infinity: 1.0 / 0.0
+negativeInfinity: 0.0 - infinity
+negativeZero: 0.0 * -1.0
+
+// ---- C type spellings: exact existing descriptor singletons
+
+check("cType int", FFI.cType("int") === FFI.i32)
+check("cType long", FFI.cType("long") === FFI.i64)
+check("cType long long", FFI.cType("long long") === FFI.i64)
+check("cType size_t", FFI.cType("size_t") === FFI.sizeT)
+check("cType double", FFI.cType("double") === FFI.f64)
+check("cType repeated", FFI.cType("int") === FFI.cType("int"))
+for(name in Array("float", "char", "_Bool", "long double", "short", "unsigned int",
+        "int ", " int", "long  long", "Int", "INT", "size_t\n", "uint32_t", "int32_t",
+        "void", "")) {
+    ordinary("cType rejects " + name, () => FFI.cType(name))
+}
+for(value in Array(null, 1, 1.0, true, FFI.i32, {}, Array("int"))) {
+    ordinary("cType domain", () => FFI.cType(value))
+}
+ordinary("cType arity", () => FFI.cType())
+ordinary("cType extra", () => FFI.cType("int", "int"))
+
+// ---- layouts mirrored by native/ffi_test.c
+
+Inner: FFI.struct(Array(FFI.field("a", FFI.i32), FFI.field("b", FFI.f64)))
+Values: FFI.array(FFI.i16, 3)
+Outer: FFI.struct(Array(
+    FFI.field("tag", FFI.u8),
+    FFI.field("inner", Inner),
+    FFI.field("values", Values),
+    FFI.field("next", FFI.nullable(FFI.pointer(Inner)))))
+check("outer size", FFI.sizeOf(Outer) == 40)
+check("outer inner offset", FFI.offsetOf(Outer, Array("inner")) == 8)
+check("outer values offset", FFI.offsetOf(Outer, Array("values")) == 24)
+check("outer next offset", FFI.offsetOf(Outer, Array("next")) == 32)
+
+// ---- allocation before any C library import
+
+early: FFI.allocate(Outer)
+check("allocation is a region", (early === null) == false)
+check("zero tag", early["tag"] == 0)
+check("zero nested member", early["inner"]["a"] == 0)
+check("zero nested Float", early["inner"]["b"] == 0.0)
+check("zero array", (early["values"][0] == 0) && (early["values"][2] == 0))
+check("zero nullable pointer is null", early["next"] === null)
+padding: octets(early, 40)
+check("zero including padding", sameOctets(padding, Array(0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)))
+other: FFI.allocate(Outer)
+check("independent allocations", other !== early)
+early["tag"] = 9
+check("independent storage", (other["tag"] == 0) && (early["tag"] == 9))
+
+scalarCell: FFI.allocate(FFI.i32)
+check("scalar cell zero", scalarCell[0] == 0)
+scalarCell[0] = -7
+check("scalar cell write", scalarCell[0] == -7)
+ordinary("scalar cell index", () => scalarCell[1])
+ordinary("scalar cell key", () => scalarCell["value"])
+unionCell: FFI.allocate(FFI.union(Array(FFI.field("bits", FFI.u64), FFI.field("value", FFI.f64))))
+unionCell["value"] = 1.0
+check("union overlapping storage", unionCell["bits"] == 4607182418800017408)
+unionCell["bits"] = 0
+check("union overlap back", unionCell["value"] == 0.0)
+arrayCell: FFI.allocate(FFI.array(FFI.u8, 5))
+arrayCell[4] = 255
+check("fixed array allocation", (arrayCell[4] == 255) && (arrayCell[0] == 0))
+
+for(value in Array(null, 0, "x", true, {}, Array(), FFI.void, FFI.utf8z,
+        FFI.field("a", FFI.i32), FFI.borrowedPointer(FFI.pointer(Inner)))) {
+    ordinary("allocate rejects a non-storage value", () => FFI.allocate(value))
+}
+ordinary("allocate arity", () => FFI.allocate())
+ordinary("allocate extra", () => FFI.allocate(Inner, Inner))
+// A valid layout larger than any native allocation fails after entry.
+foreign("huge allocation", () => FFI.allocate(FFI.array(FFI.u8, 9223372036854775807)))
+ordinary("size overflow", () => FFI.array(FFI.i64, 9223372036854775807))
+
+// ---- scalar storage widths
+
+Scalars: FFI.struct(Array(
+    FFI.field("i8", FFI.i8), FFI.field("u8", FFI.u8),
+    FFI.field("i16", FFI.i16), FFI.field("u16", FFI.u16),
+    FFI.field("i32", FFI.i32), FFI.field("u32", FFI.u32),
+    FFI.field("i64", FFI.i64), FFI.field("u64", FFI.u64),
+    FFI.field("f32", FFI.f32), FFI.field("f64", FFI.f64),
+    FFI.field("sizeT", FFI.sizeT)))
+cell: FFI.allocate(Scalars)
+size: FFI.sizeOf(Scalars)
+limits: Array(
+    Array("i8", -128, 127, -129, 128),
+    Array("u8", 0, 255, -1, 256),
+    Array("i16", -32768, 32767, -32769, 32768),
+    Array("u16", 0, 65535, -1, 65536),
+    Array("i32", -2147483648, 2147483647, -2147483649, 2147483648),
+    Array("u32", 0, 4294967295, -1, 4294967296),
+    Array("i64", -9223372036854775808, 9223372036854775807,
+        -9223372036854775809, 9223372036854775808),
+    Array("u64", 0, 18446744073709551615, -1, 18446744073709551616),
+    Array("sizeT", 0, 18446744073709551615, -1, 18446744073709551616))
+for(limit in limits) {
+    name: limit[0]
+    cell[name] = limit[1]
+    check(name + " minimum", cell[name] == limit[1])
+    cell[name] = limit[2]
+    check(name + " maximum", cell[name] == limit[2])
+    check(name + " result is an Integer", Integer.recognizes(cell[name]))
+    unchanged(name + " below range", cell, size, () => { cell[name] = limit[3] })
+    unchanged(name + " above range", cell, size, () => { cell[name] = limit[4] })
+    unchanged(name + " Float", cell, size, () => { cell[name] = 1.0 })
+    unchanged(name + " null", cell, size, () => { cell[name] = null })
+    unchanged(name + " Boolean", cell, size, () => { cell[name] = true })
+    unchanged(name + " String", cell, size, () => { cell[name] = "1" })
+    check(name + " kept maximum", cell[name] == limit[2])
+}
+check("atPut answers the exact value", cell.atPut("i32", 5) == 5)
+big: 18446744073709551615
+check("atPut answers the exact large value", cell.atPut("u64", big) == big)
+check("atPut answers the exact Float", (1.0 / cell.atPut("f64", negativeZero)) == negativeInfinity)
+
+cell["f32"] = 0.1
+check("f32 rounding", cell["f32"] == 0.10000000149011612)
+cell["f32"] = negativeZero
+check("f32 negative zero", (cell["f32"] == 0.0) && ((1.0 / cell["f32"]) == negativeInfinity))
+cell["f32"] = power(-149)
+check("f32 smallest subnormal", cell["f32"] == power(-149))
+cell["f32"] = power(-150)
+check("f32 halfway to even zero", cell["f32"] == 0.0)
+cell["f32"] = 3.4028234663852886e38 * 2.0
+check("f32 overflow", cell["f32"] == infinity)
+cell["f64"] = 0.1
+check("f64 exact", cell["f64"] == 0.1)
+cell["f64"] = negativeZero
+check("f64 negative zero", (1.0 / cell["f64"]) == negativeInfinity)
+check("Float result", Float.recognizes(cell["f64"]))
+unchanged("Integer is not coerced to f64", cell, size, () => { cell["f64"] = 1 })
+unchanged("Integer is not coerced to f32", cell, size, () => { cell["f32"] = 1 })
+
+// ---- struct keys, method-named fields and union views
+
+Named: FFI.struct(Array(FFI.field("at", FFI.i32), FFI.field("call", FFI.i32),
+    FFI.field("init", FFI.i32), FFI.field("slotValue", FFI.i32),
+    FFI.field("createSlot", FFI.i32), FFI.field("size", FFI.i32)))
+named: FFI.allocate(Named)
+named["at"] = 1
+named["call"] = 2
+named["init"] = 3
+named["slotValue"] = 4
+named["createSlot"] = 5
+named["size"] = 6
+check("field named at", named.at("at") == 1)
+check("field named call", named["call"] == 2)
+check("field named init", named["init"] == 3)
+check("field named slotValue", named["slotValue"] == 4)
+check("field named createSlot", named["createSlot"] == 5)
+check("field named size", named["size"] == 6)
+failed("fields are not members", () => named.size())
+ordinary("unknown field", () => named["missing"])
+ordinary("field keys are exact", () => named["At"])
+ordinary("struct is not positional", () => named[0])
+unchanged("unknown field write", named, 24, () => { named["missing"] = 1 })
+
+// ---- arrays: exact Integer indices and bounds
+
+values: early["values"]
+values[0] = -32768
+values[2] = 32767
+check("array element", (values[0] == -32768) && (values[2] == 32767))
+check("array view aliases the owner", early["values"][2] == 32767)
+for(index in Array(3, -1, 1.0, "0", null, true, 18446744073709551616)) {
+    ordinary("array index rejected", () => values[index])
+    unchanged("array store rejected", early, 40, () => { values[index] = 1 })
+}
+
+// ---- nested views and compatible aggregate copies
+
+nested: early["inner"]
+nested["a"] = 77
+nested["b"] = 0.25
+check("nested view writes the owner", early["inner"]["a"] == 77)
+check("nested view Float", early["inner"]["b"] == 0.25)
+source: FFI.allocate(Inner)
+source["a"] = 123
+source["b"] = 4.5
+check("aggregate copy answers the source", early.atPut("inner", source) === source)
+check("aggregate copy bytes", (early["inner"]["a"] == 123) && (early["inner"]["b"] == 4.5))
+source["a"] = 1
+check("aggregate copy is a copy", early["inner"]["a"] == 123)
+Twin: FFI.struct(Array(FFI.field("a", FFI.i32), FFI.field("b", FFI.f64)))
+twin: FFI.allocate(Twin)
+twin["a"] = 5
+unchanged("structurally equal layout is not compatible", early, 40,
+    () => { early["inner"] = twin })
+unchanged("aggregate from a byte slice", early, 40,
+    () => { early["inner"] = FFI.slice(source, 0, 16) })
+unchanged("aggregate from an ordinary object", early, 40,
+    () => { early["inner"] = { a: 1 } })
+unchanged("aggregate from null", early, 40, () => { early["inner"] = null })
+otherValues: FFI.allocate(Values)
+otherValues[1] = 11
+early["values"] = otherValues
+check("array aggregate copy", early["values"][1] == 11)
+spareValues: FFI.allocate(FFI.array(FFI.i16, 3))
+unchanged("array of another layout", early, 40, () => { early["values"] = spareValues })
+
+// ---- slices: aliasing bytes without copying
+
+bytes: FFI.slice(early, 24, 6)
+early["values"][0] = 258
+check("slice aliases little-endian bytes", (bytes[0] == 2) && (bytes[1] == 1))
+bytes[0] = 3
+check("slice write aliases the owner", early["values"][0] == 259)
+inner: FFI.slice(bytes, 2, 2)
+inner[1] = 1
+check("slice of slice offset", early["values"][1] == 267)
+ordinary("slice index bound", () => bytes[6])
+ordinary("slice index negative", () => bytes[-1])
+unchanged("slice octet range", early, 40, () => { bytes[0] = 256 })
+for(range in Array(Array(40, 1), Array(0, 41), Array(39, 2), Array(-1, 1), Array(41, 0),
+        Array(0, -1), Array(1.0, 1), Array(0, "1"), Array(9223372036854775807, 1))) {
+    ordinary("slice range rejected", () => FFI.slice(early, range[0], range[1]))
+}
+ordinary("slice beyond a slice", () => FFI.slice(bytes, 4, 3))
+ordinary("slice of a non-region", () => FFI.slice({}, 0, 1))
+ordinary("slice arity", () => FFI.slice(early, 0))
+
+// ---- empty slices: non-owning views with no admissible index
+
+emptyStart: FFI.slice(early, 0, 0)
+emptyInside: FFI.slice(early, 8, 0)
+emptyEnd: FFI.slice(early, 40, 0)
+emptyNested: FFI.slice(emptyInside, 0, 0)
+for(empty in Array(emptyStart, emptyInside, emptyEnd, emptyNested)) {
+    check("empty slice", (empty === null) == false)
+    ordinary("empty slice read", () => empty[0])
+    unchanged("empty slice write", early, 40, () => { empty[0] = 1 })
+    ordinary("empty slice is not released", () => FFI.release(empty))
+}
+check("empty slice of an empty slice", (FFI.slice(emptyEnd, 0, 0) === null) == false)
+ordinary("empty slice beyond the end", () => FFI.slice(early, 41, 0))
+ordinary("empty slice beyond an empty slice", () => FFI.slice(emptyEnd, 1, 0))
+ordinary("negative slice length", () => FFI.slice(early, 0, -1))
+emptyRoot: FFI.allocate(FFI.u8)
+emptyOfRoot: FFI.slice(emptyRoot, 1, 0)
+check("empty slice root release", FFI.release(emptyRoot) === null)
+ordinary("empty slice after its root release", () => FFI.slice(emptyOfRoot, 0, 0))
+ordinary("empty slice address after its root release", () => FFI.addressOf(emptyOfRoot))
+
+// ---- long chains of slices retain only the root lifetime
+
+chainRoot: FFI.allocate(FFI.u8)
+link: FFI.slice(chainRoot, 0, 1)
+step: 0
+while(step < 10000) {
+    link = FFI.slice(link, 0, 1)
+    step = step + 1
+}
+check("final chained slice read", link[0] == 0)
+link[0] = 77
+check("final chained slice write", link[0] == 77)
+check("chained write visible through the root", chainRoot[0] == 77)
+check("chain root release", FFI.release(chainRoot) === null)
+ordinary("root release revokes the final chained slice", () => link[0])
+
+// ---- addressOf and views: known extent, identity, alignment
+
+whole: FFI.addressOf(early)
+check("region pointer", (whole === null) == false)
+check("fresh region pointer", FFI.addressOf(early) !== whole)
+check("no numeric address", (Integer.recognizes(whole) == false) && (String.recognizes(whole) == false))
+failed("region pointer is not indexed", () => whole[0])
+failed("region pointer has no size", () => whole.size())
+again: FFI.view(whole, Outer)
+check("view of the whole region", again["inner"]["a"] == 123)
+again["tag"] = 33
+check("view aliases", early["tag"] == 33)
+ordinary("view of another pointee", () => FFI.view(whole, Inner))
+innerPointer: FFI.addressOf(early["inner"])
+check("view of a nested pointer", FFI.view(innerPointer, Inner)["b"] == 4.5)
+voidPointer: FFI.addressOf(FFI.slice(early, 8, 16))
+check("void pointer view", FFI.view(voidPointer, Inner)["a"] == 123)
+ordinary("view beyond the known extent", () => FFI.view(FFI.addressOf(bytes), Inner))
+ordinary("misaligned view", () => FFI.view(FFI.addressOf(FFI.slice(early, 1, 16)), Inner))
+for(value in Array(null, 0, "x", {}, early, FFI.i32)) {
+    ordinary("view of a non-pointer", () => FFI.view(value, Inner))
+}
+for(value in Array(null, 0, "x", {}, early, FFI.void, FFI.field("a", FFI.i32))) {
+    ordinary("view with a non-layout", () => FFI.view(voidPointer, value))
+}
+ordinary("addressOf arbitrary value", () => FFI.addressOf({}))
+
+// ---- the first C library: allocations are visible to C and C mutations to Protos
+
+first: import("ffi:first")
+memoryCalls: FFI.bindPreserving(first, "ffi_test_memory_calls_count", FFI.i32, Array())
+layoutQuery: FFI.bind(first, "ffi_test_memory_layout", FFI.i32, Array(FFI.i32))
+check("C outer size", layoutQuery(0) == FFI.sizeOf(Outer))
+check("C inner offset", layoutQuery(1) == FFI.offsetOf(Outer, Array("inner")))
+check("C values offset", layoutQuery(2) == FFI.offsetOf(Outer, Array("values")))
+check("C next offset", layoutQuery(3) == FFI.offsetOf(Outer, Array("next")))
+check("C inner size", layoutQuery(4) == FFI.sizeOf(Inner))
+
+OuterPointer: FFI.pointer(Outer)
+InnerPointer: FFI.pointer(Inner)
+readOuter: FFI.bind(first, "ffi_test_memory_read", FFI.i64, Array(OuterPointer, FFI.i32))
+readDouble: FFI.bind(first, "ffi_test_memory_double", FFI.f64, Array(OuterPointer, FFI.i32))
+writeOuter: FFI.bind(first, "ffi_test_memory_write", FFI.i32, Array(OuterPointer, FFI.i32))
+innerA: FFI.bind(first, "ffi_test_memory_inner_a", FFI.i32, Array(FFI.nullable(InnerPointer)))
+staticInner: FFI.bind(first, "ffi_test_memory_static", FFI.nullable(InnerPointer),
+    Array(FFI.i32))
+staticA: FFI.bind(first, "ffi_test_memory_static_a", FFI.i64, Array())
+
+// Rejected calls never enter C.
+rejected: (label, body) => {
+    before: memoryCalls()
+    ordinary(label, body)
+    check(label + " did not enter C", memoryCalls() == before)
+}
+
+// Allocation before the binding: the same canonical pointer identity.
+outerAddress: FFI.addressOf(early)
+check("C reads a Protos allocation", readOuter(outerAddress, 0) == 33)
+check("C reads a nested member", readOuter(outerAddress, 1) == 123)
+check("C reads an array element", readOuter(outerAddress, 3) == 267)
+check("C reads a nested Float", readDouble(outerAddress, 0) == 4.5)
+check("C reads a null pointer field", readOuter(outerAddress, 5) == -1)
+check("C mutation", writeOuter(outerAddress, 40) == 1)
+check("Protos observes C mutation", (early["tag"] == 40) && (early["inner"]["a"] == 40))
+check("Protos observes C Float", early["inner"]["b"] == 20.0)
+check("Protos observes C array", (early["values"][0] == 40) && (early["values"][2] == 42))
+rejected("region is not a pointer argument", () => readOuter(early, 0))
+rejected("nested pointer is not the outer pointee", () => readOuter(innerPointer, 0))
+
+// Binding before allocation: a layout first used by a binding.
+Late: FFI.struct(Array(FFI.field("a", FFI.i32), FFI.field("b", FFI.f64)))
+lateA: FFI.bind(first, "ffi_test_memory_inner_a", FFI.i32, Array(FFI.pointer(Late)))
+late: FFI.allocate(Late)
+late["a"] = 64
+check("binding before allocation", lateA(FFI.addressOf(late)) == 64)
+rejected("distinct layout pointee", () => lateA(FFI.addressOf(source)))
+
+// ---- pointer fields
+
+target: FFI.allocate(Inner)
+target["a"] = 501
+target["b"] = 0.5
+targetAddress: FFI.addressOf(target)
+early["next"] = targetAddress
+check("C follows a pointer field", readOuter(outerAddress, 5) == 501)
+check("C follows a pointer field Float", readDouble(outerAddress, 1) == 0.5)
+stored: early["next"]
+check("pointer field read", (stored === null) == false)
+check("pointer field read is a fresh capability", stored !== targetAddress)
+check("pointer field read passes", innerA(stored) == 501)
+ordinary("pointer field has no inferred extent", () => FFI.view(stored, Inner))
+unchanged("pointer field wrong pointee", early, 40, () => { early["next"] = outerAddress })
+unchanged("pointer field Integer", early, 40, () => { early["next"] = 0 })
+unchanged("pointer field region", early, 40, () => { early["next"] = target })
+early["next"] = null
+check("nullable pointer field null", (early["next"] === null) && (readOuter(outerAddress, 5) == -1))
+Strict: FFI.struct(Array(FFI.field("p", InnerPointer)))
+strict: FFI.allocate(Strict)
+foreign("NULL in a non-nullable pointer field", () => strict["p"])
+unchanged("non-nullable pointer field null", strict, 8, () => { strict["p"] = null })
+strict["p"] = targetAddress
+check("non-nullable pointer field", innerA(strict["p"]) == 501)
+VoidHolder: FFI.struct(Array(FFI.field("p", FFI.nullable(FFI.pointer(FFI.void)))))
+voidHolder: FFI.allocate(VoidHolder)
+voidHolder["p"] = targetAddress
+check("void pointer field admits any pointee", (voidHolder["p"] === null) == false)
+
+// ---- extent assertions: four anchors
+
+// 1. A live owned allocation root containing the whole asserted range.
+early["next"] = targetAddress
+carried: early["next"]
+accredited: FFI.assumeExtent(carried, 16, target, "readWrite")
+check("owned-root assertion", FFI.view(accredited, Inner)["a"] == 501)
+FFI.view(accredited, Inner)["a"] = 502
+check("owned-root assertion writes", target["a"] == 502)
+ordinary("asserted range beyond the allocation", () => FFI.assumeExtent(carried, 17, target, "read"))
+ordinary("asserted range in another allocation", () => FFI.assumeExtent(carried, 16, early, "read"))
+ordinary("Protos pointer with a C anchor", () => FFI.assumeExtent(targetAddress, 16, first, "read"))
+ordinary("extent widening", () => FFI.assumeExtent(accredited, 32, target, "read"))
+narrowed: FFI.assumeExtent(accredited, 4, target, "read")
+ordinary("narrowed extent", () => FFI.view(narrowed, Inner))
+
+// 2. A live owned C resource, with the trusted C lifetime claim.
+counterType: FFI.opaque(first, "ffi_test_counter")
+newCounter: FFI.bind(first, "ffi_test_counter_new",
+    FFI.owned(counterType, "ffi_test_counter_free", FFI.i32), Array(FFI.i64))
+increment: FFI.bind(first, "ffi_test_counter_increment", FFI.i64, Array(counterType))
+Counter: FFI.struct(Array(FFI.field("value", FFI.i64)))
+counter: newCounter(5)
+counterMemory: FFI.view(FFI.assumeExtent(FFI.addressOf(counter), 8, counter, "readWrite"), Counter)
+check("C-owned storage read", counterMemory["value"] == 5)
+counterMemory["value"] = 99
+check("C observes the write", increment(counter) == 100)
+check("Protos observes the C write", counterMemory["value"] == 100)
+check("exact destructor result", FFI.release(counter) == 0)
+ordinary("C-owned view revoked", () => counterMemory["value"])
+spare: newCounter(1)
+ordinary("released anchor", () => FFI.assumeExtent(FFI.addressOf(spare), 8, counter, "read"))
+check("spare release", FFI.release(spare) == 0)
+
+// 3. The borrowed pointer itself, governed by its borrow epoch.
+Quad: FFI.array(FFI.u8, 4)
+lend: FFI.bind(first, "ffi_test_pointer_octets", FFI.borrowedPointer(FFI.pointer(Quad)),
+    Array(FFI.i32))
+touch: FFI.bind(first, "ffi_test_touch", FFI.void, Array())
+keep: FFI.bindPreserving(first, "ffi_test_memory_calls_count", FFI.i32, Array())
+lent: lend(1)
+lentQuad: FFI.view(FFI.assumeExtent(lent, 4, lent, "read"), Quad)
+check("borrowed storage", (lentQuad[0] == 42) && (lentQuad[1] == 7) && (lentQuad[2] == 255))
+ordinary("borrowed storage is read-only", () => { lentQuad[0] = 1 })
+keep()
+check("preserving call keeps the borrowed view", lentQuad[3] == 0)
+check("borrowed pointer still live", first.isLive(lent) == true)
+touch()
+ordinary("invalidating call revokes the borrowed view", () => lentQuad[0])
+ordinary("expired borrowed pointer", () => FFI.assumeExtent(lent, 4, lent, "read"))
+plainStatic: staticInner(1)
+ordinary("a plain pointer is not its own anchor",
+    () => FFI.assumeExtent(plainStatic, 16, plainStatic, "read"))
+
+// 4. An authorized library facade for its static storage.
+static: staticInner(1)
+ordinary("unknown extent is not viewed", () => FFI.view(static, Inner))
+readable: FFI.assumeExtent(static, 16, first, "read")
+check("library-static read", FFI.view(readable, Inner)["a"] == 7)
+check("library-static Float", FFI.view(readable, Inner)["b"] == 2.5)
+readOnly: FFI.view(readable, Inner)
+ordinary("read-only view", () => { readOnly["a"] = 8 })
+ordinary("read-only slice", () => { FFI.slice(readOnly, 0, 4)[0] = 8 })
+ordinary("read-only nested pointer view", () => { FFI.view(FFI.addressOf(readOnly), Inner)["a"] = 8 })
+ordinary("permission is never upgraded", () => FFI.assumeExtent(readable, 16, first, "readWrite"))
+writable: FFI.view(FFI.assumeExtent(static, 16, first, "readWrite"), Inner)
+writable["a"] = 8
+check("C observes library-static write", staticA() == 8)
+writable["a"] = 7
+check("static restored", staticA() == 7)
+check("static pointer passes", innerA(FFI.addressOf(writable)) == 7)
+
+// Arbitrary anchors and arguments.
+for(anchor in Array(null, 0, "first", true, {}, Array(), FFI.i32, early["inner"], bytes,
+        targetAddress, static, (x) => x)) {
+    ordinary("arbitrary anchor", () => FFI.assumeExtent(static, 16, anchor, "read"))
+}
+for(access in Array("write", "READ", "read ", "", null, true, 1)) {
+    ordinary("access domain", () => FFI.assumeExtent(static, 16, first, access))
+}
+for(length in Array(0, -1, 1.0, "16", null, 9223372036854775808)) {
+    ordinary("length domain", () => FFI.assumeExtent(static, length, first, "read"))
+}
+ordinary("assumeExtent arity", () => FFI.assumeExtent(static, 16, first))
+ordinary("assumeExtent extra", () => FFI.assumeExtent(static, 16, first, "read", "read"))
+ordinary("non-pointer assertion", () => FFI.assumeExtent(early, 16, first, "read"))
+
+// ---- pointer-field provenance: loaded pointers are pass-only and retain
+// only their source region; the pointee's own lifetime is never inferred.
+
+pointee: FFI.allocate(Inner)
+pointee["a"] = 9
+holder: FFI.allocate(Outer)
+holder["next"] = FFI.addressOf(pointee)
+loaded: holder["next"]
+check("loaded pointer passes to C", innerA(loaded) == 9)
+failed("loaded pointer is pass-only", () => loaded[0])
+ordinary("loaded pointer has no known extent", () => FFI.view(loaded, Inner))
+asserted: FFI.assumeExtent(loaded, 16, pointee, "read")
+check("explicit root assertion", FFI.view(asserted, Inner)["a"] == 9)
+ordinary("root assertion checks the complete range", () => FFI.assumeExtent(loaded, 17, pointee, "read"))
+unrelated: FFI.allocate(Inner)
+ordinary("unrelated root anchor", () => FFI.assumeExtent(loaded, 16, unrelated, "read"))
+check("source region release", FFI.release(holder) === null)
+rejected("source release revokes the loaded pointer", () => innerA(loaded))
+ordinary("source release revokes its accredited pointer", () => FFI.view(asserted, Inner))
+ordinary("source release revokes further assertions", () => FFI.assumeExtent(loaded, 16, pointee, "read"))
+holderAgain: FFI.allocate(Outer)
+holderAgain["next"] = FFI.addressOf(pointee)
+reloaded: holderAgain["next"]
+reasserted: FFI.assumeExtent(reloaded, 16, pointee, "read")
+check("reasserted pointee", FFI.view(reasserted, Inner)["a"] == 9)
+check("pointee release", FFI.release(pointee) === null)
+// Never dereferenced again: the anchor revokes the accredited capability.
+ordinary("pointee release revokes the root-anchored pointer", () => FFI.view(reasserted, Inner))
+check("second holder release", FFI.release(holderAgain) === null)
+check("unrelated release", FFI.release(unrelated) === null)
+
+// ---- isolated parallel execution: native memory never crosses P
+
+parallelRegion: FFI.allocate(Inner)
+parallelRegion["a"] = 21
+for(value in Array(parallelRegion, FFI.slice(parallelRegion, 0, 4),
+        FFI.view(FFI.addressOf(parallelRegion), Inner), FFI.addressOf(parallelRegion),
+        staticInner(1))) {
+    refused: caught(NonParallelValue, () => ((x) => 1).parallel(value).value())
+    check("native value never crosses P", (refused === null) == false)
+}
+check("scalar read from native memory crosses P",
+    ((x) => x + 1).parallel(parallelRegion["a"]).value() == 22)
+check("parallel region release", FFI.release(parallelRegion) === null)
+
+// ---- lifetime: release of allocation roots and revocation of descendants
+
+victim: FFI.allocate(Outer)
+victim["tag"] = 5
+victimInner: victim["inner"]
+victimSlice: FFI.slice(victim, 0, 8)
+victimPointer: FFI.addressOf(victim)
+victimView: FFI.view(victimPointer, Outer)
+check("victim reachable from C", readOuter(victimPointer, 0) == 5)
+ordinary("slice is not released", () => FFI.release(victimSlice))
+ordinary("view is not released", () => FFI.release(victimView))
+ordinary("nested view is not released", () => FFI.release(victimInner))
+ordinary("pointer is not released", () => FFI.release(victimPointer))
+check("victim still live", victim["tag"] == 5)
+lentBefore: lend(1)
+check("root release answers null", FFI.release(victim) === null)
+check("borrow epoch unchanged by root release", first.isLive(lentBefore) == true)
+ordinary("duplicate release", () => FFI.release(victim))
+ordinary("released root", () => victim["tag"])
+ordinary("released root write", () => { victim["tag"] = 1 })
+ordinary("released nested view", () => victimInner["a"])
+ordinary("released slice", () => victimSlice[0])
+ordinary("released view", () => victimView["tag"])
+ordinary("released addressOf", () => FFI.addressOf(victim))
+ordinary("released slice source", () => FFI.slice(victim, 0, 1))
+rejected("released pointer argument", () => readOuter(victimPointer, 0))
+ordinary("released pointer view", () => FFI.view(victimPointer, Outer))
+check("released pointer not live", first.isLive(victimPointer) == false)
+replacement: FFI.allocate(Outer)
+ordinary("released region stays released", () => victim["tag"])
+check("replacement is independent", replacement["tag"] == 0)
+check("independent allocation survives another release", early["inner"]["a"] == 40)
+touch()
+check("independent allocation survives an invalidating call", early["inner"]["a"] == 40)
+check("independent pointer survives an invalidating call", readOuter(outerAddress, 1) == 40)
+check("release of the replacement", FFI.release(replacement) === null)
+
+// RootActor-only authority and Actor nontransferability of native memory
+// are exercised by ffm-root-actor.protos with a real secondary Actor.
+
+check("early allocation release", FFI.release(early) === null)
+check("other allocation release", FFI.release(other) === null)
+// Every allocation root still owned is released explicitly.
+for(root in Array(scalarCell, unionCell, arrayCell, cell, named, source, twin, otherValues,
+        spareValues, late, target, strict, voidHolder)) {
+    check("remaining allocation release", FFI.release(root) === null)
+}
+
+print("FFM-NATIVE-MEMORY-PASS")

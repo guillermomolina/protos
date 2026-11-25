@@ -23,6 +23,13 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.511] - 2026-11-25
+
+### D261-R2 / I174-C — Bounded native memory, typed views and explicit extent assertions
+
+- Primary owner `semantics/FFI.md`: define cType, allocate, native region indexing, slice, view, addressOf and assumeExtent, including admitted anchors, access modes, checked bounds and permanent revocation.
+- Reconcile `semantics/MODULES.md`, `semantics/ERRORS.md`, `concurrency/ACTORS.md` and `concurrency/PARALLEL_EXECUTION.md` with native memory acquired independently of a C library, RootActor authority and nontransferable native capabilities.
+
 ## [0.1.510] - 2026-11-25
 
 ### D261-R2 / I174-B — Typed native pointers and original-owner provenance

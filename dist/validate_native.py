@@ -524,6 +524,7 @@ FFM_LAYOUTS_MARKER = "FFM-LAYOUTS-PASS"
 FFM_SCALAR_LAYOUT_ABI_MARKER = "FFM-SCALAR-LAYOUT-ABI-PASS"
 FFM_ROOT_ACTOR_MARKER = "FFM-ROOT-ACTOR-PASS"
 FFM_POINTERS_MARKER = "FFM-POINTERS-PASS"
+FFM_NATIVE_MEMORY_MARKER = "FFM-NATIVE-MEMORY-PASS"
 # f32(f32, f32), physical shape F(F,F): a valid C signature that is not
 # registered for the image. It must be refused before linking with exactly an
 # ordinary Error (parent Error, the convention of ffm-public-api.protos), never
@@ -774,6 +775,17 @@ def validate_native_ffm(
         cwd=cwd,
         env=env,
         expected_stdout=FFM_POINTERS_MARKER,
+    )
+    # Bounded native memory with the installed executable: the program
+    # allocates, slices, views and accesses native memory before it imports a
+    # library; the fixture grants only make the provider available. Every C
+    # shape it calls is already registered for the image.
+    run_ffm_case(
+        "FFM_NATIVE_MEMORY",
+        [str(launcher), *fixture_grants, str(FFM_CASES / "ffm-native-memory.protos")],
+        cwd=cwd,
+        env=env,
+        expected_stdout=FFM_NATIVE_MEMORY_MARKER,
     )
     run_ffm_case(
         "FFM_UNREGISTERED_SCALAR_SIGNATURE",

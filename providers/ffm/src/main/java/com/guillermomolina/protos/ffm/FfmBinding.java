@@ -487,23 +487,66 @@ final class FfmBinding {
     /** Reads one out slot's native carrier without converting or rejecting it. */
     private static Object readCarrier(FfmTypes.Type target, MemorySegment slot) {
         return switch (target) {
-                    case FfmTypes.Scalar scalar ->
-                            switch (scalar) {
-                                // Boxed per arm: no numeric promotion between arms.
-                                case I8, U8 -> Byte.valueOf(slot.get(ValueLayout.JAVA_BYTE, 0));
-                                case I16, U16 ->
-                                        Short.valueOf(slot.get(ValueLayout.JAVA_SHORT, 0));
-                                case I32, U32 ->
-                                        Integer.valueOf(slot.get(ValueLayout.JAVA_INT, 0));
-                                case I64, U64, SIZE_T ->
-                                        Long.valueOf(slot.get(ValueLayout.JAVA_LONG, 0));
-                                case F32 -> Float.valueOf(slot.get(ValueLayout.JAVA_FLOAT, 0));
-                                case F64 ->
-                                        Double.valueOf(slot.get(ValueLayout.JAVA_DOUBLE, 0));
-                                default -> throw new IllegalStateException("not an out scalar");
-                            };
-                    default -> slot.get(ValueLayout.ADDRESS, 0);
-                };
+            case FfmTypes.Scalar scalar -> readCarrier(scalar, slot, 0);
+            default -> slot.get(ValueLayout.ADDRESS, 0);
+        };
+    }
+
+    /**
+     * Reads the physical carrier of one numeric scalar at {@code offset} of a bounded segment,
+     * without converting it; shared by out slots and native regions.
+     */
+    static Object readCarrier(FfmTypes.Scalar scalar, MemorySegment segment, long offset) {
+        return switch (scalar) {
+            // Boxed per arm: no numeric promotion between arms.
+            case I8, U8 -> Byte.valueOf(segment.get(ValueLayout.JAVA_BYTE, offset));
+            case I16, U16 -> Short.valueOf(segment.get(ValueLayout.JAVA_SHORT, offset));
+            case I32, U32 -> Integer.valueOf(segment.get(ValueLayout.JAVA_INT, offset));
+            case I64, U64, SIZE_T -> Long.valueOf(segment.get(ValueLayout.JAVA_LONG, offset));
+            case F32 -> Float.valueOf(segment.get(ValueLayout.JAVA_FLOAT, offset));
+            case F64 -> Double.valueOf(segment.get(ValueLayout.JAVA_DOUBLE, offset));
+            default -> throw new IllegalStateException("not a storage scalar");
+        };
+    }
+
+    /**
+     * Writes one physical carrier produced by {@link FfmTypes#nativeScalar} for {@code scalar}
+     * at {@code offset} of a bounded segment: exactly one typed store.
+     */
+    static void writeCarrier(
+            FfmTypes.Scalar scalar, MemorySegment segment, long offset, Object carrier) {
+        switch (scalar) {
+            case I8, U8 -> segment.set(ValueLayout.JAVA_BYTE, offset, (Byte) carrier);
+            case I16, U16 -> segment.set(ValueLayout.JAVA_SHORT, offset, (Short) carrier);
+            case I32, U32 -> segment.set(ValueLayout.JAVA_INT, offset, (Integer) carrier);
+            case I64, U64, SIZE_T -> segment.set(ValueLayout.JAVA_LONG, offset, (Long) carrier);
+            case F32 -> segment.set(ValueLayout.JAVA_FLOAT, offset, (Float) carrier);
+            case F64 -> segment.set(ValueLayout.JAVA_DOUBLE, offset, (Double) carrier);
+            default -> throw new IllegalStateException("not a storage scalar");
+        }
+    }
+
+    /**
+     * Protos-facing value of one scalar carrier: exact signed and unsigned widening, unsigned
+     * 64-bit values beyond the signed range as BigInteger, and exact binary32 widening with
+     * signed zero and NaN preserved. Shared by call results, out slots and native regions.
+     */
+    static Object fromNativeScalar(FfmTypes.Scalar scalar, Object raw) {
+        return switch (scalar) {
+            case VOID -> FfmHandles.Absent.INSTANCE;
+            case I8 -> Long.valueOf((Byte) raw);
+            case U8 -> Long.valueOf(Byte.toUnsignedLong((Byte) raw));
+            case I16 -> Long.valueOf((Short) raw);
+            case U16 -> Long.valueOf(Short.toUnsignedLong((Short) raw));
+            case I32 -> Long.valueOf((Integer) raw);
+            case U32 -> Long.valueOf(Integer.toUnsignedLong((Integer) raw));
+            case I64 -> (Long) raw;
+            case U64, SIZE_T -> FfmTypes.unsignedSize((Long) raw);
+            // Exact widening of the binary32 carrier, signed zero and NaN included.
+            case F32 -> Double.valueOf((Float) raw);
+            case F64 -> (Double) raw;
+            case UTF8Z -> throw new IllegalStateException("utf8z is input only");
+        };
     }
 
     /**
@@ -512,22 +555,7 @@ final class FfmBinding {
      */
     private Object fromNative(FfmTypes.Type type, Object raw) {
         return switch (type) {
-            case FfmTypes.Scalar scalar ->
-                    switch (scalar) {
-                        case VOID -> FfmHandles.Absent.INSTANCE;
-                        case I8 -> Long.valueOf((Byte) raw);
-                        case U8 -> Long.valueOf(Byte.toUnsignedLong((Byte) raw));
-                        case I16 -> Long.valueOf((Short) raw);
-                        case U16 -> Long.valueOf(Short.toUnsignedLong((Short) raw));
-                        case I32 -> Long.valueOf((Integer) raw);
-                        case U32 -> Long.valueOf(Integer.toUnsignedLong((Integer) raw));
-                        case I64 -> (Long) raw;
-                        case U64, SIZE_T -> FfmTypes.unsignedSize((Long) raw);
-                        // Exact widening of the binary32 carrier, signed zero and NaN included.
-                        case F32 -> Double.valueOf((Float) raw);
-                        case F64 -> (Double) raw;
-                        case UTF8Z -> throw new IllegalStateException("utf8z is input only");
-                    };
+            case FfmTypes.Scalar scalar -> fromNativeScalar(scalar, raw);
             case FfmTypes.OpaqueType opaque -> {
                 MemorySegment address = (MemorySegment) raw;
                 if (address.equals(MemorySegment.NULL)) {
@@ -551,8 +579,8 @@ final class FfmBinding {
                         : new FfmHandles.Borrowed(session, session.borrowEpoch(), address);
             }
             case FfmTypes.PointerType pointer -> {
-                // A fresh pass-only capability without readable extent; a borrowed one retains
-                // the epoch reached after this call's own advancement.
+                // A fresh pass-only C-origin capability without readable extent; a borrowed one
+                // retains the epoch reached after this call's own advancement.
                 MemorySegment address = (MemorySegment) raw;
                 if (address.equals(MemorySegment.NULL)) {
                     if (!pointer.nullable()) {

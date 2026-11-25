@@ -20,7 +20,11 @@ import java.lang.foreign.Linker;
 import java.lang.foreign.MemoryLayout;
 import java.lang.foreign.ValueLayout;
 import java.math.BigInteger;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.regex.Pattern;
 
@@ -238,6 +242,232 @@ final class FfmTypes {
         @Override
         public String toString() {
             return spelling();
+        }
+    }
+
+    /**
+     * Immutable physical access metadata of one storage layout of native memory.
+     *
+     * <p>Every size, alignment, member name, member offset, array count and array stride is
+     * supplied by the Protos {@code std:ffi} module, which alone computes C layouts. This class
+     * only retains those values and checks their physical consistency defensively (positive
+     * sizes, power-of-two alignments, checked extents, aligned members, non-overlapping struct
+     * members, union members at offset zero, sufficient array strides); it never computes
+     * padding, member order or a replacement layout. One generic representation serves every
+     * declaration: scalar and pointer leaves reuse {@link Scalar} and {@link PointerType}.
+     *
+     * <p>{@link #identity()} is the canonical plain {@link PointerType} whose pointee is this
+     * layout, or null for the provider-private byte view of a slice. Metadata is composed one
+     * member at a time ({@link #withMember}); each step answers a fresh immutable instance.
+     */
+    static final class Storage {
+        enum Kind {
+            SCALAR,
+            POINTER,
+            STRUCT,
+            UNION,
+            ARRAY
+        }
+
+        /** One named member: its supplied offset and immutable child metadata. */
+        record Member(String name, long offset, Storage layout) {}
+
+        /** The element of every byte view: one unsigned octet. */
+        static final Storage BYTE =
+                new Storage(Kind.SCALAR, 1, 1, Scalar.U8, null, List.of(), null, 0, 0, null);
+
+        private final Kind kind;
+        private final long size;
+        private final long align;
+        private final Scalar scalar;
+        private final PointerType pointer;
+        private final List<Member> members;
+        private final Map<String, Member> byName;
+        private final Storage element;
+        private final long count;
+        private final long stride;
+        private final PointerType identity;
+
+        private Storage(
+                Kind kind,
+                long size,
+                long align,
+                Scalar scalar,
+                PointerType pointer,
+                List<Member> members,
+                Storage element,
+                long count,
+                long stride,
+                PointerType identity) {
+            // Only the provider-private empty byte view may be zero-sized; every public
+            // storage layout, and so every allocation, stays positive-sized.
+            boolean emptyBytes =
+                    kind == Kind.ARRAY
+                            && identity == null
+                            && element == BYTE
+                            && count == 0
+                            && stride == 1
+                            && align == 1
+                            && size == 0;
+            if ((size <= 0 && !emptyBytes)
+                    || align <= 0
+                    || Long.bitCount(align) != 1
+                    || size % align != 0) {
+                throw new IllegalArgumentException("invalid storage size or alignment");
+            }
+            if (identity != null && (!identity.isPlain() || identity.voidPointee())) {
+                throw new IllegalArgumentException("invalid storage identity");
+            }
+            this.kind = kind;
+            this.size = size;
+            this.align = align;
+            this.scalar = scalar;
+            this.pointer = pointer;
+            this.members = List.copyOf(members);
+            Map<String, Member> names = new HashMap<>();
+            for (Member member : this.members) {
+                names.put(member.name(), member);
+            }
+            this.byName = Map.copyOf(names);
+            this.element = element;
+            this.count = count;
+            this.stride = stride;
+            this.identity = identity;
+        }
+
+        /** A scalar leaf whose supplied size and alignment equal the native carrier's. */
+        static Storage scalar(Scalar scalar, long size, long align, PointerType identity) {
+            if (!isNumericScalar(scalar)) {
+                throw new IllegalArgumentException("not a storage scalar");
+            }
+            MemoryLayout carrier = layout(scalar);
+            if (carrier.byteSize() != size || carrier.byteAlignment() != align) {
+                throw new IllegalArgumentException("scalar storage does not match its carrier");
+            }
+            return new Storage(
+                    Kind.SCALAR, size, align, scalar, null, List.of(), null, 0, 0, identity);
+        }
+
+        /** A pointer leaf of a plain or nullable typed pointer declaration. */
+        static Storage pointer(PointerType declared, PointerType identity) {
+            if (declared.borrowed()) {
+                throw new IllegalArgumentException("a borrowed pointer is not storage");
+            }
+            long bytes = ValueLayout.ADDRESS.byteSize();
+            return new Storage(
+                    Kind.POINTER, bytes, ValueLayout.ADDRESS.byteAlignment(), null, declared,
+                    List.of(), null, 0, 0, identity);
+        }
+
+        /** An aggregate with its supplied size and alignment and, initially, no member. */
+        static Storage aggregate(String kind, long size, long align, PointerType identity) {
+            Kind aggregate =
+                    switch (kind) {
+                        case "struct" -> Kind.STRUCT;
+                        case "union" -> Kind.UNION;
+                        default -> throw new IllegalArgumentException("not an aggregate kind");
+                    };
+            return new Storage(
+                    aggregate, size, align, null, null, List.of(), null, 0, 0, identity);
+        }
+
+        /** A fixed array with its supplied count and stride. */
+        static Storage array(Storage element, long count, long stride, PointerType identity) {
+            if (count <= 0 || stride < element.size || stride % element.align != 0) {
+                throw new IllegalArgumentException("invalid array stride or count");
+            }
+            long bytes = Math.multiplyExact(count, stride);
+            return new Storage(
+                    Kind.ARRAY, bytes, element.align, null, null, List.of(), element, count,
+                    stride, identity);
+        }
+
+        /**
+         * The provider-private octet view of a slice; it names no pointee layout. A zero length
+         * is the empty view, which has no admissible index.
+         */
+        static Storage bytes(long length) {
+            return new Storage(Kind.ARRAY, length, 1, null, null, List.of(), BYTE, length, 1, null);
+        }
+
+        /**
+         * This aggregate extended by one member at its supplied offset: the member must be
+         * aligned, lie inside the supplied size, carry a fresh name, and either follow every
+         * earlier struct member without overlap or, in a union, start at offset zero.
+         */
+        Storage withMember(String name, long offset, Storage child) {
+            if (kind != Kind.STRUCT && kind != Kind.UNION) {
+                throw new IllegalArgumentException("not an aggregate");
+            }
+            if (name == null
+                    || byName.containsKey(name)
+                    || offset < 0
+                    || offset % child.align != 0
+                    || child.align > align
+                    || Math.addExact(offset, child.size) > size) {
+                throw new IllegalArgumentException("invalid member placement");
+            }
+            if (kind == Kind.UNION && offset != 0) {
+                throw new IllegalArgumentException("a union member starts at offset zero");
+            }
+            if (kind == Kind.STRUCT && !members.isEmpty()) {
+                Member last = members.get(members.size() - 1);
+                if (offset < Math.addExact(last.offset(), last.layout().size)) {
+                    throw new IllegalArgumentException("struct members overlap");
+                }
+            }
+            List<Member> extended = new ArrayList<>(members);
+            extended.add(new Member(name, offset, child));
+            return new Storage(kind, size, align, null, null, extended, null, 0, 0, identity);
+        }
+
+        Kind kind() {
+            return kind;
+        }
+
+        long size() {
+            return size;
+        }
+
+        long align() {
+            return align;
+        }
+
+        Scalar scalar() {
+            return scalar;
+        }
+
+        PointerType pointer() {
+            return pointer;
+        }
+
+        Member member(String name) {
+            return byName.get(name);
+        }
+
+        Storage element() {
+            return element;
+        }
+
+        long count() {
+            return count;
+        }
+
+        long stride() {
+            return stride;
+        }
+
+        PointerType identity() {
+            return identity;
+        }
+
+        boolean isAggregate() {
+            return kind == Kind.STRUCT || kind == Kind.UNION || kind == Kind.ARRAY;
+        }
+
+        @Override
+        public String toString() {
+            return "ffi-storage(" + kind.name().toLowerCase(Locale.ROOT) + ")";
         }
     }
 

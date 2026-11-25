@@ -112,6 +112,40 @@ final class ProtosForeignPluginValueAdapter implements ProtosForeignValueAdapter
     }
 
     @Override
+    public boolean acceptsElementRead(
+            ProtosForeignProviderSession session, Object target, ProtosForeignArgument index)
+            throws Exception {
+        if (index.isCallback()) {
+            return false;
+        }
+        return operations().acceptsElementRead(plugin(session), target, publicArgument(index));
+    }
+
+    @Override
+    public boolean acceptsElementWrite(
+            ProtosForeignProviderSession session,
+            Object target,
+            ProtosForeignArgument index,
+            ProtosForeignArgument value)
+            throws Exception {
+        if (index.isCallback() || value.isCallback()) {
+            return false;
+        }
+        return operations().acceptsElementWrite(
+                plugin(session), target, publicArgument(index), publicArgument(value));
+    }
+
+    /** Forwarded to the exact plugin session that also acquires this session's modules. */
+    @Override
+    public Object acquireSessionContext(ProtosForeignProviderSession session) throws Exception {
+        ProtosForeignPluginSession pluginSession = plugin(session);
+        return Objects.requireNonNull(
+                ProtosExternalProviderPluginLoader.withLoader(
+                        plugin, pluginSession::acquireSessionContext),
+                "foreign session context");
+    }
+
+    @Override
     public boolean canFaithfullyReadMember(
             ProtosForeignProviderSession session, Object target, String name) throws Exception {
         return operations().canFaithfullyReadMember(plugin(session), target, name);

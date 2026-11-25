@@ -109,6 +109,10 @@ private Actor-local adaptation metadata follow `FFI.md`. Importing `std:ffi`
 loads no native library and creates no FFM session or native authority.
 Every Actor that imports `std:ffi` obtains its own ordinary Actor-local MODULE
 instance, whose declarations and associations need no native authority.
+Its native-memory operations acquire the RootActor's existing provider session
+lazily, on first use, through a private initializer facility that is not part
+of the MODULE's public object; they load no library and create no importable
+MODULE (`FFI.md`, Native memory).
 An `ffi:` acquisition of the production native FFM provider is different: it
 is admitted only in the Process's RootActor, and in any other Actor it fails
 with an ordinary Error before a provider session is opened (`FFI.md`,

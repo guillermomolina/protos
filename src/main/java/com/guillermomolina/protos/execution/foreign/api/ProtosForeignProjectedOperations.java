@@ -246,6 +246,7 @@ final class ProtosForeignProjectedOperations {
         Outbound outbound = new Outbound(handle, activation, prelude);
         try {
             ProtosForeignArgument index = outbound.export(supplied.get(0));
+            ProtosForeignOperation.requireAdmissibleElementRead(handle, index, prelude);
             return ProtosForeignOperation.enter(
                     handle,
                     "readElement",
@@ -272,6 +273,7 @@ final class ProtosForeignProjectedOperations {
         try {
             ProtosForeignArgument index = outbound.export(supplied.get(0));
             ProtosForeignArgument value = outbound.export(supplied.get(1));
+            ProtosForeignOperation.requireAdmissibleElementWrite(handle, index, value, prelude);
             ProtosForeignOperation.enter(
                     handle,
                     "writeElement",

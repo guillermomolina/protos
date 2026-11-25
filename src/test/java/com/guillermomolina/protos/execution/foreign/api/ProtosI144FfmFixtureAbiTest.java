@@ -61,6 +61,7 @@ class ProtosI144FfmFixtureAbiTest {
     static Path distributable;
     static Path library;
     static Path secondLibrary;
+    static Path decoy;
 
     @BeforeAll
     static void buildFixture() throws Exception {
@@ -111,6 +112,27 @@ class ProtosI144FfmFixtureAbiTest {
                         classes,
                         "com.guillermomolina.protos.ffm",
                         "com.guillermomolina.protos.ffm.FfmForeignProvider");
+
+        // A test-only provider whose MODULE facade exposes a counted assumeStaticExtent.
+        Path decoySources = Files.createDirectories(work.resolve("decoy-src").resolve("i174d"));
+        Path decoySource = decoySources.resolve("Decoy.java");
+        Files.writeString(decoySource, DECOY_SOURCE);
+        Path decoyClasses = Files.createDirectories(work.resolve("decoy-classes"));
+        ByteArrayOutputStream decoyDiagnostics = new ByteArrayOutputStream();
+        assertEquals(
+                0,
+                ToolProvider.getSystemJavaCompiler()
+                        .run(null, decoyDiagnostics, decoyDiagnostics, "--release", "25",
+                                "-proc:none", "-classpath",
+                                ProtosExternalForeignProviderTest.publicClassPath(work), "-d",
+                                decoyClasses.toString(), decoySource.toString()),
+                decoyDiagnostics::toString);
+        decoy =
+                ProtosExternalForeignProviderTest.jar(
+                        Files.createDirectories(work.resolve("decoy")),
+                        decoyClasses,
+                        "i174d",
+                        DECOY);
     }
 
     private static Path compileFixture(Path compiler, String name) throws Exception {
@@ -247,6 +269,387 @@ class ProtosI144FfmFixtureAbiTest {
                     () -> "ffm-pointers.protos failed with " + describe(fixture, outcome.error()));
         }
     }
+
+    /**
+     * Bounded native memory against the compiled C fixtures: allocation before any library
+     * import, typed regions, slices, views, extent assertions and revocation. Every semantic
+     * assertion is in the program; allocating before the import opens no second session.
+     */
+    @Test
+    void nativeMemoryProgramRunsAgainstCompiledC() throws Exception {
+        String source = withoutMarker("ffm-native-memory.protos", "FFM-NATIVE-MEMORY-PASS");
+        try (ProtosExternalForeignProviderTest.Fixture fixture =
+                distributable(
+                        Map.of(
+                                "library.first", library.toAbsolutePath().toString(),
+                                "library.second", secondLibrary.toAbsolutePath().toString()))) {
+            ProtosExecutionOutcome outcome = fixture.run(source);
+            assertEquals(
+                    ProtosExecutionOutcome.State.COMPLETED,
+                    outcome.state(),
+                    () -> "ffm-native-memory.protos failed with "
+                            + describe(fixture, outcome.error()));
+            assertEquals(1, fixture.context.foreignProviderCompartmentCountForTesting());
+            assertEquals(1, fixture.context.foreignProviderSessionCountForTesting());
+        }
+    }
+
+    /**
+     * Importing std:ffi stays inert, and the private native-context facility is neither part of
+     * the MODULE surface nor of the Prelude or the canonical Object prototype.
+     */
+    @Test
+    void stdFfiImportIsInertAndTheNativeContextFacilityIsPrivate() throws Exception {
+        try (ProtosExternalForeignProviderTest.Fixture fixture = distributable(Map.of())) {
+            ProtosObjectValue module = (ProtosObjectValue) fixture.eval("import(\"std:ffi\")");
+            assertEquals(0, fixture.context.foreignProviderCompartmentCountForTesting());
+            assertEquals(0, fixture.context.foreignProviderSessionCountForTesting());
+            java.util.Set<String> surface = module.localSlotsSnapshot().keySet();
+            for (String name :
+                    List.of("cType", "allocate", "release", "addressOf", "slice", "view",
+                            "assumeExtent")) {
+                assertTrue(surface.contains(name), name);
+            }
+            for (String name :
+                    List.of("_ffiNativeContextFacility", "_ffiObjectRecognitionFacility",
+                            "nativeContextFacility", "nativeContext", "providerContext",
+                            "storages", "physical", "cTypes", "acquire", "recognition")) {
+                assertTrue(!surface.contains(name), name);
+                assertTrue(fixture.prelude.bindings().readLocalSlot(name).isEmpty(), name);
+            }
+            ProtosObjectValue object =
+                    (ProtosObjectValue) fixture.prelude.bindings().readLocalSlot("Object")
+                            .orElseThrow();
+            assertTrue(!object.localSlotsSnapshot().containsKey("acquire"));
+            assertTrue(!object.localSlotsSnapshot().containsKey("_ffiNativeContextFacility"));
+            // Layout declarations and queries still need no native context.
+            assertEquals(
+                    "16",
+                    integer(fixture.eval("FFI: import(\"std:ffi\")\n"
+                            + "FFI.sizeOf(FFI.struct(Array(FFI.field(\"a\", FFI.i32),"
+                            + " FFI.field(\"b\", FFI.f64))))")));
+            // A rejected C type spelling is refused before any provider use.
+            assertOrdinary(fixture, fixture.run("import(\"std:ffi\").cType(\"float\")").error());
+            assertEquals(0, fixture.context.foreignProviderSessionCountForTesting());
+        }
+    }
+
+    /**
+     * The distributable provider configured without any library grant allocates: the session
+     * context loads no library, creates no library arena, and confers no library authority.
+     * Each allocation root enters the existing custody and leaves it once on release.
+     */
+    @Test
+    void allocationNeedsNoLibraryGrantAndPerformsNoLibraryLookup() throws Exception {
+        try (ProtosExternalForeignProviderTest.Fixture fixture = distributable(Map.of())) {
+            Object region =
+                    fixture.eval("FFI: import(\"std:ffi\")\n"
+                            + "FFI.allocate(FFI.struct(Array(FFI.field(\"a\", FFI.i64))))");
+            assertEquals(1, fixture.context.foreignProviderSessionCountForTesting());
+            Object session = pluginSession(region);
+            assertEquals(0, ((Map<?, ?>) field(session, "modules")).size());
+            assertEquals(null, field(session, "arena"));
+            assertEquals(1, diagnostic(session, "ownedCountForDiagnostics"));
+            assertEquals(
+                    "5",
+                    integer(fixture.eval("FFI: import(\"std:ffi\")\n"
+                            + "cell: FFI.allocate(FFI.i64)\ncell[0] = 5\ncell[0]")));
+            assertEquals(2, diagnostic(session, "ownedCountForDiagnostics"));
+            Object release = fixture.eval("import(\"std:ffi\").release");
+            assertSame(
+                    com.guillermomolina.protos.runtime.ProtosNullValue.INSTANCE,
+                    ProtosInvocation.invoke(release, List.of(region), fixture.root));
+            assertEquals(1, diagnostic(session, "ownedCountForDiagnostics"));
+            assertOrdinary(fixture, invoke(fixture, release, region));
+            assertEquals(1, diagnostic(session, "ownedCountForDiagnostics"));
+            assertEquals(0, ((Map<?, ?>) field(session, "modules")).size());
+            assertEquals(null, field(session, "arena"));
+            assertEquals(1, fixture.context.foreignProviderSessionCountForTesting());
+            // The session the allocation opened authorizes no library.
+            assertForeign(fixture, fixture.run("import(\"ffi:first\")"), "unauthorized-library");
+            assertEquals(0, diagnostic(session, "uncertainCountForDiagnostics"));
+        }
+    }
+
+    /** The native context and later authorized imports share the RootActor's one session. */
+    @Test
+    void nativeContextSharesTheSessionOfLaterAuthorizedImports() throws Exception {
+        try (ProtosExternalForeignProviderTest.Fixture fixture =
+                distributable(Map.of("library.first", library.toAbsolutePath().toString()))) {
+            Object region = fixture.eval("import(\"std:ffi\").allocate(import(\"std:ffi\").i32)");
+            ProtosForeignProviderSessionBinding binding = handle(region).session();
+            ProtosForeignModuleFacadeValue facade =
+                    (ProtosForeignModuleFacadeValue) fixture.eval("import(\"ffi:first\")");
+            assertSame(binding, facade.attachmentForRuntime().orElseThrow().session());
+            assertEquals(1, fixture.context.foreignProviderSessionCountForTesting());
+            assertEquals(1, ((Map<?, ?>) field(pluginSession(region), "modules")).size());
+        }
+    }
+
+    /**
+     * Session close releases pending allocation roots and C-owned resources once; held regions,
+     * views and pointers are then rejected before entry, and nothing reopens the session.
+     */
+    @Test
+    void sessionCloseReleasesAllocationRootsAndNeverReopens() throws Exception {
+        try (ProtosExternalForeignProviderTest.Fixture fixture =
+                distributable(Map.of("library.first", library.toAbsolutePath().toString()))) {
+            ProtosObjectValue state =
+                    (ProtosObjectValue)
+                            fixture.eval("FFI: import(\"std:ffi\")\n"
+                                    + "first: import(\"ffi:first\")\n"
+                                    + "Inner: FFI.struct(Array(FFI.field(\"a\", FFI.i32),"
+                                    + " FFI.field(\"b\", FFI.f64)))\n"
+                                    + "kept: FFI.allocate(Inner)\n"
+                                    + "dropped: FFI.allocate(Inner)\n"
+                                    + "kept[\"a\"] = 7\n"
+                                    + "counter: FFI.bind(first, \"ffi_test_counter_new\","
+                                    + " FFI.owned(FFI.opaque(first, \"ffi_test_counter\"),"
+                                    + " \"ffi_test_counter_free\", FFI.i32), Array(FFI.i64))(3)\n"
+                                    + "{\n kept: kept\n dropped: dropped\n"
+                                    + " bytes: FFI.slice(kept, 0, 4)\n"
+                                    + " pointer: FFI.addressOf(kept)\n counter: counter\n"
+                                    + " read: (region) => region[\"a\"]\n"
+                                    + " readByte: (bytes) => bytes[0]\n"
+                                    + " release: (value) => FFI.release(value)\n"
+                                    + " view: (pointer) => FFI.view(pointer, Inner)\n"
+                                    + " allocate: () => FFI.allocate(Inner)\n}");
+            Object kept = slot(state, "kept");
+            Object session = pluginSession(kept);
+            assertEquals(3, diagnostic(session, "ownedCountForDiagnostics"));
+            assertSame(
+                    com.guillermomolina.protos.runtime.ProtosNullValue.INSTANCE,
+                    ProtosInvocation.invoke(
+                            slot(state, "release"), List.of(slot(state, "dropped")), fixture.root));
+            assertEquals(2, diagnostic(session, "ownedCountForDiagnostics"));
+            assertOrdinary(
+                    fixture, invoke(fixture, slot(state, "release"), slot(state, "dropped")));
+            assertEquals(
+                    "7",
+                    integer(ProtosInvocation.invoke(
+                            slot(state, "read"), List.of(kept), fixture.root)));
+            int sessions = fixture.context.foreignProviderSessionCountForTesting();
+
+            ProtosForeignProviderSessionBinding binding = handle(kept).session();
+            binding.closeForRuntime();
+            binding.closeForRuntime();
+
+            assertEquals(0, diagnostic(session, "ownedCountForDiagnostics"));
+            assertEquals(0, diagnostic(session, "uncertainCountForDiagnostics"));
+            assertOrdinary(fixture, invoke(fixture, slot(state, "read"), kept));
+            assertOrdinary(fixture, invoke(fixture, slot(state, "readByte"), slot(state, "bytes")));
+            assertOrdinary(fixture, invoke(fixture, slot(state, "view"), slot(state, "pointer")));
+            assertOrdinary(fixture, invoke(fixture, slot(state, "release"), kept));
+            assertOrdinary(
+                    fixture, invoke(fixture, slot(state, "release"), slot(state, "counter")));
+            assertOrdinary(fixture, invoke(fixture, slot(state, "allocate")));
+            assertEquals(sessions, fixture.context.foreignProviderSessionCountForTesting());
+            assertTrue(!binding.isOpenForRuntime());
+        }
+    }
+
+    /**
+     * Native memory needs the RootActor: a secondary Actor's allocation or C type query is the
+     * ordinary pre-entry Error and opens no compartment or session, before and after the
+     * RootActor's own session exists.
+     */
+    @Test
+    void nativeMemoryRequiresTheRootActorBeforeAnySession() throws Exception {
+        try (ProtosExternalForeignProviderTest.Fixture fixture =
+                distributable(Map.of("library.first", library.toAbsolutePath().toString()))) {
+            ProtosActivation observer = fixture.newActorActivation();
+            List<String> refused =
+                    List.of(
+                            "FFI: import(\"std:ffi\")\nFFI.allocate(FFI.i32)",
+                            "FFI: import(\"std:ffi\")\nFFI.cType(\"int\")",
+                            "FFI: import(\"std:ffi\")\nFFI.view(null, FFI.i32)",
+                            "FFI: import(\"std:ffi\")\nFFI.addressOf(1)");
+            for (String program : refused) {
+                ProtosExecutionOutcome outcome = fixture.run(observer, program);
+                assertEquals(ProtosExecutionOutcome.State.FAILED, outcome.state(), program);
+                assertOrdinary(fixture, outcome.error());
+                assertEquals(0, fixture.context.foreignProviderCompartmentCountForTesting());
+                assertEquals(0, fixture.context.foreignProviderSessionCountForTesting());
+            }
+            assertEquals(Boolean.TRUE, fixture.eval(observer, PURE_DECLARATIONS));
+            fixture.eval("import(\"std:ffi\").allocate(import(\"std:ffi\").i32)");
+            assertEquals(1, fixture.context.foreignProviderSessionCountForTesting());
+            for (String program : refused) {
+                assertOrdinary(fixture, fixture.run(observer, program).error());
+            }
+            assertEquals(1, fixture.context.foreignProviderSessionCountForTesting());
+        }
+    }
+
+    /**
+     * Regions and pointers never cross to another provider session: a region of the
+     * distributable session is rejected by the fixture registration's session, and a pointer of
+     * the fixture session is rejected by native-memory operations, all before entry.
+     */
+    @Test
+    void wrongSessionRegionsAndPointersCannotCrossTheSpi() throws Exception {
+        try (ProtosExternalForeignProviderTest.Fixture fixture =
+                new ProtosExternalForeignProviderTest.Fixture(
+                        ProtosPolyglotRuntimeHost.openWithForeignProviders(
+                                ProtosForeignProviderConfiguration.trustedInProcess(
+                                                List.of(jar, distributable))
+                                        .withProviderOptions(PROVIDER_ID, authorized())
+                                        .withProviderOptions("protos-ffm", Map.of())),
+                        true)) {
+            Object region =
+                    fixture.eval("FFI: import(\"std:ffi\")\n"
+                            + "FFI.allocate(FFI.struct(Array(FFI.field(\"a\", FFI.i32))))");
+            Object isLive = fixture.eval(IMPORT + "ffi.isLive");
+            assertOrdinary(fixture, invoke(fixture, isLive, region));
+            Object foreignPointer =
+                    fixture.eval(IMPORT + "ffi.bind(\"ffi_test_pointer_octets\","
+                            + " ffi.param(ffi.signature(ffi.pointerType(false)), ffi.i32))(1)");
+            Object view = fixture.eval("FFI: import(\"std:ffi\")\n(p) => FFI.view(p, FFI.u8)");
+            assertOrdinary(fixture, invoke(fixture, view, foreignPointer));
+            Object assume =
+                    fixture.eval("FFI: import(\"std:ffi\")\n"
+                            + "(p) => FFI.assumeExtent(p, 1, p, \"read\")");
+            assertOrdinary(fixture, invoke(fixture, assume, foreignPointer));
+            assertEquals(2, fixture.context.foreignProviderSessionCountForTesting());
+        }
+    }
+
+    /**
+     * The library-static anchor admits only an actually attached FFM library facade of the
+     * pointer's own session. A foreign MODULE facade of another provider exposing a matching
+     * member, an ordinary object with a matching slot, a raw foreign reference and the FFM
+     * facade of another provider session are each refused with the ordinary Error before any
+     * member of theirs is read or executed, without advancing the borrow epoch or changing
+     * native bytes; the authorized FFM facade itself stays admitted.
+     */
+    @Test
+    void libraryAnchorRecognitionEntersNoForeignCode() throws Exception {
+        try (ProtosExternalForeignProviderTest.Fixture fixture =
+                new ProtosExternalForeignProviderTest.Fixture(
+                        ProtosPolyglotRuntimeHost.openWithForeignProviders(
+                                ProtosForeignProviderConfiguration.trustedInProcess(
+                                                List.of(jar, distributable, decoy))
+                                        .withProviderOptions(PROVIDER_ID, authorized())
+                                        .withProviderOptions(
+                                                "protos-ffm",
+                                                Map.of(
+                                                        "library.first",
+                                                        library.toAbsolutePath().toString()))),
+                        true)) {
+            Object outcome =
+                    fixture.eval("FFI: import(\"std:ffi\")\n"
+                            + "first: import(\"ffi:first\")\n"
+                            + "decoy: import(\"decoy:demo\")\n"
+                            + "other: import(\"ffi-test:ffi_test\")\n"
+                            + "Inner: FFI.struct(Array(FFI.field(\"a\", FFI.i32),"
+                            + " FFI.field(\"b\", FFI.f64)))\n"
+                            + "statics: FFI.bind(first, \"ffi_test_memory_static\","
+                            + " FFI.nullable(FFI.pointer(Inner)), Array(FFI.i32))\n"
+                            + "p: statics(1)\n"
+                            + "rawOther: statics(1)\n"
+                            + "lent: FFI.bind(first, \"ffi_test_pointer_octets\","
+                            + " FFI.borrowedPointer(FFI.pointer(FFI.u8)), Array(FFI.i32))(1)\n"
+                            + "refused: 0\n"
+                            + "imitation: {\n assumeStaticExtent: (a, b, c) => 1\n}\n"
+                            + "for(anchor in Array(decoy, imitation, rawOther, other)) {\n"
+                            + "    Error.handle(() => FFI.assumeExtent(p, 16, anchor, \"read\"),"
+                            + " (e) => {\n"
+                            + "        if(e.parent() === Error) { refused = refused + 1 }\n"
+                            + "        e\n"
+                            + "    })\n"
+                            + "}\n"
+                            + "(refused == 4) && (first.isLive(lent) == true)"
+                            + " && (FFI.view(FFI.assumeExtent(p, 16, first, \"read\"),"
+                            + " Inner)[\"a\"] == 7)"
+                            + " && (first.isLive(lent) == true)");
+            assertEquals(Boolean.TRUE, outcome);
+            assertEquals(0, ProtosExternalForeignProviderTest.counter(fixture, DECOY, "READS"));
+            assertEquals(
+                    0, ProtosExternalForeignProviderTest.counter(fixture, DECOY, "EXECUTES"));
+        }
+    }
+
+    private static final String DECOY = "i174d.Decoy";
+
+    /** A module whose faithful {@code assumeStaticExtent} member counts reads and executions. */
+    private static final String DECOY_SOURCE =
+            """
+            package i174d;
+
+            import com.guillermomolina.protos.spi.foreign.ProtosForeignArgumentValue;
+            import com.guillermomolina.protos.spi.foreign.ProtosForeignPluginEnvironment;
+            import com.guillermomolina.protos.spi.foreign.ProtosForeignPluginSession;
+            import com.guillermomolina.protos.spi.foreign.ProtosForeignProviderPlugin;
+            import com.guillermomolina.protos.spi.foreign.ProtosForeignValueClass;
+            import com.guillermomolina.protos.spi.foreign.ProtosForeignValueOperations;
+            import java.util.List;
+            import java.util.Set;
+            import java.util.concurrent.atomic.AtomicInteger;
+
+            public final class Decoy implements ProtosForeignProviderPlugin {
+                public static final AtomicInteger READS = new AtomicInteger();
+                public static final AtomicInteger EXECUTES = new AtomicInteger();
+
+                public static final class Demo {}
+
+                record Op() {}
+
+                public String providerId() { return "i174-decoy"; }
+
+                public String scheme() { return "decoy"; }
+
+                public String canonicalTarget(String target) { return target; }
+
+                public ProtosForeignPluginSession openSession(
+                        ProtosForeignPluginEnvironment environment) {
+                    return new ProtosForeignPluginSession() {
+                        public Object acquireModule(String target) { return new Demo(); }
+
+                        public void close() {}
+                    };
+                }
+
+                public ProtosForeignValueOperations valueOperations() {
+                    return new ProtosForeignValueOperations() {
+                        public String language() { return "i174-decoy"; }
+
+                        public boolean supportsLongIntegerArguments() { return true; }
+
+                        public ProtosForeignValueClass classify(
+                                ProtosForeignPluginSession session, Object handle) {
+                            if (handle instanceof Long number) {
+                                return ProtosForeignValueClass.integral(number);
+                            }
+                            if (handle instanceof Op) {
+                                return ProtosForeignValueClass.handle(null,
+                                        Set.of(ProtosForeignValueClass.Capability.EXECUTABLE));
+                            }
+                            return ProtosForeignValueClass.handle(handle,
+                                    Set.of(ProtosForeignValueClass.Capability.MEMBER_READ));
+                        }
+
+                        public boolean canFaithfullyReadMember(
+                                ProtosForeignPluginSession session, Object handle, String name) {
+                            return handle instanceof Demo && name.equals("assumeStaticExtent");
+                        }
+
+                        public Object readMember(
+                                ProtosForeignPluginSession session, Object handle, String name) {
+                            READS.incrementAndGet();
+                            return new Op();
+                        }
+
+                        public Object execute(
+                                ProtosForeignPluginSession session,
+                                Object handle,
+                                List<ProtosForeignArgumentValue> arguments) {
+                            EXECUTES.incrementAndGet();
+                            return 1L;
+                        }
+                    };
+                }
+            }
+            """;
 
     /** Borrowed and out pointer declarations are pure Protos metadata: no provider session. */
     @Test
@@ -798,6 +1201,34 @@ class ProtosI144FfmFixtureAbiTest {
     }
 
     // ---- helpers
+
+    /** The foreign handle of a raw provider value answered to Protos. */
+    private static ProtosForeignHandle handle(Object raw) {
+        return (ProtosForeignHandle)
+                ((com.guillermomolina.protos.runtime.ProtosRawForeignValue) raw).handleForRuntime();
+    }
+
+    /** The provider's own session object behind a raw value's exact session binding. */
+    private static Object pluginSession(Object raw) {
+        return ((ProtosForeignPluginProvider.Session) handle(raw).session().sessionForRuntime())
+                .plugin;
+    }
+
+    private static Object field(Object target, String name) throws Exception {
+        java.lang.reflect.Field field = target.getClass().getDeclaredField(name);
+        field.setAccessible(true);
+        return field.get(target);
+    }
+
+    private static Object diagnostic(Object target, String name) throws Exception {
+        java.lang.reflect.Method method = target.getClass().getDeclaredMethod(name);
+        method.setAccessible(true);
+        return method.invoke(target);
+    }
+
+    private static Object slot(ProtosObjectValue object, String name) {
+        return object.readLocalSlot(name).orElseThrow(() -> new AssertionError(name));
+    }
 
     private static ProtosExternalForeignProviderTest.Fixture distributable(
             Map<String, String> options) throws Exception {

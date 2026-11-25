@@ -44,12 +44,15 @@ import org.junit.jupiter.api.io.TempDir;
  */
 class ProtosI144ForeignExecutionAdmissionTest {
     private static final String ADMIT = "i144a.Admit";
+    private static final String INDEXED = "i144x.Indexed";
+    private static final String X = "cells: import(\"indexado:demo\")\n";
     private static final String M = "lib: import(\"admitido:demo\")\n";
     private static final String I = "I: import(\"std:interop\")\n";
 
     @TempDir static Path work;
     static Path admit;
     static Path legacy;
+    static Path indexed;
 
     @BeforeAll
     static void buildPluginJars() throws Exception {
@@ -60,6 +63,9 @@ class ProtosI144ForeignExecutionAdmissionTest {
         Path legacySource =
                 Files.createDirectories(sources.resolve("i144l")).resolve("Legacy.java");
         Files.writeString(legacySource, LEGACY_SOURCE);
+        Path indexedSource =
+                Files.createDirectories(sources.resolve("i144x")).resolve("Indexed.java");
+        Files.writeString(indexedSource, INDEXED_SOURCE);
         JavaCompiler javac = ToolProvider.getSystemJavaCompiler();
         List<String> arguments =
                 new ArrayList<>(
@@ -67,7 +73,7 @@ class ProtosI144ForeignExecutionAdmissionTest {
                                 "--release", "25", "-proc:none", "-classpath",
                                 ProtosExternalForeignProviderTest.publicClassPath(work), "-d",
                                 classes.toString(), admitSource.toString(),
-                                legacySource.toString()));
+                                legacySource.toString(), indexedSource.toString()));
         ByteArrayOutputStream diagnostics = new ByteArrayOutputStream();
         assertEquals(
                 0,
@@ -75,6 +81,7 @@ class ProtosI144ForeignExecutionAdmissionTest {
                 diagnostics::toString);
         admit = ProtosExternalForeignProviderTest.jar(work, classes, "i144a", ADMIT);
         legacy = ProtosExternalForeignProviderTest.jar(work, classes, "i144l", "i144l.Legacy");
+        indexed = ProtosExternalForeignProviderTest.jar(work, classes, "i144x", INDEXED);
     }
 
     @Test
@@ -198,7 +205,52 @@ class ProtosI144ForeignExecutionAdmissionTest {
         return failure.error();
     }
 
+    /**
+     * Indexed admission: {@code at} and {@code atPut} ask the provider's pure element hooks with
+     * the complete receiver, index and value before entry. A refusal is the ordinary Error and
+     * the physical read or write is never entered; an admitted write answers the exact value.
+     */
+    @Test
+    void indexedAdmissionRefusalPreventsPhysicalAccess() throws Exception {
+        try (ProtosExternalForeignProviderTest.Fixture fixture = fixture(indexed)) {
+            assertEquals("7", integer(fixture.eval(X + "cells[1] = 7\ncells[1]")));
+            assertEquals("9", integer(fixture.eval(X + "cells.atPut(2, 9)")));
+            int reads = indexedCounter(fixture, "READS");
+            int writes = indexedCounter(fixture, "WRITES");
+            for (String rejected :
+                    List.of("cells[4]", "cells[-1]", "cells[\"1\"]", "cells[1.0]", "cells[null]")) {
+                assertOrdinary(fixture, fixture.run(X + rejected).error());
+            }
+            for (String rejected :
+                    List.of("cells[4] = 1", "cells[1] = -1", "cells[1] = \"x\"",
+                            "cells[1] = null", "cells[\"1\"] = 1")) {
+                assertOrdinary(fixture, fixture.run(X + rejected).error());
+            }
+            assertEquals(reads, indexedCounter(fixture, "READS"));
+            assertEquals(writes, indexedCounter(fixture, "WRITES"));
+            assertEquals("7", integer(fixture.eval(X + "cells[1]")));
+            assertEquals(1, indexedCounter(fixture, "READS") - reads);
+            // An admitted access that fails after entry stays a ForeignError.
+            assertForeign(fixture, fixture.run(X + "cells[3]").error());
+        }
+    }
+
+    /** Admit-everything element hooks keep the entered out-of-range failure of a provider. */
+    @Test
+    void providersWithoutElementHooksKeepTheirIndexedBehavior() throws Exception {
+        try (ProtosExternalForeignProviderTest.Fixture fixture = fixture(indexed)) {
+            String legacyCells = "cells: import(\"indexado:legacy\")\n";
+            assertEquals("0", integer(fixture.eval(legacyCells + "cells[0]")));
+            assertForeign(fixture, fixture.run(legacyCells + "cells[4]").error());
+        }
+    }
+
     // ---- helpers
+
+    private static int indexedCounter(
+            ProtosExternalForeignProviderTest.Fixture fixture, String field) throws Exception {
+        return ProtosExternalForeignProviderTest.counter(fixture, INDEXED, field);
+    }
 
     private static ProtosExternalForeignProviderTest.Fixture fixture(Path jar) throws Exception {
         return new ProtosExternalForeignProviderTest.Fixture(
@@ -423,6 +475,117 @@ class ProtosI144ForeignExecutionAdmissionTest {
                                 Object handle,
                                 List<ProtosForeignArgumentValue> arguments) {
                             return ((BigInteger) arguments.get(0).value()).shiftLeft(1);
+                        }
+                    };
+                }
+            }
+            """;
+
+    /**
+     * Four Integer cells: {@code demo} validates every index and value in the element hooks
+     * (cell 3 is admitted but fails after entry); {@code legacy} admits everything, exactly
+     * like the default hooks of a provider that predates them.
+     */
+    private static final String INDEXED_SOURCE =
+            """
+            package i144x;
+
+            import com.guillermomolina.protos.spi.foreign.ProtosForeignArgumentValue;
+            import com.guillermomolina.protos.spi.foreign.ProtosForeignPluginEnvironment;
+            import com.guillermomolina.protos.spi.foreign.ProtosForeignPluginSession;
+            import com.guillermomolina.protos.spi.foreign.ProtosForeignProviderPlugin;
+            import com.guillermomolina.protos.spi.foreign.ProtosForeignValueClass;
+            import com.guillermomolina.protos.spi.foreign.ProtosForeignValueOperations;
+            import java.util.Set;
+            import java.util.concurrent.atomic.AtomicInteger;
+
+            public final class Indexed implements ProtosForeignProviderPlugin {
+                public static final AtomicInteger READS = new AtomicInteger();
+                public static final AtomicInteger WRITES = new AtomicInteger();
+
+                public static final class Cells {
+                    final long[] values = new long[4];
+                    final boolean checked;
+
+                    Cells(boolean checked) { this.checked = checked; }
+                }
+
+                public String providerId() { return "i144-indexed"; }
+
+                public String scheme() { return "indexado"; }
+
+                public String canonicalTarget(String target) { return target; }
+
+                public ProtosForeignPluginSession openSession(
+                        ProtosForeignPluginEnvironment environment) {
+                    return new ProtosForeignPluginSession() {
+                        public Object acquireModule(String target) {
+                            return new Cells(target.equals("demo"));
+                        }
+
+                        public void close() {}
+                    };
+                }
+
+                static boolean inRange(ProtosForeignArgumentValue index) {
+                    return index.value() instanceof Long position
+                            && position >= 0 && position < 4;
+                }
+
+                public ProtosForeignValueOperations valueOperations() {
+                    return new ProtosForeignValueOperations() {
+                        public String language() { return "i144-indexed"; }
+
+                        public boolean supportsLongIntegerArguments() { return true; }
+
+                        public ProtosForeignValueClass classify(
+                                ProtosForeignPluginSession session, Object handle) {
+                            if (handle instanceof Long number) {
+                                return ProtosForeignValueClass.integral(number);
+                            }
+                            return ProtosForeignValueClass.handle(handle,
+                                    Set.of(ProtosForeignValueClass.Capability.INDEXED_READ,
+                                            ProtosForeignValueClass.Capability.INDEXED_WRITE));
+                        }
+
+                        public boolean acceptsElementRead(
+                                ProtosForeignPluginSession session,
+                                Object handle,
+                                ProtosForeignArgumentValue index) {
+                            return !((Cells) handle).checked || inRange(index);
+                        }
+
+                        public boolean acceptsElementWrite(
+                                ProtosForeignPluginSession session,
+                                Object handle,
+                                ProtosForeignArgumentValue index,
+                                ProtosForeignArgumentValue value) {
+                            return !((Cells) handle).checked
+                                    || (inRange(index)
+                                            && value.value() instanceof Long number
+                                            && number >= 0);
+                        }
+
+                        public Object readElement(
+                                ProtosForeignPluginSession session,
+                                Object handle,
+                                ProtosForeignArgumentValue index) {
+                            READS.incrementAndGet();
+                            long position = (Long) index.value();
+                            if (((Cells) handle).checked && position == 3) {
+                                throw new IllegalStateException("entered failure");
+                            }
+                            return ((Cells) handle).values[Math.toIntExact(position)];
+                        }
+
+                        public void writeElement(
+                                ProtosForeignPluginSession session,
+                                Object handle,
+                                ProtosForeignArgumentValue index,
+                                ProtosForeignArgumentValue value) {
+                            WRITES.incrementAndGet();
+                            ((Cells) handle).values[Math.toIntExact((Long) index.value())] =
+                                    (Long) value.value();
                         }
                     };
                 }

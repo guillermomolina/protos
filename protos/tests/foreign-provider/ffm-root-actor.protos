@@ -13,7 +13,8 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-// RootActor-only native FFM authority with a real secondary Actor. The host
+// RootActor-only native FFM authority, including native memory, with a real
+// secondary Actor. The host
 // authorizes first=<absolute libffi_test.so> (and second, unused here).
 // Run by dist/test_external_foreign_providers.py and dist/validate_native.py.
 
@@ -25,6 +26,21 @@ worker: Actor.spawn("./ffm-root-actor-worker.protos", "worker")
 (() => {
     Assertions.require(worker.request("layoutSize").value() == 16)
     Assertions.require(worker.request("nativeImportRefused").value() == true)
+    Assertions.require(worker.request("nativeMemoryRefused").value() == true)
+
+    // Native memory of the RootActor never crosses an Actor boundary.
+    Inner: FFI.struct(Array(FFI.field("a", FFI.i32), FFI.field("b", FFI.f64)))
+    region: FFI.allocate(Inner)
+    region["a"] = 12
+    for(value in Array(region, FFI.slice(region, 0, 4), FFI.addressOf(region),
+            FFI.view(FFI.addressOf(region), Inner))) {
+        Assertions.signals(NonTransferableValue, () => worker.request("echo", value))
+    }
+    // Copied scalar values read from native memory remain transferable.
+    Assertions.require(worker.request("echo", region["a"]).value() == 12)
+    Assertions.require(region["a"] == 12)
+    Assertions.require(FFI.release(region) === null)
+    Assertions.require(worker.request("nativeMemoryRefused").value() == true)
 
     first: import("ffi:first")
     identity: FFI.bind(first, "ffi_test_i32_identity", FFI.i32, Array(FFI.i32))

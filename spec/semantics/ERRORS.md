@@ -502,7 +502,11 @@ Acquisition of the production native FFM provider is admitted only in the
 Process's RootActor (`FFI.md`, RootActor-only native authority). In any other
 Actor, an `ffi:` import, including the one performed by a `std:sqlite` open,
 is refused with an ordinary Error; no native provider operation is entered, so
-the refusal is not a `ForeignError`. In the RootActor, a host library
+the refusal is not a `ForeignError`. The same ordinary refusal applies to the
+native-memory operations of `FFI.md` (Native memory) outside the RootActor.
+Their argument, liveness, bounds and permission rejections are ordinary
+Errors before entry; only failures of admitted native-memory operations are
+`ForeignError`. In the RootActor, a host library
 authorization failure keeps its existing `ForeignError` behavior (for example
 the `unauthorized-library` category). This restriction introduces no new Error
 prototype.

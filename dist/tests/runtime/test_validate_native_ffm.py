@@ -110,7 +110,8 @@ class FixedWidthFixtureTest(unittest.TestCase):
                 ("ffm-scalar-layout-abi.protos",
                  validate_native.FFM_SCALAR_LAYOUT_ABI_MARKER),
                 ("ffm-root-actor.protos", validate_native.FFM_ROOT_ACTOR_MARKER),
-                ("ffm-pointers.protos", validate_native.FFM_POINTERS_MARKER)):
+                ("ffm-pointers.protos", validate_native.FFM_POINTERS_MARKER),
+                ("ffm-native-memory.protos", validate_native.FFM_NATIVE_MEMORY_MARKER)):
             text = (validate_native.FFM_CASES / program).read_text(encoding="utf-8")
             self.assertIn('print("' + marker + '")', text)
         self.assertNotIn("ffi:sqlite3", validate_native.FFM_UNREGISTERED_SCALAR)
@@ -245,6 +246,47 @@ class PointerProgramTest(unittest.TestCase):
         self.assertEqual(
             "FAIL",
             self.verdict(0, self.MARKER + "\n", "MissingForeignRegistrationError: P(I)"))
+
+
+class NativeMemoryProgramTest(unittest.TestCase):
+    MARKER = validate_native.FFM_NATIVE_MEMORY_MARKER
+
+    def verdict(self, returncode: int, stdout: str, stderr: str) -> str:
+        return classify_ffm_case(returncode, stdout, stderr, expected_status=0,
+                                 expected_stdout=self.MARKER)[0]
+
+    def test_program_allocates_before_importing_a_library(self) -> None:
+        text = (validate_native.FFM_CASES / "ffm-native-memory.protos").read_text(
+            encoding="utf-8")
+        allocation = text.index("FFI.allocate(")
+        self.assertLess(allocation, text.index('import("ffi:first")'))
+        self.assertIn('print("' + self.MARKER + '")', text)
+        self.assertEqual(1, text.count('print("' + self.MARKER + '")'))
+
+    def test_success_needs_status_and_marker(self) -> None:
+        self.assertEqual("PASS", self.verdict(0, self.MARKER + "\n", ""))
+
+    def test_missing_marker_fails(self) -> None:
+        self.assertEqual("FAIL", self.verdict(0, "", ""))
+
+    def test_incorrect_marker_fails(self) -> None:
+        self.assertEqual("FAIL", self.verdict(0, "FFM-NATIVE-MEMORY-FAIL\n", ""))
+        self.assertEqual("FAIL", self.verdict(0, validate_native.FFM_POINTERS_MARKER + "\n", ""))
+
+    def test_unsuccessful_exit_fails(self) -> None:
+        self.assertEqual("FAIL", self.verdict(1, self.MARKER + "\n", ""))
+
+    def test_incomplete_run_fails(self) -> None:
+        self.assertEqual("FAIL", self.verdict(1, "", "CheckFailure"))
+        self.assertEqual(
+            "FAIL",
+            self.verdict(0, validate_native.FFM_FOREIGN_ENTRY_MARKER + "\n" + self.MARKER + "\n",
+                         ""))
+
+    def test_missing_registration_error_fails(self) -> None:
+        self.assertEqual(
+            "FAIL",
+            self.verdict(0, self.MARKER + "\n", "MissingForeignRegistrationError: L(P,I)"))
 
 
 class DistributionContentTest(unittest.TestCase):

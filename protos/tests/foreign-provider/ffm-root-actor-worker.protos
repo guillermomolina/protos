@@ -34,6 +34,23 @@ worker: () => {
             if(refused === null) { ^false }
             refused.parent() === Error
         }
+        // Native memory needs the RootActor's provider session: allocation and
+        // C type queries are ordinary pre-entry Errors here, like imports.
+        nativeMemoryRefused: () => {
+            FFI: import("std:ffi")
+            refusals: 0
+            for(body in Array(() => FFI.allocate(FFI.i32), () => FFI.cType("int"))) {
+                refused: null
+                Error.handle(body, (error) => {
+                    refused = error
+                    error
+                })
+                if((refused === null) == false) {
+                    if(refused.parent() === Error) { refusals = refusals + 1 }
+                }
+            }
+            refusals == 2
+        }
         echo: (value) => value
     }
     behavior
