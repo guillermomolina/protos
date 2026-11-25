@@ -62,7 +62,7 @@ public announcements as follows:
    limit.
 6. Include the exact GitHub Release URL in both social publications.
 7. Include links to the canonical GitHub Discussion or the official website
-   (`https://protos.guillermomolina.com/`) when useful.
+   (`https://protoslang.com/`) when useful.
 8. Keep public statements factual, proportionate, and limited to published
    evidence.
 9. Preserve experimental and prerelease qualifications where applicable.
