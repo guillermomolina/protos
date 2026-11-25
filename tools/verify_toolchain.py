@@ -496,8 +496,7 @@ def workflow_job_test_command(path, job_id):
     text = workflow_job_text(path, job_id)
     expected = [
         ("Check repository", "make check"),
-        ("Run Java tests", "make test-java"),
-        ("Run Protos tests", "make test-protos"),
+        ("Run repository tests", "make test"),
         ("Run Native Image tests", "make test-native"),
     ]
     # Each phase must be a direct command in a dedicated, ordered step.
@@ -626,7 +625,7 @@ def audit_bindings(root, contract):
     ))
     rows.append((
         "ci.tests.command",
-        "make check -> make test-java -> make test-protos -> make test-native",
+        "make check -> make test -> make test-native",
         workflow_job_test_command(ci_workflow, "test"),
     ))
     rows.append((

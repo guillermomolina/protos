@@ -12,7 +12,7 @@
  *
  * Software distributed under the License is distributed on an "AS IS" basis,
  * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
- * the specific language governing rights and limitations under the LICENSE.
+ * the specific language governing rights and limitations under the License.
  */
 package com.guillermomolina.protos.execution;
 
@@ -81,12 +81,11 @@ final class ProtosTestToolJClosureReconciliationTest {
             return;
         }
 
-        // DIST017: CI exposes full validation as four ordered Makefile-owned phases.
-        // The local Java + Protos aggregate remains `make test`.
+        // GITHUB026: CI delegates Java + Protos orchestration to canonical make test.
+        // Compilerability and Native Image validation retain their separate gates.
         String[] requiredStages = {
             "- name: Check repository\n        run: make check",
-            "- name: Run Java tests\n        run: make test-java",
-            "- name: Run Protos tests\n        run: make test-protos",
+            "- name: Run repository tests\n        run: make test",
             "- name: Run Native Image tests\n        run: make test-native"
         };
         int previousStage = -1;
@@ -95,15 +94,22 @@ final class ProtosTestToolJClosureReconciliationTest {
             assertTrue(stageAt > previousStage, "missing or out-of-order CI phase: " + stage);
             previousStage = stageAt;
         }
+        assertEquals(
+                1,
+                occurrences(workflow, "\n        run: make test\n"),
+                "CI must execute the canonical Java + Protos aggregate exactly once");
         assertFalse(
-                workflow.contains("- name: Run repository tests"),
-                "CI must not duplicate the four explicit phases with make test");
+                workflow.contains("\n        run: make test-java"),
+                "CI must not duplicate the canonical Java test lane");
+        assertFalse(
+                workflow.contains("\n        run: make test-protos"),
+                "CI must not duplicate the canonical Protos test lane");
         assertTrue(
                 workflow.contains("JAVA_TEST_JOBS: \"4\""),
-                "CI Java concurrency must match its four-CPU runner");
+                "CI must retain the bounded four-worker Java lane");
         assertTrue(
                 workflow.contains("PROTOS_TEST_JOBS: \"4\""),
-                "CI Protos concurrency must match its four-CPU runner");
+                "CI must retain the bounded four-worker Protos lane");
         assertFalse(
                 workflow.contains("make test-budget"),
                 "active CI must not impose a fixed wall-clock budget");

@@ -8,6 +8,11 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.222-SNAPSHOT
+
+- **GITHUB026.** Route repository CI through canonical `make test`, retaining the separate compilerability and Native Image validation gates.
+- Align toolchain verification and CI reconciliation tests with the canonical aggregate, reject duplicate Java/Protos lane execution, and clarify the bounded four-worker configuration.
+
 ## 0.4.221-SNAPSHOT
 
 - **BUG040.** Preserve Map-entry and Object-item comments and significant blank lines through the shared sequence-boundary renderer.

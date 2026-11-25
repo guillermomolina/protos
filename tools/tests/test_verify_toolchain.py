@@ -77,9 +77,7 @@ def ci_job(name, image, command, cache_action="actions/cache@v6", workers="4"):
             ${{ runner.os }}-maven-
       - name: Check repository
         run: make check
-      - name: Run Java tests
-        run: make test-java
-      - name: Run Protos tests
+      - name: Run repository tests
         run: %s
       - name: Run Native Image tests
         run: make test-native
@@ -183,7 +181,7 @@ def make_fixture(
         )
 
     test_ci_image = STALE_CI_IMAGE if development_drift else CI_IMAGE
-    test_command = "make test" if ci_command_drift else "make test-protos"
+    test_command = "make test-protos" if ci_command_drift else "make test"
     test_workers = "6" if ci_workers_drift else "4"
     test_cache_action = (
         "actions/cache@v5"

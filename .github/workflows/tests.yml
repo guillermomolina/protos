@@ -20,7 +20,7 @@ jobs:
     timeout-minutes: 120
     runs-on: ubuntu-latest
 
-    # Four workers for the four-vCPU GitHub runner; local Makefile defaults are eight.
+    # Bound both test lanes to four workers; report actual runner resources below.
     env:
       JAVA_TEST_JOBS: "4"
       PROTOS_TEST_JOBS: "4"
@@ -64,11 +64,8 @@ jobs:
       - name: Check repository
         run: make check
 
-      - name: Run Java tests
-        run: make test-java
-
-      - name: Run Protos tests
-        run: make test-protos
+      - name: Run repository tests
+        run: make test
 
       - name: Run Native Image tests
         run: make test-native
