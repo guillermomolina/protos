@@ -6,6 +6,12 @@
   <a href="https://github.com/guillermomolina/protos/actions/workflows/tests.yml?query=branch%3Amain">
     <img src="https://github.com/guillermomolina/protos/actions/workflows/tests.yml/badge.svg?branch=main" alt="CI status" title="CI status on main">
   </a>
+  <a href="https://www.reddit.com/r/Protos/">
+    <img src="https://img.shields.io/badge/Reddit-r%2FProtos-FF4500?logo=reddit&amp;logoColor=white" alt="Reddit: r/Protos" title="Join the Protos community on Reddit">
+  </a>
+  <a href="https://x.com/ProtosLang">
+    <img src="https://img.shields.io/badge/X-%40ProtosLang-000000?logo=x&amp;logoColor=white" alt="X: @ProtosLang" title="Follow Protos on X">
+  </a>
 </p>
 
 > ### 🚀 Install Protos on Linux
@@ -611,6 +617,10 @@ expectations, and the project's AI-assisted development policy.
     questions, ideas, design exploration, introductions, and show-and-tell.
 -   [GitHub Issues](https://github.com/guillermomolina/protos/issues) —
     reproducible bugs and scoped actionable work.
+-   [Reddit — r/Protos](https://www.reddit.com/r/Protos/) —
+    community discussions, questions, examples, experiments, and announcements.
+-   [X — @ProtosLang](https://x.com/ProtosLang) —
+    release announcements, project updates, and technical highlights.
 -   [Roadmap](ROADMAP.md) — a short, human-facing `Now / Next / Later` view of
     project direction.
 -   [Support](SUPPORT.md) — where to ask for help and what information is useful.

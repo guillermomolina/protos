@@ -25,6 +25,7 @@ RUN microdnf install -y \
         procps \
         time \
         sudo \
+        python3 \
     && microdnf clean all
 
 RUN microdnf install -y \

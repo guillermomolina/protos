@@ -69,3 +69,29 @@ When editing existing documentation:
 - Before reporting completion, run `git diff --check` and review `git diff` for accidental whitespace, missing spaces, line-break changes, or unrelated formatting changes.
 - Treat existing Markdown hard line breaks (two trailing spaces) as intentional unless the task explicitly requests formatting cleanup.
 - Do not perform unrelated formatting cleanup in a semantic specification revision.
+
+## Public project news and social announcements
+
+Agents preparing a significant public project announcement MUST provide:
+
+- an English canonical announcement for GitHub Discussions — Announcements
+  (`https://github.com/guillermomolina/protos/discussions/categories/announcements`);
+- an English Reddit post for `r/Protos` (`https://www.reddit.com/r/Protos/`); and
+- a concise English X post for `@ProtosLang` (`https://x.com/ProtosLang`).
+
+Content rules:
+
+- Reddit receives a substantive, self-contained explanation of the milestone, its significance, relevant technical details, and links to canonical evidence.
+- Use the `Announcement` flair for project announcements, `Release` for releases, and an appropriate existing technical flair when preparing other community posts.
+- X receives a short, understandable summary and a canonical source link.
+- Use hashtags sparingly and only when relevant.
+- Do not publish internal implementation checkpoints automatically.
+- Significant completed features, releases, verified performance milestones, major tooling improvements, and project announcements are suitable news.
+- Published technical claims must match the actual published implementation and evidence.
+- GitHub Discussions — Announcements remains the canonical news authority.
+- Do not maintain duplicate versioned Markdown news archives.
+- The website consumes canonical announcements dynamically.
+- Keep social publication human-executed unless explicitly authorized otherwise.
+- Record actual publication URLs when available and identify pending publications.
+
+For release announcements, follow `AGENTS.work/RELEASE.md` (section "Public release announcements") instead of duplicating its release-specific contract here.
