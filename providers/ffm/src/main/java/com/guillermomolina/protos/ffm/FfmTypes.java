@@ -54,7 +54,7 @@ final class FfmTypes {
     /** One ABI descriptor. Implementations are immutable and never expose an address. */
     sealed interface Type
             permits Scalar, OpaqueType, OwnedType, BorrowedType, PointerType, OutType, InputType,
-                    InputLength, CopyDestructor, Remainder {
+                    InputLength, CopyDestructor, Remainder, Storage {
         /** The descriptor's spelling, safe for diagnostics; never contains an address. */
         String spelling();
     }
@@ -259,8 +259,14 @@ final class FfmTypes {
      * <p>{@link #identity()} is the canonical plain {@link PointerType} whose pointee is this
      * layout, or null for the provider-private byte view of a slice. Metadata is composed one
      * member at a time ({@link #withMember}); each step answers a fresh immutable instance.
+     *
+     * <p>A complete struct or union instance is also a call descriptor ({@link #isCallGroup}):
+     * it passes and returns by value with the physical group layout projected from these same
+     * values ({@link #layout}). Identity stays the Java object itself; two separately declared
+     * layouts with equal members are distinct descriptors even when their physical layouts, and
+     * so their native registrations, coincide.
      */
-    static final class Storage {
+    static final class Storage implements Type {
         enum Kind {
             SCALAR,
             POINTER,
@@ -445,6 +451,11 @@ final class FfmTypes {
             return byName.get(name);
         }
 
+        /** The members in their supplied order; empty for leaves and arrays. */
+        List<Member> members() {
+            return members;
+        }
+
         Storage element() {
             return element;
         }
@@ -466,8 +477,13 @@ final class FfmTypes {
         }
 
         @Override
+        public String spelling() {
+            return kind.name().toLowerCase(Locale.ROOT);
+        }
+
+        @Override
         public String toString() {
-            return "ffi-storage(" + kind.name().toLowerCase(Locale.ROOT) + ")";
+            return "ffi-storage(" + spelling() + ")";
         }
     }
 
@@ -586,7 +602,23 @@ final class FfmTypes {
                 || type instanceof OwnedType
                 || type == BorrowedType.INSTANCE
                 || type instanceof PointerType
-                || type == Remainder.INSTANCE;
+                || type == Remainder.INSTANCE
+                || isCallGroup(type);
+    }
+
+    /**
+     * Whether {@code type} is a complete public struct or union: a by-value argument or result
+     * and an {@code out} target. A fixed array, a scalar or pointer leaf, the private byte view
+     * and an aggregate still without members are not. Pure: no session, allocation or C call.
+     */
+    static boolean isCallGroup(Type type) {
+        return type instanceof Storage storage
+                && (storage.kind() == Storage.Kind.STRUCT
+                        || storage.kind() == Storage.Kind.UNION)
+                && storage.identity() != null
+                && !storage.members().isEmpty()
+                && storage.size() > 0
+                && storage.align() > 0;
     }
 
     static boolean isReturnType(Type type) {
@@ -602,7 +634,8 @@ final class FfmTypes {
                 || type instanceof OutType
                 || type instanceof InputType
                 || type == InputLength.INSTANCE
-                || type == CopyDestructor.INSTANCE;
+                || type == CopyDestructor.INSTANCE
+                || isCallGroup(type);
     }
 
     /** Whether {@code type} is a fixed-width integer or floating-point scalar. */
@@ -646,7 +679,68 @@ final class FfmTypes {
             case InputLength ignored -> ValueLayout.JAVA_INT;
             case CopyDestructor ignored -> ValueLayout.ADDRESS;
             case Remainder ignored -> ValueLayout.ADDRESS;
+            case Storage storage -> physicalLayout(storage);
         };
+    }
+
+    /**
+     * The physical layout of existing storage metadata, built with the standard layout
+     * factories: a struct reproduces the supplied member offsets and total size with explicit
+     * padding, a union overlaps its members at offset zero, and a fixed array is a sequence of
+     * its element. Nothing is computed here: every offset, size and alignment comes from the metadata, and a
+     * projection whose size or alignment differs from it is rejected. Layouts are unnamed, so
+     * public field names never reach a native registration.
+     */
+    private static MemoryLayout physicalLayout(Storage storage) {
+        MemoryLayout projected =
+                switch (storage.kind()) {
+                    case SCALAR -> layout(storage.scalar());
+                    // The bare address carrier: no target layout, so no pointee extent.
+                    case POINTER -> ValueLayout.ADDRESS;
+                    case ARRAY -> {
+                        MemoryLayout element = physicalLayout(storage.element());
+                        if (element.byteSize() != storage.stride()) {
+                            throw new IllegalArgumentException("array stride is not its size");
+                        }
+                        yield MemoryLayout.sequenceLayout(storage.count(), element);
+                    }
+                    case STRUCT -> {
+                        List<MemoryLayout> parts = new ArrayList<>();
+                        long cursor = 0;
+                        for (Storage.Member member : storage.members()) {
+                            long gap = member.offset() - cursor;
+                            if (gap > 0) {
+                                parts.add(MemoryLayout.paddingLayout(gap));
+                            }
+                            MemoryLayout child = physicalLayout(member.layout());
+                            parts.add(child);
+                            cursor = Math.addExact(member.offset(), child.byteSize());
+                        }
+                        if (storage.size() > cursor) {
+                            parts.add(MemoryLayout.paddingLayout(storage.size() - cursor));
+                        }
+                        yield MemoryLayout.structLayout(parts.toArray(MemoryLayout[]::new));
+                    }
+                    case UNION -> {
+                        List<MemoryLayout> parts = new ArrayList<>();
+                        long widest = 0;
+                        for (Storage.Member member : storage.members()) {
+                            MemoryLayout child = physicalLayout(member.layout());
+                            parts.add(child);
+                            widest = Math.max(widest, child.byteSize());
+                        }
+                        // Union padding overlaps the members: it spans the whole rounded size.
+                        if (widest < storage.size()) {
+                            parts.add(MemoryLayout.paddingLayout(storage.size()));
+                        }
+                        yield MemoryLayout.unionLayout(parts.toArray(MemoryLayout[]::new));
+                    }
+                };
+        if (projected.byteSize() != storage.size()
+                || projected.byteAlignment() != storage.align()) {
+            throw new IllegalArgumentException("the physical layout differs from its storage");
+        }
+        return projected;
     }
 
     static String requireIdentifier(String name) {

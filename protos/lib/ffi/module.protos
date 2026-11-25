@@ -22,6 +22,9 @@
 //! extent and are never converted to or from Integer addresses.
 //! Native regions (allocate, slice, view) are bounded typed native memory of
 //! the RootActor's provider session; allocation acquires no C library.
+//! Struct and union layouts pass and return by value: an argument is a live
+//! region of the exact layout, copied for the call; a result, or an out of
+//! that layout, is a fresh independently owned allocation root.
 
 Interop: import("std:interop")
 Arrays: import("std:collections/array")
@@ -161,23 +164,26 @@ storage: (value) => {
     isStorageLayout(value).ifFalse(() => fail())
     descriptors.at(value)
 }
-// Binding positions. R1 declarations, scalars and typed pointers are bindable;
-// aggregates and fields remain declarative (no aggregate-by-value calls).
+// Binding positions. R1 declarations, scalars, typed pointers and struct or
+// union layouts (by value) are bindable. Fixed arrays are storage only, never
+// a direct parameter, return or out target; fields remain declarative.
 isR1OrScalar: (record) => (record.layoutKind === null) || (record.layoutKind == "scalar")
 isTypedPointer: (record) => (record.layoutKind == "pointer") || (record.layoutKind == "nullablePointer")
 isPointerResult: (record) => isTypedPointer(record) || (record.layoutKind == "borrowedPointer")
+// Exactly a registered struct or union layout: a by-value group.
+isGroup: (record) => (record.layoutKind == "struct") || (record.layoutKind == "union")
 isReturnDeclaration: (record) => {
-    if(isPointerResult(record)) { ^true }
+    if(isPointerResult(record) || isGroup(record)) { ^true }
     if(isR1OrScalar(record) == false) { ^false }
     ((record.kind == "out") || (record.kind == "utf8z")) == false
 }
 isParameterDeclaration: (record) => {
-    if(isTypedPointer(record)) { ^true }
+    if(isTypedPointer(record) || isGroup(record)) { ^true }
     if(isR1OrScalar(record) == false) { ^false }
     ((record.kind == "void") || (record.kind == "owned")) == false
 }
 isOutTarget: (record) => {
-    if(isPointerResult(record)) { ^true }
+    if(isPointerResult(record) || isGroup(record)) { ^true }
     if(isR1OrScalar(record) == false) { ^false }
     ((record.kind == "void") || (record.kind == "utf8z") || (record.kind == "out")) == false
 }
@@ -429,6 +435,11 @@ nativeType: (library, descriptor) => {
     if(record.kind == "borrowedPointer") {
         ^operation(library, "borrowedPointerType", nativeType(library, record.target))
     }
+    // A by-value group is its session's physical storage metadata, so an out of
+    // a group composes through the out case above.
+    if(isGroup(record)) {
+        ^physical(descriptor)
+    }
     Interop.readMember(library, record.kind)
 }
 
@@ -501,10 +512,16 @@ this.out: (descriptor, ...extra) => {
 
 // Dispatch metadata only. Provider custody predates publication, including
 // results never published because a later native-result conversion fails.
+// An owned C handle is released through its library's destructor; a group
+// result is an allocation root released by the session context, exactly as
+// one answered by FFI.allocate, and never by a C destructor.
 publish: (library, descriptor, value) => {
     record: metadata(descriptor)
     if((record.kind == "owned") && (value !== null)) {
         owners[value] = library
+    }
+    if(isGroup(record)) {
+        owners[value] = nativeContext
     }
     value
 }
@@ -565,6 +582,9 @@ declareBinding: (library, symbol, returnDescriptor, argumentDescriptors, preserv
 /// Bind a trusted ABI declaration and answer a fresh ordinary Closure.
 /// Parameters are snapshotted. Results with outs are fresh ordinary Arrays
 /// ordered [nativeReturn, out0, ...]; a C error status remains ordinary data.
+/// A struct or union parameter takes a live region of that exact layout,
+/// copied for the call; a struct or union return or out answers a fresh
+/// independently owned region, released with FFI.release.
 this.bind: (library, symbol, returnDescriptor, argumentDescriptors, ...extra) => {
     requireArity(extra)
     declareBinding(library, symbol, returnDescriptor, argumentDescriptors, false)

@@ -1,0 +1,79 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// Native Image counterpart of ffm-groups-unregistered-jvm.protos: the same
+// valid by-value declaration of ffi_test_group_reverse is not registered for
+// the image, so binding it is refused with the ordinary Error before symbol
+// lookup, linking or entering C. The host authorizes
+// first=<absolute libffi_test.so> (native/ffi_test.c). Run by
+// scripts/native-test.sh and dist/validate_native.py only; on the JVM the
+// declaration is admitted.
+
+FFI: import("std:ffi")
+
+CheckFailure: Error {}
+
+check: (label, condition) => {
+    (condition === true).ifFalse(() => {
+        failure: CheckFailure { label: label }
+        failure.signal()
+    })
+    null
+}
+
+caught: (prototype, body) => {
+    result: null
+    prototype.handle(body, (error) => {
+        result = error
+        error
+    })
+    result
+}
+
+// f64 b at offset 0, i32 a at offset 8 and native trailing padding computed
+// by std:ffi: the same size and alignment as an i32/f64 struct, a different
+// physical layout, struct(D,I,padding(4)).
+Reversed: FFI.struct(Array(FFI.field("b", FFI.f64), FFI.field("a", FFI.i32)))
+check("reversed size", FFI.sizeOf(Reversed) == 16)
+check("reversed alignment", FFI.alignOf(Reversed) == 8)
+check("reversed a offset", FFI.offsetOf(Reversed, Array("a")) == 8)
+
+first: import("ffi:first")
+calls: FFI.bindPreserving(first, "ffi_test_group_calls_count", FFI.i32, Array())
+
+/// Exactly the ordinary Error: never a ForeignError, never a check failure.
+refusedOrdinarily: (label, body) => {
+    error: caught(Error, body)
+    check(label + " refused", (error === null) == false)
+    check(label + " is not a ForeignError", (error.parent() === ForeignError) == false)
+    check(label + " is the ordinary Error", error.parent() === Error)
+}
+
+Quad: FFI.array(FFI.u8, 4)
+lend: FFI.bind(first, "ffi_test_pointer_octets", FFI.borrowedPointer(FFI.pointer(Quad)),
+    Array(FFI.i32))
+lent: lend(1)
+before: calls()
+refusedOrdinarily("unregistered group signature",
+    () => FFI.bind(first, "ffi_test_group_reverse", Reversed, Array(Reversed)))
+refusedOrdinarily("unregistered group preserving signature",
+    () => FFI.bindPreserving(first, "ffi_test_group_reverse", Reversed, Array(Reversed)))
+// Registration admission precedes symbol resolution: no symbol-not-found.
+refusedOrdinarily("unregistered group signature of a missing symbol",
+    () => FFI.bind(first, "ffi_test_group_no_such_symbol", Reversed, Array(Reversed)))
+check("no native invocation", calls() == before)
+check("the borrowed capability is still live", first.isLive(lent) == true)
+
+print("FFM-UNREGISTERED-GROUP-NATIVE-PASS")

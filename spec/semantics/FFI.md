@@ -142,6 +142,7 @@ structurally similar objects do not forge declarations.
 | typed pointer | Live pass-only pointer capability of a compatible pointee (see Typed native pointer capabilities); native NULL result is a `ForeignError` |
 | nullable typed pointer | The same domain plus `null`; native NULL result becomes `null` |
 | borrowed typed pointer | Return and `out` only; non-null pointer capability valid until the borrow epoch advances; native NULL result is a `ForeignError` |
+| struct or union layout | By value: an input is a live native region of that exact layout identity, copied for the call; a return or `out` result is a fresh independently owned allocation root (see By-value struct and union invocation) |
 
 Native integral results become exact Protos Integers, including unsigned
 `u64` and `sizeT` values above the signed 64-bit range; an unsigned result is
@@ -188,10 +189,12 @@ the original library authority; it does not itself acquire a resource.
 
 `FFI.out(descriptor)` declares a zero-initialized native output slot. Supported
 targets are the integral scalars, `f32`, `f64`, opaque, nullable opaque,
-owned opaque, typed pointer, nullable typed pointer and borrowed typed pointer
-declarations. `void`, `utf8z`, nested `out`, field and aggregate descriptors,
-and non-descriptors are rejected. An output position
-consumes no Protos invocation argument.
+owned opaque, typed pointer, nullable typed pointer, borrowed typed pointer,
+struct and union declarations. `void`, `utf8z`, nested `out`, field and fixed
+array descriptors, and non-descriptors are rejected. An output position
+consumes no Protos invocation argument. Declaring an output position is
+declarative: it acquires no provider session and no library, even for a
+struct or union target, and an output descriptor is not a storage layout.
 
 ## Declarative layouts
 
@@ -201,9 +204,10 @@ acquires no library, opens no foreign provider session, enters no native code,
 allocates no native memory and carries no native address. Every declaration
 answers a fresh frozen ordinary object associated with private immutable
 metadata by exact identity; structurally similar objects do not forge one.
-Declarative layout capability is distinct from native memory: this contract
-defines no allocation of, read from, or write to native storage described by a
-layout, and no invocation that passes or returns one.
+Declarative layout capability is distinct from native memory and from
+invocation: storage described by a layout is allocated and accessed only as
+specified in Native memory, and struct and union layouts are passed and
+returned by value only as specified in By-value struct and union invocation.
 
 A *storage layout* is one of the integral scalars, `f32`, `f64`, a struct, a
 union, a fixed array, a typed pointer or a nullable typed pointer. `void`,
@@ -288,11 +292,14 @@ Every rejected layout declaration or query is an ordinary Error.
 The integral scalar storage layouts, `f32` and `f64` are the scalar
 descriptors of Public declarations and are admitted by `bind`,
 `bindPreserving` and `out` as described there; typed pointer declarations are
-admitted in the positions of Typed native pointer capabilities. Struct, union,
-fixed array and field descriptors are not invocation descriptors in this
-revision: used as a return, parameter or `out` target they are rejected with
-an ordinary Error before any provider signature is composed and before native
-entry. An aggregate is never passed as a pointer.
+admitted in the positions of Typed native pointer capabilities; struct and
+union layouts are admitted as by-value parameters, returns and `out` targets
+(By-value struct and union invocation). Fixed array and field descriptors are
+not invocation descriptors: used as a direct return, parameter or `out` target
+they are rejected with an ordinary Error before any provider signature is
+composed and before native entry. A fixed array is passed only as storage
+nested inside a struct or union. An aggregate is never silently passed as a
+pointer.
 
 ### Prototype association
 
@@ -327,10 +334,11 @@ associations.
 ### Not yet implemented
 
 The following capabilities are not provided by this revision. They are not
-rejected design directions: aggregate-by-value invocation (passing or
-returning a struct, union or array by value) and projection of native
-aggregates to or from ordinary Protos Maps or Objects. Native memory itself is
-specified in Native memory below.
+rejected design directions: passing or returning a C array directly by value,
+and projection (snapshot conversion) of native aggregates to or from ordinary
+Protos Maps or Objects. Struct and union by-value invocation is specified in
+By-value struct and union invocation, and native memory in Native memory
+below.
 
 
 
@@ -343,10 +351,12 @@ and objects imitating Arrays are not Arrays. The Array sequence is shallowly
 copied before retaining a signature or Closure; later mutations do not change
 the binding. Library-associated descriptors cannot silently migrate to another
 library or session. A return is scalar except `utf8z`, opaque, nullable opaque,
-owned opaque, typed pointer, nullable typed pointer or borrowed typed pointer.
-Parameters are non-void input scalars, opaque, nullable opaque, typed pointer,
-nullable typed pointer, or supported `out` positions; owned and borrowed
-typed pointer declarations are not direct input positions.
+owned opaque, typed pointer, nullable typed pointer, borrowed typed pointer,
+struct or union. Parameters are non-void input scalars, opaque, nullable
+opaque, typed pointer, nullable typed pointer, struct, union, or supported
+`out` positions; owned and borrowed typed pointer declarations and fixed arrays
+are not direct input positions. The complete declaration is validated before
+any provider signature is composed.
 
 `FFI.bindPreserving(library, symbol, returnDescriptor, argumentDescriptors)`
 has exactly the admission, invocation, result and failure semantics of `bind`,
@@ -437,6 +447,74 @@ and pointer capabilities are rejected with an ordinary Error. No other library
 is acquired. `FFI.addressOf` of a live native region is specified in Native
 memory below.
 
+### By-value struct and union invocation
+
+A struct or union layout is admitted in three positions of `bind` and
+`bindPreserving`, with the actual C ABI of the native backend: as a parameter
+it is passed by value; as the return it is returned by value; as an `out`
+target the C function receives, like every output position, a pointer to its
+output storage, which here is a fresh allocation root. The native signature is built from the real physical
+group layout of the declaration: member carriers in order, the internal and
+tail padding implied by the offsets and size `std:ffi` computed, union members
+overlapping at offset zero with padding up to the union's rounded size, and
+fixed arrays as nested sequences. A group is never reduced to a pointer, to
+its size or alignment, or to a sequence of separate scalar parameters, and
+field names never affect the native signature. Physical identity is not
+nominal identity: two separately declared layouts with identical physical
+structure share a native signature, but neither admits the other's regions.
+
+A struct or union parameter consumes exactly one invocation argument. It
+admits only a live native region of the current session whose layout is the
+exact declared layout identity, which spans exactly the layout's size at an
+address aligned to its alignment: an allocation root, a group result, or a
+compatible non-owning typed view or nested region, including a read-only one.
+An ordinary Map, Object or Array, `null`, a pointer capability, a byte slice,
+a region of a structurally identical but separately declared layout, a region
+of another session, a released root and an expired borrowed view are rejected
+with an ordinary Error. No ordinary Protos value is implicitly converted to a
+native group. Admission completes before anything is copied or allocated.
+
+The admitted region is copied once, completely, into storage private to the
+call, before the borrow epoch advances; the callee receives that copy, so a
+mutation of its parameter never reaches the source region. The copy is a
+shallow physical copy: a pointer member keeps its pointer bits, its pointee is
+not copied, and the copy confers no lifetime or extent authority over that
+pointee.
+
+A struct or union return, and each struct or union `out` position, answers a
+fresh independently owned allocation root of the declared layout. Its storage
+is allocated, zero-initialized, by the provider before native entry and
+registered in session custody before the call; the C function writes the
+result into it, for an `out` through a pointer to that storage. The root is
+independent of every argument, of every other result and of the call: it
+remains live after the call returns, is unaffected by later borrow epochs, and
+is released only by `FFI.release` (exactly as a root answered by
+`FFI.allocate`, never by a C destructor) or by session close. The result
+convention is unchanged: with outputs, the answer is a fresh ordinary Array
+`[nativeReturn, out0, out1, ...]` whose struct and union positions are those
+roots; without outputs, the group root is answered directly. Every result
+region supports the ordinary native region operations (Native memory). A union
+result has overlapping storage and no active member.
+
+Every native resource of a call, group result roots and owned C resources
+alike, is in custody before any fallible result conversion. When a later
+conversion fails after entry (for example native NULL in a non-nullable
+pointer `out`), the call fails with a fresh `ForeignError`, nothing is
+published, and the already registered roots and resources remain in custody
+until session close, which reclaims each exactly once.
+
+A rejected call (a wrong arity, any inadmissible argument, or a closed
+session) is an ordinary Error before native entry: it publishes no result
+root, writes no native byte, does not enter C, and does not advance the borrow
+epoch. Result storage prepared for a call that fails before entry is released
+and never published. An admitted call of a binding not declared preserving
+advances the borrow epoch exactly as any other call; a `bindPreserving` call
+does not. A borrowed view admitted as a by-value argument is copied before its
+own epoch is revoked by that call.
+
+Native C code remains trusted in-process code: a wrong by-value declaration
+has the consequences of any wrong ABI signature.
+
 ## Native memory
 
 Native memory is bounded, typed native storage of the RootActor's native
@@ -492,7 +570,8 @@ included, of exactly the layout's size and alignment and answers a fresh
 allocation root: an independently owned region registered in the session's
 resource custody before it is answered. Each allocation is independent of
 every other allocation and of every C library. Allocation does not change any
-layout identity or association.
+layout identity or association. A struct or union result of a by-value call
+(By-value struct and union invocation) is an allocation root of the same kind.
 
 `FFI.slice(region, byteOffset, byteLength)` requires a live region, an exact
 nonnegative Integer offset and an exact nonnegative Integer length whose sum
@@ -627,22 +706,29 @@ native address never restores an earlier region or pointer. Session close
 retires and frees every remaining allocation root together with the remaining
 owned C resources, and nothing reopens the session.
 
-### Native Image scalar admission
+### Native Image signature admission
 
 In a Native Image executable, a declaration is admitted only when the exact
 physical carrier shape of its signature (return and parameter carriers,
-including address carriers for outputs) belongs to the finite set registered
-for that image. A valid declaration of any other shape is refused with an
-ordinary Error before linking and before native entry; no fallback shape or
-coercion is attempted. A JVM admits every valid declaration. Signed and
-unsigned descriptors of one width share a registered shape.
+including address carriers for outputs and the complete recursive physical
+structure of every by-value struct or union) belongs to the finite set
+registered for that image. A valid declaration of any other shape is refused
+with an ordinary Error before symbol lookup, before linking and before native
+entry; no fallback shape, coercion or alternative calling route is attempted.
+A JVM admits every valid scalar declaration and every by-value group
+declaration that its native linker supports; a group signature the linker
+rejects is refused the same way. Signed and unsigned descriptors of one width
+share a registered shape, as do separately declared layouts of identical
+physical structure. A registered shape grants no library authorization: host
+library authorization remains independently required.
 
 ## Custody, identity and release
 
 Every non-null owned acquisition enters provider custody before publication,
 whether delivered directly or through `out`, even when C also returns an error
 status. All owned carriers of a call are adopted before fallible result
-conversion. If conversion fails before publication, provider custody still
+conversion. Struct and union result roots enter custody when allocated, before
+native entry, and are never adopted a second time. If conversion fails before publication, provider custody still
 retains those acquisitions for session shutdown.
 
 Published owned handles have a private identity-based association with their
@@ -720,9 +806,9 @@ not make an otherwise forbidden transfer valid.
 ## Exclusions
 
 R1 excludes numeric pointers, pointer arithmetic (byte slices excepted),
-aggregate invocation, aggregate projection to ordinary Maps or Objects,
-callbacks and
-upcalls, variadic functions, C++, arbitrary library paths, `SQLITE_TRANSIENT`,
+direct C array-by-value invocation, aggregate projection to ordinary Maps or
+Objects, packed layouts, bitfields, flexible array members, callbacks and
+upcalls (including function-pointer upcalls), variadic functions, C++, arbitrary library paths, `SQLITE_TRANSIENT`,
 a mandatory binding generator, external plugin execution in Native Image,
 and a second semantics of invocation. It defines no SQLite connection,
 statement, TEXT/BLOB input, transaction or row-mapping API (LIB029).

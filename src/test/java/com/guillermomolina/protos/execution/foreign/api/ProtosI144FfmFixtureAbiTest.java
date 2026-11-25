@@ -17,6 +17,7 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -813,6 +814,367 @@ class ProtosI144FfmFixtureAbiTest {
         }
     }
 
+    /**
+     * By-value struct and union arguments and returns, group outs and their independently owned
+     * roots against the compiled C fixtures. Every semantic assertion is in the program.
+     */
+    @Test
+    void nativeGroupProgramRunsAgainstCompiledC() throws Exception {
+        String source = withoutMarker("ffm-groups.protos", "FFM-GROUPS-PASS");
+        try (ProtosExternalForeignProviderTest.Fixture fixture =
+                distributable(
+                        Map.of(
+                                "library.first", library.toAbsolutePath().toString(),
+                                "library.second", secondLibrary.toAbsolutePath().toString()))) {
+            ProtosExecutionOutcome outcome = fixture.run(source);
+            assertEquals(
+                    ProtosExecutionOutcome.State.COMPLETED,
+                    outcome.state(),
+                    () -> "ffm-groups.protos failed with " + describe(fixture, outcome.error()));
+            assertEquals(1, fixture.context.foreignProviderSessionCountForTesting());
+        }
+    }
+
+    /**
+     * The by-value group shape struct(D,I,padding(4)) is deliberately not registered for Native
+     * Image. On the JVM it is admitted by the standard linker and really enters C: the program
+     * checks the entry counter and the C-transformed fields, not mere linkability.
+     */
+    @Test
+    void unregisteredNativeGroupShapeIsAnActualJvmDowncall() throws Exception {
+        String source =
+                withoutMarker(
+                        "ffm-groups-unregistered-jvm.protos", "FFM-UNREGISTERED-GROUP-JVM-PASS");
+        try (ProtosExternalForeignProviderTest.Fixture fixture =
+                distributable(Map.of("library.first", library.toAbsolutePath().toString()))) {
+            ProtosExecutionOutcome outcome = fixture.run(source);
+            assertEquals(
+                    ProtosExecutionOutcome.State.COMPLETED,
+                    outcome.state(),
+                    () -> "ffm-groups-unregistered-jvm.protos failed with "
+                            + describe(fixture, outcome.error()));
+        }
+    }
+
+    /** Struct, union and array layouts and their admitted outs are declarative: no session. */
+    @Test
+    void groupDeclarationsDoNotOpenAProviderSession() throws Exception {
+        try (ProtosExternalForeignProviderTest.Fixture fixture = distributable(Map.of())) {
+            ProtosExecutionOutcome outcome =
+                    fixture.run(
+                            "FFI: import(\"std:ffi\")\n"
+                                    + "inner: FFI.struct(Array(FFI.field(\"a\", FFI.i32),"
+                                    + " FFI.field(\"b\", FFI.f64)))\n"
+                                    + "choice: FFI.union(Array(FFI.field(\"i\", FFI.i64),"
+                                    + " FFI.field(\"r\", FFI.f64)))\n"
+                                    + "values: FFI.array(FFI.i16, 3)\n"
+                                    + "FFI.out(inner)\n"
+                                    + "FFI.out(choice)\n"
+                                    + "FFI.struct(Array(FFI.field(\"v\", values),"
+                                    + " FFI.field(\"c\", choice)))");
+            assertEquals(
+                    ProtosExecutionOutcome.State.COMPLETED,
+                    outcome.state(),
+                    () -> describe(fixture, outcome.error()));
+            assertOrdinary(
+                    fixture,
+                    fixture.run("FFI: import(\"std:ffi\")\nFFI.out(FFI.array(FFI.i16, 3))")
+                            .error());
+            assertEquals(0, fixture.context.foreignProviderCompartmentCountForTesting());
+            assertEquals(0, fixture.context.foreignProviderSessionCountForTesting());
+        }
+    }
+
+    private static final String GROUP_DECLARATIONS =
+            "FFI: import(\"std:ffi\")\n"
+                    + "first: import(\"ffi:first\")\n"
+                    + "Inner: FFI.struct(Array(FFI.field(\"a\", FFI.i32),"
+                    + " FFI.field(\"b\", FFI.f64)))\n"
+                    + "Choice: FFI.union(Array(FFI.field(\"integer\", FFI.i64),"
+                    + " FFI.field(\"real\", FFI.f64)))\n"
+                    + "counterType: FFI.opaque(first, \"ffi_test_counter\")\n"
+                    + "owned: FFI.owned(counterType, \"ffi_test_counter_free\", FFI.i32)\n"
+                    + "calls: FFI.bindPreserving(first, \"ffi_test_group_calls_count\", FFI.i32,"
+                    + " Array())\n";
+
+    /**
+     * Group results are allocation roots of the existing custody: a direct group return adds one
+     * root and each group out one more, each released independently without advancing the borrow
+     * epoch; session close reclaims the rest, an owned C resource included, and every held root
+     * is then unusable.
+     */
+    @Test
+    void groupResultsEnterExistingCustody() throws Exception {
+        try (ProtosExternalForeignProviderTest.Fixture fixture =
+                distributable(Map.of("library.first", library.toAbsolutePath().toString()))) {
+            ProtosObjectValue state =
+                    (ProtosObjectValue)
+                            fixture.eval(GROUP_DECLARATIONS
+                                    + "make: FFI.bind(first, \"ffi_test_group_inner_make\", Inner,"
+                                    + " Array())\n"
+                                    + "mixed: FFI.bind(first, \"ffi_test_group_mixed\", Inner,"
+                                    + " Array(Inner, FFI.i32, FFI.out(Inner), FFI.out(Choice)))\n"
+                                    + "lend: FFI.bind(first, \"ffi_test_pointer_octets\","
+                                    + " FFI.borrowedPointer(FFI.pointer(FFI.array(FFI.u8, 4))),"
+                                    + " Array(FFI.i32))\n"
+                                    + "seed: FFI.allocate(Inner)\n"
+                                    + "seed[\"a\"] = 2\n"
+                                    + "counter: FFI.bind(first, \"ffi_test_counter_new\", owned,"
+                                    + " Array(FFI.i64))(3)\n"
+                                    + "{\n seed: seed\n counter: counter\n"
+                                    + " make: () => make()\n"
+                                    + " mixed: () => mixed(seed, 1)\n"
+                                    + " at: (answers, index) => answers[index]\n"
+                                    + " lend: () => lend(1)\n"
+                                    + " alive: (pointer) => first.isLive(pointer)\n"
+                                    + " read: (region) => region[\"a\"]\n"
+                                    + " release: (value) => FFI.release(value)\n}");
+            Object seed = slot(state, "seed");
+            Object session = pluginSession(seed);
+            int base = ownedCount(session);
+            assertEquals(2, base);
+
+            Object made = ProtosInvocation.invoke(slot(state, "make"), List.of(), fixture.root);
+            assertEquals(base + 1, ownedCount(session));
+            Object answers =
+                    ProtosInvocation.invoke(slot(state, "mixed"), List.of(), fixture.root);
+            // The group return and its two group outs: three independent roots.
+            assertEquals(base + 4, ownedCount(session));
+            List<Object> roots = new ArrayList<>();
+            for (int index = 0; index < 3; index++) {
+                roots.add(
+                        ProtosInvocation.invoke(
+                                slot(state, "at"),
+                                List.of(answers,
+                                        com.guillermomolina.protos.runtime.ProtosNumericValueSupport
+                                                .integer(index)),
+                                fixture.root));
+            }
+            // Three independent roots, none of them the argument or an earlier result.
+            assertNotSame(roots.get(0), roots.get(1));
+            assertNotSame(roots.get(0), roots.get(2));
+            assertNotSame(roots.get(1), roots.get(2));
+            for (Object root : roots) {
+                assertNotSame(seed, root);
+                assertNotSame(made, root);
+            }
+            assertEquals("3", integer(ProtosInvocation.invoke(
+                    slot(state, "read"), List.of(roots.get(0)), fixture.root)));
+
+            Object lent = ProtosInvocation.invoke(slot(state, "lend"), List.of(), fixture.root);
+            Object release = slot(state, "release");
+            for (Object root : List.of(made, roots.get(2), roots.get(1))) {
+                assertSame(
+                        com.guillermomolina.protos.runtime.ProtosNullValue.INSTANCE,
+                        ProtosInvocation.invoke(release, List.of(root), fixture.root));
+            }
+            assertEquals(base + 1, ownedCount(session));
+            assertOrdinary(fixture, invoke(fixture, release, made));
+            // Group releases never advance the borrow epoch.
+            assertEquals(
+                    Boolean.TRUE,
+                    ProtosInvocation.invoke(slot(state, "alive"), List.of(lent), fixture.root));
+
+            ProtosForeignProviderSessionBinding binding = handle(seed).session();
+            binding.closeForRuntime();
+            binding.closeForRuntime();
+            assertEquals(0, ownedCount(session));
+            assertEquals(0, diagnostic(session, "uncertainCountForDiagnostics"));
+            assertOrdinary(fixture, invoke(fixture, slot(state, "read"), roots.get(0)));
+            assertOrdinary(fixture, invoke(fixture, release, roots.get(0)));
+            assertOrdinary(fixture, invoke(fixture, release, slot(state, "counter")));
+            assertOrdinary(fixture, invoke(fixture, slot(state, "make")));
+        }
+    }
+
+    /**
+     * A NULL result in a non-nullable pointer out fails conversion after C returned. The group
+     * out root allocated before entry and the owned counter of the same call are already in
+     * custody; session close reclaims both, and the C destructor runs exactly once.
+     */
+    @Test
+    void groupAndOwnedOutputsAreAdoptedBeforeConversionFailure() throws Exception {
+        try (ProtosExternalForeignProviderTest.Fixture fixture =
+                withObserverLibrary(
+                        Map.of("library.first", library.toAbsolutePath().toString()))) {
+            ProtosActivation observer = fixture.newActorActivation();
+            int liveBaseline = nativeCount(fixture, observer, "ffi_test_live_count");
+            int destroyedBaseline = destroyedCount(fixture, observer);
+            Object anchor = fixture.eval("import(\"std:ffi\").allocate(import(\"std:ffi\").i32)");
+            Object session = pluginSession(anchor);
+            assertEquals(1, ownedCount(session));
+            ProtosExecutionOutcome outcome =
+                    fixture.run(GROUP_DECLARATIONS
+                            + "FFI.bind(first, \"ffi_test_group_failure\", FFI.i32,"
+                            + " Array(FFI.out(FFI.pointer(FFI.i32)), FFI.out(Inner),"
+                            + " FFI.out(owned)))()");
+            assertForeign(fixture, outcome, "null-result");
+            // The group root and the owned counter, both registered before conversion failed.
+            assertEquals(3, ownedCount(session));
+            assertEquals(liveBaseline + 1, nativeCount(fixture, observer, "ffi_test_live_count"));
+            assertEquals(destroyedBaseline, destroyedCount(fixture, observer));
+
+            ProtosForeignProviderSessionBinding binding = handle(anchor).session();
+            binding.closeForRuntime();
+            binding.closeForRuntime();
+            assertEquals(0, ownedCount(session));
+            assertEquals(0, diagnostic(session, "uncertainCountForDiagnostics"));
+            assertEquals(destroyedBaseline + 1, destroyedCount(fixture, observer));
+            assertEquals(liveBaseline, nativeCount(fixture, observer, "ffi_test_live_count"));
+        }
+    }
+
+    /**
+     * Handles of one provider session never cross into another, whatever the argument
+     * category: a region of the distributable session passed to a pointer parameter of the
+     * fixture registration's session, and a pointer capability of the fixture session passed to
+     * a by-value group parameter of the distributable session, are both rejected before C entry.
+     * Group regions of two sessions of the same provider are covered by
+     * {@link #foreignSessionGroupRegionsAreRejectedBeforeEntry}.
+     */
+    @Test
+    void foreignSessionHandlesAreRejectedBeforeEntry() throws Exception {
+        try (ProtosExternalForeignProviderTest.Fixture fixture =
+                withObserverLibrary(
+                        Map.of("library.first", library.toAbsolutePath().toString()))) {
+            ProtosObjectValue state =
+                    (ProtosObjectValue)
+                            fixture.eval(GROUP_DECLARATIONS
+                                    + "region: FFI.allocate(Inner)\n"
+                                    + "region[\"a\"] = 4\n"
+                                    + "{\n region: region\n"
+                                    + " calls: () => calls()\n"
+                                    + " measure: FFI.bind(first, \"ffi_test_group_inner_measure\","
+                                    + " FFI.i32, Array(Inner))\n}");
+            Object region = slot(state, "region");
+            Object calls = slot(state, "calls");
+            Object measure = slot(state, "measure");
+            assertEquals("4", integer(ProtosInvocation.invoke(measure, List.of(region),
+                    fixture.root)));
+            String entered = integer(ProtosInvocation.invoke(calls, List.of(), fixture.root));
+            // Declared against the fixture session only to receive the foreign region: the
+            // admission refuses it before any marshalling, so the declaration is never entered.
+            Object fixtureBinding =
+                    fixture.eval(IMPORT + "ffi.bind(\"ffi_test_group_inner_measure\","
+                            + " ffi.param(ffi.signature(ffi.i32), ffi.pointerType(true)))");
+            assertOrdinary(fixture, invoke(fixture, fixtureBinding, region));
+            Object foreignPointer =
+                    fixture.eval(IMPORT + "ffi.bind(\"ffi_test_pointer_octets\","
+                            + " ffi.param(ffi.signature(ffi.pointerType(false)), ffi.i32))(1)");
+            assertOrdinary(fixture, invoke(fixture, measure, foreignPointer));
+            assertEquals(entered, integer(ProtosInvocation.invoke(calls, List.of(),
+                    fixture.root)));
+            assertEquals(2, fixture.context.foreignProviderSessionCountForTesting());
+        }
+    }
+
+    /** One RootActor session holding an Inner-compatible group region and its bindings. */
+    private static ProtosObjectValue groupSession(
+            ProtosExternalForeignProviderTest.Fixture fixture, int value) {
+        return (ProtosObjectValue)
+                fixture.eval(GROUP_DECLARATIONS
+                        + "measureBinding: FFI.bind(first, \"ffi_test_group_inner_measure\","
+                        + " FFI.i32, Array(Inner))\n"
+                        + "lendBinding: FFI.bind(first, \"ffi_test_pointer_octets\","
+                        + " FFI.borrowedPointer(FFI.pointer(FFI.array(FFI.u8, 4))),"
+                        + " Array(FFI.i32))\n"
+                        + "region: FFI.allocate(Inner)\n"
+                        + "region[\"a\"] = " + value + "\n"
+                        + "{\n region: region\n"
+                        + " measureGroup: (group) => measureBinding(group)\n"
+                        + " entries: () => calls()\n"
+                        + " lendBytes: () => lendBinding(1)\n"
+                        + " alive: (pointer) => first.isLive(pointer)\n"
+                        + " read: (group) => group[\"a\"]\n"
+                        + " release: (group) => FFI.release(group)\n}");
+    }
+
+    private static Object call(
+            ProtosExternalForeignProviderTest.Fixture fixture,
+            ProtosObjectValue state,
+            String name,
+            Object... arguments) {
+        return ProtosInvocation.invoke(slot(state, name), List.of(arguments), fixture.root);
+    }
+
+    /**
+     * Two independent sessions of the same distributable provider, each with a live region of
+     * an Inner-compatible group layout. The receiving session's by-value group binding of the
+     * real ffi_test_group_inner_measure accepts its own region and rejects the other session's
+     * live region with the ordinary Error at the existing admission boundary, before C entry:
+     * the entry counter, both regions, the receiver's borrowed pointer and both custodies are
+     * unchanged, and each session then releases its region on its own.
+     */
+    @Test
+    void foreignSessionGroupRegionsAreRejectedBeforeEntry() throws Exception {
+        Map<String, String> grant = Map.of("library.first", library.toAbsolutePath().toString());
+        try (ProtosExternalForeignProviderTest.Fixture receiver = distributable(grant);
+                ProtosExternalForeignProviderTest.Fixture other = distributable(grant)) {
+            ProtosObjectValue mine = groupSession(receiver, 7);
+            ProtosObjectValue theirs = groupSession(other, 9);
+            Object ownRegion = slot(mine, "region");
+            Object foreignRegion = slot(theirs, "region");
+            Object receiverSession = pluginSession(ownRegion);
+            Object otherSession = pluginSession(foreignRegion);
+            assertNotSame(receiverSession, otherSession);
+            assertEquals(1, receiver.context.foreignProviderSessionCountForTesting());
+            assertEquals(1, other.context.foreignProviderSessionCountForTesting());
+
+            // 1. The receiver's own region of the declared layout is admitted and enters C.
+            assertEquals("7", integer(call(receiver, mine, "measureGroup", ownRegion)));
+            Object lent = call(receiver, mine, "lendBytes");
+            String entries = integer(call(receiver, mine, "entries"));
+            int receiverOwned = ownedCount(receiverSession);
+            int otherOwned = ownedCount(otherSession);
+
+            // 2. The other session's live region is refused by the same binding.
+            assertOrdinary(receiver, invoke(receiver, slot(mine, "measureGroup"), foreignRegion));
+
+            // 3. No C entry.
+            assertEquals(entries, integer(call(receiver, mine, "entries")));
+            // 4. and 5. Both regions stay live in their own sessions.
+            assertEquals("9", integer(call(other, theirs, "read", foreignRegion)));
+            assertEquals("7", integer(call(receiver, mine, "read", ownRegion)));
+            // 6. The refusal did not advance the receiver's borrow epoch.
+            assertEquals(Boolean.TRUE, call(receiver, mine, "alive", lent));
+            // 7. Neither custody changed.
+            assertEquals(receiverOwned, ownedCount(receiverSession));
+            assertEquals(otherOwned, ownedCount(otherSession));
+
+            // 8. Each session releases its own region independently.
+            assertSame(
+                    com.guillermomolina.protos.runtime.ProtosNullValue.INSTANCE,
+                    call(receiver, mine, "release", ownRegion));
+            assertEquals(receiverOwned - 1, ownedCount(receiverSession));
+            assertEquals(otherOwned, ownedCount(otherSession));
+            assertEquals("9", integer(call(other, theirs, "read", foreignRegion)));
+            assertSame(
+                    com.guillermomolina.protos.runtime.ProtosNullValue.INSTANCE,
+                    call(other, theirs, "release", foreignRegion));
+            assertEquals(otherOwned - 1, ownedCount(otherSession));
+        }
+    }
+
+    /** The provider-side count of allocation roots and owned resources in custody. */
+    private static int ownedCount(Object session) throws Exception {
+        return ((Number) diagnostic(session, "ownedCountForDiagnostics")).intValue();
+    }
+
+    /**
+     * The distributable provider with {@code options} next to the fixture registration, whose
+     * own session can read the fixture's C counters from a non-root observer Actor.
+     */
+    private static ProtosExternalForeignProviderTest.Fixture withObserverLibrary(
+            Map<String, String> options) throws Exception {
+        return new ProtosExternalForeignProviderTest.Fixture(
+                ProtosPolyglotRuntimeHost.openWithForeignProviders(
+                        ProtosForeignProviderConfiguration.trustedInProcess(
+                                        List.of(jar, distributable))
+                                .withProviderOptions(PROVIDER_ID, authorized())
+                                .withProviderOptions("protos-ffm", options)),
+                true);
+    }
+
     @Test
     void abiProgramRunsUnderTheTestHost() throws Exception {
         // The CLI success marker is not part of the checks: this embedded host has no print.
@@ -1265,11 +1627,33 @@ class ProtosI144FfmFixtureAbiTest {
                 ProtosI144FfmFixtureAbiTest.class.getClassLoader());
     }
 
-    /** Non-variadic downcall shapes of the image metadata, in the same letter notation. */
+    private static final Map<String, String> METADATA_LETTERS =
+            Map.of("jbyte", "B", "jshort", "S", "jint", "I", "jlong", "L", "jfloat", "F",
+                    "jdouble", "D", "void*", "P", "void", "V");
+
+    /**
+     * One metadata layout in the provider's notation: scalar tokens become carrier letters and
+     * whitespace is dropped, while group kinds, nesting, member order, sequence counts and
+     * padding are kept token by token; nothing is split on commas.
+     */
+    private static String metadataLayout(String layout) {
+        String compact = layout.replaceAll("\\s+", "");
+        java.util.regex.Matcher token =
+                java.util.regex.Pattern.compile("void\\*|[A-Za-z_][A-Za-z0-9_]*|[0-9]+|[(),]")
+                        .matcher(compact);
+        StringBuilder converted = new StringBuilder();
+        int end = 0;
+        while (token.find()) {
+            assertEquals(end, token.start(), () -> "unexpected metadata layout: " + layout);
+            converted.append(METADATA_LETTERS.getOrDefault(token.group(), token.group()));
+            end = token.end();
+        }
+        assertEquals(compact.length(), end, () -> "unexpected metadata layout: " + layout);
+        return converted.toString();
+    }
+
+    /** Non-variadic downcall shapes of the image metadata, in the provider's notation. */
     private static java.util.Set<String> metadataShapes() throws Exception {
-        Map<String, String> letters =
-                Map.of("jbyte", "B", "jshort", "S", "jint", "I", "jlong", "L", "jfloat", "F",
-                        "jdouble", "D", "void*", "P", "void", "V");
         java.util.Set<String> shapes = new java.util.TreeSet<>();
         java.util.regex.Matcher entry =
                 java.util.regex.Pattern.compile(
@@ -1277,12 +1661,12 @@ class ProtosI144FfmFixtureAbiTest {
                                         + "\"parameterTypes\":\\s*\\[([^\\]]*)\\]\\s*\\}")
                         .matcher(Files.readString(METADATA));
         while (entry.find()) {
-            StringBuilder shape = new StringBuilder(letters.get(entry.group(1))).append('(');
+            StringBuilder shape = new StringBuilder(metadataLayout(entry.group(1))).append('(');
             java.util.regex.Matcher parameter =
                     java.util.regex.Pattern.compile("\"([^\"]+)\"").matcher(entry.group(2));
             boolean first = true;
             while (parameter.find()) {
-                shape.append(first ? "" : ",").append(letters.get(parameter.group(1)));
+                shape.append(first ? "" : ",").append(metadataLayout(parameter.group(1)));
                 first = false;
             }
             shapes.add(shape.append(')').toString());
@@ -1323,15 +1707,41 @@ class ProtosI144FfmFixtureAbiTest {
             for (String shape : scalarShapes) {
                 assertTrue(registered.contains(shape), shape);
             }
+            // Scalar-only shapes spell no group kind, so they carry no lowercase letter.
             java.util.Set<String> narrow = new java.util.TreeSet<>();
+            java.util.Set<String> groups = new java.util.TreeSet<>();
             for (String shape : registered) {
-                if (shape.matches(".*[BSF].*")) {
+                if (shape.matches(".*[a-z].*")) {
+                    groups.add(shape);
+                } else if (shape.matches(".*[BSF].*")) {
                     narrow.add(shape);
                 }
             }
             assertEquals(java.util.Set.of("B(B)", "S(S)", "F(F)"), narrow);
             for (String shape : List.of("F(F,F)", "B(S)", "S(B)", "F(D)", "D(F)", "B()")) {
                 assertTrue(!registered.contains(shape), shape);
+            }
+            // Exactly the by-value group signatures of the positive fixtures.
+            String m = "struct(I,padding(4),D)";
+            String l3 = "struct(L,L,L)";
+            String u = "union(L,D)";
+            String up = "union(L,sequence(9,B),padding(16))";
+            String o = "struct(B,padding(7)," + m + ",sequence(3,S),padding(2),P)";
+            String n = "struct(" + u + ",sequence(2,F))";
+            assertEquals(
+                    java.util.Set.of(
+                            m + "()", m + "(" + m + ")", "I(" + m + ")", l3 + "(" + l3 + ")",
+                            u + "(" + u + ")", up + "(" + up + ")", o + "(" + o + ")",
+                            n + "(" + n + ")", m + "(" + m + ",I,P,P)"),
+                    groups);
+            // The reverse-layout fixture is valid but deliberately unregistered.
+            String reversed = "struct(D,I,padding(4))";
+            for (String shape : List.of(reversed + "(" + reversed + ")", reversed + "()")) {
+                assertTrue(!registered.contains(shape), shape);
+                assertTrue(!metadata.contains(shape), shape);
+            }
+            for (String shape : metadata) {
+                assertTrue(!shape.contains(reversed), shape);
             }
         }
     }
@@ -1410,6 +1820,129 @@ class ProtosI144FfmFixtureAbiTest {
             assertEquals("F(F,F)", shape.invoke(narrowUnregistered));
             assertTrue(!((java.util.Set<String>) field.get(null)).contains("F(F,F)"));
             assertEquals(true, linkable.invoke(narrowUnregistered));
+
+            // By-value groups: recursive physical keys of real FunctionDescriptors built from
+            // existing storage metadata; the JVM linker admits every one of them.
+            Layouts layouts = Layouts.of(loader);
+            Object i32 = layouts.scalar(s.apply("I32"), 4);
+            Object i64 = layouts.scalar(s.apply("I64"), 8);
+            Object f64 = layouts.scalar(s.apply("F64"), 8);
+            Object inner = layouts.group("struct", 16, 8, "a", 0, i32, "b", 8, f64);
+            Object renamed = layouts.group("struct", 16, 8, "x", 0, i32, "y", 8, f64);
+            Object[][] groupCases = {
+                {inner, "struct(I,padding(4),D)"},
+                // Guest member names never contribute.
+                {renamed, "struct(I,padding(4),D)"},
+                // Struct and union stay distinct.
+                {layouts.group("union", 8, 8, "a", 0, i32, "b", 0, f64), "union(I,D)"},
+                // Same size and alignment, different member order.
+                {layouts.group("struct", 16, 8, "b", 0, f64, "a", 8, i32),
+                    "struct(D,I,padding(4))"},
+                // Integer and floating-point members stay distinct.
+                {layouts.group("struct", 8, 8, "v", 0, i64), "struct(L)"},
+                {layouts.group("struct", 8, 8, "v", 0, f64), "struct(D)"},
+                // Padding contributes: same size and alignment, padding instead of a member.
+                {layouts.group("struct", 16, 8, "a", 0, i32, "b", 4, i32, "c", 8, i64),
+                    "struct(I,I,L)"},
+                {layouts.group("struct", 16, 8, "a", 0, i32, "c", 8, i64),
+                    "struct(I,padding(4),L)"},
+                // The sequence count contributes.
+                {layouts.group("struct", 8, 4, "v", 0, layouts.array(i32, 2, 4)),
+                    "struct(sequence(2,I))"},
+                {layouts.group("struct", 12, 4, "v", 0, layouts.array(i32, 3, 4)),
+                    "struct(sequence(3,I))"},
+                // Union padding spans the whole rounded size.
+                {layouts.group("union", 16, 8, "w", 0, i64, "b", 0,
+                        layouts.array(layouts.scalar(s.apply("U8"), 1), 9, 1)),
+                    "union(L,sequence(9,B),padding(16))"},
+            };
+            for (Object[] c : groupCases) {
+                Object value = create.newInstance(c[0], List.of(c[0]), false);
+                assertEquals(c[1] + "(" + c[1] + ")", shape.invoke(value));
+                assertEquals(true, linkable.invoke(value), (String) c[1]);
+            }
+            Object mixed = create.newInstance(inner, List.of(inner, s.apply("I32"),
+                    newOut.newInstance(inner)), false);
+            assertEquals("struct(I,padding(4),D)(struct(I,padding(4),D),I,P)",
+                    shape.invoke(mixed));
+            // Distinct identities share one physical registration key, yet remain distinct
+            // descriptors: different signatures, different binding keys and, as
+            // ffm-groups.protos checks, mutually inadmissible guest arguments.
+            Object innerSignature = create.newInstance(inner, List.of(inner), false);
+            Object renamedSignature = create.newInstance(renamed, List.of(renamed), false);
+            assertEquals(shape.invoke(innerSignature), shape.invoke(renamedSignature));
+            assertTrue(!inner.equals(renamed));
+            assertTrue(!innerSignature.equals(renamedSignature));
+            // A fixed array is storage only: never a direct parameter or return.
+            Object values = layouts.array(i32, 2, 4);
+            org.junit.jupiter.api.Assertions.assertThrows(
+                    java.lang.reflect.InvocationTargetException.class,
+                    () -> create.newInstance(values, List.of(), false));
+            org.junit.jupiter.api.Assertions.assertThrows(
+                    java.lang.reflect.InvocationTargetException.class,
+                    () -> create.newInstance(s.apply("I32"), List.of(values), false));
+            org.junit.jupiter.api.Assertions.assertThrows(
+                    java.lang.reflect.InvocationTargetException.class,
+                    () -> newOut.newInstance(values));
+        }
+    }
+
+    /** Reflective construction of provider storage metadata, as std:ffi composes it. */
+    private record Layouts(
+            java.lang.reflect.Method scalar,
+            java.lang.reflect.Method aggregate,
+            java.lang.reflect.Method withMember,
+            java.lang.reflect.Method array,
+            java.lang.reflect.Constructor<?> pointer) {
+        static Layouts of(java.net.URLClassLoader loader) throws Exception {
+            Class<?> storage = providerClass(loader, "FfmTypes$Storage");
+            Class<?> pointerType = providerClass(loader, "FfmTypes$PointerType");
+            Class<?> scalarType = providerClass(loader, "FfmTypes$Scalar");
+            Layouts layouts =
+                    new Layouts(
+                            storage.getDeclaredMethod(
+                                    "scalar", scalarType, long.class, long.class, pointerType),
+                            storage.getDeclaredMethod(
+                                    "aggregate", String.class, long.class, long.class,
+                                    pointerType),
+                            storage.getDeclaredMethod(
+                                    "withMember", String.class, long.class, storage),
+                            storage.getDeclaredMethod(
+                                    "array", storage, long.class, long.class, pointerType),
+                            pointerType.getDeclaredConstructor(boolean.class));
+            layouts.scalar.setAccessible(true);
+            layouts.aggregate.setAccessible(true);
+            layouts.withMember.setAccessible(true);
+            layouts.array.setAccessible(true);
+            layouts.pointer.setAccessible(true);
+            return layouts;
+        }
+
+        /** A fresh plain pointee identity, as std:ffi creates one per layout. */
+        Object identity() throws Exception {
+            return pointer.newInstance(false);
+        }
+
+        Object scalar(Object type, long bytes) throws Exception {
+            return scalar.invoke(null, type, bytes, bytes, identity());
+        }
+
+        Object array(Object element, long count, long stride) throws Exception {
+            return array.invoke(null, element, count, stride, identity());
+        }
+
+        /** A struct or union from (name, offset, child) member triples. */
+        Object group(String kind, long size, long align, Object... members) throws Exception {
+            Object group = aggregate.invoke(null, kind, size, align, identity());
+            for (int index = 0; index < members.length; index += 3) {
+                group =
+                        withMember.invoke(
+                                group,
+                                members[index],
+                                ((Number) members[index + 1]).longValue(),
+                                members[index + 2]);
+            }
+            return group;
         }
     }
 

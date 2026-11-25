@@ -545,3 +545,182 @@ int64_t ffi_test_memory_static_a(void) {
 }
 
 int32_t ffi_test_memory_calls_count(void) { return ffi_test_memory_calls; }
+
+/*
+ * ---- by-value groups: structs and unions passed and returned by value
+ *
+ * Every group entry point counts its entries in ffi_test_group_calls, so a
+ * call rejected before native entry leaves the counter unchanged; the query
+ * itself does not count. The layouts are measured independently by
+ * ffi_test_group_layout with sizeof, _Alignof and offsetof.
+ */
+
+typedef struct ffi_test_group_large {
+    int64_t x;
+    int64_t y;
+    int64_t z;
+} ffi_test_group_large;
+
+typedef union ffi_test_group_choice {
+    int64_t integer;
+    double real;
+} ffi_test_group_choice;
+
+typedef union ffi_test_group_padded_union {
+    int64_t wide;
+    uint8_t bytes[9];
+} ffi_test_group_padded_union;
+
+typedef struct ffi_test_group_nested {
+    ffi_test_group_choice choice;
+    float ratios[2];
+} ffi_test_group_nested;
+
+/* Same size and alignment as ffi_test_memory_inner, different physical layout. */
+typedef struct ffi_test_group_reversed {
+    double b;
+    int32_t a;
+} ffi_test_group_reversed;
+
+_Static_assert(sizeof(ffi_test_group_padded_union) == 16, "padded union size");
+_Static_assert(_Alignof(ffi_test_group_padded_union) == 8, "padded union alignment");
+
+static int32_t ffi_test_group_calls;
+
+int32_t ffi_test_group_calls_count(void) { return ffi_test_group_calls; }
+
+ffi_test_memory_inner ffi_test_group_inner_make(void) {
+    ffi_test_group_calls++;
+    ffi_test_memory_inner value = {17, 2.5};
+    return value;
+}
+
+ffi_test_memory_inner ffi_test_group_inner_transform(ffi_test_memory_inner value) {
+    ffi_test_group_calls++;
+    value.a += 7;
+    value.b *= 2.0;
+    return value;
+}
+
+int32_t ffi_test_group_inner_measure(ffi_test_memory_inner value) {
+    ffi_test_group_calls++;
+    return value.a;
+}
+
+ffi_test_group_large ffi_test_group_large_transform(ffi_test_group_large value) {
+    ffi_test_group_calls++;
+    value.x += 1;
+    value.y *= 2;
+    value.z = -value.z;
+    return value;
+}
+
+ffi_test_group_choice ffi_test_group_union_integer(ffi_test_group_choice value) {
+    ffi_test_group_calls++;
+    value.integer += 100;
+    return value;
+}
+
+ffi_test_group_choice ffi_test_group_union_float(ffi_test_group_choice value) {
+    ffi_test_group_calls++;
+    value.real *= 4.0;
+    return value;
+}
+
+ffi_test_group_padded_union
+ffi_test_group_padded_union_transform(ffi_test_group_padded_union value) {
+    ffi_test_group_calls++;
+    value.bytes[0] = (uint8_t)(value.bytes[0] + 1);
+    value.bytes[8] = (uint8_t)(value.bytes[8] ^ 0xFF);
+    return value;
+}
+
+/* The pointer member is preserved as pointer bits and never dereferenced. */
+ffi_test_memory_outer ffi_test_group_outer_transform(ffi_test_memory_outer value) {
+    ffi_test_group_calls++;
+    value.tag = (uint8_t)(value.tag + 1);
+    value.inner.a *= 3;
+    value.inner.b += 0.5;
+    for (int index = 0; index < 3; index++) {
+        value.values[index] = (int16_t)(value.values[index] + 10 * (index + 1));
+    }
+    return value;
+}
+
+ffi_test_group_nested ffi_test_group_nested_transform(ffi_test_group_nested value) {
+    ffi_test_group_calls++;
+    value.choice.integer -= 5;
+    value.ratios[0] *= 2.0f;
+    value.ratios[1] += 0.25f;
+    return value;
+}
+
+/* A group return, a struct out and a union out, each with distinct values. */
+ffi_test_memory_inner ffi_test_group_mixed(ffi_test_memory_inner value, int32_t delta,
+                                           ffi_test_memory_inner *first,
+                                           ffi_test_group_choice *second) {
+    ffi_test_group_calls++;
+    first->a = value.a * 2;
+    first->b = value.b - 1.0;
+    second->integer = (int64_t)value.a + delta + 1000;
+    value.a += delta;
+    value.b += 0.5;
+    return value;
+}
+
+/*
+ * NULL into the first out, a deterministic group into the second and a fresh
+ * owned counter (initial 23) into the third; answers 6. Declaring the first
+ * out as a non-nullable pointer makes the conversion fail after both the
+ * group root and the owned counter exist.
+ */
+int32_t ffi_test_group_failure(int32_t **missing, ffi_test_memory_inner *group,
+                               ffi_test_counter **owned) {
+    ffi_test_group_calls++;
+    *missing = NULL;
+    group->a = 41;
+    group->b = 0.75;
+    *owned = ffi_test_counter_new(23);
+    return 6;
+}
+
+/* A valid by-value signature deliberately absent from the Native Image registration. */
+ffi_test_group_reversed ffi_test_group_reverse(ffi_test_group_reversed value) {
+    ffi_test_group_calls++;
+    value.b = value.b * 10.0;
+    value.a = value.a - 3;
+    return value;
+}
+
+/* One numbered C fact per query about the group fixtures; -1 when unknown. */
+int64_t ffi_test_group_layout(int64_t query) {
+    switch (query) {
+    case 0: return (int64_t)sizeof(ffi_test_memory_inner);
+    case 1: return (int64_t)_Alignof(ffi_test_memory_inner);
+    case 2: return (int64_t)offsetof(ffi_test_memory_inner, b);
+    case 10: return (int64_t)sizeof(ffi_test_group_large);
+    case 11: return (int64_t)_Alignof(ffi_test_group_large);
+    case 12: return (int64_t)offsetof(ffi_test_group_large, z);
+    case 20: return (int64_t)sizeof(ffi_test_group_choice);
+    case 21: return (int64_t)_Alignof(ffi_test_group_choice);
+    case 22: return (int64_t)offsetof(ffi_test_group_choice, real);
+    case 30: return (int64_t)sizeof(ffi_test_group_padded_union);
+    case 31: return (int64_t)_Alignof(ffi_test_group_padded_union);
+    case 32: return (int64_t)offsetof(ffi_test_group_padded_union, bytes[8]);
+    case 40: return (int64_t)sizeof(ffi_test_memory_outer);
+    case 41: return (int64_t)_Alignof(ffi_test_memory_outer);
+    case 42: return (int64_t)offsetof(ffi_test_memory_outer, inner);
+    case 43: return (int64_t)offsetof(ffi_test_memory_outer, inner.b);
+    case 44: return (int64_t)offsetof(ffi_test_memory_outer, values);
+    case 45: return (int64_t)offsetof(ffi_test_memory_outer, values[2]);
+    case 46: return (int64_t)offsetof(ffi_test_memory_outer, next);
+    case 50: return (int64_t)sizeof(ffi_test_group_nested);
+    case 51: return (int64_t)_Alignof(ffi_test_group_nested);
+    case 52: return (int64_t)offsetof(ffi_test_group_nested, ratios);
+    case 53: return (int64_t)offsetof(ffi_test_group_nested, ratios[1]);
+    case 60: return (int64_t)sizeof(ffi_test_group_reversed);
+    case 61: return (int64_t)_Alignof(ffi_test_group_reversed);
+    case 62: return (int64_t)offsetof(ffi_test_group_reversed, a);
+    default: return -1;
+    }
+}

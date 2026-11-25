@@ -897,6 +897,17 @@ else
         --allow-library "first=${tmp_dir}/libffi_test.so" \
         --allow-library "second=${tmp_dir}/libffi_second.so" \
         "${ffm_cases_dir}/ffm-native-memory.protos"
+    # By-value struct and union calls: every exercised shape is registered.
+    run_ffm_case GROUPS 0 'FFM-GROUPS-PASS' \
+        --allow-library "first=${tmp_dir}/libffi_test.so" \
+        --allow-library "second=${tmp_dir}/libffi_second.so" \
+        "${ffm_cases_dir}/ffm-groups.protos"
+    # A valid but unregistered by-value group shape is refused before symbol
+    # lookup, linking or entering C.
+    run_ffm_case GROUPS_UNREGISTERED 0 'FFM-UNREGISTERED-GROUP-NATIVE-PASS' \
+        --allow-library "first=${tmp_dir}/libffi_test.so" \
+        --allow-library "second=${tmp_dir}/libffi_second.so" \
+        "${ffm_cases_dir}/ffm-groups-unregistered-native.protos"
     run_ffm_case MISSING_SYMBOL 0 'symbol-not-found' \
         --allow-library "first=${tmp_dir}/libffi_test.so" \
         -e 'FFI: import("std:ffi")

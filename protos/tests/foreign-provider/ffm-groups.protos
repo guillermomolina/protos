@@ -1,0 +1,433 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// By-value struct and union arguments and returns, group out positions and
+// their independently owned result roots, against real C functions. The host
+// authorizes:
+//   first=<absolute libffi_test.so>    (native/ffi_test.c)
+//   second=<absolute libffi_second.so> (native/ffi_second.c)
+// Every exercised group signature is registered for Native Image, so this
+// program runs on the JVM and under Native Image alike. Run by
+// ProtosI144FfmFixtureAbiTest, dist/test_external_foreign_providers.py,
+// scripts/native-test.sh and dist/validate_native.py.
+
+FFI: import("std:ffi")
+Arrays: import("std:collections/array")
+
+CheckFailure: Error {}
+
+check: (label, condition) => {
+    (condition === true).ifFalse(() => {
+        failure: CheckFailure { label: label }
+        failure.signal()
+    })
+    null
+}
+
+caught: (prototype, body) => {
+    result: null
+    prototype.handle(body, (error) => {
+        result = error
+        error
+    })
+    result
+}
+
+/// The ordinary pre-entry Error, never a ForeignError.
+ordinary: (label, body) => {
+    error: caught(Error, body)
+    check(label, (error === null) == false)
+    check(label + " is ordinary", error.parent() === Error)
+}
+
+/// A ForeignError signalled after entry.
+foreign: (label, body) => {
+    error: caught(ForeignError, body)
+    check(label, (error === null) == false)
+}
+
+// Every octet of a region, as an ordinary Array of Integers.
+octets: (region, length) => {
+    view: FFI.slice(region, 0, length)
+    answer: Array()
+    index: 0
+    while(index < length) {
+        answer = Arrays.append(answer, view[index])
+        index = index + 1
+    }
+    answer
+}
+
+sameOctets: (left, right) => {
+    if((left.size() == right.size()) == false) { ^false }
+    index: 0
+    while(index < left.size()) {
+        if((left[index] == right[index]) == false) { ^false }
+        index = index + 1
+    }
+    true
+}
+
+// ---- group layouts, each declared independently in Protos
+
+field: FFI.field
+Inner: FFI.struct(Array(field("a", FFI.i32), field("b", FFI.f64)))
+Large: FFI.struct(Array(field("x", FFI.i64), field("y", FFI.i64), field("z", FFI.i64)))
+Choice: FFI.union(Array(field("integer", FFI.i64), field("real", FFI.f64)))
+PaddedUnion: FFI.union(Array(field("wide", FFI.i64), field("bytes", FFI.array(FFI.u8, 9))))
+Outer: FFI.struct(Array(
+    field("tag", FFI.u8),
+    field("inner", Inner),
+    field("values", FFI.array(FFI.i16, 3)),
+    field("next", FFI.nullable(FFI.pointer(Inner)))))
+Nested: FFI.struct(Array(field("choice", Choice), field("ratios", FFI.array(FFI.f32, 2))))
+// Structurally identical to Inner, but a distinct layout identity.
+Twin: FFI.struct(Array(field("a", FFI.i32), field("b", FFI.f64)))
+
+// ---- C measurements: sizeof, _Alignof and offsetof against Protos
+
+first: import("ffi:first")
+layout: FFI.bind(first, "ffi_test_group_layout", FFI.i64, Array(FFI.i64))
+check("unknown group query", layout(9999) == -1)
+oracle: Array(
+    Array(0, FFI.sizeOf(Inner)), Array(1, FFI.alignOf(Inner)),
+    Array(2, FFI.offsetOf(Inner, Array("b"))),
+    Array(10, FFI.sizeOf(Large)), Array(11, FFI.alignOf(Large)),
+    Array(12, FFI.offsetOf(Large, Array("z"))),
+    Array(20, FFI.sizeOf(Choice)), Array(21, FFI.alignOf(Choice)),
+    Array(22, FFI.offsetOf(Choice, Array("real"))),
+    Array(30, FFI.sizeOf(PaddedUnion)), Array(31, FFI.alignOf(PaddedUnion)),
+    Array(32, FFI.offsetOf(PaddedUnion, Array("bytes", 8))),
+    Array(40, FFI.sizeOf(Outer)), Array(41, FFI.alignOf(Outer)),
+    Array(42, FFI.offsetOf(Outer, Array("inner"))),
+    Array(43, FFI.offsetOf(Outer, Array("inner", "b"))),
+    Array(44, FFI.offsetOf(Outer, Array("values"))),
+    Array(45, FFI.offsetOf(Outer, Array("values", 2))),
+    Array(46, FFI.offsetOf(Outer, Array("next"))),
+    Array(50, FFI.sizeOf(Nested)), Array(51, FFI.alignOf(Nested)),
+    Array(52, FFI.offsetOf(Nested, Array("ratios"))),
+    Array(53, FFI.offsetOf(Nested, Array("ratios", 1))))
+for(entry in oracle) {
+    check("C group layout matches Protos", layout(entry[0]) == entry[1])
+}
+check("Twin measures like Inner",
+    (FFI.sizeOf(Twin) == layout(0)) && (FFI.alignOf(Twin) == layout(1)))
+
+// ---- bindings
+
+calls: FFI.bindPreserving(first, "ffi_test_group_calls_count", FFI.i32, Array())
+make: FFI.bind(first, "ffi_test_group_inner_make", Inner, Array())
+transform: FFI.bind(first, "ffi_test_group_inner_transform", Inner, Array(Inner))
+measure: FFI.bind(first, "ffi_test_group_inner_measure", FFI.i32, Array(Inner))
+measurePreserving: FFI.bindPreserving(first, "ffi_test_group_inner_measure", FFI.i32, Array(Inner))
+large: FFI.bind(first, "ffi_test_group_large_transform", Large, Array(Large))
+unionInteger: FFI.bind(first, "ffi_test_group_union_integer", Choice, Array(Choice))
+unionFloat: FFI.bind(first, "ffi_test_group_union_float", Choice, Array(Choice))
+padded: FFI.bind(first, "ffi_test_group_padded_union_transform", PaddedUnion, Array(PaddedUnion))
+outer: FFI.bind(first, "ffi_test_group_outer_transform", Outer, Array(Outer))
+nested: FFI.bind(first, "ffi_test_group_nested_transform", Nested, Array(Nested))
+innerA: FFI.bind(first, "ffi_test_memory_inner_a", FFI.i32, Array(FFI.nullable(FFI.pointer(Inner))))
+touch: FFI.bind(first, "ffi_test_touch", FFI.void, Array())
+Quad: FFI.array(FFI.u8, 4)
+lend: FFI.bind(first, "ffi_test_pointer_octets", FFI.borrowedPointer(FFI.pointer(Quad)),
+    Array(FFI.i32))
+lendInner: FFI.bind(first, "ffi_test_memory_static", FFI.borrowedPointer(FFI.pointer(Inner)),
+    Array(FFI.i32))
+check("a binding is a fresh Closure",
+    FFI.bind(first, "ffi_test_group_inner_make", Inner, Array()) !== make)
+
+// Exactly one C entry per admitted group call.
+entered: (label, body) => {
+    before: calls()
+    answer: body()
+    check(label + " entered C once", calls() == (before + 1))
+    answer
+}
+
+// ---- group return without group input
+
+made: entered("make", () => make())
+check("returned struct a", made["a"] == 17)
+check("returned struct b", made["b"] == 2.5)
+again: make()
+check("every return is a fresh root", again !== made)
+again["a"] = 1
+check("returned roots are independent", made["a"] == 17)
+
+// ---- group input and return
+
+input: FFI.allocate(Inner)
+input["a"] = 5
+input["b"] = 1.25
+result: entered("transform", () => transform(input))
+check("transformed a", result["a"] == 12)
+check("transformed b", result["b"] == 2.5)
+check("result is not the input", result !== input)
+check("input unchanged by C", (input["a"] == 5) && (input["b"] == 1.25))
+result["a"] = 99
+check("result write leaves the input", input["a"] == 5)
+input["a"] = 6
+check("input write leaves the result", result["a"] == 99)
+check("group input without group return", entered("measure", () => measure(input)) == 6)
+
+// Returned roots are ordinary native regions.
+check("returned region slice", FFI.slice(result, 0, 4)[0] == 99)
+check("returned region view", FFI.view(FFI.addressOf(result), Inner)["a"] == 99)
+check("returned region at", result.at("b") == 2.5)
+check("returned region atPut", result.atPut("b", 3.0) == 3.0)
+check("returned region passes by value", measure(result) == 99)
+check("returned region pointer passes", innerA(FFI.addressOf(result)) == 99)
+
+// Owning roots, typed views, nested views and read-only views are inputs.
+fromView: transform(FFI.view(FFI.addressOf(input), Inner))
+check("typed view input", fromView["a"] == 13)
+holder: FFI.allocate(Outer)
+holder["inner"]["a"] = 30
+holder["inner"]["b"] = 0.5
+fromNested: transform(holder["inner"])
+check("nested view input", (fromNested["a"] == 37) && (fromNested["b"] == 1.0))
+holder["next"] = FFI.addressOf(input)
+readOnly: FFI.view(FFI.assumeExtent(holder["next"], 16, input, "read"), Inner)
+ordinary("read-only view stays read-only", () => { readOnly["a"] = 1 })
+fromReadOnly: entered("read-only input", () => transform(readOnly))
+check("read-only view input", (fromReadOnly["a"] == 13) && (fromReadOnly["b"] == 2.5))
+check("read-only source unchanged", (input["a"] == 6) && (input["b"] == 1.25))
+
+// Releasing the input never revokes an independent result.
+check("input release", FFI.release(input) === null)
+check("result survives the input release", result["a"] == 99)
+check("result release", FFI.release(result) === null)
+ordinary("result released once", () => FFI.release(result))
+ordinary("released result", () => result["a"])
+
+// ---- a large aggregate: the backend's indirect return
+
+wide: FFI.allocate(Large)
+wide["x"] = -1
+wide["y"] = 21
+wide["z"] = 9223372036854775807
+widened: entered("large", () => large(wide))
+check("large x", widened["x"] == 0)
+check("large y", widened["y"] == 42)
+check("large z", widened["z"] == -9223372036854775807)
+check("large input unchanged",
+    (wide["x"] == -1) && (wide["y"] == 21) && (wide["z"] == 9223372036854775807))
+
+// ---- a nested aggregate with a fixed array and a pointer member
+
+pointee: FFI.allocate(Inner)
+pointee["a"] = 77
+complex: FFI.allocate(Outer)
+complex["tag"] = 250
+complex["inner"]["a"] = 4
+complex["inner"]["b"] = 1.5
+complex["values"][0] = 1
+complex["values"][1] = 2
+complex["values"][2] = 3
+complex["next"] = FFI.addressOf(pointee)
+transformed: entered("outer", () => outer(complex))
+check("outer tag", transformed["tag"] == 251)
+check("outer nested a", transformed["inner"]["a"] == 12)
+check("outer nested b", transformed["inner"]["b"] == 2.0)
+check("outer array 0", transformed["values"][0] == 11)
+check("outer array 1", transformed["values"][1] == 22)
+check("outer array 2", transformed["values"][2] == 33)
+kept: transformed["next"]
+check("outer pointer kept", (kept === null) == false)
+check("outer pointer passes to C", innerA(kept) == 77)
+ordinary("outer pointer has no inferred extent", () => FFI.view(kept, Inner))
+outerKept: (complex["tag"] == 250) && (complex["values"][2] == 3)
+check("outer input unchanged", outerKept && (complex["inner"]["a"] == 4))
+
+shaped: FFI.allocate(Nested)
+shaped["choice"]["integer"] = 50
+shaped["ratios"][0] = 1.5
+shaped["ratios"][1] = 0.5
+reshaped: entered("nested", () => nested(shaped))
+check("nested union arm", reshaped["choice"]["integer"] == 45)
+check("nested ratio 0", reshaped["ratios"][0] == 3.0)
+check("nested ratio 1", reshaped["ratios"][1] == 0.75)
+
+// ---- unions: overlapping storage, no active-arm tracking
+
+choice: FFI.allocate(Choice)
+choice["integer"] = 1
+integral: entered("union integer", () => unionInteger(choice))
+check("union integer arm", integral["integer"] == 101)
+real: FFI.allocate(Choice)
+real["real"] = 2.5
+scaled: entered("union float", () => unionFloat(real))
+check("union float arm", scaled["real"] == 10.0)
+check("union result overlaps", scaled["integer"] == 4621819117588971520)
+scaled["real"] = 1.0
+check("union result overlaps back", scaled["integer"] == 4607182418800017408)
+check("union input unchanged", (choice["integer"] == 1) && (real["real"] == 2.5))
+
+octuple: FFI.allocate(PaddedUnion)
+octuple["bytes"][0] = 10
+octuple["bytes"][8] = 1
+flipped: entered("padded union", () => padded(octuple))
+check("padded union size", FFI.sizeOf(PaddedUnion) == 16)
+check("padded union byte 0", flipped["bytes"][0] == 11)
+check("padded union byte 8", flipped["bytes"][8] == 254)
+check("padded union bytes 1..7", sameOctets(Arrays.take(Arrays.drop(octets(flipped, 9), 1), 7),
+    Array(0, 0, 0, 0, 0, 0, 0)))
+check("padded union wide arm", flipped["wide"] == 11)
+check("padded union input unchanged", (octuple["bytes"][0] == 10) && (octuple["bytes"][8] == 1))
+
+// ---- a group return together with struct and union outs
+
+mixedParameters: Array(Inner, FFI.i32, FFI.out(Inner), FFI.out(Choice))
+mixed: FFI.bind(first, "ffi_test_group_mixed", Inner, mixedParameters)
+seed: FFI.allocate(Inner)
+seed["a"] = 3
+seed["b"] = 1.0
+answers: entered("mixed", () => mixed(seed, 4))
+check("mixed answers an Array", Array.recognizes(answers))
+check("mixed positions", answers.size() == 3)
+check("mixed return", (answers[0]["a"] == 7) && (answers[0]["b"] == 1.5))
+check("mixed struct out", (answers[1]["a"] == 6) && (answers[1]["b"] == 0.0))
+check("mixed union out", answers[2]["integer"] == 1007)
+mixedDistinct: (answers[0] !== answers[1]) && (answers[1] !== answers[2])
+check("mixed roots are independent", mixedDistinct && (answers[0] !== answers[2]))
+check("mixed return is not the struct out", answers[0] !== answers[1])
+check("mixed return is not the union out", answers[0] !== answers[2])
+check("mixed struct out is not the union out", answers[1] !== answers[2])
+check("mixed return is not the input", answers[0] !== seed)
+check("mixed struct out is not the input", answers[1] !== seed)
+answers[1]["a"] = 0
+check("mixed out write is independent", answers[0]["a"] == 7)
+check("mixed out write leaves the input", seed["a"] == 3)
+answers[0]["b"] = 9.5
+check("mixed return write leaves the input", seed["b"] == 1.0)
+check("mixed return write leaves the struct out", answers[1]["b"] == 0.0)
+answers[1]["b"] = -2.5
+check("mixed struct out write leaves the input", seed["b"] == 1.0)
+check("mixed struct out write leaves the return", answers[0]["b"] == 9.5)
+check("mixed struct writes leave the union out", answers[2]["integer"] == 1007)
+answers[1]["b"] = 0.0
+ordinary("mixed takes two arguments", () => mixed(seed))
+ordinary("mixed takes no out argument", () => mixed(seed, 4, seed))
+repeated: mixed(seed, 4)
+check("mixed fresh Array", repeated !== answers)
+freshRoots: (repeated[0] !== answers[0]) && (repeated[1] !== answers[1])
+check("mixed fresh roots", freshRoots && (repeated[2] !== answers[2]))
+check("mixed release union out first", FFI.release(answers[2]) === null)
+check("mixed return outlives its outs", answers[0]["a"] == 7)
+check("mixed release return", FFI.release(answers[0]) === null)
+check("mixed struct out outlives the return", answers[1]["b"] == 0.0)
+check("mixed release struct out", FFI.release(answers[1]) === null)
+check("repeated results unaffected", (repeated[0]["a"] == 7) && (repeated[2]["integer"] == 1007))
+for(root in repeated) {
+    check("repeated release", FFI.release(root) === null)
+}
+mixedPreserving: FFI.bindPreserving(first, "ffi_test_group_mixed", Inner, mixedParameters)
+lentForMixed: lend(1)
+preserved: mixedPreserving(seed, -3)
+preservedFirst: (preserved[0]["a"] == 0) && (preserved[1]["a"] == 6)
+check("preserving mixed results", preservedFirst && (preserved[2]["integer"] == 1000))
+check("preserving mixed keeps borrowed pointers", first.isLive(lentForMixed) == true)
+for(root in preserved) {
+    check("preserving mixed release", FFI.release(root) === null)
+}
+
+// ---- borrowed inputs are copied before the epoch advances
+
+borrowed: lendInner(1)
+borrowedView: FFI.view(FFI.assumeExtent(borrowed, 16, borrowed, "read"), Inner)
+expectedA: borrowedView["a"] + 7
+copied: entered("borrowed input", () => transform(borrowedView))
+check("borrowed input copied before the call", copied["a"] == expectedA)
+ordinary("borrowed view expired by the call", () => borrowedView["a"])
+check("group result outlives the epoch", copied["a"] == expectedA)
+
+// ---- rejection before entry: counter, bytes and borrowed pointers unchanged
+
+source: FFI.allocate(Inner)
+source["a"] = 8
+source["b"] = 0.125
+unrelated: FFI.allocate(Large)
+twin: FFI.allocate(Twin)
+twin["a"] = 8
+released: FFI.allocate(Inner)
+check("released release", FFI.release(released) === null)
+plainMap: Map()
+plainMap["a"] = 8
+plainMap["b"] = 0.125
+lent: lend(1)
+rejected: (label, body) => {
+    before: calls()
+    bytes: octets(source, 16)
+    ordinary(label, body)
+    check(label + " did not enter C", calls() == before)
+    check(label + " left the input bytes", sameOctets(bytes, octets(source, 16)))
+    check(label + " kept the borrowed pointer", first.isLive(lent) == true)
+}
+rejected("wrong arity", () => transform())
+rejected("extra argument", () => transform(source, source))
+rejected("ordinary Object", () => transform({ a: 8 }))
+rejected("ordinary Map", () => transform(plainMap))
+rejected("ordinary Array", () => transform(Array(8, 0.125)))
+rejected("null", () => transform(null))
+rejected("raw pointer", () => transform(FFI.addressOf(source)))
+rejected("byte slice", () => transform(FFI.slice(source, 0, 16)))
+rejected("unrelated layout", () => transform(unrelated))
+rejected("structurally identical layout", () => transform(twin))
+rejected("released region", () => transform(released))
+rejected("expired borrowed view", () => transform(borrowedView))
+rejected("measure of a Twin", () => measure(twin))
+rejected("mixed of a Twin", () => mixed(twin, 1))
+check("no rejection advanced the epoch", first.isLive(lent) == true)
+
+// ---- borrow epoch: non-preserving group calls revoke, preserving keep
+
+check("non-preserving group call", measure(source) == 8)
+check("non-preserving group call revokes", first.isLive(lent) == false)
+lentAgain: lend(1)
+check("preserving group call", measurePreserving(source) == 8)
+check("preserving group call keeps", first.isLive(lentAgain) == true)
+independent: make()
+touch()
+check("group result independent of the epoch", independent["a"] == 17)
+
+// ---- the same layout through a second, independently authorized library
+
+second: import("ffi:second")
+secondTransform: FFI.bind(second, "ffi_second_group_transform", Inner, Array(Inner))
+pair: FFI.allocate(Inner)
+pair["a"] = 2
+pair["b"] = 5.0
+paired: secondTransform(pair)
+check("second library result", (paired["a"] == 11) && (paired["b"] == 3.0))
+ordinary("second library rejects a structurally identical layout", () => secondTransform(twin))
+// The shared physical registration grants no symbol of another library.
+foreign("registration is not authorization",
+    () => FFI.bind(second, "ffi_test_group_inner_transform", Inner, Array(Inner)))
+
+// ---- isolated parallel execution: group roots never cross P
+
+refused: caught(NonParallelValue, () => ((x) => 1).parallel(paired).value())
+check("group root never crosses P", (refused === null) == false)
+check("scalar read from a group crosses P", ((x) => x + 1).parallel(paired["a"]).value() == 12)
+
+// ---- cleanup: every remaining allocation root is released explicitly
+
+for(root in Array(made, again, wide, widened, pointee, complex, transformed, shaped, reshaped,
+        choice, integral, real, scaled, octuple, flipped, seed, holder, fromNested,
+        fromView, fromReadOnly, copied, source, unrelated, twin, independent, pair, paired)) {
+    check("remaining release", FFI.release(root) === null)
+}
+
+print("FFM-GROUPS-PASS")

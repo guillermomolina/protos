@@ -20,9 +20,14 @@ import com.guillermomolina.protos.spi.foreign.ProtosForeignArgumentValue;
 import com.guillermomolina.protos.spi.foreign.ProtosForeignValueClass;
 import java.lang.foreign.Arena;
 import java.lang.foreign.FunctionDescriptor;
+import java.lang.foreign.GroupLayout;
 import java.lang.foreign.Linker;
 import java.lang.foreign.MemoryLayout;
 import java.lang.foreign.MemorySegment;
+import java.lang.foreign.PaddingLayout;
+import java.lang.foreign.SegmentAllocator;
+import java.lang.foreign.SequenceLayout;
+import java.lang.foreign.StructLayout;
 import java.lang.foreign.ValueLayout;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodType;
@@ -46,9 +51,13 @@ final class FfmBinding {
      * Physical downcall shapes registered for a Native Image executable, one letter per carrier:
      * {@code B} byte, {@code S} short, {@code I} int, {@code L} long, {@code F} float, {@code D}
      * double, {@code P} address and {@code V} void return. Signed and unsigned descriptors of one
-     * width share one carrier letter.
-     * The image metadata registers exactly these shapes; a declaration of any other shape is
-     * refused before linking there. A JVM links every valid declaration.
+     * width share one carrier letter. A by-value struct or union is spelled recursively with its
+     * complete physical structure: {@code struct(...)}, {@code union(...)}, {@code
+     * sequence(count,element)} and {@code padding(bytes)}, so member order, member carriers,
+     * sequence counts and padding all distinguish shapes; field names and layout identities never
+     * appear. The image metadata registers exactly these shapes; a declaration of any other shape
+     * is refused before symbol lookup or linking there. A JVM links every declaration its linker
+     * supports.
      */
     static final Set<String> NATIVE_SHAPES =
             Set.of(
@@ -56,7 +65,19 @@ final class FfmBinding {
                     "I(P,I,P)", "I(P,P,L)", "I(L,I,P)", "I(I,I,P,P)", "I(P,P,I,P)",
                     "I(P,P,I,P,P)", "I(P,I,P,I,P)", "L()", "L(L)", "L(P)", "L(P,I)", "D(P,I)",
                     "D(D,D)", "P(I)", "P(L)", "P(P,I)", "V()", "V(L)", "V(P)",
-                    "B(B)", "S(S)", "I(P,P,P)", "F(F)", "I(P,P,P,P)");
+                    "B(B)", "S(S)", "I(P,P,P)", "F(F)", "I(P,P,P,P)",
+                    // By-value groups of the fixture inventory, one entry per exercised signature.
+                    "struct(I,padding(4),D)()",
+                    "struct(I,padding(4),D)(struct(I,padding(4),D))",
+                    "I(struct(I,padding(4),D))",
+                    "struct(L,L,L)(struct(L,L,L))",
+                    "union(L,D)(union(L,D))",
+                    "union(L,sequence(9,B),padding(16))(union(L,sequence(9,B),padding(16)))",
+                    "struct(B,padding(7),struct(I,padding(4),D),sequence(3,S),padding(2),P)"
+                            + "(struct(B,padding(7),struct(I,padding(4),D),sequence(3,S),"
+                            + "padding(2),P))",
+                    "struct(union(L,D),sequence(2,F))(struct(union(L,D),sequence(2,F)))",
+                    "struct(I,padding(4),D)(struct(I,padding(4),D),I,P,P)");
 
     /**
      * Immutable declared signature: return descriptor, ordered parameters, borrow policy.
@@ -146,11 +167,14 @@ final class FfmBinding {
                     : FunctionDescriptor.of(FfmTypes.layout(returns), layouts);
         }
 
-        /** The physical carrier shape of {@link #descriptor()}, for example {@code I(P,I)}. */
+        /**
+         * The physical carrier shape of {@link #descriptor()}, for example {@code I(P,I)} or
+         * {@code struct(I,padding(4),D)(struct(I,padding(4),D))}.
+         */
         String physicalShape() {
             FunctionDescriptor descriptor = descriptor();
             StringBuilder shape = new StringBuilder();
-            shape.append(descriptor.returnLayout().map(Signature::carrier).orElse('V')).append('(');
+            shape.append(descriptor.returnLayout().map(Signature::carrier).orElse("V")).append('(');
             List<MemoryLayout> arguments = descriptor.argumentLayouts();
             for (int index = 0; index < arguments.size(); index++) {
                 if (index > 0) {
@@ -161,38 +185,84 @@ final class FfmBinding {
             return shape.append(')').toString();
         }
 
-        private static char carrier(MemoryLayout layout) {
+        /** The recursive physical spelling of one layout, without whitespace. */
+        private static String carrier(MemoryLayout layout) {
             if (layout.equals(ValueLayout.JAVA_BYTE)) {
-                return 'B';
+                return "B";
             }
             if (layout.equals(ValueLayout.JAVA_SHORT)) {
-                return 'S';
+                return "S";
             }
             if (layout.equals(ValueLayout.JAVA_FLOAT)) {
-                return 'F';
+                return "F";
             }
             if (layout.equals(ValueLayout.JAVA_INT)) {
-                return 'I';
+                return "I";
             }
             if (layout.equals(ValueLayout.JAVA_LONG)) {
-                return 'L';
+                return "L";
             }
             if (layout.equals(ValueLayout.JAVA_DOUBLE)) {
-                return 'D';
+                return "D";
             }
             if (layout.equals(ValueLayout.ADDRESS)) {
-                return 'P';
+                return "P";
+            }
+            if (layout instanceof PaddingLayout) {
+                return "padding(" + layout.byteSize() + ")";
+            }
+            if (layout instanceof SequenceLayout sequence) {
+                return "sequence(" + sequence.elementCount() + ","
+                        + carrier(sequence.elementLayout()) + ")";
+            }
+            if (layout instanceof GroupLayout aggregate) {
+                StringBuilder group =
+                        new StringBuilder(aggregate instanceof StructLayout ? "struct(" : "union(");
+                List<MemoryLayout> members = aggregate.memberLayouts();
+                for (int index = 0; index < members.size(); index++) {
+                    if (index > 0) {
+                        group.append(',');
+                    }
+                    group.append(carrier(members.get(index)));
+                }
+                return group.append(')').toString();
             }
             throw new IllegalArgumentException("unsupported carrier layout");
         }
 
+        /** Whether a by-value struct or union is a direct parameter or the return. */
+        private boolean hasDirectGroup() {
+            if (FfmTypes.isCallGroup(returns)) {
+                return true;
+            }
+            for (FfmTypes.Type parameter : parameters) {
+                if (FfmTypes.isCallGroup(parameter)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         /**
-         * Whether this executable can link the signature: always on a JVM, and in a Native Image
-         * only when its exact physical shape is registered.
+         * Whether this executable can link the signature, decided before any symbol lookup. A
+         * Native Image admits only an exactly registered physical shape. A JVM admits every
+         * scalar shape and, for a by-value group, whatever the standard linker accepts: the
+         * unbound downcall construction validates the descriptor without resolving or calling
+         * a symbol, and runs only at binding admission, never per invocation.
          */
         boolean isLinkable() {
-            return !ImageInfo.inImageRuntimeCode()
-                    || NATIVE_SHAPES.contains(physicalShape());
+            try {
+                if (ImageInfo.inImageRuntimeCode()) {
+                    return NATIVE_SHAPES.contains(physicalShape());
+                }
+                if (!hasDirectGroup()) {
+                    return true;
+                }
+                Linker.nativeLinker().downcallHandle(descriptor());
+                return true;
+            } catch (IllegalArgumentException unsupported) {
+                return false;
+            }
         }
 
         /** Whether every library-bound descriptor belongs to {@code library}. */
@@ -232,8 +302,10 @@ final class FfmBinding {
         this.library = Objects.requireNonNull(library, "library");
         this.symbol = FfmTypes.requireIdentifier(symbol);
         this.signature = Objects.requireNonNull(signature, "signature");
-        int count = signature.parameters().size();
         MethodHandle downcall = linker.downcallHandle(address, signature.descriptor());
+        // A by-value group return adds the linker's leading SegmentAllocator parameter, which is
+        // neither a Protos argument nor a C parameter; every other shape keeps its C arity.
+        int count = downcall.type().parameterCount();
         this.spread =
                 downcall.asType(MethodType.genericMethodType(count))
                         .asSpreader(Object[].class, count);
@@ -308,6 +380,17 @@ final class FfmBinding {
             case FfmTypes.InputType input ->
                     argument.kind() == ProtosForeignValueClass.Kind.STRING
                             && FfmTypes.inputLength(input, value) >= 0;
+            // Nominal admission: a live region or typed view of this session whose layout is the
+            // exact declared one, never a structurally equal layout, a byte slice or a pointer.
+            // Read-only views pass: the callee receives a copy.
+            case FfmTypes.Storage group ->
+                    FfmTypes.isCallGroup(group)
+                            && value instanceof FfmHandles.Region region
+                            && region.session() == session
+                            && region.isLive()
+                            && region.storage().identity() == group.identity()
+                            && region.segment().byteSize() == group.size()
+                            && region.segment().address() % group.align() == 0;
             default -> false;
         };
     }
@@ -328,35 +411,65 @@ final class FfmBinding {
             // Octet length of each marshalled text/input region (utf8z excludes its NUL); -1
             // elsewhere. Only private input lengths and remainder outputs consult it.
             long[] regionLengths = new long[parameters.size()];
+            // Independently owned group results of this invocation only, already in custody when
+            // allocated; created only by signatures that declare them.
+            FfmHandles.Region[] groupOuts = null;
+            FfmHandles.Region groupReturn = null;
             Object[] values;
             try (Arena call = Arena.ofConfined()) {
-                int next = 0;
-                long lastInput = -1;
-                for (int index = 0; index < carriers.length; index++) {
-                    FfmTypes.Type parameter = parameters.get(index);
-                    regionLengths[index] = -1;
-                    if (parameter instanceof FfmTypes.OutType out) {
-                        MemorySegment slot = call.allocate(FfmTypes.layout(out.target()));
-                        slot.fill((byte) 0);
-                        outSlots[index] = slot;
-                        carriers[index] = slot;
-                    } else if (parameter == FfmTypes.InputLength.INSTANCE) {
-                        // Admitted lengths never exceed MAX_INPUT_BYTES, so this is exact.
-                        carriers[index] = Integer.valueOf(Math.toIntExact(lastInput));
-                    } else if (parameter == FfmTypes.CopyDestructor.INSTANCE) {
-                        carriers[index] =
-                                MemorySegment.ofAddress(FfmTypes.CopyDestructor.SENTINEL);
-                    } else {
-                        Object value = arguments.get(next++).value();
-                        carriers[index] = carrier(parameter, value, call);
-                        if (FfmTypes.isTextInput(parameter)
-                                || parameter instanceof FfmTypes.InputType) {
-                            regionLengths[index] = ((MemorySegment) carriers[index]).byteSize() - 1;
-                        }
-                        if (parameter instanceof FfmTypes.InputType) {
-                            lastInput = regionLengths[index];
+                Object[] invocation;
+                try {
+                    int next = 0;
+                    long lastInput = -1;
+                    for (int index = 0; index < carriers.length; index++) {
+                        FfmTypes.Type parameter = parameters.get(index);
+                        regionLengths[index] = -1;
+                        if (parameter instanceof FfmTypes.OutType out
+                                && FfmTypes.isCallGroup(out.target())) {
+                            // The C out pointer addresses the result root's own storage, never
+                            // the call arena, so the result outlives the call.
+                            if (groupOuts == null) {
+                                groupOuts = new FfmHandles.Region[carriers.length];
+                            }
+                            groupOuts[index] = session.allocate((FfmTypes.Storage) out.target());
+                            carriers[index] = groupOuts[index].segment();
+                        } else if (parameter instanceof FfmTypes.OutType out) {
+                            MemorySegment slot = call.allocate(FfmTypes.layout(out.target()));
+                            slot.fill((byte) 0);
+                            outSlots[index] = slot;
+                            carriers[index] = slot;
+                        } else if (parameter == FfmTypes.InputLength.INSTANCE) {
+                            // Admitted lengths never exceed MAX_INPUT_BYTES, so this is exact.
+                            carriers[index] = Integer.valueOf(Math.toIntExact(lastInput));
+                        } else if (parameter == FfmTypes.CopyDestructor.INSTANCE) {
+                            carriers[index] =
+                                    MemorySegment.ofAddress(FfmTypes.CopyDestructor.SENTINEL);
+                        } else {
+                            Object value = arguments.get(next++).value();
+                            carriers[index] = carrier(parameter, value, call);
+                            if (FfmTypes.isTextInput(parameter)
+                                    || parameter instanceof FfmTypes.InputType) {
+                                regionLengths[index] =
+                                        ((MemorySegment) carriers[index]).byteSize() - 1;
+                            }
+                            if (parameter instanceof FfmTypes.InputType) {
+                                lastInput = regionLengths[index];
+                            }
                         }
                     }
+                    invocation = carriers;
+                    if (FfmTypes.isCallGroup(signature.returns())) {
+                        // The linker writes the by-value result through this allocator straight
+                        // into an independently owned root; it is not a public parameter.
+                        groupReturn = session.allocate((FfmTypes.Storage) signature.returns());
+                        invocation = new Object[carriers.length + 1];
+                        invocation[0] = SegmentAllocator.prefixAllocator(groupReturn.segment());
+                        System.arraycopy(carriers, 0, invocation, 1, carriers.length);
+                    }
+                } catch (Throwable failure) {
+                    // C was not entered: prepared result roots are released, never published.
+                    releasePrepared(groupOuts, groupReturn, failure);
+                    throw failure;
                 }
                 // Every argument is validated and marshalled: entry into C starts here. A
                 // non-preserving call revokes earlier borrowed regions before the downcall, so
@@ -365,17 +478,22 @@ final class FfmBinding {
                 if (!signature.preserving()) {
                     session.advanceBorrowEpoch();
                 }
-                Object raw = (Object) spread.invokeExact(carriers);
+                Object raw = (Object) spread.invokeExact(invocation);
 
                 // Stage A: capture every native carrier ([return, out0, out1, ...]) while the
-                // call arena still holds the out slots; nothing fallible is converted yet.
+                // call arena still holds the out slots; nothing fallible is converted yet. A
+                // group result is its already allocated root, never an address to convert.
                 List<FfmTypes.Type> types = new ArrayList<>();
                 List<Object> natives = new ArrayList<>();
                 types.add(signature.returns());
-                natives.add(raw);
+                natives.add(groupReturn != null ? groupReturn : raw);
                 for (int index = 0; index < carriers.length; index++) {
                     if (parameters.get(index) instanceof FfmTypes.OutType out) {
                         types.add(out.target());
+                        if (groupOuts != null && groupOuts[index] != null) {
+                            natives.add(groupOuts[index]);
+                            continue;
+                        }
                         Object nativeValue = readCarrier(out.target(), outSlots[index]);
                         if (out.target() == FfmTypes.Remainder.INSTANCE) {
                             // Capture only integers while the input region is alive: the
@@ -396,7 +514,8 @@ final class FfmBinding {
                 }
 
                 // Stage B: every non-null owned result enters session custody before any
-                // conversion can fail, whatever the C status says.
+                // conversion can fail, whatever the C status says. Group roots entered custody
+                // when they were allocated and are never adopted again.
                 Object[] adopted = new Object[types.size()];
                 for (int index = 0; index < adopted.length; index++) {
                     if (types.get(index) instanceof FfmTypes.OwnedType owned
@@ -421,6 +540,33 @@ final class FfmBinding {
             return signature.hasOutputs() ? new FfmHandles.Result(List.of(values)) : values[0];
         } finally {
             session.endCall();
+        }
+    }
+
+    /**
+     * Releases the group result roots of an invocation that failed before entering C, through
+     * the ordinary allocation release. A cleanup failure is attached to the original failure and
+     * never retried; once the session is closing, its close reclaims what remains in custody.
+     */
+    private void releasePrepared(
+            FfmHandles.Region[] groupOuts, FfmHandles.Region groupReturn, Throwable failure) {
+        if (groupOuts != null) {
+            for (FfmHandles.Region root : groupOuts) {
+                if (root != null) {
+                    releaseQuietly(root, failure);
+                }
+            }
+        }
+        if (groupReturn != null) {
+            releaseQuietly(groupReturn, failure);
+        }
+    }
+
+    private void releaseQuietly(FfmHandles.Region root, Throwable failure) {
+        try {
+            session.releaseAllocation(root);
+        } catch (RuntimeException cleanup) {
+            failure.addSuppressed(cleanup);
         }
     }
 
@@ -480,6 +626,14 @@ final class FfmBinding {
                     value == null
                             ? MemorySegment.NULL
                             : ((FfmHandles.Pointer) value).addressForCall();
+            // By-value group: one shallow copy of the admitted region into the call arena,
+            // before the borrow epoch advances. Pointer members stay pointer bits; their
+            // pointees are not copied. The copy is the callee's private parameter storage.
+            case FfmTypes.Storage group -> {
+                MemorySegment copy = call.allocate(group.size(), group.align());
+                MemorySegment.copy(((FfmHandles.Region) value).segment(), 0, copy, 0, group.size());
+                yield copy;
+            }
             default -> throw new IllegalStateException("not an argument position");
         };
     }
@@ -602,6 +756,8 @@ final class FfmBinding {
             case FfmTypes.InputLength ignored -> throw new IllegalStateException("input only");
             case FfmTypes.CopyDestructor ignored ->
                     throw new IllegalStateException("input only");
+            // An owned root allocated for this result before entry; published unchanged.
+            case FfmTypes.Storage ignored -> (FfmHandles.Region) raw;
         };
     }
 

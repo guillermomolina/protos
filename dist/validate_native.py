@@ -525,6 +525,11 @@ FFM_SCALAR_LAYOUT_ABI_MARKER = "FFM-SCALAR-LAYOUT-ABI-PASS"
 FFM_ROOT_ACTOR_MARKER = "FFM-ROOT-ACTOR-PASS"
 FFM_POINTERS_MARKER = "FFM-POINTERS-PASS"
 FFM_NATIVE_MEMORY_MARKER = "FFM-NATIVE-MEMORY-PASS"
+# By-value struct and union calls whose physical shapes are all registered.
+FFM_GROUPS_MARKER = "FFM-GROUPS-PASS"
+# A valid by-value group shape that is not registered: refused with the
+# ordinary Error before symbol lookup, linking or C entry.
+FFM_UNREGISTERED_GROUP_MARKER = "FFM-UNREGISTERED-GROUP-NATIVE-PASS"
 # f32(f32, f32), physical shape F(F,F): a valid C signature that is not
 # registered for the image. It must be refused before linking with exactly an
 # ordinary Error (parent Error, the convention of ffm-public-api.protos), never
@@ -566,11 +571,14 @@ def classify_ffm_case(
     *,
     expected_status: int,
     expected_stdout: str | None,
+    exact_stdout: bool = False,
 ) -> tuple[str, str]:
     """Classify one Native-FFM case as ("PASS", "") or ("FAIL", reason).
 
     A pass needs the exact status, the expected marker and no uncontrolled
-    host failure; anything else is a failure, never a pass.
+    host failure; anything else is a failure, never a pass. With
+    exact_stdout, stdout must be exactly the marker line: a duplicated marker
+    or any additional output is a failure.
     """
     for marker in FFM_UNEXPECTED_MARKERS:
         if marker in stdout or marker in stderr:
@@ -581,6 +589,8 @@ def classify_ffm_case(
         )
     if expected_stdout is not None and expected_stdout not in stdout:
         return "FAIL", "output is missing " + repr(expected_stdout)
+    if exact_stdout and stdout != (expected_stdout or "") + "\n":
+        return "FAIL", "output is not exactly " + repr(expected_stdout)
     if expected_status != 0 and "ran" in stdout:
         return "FAIL", "refused case ran guest code"
     return "PASS", ""
@@ -594,6 +604,7 @@ def run_ffm_case(
     env: dict[str, str],
     expected_status: int = 0,
     expected_stdout: str | None = None,
+    exact_stdout: bool = False,
 ) -> None:
     result = subprocess.run(
         command, cwd=cwd, env=env, text=True, capture_output=True, check=False
@@ -604,6 +615,7 @@ def run_ffm_case(
         result.stderr,
         expected_status=expected_status,
         expected_stdout=expected_stdout,
+        exact_stdout=exact_stdout,
     )
     if verdict != "PASS":
         fail(
@@ -786,6 +798,30 @@ def validate_native_ffm(
         cwd=cwd,
         env=env,
         expected_stdout=FFM_NATIVE_MEMORY_MARKER,
+    )
+    # By-value struct and union arguments, returns and group outs; every
+    # group signature it binds is in the exact image registration.
+    run_ffm_case(
+        "FFM_GROUPS",
+        [str(launcher), *fixture_grants, str(FFM_CASES / "ffm-groups.protos")],
+        cwd=cwd,
+        env=env,
+        expected_stdout=FFM_GROUPS_MARKER,
+        exact_stdout=True,
+    )
+    # The unregistered reverse-layout group signature: an ordinary refusal,
+    # never a MissingForeignRegistrationError, a ForeignError or a C entry.
+    run_ffm_case(
+        "FFM_UNREGISTERED_GROUP_SIGNATURE",
+        [
+            str(launcher),
+            *fixture_grants,
+            str(FFM_CASES / "ffm-groups-unregistered-native.protos"),
+        ],
+        cwd=cwd,
+        env=env,
+        expected_stdout=FFM_UNREGISTERED_GROUP_MARKER,
+        exact_stdout=True,
     )
     run_ffm_case(
         "FFM_UNREGISTERED_SCALAR_SIGNATURE",

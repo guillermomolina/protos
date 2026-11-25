@@ -75,3 +75,21 @@ int32_t ffi_second_pointer_present(const void *data) {
     ffi_second_pointer_calls++;
     return data == NULL ? 0 : 1;
 }
+
+/*
+ * ---- a by-value group under a second, independently authorized library
+ *
+ * Its physical layout equals ffi_test_memory_inner of the first library, so it
+ * reuses the same native registration; the transformation differs.
+ */
+
+typedef struct ffi_second_pair {
+    int32_t a;
+    double b;
+} ffi_second_pair;
+
+ffi_second_pair ffi_second_group_transform(ffi_second_pair value) {
+    value.a = value.a * 5 + 1;
+    value.b = value.b - 2.0;
+    return value;
+}

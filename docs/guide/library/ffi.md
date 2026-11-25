@@ -155,7 +155,7 @@ Loading the provider (`--foreign-provider-path`, portable JVM only), authorizing
 transitive dependencies and run their initializers, keep global state shared
 by all Actors, block indefinitely, corrupt memory through a wrong ABI
 signature, or terminate the process. `--allow-library` is not a sandbox, and
-authorizing a C++ library adds no C++ ABI, Qt, Boost, callback, struct or
+authorizing a C++ library adds no C++ ABI, Qt, Boost, callback or
 virtual-method support.
 
 The public sample is
@@ -265,10 +265,14 @@ FFI.layoutOf(Vector2) === Point          // true
 The association is exact: a descendant of `Vector2` has no layout until it is
 registered itself, and the prototype is neither mutated nor called.
 
-This release does not allocate native memory, read or write native regions,
-pass or return aggregates by value, or provide `FFI.cType`. Aggregate and
-field descriptors are therefore rejected by `bind`, `bindPreserving` and
-`out`. Typed pointers are bindable, as described next.
+Declaring a layout never allocates memory. Native memory (`FFI.allocate`,
+regions, slices and views) and `FFI.cType` are described in
+[Native memory](#native-memory); typed pointers are bindable as described
+next, and structs and unions pass and return by value as described in
+[Structs and unions by value](#structs-and-unions-by-value). Field
+descriptors, and fixed arrays used directly, are rejected by `bind`,
+`bindPreserving` and `out`: a fixed array travels only inside a struct or
+union.
 
 ## Typed native pointers
 
@@ -419,7 +423,8 @@ result: complete("SELECT 1;")
 
 The descriptor Array is shallowly copied when the binding is constructed.
 Later changes to the caller's Array do not alter its retained ABI signature.
-Parameters are non-void scalar inputs, opaque or nullable opaque references, or
+Parameters are non-void scalar inputs, opaque or nullable opaque references,
+typed or nullable typed pointers, struct or union layouts passed by value, or
 supported `out` descriptors; an owned descriptor is for a result, not a direct
 input parameter.
 
@@ -449,6 +454,88 @@ Protos Array:
 The first element is `null` for a `void` return. Outputs follow C parameter
 order. The provider's private indexed result is not exposed as the public
 result. Nonzero C status codes remain values that Protos code must inspect.
+
+## Structs and unions by value
+
+Struct and union layouts can be passed and returned by value, with the real C
+calling convention. Every binding position, in this release:
+
+| Descriptor | Return | Parameter | `out` target |
+|---|---|---|---|
+| integral scalars, `f32`, `f64` | yes | yes | yes |
+| `void` | yes (answers `null`) | no | no |
+| `utf8z` | no | yes | no |
+| opaque, nullable opaque | yes | yes | yes |
+| owned opaque | yes | no | yes |
+| typed pointer, nullable typed pointer | yes | yes | yes |
+| borrowed typed pointer | yes | no | yes |
+| `FFI.struct(...)`, `FFI.union(...)` | yes, a new owned region | yes, a region of that exact layout, copied | yes, a new owned region |
+| `FFI.array(...)` | no (only inside a struct or union) | no | no |
+| field, `out(...)` | no | no (`out` declares an output position) | no |
+
+A struct or union argument must be a live native region of exactly the
+declared layout: an allocation, a returned region, or a typed view of one
+(read-only views included). It is copied for the call, so C cannot change the
+caller's region. Maps, Objects, Arrays, pointers, byte slices and regions of a
+structurally identical but separately declared layout are rejected before C
+is entered; nothing converts an ordinary Protos value into a C struct.
+
+```protos
+FFI: import("std:ffi")
+native: import("ffi:mylib")
+
+// C: typedef struct { int32_t a; double b; } pair;
+//    pair pair_scale(pair value);
+Pair: FFI.struct(Array(FFI.field("a", FFI.i32), FFI.field("b", FFI.f64)))
+scale: FFI.bind(native, "pair_scale", Pair, Array(Pair))
+
+input: FFI.allocate(Pair)
+input["a"] = 5
+input["b"] = 1.25
+result: scale(input)
+result["a"]          // read from the returned native region
+input["a"]           // still 5: C received a copy
+
+FFI.release(input)   // each region is released on its own
+FFI.release(result)
+```
+
+The returned region is a new allocation, independent of the argument and of
+the call: it stays valid after the call, after other calls and after the
+argument is released, until `FFI.release` (or the end of the native session).
+It supports every region operation: indexing, `FFI.slice`, `FFI.view` and
+`FFI.addressOf`. A returned union has overlapping storage; no member is
+"active".
+
+A struct or union `out` position also answers a new owned region, in the
+usual result Array:
+
+```protos
+// C: pair pair_split(pair value, int32_t delta, pair *first, choice *second);
+Choice: FFI.union(Array(FFI.field("integer", FFI.i64), FFI.field("real", FFI.f64)))
+split: FFI.bind(native, "pair_split", Pair,
+    Array(Pair, FFI.i32, FFI.out(Pair), FFI.out(Choice)))
+
+source: FFI.allocate(Pair)   // `input` was released above
+source["a"] = 3
+source["b"] = 1.0
+answers: split(source, 4)    // two arguments: the outs consume none
+answers[0]                   // the returned Pair region
+answers[1]                   // the Pair written through `first`
+answers[2]                   // the Choice written through `second`
+FFI.release(source)
+for(region in answers) { FFI.release(region) }
+```
+
+The copy is shallow: a pointer member is copied as a pointer, and its target
+is neither copied nor kept alive. The copied struct is independent of the
+caller's region, but the memory its pointer members point to is not: the
+caller's region and the copy still point to the same memory, and passing by
+value says nothing about how long that memory lives. Struct and union calls follow the usual
+borrow rules: a call declared with `bind` revokes earlier borrowed pointers,
+while a `bindPreserving` call keeps them; a rejected call changes nothing and
+never enters C. Packed structs, bitfields, flexible array members, passing a C
+array directly, callbacks and variadic functions are not supported.
 
 ## Owned resources
 
@@ -524,6 +611,14 @@ This FFM profile is not a platform portability promise. The portable JVM loads
 the external provider JAR; the installed Native Image executable integrates the
 same provider with a finite set of physical signatures. Platform support is
 limited to Linux x86-64 LP64.
+
+In a Native Image executable, a binding is accepted only when its exact
+physical signature is registered in the image, including the complete member
+structure of every struct or union passed or returned by value; another valid
+declaration is refused with an ordinary Error before C is looked up or
+entered. The JVM accepts every signature its native linker supports. A
+registered signature is not a library grant: each library still needs its own
+`--allow-library` authorization.
 
 ## Actors and isolated parallel execution
 

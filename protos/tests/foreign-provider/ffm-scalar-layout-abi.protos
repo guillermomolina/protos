@@ -237,24 +237,24 @@ check("second u8 mixed", complement(15) == 240)
 ordinary("second u8 above", () => complement(256))
 foreign("symbols stay in their library", () => FFI.bind(second, "ffi_test_u8_identity", FFI.u8, Array(FFI.u8)))
 
-// ---- aggregate layouts are not bindable (typed pointers: ffm-pointers.protos)
+// ---- direct fixed arrays and fields are not bindable (struct and union
+// layouts pass by value: ffm-groups.protos; typed pointers: ffm-pointers.protos)
 
 padded: FFI.struct(Array(
     FFI.field("a", FFI.i8), FFI.field("b", FFI.i32), FFI.field("c", FFI.i16)))
-ordinary("struct return", () => declare("ffi_test_i8_identity", padded, Array()))
-ordinary("struct parameter", () => declare("ffi_test_i8_identity", FFI.i8, Array(padded)))
 ordinary("array parameter", () => declare("ffi_test_i8_identity", FFI.i8, Array(FFI.array(FFI.i8, 1))))
 ordinary("field parameter",
     () => declare("ffi_test_i8_identity", FFI.i8, Array(FFI.field("x", FFI.i8))))
-for(invalid in Array(padded, FFI.array(FFI.i8, 2), FFI.union(Array(FFI.field("x", FFI.i8))))) {
+for(invalid in Array(FFI.array(FFI.i8, 2), FFI.array(padded, 2), FFI.field("y", padded), {})) {
     rejected("invalid return", () => declare("ffi_test_i8_identity", invalid, Array()))
     rejected("invalid parameter", () => declare("ffi_test_i8_identity", FFI.i8, Array(invalid)))
     rejected("invalid output target", () => FFI.out(invalid))
     rejected("invalid preserving parameter",
         () => FFI.bindPreserving(first, "ffi_test_i8_identity", FFI.i8, Array(invalid)))
 }
-ordinary("preserving struct return",
-    () => FFI.bindPreserving(first, "ffi_test_i8_identity", padded, Array()))
+rejected("nested out of a struct", () => FFI.out(FFI.out(padded)))
+rejected("preserving array return",
+    () => FFI.bindPreserving(first, "ffi_test_i8_identity", FFI.array(FFI.i8, 1), Array()))
 
 // ---- public layouts against C sizeof, _Alignof and offsetof
 

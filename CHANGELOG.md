@@ -8,6 +8,13 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.217-SNAPSHOT
+
+- **I174-D.** Aggregate-by-value calls and exact Native Image group admission.
+- Support verified struct and union arguments, returns and output positions by value through the existing generic FFM provider.
+- Copy admitted aggregate arguments for calls and publish aggregate results as independently owned native roots, preserving custody before fallible conversion.
+- Register only the concrete required physical Native Image group signatures and add C fixtures, JVM/Native group coverage, cross-library ABI reuse and clean unregistered-signature regressions.
+
 ## 0.4.216-SNAPSHOT
 
 - **I174-C.** Bounded native memory, typed views and explicit extent assertions.

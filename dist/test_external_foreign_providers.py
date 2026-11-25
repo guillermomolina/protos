@@ -39,7 +39,9 @@ fixed-width scalar and C-measured layout program
 (``ffm-scalar-layout-abi.protos``), which authorizes both compiled fixtures
 and calls the same registered scalar shape through each of them, and the
 typed native pointer program (``ffm-pointers.protos``) and the bounded native
-memory program (``ffm-native-memory.protos``) under the same grants, and a
+memory program (``ffm-native-memory.protos``) and the by-value group programs
+(``ffm-groups.protos``, ``ffm-groups-unregistered-jvm.protos``) under the same
+grants, and a
 native allocation program (``ffm-native-memory-no-library.protos``) with the
 provider configured and no library grant. The ``ffi-test`` ABI fixture (``ffm-abi.protos``) is run by
 the Java test host ``ProtosI144FfmFixtureAbiTest``. Missing platform support or
@@ -193,6 +195,8 @@ RESULT_KEYS = (
     "I174_FFM_POINTERS",
     "I174_FFM_NATIVE_MEMORY",
     "I174_FFM_NATIVE_MEMORY_NO_LIBRARY",
+    "I174_FFM_GROUPS",
+    "I174_FFM_GROUPS_UNREGISTERED_JVM",
     *(key for key, _, _ in LIB029_CASES),
     *(key for key, _, _ in LIB030_CASES),
     *(key for key, _ in LIB031_CASES),
@@ -689,6 +693,18 @@ def plan_i144(runner: Runner, install: Path, protos_jar: Path, plugins: Path,
     plan_i169(runner, install, provider, plan)
 
 
+# Cases that need the two compiled C fixtures; without them none of these passes.
+COMPILED_FIXTURE_KEYS = (
+    "I169_TWO_LIBRARIES",
+    "I174_FFM_SCALAR_LAYOUT_ABI",
+    "I174_FFM_ROOT_ACTOR",
+    "I174_FFM_POINTERS",
+    "I174_FFM_NATIVE_MEMORY",
+    "I174_FFM_GROUPS",
+    "I174_FFM_GROUPS_UNREGISTERED_JVM",
+)
+
+
 def plan_i169(runner: Runner, install: Path, provider: Path, plan: list) -> None:
     """Default-off native library allowlist: denial, CLI validation, and two libraries."""
     sqlite_program = str(CASES / "ffm-sqlite.protos")
@@ -725,8 +741,7 @@ def plan_i169(runner: Runner, install: Path, provider: Path, plan: list) -> None
     compiler = next((found for found in (shutil.which(name) for name in ("cc", "gcc", "clang"))
                      if found is not None), None)
     if compiler is None:
-        for key in ("I169_TWO_LIBRARIES", "I174_FFM_SCALAR_LAYOUT_ABI", "I174_FFM_ROOT_ACTOR",
-                    "I174_FFM_POINTERS", "I174_FFM_NATIVE_MEMORY"):
+        for key in COMPILED_FIXTURE_KEYS:
             runner.record(key, UNSUPPORTED, "no C compiler (cc, gcc, or clang) on PATH")
         return
     native = runner.work / "i169-native"
@@ -740,8 +755,7 @@ def plan_i169(runner: Runner, install: Path, provider: Path, plan: list) -> None
              "-o", str(target), str(CASES / "native" / source)],
             runner.work, runner.environment())
         if completed.returncode != 0:
-            for key in ("I169_TWO_LIBRARIES", "I174_FFM_SCALAR_LAYOUT_ABI", "I174_FFM_ROOT_ACTOR",
-                        "I174_FFM_POINTERS", "I174_FFM_NATIVE_MEMORY"):
+            for key in COMPILED_FIXTURE_KEYS:
                 runner.record(key, FAIL, f"{source} did not compile")
             return
         libraries[alias] = target
@@ -773,6 +787,13 @@ def plan_i169(runner: Runner, install: Path, provider: Path, plan: list) -> None
     # Bounded native memory; the program allocates before it imports a library.
     plan.append(lambda: check_ffm_program(runner, "I174_FFM_NATIVE_MEMORY", install,
                   "ffm-native-memory.protos", provider, "FFM-NATIVE-MEMORY-PASS", grants))
+    # By-value struct and union calls, group outs and owned group results.
+    plan.append(lambda: check_ffm_program(runner, "I174_FFM_GROUPS", install,
+                  "ffm-groups.protos", provider, "FFM-GROUPS-PASS", grants))
+    # A by-value group shape absent from the Native Image registration is a real JVM downcall.
+    plan.append(lambda: check_ffm_program(runner, "I174_FFM_GROUPS_UNREGISTERED_JVM", install,
+                  "ffm-groups-unregistered-jvm.protos", provider,
+                  "FFM-UNREGISTERED-GROUP-JVM-PASS", grants))
 
 
 def plan_i169_cli(runner: Runner, install: Path, plan: list) -> None:

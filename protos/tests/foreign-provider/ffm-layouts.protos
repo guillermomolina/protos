@@ -269,7 +269,18 @@ outPointer: FFI.out(paddedPointer)
 check("out of pointer", (outPointer !== null) && (outPointer !== FFI.out(paddedPointer)))
 ordinary("out of pointer is not storage", () => FFI.sizeOf(outPointer))
 ordinary("out of out pointer", () => FFI.out(outPointer))
-ordinary("out of struct", () => FFI.out(padded))
+// Struct and union out declarations are admitted and stay declarative: no
+// provider session or library grant is needed to construct them.
+outStruct: FFI.out(padded)
+check("out of struct", (outStruct === null) == false)
+check("out of struct is fresh", outStruct !== FFI.out(padded))
+outUnion: FFI.out(mixed)
+check("out of union", (outUnion === null) == false)
+ordinary("out of struct is not storage", () => FFI.sizeOf(outStruct))
+ordinary("out of union is not storage", () => FFI.alignOf(outUnion))
+ordinary("out of struct has no offsets", () => FFI.offsetOf(outStruct, path()))
+ordinary("out of out struct", () => FFI.out(outStruct))
+ordinary("out of fixed array", () => FFI.out(quad))
 
 // ---- nullable typed pointers
 

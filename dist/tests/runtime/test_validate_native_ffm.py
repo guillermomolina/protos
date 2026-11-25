@@ -289,6 +289,103 @@ class NativeMemoryProgramTest(unittest.TestCase):
             self.verdict(0, self.MARKER + "\n", "MissingForeignRegistrationError: L(P,I)"))
 
 
+class GroupProgramTest(unittest.TestCase):
+    MARKER = validate_native.FFM_GROUPS_MARKER
+
+    def verdict(self, returncode: int, stdout: str, stderr: str) -> str:
+        return classify_ffm_case(returncode, stdout, stderr, expected_status=0,
+                                 expected_stdout=self.MARKER, exact_stdout=True)[0]
+
+    def test_native_programs_exist_and_emit_one_unique_marker(self) -> None:
+        markers = {
+            "ffm-groups.protos": validate_native.FFM_GROUPS_MARKER,
+            "ffm-groups-unregistered-native.protos":
+                validate_native.FFM_UNREGISTERED_GROUP_MARKER,
+        }
+        self.assertNotEqual(*markers.values())
+        for name, marker in markers.items():
+            text = (validate_native.FFM_CASES / name).read_text(encoding="utf-8")
+            self.assertEqual(1, text.count('print("' + marker + '")'), name)
+            self.assertEqual(1, text.count("print("), name)
+            self.assertIn('import("ffi:first")', text, name)
+
+    def test_success_needs_status_and_marker(self) -> None:
+        self.assertEqual("PASS", self.verdict(0, self.MARKER + "\n", ""))
+
+    def test_missing_marker_fails(self) -> None:
+        self.assertEqual("FAIL", self.verdict(0, "", ""))
+
+    def test_wrong_marker_fails(self) -> None:
+        self.assertEqual("FAIL", self.verdict(0, "FFM-GROUPS-FAIL\n", ""))
+        self.assertEqual(
+            "FAIL", self.verdict(0, validate_native.FFM_NATIVE_MEMORY_MARKER + "\n", ""))
+        self.assertEqual(
+            "FAIL", self.verdict(0, validate_native.FFM_UNREGISTERED_GROUP_MARKER + "\n", ""))
+
+    def test_unsuccessful_exit_fails(self) -> None:
+        self.assertEqual("FAIL", self.verdict(1, self.MARKER + "\n", ""))
+        self.assertEqual("FAIL", self.verdict(1, "", "CheckFailure"))
+
+    def test_duplicate_or_additional_output_fails(self) -> None:
+        self.assertEqual("FAIL", self.verdict(0, self.MARKER + "\n" + self.MARKER + "\n", ""))
+        self.assertEqual("FAIL", self.verdict(0, "ran\n" + self.MARKER + "\n", ""))
+        self.assertEqual("FAIL", self.verdict(0, self.MARKER + "\nextra\n", ""))
+
+    def test_missing_registration_error_fails(self) -> None:
+        self.assertEqual(
+            "FAIL",
+            self.verdict(0, self.MARKER + "\n",
+                         "MissingForeignRegistrationError: struct(I,padding(4),D)()"))
+
+    def test_exactness_is_opt_in(self) -> None:
+        # Existing cases keep their substring classification unchanged.
+        self.assertEqual(
+            "PASS",
+            classify_ffm_case(0, "noise\n" + self.MARKER + "\n", "", expected_status=0,
+                              expected_stdout=self.MARKER)[0])
+
+
+class UnregisteredGroupSignatureTest(unittest.TestCase):
+    MARKER = validate_native.FFM_UNREGISTERED_GROUP_MARKER
+
+    def verdict(self, returncode: int, stdout: str, stderr: str) -> str:
+        return classify_ffm_case(returncode, stdout, stderr, expected_status=0,
+                                 expected_stdout=self.MARKER, exact_stdout=True)[0]
+
+    def test_clean_ordinary_refusal_passes(self) -> None:
+        self.assertEqual("PASS", self.verdict(0, self.MARKER + "\n", ""))
+
+    def test_refusal_needs_its_own_marker(self) -> None:
+        self.assertEqual("FAIL", self.verdict(0, "", ""))
+        self.assertEqual("FAIL", self.verdict(0, validate_native.FFM_GROUPS_MARKER + "\n", ""))
+        self.assertEqual("FAIL", self.verdict(0, "ffm-unregistered-scalar-refused\n", ""))
+
+    def test_missing_registration_error_is_not_a_refusal(self) -> None:
+        self.assertEqual(
+            "FAIL",
+            self.verdict(1, "", "MissingForeignRegistrationError: struct(D,I,padding(4))"))
+        self.assertEqual(
+            "FAIL",
+            self.verdict(0, self.MARKER + "\n", "MissingForeignRegistrationError"))
+
+    def test_foreign_entry_failure_fails(self) -> None:
+        self.assertEqual(
+            "FAIL",
+            self.verdict(0, validate_native.FFM_FOREIGN_ENTRY_MARKER + "\n" + self.MARKER
+                         + "\n", ""))
+
+    def test_unsuccessful_exit_fails(self) -> None:
+        self.assertEqual("FAIL", self.verdict(1, self.MARKER + "\n", ""))
+
+    def test_program_requires_an_exact_ordinary_error_before_lookup(self) -> None:
+        text = (validate_native.FFM_CASES / "ffm-groups-unregistered-native.protos").read_text(
+            encoding="utf-8")
+        self.assertIn("error.parent() === Error", text)
+        self.assertIn("(error.parent() === ForeignError) == false", text)
+        self.assertIn("ffi_test_group_no_such_symbol", text)
+        self.assertIn("calls() == before", text)
+
+
 class DistributionContentTest(unittest.TestCase):
     def test_bundled_sqlite_is_detected(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
