@@ -484,73 +484,97 @@ def workflow_job_scalar(path, job_id, key):
 def workflow_job_container_image(path, job_id):
     # type: (Path, str) -> str
     text = workflow_job_text(path, job_id)
-    return first_match(
-        text,
-        r"^[ \t]*image:[ \t]*[\"']?([^\"'\n#]+)",
-        "%s.container image" % job_id,
-    )
+    images = re.findall(r"(?m)^      image: ([^\n#]+)$", text)
+    return images[0].strip() if len(images) == 1 else "<drift:%s.container>" % job_id
+
+
+CI_MAVEN_JOBS = ("prepare", "compilerability", "java-parallel", "java-serial",
+                 "protos-suite", "protos-foreign", "native-image")
+CI_COMMANDS = {
+    "prepare": ["prepare-java-test-shards"],
+    "compilerability": ["check"],
+    "java-parallel": ["test-java-parallel"],
+    "java-serial": ["test-java-serial"],
+    "protos-suite": ["prepare-protos-tests", "test-protos-suite"],
+    "protos-foreign": ["prepare-protos-tests", "test-protos-foreign"],
+    "native-image": ["test-native"],
+}
 
 
 def workflow_job_test_command(path, job_id):
-    # type: (Path, str) -> str
-    text = workflow_job_text(path, job_id)
-    expected = [
-        ("Check repository", "make check"),
-        ("Run repository tests", "make test"),
-        ("Run Native Image tests", "make test-native"),
-    ]
-    # Each phase must be a direct command in a dedicated, ordered step.
-    steps = re.findall(
-        r"(?m)^      - name: ([^\n]+)\n        run: (make [^\r\n]+)$",
-        text,
-    )
-    commands = re.findall(
-        r"(?m)^[ \t]*(?:run:[ \t]*)?(make[ \t]+[^\r\n#]+)$",
-        text,
-    )
-    if (steps == expected and len(commands) == len(expected)
-            and "devcontainers/ci@" not in text):
-        return " -> ".join(command for _, command in expected)
-    return "<drift:%s.command>" % job_id
+    # Inspect the complete distributed contract, including automatic entry and
+    # acceptance wiring. Substring presence alone cannot establish ownership.
+    text = read_text(path)
+    jobs = text.split("\njobs:\n", 1)[-1]
+    ids = re.findall(r"(?m)^  ([A-Za-z0-9_-]+):$", jobs)
+    expected = set(CI_MAVEN_JOBS) | {"aggregate"}
+    valid = len(ids) == len(expected) and set(ids) == expected
+    valid = valid and "\n  push:\n" in text and "\n  pull_request:\n" in text
+    valid = valid and "pull_request_target" not in text
+    valid = valid and "continue-on-error:" not in text
+    valid = valid and "devcontainers/ci@" not in text
+    shells = re.findall(r"(?m)^\s*shell: (.+)$", text)
+    valid = valid and shells == ["bash"]
+    valid = valid and not re.search(r"(?m)^\s*set \+", text)
+    # bash's default Actions invocation retains -e and pipefail; reject
+    # explicit suppression in validation command lines.
+    for name, targets in CI_COMMANDS.items():
+        body = workflow_job_text(path, name)
+        commands = re.findall(r"(?m)^\s*(?:-\s+)?(?:run:\s*)?make\s+([a-zA-Z0-9_-]+)([^\n]*)$", body)
+        valid = valid and [target for target, _ in commands] == targets
+        valid = valid and all(not re.search(r"\|\||;|&&|continue-on-error|set \+", tail)
+                              for _, tail in commands)
+    aggregate = workflow_job_text(path, "aggregate")
+    needs = re.search(r"(?m)^    needs: \[([^\]]+)\]$", aggregate)
+    valid = valid and bool(needs) and [v.strip() for v in needs.group(1).split(",")] == list(CI_MAVEN_JOBS)
+    valid = valid and "    if: always()" in aggregate
+    for token in ("tools/ci_validation_aggregate.py", "--plan", "--results", "--dependencies",
+                  "${{ toJSON(needs) }}", "actions/download-artifact@v4", "java-plan-${{ github.sha }}",
+                  "java-evidence-*-${{ github.sha }}"):
+        valid = valid and token in aggregate
+    for name in ("java-parallel", "java-serial"):
+        body = workflow_job_text(path, name)
+        valid = valid and "    needs: prepare" in body
+        valid = valid and "actions/download-artifact@v4" in body
+        valid = valid and "java-plan-${{ github.sha }}" in body
+    return "distributed validation gates" if valid else "<drift:distributed.command>"
 
 
 def workflow_job_test_workers(path, job_id):
-    # type: (Path, str) -> str
-    text = workflow_job_text(path, job_id)
-    values = re.findall(
-        r"(?m)^      (JAVA_TEST_JOBS|PROTOS_TEST_JOBS):[ \t]*\"?([0-9]+)\"?[ \t]*$",
-        text,
-    )
-    if (re.search(r"(?m)^    env:[ \t]*$", text)
-            and values == [("JAVA_TEST_JOBS", "4"), ("PROTOS_TEST_JOBS", "4")]):
-        return "JAVA_TEST_JOBS=4 PROTOS_TEST_JOBS=4"
-    return "<drift:%s.workers>" % job_id
+    text = read_text(path)
+    top = text.split("\njobs:\n", 1)[0]
+    bounded = all(re.search(r'^  %s: "%s"$' % (name, value), top, re.MULTILINE)
+                  for name, value in (("JAVA_TEST_SHARD_COUNT", "4"), ("JAVA_TEST_JOBS", "2"),
+                                      ("PROTOS_TEST_JOBS", "2")))
+    # Reject job-local worker overrides that bypass the bounded defaults.
+    bounded = bounded and not re.search(r"(?m)^      (JAVA_TEST_JOBS|PROTOS_TEST_JOBS):", text)
+    parallel = workflow_job_text(path, "java-parallel")
+    prepare = workflow_job_text(path, "prepare")
+    for token in ("fail-fast: false", "shard: ${{ fromJSON(needs.prepare.outputs.indices) }}",
+                  "JAVA_TEST_SHARD_COUNT: ${{ needs.prepare.outputs.count }}",
+                  "JAVA_TEST_SHARD_INDEX: ${{ matrix.shard }}"):
+        bounded = bounded and token in parallel
+    for token in ("count: ${{ steps.plan.outputs.count }}", "indices: ${{ steps.plan.outputs.indices }}",
+                  "tools/ci_java_test_shards.py outputs", '>> "$GITHUB_OUTPUT"'):
+        bounded = bounded and token in prepare
+    return "4 shards; Java=2 Protos=2" if bounded else "<drift:distributed.workers>"
 
 
 def workflow_job_maven_cache_contract(path, job_id):
-    # type: (Path, str) -> str
     text = workflow_job_text(path, job_id)
-
-    action_present = re.search(
-        r"^[ \\t]*(?:-[ \\t]*)?uses:[ \\t]*actions/cache@v6[ \\t]*$",
-        text,
-        flags=re.MULTILINE,
-    )
-    path_present = re.search(
-        r"^[ \\t]*path:[ \\t]*/root/.m2/repository[ \\t]*$",
-        text,
-        flags=re.MULTILINE,
-    )
-    key_present = (
-        "${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}" in text
-    )
-    restore_present = (
-        "${{ runner.os }}-maven-" in text
-    )
-
-    if action_present and path_present and key_present and restore_present:
-        return "actions/cache@v6 /root/.m2/repository pom-hash"
-    return "<drift:%s.maven_cache>" % job_id
+    blocks = re.split(r"(?m)^      - ", text)
+    caches = [block for block in blocks if re.search(r"(?m)^\s*(?:uses: )?actions/cache@", block)
+              or "uses: actions/cache@" in block]
+    valid = len(caches) == 1
+    if valid:
+        cache = caches[0]
+        valid = bool(re.search(r"(?m)^\s*uses: actions/cache@v6\s*$", cache))
+        valid = valid and bool(re.search(r"(?m)^\s*path: /root/\.m2/repository\s*$", cache))
+        valid = valid and bool(re.search(
+            r"(?m)^\s*key: " + re.escape("${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}") + r"\s*$", cache))
+        valid = valid and bool(re.search(
+            r"(?m)^\s*restore-keys: \|\n\s*" + re.escape("${{ runner.os }}-maven-") + r"\s*$", cache))
+    return "actions/cache@v6 /root/.m2/repository pom-hash" if valid else "<drift:%s.maven_cache>" % job_id
 
 
 def audit_bindings(root, contract):
@@ -618,26 +642,18 @@ def audit_bindings(root, contract):
     rows.append(("devcontainer.java_path", "JAVA_HOME-first", docker_java_path))
 
     ci_workflow = root / ".github" / "workflows" / "tests.yml"
-    rows.append((
-        "ci.tests.container",
-        str(contract["ci"]["image"]),
-        workflow_job_container_image(ci_workflow, "test"),
-    ))
-    rows.append((
-        "ci.tests.command",
-        "make check -> make test -> make test-native",
-        workflow_job_test_command(ci_workflow, "test"),
-    ))
-    rows.append((
-        "ci.tests.workers",
-        "JAVA_TEST_JOBS=4 PROTOS_TEST_JOBS=4",
-        workflow_job_test_workers(ci_workflow, "test"),
-    ))
-    rows.append((
-        "ci.tests.maven_cache",
-        "actions/cache@v6 /root/.m2/repository pom-hash",
-        workflow_job_maven_cache_contract(ci_workflow, "test"),
-    ))
+    images = [workflow_job_container_image(ci_workflow, name) for name in CI_MAVEN_JOBS]
+    expected_image = str(contract["ci"]["image"])
+    rows.append(("ci.tests.container", expected_image,
+                 expected_image if all(image == expected_image for image in images) else " | ".join(images)))
+    rows.append(("ci.tests.command", "distributed validation gates",
+                 workflow_job_test_command(ci_workflow, "aggregate")))
+    rows.append(("ci.tests.workers", "4 shards; Java=2 Protos=2",
+                 workflow_job_test_workers(ci_workflow, "java-parallel")))
+    caches = [workflow_job_maven_cache_contract(ci_workflow, name) for name in CI_MAVEN_JOBS]
+    expected_cache = "actions/cache@v6 /root/.m2/repository pom-hash"
+    rows.append(("ci.tests.maven_cache", expected_cache,
+                 expected_cache if all(cache == expected_cache for cache in caches) else " | ".join(caches)))
     rows.append((
         "dist.runtime_pom_absent",
         "absent",

@@ -60,43 +60,87 @@ def write(path, text):
     path.write_text(text, encoding="utf-8")
 
 
-def ci_job(name, image, command, cache_action="actions/cache@v6", workers="4"):
-    return """  %s:
+def ci_job(name, image, command, cache_action="actions/cache@v6", workers="2"):
+    extra = ""
+    if name == "prepare":
+        extra = """    outputs:
+      count: ${{ steps.plan.outputs.count }}
+      indices: ${{ steps.plan.outputs.indices }}
+"""
+    elif name == "java-parallel":
+        extra = """    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.prepare.outputs.indices) }}
     env:
-      JAVA_TEST_JOBS: "%s"
-      PROTOS_TEST_JOBS: "%s"
-    container:
-      image: %s
-    steps:
-      - name: Restore Maven dependency cache
-        uses: %s
+      JAVA_TEST_SHARD_COUNT: ${{ needs.prepare.outputs.count }}
+      JAVA_TEST_SHARD_INDEX: ${{ matrix.shard }}
+"""
+    elif name == "java-serial":
+        extra = "    needs: prepare\n"
+    body = "  %s:\n%s    container:\n      image: %s\n    steps:\n" % (name, extra, image)
+    body += """      - uses: actions/cache@v6
         with:
           path: /root/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
             ${{ runner.os }}-maven-
-      - name: Check repository
-        run: make check
-      - name: Run repository tests
-        run: %s
-      - name: Run Native Image tests
-        run: make test-native
-""" % (name, workers, workers, image, cache_action, command)
+""".replace("actions/cache@v6", cache_action)
+    if name in ("java-parallel", "java-serial"):
+        body += """      - uses: actions/download-artifact@v4
+        with:
+          name: java-plan-${{ github.sha }}
+"""
+    body += "".join("      - name: Execute target\n        run: %s\n" % c for c in command.split("\n"))
+    if name == "prepare":
+        body += '      - run: python3 tools/ci_java_test_shards.py outputs >> "$GITHUB_OUTPUT"\n'
+    return body
 
 
-def ci_workflow(
-    test_image,
-    test_command,
-    cache_action="actions/cache@v6",
-    workers="4",
-):
-    return "jobs:\n" + ci_job(
-        "test",
-        test_image,
-        test_command,
-        cache_action,
-        workers,
-    )
+def ci_workflow(test_image, test_command, cache_action="actions/cache@v6", workers="2"):
+    commands = {
+        "prepare": "make prepare-java-test-shards",
+        "compilerability": "make check",
+        "java-parallel": test_command,
+        "java-serial": "make test-java-serial",
+        "protos-suite": "make prepare-protos-tests\nmake test-protos-suite",
+        "protos-foreign": "make prepare-protos-tests\nmake test-protos-foreign",
+        "native-image": "make test-native",
+    }
+    text = """name: CI
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+env:
+  JAVA_TEST_SHARD_COUNT: "4"
+  JAVA_TEST_JOBS: "%s"
+  PROTOS_TEST_JOBS: "%s"
+defaults:
+  run:
+    shell: bash
+jobs:
+""" % (workers, workers)
+    text += "".join(ci_job(name, test_image, command, cache_action, workers)
+                    for name, command in commands.items())
+    return text + """  aggregate:
+    if: always()
+    needs: [prepare, compilerability, java-parallel, java-serial, protos-suite, protos-foreign, native-image]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: java-plan-${{ github.sha }}
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: java-evidence-*-${{ github.sha }}
+      - run: python3 tools/ci_validation_aggregate.py --plan p --results r --dependencies "$DEPENDENCIES"
+        env:
+          DEPENDENCIES: ${{ toJSON(needs) }}
+"""
+
 
 def make_fixture(
     root,
@@ -181,8 +225,8 @@ def make_fixture(
         )
 
     test_ci_image = STALE_CI_IMAGE if development_drift else CI_IMAGE
-    test_command = "make test-protos" if ci_command_drift else "make test"
-    test_workers = "6" if ci_workers_drift else "4"
+    test_command = "make test-protos" if ci_command_drift else "make test-java-parallel"
+    test_workers = "6" if ci_workers_drift else "2"
     test_cache_action = (
         "actions/cache@v5"
         if ci_cache_drift
@@ -465,6 +509,45 @@ Java version: 25.0.5.0.3, vendor: GraalVM Community, runtime: /opt/graalvm-commu
             "Portable bytecode drift was not identified",
             result,
         )
+
+        module = runpy.run_path(str(verifier))
+        workflow_command = module["workflow_job_test_command"]
+        workflow_workers = module["workflow_job_test_workers"]
+        workflow_image = module["workflow_job_container_image"]
+        workflow_cache = module["workflow_job_maven_cache_contract"]
+        workflow = tmp / "distributed-fixture.yml"
+        good_ci = ci_workflow(CI_IMAGE, "make test-java-parallel")
+        write(workflow, good_ci)
+        require(workflow_command(workflow, "aggregate") == "distributed validation gates",
+                "distributed fixture was rejected")
+        for lane in ("prepare", "compilerability", "java-parallel", "java-serial",
+                     "protos-suite", "protos-foreign", "native-image", "aggregate"):
+            write(workflow, good_ci.replace("  " + lane + ":\n", "  missing-lane:\n", 1))
+            require(workflow_command(workflow, "aggregate") != "distributed validation gates",
+                    "missing lane accepted: " + lane)
+        for before, after in (("  push:\n", "  disabled-push:\n"),
+                              ("  pull_request:\n", "  disabled-pr:\n"),
+                              ("native-image]", "protos-suite]"),
+                              ("run: make check", "continue-on-error: true\n        run: make check")):
+            write(workflow, good_ci.replace(before, after, 1))
+            require(workflow_command(workflow, "aggregate") != "distributed validation gates",
+                    "unsafe workflow accepted: " + before)
+        for duplicate in ("test", "test-java", "test-protos"):
+            write(workflow, good_ci.replace("run: make check", "run: make check\n      - run: make " + duplicate))
+            require(workflow_command(workflow, "aggregate") != "distributed validation gates",
+                    "duplicate aggregate accepted: " + duplicate)
+        for before, after in (('JAVA_TEST_SHARD_COUNT: "4"', 'JAVA_TEST_SHARD_COUNT: "3"'),
+                              ('JAVA_TEST_JOBS: "2"', 'JAVA_TEST_JOBS: "4"'),
+                              ('PROTOS_TEST_JOBS: "2"', 'PROTOS_TEST_JOBS: "4"'),
+                              ("fail-fast: false", "fail-fast: true"),
+                              ("fromJSON(needs.prepare.outputs.indices)", "fromJSON('[1,2,3,4]')")):
+            write(workflow, good_ci.replace(before, after, 1))
+            require(workflow_workers(workflow, "java-parallel") != "4 shards; Java=2 Protos=2",
+                    "unbounded worker configuration accepted: " + before)
+        write(workflow, good_ci.replace(CI_IMAGE, STALE_CI_IMAGE, 1))
+        require(workflow_image(workflow, "prepare") != CI_IMAGE, "single-job image drift accepted")
+        write(workflow, good_ci.replace("actions/cache@v6", "actions/cache@v5", 1))
+        require("drift" in workflow_cache(workflow, "prepare"), "single-job cache drift accepted")
 
         root = tmp / "ci-command-drift"
         make_fixture(root, ci_command_drift=True)

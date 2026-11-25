@@ -15,16 +15,23 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: false
 
+# Planning count and per-runner concurrency are independent controls.
+env:
+  JAVA_TEST_SHARD_COUNT: "4"
+  JAVA_TEST_JOBS: "2"
+  PROTOS_TEST_JOBS: "2"
+
+defaults:
+  run:
+    shell: bash
+
 jobs:
-  test:
+  prepare:
     timeout-minutes: 120
     runs-on: ubuntu-latest
-
-    # Bound both test lanes to four workers; report actual runner resources below.
-    env:
-      JAVA_TEST_JOBS: "4"
-      PROTOS_TEST_JOBS: "4"
-
+    outputs:
+      count: ${{ steps.plan.outputs.count }}
+      indices: ${{ steps.plan.outputs.indices }}
     container:
       image: ghcr.io/guillermomolina/protos-ci@sha256:44e03c759ccd2b57135f5c0bdbb5060563e858601daa73958ab6cbba2ffc5fe3
       credentials:
@@ -33,6 +40,10 @@ jobs:
       options: --user 0
 
     steps:
+      - name: Start lane clock
+        run: |
+          mkdir -p target/ci-logs
+          date +%s > "$RUNNER_TEMP/lane-start"
       - name: Check out repository
         uses: actions/checkout@v7
         with:
@@ -57,15 +68,538 @@ jobs:
             printf 'CPU_CGROUP_MAX='
             cat /sys/fs/cgroup/cpu.max
           fi
+          if [ -r /proc/meminfo ]; then head -n 5 /proc/meminfo; fi
+          for resource in memory.max memory.current memory.peak; do
+            if [ -r "/sys/fs/cgroup/$resource" ]; then
+              printf '%s=' "$resource"
+              cat "/sys/fs/cgroup/$resource"
+            fi
+          done
+          java -XshowSettings:system -version
+          printf 'JAVA_TEST_JOBS=%s\n' "$JAVA_TEST_JOBS"
+          printf 'PROTOS_TEST_JOBS=%s\n' "$PROTOS_TEST_JOBS"
+
+      - name: Exercise CI orchestration regressions
+        run: |
+          python3 tools/tests/test_ci_java_test_shards.py
+          python3 tools/tests/test_ci_validation_aggregate.py
+          python3 tools/tests/test_verify_toolchain.py
+      - name: Prepare Java partition plan
+        run: make prepare-java-test-shards
+      - name: Export validated partition matrix
+        id: plan
+        run: python3 tools/ci_java_test_shards.py outputs >> "$GITHUB_OUTPUT"
+      - name: Upload revision-bound plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: java-plan-${{ github.sha }}
+          if-no-files-found: error
+          path: |
+            target/java-test-shards/plan.json
+            target/java-test-shards/*.includes
+      - name: Record lane wall time
+        if: always()
+        run: |
+          start=$(cat "$RUNNER_TEMP/lane-start" 2>/dev/null || date +%s)
+          duration=$(( $(date +%s) - start ))
+          printf 'LANE_DURATION_SECONDS=%s\n' "$duration"
+          printf 'Wall time: %s seconds\n' "$duration" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload lane diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prepare-${{ github.sha }}
+          if-no-files-found: warn
+          path: |
+            target/java-test-shards/plan.json
+  compilerability:
+    timeout-minutes: 120
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/guillermomolina/protos-ci@sha256:44e03c759ccd2b57135f5c0bdbb5060563e858601daa73958ab6cbba2ffc5fe3
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --user 0
+
+    steps:
+      - name: Start lane clock
+        run: |
+          mkdir -p target/ci-logs
+          date +%s > "$RUNNER_TEMP/lane-start"
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Trust checked-out repository
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Restore Maven dependency cache
+        uses: actions/cache@v6
+        with:
+          path: /root/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Report available CPU resources
+        run: |
+          printf 'CPU_NPROC=%s\n' "$(nproc)"
+          printf 'CPU_ONLINE=%s\n' "$(getconf _NPROCESSORS_ONLN)"
+          if [ -r /sys/fs/cgroup/cpu.max ]; then
+            printf 'CPU_CGROUP_MAX='
+            cat /sys/fs/cgroup/cpu.max
+          fi
+          if [ -r /proc/meminfo ]; then head -n 5 /proc/meminfo; fi
+          for resource in memory.max memory.current memory.peak; do
+            if [ -r "/sys/fs/cgroup/$resource" ]; then
+              printf '%s=' "$resource"
+              cat "/sys/fs/cgroup/$resource"
+            fi
+          done
           java -XshowSettings:system -version
           printf 'JAVA_TEST_JOBS=%s\n' "$JAVA_TEST_JOBS"
           printf 'PROTOS_TEST_JOBS=%s\n' "$PROTOS_TEST_JOBS"
 
       - name: Check repository
-        run: make check
+        run: |
+          mkdir -p target/ci-logs
+          make check 2>&1 | tee target/ci-logs/compilerability.log
+      - name: Record lane wall time
+        if: always()
+        run: |
+          start=$(cat "$RUNNER_TEMP/lane-start" 2>/dev/null || date +%s)
+          duration=$(( $(date +%s) - start ))
+          printf 'LANE_DURATION_SECONDS=%s\n' "$duration"
+          printf 'Wall time: %s seconds\n' "$duration" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload lane diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compilerability-${{ github.sha }}
+          if-no-files-found: warn
+          path: |
+            target/ci-logs/compilerability.log
+            target/native-analysis/
+            target/*report.json
+  java-parallel:
+    timeout-minutes: 120
+    runs-on: ubuntu-latest
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.prepare.outputs.indices) }}
+    env:
+      JAVA_TEST_SHARD_COUNT: ${{ needs.prepare.outputs.count }}
+      JAVA_TEST_SHARD_INDEX: ${{ matrix.shard }}
+    container:
+      image: ghcr.io/guillermomolina/protos-ci@sha256:44e03c759ccd2b57135f5c0bdbb5060563e858601daa73958ab6cbba2ffc5fe3
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --user 0
 
-      - name: Run repository tests
-        run: make test
+    steps:
+      - name: Start lane clock
+        run: |
+          mkdir -p target/ci-logs
+          date +%s > "$RUNNER_TEMP/lane-start"
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Trust checked-out repository
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Restore Maven dependency cache
+        uses: actions/cache@v6
+        with:
+          path: /root/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Report available CPU resources
+        run: |
+          printf 'CPU_NPROC=%s\n' "$(nproc)"
+          printf 'CPU_ONLINE=%s\n' "$(getconf _NPROCESSORS_ONLN)"
+          if [ -r /sys/fs/cgroup/cpu.max ]; then
+            printf 'CPU_CGROUP_MAX='
+            cat /sys/fs/cgroup/cpu.max
+          fi
+          if [ -r /proc/meminfo ]; then head -n 5 /proc/meminfo; fi
+          for resource in memory.max memory.current memory.peak; do
+            if [ -r "/sys/fs/cgroup/$resource" ]; then
+              printf '%s=' "$resource"
+              cat "/sys/fs/cgroup/$resource"
+            fi
+          done
+          java -XshowSettings:system -version
+          printf 'JAVA_TEST_JOBS=%s\n' "$JAVA_TEST_JOBS"
+          printf 'PROTOS_TEST_JOBS=%s\n' "$PROTOS_TEST_JOBS"
+
+      - name: Download revision-bound plan
+        uses: actions/download-artifact@v4
+        with:
+          name: java-plan-${{ github.sha }}
+          path: target/java-test-shards
+      - name: Run Java parallel partition
+        run: |
+          mkdir -p target/ci-logs
+          make test-java-parallel 2>&1 | tee target/ci-logs/java-parallel.log
+      - name: Record lane wall time
+        if: always()
+        run: |
+          start=$(cat "$RUNNER_TEMP/lane-start" 2>/dev/null || date +%s)
+          duration=$(( $(date +%s) - start ))
+          printf 'LANE_DURATION_SECONDS=%s\n' "$duration"
+          printf 'Wall time: %s seconds\n' "$duration" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload lane diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: java-evidence-parallel-${{ matrix.shard }}-${{ github.sha }}
+          if-no-files-found: warn
+          path: |
+            target/java-test-reports/parallel-${{ matrix.shard }}/
+            target/ci-logs/java-parallel.log
+  java-serial:
+    timeout-minutes: 120
+    runs-on: ubuntu-latest
+    needs: prepare
+    env:
+      JAVA_TEST_SHARD_COUNT: ${{ needs.prepare.outputs.count }}
+      JAVA_TEST_SHARD_INDEX: "1"
+      JAVA_SERIAL_REPORTS: target/java-test-reports/serial
+    container:
+      image: ghcr.io/guillermomolina/protos-ci@sha256:44e03c759ccd2b57135f5c0bdbb5060563e858601daa73958ab6cbba2ffc5fe3
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --user 0
+
+    steps:
+      - name: Start lane clock
+        run: |
+          mkdir -p target/ci-logs
+          date +%s > "$RUNNER_TEMP/lane-start"
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Trust checked-out repository
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Restore Maven dependency cache
+        uses: actions/cache@v6
+        with:
+          path: /root/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Report available CPU resources
+        run: |
+          printf 'CPU_NPROC=%s\n' "$(nproc)"
+          printf 'CPU_ONLINE=%s\n' "$(getconf _NPROCESSORS_ONLN)"
+          if [ -r /sys/fs/cgroup/cpu.max ]; then
+            printf 'CPU_CGROUP_MAX='
+            cat /sys/fs/cgroup/cpu.max
+          fi
+          if [ -r /proc/meminfo ]; then head -n 5 /proc/meminfo; fi
+          for resource in memory.max memory.current memory.peak; do
+            if [ -r "/sys/fs/cgroup/$resource" ]; then
+              printf '%s=' "$resource"
+              cat "/sys/fs/cgroup/$resource"
+            fi
+          done
+          java -XshowSettings:system -version
+          printf 'JAVA_TEST_JOBS=%s\n' "$JAVA_TEST_JOBS"
+          printf 'PROTOS_TEST_JOBS=%s\n' "$PROTOS_TEST_JOBS"
+
+      - name: Download revision-bound plan
+        uses: actions/download-artifact@v4
+        with:
+          name: java-plan-${{ github.sha }}
+          path: target/java-test-shards
+      - name: Run Java serial policy
+        run: |
+          mkdir -p target/ci-logs
+          make test-java-serial 2>&1 | tee target/ci-logs/java-serial.log
+      - name: Record lane wall time
+        if: always()
+        run: |
+          start=$(cat "$RUNNER_TEMP/lane-start" 2>/dev/null || date +%s)
+          duration=$(( $(date +%s) - start ))
+          printf 'LANE_DURATION_SECONDS=%s\n' "$duration"
+          printf 'Wall time: %s seconds\n' "$duration" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload lane diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: java-evidence-serial-${{ github.sha }}
+          if-no-files-found: warn
+          path: |
+            target/java-test-reports/serial/
+            target/ci-logs/java-serial.log
+  protos-suite:
+    timeout-minutes: 120
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/guillermomolina/protos-ci@sha256:44e03c759ccd2b57135f5c0bdbb5060563e858601daa73958ab6cbba2ffc5fe3
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --user 0
+
+    steps:
+      - name: Start lane clock
+        run: |
+          mkdir -p target/ci-logs
+          date +%s > "$RUNNER_TEMP/lane-start"
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Trust checked-out repository
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Restore Maven dependency cache
+        uses: actions/cache@v6
+        with:
+          path: /root/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Report available CPU resources
+        run: |
+          printf 'CPU_NPROC=%s\n' "$(nproc)"
+          printf 'CPU_ONLINE=%s\n' "$(getconf _NPROCESSORS_ONLN)"
+          if [ -r /sys/fs/cgroup/cpu.max ]; then
+            printf 'CPU_CGROUP_MAX='
+            cat /sys/fs/cgroup/cpu.max
+          fi
+          if [ -r /proc/meminfo ]; then head -n 5 /proc/meminfo; fi
+          for resource in memory.max memory.current memory.peak; do
+            if [ -r "/sys/fs/cgroup/$resource" ]; then
+              printf '%s=' "$resource"
+              cat "/sys/fs/cgroup/$resource"
+            fi
+          done
+          java -XshowSettings:system -version
+          printf 'JAVA_TEST_JOBS=%s\n' "$JAVA_TEST_JOBS"
+          printf 'PROTOS_TEST_JOBS=%s\n' "$PROTOS_TEST_JOBS"
+
+      - name: Package checkout CLI
+        run: make prepare-protos-tests
+      - name: Run protos-suite
+        run: |
+          mkdir -p target/ci-logs
+          make test-protos-suite 2>&1 | tee target/ci-logs/protos-suite.log
+      - name: Record lane wall time
+        if: always()
+        run: |
+          start=$(cat "$RUNNER_TEMP/lane-start" 2>/dev/null || date +%s)
+          duration=$(( $(date +%s) - start ))
+          printf 'LANE_DURATION_SECONDS=%s\n' "$duration"
+          printf 'Wall time: %s seconds\n' "$duration" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload lane diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: protos-suite-${{ github.sha }}
+          if-no-files-found: warn
+          path: |
+            target/ci-logs/protos-suite.log
+            target/*report*
+            target/dist/
+  protos-foreign:
+    timeout-minutes: 120
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/guillermomolina/protos-ci@sha256:44e03c759ccd2b57135f5c0bdbb5060563e858601daa73958ab6cbba2ffc5fe3
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --user 0
+
+    steps:
+      - name: Start lane clock
+        run: |
+          mkdir -p target/ci-logs
+          date +%s > "$RUNNER_TEMP/lane-start"
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Trust checked-out repository
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Restore Maven dependency cache
+        uses: actions/cache@v6
+        with:
+          path: /root/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Report available CPU resources
+        run: |
+          printf 'CPU_NPROC=%s\n' "$(nproc)"
+          printf 'CPU_ONLINE=%s\n' "$(getconf _NPROCESSORS_ONLN)"
+          if [ -r /sys/fs/cgroup/cpu.max ]; then
+            printf 'CPU_CGROUP_MAX='
+            cat /sys/fs/cgroup/cpu.max
+          fi
+          if [ -r /proc/meminfo ]; then head -n 5 /proc/meminfo; fi
+          for resource in memory.max memory.current memory.peak; do
+            if [ -r "/sys/fs/cgroup/$resource" ]; then
+              printf '%s=' "$resource"
+              cat "/sys/fs/cgroup/$resource"
+            fi
+          done
+          java -XshowSettings:system -version
+          printf 'JAVA_TEST_JOBS=%s\n' "$JAVA_TEST_JOBS"
+          printf 'PROTOS_TEST_JOBS=%s\n' "$PROTOS_TEST_JOBS"
+
+      - name: Package checkout CLI
+        run: make prepare-protos-tests
+      - name: Run protos-foreign
+        run: |
+          mkdir -p target/ci-logs
+          make test-protos-foreign 2>&1 | tee target/ci-logs/protos-foreign.log
+      - name: Record lane wall time
+        if: always()
+        run: |
+          start=$(cat "$RUNNER_TEMP/lane-start" 2>/dev/null || date +%s)
+          duration=$(( $(date +%s) - start ))
+          printf 'LANE_DURATION_SECONDS=%s\n' "$duration"
+          printf 'Wall time: %s seconds\n' "$duration" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload lane diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: protos-foreign-${{ github.sha }}
+          if-no-files-found: warn
+          path: |
+            target/ci-logs/protos-foreign.log
+            target/*report*
+            target/dist/
+  native-image:
+    timeout-minutes: 120
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/guillermomolina/protos-ci@sha256:44e03c759ccd2b57135f5c0bdbb5060563e858601daa73958ab6cbba2ffc5fe3
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --user 0
+
+    steps:
+      - name: Start lane clock
+        run: |
+          mkdir -p target/ci-logs
+          date +%s > "$RUNNER_TEMP/lane-start"
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Trust checked-out repository
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Restore Maven dependency cache
+        uses: actions/cache@v6
+        with:
+          path: /root/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Report available CPU resources
+        run: |
+          printf 'CPU_NPROC=%s\n' "$(nproc)"
+          printf 'CPU_ONLINE=%s\n' "$(getconf _NPROCESSORS_ONLN)"
+          if [ -r /sys/fs/cgroup/cpu.max ]; then
+            printf 'CPU_CGROUP_MAX='
+            cat /sys/fs/cgroup/cpu.max
+          fi
+          if [ -r /proc/meminfo ]; then head -n 5 /proc/meminfo; fi
+          for resource in memory.max memory.current memory.peak; do
+            if [ -r "/sys/fs/cgroup/$resource" ]; then
+              printf '%s=' "$resource"
+              cat "/sys/fs/cgroup/$resource"
+            fi
+          done
+          java -XshowSettings:system -version
+          printf 'JAVA_TEST_JOBS=%s\n' "$JAVA_TEST_JOBS"
+          printf 'PROTOS_TEST_JOBS=%s\n' "$PROTOS_TEST_JOBS"
 
       - name: Run Native Image tests
-        run: make test-native
+        run: |
+          mkdir -p target/ci-logs
+          make test-native 2>&1 | tee target/ci-logs/native-image.log
+      - name: Record lane wall time
+        if: always()
+        run: |
+          start=$(cat "$RUNNER_TEMP/lane-start" 2>/dev/null || date +%s)
+          duration=$(( $(date +%s) - start ))
+          printf 'LANE_DURATION_SECONDS=%s\n' "$duration"
+          printf 'Wall time: %s seconds\n' "$duration" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload lane diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-image-${{ github.sha }}
+          if-no-files-found: warn
+          path: |
+            target/ci-logs/native-image.log
+            target/native-test-reports/
+            target/native/*.log
+            target/native/*.json
+  aggregate:
+    if: always()
+    needs: [prepare, compilerability, java-parallel, java-serial, protos-suite, protos-foreign, native-image]
+    timeout-minutes: 120
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Download revision-bound plan
+        uses: actions/download-artifact@v4
+        with:
+          name: java-plan-${{ github.sha }}
+          path: target/java-test-shards
+      - name: Download Java execution evidence
+        if: always()
+        uses: actions/download-artifact@v4
+        with:
+          pattern: java-evidence-*-${{ github.sha }}
+          path: target/ci-evidence
+      - name: Verify dependencies and coverage
+        if: always()
+        env:
+          DEPENDENCY_RESULTS: ${{ toJSON(needs) }}
+        run: >-
+          python3 tools/ci_validation_aggregate.py
+          --plan target/java-test-shards/plan.json
+          --results target/ci-evidence
+          --dependencies "$DEPENDENCY_RESULTS"
+          --output target/ci-aggregate/result.json
+          --summary "$GITHUB_STEP_SUMMARY"
+      - name: Upload aggregate evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aggregate-${{ github.sha }}
+          if-no-files-found: error
+          path: target/ci-aggregate/result.json

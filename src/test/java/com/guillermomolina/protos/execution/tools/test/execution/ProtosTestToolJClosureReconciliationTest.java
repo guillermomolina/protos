@@ -81,35 +81,41 @@ final class ProtosTestToolJClosureReconciliationTest {
             return;
         }
 
-        // GITHUB026: CI delegates Java + Protos orchestration to canonical make test.
-        // Compilerability and Native Image validation retain their separate gates.
-        String[] requiredStages = {
-            "- name: Check repository\n        run: make check",
-            "- name: Run repository tests\n        run: make test",
-            "- name: Run Native Image tests\n        run: make test-native"
+        // GITHUB026: independent lanes retain Makefile execution ownership.
+        String[] requiredLanes = {
+            "prepare", "compilerability", "java-parallel", "java-serial",
+            "protos-suite", "protos-foreign", "native-image", "aggregate"
         };
-        int previousStage = -1;
-        for (String stage : requiredStages) {
-            int stageAt = workflow.indexOf(stage);
-            assertTrue(stageAt > previousStage, "missing or out-of-order CI phase: " + stage);
-            previousStage = stageAt;
+        for (String lane : requiredLanes) {
+            assertEquals(1, occurrences(workflow, "\n  " + lane + ":\n"),
+                    "each distributed validation lane must occur exactly once: " + lane);
         }
-        assertEquals(
-                1,
-                occurrences(workflow, "\n        run: make test\n"),
-                "CI must execute the canonical Java + Protos aggregate exactly once");
-        assertFalse(
-                workflow.contains("\n        run: make test-java"),
-                "CI must not duplicate the canonical Java test lane");
-        assertFalse(
-                workflow.contains("\n        run: make test-protos"),
-                "CI must not duplicate the canonical Protos test lane");
-        assertTrue(
-                workflow.contains("JAVA_TEST_JOBS: \"4\""),
-                "CI must retain the bounded four-worker Java lane");
-        assertTrue(
-                workflow.contains("PROTOS_TEST_JOBS: \"4\""),
-                "CI must retain the bounded four-worker Protos lane");
+        String[] targets = {
+            "prepare-java-test-shards", "check", "test-java-parallel", "test-java-serial",
+            "test-protos-suite", "test-protos-foreign", "test-native"
+        };
+        for (int index = 0; index < targets.length; index++) {
+            String target = targets[index];
+            String laneHeader = "\n  " + requiredLanes[index] + ":\n";
+            String laneBody = workflow.substring(workflow.indexOf(laneHeader) + laneHeader.length())
+                    .split("\n  [A-Za-z0-9_-]+:\n", 2)[0];
+            assertTrue(laneBody.contains("make " + target),
+                    "validation target must remain in its dedicated lane: " + target);
+            assertEquals(1, occurrences(workflow, "make " + target + " ")
+                            + occurrences(workflow, "make " + target + "\n"),
+                    "each validation target must execute exactly once: " + target);
+        }
+        for (String target : new String[] {"test", "test-java", "test-protos"}) {
+            assertEquals(0, occurrences(workflow, "make " + target + "\n")
+                            + occurrences(workflow, "make " + target + " "),
+                    "CI must not duplicate aggregate execution: " + target);
+        }
+        assertTrue(workflow.contains("tools/ci_validation_aggregate.py"),
+                "CI must verify distributed execution evidence");
+        assertTrue(workflow.contains("JAVA_TEST_JOBS: \"2\""),
+                "CI must retain bounded Java concurrency");
+        assertTrue(workflow.contains("PROTOS_TEST_JOBS: \"2\""),
+                "CI must retain bounded Protos concurrency");
         assertFalse(
                 workflow.contains("make test-budget"),
                 "active CI must not impose a fixed wall-clock budget");

@@ -12,6 +12,15 @@ POSIX_PROCESS_LIBRARY := target/native-libs/libprotos_posix_process.so
 DIST_VALIDATE_FLAGS ?= --require-clean-source
 JAVA_TEST_JOBS ?= 6
 PROTOS_TEST_JOBS ?= 8
+JAVA_TEST_SHARD_COUNT ?= 1
+JAVA_TEST_SHARD_INDEX ?= 1
+JAVA_TEST_SHARD_DIR ?= target/java-test-shards
+JAVA_TEST_SHARD_TOOL := $(PYTHON) tools/ci_java_test_shards.py
+JAVA_TEST_SHARD_PLAN := $(JAVA_TEST_SHARD_DIR)/plan.json
+JAVA_TEST_SHARD_INCLUDES := $(JAVA_TEST_SHARD_DIR)/shard-$(JAVA_TEST_SHARD_INDEX).includes
+JAVA_TEST_SHARD_REPORTS := target/java-test-reports/parallel-$(JAVA_TEST_SHARD_INDEX)
+JAVA_SERIAL_REPORTS ?= $(if $(filter 1,$(JAVA_TEST_SHARD_COUNT)),,target/java-test-reports/serial)
+JAVA_TEST_SHARD_ARGS = --directory $(JAVA_TEST_SHARD_DIR) --count $(JAVA_TEST_SHARD_COUNT) --index $(JAVA_TEST_SHARD_INDEX) --serial "$(JAVA_SERIAL_TESTS)" --excludes "$(JAVA_PARALLEL_EXCLUDES)"
 
 # Explicit Native Image build, tests and clean; separate from regular make test.
 NATIVE_TEST := scripts/native-test.sh
@@ -85,11 +94,16 @@ TRUFFLE_ROOT_SELECTOR ?=
 TRUFFLE_ROOT_EXPANSION ?= method
 TRUFFLE_ROOT_DUMP_LEVEL ?= 1
 
-.PHONY: help toolchain compile build test test-java java-test-phase test-java-parallel test-java-serial test-java-confirm test-java-stress test-local-range-pe-guard check-local-range-index-pe check-local-range-operands-pe check-local-accessor-pe check-bytecode-api-pe check-generated-bytecode-bci-pe check-native-runtime-compilation check-truffle-compilation diagnose-truffle-compilation truffle-root-catalog diagnose-truffle-root test-protos test-protos-suite test-protos-foreign check verify clean artifacts artifacts-verify artifacts-publish-d064 dist dist-validate build-native test-native clean-native build-posix-process-library
+.PHONY: prepare-java-test-shards prepare-protos-tests help toolchain compile build test test-java java-test-phase test-java-parallel test-java-serial test-java-confirm test-java-stress test-local-range-pe-guard check-local-range-index-pe check-local-range-operands-pe check-local-accessor-pe check-bytecode-api-pe check-generated-bytecode-bci-pe check-native-runtime-compilation check-truffle-compilation diagnose-truffle-compilation truffle-root-catalog diagnose-truffle-root test-protos test-protos-suite test-protos-foreign check verify clean artifacts artifacts-verify artifacts-publish-d064 dist dist-validate build-native test-native clean-native build-posix-process-library
 
 help:
 	@printf '%s\n' \
 		'Protos developer targets:' \
+		'  make prepare-java-test-shards JAVA_TEST_SHARD_COUNT=4' \
+		'  make test-java-parallel JAVA_TEST_SHARD_COUNT=4 JAVA_TEST_SHARD_INDEX=1 JAVA_TEST_JOBS=2' \
+		'  make prepare-protos-tests  Package CLI without running either Protos lane' \
+		'  Sharding overrides: JAVA_TEST_SHARD_COUNT=... JAVA_TEST_SHARD_INDEX=... JAVA_TEST_SHARD_DIR=...' \
+		'  Distributed serial reports: JAVA_SERIAL_REPORTS=target/java-test-reports/serial' \
 		'  make toolchain      Verify the selected development toolchain contract' \
 		'  make compile        Compile production sources only (incremental)' \
 		'  make build          Clean and package without executing tests' \
@@ -232,6 +246,12 @@ java-test-phase:
 		--timing $(JAVA_SLOW_TEST_STATE)/phases.txt --phase $(JAVA_TEST_PHASE) -- \
 		$(MAKE) --no-print-directory $(JAVA_TEST_PHASE)
 
+# The ordinary one-shard path deliberately has no planning/build prerequisite.
+prepare-java-test-shards:
+	$(MVN) $(MVN_FLAGS) test-compile
+	$(JAVA_TEST_SHARD_TOOL) prepare $(JAVA_TEST_SHARD_ARGS)
+
+ifeq ($(JAVA_TEST_SHARD_COUNT):$(JAVA_TEST_SHARD_INDEX),1:1)
 test-java-parallel:
 	$(MVN) $(MVN_FLAGS) \
 		-Djunit.jupiter.execution.parallel.enabled=true \
@@ -241,9 +261,54 @@ test-java-parallel:
 		-Djunit.jupiter.execution.parallel.config.fixed.parallelism=$(JAVA_TEST_JOBS) \
 		"-Dsurefire.excludes=$(JAVA_PARALLEL_EXCLUDES)" \
 		test
+else
+test-java-parallel:
+	@$(PYTHON) -c 'import sys; c=int(sys.argv[1]); i=int(sys.argv[2]); sys.exit(0 if c>0 and 1<=i<=c else 1)' "$(JAVA_TEST_SHARD_COUNT)" "$(JAVA_TEST_SHARD_INDEX)"
+	@if [ ! -f $(JAVA_TEST_SHARD_PLAN) ]; then \
+		$(MAKE) --no-print-directory prepare-java-test-shards; \
+	else \
+		$(MVN) $(MVN_FLAGS) test-compile; \
+	fi
+	$(JAVA_TEST_SHARD_TOOL) validate $(JAVA_TEST_SHARD_ARGS)
+	$(JAVA_TEST_SHARD_TOOL) begin $(JAVA_TEST_SHARD_ARGS) --reports $(JAVA_TEST_SHARD_REPORTS)
+	@status=0; \
+	$(MVN) $(MVN_FLAGS) \
+		-Djunit.jupiter.execution.parallel.enabled=true \
+		-Djunit.jupiter.execution.parallel.mode.default=same_thread \
+		-Djunit.jupiter.execution.parallel.mode.classes.default=concurrent \
+		-Djunit.jupiter.execution.parallel.config.strategy=fixed \
+		-Djunit.jupiter.execution.parallel.config.fixed.parallelism=$(JAVA_TEST_JOBS) \
+		"-Dsurefire.excludes=$(JAVA_PARALLEL_EXCLUDES)" \
+		-Dsurefire.includesFile=$(abspath $(JAVA_TEST_SHARD_INCLUDES)) \
+		-Dprotos.surefire.reports=$(abspath $(JAVA_TEST_SHARD_REPORTS)) \
+		-DfailIfNoTests=true test || status=$$?; \
+	validation=0; $(JAVA_TEST_SHARD_TOOL) report $(JAVA_TEST_SHARD_ARGS) \
+		--reports $(JAVA_TEST_SHARD_REPORTS) --maven-status $$status || validation=$$?; \
+	[ $$status -eq 0 ] || exit $$status; exit $$validation
+endif
 
+ifeq ($(strip $(JAVA_SERIAL_REPORTS)),)
 test-java-serial:
 	$(MVN) $(MVN_FLAGS) -Dtest=$(JAVA_SERIAL_TESTS) test
+else
+# CI serial evidence uses the same revision-bound plan, without shard includes.
+test-java-serial:
+	@if [ ! -f $(JAVA_TEST_SHARD_PLAN) ]; then \
+		$(MAKE) --no-print-directory prepare-java-test-shards; \
+	else \
+		$(MVN) $(MVN_FLAGS) test-compile; \
+	fi
+	$(JAVA_TEST_SHARD_TOOL) validate $(JAVA_TEST_SHARD_ARGS)
+	$(JAVA_TEST_SHARD_TOOL) begin $(JAVA_TEST_SHARD_ARGS) --lane serial --reports $(JAVA_SERIAL_REPORTS)
+	@status=0; \
+	$(MVN) $(MVN_FLAGS) -Dtest=$(JAVA_SERIAL_TESTS) \
+		-Djunit.jupiter.execution.parallel.enabled=false \
+		-Dprotos.surefire.reports=$(abspath $(JAVA_SERIAL_REPORTS)) \
+		-DfailIfNoTests=true test || status=$$?; \
+	validation=0; $(JAVA_TEST_SHARD_TOOL) report $(JAVA_TEST_SHARD_ARGS) --lane serial \
+		--reports $(JAVA_SERIAL_REPORTS) --maven-status $$status || validation=$$?; \
+	[ $$status -eq 0 ] || exit $$status; exit $$validation
+endif
 
 # The single reduced-contention confirmation run for slow-test suspects.
 test-java-confirm:
@@ -365,8 +430,10 @@ test-local-range-pe-guard: check-local-range-index-pe
 
 # One package build, then both phases. A failing phase never prevents the
 # other from running; the target fails when either phase failed.
-test-protos:
+prepare-protos-tests:
 	$(MVN) $(MVN_FLAGS) package -DskipTests
+
+test-protos: prepare-protos-tests
 	@foreign=0; suite=0; \
 	$(MAKE) --no-print-directory test-protos-foreign || foreign=$$?; \
 	$(MAKE) --no-print-directory test-protos-suite || suite=$$?; \

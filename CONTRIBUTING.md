@@ -79,6 +79,74 @@ external-contributor path is:
    contributions are welcome. Prompt transcripts, token logs, and
    human-authored percentages are not required.
 
+The ordinary local validation entry points remain `make test`, `make check`,
+and `make test-native`. `make test` still runs Java followed by Protos, including
+local slow-test telemetry and reduced-contention confirmation. CI timing remains
+advisory; test outcomes determine acceptance.
+
+GitHub Actions runs independent `prepare`, `compilerability`, `java-parallel`,
+`java-serial`, `protos-suite`, `protos-foreign`, and `native-image` jobs followed by
+`aggregate`. Preparation compiles test classes without running them and publishes
+a revision-bound Java selection plan. Four initial parallel Java partitions use
+two JUnit class workers per runner. The six Makefile-owned serial classes run in
+the separate serial lane. Compilerability retains all of `make check`; Native
+Image retains all of `make test-native`. Each Protos lane packages its own CLI:
+
+```sh
+make prepare-protos-tests
+make test-protos-suite
+# On an independent worker, after the same preparation:
+make test-protos-foreign
+```
+
+The Protos suite still runs through `bin/protos test`; the existing foreign
+provider harness retains its FFM checks. Protos Test Tool sharding is deferred.
+The CI jobs do not additionally execute `make test` or its Java/Protos aggregates.
+
+To reproduce a Java partition locally:
+
+```sh
+make prepare-java-test-shards JAVA_TEST_SHARD_COUNT=4
+make test-java-parallel JAVA_TEST_SHARD_COUNT=4 JAVA_TEST_SHARD_INDEX=1 JAVA_TEST_JOBS=2
+```
+
+`JAVA_TEST_SHARD_COUNT`, `JAVA_TEST_SHARD_INDEX`, and `JAVA_TEST_SHARD_DIR` control
+planning and selection; `JAVA_TEST_JOBS` controls JUnit concurrency independently.
+`PROTOS_TEST_JOBS` controls the existing Test Tool workers. CI defaults live in the
+workflow's top-level environment (four partitions, two Java/Protos workers).
+Changing that initial CI configuration also requires updating its toolchain
+contract and regression fixtures.
+
+Plans and exact class-path inclusion files live under `target/java-test-shards`.
+They partition lexicographically sorted compiled fully qualified identities by
+position modulo shard count; source filenames are not authoritative. Workers
+reject stale inventories, revisions, plan digests, and inclusion files. Remove
+an old dedicated report directory before repeating a partition invocation:
+report directories must initially be empty. Distributed XML and `result.json`
+live under `target/java-test-reports/parallel-<index>` or `serial`. The serial CI
+lane uses `JAVA_SERIAL_REPORTS=target/java-test-reports/serial` and the prepared
+plan. This is also the serial report default when the shard count exceeds one;
+ordinary local serial execution keeps its existing report location.
+
+Candidate selection coverage is distinct from observed execution coverage.
+Surefire owns discovery and execution; a selected compiled candidate may have no
+executable JUnit methods. XML evidence records executed invocations, nested class
+ownership, actual skips, failures and errors separately. A missing report is
+never a skip. Candidates without testcase evidence stay visible as unresolved
+and block acceptance. Reconcile these against authoritative Surefire discovery
+or an unpartitioned reference execution before claiming equivalent coverage;
+there is no manually maintained helper exemption or automatic coverage waiver.
+
+The always-running aggregate checks every required dependency and exactly one
+revision/digest-bound result per Java partition plus serial evidence. Missing,
+failed, cancelled, skipped, duplicated or inconsistent evidence fails acceptance.
+The unchanged Protos Makefile job result remains its authoritative gate. The
+Actions summary contains lane status, candidate coverage and invocation/skip
+counts; raw XML, evidence and logs are available in revision-named `java-plan-*`,
+`java-evidence-parallel-*`, `java-evidence-serial-*`, and lane diagnostic artifacts.
+Each lane retains a 120-minute timeout and records elapsed time and runner
+resources without adding a test-duration admission threshold.
+
 That is enough for a normal first PR. The sections below explain the project's
 design discipline, validation expectations, AI policy, and detailed review
 standards. `AGENTS.md` remains the source for the project's more detailed
