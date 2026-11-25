@@ -48,6 +48,152 @@ class ProtosSourceLayoutViewTest {
             new ProtosStaticAnalysisCore();
 
     @Test
+    void bug040ProjectsMapEntryAndObjectItemCommentBoundaries() {
+        for (boolean map : List.of(true, false)) {
+            String source = (map ? "%{" : "{") + "\n"
+                    + "    " + (map ? "0" : "first") + ": 1 // trailing\n"
+                    + "    // first\n\n"
+                    + "    // second\n"
+                    + "    " + (map ? "1" : "second") + ": 2\n"
+                    + "    // repeated\n"
+                    + "    " + (map ? "2" : "third") + ": 3\n"
+                    + "    // repeated\n"
+                    + "    " + (map ? "3" : "fourth") + ": 4\n}";
+            var view = core.sourceLayout(
+                    new ProtosDocumentSnapshot("memory:bug040-boundaries", 1L, source));
+            Object root = view.program().expressions().get(0);
+            List<ProtosSourceLayoutView.StructuralPath> paths;
+            if (map) {
+                paths = assertInstanceOf(SurfaceMapConstruction.class, root).entries()
+                        .stream().map(entry -> view.pathOfNode(entry).orElseThrow()).toList();
+            } else {
+                paths = assertInstanceOf(
+                        com.guillermomolina.protos.parser.ast.SurfaceObject.class, root).items()
+                        .stream().map(item -> view.pathOfNode(item).orElseThrow()).toList();
+            }
+            var projection = view.preservationProjection();
+            var comments = projection.comments();
+            var separators = projection.sequenceSeparators();
+            assertEquals(5, comments.size(), source);
+            assertEquals(3, separators.size(), source);
+            assertEquals(List.of("// trailing", "// first", "// second",
+                            "// repeated", "// repeated"),
+                    comments.stream().map(ProtosSourceLayoutView.CommentProjection::rawText)
+                            .toList());
+            for (int index = 0; index < separators.size(); index++) {
+                var separator = separators.get(index);
+                assertEquals(map ? ProtosParserSourceFacts.SequenceContext.MAP_CONSTRUCTION
+                                : ProtosParserSourceFacts.SequenceContext.OBJECT_BODY,
+                        separator.context());
+                assertEquals(paths.get(index), separator.preceding());
+                assertEquals(paths.get(index + 1), separator.following());
+                assertEquals(SequenceSeparatorKind.LOGICAL_NEWLINE, separator.kind());
+                assertEquals(index == 0, separator.blankLine());
+            }
+            for (int index = 0; index < comments.size(); index++) {
+                var comment = comments.get(index);
+                int boundary = index < 3 ? 0 : index - 2;
+                assertEquals("LINE_COMMENT", comment.kind().name());
+                assertEquals(ProtosSourceLayoutView.CommentBoundaryKind.SEQUENCE_SEPARATOR,
+                        comment.boundaryKind());
+                assertEquals(index == 0 ? ProtosSourceLayoutView.CommentPlacement.END_OF_LINE
+                                : ProtosSourceLayoutView.CommentPlacement.OWN_LINE,
+                        comment.placement());
+                assertEquals(paths.get(boundary), comment.preceding().orElseThrow());
+                assertEquals(paths.get(boundary + 1), comment.following().orElseThrow());
+                assertEquals(SequenceSeparatorKind.LOGICAL_NEWLINE,
+                        comment.sequenceSeparatorKind().orElseThrow());
+                assertEquals(index == 2, comment.blankLineBefore());
+                assertEquals(index == 1, comment.blankLineAfter());
+            }
+            org.junit.jupiter.api.Assertions.assertNotEquals(
+                    comments.get(3).preceding(), comments.get(4).preceding());
+            org.junit.jupiter.api.Assertions.assertNotEquals(
+                    comments.get(3).following(), comments.get(4).following());
+        }
+    }
+
+    @Test
+    void bug040ProjectsIdenticalCommentsAtNestedStructuralPaths() {
+        String source = "{\n"
+                + "mapping: %{\n"
+                + "0: { first: 1\n// repeated\nsecond: 2 }\n"
+                + "// repeated\n1: 2\n}\n"
+                + "// repeated\n"
+                + "action: () => { first: 1\n// repeated\nsecond: 2 }\n}";
+        var projection = core.sourceLayout(
+                new ProtosDocumentSnapshot("memory:bug040-nested", 1L, source))
+                .preservationProjection();
+        assertEquals(4, projection.comments().size());
+        assertEquals(4L, projection.comments().stream()
+                .map(ProtosSourceLayoutView.CommentProjection::preceding).distinct().count());
+        assertEquals(4L, projection.comments().stream()
+                .map(ProtosSourceLayoutView.CommentProjection::following).distinct().count());
+        for (var comment : projection.comments()) {
+            assertEquals("// repeated", comment.rawText());
+            assertEquals(ProtosSourceLayoutView.CommentPlacement.OWN_LINE, comment.placement());
+            assertEquals(ProtosSourceLayoutView.CommentBoundaryKind.SEQUENCE_SEPARATOR,
+                    comment.boundaryKind());
+            var separator = projection.sequenceSeparators().stream()
+                    .filter(boundary -> comment.preceding().orElseThrow()
+                                    .equals(boundary.preceding())
+                            && comment.following().orElseThrow().equals(boundary.following()))
+                    .toList();
+            assertEquals(1, separator.size());
+            String role = switch (separator.get(0).context()) {
+                case MAP_CONSTRUCTION -> "entry";
+                case OBJECT_BODY -> "item";
+                case CLOSURE_BODY -> "expression";
+                default -> throw new AssertionError("Unexpected boundary context");
+            };
+            var preceding = comment.preceding().orElseThrow().steps();
+            var following = comment.following().orElseThrow().steps();
+            assertEquals(role, preceding.get(preceding.size() - 1).role());
+            assertEquals(role, following.get(following.size() - 1).role());
+            assertEquals(0, preceding.get(preceding.size() - 1).index());
+            assertEquals(1, following.get(following.size() - 1).index());
+        }
+    }
+
+    @Test
+    void bug040PreservationProjectionDistinguishesLossyValidCandidates() {
+        for (String prefix : List.of("%{", "{")) {
+            String original = prefix + "\n0: 1 // first\n// second\n1: 2\n2: 3\n}";
+            // Numeric slot names are Map keys; use ordinary slot names for Objects.
+            if (prefix.equals("{")) {
+                original = original.replace("0:", "first:")
+                        .replace("1:", "second:").replace("2:", "third:");
+            }
+            String next = prefix.equals("%{") ? "1: 2" : "second: 2";
+            String first = prefix.equals("%{") ? "0: 1" : "first: 1";
+            String[] candidates = {
+                original.replace(" // first", ""),
+                original.replace("// second", "// second\n// second"),
+                original.replace("// first", "// swapped")
+                        .replace("// second", "// first").replace("// swapped", "// second"),
+                original.replace("// second\n", "")
+                        .replace(next + "\n", next + "\n// second\n"),
+                original.replace(" // first", "\n// first"),
+                original.replace("// second", "// changed"),
+                original.replace(" // first", "")
+                        .replace(first, first.substring(0, first.length() - 1)
+                                + "\"// first\""),
+                original.replace("// second\n", "// second\n\n")
+            };
+            var before = core.sourceLayout(new ProtosDocumentSnapshot(
+                    "memory:bug040-before", 1L, original)).preservationProjection();
+            for (String candidate : candidates) {
+                var snapshot = new ProtosDocumentSnapshot("memory:bug040-candidate", 2L, candidate);
+                assertInstanceOf(ProtosStaticParseResult.Parsed.class, core.parse(snapshot), candidate);
+                var after = core.sourceLayout(snapshot).preservationProjection();
+                org.junit.jupiter.api.Assertions.assertNotEquals(
+                        before.comments(), after.comments(), candidate);
+                org.junit.jupiter.api.Assertions.assertNotEquals(before, after, candidate);
+            }
+        }
+    }
+
+    @Test
     void bug033AttachesNamedArgumentCommentsToTheirExactBoundaries() {
         String source =
                 "f(first /* before */: /* after */ "

@@ -8,6 +8,14 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.221-SNAPSHOT
+
+- **BUG040.** Preserve Map-entry and Object-item comments and significant blank lines through the shared sequence-boundary renderer.
+- Track comment consumption by original attachment and restore consumption checkpoints when provisional renderings are discarded; reject admitted comments without a rendering operation.
+- Add Protos source-preservation comparison for independent layout projections and expose preservesSource through the formatter module, retaining existing token and blank-line normalization exceptions.
+- Extend formatter, source-layout and LSP regressions and add direct guest-policy coverage for ordered facts, structural paths, lossy candidates and malformed projections.
+- The whole-document preservation acceptance gate remains unconnected; candidate reparsing and independent canonical equivalence are still required before production integration is complete.
+
 ## 0.4.220-SNAPSHOT
 
 - **I174-G.** Integrated FFM R2 conformance and normative reconciliation.

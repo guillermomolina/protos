@@ -22,6 +22,7 @@
 this.toolId: "TOOL010"
 
 Structural: import("../Structural.protos")
+Preservation: import("../Preservation.protos")
 
 this.acceptSourceLayout: (layout) => {
     layout.exactSource
@@ -82,6 +83,13 @@ this.acceptSourceLayout: (layout) => {
 
 this.formatStructural: (layout) => {
     Structural.format(layout)
+}
+
+this.preservesSource: (originalLayout, candidateLayout) => {
+    Preservation.equivalent(
+        originalLayout,
+        candidateLayout
+    )
 }
 
 toolId

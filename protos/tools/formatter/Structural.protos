@@ -346,6 +346,8 @@ formatArgumentLines: (arguments, count, level, layout) => {
 }
 
 formatCallHead: (receiver, arguments, count, level, layout) => {
+    commentCheckpoint: layout.checkpointComments()
+
     flatArguments:
         formatArgumentCount(
             arguments,
@@ -377,6 +379,8 @@ formatCallHead: (receiver, arguments, count, level, layout) => {
     }
 
     if((count > 0) && shouldBreak) {
+        layout.restoreComments(commentCheckpoint)
+
         result =
             receiver +
             "(\n" +
@@ -396,6 +400,8 @@ formatCallHead: (receiver, arguments, count, level, layout) => {
 }
 
 formatArray: (arguments, level, layout) => {
+    commentCheckpoint: layout.checkpointComments()
+
     flatArguments:
         formatArguments(
             arguments,
@@ -421,6 +427,8 @@ formatArray: (arguments, level, layout) => {
     }
 
     if((arguments.size() > 0) && shouldBreak) {
+        layout.restoreComments(commentCheckpoint)
+
         result =
             "[\n" +
             indent(level + 1) +
@@ -498,6 +506,8 @@ formatSlotCreation: (node, level, layout) => {
             layout
         )
 
+    commentCheckpoint: layout.checkpointComments()
+
     right:
         formatExpression(
             node.value,
@@ -517,6 +527,8 @@ formatSlotCreation: (node, level, layout) => {
         right,
         level
     )) {
+        layout.restoreComments(commentCheckpoint)
+
         result =
             left +
             ":\n" +
@@ -541,6 +553,8 @@ formatMultipleSlotCreation: (node, level, layout) => {
         ) +
         ")"
 
+    commentCheckpoint: layout.checkpointComments()
+
     right:
         formatExpression(
             node.value,
@@ -560,6 +574,8 @@ formatMultipleSlotCreation: (node, level, layout) => {
         right,
         level
     )) {
+        layout.restoreComments(commentCheckpoint)
+
         result =
             left +
             ":\n" +
@@ -582,6 +598,8 @@ formatAssignment: (node, level, layout) => {
             layout
         )
 
+    commentCheckpoint: layout.checkpointComments()
+
     right:
         formatExpression(
             node.value,
@@ -601,6 +619,8 @@ formatAssignment: (node, level, layout) => {
         right,
         level
     )) {
+        layout.restoreComments(commentCheckpoint)
+
         result =
             left +
             " =\n" +
@@ -677,7 +697,7 @@ formatSequenceBoundary: (
 
                 result =
                     " " +
-                    comment.rawText +
+                    layout.commentText(comment) +
                     "\n"
 
                 pendingBlankAfter =
@@ -711,7 +731,7 @@ formatSequenceBoundary: (
                 result =
                     result +
                     indent(level) +
-                    comment.rawText +
+                    layout.commentText(comment) +
                     "\n"
 
                 pendingBlankAfter =
@@ -886,21 +906,15 @@ formatMapEntries: (entries, level, layout) => {
                     entries[index]
                 )
 
-            if(kind == "SEMICOLON") {
-                result = result + "; "
-            }
-
-            if(kind == "LOGICAL_NEWLINE") {
-                result =
-                    result +
-                    "\n" +
-                    indent(level)
-            }
-
-            ((kind == "SEMICOLON") ||
-                (kind == "LOGICAL_NEWLINE")).ifFalse(() => {
-                Error().signal()
-            })
+            result =
+                result +
+                formatSequenceBoundary(
+                    entries[index - 1],
+                    entries[index],
+                    kind,
+                    level,
+                    layout
+                )
         }
 
         result =
@@ -984,21 +998,15 @@ formatObjectItems: (items, level, layout) => {
                     items[index]
                 )
 
-            if(kind == "SEMICOLON") {
-                result = result + "; "
-            }
-
-            if(kind == "LOGICAL_NEWLINE") {
-                result =
-                    result +
-                    "\n" +
-                    indent(level)
-            }
-
-            ((kind == "SEMICOLON") ||
-                (kind == "LOGICAL_NEWLINE")).ifFalse(() => {
-                Error().signal()
-            })
+            result =
+                result +
+                formatSequenceBoundary(
+                    items[index - 1],
+                    items[index],
+                    kind,
+                    level,
+                    layout
+                )
         }
 
         result =
@@ -1125,6 +1133,8 @@ formatParameterLines: (parameters, level, layout) => {
 }
 
 formatParenthesizedParameters: (parameters, level, layout) => {
+    commentCheckpoint: layout.checkpointComments()
+
     flatParameters:
         formatParameterList(
             parameters,
@@ -1150,6 +1160,8 @@ formatParenthesizedParameters: (parameters, level, layout) => {
     }
 
     if((parameters.size() > 0) && shouldBreak) {
+        layout.restoreComments(commentCheckpoint)
+
         result =
             "(\n" +
             indent(level + 1) +
@@ -1254,6 +1266,8 @@ formatClosure: (closure, level, layout) => {
             Error().signal()
         })
 
+        commentCheckpoint: layout.checkpointComments()
+
         body:
             formatExpression(
                 closure.body.expressions[0],
@@ -1282,6 +1296,8 @@ formatClosure: (closure, level, layout) => {
         }
 
         if(breakAfterArrow) {
+            layout.restoreComments(commentCheckpoint)
+
             result =
                 parameters +
                 " =>\n" +
@@ -1354,7 +1370,7 @@ contextualHeaderComments: (
                 result = result + " "
             }
 
-            result = result + comment.rawText
+            result = result + layout.commentText(comment)
         }
     }
 
@@ -1390,11 +1406,11 @@ formatTokenBoundaryComments: (
                         result = result + "\n" + indent(level)
                     }
 
-                    result = result + comment.rawText
+                    result = result + layout.commentText(comment)
                 }
 
                 atLineStart.ifFalse(() => {
-                    result = result + " " + comment.rawText
+                    result = result + " " + layout.commentText(comment)
                 })
 
                 atLineStart = false
@@ -1409,7 +1425,7 @@ formatTokenBoundaryComments: (
                 result =
                     result +
                     " " +
-                    comment.rawText +
+                    layout.commentText(comment) +
                     "\n" +
                     indent(level)
 
@@ -1428,7 +1444,7 @@ formatTokenBoundaryComments: (
 
                 result =
                     result +
-                    comment.rawText +
+                    layout.commentText(comment) +
                     "\n" +
                     indent(level)
 
@@ -1492,7 +1508,7 @@ contextualCommentsBeforeSeparator: (
                 Error().signal()
             })
 
-            result = result + " " + comment.rawText
+            result = result + " " + layout.commentText(comment)
         }
     }
 
@@ -1524,7 +1540,7 @@ contextualElseSeparatorComments: (
 
             result =
                 result +
-                comment.rawText +
+                layout.commentText(comment) +
                 " "
         }
     }
@@ -1553,7 +1569,7 @@ formatTrailingClosureSeparator: (
 
             result =
                 result +
-                comment.rawText +
+                layout.commentText(comment) +
                 " "
         }
     }
@@ -1685,7 +1701,7 @@ formatEmbeddedCommentsAfter: (
             result =
                 result +
                 " " +
-                comment.rawText
+                layout.commentText(comment)
         }
     }
 
@@ -2185,7 +2201,40 @@ formatExpression = (node, level, layout) => {
     )
 }
 
-formatBody: (layout) => {
+formatBody: (sourceLayout) => {
+    // Keys are the original projected attachments, never their text. The
+    // delegated layout retains the host projection without copying its facts.
+    consumed: %{}
+    for(comment in sourceLayout.comments) {
+        consumed[comment] = 0
+    }
+
+    layout: sourceLayout {
+        commentText: (comment) => {
+            consumed[comment] = consumed[comment] + 1
+            (consumed[comment] == 1).ifFalse(() => {
+                Error().signal()
+            })
+            comment.rawText
+        }
+
+        // Wrapping may discard a provisional rendering. Only the selected
+        // rendering contributes to the final exactly-once consumption check.
+        checkpointComments: () => {
+            checkpoint: %{}
+            consumed.each((comment, count) => {
+                checkpoint[comment] = count
+            })
+            checkpoint
+        }
+
+        restoreComments: (checkpoint) => {
+            checkpoint.each((comment, count) => {
+                consumed[comment] = count
+            })
+        }
+    }
+
     leadingComments: ""
     pendingSeparator: ""
     trailingComments: ""
@@ -2201,7 +2250,7 @@ formatBody: (layout) => {
             leadingComments =
                 leadingComments +
                 pendingSeparator +
-                comment.rawText
+                layout.commentText(comment)
 
             pendingSeparator = " "
 
@@ -2229,7 +2278,7 @@ formatBody: (layout) => {
             trailingComments =
                 trailingComments +
                 separator +
-                comment.rawText
+                layout.commentText(comment)
         }
 
         sequenceComment:
@@ -2338,6 +2387,12 @@ formatBody: (layout) => {
         leadingComments =
             leadingComments +
             pendingSeparator
+    }
+
+    for(comment in layout.comments) {
+        (consumed[comment] == 1).ifFalse(() => {
+            Error().signal()
+        })
     }
 
     leadingComments + body + trailingComments

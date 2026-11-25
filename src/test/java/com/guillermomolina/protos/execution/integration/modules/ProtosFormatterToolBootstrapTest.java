@@ -2431,6 +2431,210 @@ final class ProtosFormatterToolBootstrapTest {
         }
     }
 
+    @Test
+    void bug040PreservesMapEntryBoundaries() throws Exception {
+        String[] sources = {
+            "%{\n"
+                        + "    0: 1 // next\n"
+                        + "    1: 2\n"
+                        + "}",
+            "%{\n"
+                        + "    0: 1\n"
+                        + "    // between\n"
+                        + "    1: 2\n"
+                        + "}",
+            "%{\n"
+                        + "    0: 1 // trailing\n"
+                        + "    // first\n"
+                        + "\n"
+                        + "    // second\n"
+                        + "    1: 2\n"
+                        + "\n"
+                        + "    2: 3\n"
+                        + "}",
+            "%{\n"
+                        + "    0: 1\n"
+                        + "    // repeated\n"
+                        + "    1: 2\n"
+                        + "    // repeated\n"
+                        + "    2: 3\n"
+                        + "}",
+            "%{\n"
+                        + "    0: 1\n"
+                        + "\n"
+                        + "    1: 2\n"
+                        + "}",
+            "%{ 0: 1; 1: 2; 2: 3 }"
+        };
+
+        for (String source : sources) {
+            assertBoundaryPreservation(source, source + "\n");
+        }
+    }
+
+    @Test
+    void bug040PreservesObjectItemBoundaries() throws Exception {
+        String[] sources = {
+            "{\n"
+                        + "    first: 1 // next\n"
+                        + "    second: 2\n"
+                        + "}",
+            "{\n"
+                        + "    first: 1\n"
+                        + "    // between\n"
+                        + "    second: 2\n"
+                        + "}",
+            "{\n"
+                        + "    first: 1 // trailing\n"
+                        + "    // first\n"
+                        + "\n"
+                        + "    // second\n"
+                        + "    second: 2\n"
+                        + "\n"
+                        + "    third: 3\n"
+                        + "}",
+            "{\n"
+                        + "    first: 1\n"
+                        + "    // repeated\n"
+                        + "    second: 2\n"
+                        + "    // repeated\n"
+                        + "    third: 3\n"
+                        + "}",
+            "{\n"
+                        + "    first: 1\n"
+                        + "\n"
+                        + "    second: 2\n"
+                        + "}",
+            "{ first: 1; second: 2; third: 3 }",
+            "{\n"
+                        + "    first: 1 // before composition\n"
+                        + "    // composition\n"
+                        + "    ...base\n"
+                        + "    // after composition\n"
+                        + "    second: 2\n"
+                        + "}"
+        };
+
+        for (String source : sources) {
+            assertBoundaryPreservation(source, source + "\n");
+        }
+    }
+
+    @Test
+    void bug040PreservesNestedStructuralAttachments() throws Exception {
+        String[] sources = {
+            "{\n"
+                        + "    mapping: %{\n"
+                        + "        0: {\n"
+                        + "            first: 1\n"
+                        + "            // repeated\n"
+                        + "            second: 2\n"
+                        + "        } // trailing\n"
+                        + "        // repeated\n"
+                        + "\n"
+                        + "        1: 2\n"
+                        + "    }\n"
+                        + "    // repeated\n"
+                        + "    action: () => {\n"
+                        + "        mapping: %{\n"
+                        + "            0: 1\n"
+                        + "            // repeated\n"
+                        + "            1: 2\n"
+                        + "        }\n"
+                        + "        // repeated\n"
+                        + "        mapping\n"
+                        + "    }\n"
+                        + "}"
+        };
+
+        for (String source : sources) {
+            assertBoundaryPreservation(source, source + "\n");
+        }
+    }
+
+    @Test
+    void bug040CountsOnlySelectedRenderingsWhenWrapping() throws Exception {
+        String[] sources = {
+            "consume(\n"
+                        + "    %{\n"
+                        + "        0: 1\n"
+                        + "        // repeated\n"
+                        + "        1: 2\n"
+                        + "    }\n"
+                        + ")",
+            "[\n"
+                        + "    {\n"
+                        + "        first: 1\n"
+                        + "        // repeated\n"
+                        + "        second: 2\n"
+                        + "    }\n"
+                        + "]",
+            "(\n"
+                        + "    value: %{\n"
+                        + "        0: 1\n"
+                        + "        // repeated\n"
+                        + "        1: 2\n"
+                        + "    }\n"
+                        + ") => value"
+        };
+        for (String source : sources) {
+            assertBoundaryPreservation(source, source + "\n");
+        }
+    }
+
+    @Test
+    void bug040KeepsInlineFormattingPolicy() throws Exception {
+        assertBoundaryPreservation(
+                "%{0:1;1:2;2:3}",
+                "%{ 0: 1; 1: 2; 2: 3 }\n");
+        assertBoundaryPreservation(
+                "{first:1;second:2;third:3}",
+                "{ first: 1; second: 2; third: 3 }\n");
+    }
+
+    @Test
+    void bug040RejectsAdmittedCommentsWithoutARenderingOperation() {
+        // Parameter attachments are not traversed by the embedded-comment
+        // renderer. Identical text inside a String is never consumption.
+        for (String source : List.of(
+                "(x /* unconsumed */) => x",
+                "(x /* unconsumed */) => \"/* unconsumed */\"")) {
+            var view = new ProtosStaticAnalysisCore().sourceLayout(
+                    new ProtosDocumentSnapshot("memory:bug040-unconsumed", 4000L, source));
+            assertEquals(1, view.preservationProjection().comments().size());
+            var comment = view.preservationProjection().comments().get(0);
+            assertEquals(ProtosSourceLayoutView.CommentBoundaryKind.NONE,
+                    comment.boundaryKind());
+            assertEquals(ProtosSourceLayoutView.CommentPlacement.EMBEDDED_BETWEEN_TOKENS,
+                    comment.placement());
+            assertTrue(comment.preceding().isPresent());
+            org.junit.jupiter.api.Assertions.assertThrows(
+                    java.io.IOException.class,
+                    () -> formatOnce(source, 4000L),
+                    source);
+        }
+    }
+
+    private void assertBoundaryPreservation(String source, String expected)
+            throws Exception {
+        ProtosStaticAnalysisCore analysis = new ProtosStaticAnalysisCore();
+        ProtosDocumentSnapshot original =
+                new ProtosDocumentSnapshot("memory:bug040-original", 4001L, source);
+        assertInstanceOf(ProtosStaticParseResult.Parsed.class, analysis.parse(original));
+        String formatted = formatOnce(source, 4002L);
+        assertEquals(expected, formatted, source);
+        ProtosDocumentSnapshot candidate =
+                new ProtosDocumentSnapshot("memory:bug040-formatted", 4003L, formatted);
+        assertInstanceOf(ProtosStaticParseResult.Parsed.class, analysis.parse(candidate));
+        assertEquals(canonicalOf(source, 4004L), canonicalOf(formatted, 4005L), source);
+        assertSourcePreservationInvariants(
+                analysis.sourceLayout(original).preservationProjection(),
+                analysis.sourceLayout(candidate).preservationProjection(),
+                source,
+                formatted);
+        assertEquals(formatted, formatOnce(formatted, 4006L), source);
+    }
+
     private static void assertSourcePreservationInvariants(
             ProtosSourceLayoutView.SourcePreservationProjection before,
             ProtosSourceLayoutView.SourcePreservationProjection after,
@@ -2501,6 +2705,12 @@ final class ProtosFormatterToolBootstrapTest {
                     left.sequenceSeparatorKind(),
                     right.sequenceSeparatorKind(),
                     context);
+            // The line preceding an end-of-line comment belongs to the
+            // preceding expression, not to this comment's boundary.
+            if (left.placement() == ProtosSourceLayoutView.CommentPlacement.OWN_LINE) {
+                assertEquals(left.blankLineBefore(), right.blankLineBefore(), context);
+            }
+            assertEquals(left.blankLineAfter(), right.blankLineAfter(), context);
         }
 
         assertEquals(
@@ -2537,6 +2747,7 @@ final class ProtosFormatterToolBootstrapTest {
                     left.following(),
                     right.following(),
                     context);
+            assertEquals(left.blankLine(), right.blankLine(), context);
         }
 
         assertEquals(
@@ -2803,6 +3014,289 @@ final class ProtosFormatterToolBootstrapTest {
 
             org.junit.jupiter.api.Assertions.assertNull(
                     observed.get());
+        }
+    }
+
+    // Guest-policy unit tests: these invoke the production Protos comparator
+    // with two independently bridged layouts, not whole-document acceptance.
+    @Test
+    void bug040GuestPolicyAcceptsIndependentLayoutsAndShiftedOffsets() throws Exception {
+        String source = "{\n"
+                + "    mapping: %{\n"
+                + "        0: { first: 1\n// repeated\nsecond: 2 }\n"
+                + "        // repeated\n\n        1: 2\n    }\n"
+                + "    // repeated\n    last: 3\n}";
+        assertGuestPreservation(source, source, true);
+        assertGuestPreservation("Error().signal()", "Error().signal()", true);
+        assertGuestPreservation(source, "\n\n    " + source, true);
+        assertGuestPreservation("/* prefix */\na:1\n/* suffix */",
+                "/* prefix */\na:1\n/* suffix */", true);
+    }
+
+    @Test
+    void bug040GuestPolicyAcceptsExistingFormattingTransformations() throws Exception {
+        for (String source : List.of(
+                "%{0:1 // trailing\n// first\n\n// second\n1:2\n\n2:3}",
+                "{first:1\n// repeated\nsecond:2\n// repeated\nthird:3}",
+                "consume(%{0:1\n// nested\n1:2})",
+                "a:1\n\n\n\nb:2",
+                "f:(x)=>x+1",
+                "foo /* embedded */+bar",
+                "foo() /* trailing */ {body()}",
+                "if(ok){one()}else{two()}")) {
+            assertGuestPreservation(source, formatOnce(source, 4100L), true);
+        }
+    }
+
+    @Test
+    void bug040GuestPolicyRejectsCommentLossAndRelocation() throws Exception {
+        for (boolean map : List.of(true, false)) {
+            String first = map ? "0: 1" : "first: 1";
+            String second = map ? "1: 2" : "second: 2";
+            String third = map ? "2: 3" : "third: 3";
+            String source = (map ? "%{" : "{") + "\n" + first
+                    + " // first\n// second\n" + second + "\n" + third + "\n}";
+            String[] candidates = {
+                source.replace(" // first", ""),
+                source.replace("// second", "// second\n// second"),
+                source.replace("// first", "// swapped")
+                        .replace("// second", "// first").replace("// swapped", "// second"),
+                source.replace("// second", "// changed"),
+                source.replace(" // first", "\n// first"),
+                source.replace("// second\n", "")
+                        .replace(second + "\n", second + "\n// second\n"),
+                source.replace(" // first", "")
+                        .replace(first, first.substring(0, first.length() - 1)
+                                + "\"// first\""),
+                source.replace("// second\n", "// second\n\n")
+            };
+            for (String candidate : candidates) {
+                assertGuestPreservation(source, candidate, false);
+            }
+        }
+        assertGuestPreservation(
+                "%{0:1\n// repeated\n1:2\n// repeated\n2:3}",
+                "%{0:1\n1:2\n// repeated\n// repeated\n2:3}", false);
+    }
+
+    @Test
+    void bug040GuestPolicyRejectsSeparatorAndTokenChanges() throws Exception {
+        assertGuestPreservation("%{0:1;1:2}", "%{0:1\n1:2}", false);
+        assertGuestPreservation("{first:1\nsecond:2}", "{first:1\n\nsecond:2}", false);
+        assertGuestPreservation("value:1", "value:2", false);
+        String source = "%{0:1\n1:2}";
+        for (String field : List.of(
+                "this.context: \"OBJECT_BODY\"",
+                "preceding: candidateLayout.sequenceSeparators[0].following",
+                "following: candidateLayout.sequenceSeparators[0].preceding",
+                "kind: \"SEMICOLON\"", "blankLine: true")) {
+            assertGuestPolicy(source, source,
+                    "Preservation.equivalent(originalLayout, candidateLayout {\n"
+                            + "sequenceSeparators: [(candidateLayout.sequenceSeparators[0]) { "
+                            + field + " }]\n})", false);
+        }
+    }
+
+    @Test
+    void bug040GuestPolicyComparesEveryCommentFieldWithExistingBlankLineExceptions()
+            throws Exception {
+        String source = "%{0:1 // trailing\n1:2}";
+        for (String field : List.of(
+                "kind: \"BLOCK_COMMENT\"", "rawText: \"// changed\"",
+                "placement: \"OWN_LINE\"", "preceding: null", "following: null",
+                "boundaryKind: \"NONE\"; sequenceSeparatorKind: null",
+                "sequenceSeparatorKind: \"SEMICOLON\"", "blankLineAfter: true")) {
+            assertGuestPolicy(source, source,
+                    "Preservation.equivalent(originalLayout, candidateLayout {\n"
+                            + "comments: [(candidateLayout.comments[0]) { " + field + " }]\n})",
+                    false);
+        }
+        for (String placementSource : List.of(
+                source, "foo /* embedded */+bar", "/* prefix */ value:1")) {
+            assertGuestPolicy(placementSource, placementSource,
+                    "Preservation.equivalent(originalLayout, candidateLayout {\n"
+                            + "comments: [(candidateLayout.comments[0]) {\n"
+                            + "blankLineBefore: !candidateLayout.comments[0].blankLineBefore\n"
+                            + "}]\n})", true);
+        }
+        String ownLine = "%{0:1\n// own\n1:2}";
+        assertGuestPolicy(ownLine, ownLine,
+                "Preservation.equivalent(originalLayout, candidateLayout {\n"
+                        + "comments: [(candidateLayout.comments[0]) { blankLineBefore: true }]\n})",
+                false);
+    }
+
+    @Test
+    void bug040GuestPolicyComparesPathsStructurallyAndHandlesAbsence() throws Exception {
+        String source = "%{0:{first:1\n// nested\nsecond:2}\n1:2}";
+        String path = "originalLayout.comments[0].preceding";
+        String candidatePath = "candidateLayout.comments[0].preceding";
+        assertGuestPolicy(source, source,
+                "Preservation.structuralPathEquivalent(" + path + ", " + candidatePath + ")",
+                true);
+        assertGuestPolicy(source, source,
+                "Preservation.structuralPathEquivalent(null, null)", true);
+        assertGuestPolicy(source, source,
+                "Preservation.structuralPathEquivalent(null, " + candidatePath + ")", false);
+        assertGuestPolicy(source, source,
+                "Preservation.structuralPathEquivalent(" + path + ", null)", false);
+        for (String patch : List.of("root: \"other\"", "steps: []")) {
+            assertGuestPolicy(source, source,
+                    "Preservation.structuralPathEquivalent(" + path + ", "
+                            + candidatePath + " { " + patch + " })", false);
+        }
+        String copiedSteps = "modifiedSteps: [..." + candidatePath + ".steps]\n";
+        assertGuestPolicy(source, source,
+                copiedSteps + "firstStep: modifiedSteps[0]\n"
+                        + "modifiedSteps[0] = modifiedSteps[1]\n"
+                        + "modifiedSteps[1] = firstStep\n"
+                        + "Preservation.structuralPathEquivalent(" + path + ", "
+                        + candidatePath + " { steps: modifiedSteps })", false);
+        for (String stepPatch : List.of("role: \"other\"", "index: 42")) {
+            assertGuestPolicy(source, source,
+                    copiedSteps + "last: modifiedSteps.size() - 1\n"
+                            + "modifiedSteps[last] = (modifiedSteps[last]) { " + stepPatch + " }\n"
+                            + "Preservation.structuralPathEquivalent(" + path + ", "
+                            + candidatePath + " { steps: modifiedSteps })", false);
+        }
+    }
+
+    @Test
+    void bug040GuestPolicyComparesRemainingOrderedProjectionFacts() throws Exception {
+        String source = "f:x=>x\nfoo(){one()}\nif(ok){one()}else{two()}";
+        String[][] checks = {
+            {"structuralFormsEquivalent", "structuralForms", "kind: \"GROUP\""},
+            {"structuralFormsEquivalent", "structuralForms", "path: {root: \"other\"; steps: []}"},
+            {"closureFormsEquivalent", "closureForms", "form: \"PARENTHESIZED\""},
+            {"closureFormsEquivalent", "closureForms", "closure: {root: \"other\"; steps: []}"},
+            {"trailingClosuresEquivalent", "trailingClosures", "call: {root: \"other\"; steps: []}"},
+            {"trailingClosuresEquivalent", "trailingClosures", "closure: {root: \"other\"; steps: []}"},
+            {"contextualElsesEquivalent", "contextualElses", "conditional: {root: \"other\"; steps: []}"},
+            {"contextualElsesEquivalent", "contextualElses", "falseBranch: {root: \"other\"; steps: []}"},
+            {"contextualElsesEquivalent", "contextualElses", "elseToken: 999"},
+            {"tokensEquivalent", "tokens", "type: \"STRING\""},
+            {"tokensEquivalent", "tokens", "rawText: \"different\""}
+        };
+        assertGuestPreservation(source, source, true);
+        for (String[] check : checks) {
+            String original = "originalLayout." + check[1] + "[0]";
+            String candidate = "candidateLayout." + check[1] + "[0]";
+            assertGuestPolicy(source, source,
+                    "Preservation." + check[0] + "([" + original + "], [("
+                            + candidate + ") { " + check[2] + " }])", false);
+        }
+        for (String field : List.of("structuralForms", "closureForms",
+                "trailingClosures", "contextualElses", "tokens")) {
+            assertGuestPolicy(source, source,
+                    "Preservation.equivalent(originalLayout, candidateLayout { "
+                            + field + ": [] })", false);
+        }
+    }
+
+    @Test
+    void bug040GuestPolicyPreservesOrderingOfEveryProjectionList() throws Exception {
+        String source = "f:x=>x\ng:y=>y\nfoo(){one()}\nbar(){two()}\n"
+                + "if(ok){one()}else{two()}\nif(other){three()}else{four()}";
+        String[][] checks = {
+            {"structuralFormsEquivalent", "structuralForms"},
+            {"closureFormsEquivalent", "closureForms"},
+            {"trailingClosuresEquivalent", "trailingClosures"},
+            {"contextualElsesEquivalent", "contextualElses"},
+            {"sequenceSeparatorsEquivalent", "sequenceSeparators"},
+            {"tokensEquivalent", "tokens"}
+        };
+        for (String[] check : checks) {
+            String original = "originalLayout." + check[1];
+            String candidate = "candidateLayout." + check[1];
+            assertGuestPolicy(source, source,
+                    "Preservation." + check[0] + "([" + original + "[0], " + original
+                            + "[1]], [" + candidate + "[1], " + candidate + "[0]])", false);
+        }
+    }
+
+    @Test
+    void bug040GuestPolicySignalsForMissingOrUnsupportedProjectionData() throws Exception {
+        String source = "%{0:1 // trailing\n1:2}";
+        List<String> fields = List.of("tokens", "comments", "sequenceSeparators",
+                "structuralForms", "closureForms", "trailingClosures", "contextualElses");
+        for (String omitted : fields) {
+            StringBuilder candidate = new StringBuilder("{\n");
+            for (String field : fields) {
+                if (!field.equals(omitted)) {
+                    candidate.append(field).append(": candidateLayout.")
+                            .append(field).append('\n');
+                }
+            }
+            candidate.append('}');
+            assertGuestPolicyFailure(source,
+                    "Preservation.equivalent(originalLayout, " + candidate + ")");
+        }
+        for (String patch : List.of(
+                "tokens: [{type: \"UNSUPPORTED\"; rawText: \"x\"}]",
+                "comments: [(candidateLayout.comments[0]) { boundaryKind: \"UNSUPPORTED\" }]",
+                "comments: [(candidateLayout.comments[0]) { blankLineAfter: null }]",
+                "comments: %{}",
+                "comments: [{kind: \"LINE_COMMENT\"; rawText: \"// trailing\"}]",
+                "sequenceSeparators: [(candidateLayout.sequenceSeparators[0]) { preceding: null }]",
+                "structuralForms: [(candidateLayout.structuralForms[0]) { path: {root: \"program\"} }]")) {
+            assertGuestPolicyFailure(source,
+                    "Preservation.equivalent(originalLayout, candidateLayout { " + patch + " })");
+        }
+        assertGuestPolicyFailure(source,
+                "Preservation.structuralPathEquivalent({root: null; steps: []}, null)");
+        assertGuestPolicyFailure(source,
+                "Preservation.structuralPathEquivalent(null, {root: \"program\"; "
+                        + "steps: [{role: \"expression\"; index: \"invalid\"}]})");
+        // A malformed later fact must not be masked by an earlier inequality.
+        assertGuestPolicyFailure(source,
+                "Preservation.equivalent(originalLayout, candidateLayout {\n"
+                        + "tokens: []\ncomments: [{}]\n})");
+        assertGuestPolicyFailure(source,
+                "Preservation.equivalent(originalLayout { tokens: [{type: \"UNSUPPORTED\"; rawText: \"x\"}] },"
+                        + " candidateLayout { tokens: [{type: \"UNSUPPORTED\"; rawText: \"x\"}] })");
+    }
+
+    private static void assertGuestPreservation(String original, String candidate, boolean expected)
+            throws Exception {
+        assertGuestPolicy(original, candidate,
+                "Preservation.equivalent(originalLayout, candidateLayout)", expected);
+    }
+
+    private static void assertGuestPolicy(
+            String original, String candidate, String operation, boolean expected) throws Exception {
+        ProtosExecutionOutcome outcome = guestPreservationOutcome(original, candidate, operation);
+        assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state(),
+                () -> "Guest preservation policy failed: " + outcome.error()
+                        + "; trace=" + outcome.failureDiagnosticTrace());
+        assertEquals(expected, outcome.value(), operation);
+    }
+
+    private static void assertGuestPolicyFailure(String source, String operation) throws Exception {
+        ProtosExecutionOutcome outcome = guestPreservationOutcome(source, source, operation);
+        assertEquals(ProtosExecutionOutcome.State.FAILED, outcome.state(), operation);
+        assertNotNull(outcome.error(), operation);
+    }
+
+    private static ProtosExecutionOutcome guestPreservationOutcome(
+            String original, String candidate, String operation) throws Exception {
+        ProtosSourceLayoutView originalView = new ProtosStaticAnalysisCore().sourceLayout(
+                new ProtosDocumentSnapshot("memory:bug040-policy-original", 4200L, original));
+        ProtosSourceLayoutView candidateView = new ProtosStaticAnalysisCore().sourceLayout(
+                new ProtosDocumentSnapshot("memory:bug040-policy-candidate", 4201L, candidate));
+        ProtosBundledToolModuleResolver resolver = new ProtosBundledToolModuleResolver(
+                "formatter", TOOL_ROOT, TOOL_ROOT.resolveSibling("shared"),
+                new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY));
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+        try (ProtosHostedExecutionTestFixture fixture = ProtosHostedExecutionTestFixture.open(prelude)) {
+            ProtosObjectValue before = ProtosSourceLayoutToolBridge.project(originalView, prelude);
+            ProtosObjectValue after = ProtosSourceLayoutToolBridge.project(candidateView, prelude);
+            assertNotSame(before, after);
+            assertNotSame(slot(object(slot(before, "program")), "path"),
+                    slot(object(slot(after, "program")), "path"));
+            fixture.activation().context().createLocalSlot("originalLayout", before);
+            fixture.activation().context().createLocalSlot("candidateLayout", after);
+            return fixture.executeAsTool("formatter", "bug040-preservation-policy.protos",
+                    "Preservation: import(\"./Preservation.protos\")\n" + operation);
         }
     }
 

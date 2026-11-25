@@ -364,6 +364,124 @@ class ProtosLanguageServerFormattingTest {
                 format(server, URI, options(4, true)));
     }
 
+    @Test
+    void bug040RealFormatterPreservesStructuralCommentsAndIsIdempotent() {
+        String[] sources = {
+            "%{\n"
+                        + "    0: 1 // next\n"
+                        + "    1: 2\n"
+                        + "}",
+            "%{\n"
+                        + "    0: 1\n"
+                        + "    // between\n"
+                        + "    1: 2\n"
+                        + "}",
+            "%{\n"
+                        + "    0: 1 // trailing\n"
+                        + "    // first\n"
+                        + "\n"
+                        + "    // second\n"
+                        + "    1: 2\n"
+                        + "\n"
+                        + "    2: 3\n"
+                        + "}",
+            "%{\n"
+                        + "    0: 1\n"
+                        + "    // repeated\n"
+                        + "    1: 2\n"
+                        + "    // repeated\n"
+                        + "    2: 3\n"
+                        + "}",
+            "{\n"
+                        + "    first: 1 // next\n"
+                        + "    second: 2\n"
+                        + "}",
+            "{\n"
+                        + "    first: 1\n"
+                        + "    // between\n"
+                        + "    second: 2\n"
+                        + "}",
+            "{\n"
+                        + "    first: 1 // trailing\n"
+                        + "    // first\n"
+                        + "\n"
+                        + "    // second\n"
+                        + "    second: 2\n"
+                        + "\n"
+                        + "    third: 3\n"
+                        + "}",
+            "{\n"
+                        + "    first: 1\n"
+                        + "    // repeated\n"
+                        + "    second: 2\n"
+                        + "    // repeated\n"
+                        + "    third: 3\n"
+                        + "}",
+            "{\n"
+                        + "    mapping: %{\n"
+                        + "        0: {\n"
+                        + "            first: 1\n"
+                        + "            // repeated\n"
+                        + "            second: 2\n"
+                        + "        } // trailing\n"
+                        + "        // repeated\n"
+                        + "\n"
+                        + "        1: 2\n"
+                        + "    }\n"
+                        + "    // repeated\n"
+                        + "    action: () => {\n"
+                        + "        mapping: %{\n"
+                        + "            0: 1\n"
+                        + "            // repeated\n"
+                        + "            1: 2\n"
+                        + "        }\n"
+                        + "        // repeated\n"
+                        + "        mapping\n"
+                        + "    }\n"
+                        + "}"
+        };
+
+        for (String source : sources) {
+            ProtosLanguageServer server = new ProtosLanguageServer(code -> {});
+            server.textDocuments().didOpen(open(URI, 1, source));
+            List<? extends TextEdit> edits = format(server, URI, options(4, true));
+            assertEquals(1, edits.size(), source);
+            TextEdit edit = edits.get(0);
+            assertEquals(new Position(0, 0), edit.getRange().getStart(), source);
+            assertEquals(
+                    ProtosLspSourcePositions.position(source, source.length()),
+                    edit.getRange().getEnd(),
+                    source);
+            assertEquals(source + "\n", edit.getNewText(), source);
+            // The fixture returns a single whole-document replacement.
+            String applied = edit.getNewText();
+            server.textDocuments().didChange(change(URI, 2, applied));
+            assertEquals(List.of(), format(server, URI, options(4, true)), source);
+        }
+    }
+
+    @Test
+    void bug040RealFormatterFailsClosedForUnconsumedParameterComment() {
+        String source = "(x /* unconsumed */) => \"/* unconsumed */\"";
+        assertTrue(
+                new com.guillermomolina.protos.analysis.ProtosStaticAnalysisCore()
+                        .parse(new ProtosDocumentSnapshot(URI, 1L, source))
+                        instanceof com.guillermomolina.protos.analysis
+                                .ProtosStaticParseResult.Parsed);
+        ProtosLanguageServer server = new ProtosLanguageServer(code -> {});
+        server.textDocuments().didOpen(open(URI, 1, source));
+        // Guest formatter rejection crosses the existing bootstrap boundary
+        // as IOException; the LSP completes exceptionally without returning edits.
+        CompletionException failure = assertThrows(
+                CompletionException.class,
+                () -> format(server, URI, options(4, true)));
+        java.io.IOException cause = org.junit.jupiter.api.Assertions.assertInstanceOf(
+                java.io.IOException.class, failure.getCause());
+        assertTrue(cause.getMessage().contains(
+                "bundled TOOL010 structural formatter did not return String"));
+        assertTrue(cause.getMessage().contains("state=FAILED"));
+    }
+
     private static ProtosLanguageServer server(ProtosLspDocumentFormatter formatter) {
         return new ProtosLanguageServer(
                 code -> {}, new ProtosProjectFileBindingProvider(), formatter);
