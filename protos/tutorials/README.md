@@ -28,14 +28,20 @@ the strict evaluation of `&` and `|` with the lazy Boolean `&&`, and
 demonstrates that each operator sends an ordinary message (such as `bitAnd`)
 to its receiver, including a custom object. It runs with the standalone CLI.
 
-The control-flow progression now ends with
+The control-flow progression continues with
 [`04-control-flow/04-contextual-for.protos`](04-control-flow/04-contextual-for.protos).
 It introduces generic Array traversal, ascending and descending numeric ranges,
 signed and dynamic steps, Closure-parameter binder scope, and the exact
 relationship with ordinary `each`. The lesson runs unchanged through the
 standalone CLI without imports or additional host authority. See the
 [control-flow guide](../../docs/guide/04-control-flow-through-protocols.md#the-contextual-for-forms-are-each-and-eachstep)
-for the accompanying explanation.
+for the accompanying explanation. It then reaches
+[`04-control-flow/05-contextual-match.protos`](04-control-flow/05-contextual-match.protos):
+multi-way selection, ordinary `caseOf` equivalence, lazy actions, structural
+captures, eager evaluation of the subject and keys, and the distinction between
+explicit Closures and implicitly wrapped expressions. This lesson also runs
+through the normal CLI without imports or additional capabilities. See the
+[contextual matching section](../../docs/guide/12-matching-expressions.md#contextual-match).
 
 The collection progression continues after Map and IdentityMap with
 [`05-collections/03-array-copies-and-queries.protos`](05-collections/03-array-copies-and-queries.protos)

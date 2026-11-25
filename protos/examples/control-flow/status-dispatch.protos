@@ -1,0 +1,39 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
+
+// Classify response codes locally; no network request is performed.
+classifyStatus: (status) => {
+    match(status) {
+        200: "success"
+        201: "created"
+        400: "invalid request"
+        404: "not found"
+        503: "retry later"
+        Any: "unknown status"
+    }
+}
+
+// Each code and its classification occupy consecutive output lines.
+for(status in [200, 201, 400, 404, 503, 999]) {
+    print(status)                 // 200, 201, 400, 404, 503, 999 in order
+    print(classifyStatus(status)) // success, created, invalid request,
+                                  // not found, retry later, unknown status
+}
+
+print(classifyStatus(200) == "success")         // true; known code
+print(classifyStatus(999) == "unknown status")  // true; fallback
+print(classifyStatus(404) == "not found")       // true; intermediate case

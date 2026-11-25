@@ -32,7 +32,7 @@ read every section before writing your next program.
 | [1. Values and bindings](01-bindings-contexts-and-state.md) | Create a binding with `:`, update it with `=`, and use local state | [Values and slots](../../protos/tutorials/01-values-and-slots/) |
 | [2. Objects](02-objects-delegation-and-composition.md) | Group state in objects and reuse behavior through delegation | [Objects](../../protos/tutorials/02-objects/) |
 | [3. Functions and methods](03-closures-methods-and-receivers.md) | Pass arguments, capture state, and invoke behavior on a receiver | [Closures](../../protos/tutorials/03-closures/) |
-| [4. Decisions and loops](04-control-flow-through-protocols.md) | Use `if`, `while`, and `for` | [Control flow](../../protos/tutorials/04-control-flow/) |
+| [4. Decisions and loops](04-control-flow-through-protocols.md) | Use `if`, `match`, `while`, and `for` | [Control flow](../../protos/tutorials/04-control-flow/), [contextual match](../../protos/tutorials/04-control-flow/05-contextual-match.protos), and [status dispatch](../../protos/examples/control-flow/status-dispatch.protos) |
 | [5. Collections](05-values-identity-equality-and-collections.md) | Index Arrays, work with Maps, and choose equality or identity | [Collections](../../protos/tutorials/05-collections/) |
 | [6. Modules](06-modules-and-imports.md) | Split a program into files and import a library | [Imports and modules](../../protos/tutorials/08-language-interactions/) |
 | [7. Errors and cleanup](07-errors-handlers-ensure-and-resource-lifetime.md) | Handle failures and release resources with `ensure` | [Cleanup pattern](07-errors-handlers-ensure-and-resource-lifetime.md#a-practical-acquisitioncleanup-pattern) |
@@ -40,7 +40,7 @@ read every section before writing your next program.
 | [9. Parallel computation](09-isolated-parallel-execution.md) | Choose isolated computation when work should run in parallel | [Concurrency choices](09-isolated-parallel-execution.md) |
 | [10. Actors](10-actors-actorrefs-and-groups.md) | Keep independent state and communicate by messages | [Actors](../../protos/tutorials/10-actors/) and [Groups](../../protos/tutorials/11-actor-groups/) |
 | [11. Files and I/O](11-process-io-filesystems-and-authority.md) | Read and write through explicitly granted capabilities | [System resources](../../protos/tutorials/12-system-resources/) |
-| [12. Matching](12-matching-expressions.md) | Match values and select cases through ordinary messages | [Matcher protocol](12-matching-expressions.md#the-root-matcher-protocol) |
+| [12. Matching](12-matching-expressions.md) | Recognize structural values and use contextual multi-way selection | [Match lesson](../../protos/tutorials/04-control-flow/05-contextual-match.protos), [structural dispatch](../../protos/examples/control-flow/structural-dispatch.protos), and [explicit protocol](../../protos/examples/control-flow/custom-case-selection.protos) |
 
 The [tutorial overview](../../protos/tutorials/README.md) explains how to run
 lessons and which require additional host permissions. Start with the
@@ -54,6 +54,8 @@ specific task. These are useful next steps after the first program:
 
 - [Return early from a callback](../../protos/examples/closures/non-local-return.protos).
 - [Sample a range with a step](../../protos/examples/algorithms/stride-sampling-summary.protos).
+- [Status-code dispatch](../../protos/examples/control-flow/status-dispatch.protos).
+- [Structural message dispatch](../../protos/examples/control-flow/structural-dispatch.protos).
 - [Use flags and masks](../../protos/examples/numbers/bit-flags-and-masks.protos).
 - [Organize a small module project](../../protos/examples/modules/public-module-pricing/package.toml).
 - [Query SQLite with prepared parameters](library/sqlite.md).

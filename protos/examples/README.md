@@ -48,6 +48,9 @@ instead.
 | Return early from an enclosing function inside an Array callback | `closures/non-local-return.protos` |
 | Inherit callable behavior through delegation | `objects/inherited-callability.protos` |
 | Express conditional control flow | `control-flow/conditional.protos` |
+| Dispatch a status code using contextual match | [control-flow/status-dispatch.protos](control-flow/status-dispatch.protos) |
+| Process structured messages using captures | [control-flow/structural-dispatch.protos](control-flow/structural-dispatch.protos) |
+| Reuse case tables and existing callable actions | [control-flow/custom-case-selection.protos](control-flow/custom-case-selection.protos) |
 | Compute Fibonacci with recursive and iterative variants | `algorithms/fibonacci-recursive.protos` |
 | Compute factorial recursively | `algorithms/factorial-recursive.protos` |
 | Run FizzBuzz over 1 through 100 | `algorithms/fizzbuzz.protos` |
@@ -96,6 +99,11 @@ instead.
 | Import a neighboring SOURCE context and pass output behavior explicitly | `modules/direct-file-import/main.protos` |
 | Publish a pricing MODULE with an encapsulated discount helper | `modules/public-module-pricing/` (`protos run Main`) |
 | Compose a real invoice across root and dependency MODULE exports | `modules/package-invoice/` (`protos run Main`) |
+
+The three matching examples above run through the normal CLI without imports
+or additional capabilities. They teach status selection, structural message
+captures, and deliberate use of the explicit selection protocol. See the
+[Programming Guide matching chapter](../../docs/guide/12-matching-expressions.md).
 
 The [`direct-file-import`](modules/direct-file-import/main.protos) example uses
 `bin/protos protos/examples/modules/direct-file-import/main.protos` from the

@@ -4,14 +4,15 @@
 >
 > **Normative owners:** `spec/semantics/EXECUTION_AND_CONTROL.md`,
 > `spec/semantics/VALUES_AND_COLLECTIONS.md`,
-> `spec/semantics/CALLABLES.md`, and `spec/PROTOS_GRAMMAR.md`
+> `spec/semantics/CALLABLES.md`, `spec/semantics/MATCHING.md`, and
+> `spec/PROTOS_GRAMMAR.md`
 
 ## Choose a branch and repeat work
 
 Begin with the [conditional lesson](../../protos/tutorials/04-control-flow/01-conditionals.protos),
 then run the [for lesson](../../protos/tutorials/04-control-flow/04-contextual-for.protos).
 Change an input so a different branch runs, then change a numeric range and
-its step. For everyday source, start with `if`, `while`, and `for`; the
+its step. For everyday source, start with `if`, `match`, `while`, and `for`; the
 protocol sections below explain the messages behind those forms.
 
 ## Understand the model
@@ -25,7 +26,8 @@ The central idea is:
 > Core control flow is expressed through ordinary messages and lazy Closures,
 > not through a separate callback model or special-purpose control-flow runtime.
 
-That is visible in conditionals, short-circuit Boolean operations, and loops.
+That is visible in conditionals, multi-way selection, short-circuit Boolean
+operations, and loops.
 The familiar control-flow role comes from the protocol being invoked; the
 underlying operations remain ordinary lookup, ordinary arguments, and ordinary
 Closure activation.
@@ -166,6 +168,48 @@ revisions had receiver-preserving `.if()` / `.else()` messages that returned the
 Boolean so that sends could be chained; those messages no longer exist. Use the
 contextual form, or `ifTrue` / `ifFalse` / `ifTrueIfFalse` directly; `or` / `||`
 are strict Boolean operations and are not a substitute for that old chaining.
+
+## Multi-way selection with contextual match
+
+Use `if` for a conditional decision and `match` to select among several ordered
+matchers:
+
+```protos
+classify: (status) => {
+    match(status) {
+        "ready": "run"
+        "busy": "wait"
+        "failed": "retry"
+        Any: "unknown"
+    }
+}
+```
+
+`match` is an expression: `classify("busy")` returns `"wait"`. Under standard
+`caseOf`, only the selected action runs. Single-expression actions need no
+explicit `() =>`; the contextual form supplies the lexical Closure. `Any` is
+an ordinary matcher object that always succeeds, so placing it last supplies a
+fallback. It is not a special language clause.
+
+The canonical equivalent is an ordinary message with an ordinary Map:
+
+```protos
+classify: (status) => {
+    status.caseOf(%{
+        "ready": () => "run"
+        "busy": () => "wait"
+        "failed": () => "retry"
+        Any: () => "unknown"
+    })
+}
+```
+
+This introduces neither a second matching protocol nor a runtime primitive.
+For captures, evaluation order, and custom selection, read the
+[matching chapter](12-matching-expressions.md). Run the
+[contextual match lesson](../../protos/tutorials/04-control-flow/05-contextual-match.protos),
+then adapt the
+[status dispatch example](../../protos/examples/control-flow/status-dispatch.protos).
 
 ## Returning from the enclosing invocation through a callback
 
@@ -1078,6 +1122,7 @@ Run the lessons in order, changing one input each time:
 2. [Repeat while a condition holds](../../protos/tutorials/04-control-flow/02-pre-test-loops.protos).
 3. [Run a body before testing its condition](../../protos/tutorials/04-control-flow/03-post-test-loops.protos).
 4. [Traverse collections and numeric ranges](../../protos/tutorials/04-control-flow/04-contextual-for.protos).
+5. [Select among ordered matchers](../../protos/tutorials/04-control-flow/05-contextual-match.protos).
 
 For a complete task, adapt the
 [stride-sampling example](../../protos/examples/algorithms/stride-sampling-summary.protos)
@@ -1096,9 +1141,11 @@ For exact behavior, consult:
 - [`../../spec/semantics/CALLABLES.md`](../../spec/semantics/CALLABLES.md) for
   Closure receiver domains, ordinary `Object.whileTrue` placement, lookup,
   extraction, shadowing, and activation;
+- [`../../spec/semantics/MATCHING.md`](../../spec/semantics/MATCHING.md)
+  for matcher outcomes, positional captures, and standard ordered selection;
 - [`../../spec/PROTOS_GRAMMAR.md`](../../spec/PROTOS_GRAMMAR.md) for ordinary
   call/message syntax, trailing Closures, and the exact contextual `if`,
-  `while`, suffix `until`, and `for` desugarings;
+  `while`, suffix `until`, `for`, and `match` desugarings;
 - [`../../spec/concurrency/FUTURES_AND_TASKS.md`](../../spec/concurrency/FUTURES_AND_TASKS.md)
   for structured task ownership and Future semantics;
 - [`03-closures-methods-and-receivers.md`](03-closures-methods-and-receivers.md)

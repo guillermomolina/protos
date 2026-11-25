@@ -1,0 +1,110 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
+
+// A. Constant selection.
+classify: (code) => {
+    match(code) {
+        0: "ready"
+        1: "busy"
+        2: "failed"
+        Any: "unknown"
+    }
+}
+
+print(classify(0)) // ready
+print(classify(2)) // failed
+print(classify(9)) // unknown
+
+// B. Canonical equivalence: explicit actions in an ordinary Map.
+classifyExplicit: (code) => {
+    code.caseOf(%{
+        0: () => "ready"
+        1: () => "busy"
+        2: () => "failed"
+        Any: () => "unknown"
+    })
+}
+
+for(code in [0, 1, 2, 9]) {
+    print(classify(code) == classifyExplicit(code)) // true each time
+}
+
+// C. Lazy actions: only the selected action changes log.
+log: ""
+selected: match(1) {
+    0: log = log + "zero"
+    1: log = log + "one"
+    Any: log = log + "other"
+}
+print(selected) // one
+print(log)      // one
+
+// D. Eager subject and keys precede standard selection.
+log = ""
+subject: () => {
+    log = log + "s"
+    2
+}
+key: (name, value) => {
+    log = log + name
+    value
+}
+result: match(subject()) {
+    key("a", 1): log = log + "A"
+    key("b", 2): log = log + "B"
+    key("c", 3): log = log + "C"
+}
+print(result)         // sabcB
+print(log)            // sabcB
+print(log == "sabcB") // true
+
+// E. Structural captures are ordinary positional Closure arguments.
+describe: (value) => {
+    match(value) {
+        ["data", Capture]: payload => payload
+        ["sum", Capture, Capture]: (a, b) => a + b
+        Any: null
+    }
+}
+print(describe(["data", 42]))          // 42
+print(describe(["sum", 10, 20]))       // 30
+print(describe(["unknown"]) === null) // true
+
+// F. Action expressions: syntax determines which Closure is invoked.
+handler: () => 5
+print(match(1) { 1: handler } === handler) // true; handler is not invoked
+print(match(1) { 1: handler() } == 5)      // true
+print(match(1) { 1: (() => 7) } == 7)      // true; grouped action is invoked
+object: match(1) { 1: { x: 10 } }
+print(object.x == 10) // true; braces here construct an object
+print(match(1) {
+    1: () => {
+        x: 10
+        x + 1
+    }
+} == 11) // true; an explicit Closure has a multi-expression body
+
+// G. Composition: nesting and postfix access need no extra grouping.
+nested: match(0) {
+    0: match(1) {
+        1: "nested"
+        Any: "inner fallback"
+    }
+    Any: "outer fallback"
+}
+print(nested) // nested
+print(match(1) { 1: { label: "selected" } }.label) // selected

@@ -77,6 +77,31 @@ forwarding an existing cases Map or existing callable objects, or when
 demonstrating the canonical equivalence. Existing `caseOf` source is not
 converted mechanically.
 
+Preferred ordinary selection:
+
+```protos
+match(value) {
+    0: "zero"
+    Any: "other"
+}
+```
+
+Its canonical form is:
+
+```protos
+value.caseOf(%{
+    0: () => "zero"
+    Any: () => "other"
+})
+```
+
+Single-expression actions may omit the explicit Closure. Actions that consume
+captures keep explicit parameters; actions with several expressions keep an
+explicit Closure with a braced body. An existing Map or callable can justify
+keeping `caseOf`. Do not apply a mechanical text substitution: an implicit
+action that evaluates a Closure-valued name returns that Closure, while an
+existing callable supplied directly to `caseOf` is invoked when selected.
+
 ## Boundaries
 
 This policy does **not**:
