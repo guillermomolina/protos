@@ -731,4 +731,60 @@ final class ProtosHostEntryFutureSuspensionTest {
             assertCompactState(f);
         }
     }
+
+    /**
+     * I176 / D263-C: contextual {@code match} and its explicit {@code caseOf} expansion suspend
+     * identically at the subject, a key expression, a reached matcher, and the selected action,
+     * and resume without replaying completed effects.
+     */
+    @Test
+    void i176ContextualMatchSuspendsLikeExplicitCaseOfWithoutReplay() throws Exception {
+        String waitAt =
+                """
+                waitAt: () => {
+                    before = before + 1
+                    gateBox.current.value()
+                }
+                Gate: {
+                    match: (subject) => waitAt() == subject
+                }
+                """;
+        String[][] cases = {
+            {"match(waitAt()) { Capture: v => v + 1 }",
+                "waitAt().caseOf(%{ Capture: v => v + 1 })", "41"},
+            {"match(1) { waitAt(): 42; Any: 0 }",
+                "1.caseOf(%{ waitAt(): () => 42; Any: () => 0 })", "1"},
+            {"match(41) { Gate: 42; Any: 0 }",
+                "41.caseOf(%{ Gate: () => 42; Any: () => 0 })", "41"},
+            {"match(1) { 1: waitAt() + 1 }",
+                "1.caseOf(%{ 1: () => waitAt() + 1 })", "41"},
+        };
+        for (String[] pair : cases) {
+            for (int spelling = 0; spelling < 2; spelling++) {
+                String selection = pair[spelling];
+                try (Context context = newContext()) {
+                    Fixture f =
+                            new Fixture(
+                                    context,
+                                    waitAt
+                                            + "run: () => {\n"
+                                            + "    r: "
+                                            + selection
+                                            + "\n    after = after + 1\n"
+                                            + "    r\n"
+                                            + "}\n");
+                    Entry entry = new Entry(f.member("run"));
+                    entry.awaitSuspended(() -> f.gate.observerCountForTesting() == 1);
+                    assertEquals(1, f.slot("before"), selection);
+                    assertEquals(0, f.slot("after"), selection);
+                    f.resolve(Long.parseLong(pair[2]));
+                    assertEquals(42L, entry.await(), selection);
+                    assertEquals(1, f.slot("before"), "no replay: " + selection);
+                    assertEquals(1, f.slot("after"), selection);
+                    assertEquals(0, f.gate.observerCountForTesting());
+                    assertCompactState(f);
+                }
+            }
+        }
+    }
 }

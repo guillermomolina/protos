@@ -23,6 +23,13 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.516] - 2026-11-25
+
+### D263-C / I176 — Contextual match with implicit lazy action Closures
+
+- Primary owner `PROTOS_GRAMMAR.md`: define the contextual `match(subject) { key: action ... }` expression on a bare, ungrouped `match` with exactly one non-spread argument and an attached `{`, recognized before named-argument reinterpretation, committed to the unchanged Map construction entry table and never retried as a trailing Closure; specify syntactic action classification (explicit Closure literals after outer grouping are kept, every other right-hand side becomes an implicit parameterless Closure) and the mandatory desugaring to the ordinary `subject.caseOf(%{ ... })` send; add `contextual-match-suffix` and the Map construction productions to the compact EBNF.
+- Update `PROTOS_LANGUAGE_SPEC.md` with the contextual `match` overview beside the other contextual control forms, and `semantics/MATCHING.md` sections 8 and 10 to recognize the contextual spelling without changing `caseOf` selection semantics or restoring any removed pattern-language institution.
+
 ## [0.1.515] - 2026-11-25
 
 ### D261-R2 / I174-G — Integrated FFM R2 conformance and normative reconciliation

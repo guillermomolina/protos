@@ -251,6 +251,27 @@ class ProtosStaticHoverTest {
     }
 
     @Test
+    void i176ContextualMatchExposesSubjectAndOriginalEntriesWithoutAKeywordBinding() {
+        String source =
+                "f: (n) => {\n  match(n) {\n    1: 2\n    [Capture]: (k) => k\n  }\n}";
+        int header = source.indexOf("match(");
+        int subject = source.indexOf("n", header);
+        int literal = source.indexOf("2", header);
+        int parameter = source.indexOf("k", source.indexOf("[Capture]"));
+        int reference = source.lastIndexOf("k");
+
+        assertTrue(hover(source, header).isEmpty());
+        assertProven(hover(source, subject));
+        assertEquals(
+                syntax("Number literal"),
+                hover(source, literal).orElseThrow().sections());
+        assertEquals(
+                span(parameter, "k"),
+                hover(source, parameter).orElseThrow().span());
+        assertEquals(span(reference, "k"), hover(source, reference).orElseThrow().span());
+    }
+
+    @Test
     void contextualUntilExposesBodyAndConditionWithoutAKeywordBinding() {
         String source = "f: (n) => {\n  { (k) => k } until(((j) => j)(n))\n}";
         int bodyBrace = source.indexOf('{', source.indexOf("=>") + 4);
@@ -397,6 +418,81 @@ class ProtosStaticHoverTest {
         assertEquals(
                 List.of(new Section(Kind.PROVEN_BINDING, List.of("Closure parameter: valor"))),
                 hover(shadow, innerRead).orElseThrow().sections());
+    }
+
+    @Test
+    void i176ContextualMatchHoverMatchesExplicitExpansion() {
+        for (String[] pair : I176_PAIRS) {
+            for (String name : List.of(pair[2], pair[3])) {
+                List<Integer> contextual = i176Occurrences(pair[0], name);
+                List<Integer> explicit = i176Occurrences(pair[1], name);
+                assertEquals(explicit.size(), contextual.size(), name);
+                for (int index = 0; index < contextual.size(); index++) {
+                    assertEquals(
+                            hoverLabel(pair[1], explicit.get(index)),
+                            hoverLabel(pair[0], contextual.get(index)),
+                            name + "#" + index + " in\n" + pair[0]);
+                }
+            }
+        }
+    }
+
+    @Test
+    void i176ContextualMatchHoverExposesNoSyntheticTokens() {
+        String source = I176_PAIRS.get(0)[0];
+        assertTrue(hover(source, source.indexOf("match(")).isEmpty());
+        assertTrue(hover(source, source.indexOf("1: {") + 1).isEmpty());
+    }
+
+    private String hoverLabel(String source, int offset) {
+        return hover(source, offset)
+                .map(result -> i176OccurrenceLabel(source, result.span()) + " " + result.sections())
+                .orElse("none");
+    }
+
+    private static final List<String[]> I176_PAIRS = List.of(
+            new String[] {
+                "f: (outer) => {\n    match(1) {\n        1: {\n            inner: 10\n"
+                        + "            copy: inner\n            captured: outer\n        }\n    }\n}",
+                "f: (outer) => {\n    1.caseOf(%{\n        1: () => ({\n            inner: 10\n"
+                        + "            copy: inner\n            captured: outer\n        })\n    })\n}",
+                "inner", "outer"},
+            new String[] {
+                "f: (outer) => {\n    match(1) {\n        1: {\n            run: (param) => "
+                        + "match(param) {\n                Any: param + outer\n            }\n"
+                        + "        }\n    }\n}",
+                "f: (outer) => {\n    1.caseOf(%{\n        1: () => ({\n            run: (param) => "
+                        + "param.caseOf(%{\n                Any: () => param + outer\n            })\n"
+                        + "        })\n    })\n}",
+                "param", "outer"},
+            new String[] {
+                "f: (value) => {\n    match(value) {\n        0: (local: 1) + local\n"
+                        + "        Any: (local: 2) + local\n    }\n    local\n}",
+                "f: (value) => {\n    value.caseOf(%{\n        0: () => (local: 1) + local\n"
+                        + "        Any: () => (local: 2) + local\n    })\n    local\n}",
+                "local", "value"},
+            new String[] {
+                "f: (value) => {\n    match(value) {\n        [Capture]: ((item) => item)\n    }\n}",
+                "f: (value) => {\n    value.caseOf(%{\n        [Capture]: ((item) => item)\n    })\n}",
+                "item", "value"});
+
+    private static String i176OccurrenceLabel(String source, SourceSpan span) {
+        String name = source.substring(span.startOffset(), span.endOffset());
+        int count = 0;
+        int index = source.indexOf(name);
+        while (index >= 0 && index < span.startOffset()) {
+            count++;
+            index = source.indexOf(name, index + 1);
+        }
+        return name + "#" + count;
+    }
+
+    private static List<Integer> i176Occurrences(String source, String name) {
+        List<Integer> offsets = new java.util.ArrayList<>();
+        for (int index = source.indexOf(name); index >= 0; index = source.indexOf(name, index + 1)) {
+            offsets.add(index);
+        }
+        return offsets;
     }
 
     private static void assertNoProvenBinding(Optional<ProtosStaticHoverResult> result) {

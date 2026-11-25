@@ -33,8 +33,10 @@ import com.guillermomolina.protos.parser.ast.SurfaceCall;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualFor;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualIf;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualMatch;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualUntil;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
+import com.guillermomolina.protos.parser.ast.SurfaceMapConstruction;
 import com.guillermomolina.protos.parser.ast.SurfaceObject;
 import com.guillermomolina.protos.parser.ast.SurfaceSequence;
 import com.guillermomolina.protos.source.SourceSpan;
@@ -502,6 +504,80 @@ class ProtosParserSourceFactsTest {
         assertThrows(
                 IllegalArgumentException.class,
                 () -> new ProtosParserSourceFacts.TrailingClosureOrigin(loop, foreign));
+    }
+
+    @Test
+    void i176RecordsContextualMatchTableSeparatorsAsMapEntries() {
+        String source = "match(value) {\n    0: 1; 1: 2\n    Any: 3\n}";
+        Parsed parsed = parseWithFacts(source);
+        SurfaceContextualMatch match = assertInstanceOf(
+                SurfaceContextualMatch.class,
+                parsed.program().expressions().get(0));
+        List<SurfaceMapConstruction.Entry> entries = match.table().entries();
+
+        assertEquals(
+                new SourceSpan(source.indexOf('{'), source.length()),
+                match.table().span());
+        List<ProtosParserSourceFacts.SequenceSeparatorFact> separators =
+                parsed.facts().sequenceSeparators();
+        assertEquals(2, separators.size());
+        assertTrue(separators.stream().allMatch(
+                fact -> fact.context() == SequenceContext.MAP_CONSTRUCTION));
+        assertEquals(SequenceSeparatorKind.SEMICOLON, separators.get(0).kind());
+        assertEquals(
+                new SourceSpan(source.indexOf(';'), source.indexOf(';') + 1),
+                separators.get(0).separatorSpan());
+        assertSame(
+                entries.get(0),
+                assertInstanceOf(
+                        ProtosParserSourceFacts.MapEntryElement.class,
+                        separators.get(0).preceding()).entry());
+        assertSame(
+                entries.get(1),
+                assertInstanceOf(
+                        ProtosParserSourceFacts.MapEntryElement.class,
+                        separators.get(0).following()).entry());
+        assertEquals(
+                SequenceSeparatorKind.LOGICAL_NEWLINE,
+                separators.get(1).kind());
+        assertSame(
+                entries.get(2),
+                assertInstanceOf(
+                        ProtosParserSourceFacts.MapEntryElement.class,
+                        separators.get(1).following()).entry());
+    }
+
+    @Test
+    void i176ImplicitActionsProduceNoClosureOriginFacts() {
+        Parsed parsed = parseWithFacts(
+                "match(value) {\n    0: handler\n    Any: { x: 10 }\n}");
+
+        assertEquals(List.of(), parsed.facts().trailingClosureOrigins());
+        assertEquals(List.of(), parsed.facts().singleParameterClosureForms());
+        assertEquals(List.of(), parsed.facts().contextualElseOrigins());
+    }
+
+    @Test
+    void i176ExplicitActionClosureSourceFormsRemainIntact() {
+        Parsed parsed = parseWithFacts(
+                "match(value) {\n    [Capture]: x => x\n    [1, Capture]: (y) => y\n}");
+
+        assertEquals(List.of(), parsed.facts().trailingClosureOrigins());
+        assertEquals(
+                List.of(
+                        SingleParameterClosureForm.BARE,
+                        SingleParameterClosureForm.PARENTHESIZED),
+                parsed.facts().singleParameterClosureForms().stream()
+                        .map(
+                                ProtosParserSourceFacts
+                                        .SingleParameterClosureSourceForm::form)
+                        .toList());
+        SurfaceContextualMatch match = assertInstanceOf(
+                SurfaceContextualMatch.class,
+                parsed.program().expressions().get(0));
+        assertSame(
+                match.table().entries().get(0).value(),
+                parsed.facts().singleParameterClosureForms().get(0).closure());
     }
 
     private Parsed parseWithTrivia(String source) {

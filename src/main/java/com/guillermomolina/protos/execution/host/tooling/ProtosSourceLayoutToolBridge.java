@@ -35,6 +35,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceBinary;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualFor;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualIf;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualMatch;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualUntil;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
@@ -312,6 +313,22 @@ public final class ProtosSourceLayoutToolBridge {
                                 paths,
                                 prelude));
             }
+            case SurfaceContextualMatch match -> {
+                value.createLocalSlot(
+                        "subject",
+                        expression(
+                                match.subject(),
+                                view,
+                                paths,
+                                prelude));
+                value.createLocalSlot(
+                        "table",
+                        expression(
+                                match.table(),
+                                view,
+                                paths,
+                                prelude));
+            }
             case SurfaceArrayConstruction array ->
                     value.createLocalSlot(
                             "arguments",
@@ -509,6 +526,8 @@ public final class ProtosSourceLayoutToolBridge {
                     "CONTEXTUAL_UNTIL";
             case SurfaceContextualFor ignored ->
                     "CONTEXTUAL_FOR";
+            case SurfaceContextualMatch ignored ->
+                    "CONTEXTUAL_MATCH";
             case SurfaceArrayConstruction ignored ->
                     "ARRAY_CONSTRUCTION";
             case SurfaceMapConstruction ignored ->

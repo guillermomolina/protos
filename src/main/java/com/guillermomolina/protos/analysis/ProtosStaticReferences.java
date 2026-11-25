@@ -25,6 +25,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceBinary;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualFor;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualIf;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualMatch;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualUntil;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
@@ -214,6 +215,10 @@ final class ProtosStaticReferences {
                         }
                     }
                     collectClosure(loop.body());
+                }
+                case SurfaceContextualMatch match -> {
+                    collect(match.subject());
+                    collect(match.table());
                 }
                 case SurfaceArrayConstruction array ->
                         collectArguments(array.arguments());

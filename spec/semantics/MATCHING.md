@@ -401,6 +401,34 @@ value.caseOf(cases)
 
 `caseOf` is an ordinary selector, not a keyword and not dedicated grammar.
 
+D263-C approves one contextual source spelling of the same send:
+
+```protos
+match(value) {
+    [1, Capture]: x => x
+    [Capture, Capture]: (x, y) => x + y
+    Any: null
+}
+```
+
+is exactly the ordinary
+
+```protos
+value.caseOf(%{
+    [1, Capture]: x => x
+    [Capture, Capture]: (x, y) => x + y
+    Any: () => null
+})
+```
+
+Its recognition, implicit parameterless action Closures, and mandatory
+desugaring are owned by `PROTOS_GRAMMAR.md` (Contextual `match` expression).
+The contextual spelling changes none of the semantics in this section: the
+cases are an ordinary Map construction evaluated eagerly before `caseOf` is
+looked up, actions are ordinary callables invoked only when selected, and the
+selector is the ordinary `caseOf` under ordinary lookup, including
+user-defined overrides.
+
 ### 8.1 Case carrier
 
 `cases` must be a normal standard Map.
@@ -525,6 +553,13 @@ D131 removes the following from Core v0.1:
 - pattern-arm structural unreachability source-error machinery.
 
 These are not dormant Core v0.1 features.
+
+The D263-C contextual `match(subject) { ... }` expression (section 8) does not
+restore any of them: it is sugar over the ordinary `caseOf` send, its keys are
+ordinary Map construction keys and matcher expressions, and its actions are
+ordinary Closures. It is unrelated to the removed postfix `subject match { ... }`
+form and introduces no arm, guard, binder, wildcard, pattern, or coverage
+grammar.
 
 Future explicit decisions may add ordinary matcher/combinator capabilities or
 syntax when concrete use justifies them. Future sugar should preserve

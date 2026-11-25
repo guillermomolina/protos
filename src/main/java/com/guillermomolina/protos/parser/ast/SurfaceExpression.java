@@ -31,6 +31,7 @@ public sealed interface SurfaceExpression
                 SurfaceContextualIf,
                 SurfaceContextualUntil,
                 SurfaceContextualFor,
+                SurfaceContextualMatch,
                 SurfaceArrayConstruction,
                 SurfaceMapConstruction,
                 SurfaceIndex,

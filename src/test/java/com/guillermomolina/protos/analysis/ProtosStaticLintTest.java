@@ -124,6 +124,30 @@ class ProtosStaticLintTest {
     }
 
     @Test
+    void i176ContextualMatchActionsAreClosuresNotProvenExecution() {
+        assertTrue(lint(
+                "f: (x) => {\n    match(x) {\n        0: ^1\n        Any: () => { ^2 }\n    }\n    a\n}")
+                .isEmpty());
+        assertTrue(lint("match(x) {\n    1: 2\n    1: 3\n}").isEmpty());
+    }
+
+    @Test
+    void i176ContextualMatchVisitsSubjectKeysAndActions() {
+        String subject = "match(a === { x: 1 }) { Any: 1 }";
+        assertEquals(FRESH, single(subject).ruleId());
+
+        String key = "match(a) { (b === { x: 1 }): 1 }";
+        assertEquals(FRESH, single(key).ruleId());
+
+        String action = "match(a) { Any: () => { ^1; c } }";
+        ProtosStaticLintDiagnostic only = single(action);
+        assertEquals(UNREACHABLE, only.ruleId());
+        assertEquals(
+                new SourceSpan(action.indexOf("c }"), action.indexOf("c }") + 1),
+                only.span());
+    }
+
+    @Test
     void contextualUntilBodyIsAClosureNotProvenExecution() {
         assertTrue(lint(
                 "f: (x) => {\n    { ^1 } until(x)\n    a\n}").isEmpty());

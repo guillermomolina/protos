@@ -283,6 +283,96 @@ class ProtosLanguageServerDefinitionTest {
     }
 
     @Test
+    void i176ContextualMatchCaptureReadDefinesToItsActionParameter() throws Exception {
+        ProjectFixture project = project("contextual-match");
+        ProtosLanguageServer server = initialized(
+                project,
+                candidate -> candidate.equals(project.root())
+                        ? Optional.of(project.binding())
+                        : Optional.empty());
+
+        String source = "match(value) {\n  [Capture]: (item) => item\n}\n";
+        String uri = project.source().toUri().toString();
+        server.textDocuments().didOpen(open(uri, 1, source));
+
+        // The read "item" spans line 1 characters 23-27; its parameter 14-18.
+        assertLocation(definitions(server, uri, 1, 23), uri, 1, 14, 1, 18);
+
+        // The contextual keyword is not a lexical read.
+        assertTrue(definitions(server, uri, 0, 0).isEmpty());
+    }
+
+    @Test
+    void i176GroupedMatchCallKeepsOrdinaryDefinition() throws Exception {
+        Path root = Files.createDirectory(temporary.resolve("grouped-match")).toRealPath();
+        ProtosLanguageServer server =
+                new ProtosLanguageServer(code -> {}, candidate -> Optional.empty());
+        server.initialize(initializeParams(root)).join();
+
+        String uri = root.resolve("Grouped.protos").toUri().toString();
+        server.textDocuments().didOpen(
+                open(uri, 1, "match: (v, b) => b()\n(match)(1) { 2 }\n"));
+
+        // The grouped read "match" spans line 1 characters 1-6.
+        assertLocation(definitions(server, uri, 1, 1), uri, 0, 0, 0, 5);
+    }
+
+    @Test
+    void i176ContextualMatchActionScopesDefineLikeOrdinaryClosures() throws Exception {
+        String source =
+                "f: (outer) => {\n"
+                        + "    match(1) {\n"
+                        + "        1: {\n"
+                        + "            run: (param) => param + outer\n"
+                        + "        }\n"
+                        + "        2: (local: 1) + local\n"
+                        + "        Any: (local: 2) + local\n"
+                        + "    }\n"
+                        + "}\n";
+        Path root = Files.createDirectory(temporary.resolve("contextual-match-scopes")).toRealPath();
+        ProtosLanguageServer server =
+                new ProtosLanguageServer(code -> {}, candidate -> Optional.empty());
+        server.initialize(initializeParams(root)).join();
+        String uri = root.resolve("Scopes.protos").toUri().toString();
+        server.textDocuments().didOpen(open(uri, 1, source));
+
+        // Object-valued implicit action: the captured outer read.
+        assertDefinesTo(server, uri, source, nthIndex(source, "outer", 1), nthIndex(source, "outer", 0), "outer");
+        // Nested explicit Closure parameter inside the object.
+        assertDefinesTo(server, uri, source, nthIndex(source, "param", 1), nthIndex(source, "param", 0), "param");
+        // Sibling actions each resolve to their own local slot.
+        assertDefinesTo(server, uri, source, nthIndex(source, "local", 1), nthIndex(source, "local", 0), "local");
+        assertDefinesTo(server, uri, source, nthIndex(source, "local", 3), nthIndex(source, "local", 2), "local");
+    }
+
+    private static void assertDefinesTo(
+            ProtosLanguageServer server,
+            String uri,
+            String source,
+            int reference,
+            int declaration,
+            String name) {
+        Position at = ProtosLspSourcePositions.position(source, reference);
+        Position start = ProtosLspSourcePositions.position(source, declaration);
+        Position end = ProtosLspSourcePositions.position(source, declaration + name.length());
+        assertLocation(
+                definitions(server, uri, at.getLine(), at.getCharacter()),
+                uri,
+                start.getLine(),
+                start.getCharacter(),
+                end.getLine(),
+                end.getCharacter());
+    }
+
+    private static int nthIndex(String source, String name, int occurrence) {
+        int index = source.indexOf(name);
+        for (int count = 0; count < occurrence; count++) {
+            index = source.indexOf(name, index + 1);
+        }
+        return index;
+    }
+
+    @Test
     void namedArgumentLabelIsNotALexicalRead() throws Exception {
         ProjectFixture project = project("named-label");
         ProtosLanguageServer server = initialized(

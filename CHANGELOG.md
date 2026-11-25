@@ -8,6 +8,15 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.223-SNAPSHOT
+
+- **I176 / D263-C.** Add contextual `match(subject) { key: action ... }` syntax as mandatory sugar for the ordinary `subject.caseOf(%{ ... })` send; a non-Closure action becomes an implicit parameterless Closure, explicit Closure actions are kept unchanged, and the canonical form is identical to explicit `caseOf` with no new canonical, bytecode or runtime machinery.
+- Share the Map construction entry-table parser between `%{...}` and the contextual table; recognition requires a bare `match`, one non-spread argument and an attached `{`, so grouped, member, multi-argument and spread calls keep their ordinary meaning.
+- Extend static references, definitions, hover, lint and document symbols; implicit actions are analyzed as deferred activations keyed by their stable table entry.
+- Project contextual match header comments and shared Map table boundaries (empty table, before first entry, after last entry, either side of an entry colon) in the source layout, render them in the Protos formatter through the shared table renderer and comment accounting, and admit them in the Protos source-preservation comparator.
+- Update the grammar (including the compact EBNF Map productions), language specification and matching semantics, and the matching, control-flow and source-style guides.
+- Add parser, source-fact, canonicalization, static-analysis, source-layout, formatter, guest-preservation, LSP, protocol, suspension and suite-native conformance regressions.
+
 ## 0.4.222-SNAPSHOT
 
 - **GITHUB026.** Route repository CI through canonical `make test`, retaining the separate compilerability and Native Image validation gates.

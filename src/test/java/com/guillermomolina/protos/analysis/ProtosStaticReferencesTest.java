@@ -277,6 +277,59 @@ class ProtosStaticReferencesTest {
     }
 
     @Test
+    void i176ContextualMatchHeaderIsNotAReferenceButGroupedMatchIs() {
+        String source =
+                "f: (match, n) => {\n"
+                        + "  (match)(n) { n }\n"
+                        + "  match(n) { 0: n }\n"
+                        + "}";
+        int declaration = source.indexOf("match");
+        int groupedRead = source.indexOf("match", source.indexOf("(match)"));
+        int contextualHeader = source.lastIndexOf("match(");
+
+        ProtosStaticReferenceResult result =
+                references(source, declaration + 1).orElseThrow();
+
+        assertEquals(
+                List.of(new SourceSpan(groupedRead, groupedRead + "match".length())),
+                spans(result));
+        assertTrue(references(source, contextualHeader).isEmpty());
+    }
+
+    @Test
+    void i176ContextualMatchSubjectIsAReferenceButActionReadsAreNot() {
+        String source =
+                "f: (n) => {\n"
+                        + "  match(n) {\n"
+                        + "    0: n\n"
+                        + "    Any: (m) => n\n"
+                        + "  }\n"
+                        + "}";
+        int declaration = source.indexOf("n");
+        int subjectRead = source.indexOf("n", source.indexOf("match("));
+
+        ProtosStaticReferenceResult result =
+                references(source, declaration).orElseThrow();
+
+        assertEquals(List.of(new SourceSpan(subjectRead, subjectRead + 1)), spans(result));
+    }
+
+    @Test
+    void i176ExplicitCaptureParameterReferencesStayInsideTheirAction() {
+        String source = "match(v) {\n  [Capture]: (capturado) => capturado\n}";
+        int declaration = source.indexOf("capturado");
+        int read = source.lastIndexOf("capturado");
+
+        ProtosStaticReferenceResult result =
+                references(source, declaration).orElseThrow();
+        assertEquals(
+                new SourceSpan(declaration, declaration + "capturado".length()),
+                result.target().span());
+        assertEquals(List.of(new SourceSpan(read, read + "capturado".length())), spans(result));
+        assertSameProvenOrigin(source, result);
+    }
+
+    @Test
     void contextualWhileCapturedReadsAreNotClaimedAsExactReferences() {
         String source =
                 "f: (n) => {\n"
@@ -471,6 +524,91 @@ class ProtosStaticReferencesTest {
         assertParameterReferences("f: (valor) => valor", "valor", -1);
         assertParameterReferences("f: (valor: 3) => valor", "valor", "f: (valor: ".length());
         assertParameterReferences("f: (...valor) => valor", "valor", "f: (".length());
+    }
+
+    @Test
+    void i176ContextualMatchReferencesMatchExplicitExpansion() {
+        for (String[] pair : I176_PAIRS) {
+            for (String name : List.of(pair[2], pair[3])) {
+                List<Integer> contextual = i176Occurrences(pair[0], name);
+                List<Integer> explicit = i176Occurrences(pair[1], name);
+                assertEquals(explicit.size(), contextual.size(), name);
+                for (int index = 0; index < contextual.size(); index++) {
+                    assertEquals(
+                            referenceLabels(pair[1], explicit.get(index)),
+                            referenceLabels(pair[0], contextual.get(index)),
+                            name + "#" + index + " in\n" + pair[0]);
+                }
+            }
+        }
+    }
+
+    @Test
+    void i176SiblingActionReferencesStayInTheirOwnActivation() {
+        String source = I176_PAIRS.get(2)[0];
+        List<Integer> local = i176Occurrences(source, "local");
+        Optional<ProtosStaticReferenceResult> first = references(source, local.get(0));
+        Optional<ProtosStaticReferenceResult> second = references(source, local.get(2));
+        first.ifPresent(result -> assertTrue(spans(result).stream()
+                .noneMatch(span -> span.startOffset() == local.get(3)
+                        || span.startOffset() == local.get(4))));
+        second.ifPresent(result -> assertTrue(spans(result).stream()
+                .noneMatch(span -> span.startOffset() == local.get(1)
+                        || span.startOffset() == local.get(4))));
+    }
+
+    private String referenceLabels(String source, int offset) {
+        return references(source, offset)
+                .map(result -> "target " + i176OccurrenceLabel(source, result.target().span())
+                        + " occurrences " + spans(result).stream()
+                                .map(span -> i176OccurrenceLabel(source, span))
+                                .toList())
+                .orElse("none");
+    }
+
+    private static final List<String[]> I176_PAIRS = List.of(
+            new String[] {
+                "f: (outer) => {\n    match(1) {\n        1: {\n            inner: 10\n"
+                        + "            copy: inner\n            captured: outer\n        }\n    }\n}",
+                "f: (outer) => {\n    1.caseOf(%{\n        1: () => ({\n            inner: 10\n"
+                        + "            copy: inner\n            captured: outer\n        })\n    })\n}",
+                "inner", "outer"},
+            new String[] {
+                "f: (outer) => {\n    match(1) {\n        1: {\n            run: (param) => "
+                        + "match(param) {\n                Any: param + outer\n            }\n"
+                        + "        }\n    }\n}",
+                "f: (outer) => {\n    1.caseOf(%{\n        1: () => ({\n            run: (param) => "
+                        + "param.caseOf(%{\n                Any: () => param + outer\n            })\n"
+                        + "        })\n    })\n}",
+                "param", "outer"},
+            new String[] {
+                "f: (value) => {\n    match(value) {\n        0: (local: 1) + local\n"
+                        + "        Any: (local: 2) + local\n    }\n    local\n}",
+                "f: (value) => {\n    value.caseOf(%{\n        0: () => (local: 1) + local\n"
+                        + "        Any: () => (local: 2) + local\n    })\n    local\n}",
+                "local", "value"},
+            new String[] {
+                "f: (value) => {\n    match(value) {\n        [Capture]: ((item) => item)\n    }\n}",
+                "f: (value) => {\n    value.caseOf(%{\n        [Capture]: ((item) => item)\n    })\n}",
+                "item", "value"});
+
+    private static String i176OccurrenceLabel(String source, SourceSpan span) {
+        String name = source.substring(span.startOffset(), span.endOffset());
+        int count = 0;
+        int index = source.indexOf(name);
+        while (index >= 0 && index < span.startOffset()) {
+            count++;
+            index = source.indexOf(name, index + 1);
+        }
+        return name + "#" + count;
+    }
+
+    private static List<Integer> i176Occurrences(String source, String name) {
+        List<Integer> offsets = new java.util.ArrayList<>();
+        for (int index = source.indexOf(name); index >= 0; index = source.indexOf(name, index + 1)) {
+            offsets.add(index);
+        }
+        return offsets;
     }
 
     private void assertParameterReferences(String source, String name, int nonNameOffset) {

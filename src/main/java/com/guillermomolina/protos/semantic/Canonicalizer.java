@@ -27,6 +27,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceCall;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualFor;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualIf;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualMatch;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualUntil;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
 import com.guillermomolina.protos.parser.ast.SurfaceExpression;
@@ -70,6 +71,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalSpread;
 import com.guillermomolina.protos.semantic.ast.CanonicalSuperSend;
 import com.guillermomolina.protos.source.SourceSpan;
 import java.util.List;
+import java.util.function.UnaryOperator;
 
 public final class Canonicalizer {
     public CanonicalExpression canonicalize(SurfaceExpression expression) {
@@ -93,6 +95,7 @@ public final class Canonicalizer {
             case SurfaceContextualIf conditional -> lowerContextualIf(conditional);
             case SurfaceContextualUntil loop -> lowerContextualUntil(loop);
             case SurfaceContextualFor loop -> lowerContextualFor(loop);
+            case SurfaceContextualMatch match -> lowerContextualMatch(match);
             case SurfaceArrayConstruction array -> lowerArrayConstruction(array);
             case SurfaceMapConstruction map -> lowerMapConstruction(map);
             case SurfaceClosure closure -> lowerClosure(closure);
@@ -150,20 +153,54 @@ public final class Canonicalizer {
 
     private CanonicalExpression lowerMapConstruction(
             SurfaceMapConstruction map) {
+        return lowerMapConstruction(map, UnaryOperator.identity());
+    }
+
+    /**
+     * Lowers a Map construction whose entry values are first projected by
+     * {@code value}; keys and the ordinary lexical {@code Map} factory lookup
+     * are unchanged.
+     */
+    private CanonicalMapConstruction lowerMapConstruction(
+            SurfaceMapConstruction map,
+            UnaryOperator<SurfaceExpression> value) {
         return new CanonicalMapConstruction(
                 new CanonicalLookup("Map", map.span()),
                 map.entries().stream()
-                        .map(this::canonicalizeMapConstructionEntry)
+                        .map(entry -> canonicalizeMapConstructionEntry(
+                                entry,
+                                value.apply(entry.value())))
                         .toList(),
                 map.span());
     }
 
     private CanonicalMapConstruction.Entry canonicalizeMapConstructionEntry(
-            SurfaceMapConstruction.Entry entry) {
+            SurfaceMapConstruction.Entry entry,
+            SurfaceExpression value) {
         return new CanonicalMapConstruction.Entry(
                 canonicalize(entry.key()),
-                canonicalize(entry.value()),
+                canonicalize(value),
                 entry.span());
+    }
+
+    /**
+     * {@code match(subject) { key: action ... }} is the ordinary
+     * {@code subject.caseOf(%{ key: action ... })} send. Each action is the
+     * original explicit Closure literal, or else an ordinary parameterless
+     * Closure whose body is exactly the written expression; no
+     * matching-specific canonical node exists and the send is identical to
+     * an explicitly written {@code caseOf} send.
+     */
+    private CanonicalExpression lowerContextualMatch(
+            SurfaceContextualMatch match) {
+        CanonicalExpression subject = canonicalize(match.subject());
+        return new CanonicalSend(
+                subject,
+                "caseOf",
+                List.of(lowerMapConstruction(
+                        match.table(),
+                        SurfaceContextualMatch::action)),
+                match.span());
     }
 
     private CanonicalExpression lowerCall(SurfaceCall call) {

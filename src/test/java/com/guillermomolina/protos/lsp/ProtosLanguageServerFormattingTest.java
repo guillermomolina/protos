@@ -18,6 +18,7 @@
 package com.guillermomolina.protos.lsp;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -480,6 +481,168 @@ class ProtosLanguageServerFormattingTest {
         assertTrue(cause.getMessage().contains(
                 "bundled TOOL010 structural formatter did not return String"));
         assertTrue(cause.getMessage().contains("state=FAILED"));
+    }
+
+    @Test
+    void i176RealFormatterPreservesContextualMatchSyntax() {
+        String source =
+                "match( x ){\n"
+                        + "0:{ x: 10 }\n"
+                        + "[Capture]:(k=>k)\n"
+                        + "Any:null\n"
+                        + "}";
+
+        String expected =
+                "match(x) {\n"
+                        + "    0: { x: 10 }\n"
+                        + "    [Capture]: (k => k)\n"
+                        + "    Any: null\n"
+                        + "}\n";
+
+        assertRealFormatting(source, expected);
+    }
+
+    @Test
+    void i176RealFormatterPreservesContextualMatchHeaderComments() {
+        String source = "match /* a */ ( /* b */ x /* c */ ) /* d */ { 0: 1; Any: () => 2 }";
+
+        String expected =
+                "match /* a */ (/* b */ x /* c */) /* d */ { 0: 1; Any: () => 2 }\n";
+
+        assertRealFormatting(source, expected);
+    }
+
+    @Test
+    void i176RealFormatterIsIdempotentForNestedContextualMatchComments() {
+        String source =
+                "match /* outer */ (a) {\n"
+                        + "    0: match(/* inner */ b) /* table */ {\n"
+                        + "        1: /* value */ 2\n"
+                        + "        // between\n"
+                        + "        Any: 3\n"
+                        + "    }\n"
+                        + "    Any: 4\n"
+                        + "}";
+
+        ProtosLanguageServer server =
+                new ProtosLanguageServer(code -> {});
+        server.textDocuments().didOpen(open(URI, 1, source));
+
+        List<? extends TextEdit> edits =
+                format(server, URI, options(4, true));
+        assertEquals(1, edits.size());
+        String formatted = edits.get(0).getNewText();
+        for (String comment : List.of(
+                "/* outer */", "/* inner */", "/* table */", "/* value */", "// between")) {
+            assertEquals(
+                    2,
+                    formatted.split(java.util.regex.Pattern.quote(comment), -1).length,
+                    comment + " exactly once in\n" + formatted);
+        }
+        assertTrue(formatted.startsWith("match /* outer */ (a) {"), formatted);
+
+        com.guillermomolina.protos.analysis.ProtosStaticAnalysisCore analysis =
+                new com.guillermomolina.protos.analysis.ProtosStaticAnalysisCore();
+        var originalView = analysis.sourceLayout(new ProtosDocumentSnapshot(URI, 10L, source));
+        var formattedView = analysis.sourceLayout(new ProtosDocumentSnapshot(URI, 11L, formatted));
+        assertInstanceOf(
+                com.guillermomolina.protos.parser.ast.SurfaceContextualMatch.class,
+                formattedView.program().expressions().get(0));
+        var originalComments = originalView.preservationProjection().comments();
+        var formattedComments = formattedView.preservationProjection().comments();
+        assertEquals(originalComments.size(), formattedComments.size(), formatted);
+        for (int index = 0; index < originalComments.size(); index++) {
+            assertEquals(originalComments.get(index).rawText(),
+                    formattedComments.get(index).rawText(), formatted);
+            assertEquals(originalComments.get(index).boundaryKind(),
+                    formattedComments.get(index).boundaryKind(), formatted);
+            assertEquals(originalComments.get(index).preceding(),
+                    formattedComments.get(index).preceding(), formatted);
+            assertEquals(originalComments.get(index).following(),
+                    formattedComments.get(index).following(), formatted);
+        }
+        assertEquals(
+                spanIndependentCanonical(originalView.program()),
+                spanIndependentCanonical(formattedView.program()),
+                formatted);
+
+        server.textDocuments().didChange(change(URI, 2, formatted));
+
+        assertEquals(
+                List.of(),
+                format(server, URI, options(4, true)));
+    }
+
+    @Test
+    void i176RealFormatterKeepsEmbeddedTableAndColonCommentsOnTheirBoundaries() {
+        assertRealTableFormatting(
+                "match(x){ /* empty */ }",
+                "match(x) { /* empty */ }\n");
+        assertRealTableFormatting(
+                "match(x){/* first */ 0:1}",
+                "match(x) { /* first */ 0: 1 }\n");
+        assertRealTableFormatting(
+                "match(x){0/* before */:/* after */1}",
+                "match(x) { 0 /* before */: /* after */ 1 }\n");
+        assertRealTableFormatting(
+                "match(x){0:1/* last */}",
+                "match(x) { 0: 1 /* last */ }\n");
+    }
+
+    private static void assertRealTableFormatting(String source, String expected) {
+        assertRealFormatting(source, expected);
+
+        com.guillermomolina.protos.analysis.ProtosStaticAnalysisCore analysis =
+                new com.guillermomolina.protos.analysis.ProtosStaticAnalysisCore();
+        var originalView = analysis.sourceLayout(new ProtosDocumentSnapshot(URI, 20L, source));
+        var formattedView = analysis.sourceLayout(new ProtosDocumentSnapshot(URI, 21L, expected));
+        assertInstanceOf(
+                com.guillermomolina.protos.parser.ast.SurfaceContextualMatch.class,
+                formattedView.program().expressions().get(0));
+        var originalComments = originalView.preservationProjection().comments();
+        var formattedComments = formattedView.preservationProjection().comments();
+        assertEquals(originalComments.size(), formattedComments.size(), expected);
+        for (int index = 0; index < originalComments.size(); index++) {
+            assertEquals(originalComments.get(index).rawText(),
+                    formattedComments.get(index).rawText(), expected);
+            assertEquals(originalComments.get(index).boundaryKind(),
+                    formattedComments.get(index).boundaryKind(), expected);
+            assertEquals(originalComments.get(index).preceding(),
+                    formattedComments.get(index).preceding(), expected);
+            assertEquals(originalComments.get(index).following(),
+                    formattedComments.get(index).following(), expected);
+        }
+        assertEquals(
+                spanIndependentCanonical(originalView.program()),
+                spanIndependentCanonical(formattedView.program()),
+                expected);
+    }
+
+    private static String spanIndependentCanonical(
+            com.guillermomolina.protos.parser.ast.SurfaceSequence program) {
+        return new com.guillermomolina.protos.semantic.Canonicalizer()
+                .canonicalize(program)
+                .toString()
+                .replaceAll("SourceSpan\\[[^\\]]*\\]", "");
+    }
+
+    private static void assertRealFormatting(String source, String expected) {
+        ProtosLanguageServer server =
+                new ProtosLanguageServer(code -> {});
+
+        server.textDocuments().didOpen(open(URI, 1, source));
+
+        List<? extends TextEdit> edits =
+                format(server, URI, options(4, true));
+
+        assertEquals(1, edits.size());
+        assertEquals(expected, edits.get(0).getNewText());
+
+        server.textDocuments().didChange(change(URI, 2, expected));
+
+        assertEquals(
+                List.of(),
+                format(server, URI, options(4, true)));
     }
 
     private static ProtosLanguageServer server(ProtosLspDocumentFormatter formatter) {

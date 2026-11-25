@@ -813,6 +813,27 @@ contextual expression.
 - [Directed Integer ranges](05-values-identity-equality-and-collections.md#directed-integer-ranges)
   explains the underlying `Range` protocol.
 
+## The contextual `match(subject) { ... }` form
+
+Multi-way selection has one contextual form beside `if`, `while`, `until` and
+`for`:
+
+```protos
+label: match(code) {
+    0: "ok"
+    Any: "failed"
+}
+```
+
+It is the ordinary `code.caseOf(%{ 0: () => "ok"; Any: () => "failed" })`
+send: the subject is the receiver, the braces are an ordinary Map construction
+without `%`, and every non-Closure right-hand side becomes a lazy
+zero-parameter Closure. Like the other contextual forms, it applies only to a
+bare `match` with one non-spread argument and an attached `{`; `(match)(x) { ... }`
+stays an ordinary call. See
+[Protocol-First Matching and Case Selection](12-matching-expressions.md) for
+the `caseOf` protocol and action rules.
+
 ## Standard `whileTrue` has a strict contract
 
 The standard behavior is Closure-specific.

@@ -32,6 +32,270 @@ tests: [
                 2: () => true
             })
         })
+    }),
+
+    // D263-C / I176: `match(subject) { key: action }` is exactly the ordinary
+    // `subject.caseOf(%{ key: action })` send; a non-Closure action is an
+    // implicit parameterless Closure around the written expression.
+    Test("contextual match selects a constant result like explicit caseOf", () => {
+        select: (value) => {
+            match(value) {
+                0: 11
+                1: 23
+                2: 37
+                Any: 53
+            }
+        }
+        explicit: (value) => {
+            value.caseOf(%{
+                0: () => 11
+                1: () => 23
+                2: () => 37
+                Any: () => 53
+            })
+        }
+        for(value in [0, 1, 2, 9]) {
+            Assertions.require(select(value) == explicit(value))
+        }
+        Assertions.require(select(2) == 37)
+        Assertions.require(select(9) == 53)
+    }),
+    Test("contextual match runs only the selected action", () => {
+        log: ""
+        result: match(1) {
+            0: log = log + "zero"
+            1: log = log + "one"
+            Any: log = log + "any"
+        }
+        Assertions.require(log == "one")
+        Assertions.require(result == "one")
+    }),
+    Test("contextual match evaluates the subject once and every key before selection", () => {
+        log: ""
+        subject: () => {
+            log = log + "s"
+            2
+        }
+        key: (name, value) => {
+            log = log + name
+            value
+        }
+        result: match(subject()) {
+            key("a", 1): log = log + "A"
+            key("b", 2): log = log + "B"
+            key("c", 3): log = log + "C"
+        }
+        Assertions.require(log == "sabcB")
+        Assertions.require(result == "sabcB")
+    }),
+    Test("contextual match asks reached matchers in order and commits to the first success", () => {
+        log: ""
+        matcher: (name, answer) => {
+            {
+                match: (subject) => {
+                    log = log + name
+                    answer
+                }
+            }
+        }
+        result: match(5) {
+            matcher("1", false): "first"
+            matcher("2", true): "second"
+            matcher("3", true): "third"
+        }
+        Assertions.require(result == "second")
+        Assertions.require(log == "12")
+    }),
+    Test("contextual match passes structural captures to explicit Closures", () => {
+        pair: (value) => {
+            match(value) {
+                [1, Capture]: x => x
+                [Capture, Capture]: (x, y) => x + y
+                Any: null
+            }
+        }
+        Assertions.require(pair([1, 7]) == 7)
+        Assertions.require(pair([3, 4]) == 7)
+        Assertions.require(pair([1, 2, 3]) === null)
+        Assertions.require(
+            pair([3, 4]) ==
+                [3, 4].caseOf(%{
+                    [1, Capture]: x => x
+                    [Capture, Capture]: (x, y) => x + y
+                    Any: () => null
+                }))
+    }),
+    Test("contextual match implicit actions ignore captures", () => {
+        result: match([1, 7]) {
+            [1, Capture]: "ignored"
+        }
+        Assertions.require(result == "ignored")
+    }),
+    Test("contextual match keeps explicit defaults and rest", () => {
+        result: match([5]) {
+            [Capture]: (x, y: 10, ...rest) => x + y + rest.size()
+        }
+        Assertions.require(result == 15)
+    }),
+    Test("contextual match returns null Closures and objects unchanged", () => {
+        Assertions.require(match(1) { 1: null } === null)
+
+        handler: () => 5
+        Assertions.require(match(1) { 1: handler } === handler)
+        Assertions.require(match(1) { 1: handler() } == 5)
+
+        object: match(1) { 1: { x: 10 } }
+        Assertions.require(object.x == 10)
+        Assertions.require(match(1) { 1: () => {
+            x: 10
+            x + 1
+        } } == 11)
+    }),
+    Test("contextual match actions capture lexical bindings by reference", () => {
+        n: 1
+        bump: () => {
+            n = 5
+            1
+        }
+        Assertions.require(match(1) { bump(): n } == 5)
+
+        hit: 0
+        match(1) { 1: hit = 7 }
+        Assertions.require(hit == 7)
+    }),
+    Test("contextual match actions may return non-locally", () => {
+        after: 0
+        find: (value) => {
+            match(value) {
+                1: ^"early"
+                Any: 0
+            }
+            after = after + 1
+            "late"
+        }
+        Assertions.require(find(1) == "early")
+        Assertions.require(after == 0)
+        Assertions.require(find(2) == "late")
+        Assertions.require(after == 1)
+    }),
+    Test("contextual matches nest", () => {
+        classify: (a, b) => {
+            match(a) {
+                0: match(b) {
+                    0: "both"
+                    Any: "first"
+                }
+                Any: "neither"
+            }
+        }
+        Assertions.require(classify(0, 0) == "both")
+        Assertions.require(classify(0, 1) == "first")
+        Assertions.require(classify(1, 0) == "neither")
+    }),
+    Test("contextual match signals ordinary Errors", () => {
+        Assertions.signals(Error, () => {
+            match(1) {
+                1: "one"
+                1: "again"
+            }
+        })
+        Assertions.signals(Error, () => {
+            match(1) {
+                2: true
+            }
+        })
+        Assertions.signals(Error, () => {
+            match(1) {}
+        })
+    }),
+    Test("contextual match sends ordinary caseOf with a Map of callables", () => {
+        subject: {
+            caseOf: (cases) => cases
+        }
+        received: match(subject) {
+            1: 2
+            3: x => x
+        }
+        Assertions.require(received.size() == 2)
+        Assertions.require(received[1]() == 2)
+        Assertions.require(received[3](4) == 4)
+    }),
+    Test("contextual match subject may create an ordinary slot", () => {
+        result: match(flag: true) {
+            true: flag
+            Any: false
+        }
+        Assertions.require(result === true)
+        Assertions.require(flag === true)
+    }),
+    Test("contextual match action slots stay in the action activation", () => {
+        local: "outer"
+        result: match(1) {
+            1: (local: "inner") + "!"
+        }
+        Assertions.require(result == "inner!")
+        Assertions.require(local == "outer")
+    }),
+    Test("contextual match sibling actions have independent local slots", () => {
+        pick: (value) => {
+            match(value) {
+                0: (local: 10) + local
+                Any: (local: 20) + local
+            }
+        }
+        Assertions.require(pick(0) == 20)
+        Assertions.require(pick(1) == 40)
+    }),
+    Test("contextual matches nest inside keys subjects and actions", () => {
+        result: match(match(1) { 1: 2 }) {
+            match(0) { Any: 2 }: match(3) {
+                3: "deep"
+            }
+            Any: "shallow"
+        }
+        Assertions.require(result == "deep")
+    }),
+    Test("postfix suffixes apply to the selected value", () => {
+        Assertions.require(match(1) { 1: { name: "selected" } }.name == "selected")
+        adder: (n) => n + 1
+        Assertions.require(match(1) { 1: adder }(41) == 42)
+        // An explicit Closure action is invoked by caseOf; its result is selected.
+        Assertions.require(match(1) { 1: (() => 7) } == 7)
+        Assertions.require(match(1) { 1: [10, 20] }[1] == 20)
+    }),
+    Test("contextual match does not invoke unselected failing actions", () => {
+        result: match(1) {
+            0: Error().signal()
+            1: "safe"
+            Any: Error().signal()
+        }
+        Assertions.require(result == "safe")
+    }),
+    Test("contextual match propagates an Error from the selected action", () => {
+        Assertions.signals(Error, () => {
+            match(1) {
+                1: Error().signal()
+                Any: "unreached"
+            }
+        })
+    }),
+    Test("custom caseOf may keep the cases and invoke an action later", () => {
+        saved: null
+        keeper: {
+            caseOf: (cases) => {
+                saved = cases
+                "kept"
+            }
+        }
+        label: "before"
+        Assertions.require(match(keeper) { 1: label } == "kept")
+        label = "after"
+        Assertions.require(saved[1]() == "after")
+    }),
+    Test("grouped match stays an ordinary call", () => {
+        match: (value, body) => body() + value
+        Assertions.require((match)(1) { 41 } == 42)
+        Assertions.require(match(1, () => 1) == 2)
     })
 ]
 tests.freeze()

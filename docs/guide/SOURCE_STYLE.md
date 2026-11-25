@@ -67,6 +67,16 @@ explicit form is materially clearer. Existing source that spells these messages
 is not converted mechanically; convert it only when a scoped change touches it
 for another reason.
 
+### Contextual `match` (D263-C)
+
+Idiomatic Protos source should normally spell ordinary multi-way selection with
+the contextual `match(subject) { key: action ... }` expression rather than an
+explicit `subject.caseOf(%{ key: () => action ... })` send. Keep explicit
+`caseOf` when discussing or directly testing the `caseOf` protocol, when
+forwarding an existing cases Map or existing callable objects, or when
+demonstrating the canonical equivalence. Existing `caseOf` source is not
+converted mechanically.
+
 ## Boundaries
 
 This policy does **not**:

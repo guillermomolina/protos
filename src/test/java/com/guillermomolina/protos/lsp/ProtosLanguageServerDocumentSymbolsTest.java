@@ -96,6 +96,27 @@ class ProtosLanguageServerDocumentSymbolsTest {
     }
 
     @Test
+    void i176ContextualMatchActionDefinitionsAreDiscoverableButKeysAreNot() {
+        ProtosLanguageServer server = initializedServer();
+        ProtosTextDocumentService documents = server.textDocuments();
+        String uri = "file:///workspace/selection.protos";
+        String source = "match(ready) {\n"
+                + "    key: () => {\n"
+                + "        started: 1\n"
+                + "    }\n"
+                + "    Any: (waiting: 2)\n"
+                + "}\n";
+
+        documents.didOpen(open(uri, 1, source));
+        List<DocumentSymbol> symbols = symbols(documents, uri);
+
+        assertEquals(List.of("started", "waiting"),
+                symbols.stream().map(DocumentSymbol::getName).toList());
+        assertEquals(new Position(2, 8), symbols.get(0).getSelectionRange().getStart());
+        assertEquals(new Position(4, 10), symbols.get(1).getSelectionRange().getStart());
+    }
+
+    @Test
     void projectsSlotsAcrossContextualForHeadersBodiesAndReturnOperands() {
         ProtosLanguageServer server = initializedServer();
         ProtosTextDocumentService documents = server.textDocuments();

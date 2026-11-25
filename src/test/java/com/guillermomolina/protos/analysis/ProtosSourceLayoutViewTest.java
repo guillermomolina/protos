@@ -31,6 +31,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceCall;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualFor;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualIf;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualMatch;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualUntil;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
 import com.guillermomolina.protos.parser.ast.SurfaceGroup;
@@ -1252,6 +1253,316 @@ class ProtosSourceLayoutViewTest {
         assertEquals(
                 "else",
                 projection.tokens().get(contextualElse.elseToken()).rawText());
+    }
+
+    @Test
+    void i176ContextualMatchHeaderCommentsAttachToFourDistinctBoundaries() {
+        String source =
+                "match /* a */ (/* b */ x /* c */) /* d */ {\n    0: y\n    Any: z\n}";
+        ProtosSourceLayoutView view =
+                core.sourceLayout(
+                        new ProtosDocumentSnapshot(
+                                "memory:i176-contextual-match-comments",
+                                1L,
+                                source));
+
+        SurfaceContextualMatch match =
+                assertInstanceOf(
+                        SurfaceContextualMatch.class,
+                        view.program().expressions().get(0));
+        String matchPath = view.pathOf(match).orElseThrow().toString();
+        String subjectPath = view.pathOf(match.subject()).orElseThrow().toString();
+        String tablePath = view.pathOf(match.table()).orElseThrow().toString();
+        assertEquals(matchPath + "/subject", subjectPath);
+        assertEquals(matchPath + "/table", tablePath);
+        assertEquals(
+                tablePath + "/entry[1]/value",
+                view.pathOf(match.table().entries().get(1).value())
+                        .orElseThrow()
+                        .toString());
+
+        List<String> texts = List.of("/* a */", "/* b */", "/* c */", "/* d */");
+        List<ProtosSourceLayoutView.CommentBoundaryKind> kinds = List.of(
+                ProtosSourceLayoutView.CommentBoundaryKind.CONTEXTUAL_MATCH_BEFORE_LPAREN,
+                ProtosSourceLayoutView.CommentBoundaryKind.CONTEXTUAL_MATCH_AFTER_LPAREN,
+                ProtosSourceLayoutView.CommentBoundaryKind.CONTEXTUAL_MATCH_BEFORE_RPAREN,
+                ProtosSourceLayoutView.CommentBoundaryKind.CONTEXTUAL_MATCH_BEFORE_TABLE);
+        List<String> preceding = List.of(matchPath, matchPath, subjectPath, subjectPath);
+        List<String> following = List.of(subjectPath, subjectPath, tablePath, tablePath);
+
+        List<ProtosSourceLayoutView.CommentAttachment> attachments =
+                view.commentAttachments();
+        assertEquals(texts.size(), attachments.size());
+        for (int index = 0; index < attachments.size(); index++) {
+            ProtosSourceLayoutView.CommentAttachment attachment = attachments.get(index);
+            int start = source.indexOf(texts.get(index));
+            assertEquals(
+                    new SourceSpan(start, start + texts.get(index).length()),
+                    attachment.comment().span());
+            assertEquals(kinds.get(index), attachment.boundaryKind());
+            assertEquals(
+                    ProtosSourceLayoutView.CommentPlacement.EMBEDDED_BETWEEN_TOKENS,
+                    attachment.placement());
+            assertEquals(preceding.get(index), attachment.preceding().orElseThrow().toString());
+            assertEquals(following.get(index), attachment.following().orElseThrow().toString());
+        }
+    }
+
+    @Test
+    void i176ContextualMatchProjectsItsOwnStructuralFormAndMapEntrySeparators() {
+        String source = "match(x) { 0: y; Any: z }\n%{ 1: 2 }";
+        ProtosSourceLayoutView view =
+                core.sourceLayout(
+                        new ProtosDocumentSnapshot(
+                                "memory:i176-contextual-match-forms",
+                                1L,
+                                source));
+        SurfaceContextualMatch match =
+                assertInstanceOf(
+                        SurfaceContextualMatch.class,
+                        view.program().expressions().get(0));
+        String matchPath = view.pathOf(match).orElseThrow().toString();
+        String tablePath = view.pathOf(match.table()).orElseThrow().toString();
+        String mapPath =
+                view.pathOf(view.program().expressions().get(1)).orElseThrow().toString();
+
+        ProtosSourceLayoutView.SourcePreservationProjection projection =
+                view.preservationProjection();
+        List<String> forms =
+                projection.structuralForms().stream()
+                        .map(form -> form.path() + "=" + form.kind())
+                        .toList();
+        assertTrue(forms.contains(matchPath + "=CONTEXTUAL_MATCH"), forms.toString());
+        assertTrue(forms.contains(mapPath + "=MAP_CONSTRUCTION"), forms.toString());
+        assertTrue(
+                forms.stream().noneMatch(form -> form.startsWith(tablePath + "=")),
+                forms.toString());
+
+        List<ProtosSourceLayoutView.SequenceSeparatorProjection> mapSeparators =
+                projection.sequenceSeparators().stream()
+                        .filter(candidate -> candidate.context()
+                                == ProtosParserSourceFacts.SequenceContext.MAP_CONSTRUCTION)
+                        .toList();
+        assertEquals(1, mapSeparators.size());
+        ProtosSourceLayoutView.SequenceSeparatorProjection separator =
+                mapSeparators.get(0);
+        assertEquals(SequenceSeparatorKind.SEMICOLON, separator.kind());
+        assertEquals(tablePath + "/entry[0]", separator.preceding().toString());
+        assertEquals(tablePath + "/entry[1]", separator.following().toString());
+    }
+
+    @Test
+    void i176MapTableEdgeAndColonCommentsAttachToTheirOwnBoundaries() {
+        for (String prefix : List.of("match(x) ", "%")) {
+            String source = prefix + "{ /* a */ /* b */ 0 /* c */: /* d */ 1 /* e */ }";
+            ProtosSourceLayoutView view = i176View(source);
+            SurfaceMapConstruction table = i176Table(view);
+            SurfaceMapConstruction.Entry entry = table.entries().get(0);
+            String tablePath = i176Path(view, table);
+            String entryPath = view.pathOfNode(entry).orElseThrow().toString();
+            String keyPath = i176Path(view, entry.key());
+            String valuePath = i176Path(view, entry.value());
+
+            assertEquals(
+                    List.of(
+                            "MAP_TABLE_BEFORE_FIRST_ENTRY " + tablePath + " -> " + entryPath,
+                            "MAP_TABLE_BEFORE_FIRST_ENTRY " + tablePath + " -> " + entryPath,
+                            "MAP_ENTRY_BEFORE_COLON " + keyPath + " -> " + valuePath,
+                            "MAP_ENTRY_AFTER_COLON " + keyPath + " -> " + valuePath,
+                            "MAP_TABLE_AFTER_LAST_ENTRY " + entryPath + " -> " + tablePath),
+                    i176Attachments(view),
+                    source);
+            i176AssertCommentSpans(source, view);
+            assertTrue(
+                    view.commentAttachments().stream().allMatch(
+                            attachment -> attachment.placement()
+                                    == ProtosSourceLayoutView.CommentPlacement
+                                            .EMBEDDED_BETWEEN_TOKENS),
+                    source);
+        }
+    }
+
+    @Test
+    void i176EmptyTableCommentsBelongToTheTable() {
+        for (String prefix : List.of("match(x) ", "%")) {
+            String source = prefix + "{ /* empty */ }";
+            ProtosSourceLayoutView view = i176View(source);
+            String tablePath = i176Path(view, i176Table(view));
+            assertEquals(
+                    List.of("MAP_TABLE_EMPTY " + tablePath + " -> " + tablePath),
+                    i176Attachments(view),
+                    source);
+            i176AssertCommentSpans(source, view);
+        }
+
+        ProtosSourceLayoutView contextual = i176View("match(x) { /* empty */ }");
+        SurfaceContextualMatch match = assertInstanceOf(
+                SurfaceContextualMatch.class,
+                contextual.program().expressions().get(0));
+        assertEquals(
+                i176Path(contextual, match) + "/table",
+                i176Path(contextual, match.table()));
+        List<String> forms = contextual.preservationProjection().structuralForms().stream()
+                .map(form -> form.kind().name())
+                .toList();
+        assertEquals(List.of("CONTEXTUAL_MATCH"), forms);
+        assertTrue(contextual.preservationProjection().tokens().stream()
+                .noneMatch(token -> token.type() == TokenType.PERCENT));
+    }
+
+    @Test
+    void i176RepeatedCommentTextKeepsDistinctBoundaries() {
+        for (String prefix : List.of("match(x) ", "%")) {
+            String source = prefix + "{ /* s */ 0: /* s */ 1 /* s */ }";
+            ProtosSourceLayoutView view = i176View(source);
+            assertEquals(
+                    List.of(
+                            "MAP_TABLE_BEFORE_FIRST_ENTRY",
+                            "MAP_ENTRY_AFTER_COLON",
+                            "MAP_TABLE_AFTER_LAST_ENTRY"),
+                    view.commentAttachments().stream()
+                            .map(attachment -> attachment.boundaryKind().name())
+                            .toList(),
+                    source);
+            i176AssertCommentSpans(source, view);
+        }
+    }
+
+    @Test
+    void i176NestedTablesOwnOnlyTheirOwnEdgeComments() {
+        String contextual = "match(x) { 0: match(y) { /* inner */ 1: 2 } /* outer */ }";
+        ProtosSourceLayoutView view = i176View(contextual);
+        SurfaceMapConstruction outer = i176Table(view);
+        SurfaceContextualMatch inner = assertInstanceOf(
+                SurfaceContextualMatch.class,
+                outer.entries().get(0).value());
+        String innerTable = i176Path(view, inner.table());
+        assertEquals(i176Path(view, outer) + "/entry[0]/value/table", innerTable);
+        assertEquals(
+                List.of(
+                        "MAP_TABLE_BEFORE_FIRST_ENTRY " + innerTable + " -> "
+                                + view.pathOfNode(inner.table().entries().get(0))
+                                        .orElseThrow(),
+                        "MAP_TABLE_AFTER_LAST_ENTRY "
+                                + view.pathOfNode(outer.entries().get(0)).orElseThrow()
+                                + " -> " + i176Path(view, outer)),
+                i176Attachments(view));
+
+        String map = "%{ 0: %{ /* inner */ 1: 2 } /* outer */ }";
+        ProtosSourceLayoutView mapView = i176View(map);
+        SurfaceMapConstruction mapOuter = i176Table(mapView);
+        SurfaceMapConstruction mapInner = assertInstanceOf(
+                SurfaceMapConstruction.class,
+                mapOuter.entries().get(0).value());
+        assertEquals(
+                List.of(
+                        "MAP_TABLE_BEFORE_FIRST_ENTRY " + i176Path(mapView, mapInner) + " -> "
+                                + mapView.pathOfNode(mapInner.entries().get(0)).orElseThrow(),
+                        "MAP_TABLE_AFTER_LAST_ENTRY "
+                                + mapView.pathOfNode(mapOuter.entries().get(0)).orElseThrow()
+                                + " -> " + i176Path(mapView, mapOuter)),
+                i176Attachments(mapView));
+    }
+
+    @Test
+    void i176ContextualMatchesInMapKeysAndValuesOwnTheirTables() {
+        String source = "%{ match(a) { /* key */ 1: 2 }: match(b) { 3: 4 /* value */ } }";
+        ProtosSourceLayoutView view = i176View(source);
+        SurfaceMapConstruction map = i176Table(view);
+        SurfaceContextualMatch key = assertInstanceOf(
+                SurfaceContextualMatch.class, map.entries().get(0).key());
+        SurfaceContextualMatch value = assertInstanceOf(
+                SurfaceContextualMatch.class, map.entries().get(0).value());
+        assertEquals(
+                List.of(
+                        "MAP_TABLE_BEFORE_FIRST_ENTRY " + i176Path(view, key.table()) + " -> "
+                                + view.pathOfNode(key.table().entries().get(0)).orElseThrow(),
+                        "MAP_TABLE_AFTER_LAST_ENTRY "
+                                + view.pathOfNode(value.table().entries().get(0)).orElseThrow()
+                                + " -> " + i176Path(view, value.table())),
+                i176Attachments(view));
+    }
+
+    @Test
+    void i176SubjectAndPostfixCommentsKeepTheirOwnBoundaries() {
+        String source = "match(x /* subject */) { /* table */ 0: 1 /* last */ }.name";
+        ProtosSourceLayoutView view = i176View(source);
+        assertEquals(
+                List.of(
+                        "CONTEXTUAL_MATCH_BEFORE_RPAREN",
+                        "MAP_TABLE_BEFORE_FIRST_ENTRY",
+                        "MAP_TABLE_AFTER_LAST_ENTRY"),
+                view.commentAttachments().stream()
+                        .map(attachment -> attachment.boundaryKind().name())
+                        .toList());
+        i176AssertCommentSpans(source, view);
+    }
+
+    @Test
+    void i176OwnLineAndEndOfLineEdgeCommentsAreProjectedAccurately() {
+        for (String prefix : List.of("match(x) ", "%")) {
+            String source = prefix + "{\n    // first\n    0: 1 // last\n}";
+            ProtosSourceLayoutView view = i176View(source);
+            List<ProtosSourceLayoutView.CommentAttachment> attachments =
+                    view.commentAttachments();
+            assertEquals(2, attachments.size(), source);
+            assertEquals(
+                    ProtosSourceLayoutView.CommentBoundaryKind.MAP_TABLE_BEFORE_FIRST_ENTRY,
+                    attachments.get(0).boundaryKind());
+            assertEquals(
+                    ProtosSourceLayoutView.CommentPlacement.OWN_LINE,
+                    attachments.get(0).placement());
+            assertEquals(
+                    ProtosSourceLayoutView.CommentBoundaryKind.MAP_TABLE_AFTER_LAST_ENTRY,
+                    attachments.get(1).boundaryKind());
+            assertEquals(
+                    ProtosSourceLayoutView.CommentPlacement.END_OF_LINE,
+                    attachments.get(1).placement());
+            i176AssertCommentSpans(source, view);
+        }
+    }
+
+    private ProtosSourceLayoutView i176View(String source) {
+        return core.sourceLayout(
+                new ProtosDocumentSnapshot("memory:i176-table-comments", 1L, source));
+    }
+
+    /** The outermost table: a contextual match's table or an ordinary Map. */
+    private static SurfaceMapConstruction i176Table(ProtosSourceLayoutView view) {
+        Object first = view.program().expressions().get(0);
+        while (first instanceof com.guillermomolina.protos.parser.ast.SurfaceMember member) {
+            first = member.receiver();
+        }
+        if (first instanceof SurfaceContextualMatch match) {
+            return match.table();
+        }
+        return assertInstanceOf(SurfaceMapConstruction.class, first);
+    }
+
+    private static String i176Path(
+            ProtosSourceLayoutView view,
+            com.guillermomolina.protos.parser.ast.SurfaceExpression expression) {
+        return view.pathOf(expression).orElseThrow().toString();
+    }
+
+    private static List<String> i176Attachments(ProtosSourceLayoutView view) {
+        return view.commentAttachments().stream()
+                .map(attachment -> attachment.boundaryKind().name() + " "
+                        + attachment.preceding().orElseThrow() + " -> "
+                        + attachment.following().orElseThrow())
+                .toList();
+    }
+
+    /** Every attachment covers exactly one written comment, in source order. */
+    private static void i176AssertCommentSpans(String source, ProtosSourceLayoutView view) {
+        int searchFrom = 0;
+        for (ProtosSourceLayoutView.CommentAttachment attachment : view.commentAttachments()) {
+            SourceSpan span = attachment.comment().span();
+            assertTrue(span.startOffset() >= searchFrom, source);
+            String text = source.substring(span.startOffset(), span.endOffset());
+            assertTrue(text.startsWith("/*") || text.startsWith("//"), text);
+            searchFrom = span.endOffset();
+        }
     }
 
     @Test

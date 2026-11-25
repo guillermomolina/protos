@@ -24,6 +24,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceBinary;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualFor;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualIf;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualMatch;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualUntil;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
@@ -342,6 +343,13 @@ final class ProtosStaticHover {
                     }
                 }
                 children.add(loop.body());
+            }
+            case SurfaceContextualMatch match -> {
+                children.add(match.subject());
+                for (SurfaceMapConstruction.Entry entry : match.table().entries()) {
+                    children.add(entry.key());
+                    children.add(entry.value());
+                }
             }
             case SurfaceArrayConstruction array -> addArguments(children, array.arguments());
             case SurfaceMapConstruction map -> {

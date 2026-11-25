@@ -30,6 +30,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceCall;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualFor;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualIf;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualMatch;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualUntil;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
 import com.guillermomolina.protos.parser.ast.SurfaceExpression;
@@ -411,7 +412,24 @@ public final class ProtosParser {
 
     private SurfaceExpression parseMapConstruction() {
         TokenOccurrence percent = cursor.consume(TokenType.PERCENT, "'%'");
-        cursor.consume(TokenType.LBRACE, "'{' after '%' in Map construction");
+        SurfaceMapConstruction table = parseMapConstructionTable(
+                cursor.consume(
+                        TokenType.LBRACE,
+                        "'{' after '%' in Map construction"));
+        return new SurfaceMapConstruction(
+                table.entries(),
+                new SourceSpan(
+                        percent.span().startOffset(),
+                        table.span().endOffset()));
+    }
+
+    /**
+     * Parses the braced entry table shared by ordinary {@code %{...}} Map
+     * construction and contextual {@code match}, after its opening brace has
+     * been consumed. The returned span covers the actual braces.
+     */
+    private SurfaceMapConstruction parseMapConstructionTable(
+            TokenOccurrence open) {
         consumeNewlines();
 
         List<SurfaceMapConstruction.Entry> entries = new ArrayList<>();
@@ -438,7 +456,7 @@ public final class ProtosParser {
         return new SurfaceMapConstruction(
                 entries,
                 new SourceSpan(
-                        percent.span().startOffset(),
+                        open.span().startOffset(),
                         close.span().endOffset()));
     }
 
@@ -795,6 +813,18 @@ public final class ProtosParser {
         SurfaceClosure trailingClosure = null;
 
         if (cursor.at(TokenType.LBRACE)
+                && isContextualMatchHeader(receiver, arguments)) {
+            SurfaceMapConstruction table = parseMapConstructionTable(
+                    cursor.consume(TokenType.LBRACE, "'{'"));
+            return new SurfaceContextualMatch(
+                    arguments.get(0).expression(),
+                    table,
+                    new SourceSpan(
+                            receiver.span().startOffset(),
+                            table.span().endOffset()));
+        }
+
+        if (cursor.at(TokenType.LBRACE)
                 && isContextualNumericForHeader(receiver, arguments)) {
             return parseContextualNumericFor(receiver, arguments);
         }
@@ -930,6 +960,20 @@ public final class ProtosParser {
                         body.span().endOffset()));
         recordTrailingClosureOrigin(loop, body);
         return loop;
+    }
+
+    /**
+     * Only a bare, ungrouped {@code match} name with exactly one non-spread
+     * explicit argument is the contextual match header; the caller
+     * additionally requires an attached {@code '{'}. The argument is the raw
+     * subject expression, taken before named-argument normalization.
+     */
+    private static boolean isContextualMatchHeader(
+            SurfaceExpression receiver,
+            List<SurfaceArgument> arguments) {
+        return isBareName(receiver, "match")
+                && arguments.size() == 1
+                && !arguments.get(0).spread();
     }
 
     /**

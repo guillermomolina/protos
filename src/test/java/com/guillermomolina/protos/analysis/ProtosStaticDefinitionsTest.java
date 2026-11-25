@@ -22,6 +22,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.source.SourceSpan;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
@@ -303,6 +305,263 @@ class ProtosStaticDefinitionsTest {
         String inner = "if(c) { ((k) => k)(1) } else { ((j) => j)(2) }";
         assertTrue(exactOrigin(inner, inner.indexOf("k", inner.indexOf("=>"))).isPresent());
         assertTrue(exactOrigin(inner, inner.indexOf("j", inner.indexOf("j) =>") + 1)).isPresent());
+    }
+
+    @Test
+    void i176ContextualMatchHeaderIsNotALexicalReadOfMatchBinding() {
+        String source =
+                "f: (match, n) => {\n"
+                        + "  (match)(n) { n }\n"
+                        + "  match(n) { 0: n }\n"
+                        + "}";
+        int declaration = source.indexOf("match");
+        int groupedRead = source.indexOf("match", source.indexOf("(match)"));
+        int contextualHeader = source.lastIndexOf("match(");
+
+        ProtosStaticDefinitionResult grouped = exactOrigin(source, groupedRead).orElseThrow();
+        assertEquals(
+                new SourceSpan(declaration, declaration + "match".length()),
+                grouped.targets().get(0).span());
+        assertTrue(exactOrigin(source, contextualHeader).isEmpty());
+        assertTrue(navigation(source, contextualHeader).isEmpty());
+    }
+
+    @Test
+    void i176ContextualMatchSubjectIsEagerButActionsAreDeferred() {
+        String source =
+                "f: (n) => {\n"
+                        + "  match(n) {\n"
+                        + "    0: n\n"
+                        + "    Any: (m) => n\n"
+                        + "  }\n"
+                        + "  n\n"
+                        + "}";
+        int declaration = source.indexOf("n");
+        int subjectRead = source.indexOf("n", source.indexOf("match("));
+        int implicitRead = source.indexOf("n", source.indexOf("0:"));
+        int explicitRead = source.indexOf("n", source.indexOf("(m) =>"));
+        int afterMatch = source.lastIndexOf("n");
+
+        ProtosStaticDefinitionResult subject =
+                exactOrigin(source, subjectRead).orElseThrow();
+        assertEquals(
+                new SourceSpan(declaration, declaration + 1),
+                subject.targets().get(0).span());
+        assertTrue(exactOrigin(source, implicitRead).isEmpty());
+        assertTrue(exactOrigin(source, explicitRead).isEmpty());
+        assertTrue(exactOrigin(source, afterMatch).isEmpty());
+
+        String inner = "match(c) { 0: ((k) => k)(1) }";
+        assertTrue(exactOrigin(inner, inner.indexOf("k", inner.indexOf("=>"))).isPresent());
+    }
+
+    @Test
+    void i176ImplicitActionSlotIsNotAnEnclosingDeclaration() {
+        String source = "match(v) {\n  0: local: 1\n}\nlocal";
+        assertTrue(exactOrigin(source, source.lastIndexOf("local")).isEmpty());
+
+        String explicit = "v.caseOf(%{\n  0: () => local: 1\n})\nlocal";
+        assertEquals(
+                exactOrigin(explicit, explicit.lastIndexOf("local")).isPresent(),
+                exactOrigin(source, source.lastIndexOf("local")).isPresent());
+    }
+
+    @Test
+    void i176NavigationThroughContextualMatchUsesOrdinaryLexicalScope() {
+        String source =
+                "valor: 1\n"
+                        + "clave: 2\n"
+                        + "match(valor) {\n"
+                        + "  clave: valor\n"
+                        + "  [Capture]: (x) => x + valor\n"
+                        + "}\n";
+        int clave = source.indexOf("clave");
+        assertNavigates(source, source.indexOf("valor", source.indexOf("match(")), "valor", 0);
+        assertNavigates(source, source.indexOf("clave", clave + 1), "clave", clave);
+        assertNavigates(source, source.indexOf("valor", source.indexOf("clave:", clave + 1)),
+                "valor", 0);
+        assertNavigates(source, source.lastIndexOf("valor"), "valor", 0);
+        assertNavigates(source, source.indexOf("x +"), "x", source.indexOf("(x)") + 1);
+    }
+
+    private static final String I176_OBJECT_CONTEXTUAL =
+            "f: (outer) => {\n"
+                    + "    match(1) {\n"
+                    + "        1: {\n"
+                    + "            inner: 10\n"
+                    + "            copy: inner\n"
+                    + "            captured: outer\n"
+                    + "        }\n"
+                    + "    }\n"
+                    + "}";
+
+    private static final String I176_OBJECT_EXPLICIT =
+            "f: (outer) => {\n"
+                    + "    1.caseOf(%{\n"
+                    + "        1: () => ({\n"
+                    + "            inner: 10\n"
+                    + "            copy: inner\n"
+                    + "            captured: outer\n"
+                    + "        })\n"
+                    + "    })\n"
+                    + "}";
+
+    @Test
+    void i176ObjectValuedImplicitActionResolvesLikeExplicitClosure() {
+        assertSameResolution(I176_OBJECT_CONTEXTUAL, I176_OBJECT_EXPLICIT, "inner", 1);
+        assertSameResolution(I176_OBJECT_CONTEXTUAL, I176_OBJECT_EXPLICIT, "outer", 1);
+        assertTrue(resolutionLabels(I176_OBJECT_CONTEXTUAL,
+                        nth(I176_OBJECT_CONTEXTUAL, "outer", 1))
+                .contains("navigation outer#0"));
+    }
+
+    @Test
+    void i176GroupedObjectValuedImplicitActionResolvesLikeUngroupedAction() {
+        String grouped = I176_OBJECT_CONTEXTUAL
+                .replace("        1: {\n", "        1: ({\n")
+                .replace("        }\n    }\n}", "        })\n    }\n}");
+        assertTrue(grouped.contains("1: ({"));
+        assertTrue(grouped.contains("})\n    }\n}"));
+        assertSameResolution(grouped, I176_OBJECT_EXPLICIT, "inner", 1);
+        assertSameResolution(grouped, I176_OBJECT_EXPLICIT, "outer", 1);
+        assertSameResolution(grouped, I176_OBJECT_CONTEXTUAL, "inner", 1);
+        assertSameResolution(grouped, I176_OBJECT_CONTEXTUAL, "outer", 1);
+    }
+
+    @Test
+    void i176NestedDeferredScopesResolveLikeExplicitExpansion() {
+        String contextual =
+                "f: (outer) => {\n"
+                        + "    match(1) {\n"
+                        + "        1: {\n"
+                        + "            run: (param) => match(param) {\n"
+                        + "                Any: param + outer\n"
+                        + "            }\n"
+                        + "        }\n"
+                        + "    }\n"
+                        + "}";
+        String explicit =
+                "f: (outer) => {\n"
+                        + "    1.caseOf(%{\n"
+                        + "        1: () => ({\n"
+                        + "            run: (param) => param.caseOf(%{\n"
+                        + "                Any: () => param + outer\n"
+                        + "            })\n"
+                        + "        })\n"
+                        + "    })\n"
+                        + "}";
+        assertSameResolution(contextual, explicit, "param", 1);
+        assertSameResolution(contextual, explicit, "param", 2);
+        assertSameResolution(contextual, explicit, "outer", 1);
+        for (String source : List.of(contextual, explicit)) {
+            assertTrue(resolutionLabels(source, nth(source, "param", 2))
+                    .contains("navigation param#0"), source);
+            assertTrue(resolutionLabels(source, nth(source, "outer", 1))
+                    .contains("navigation outer#0"), source);
+        }
+    }
+
+    @Test
+    void i176SiblingImplicitActionsKeepIndependentActivations() {
+        String contextual =
+                "f: (value) => {\n"
+                        + "    match(value) {\n"
+                        + "        0: (local: 1) + local\n"
+                        + "        Any: (local: 2) + local\n"
+                        + "    }\n"
+                        + "    local\n"
+                        + "}";
+        String explicit =
+                "f: (value) => {\n"
+                        + "    value.caseOf(%{\n"
+                        + "        0: () => (local: 1) + local\n"
+                        + "        Any: () => (local: 2) + local\n"
+                        + "    })\n"
+                        + "    local\n"
+                        + "}";
+        for (int occurrence = 1; occurrence <= 4; occurrence++) {
+            assertSameResolution(contextual, explicit, "local", occurrence);
+        }
+        for (String source : List.of(contextual, explicit)) {
+            List<String> first = resolutionLabels(source, nth(source, "local", 1));
+            List<String> second = resolutionLabels(source, nth(source, "local", 3));
+            List<String> after = resolutionLabels(source, nth(source, "local", 4));
+            assertTrue(first.contains("navigation local#0"), source);
+            assertFalse(first.contains("navigation local#2"), source);
+            assertTrue(second.contains("navigation local#2"), source);
+            assertFalse(second.contains("navigation local#0"), source);
+            assertFalse(after.contains("navigation local#0"), source);
+            assertFalse(after.contains("navigation local#2"), source);
+            assertFalse(after.contains("exact local#0"), source);
+            assertFalse(after.contains("exact local#2"), source);
+        }
+    }
+
+    @Test
+    void i176EagerSubjectAndKeySlotsFollowOrdinaryEvaluation() {
+        String contextual =
+                "f: () => {\n"
+                        + "    match(subj: 1) {\n"
+                        + "        (keyed: 1): subj + keyed\n"
+                        + "    }\n"
+                        + "    subj + keyed\n"
+                        + "}";
+        String explicit =
+                "f: () => {\n"
+                        + "    (subj: 1).caseOf(%{\n"
+                        + "        (keyed: 1): () => subj + keyed\n"
+                        + "    })\n"
+                        + "    subj + keyed\n"
+                        + "}";
+        for (String name : List.of("subj", "keyed")) {
+            assertSameResolution(contextual, explicit, name, 1);
+            assertSameResolution(contextual, explicit, name, 2);
+            for (String source : List.of(contextual, explicit)) {
+                assertTrue(resolutionLabels(source, nth(source, name, 2))
+                        .contains("navigation " + name + "#0"), source);
+            }
+        }
+    }
+
+    private void assertSameResolution(
+            String contextual, String explicit, String name, int occurrence) {
+        assertEquals(
+                resolutionLabels(explicit, nth(explicit, name, occurrence)),
+                resolutionLabels(contextual, nth(contextual, name, occurrence)),
+                name + "#" + occurrence);
+    }
+
+    /**
+     * Navigation and exact-origin targets named by identifier and occurrence
+     * index, so equivalent sources of different lengths compare directly.
+     */
+    private List<String> resolutionLabels(String source, int reference) {
+        List<String> labels = new ArrayList<>();
+        navigation(source, reference).ifPresent(result -> result.targets().forEach(
+                target -> labels.add("navigation " + occurrenceLabel(source, target.span()))));
+        exactOrigin(source, reference).ifPresent(result -> result.targets().forEach(
+                target -> labels.add("exact " + occurrenceLabel(source, target.span()))));
+        return labels;
+    }
+
+    private static String occurrenceLabel(String source, SourceSpan span) {
+        String name = slice(source, span);
+        int count = 0;
+        int index = source.indexOf(name);
+        while (index >= 0 && index < span.startOffset()) {
+            count++;
+            index = source.indexOf(name, index + 1);
+        }
+        return name + "#" + count;
+    }
+
+    private static int nth(String source, String name, int occurrence) {
+        int index = source.indexOf(name);
+        for (int count = 0; count < occurrence; count++) {
+            index = source.indexOf(name, index + 1);
+        }
+        assertTrue(index >= 0, name + "#" + occurrence);
+        return index;
     }
 
     @Test

@@ -36,6 +36,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceBinary;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualFor;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualIf;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualMatch;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualUntil;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
@@ -101,6 +102,15 @@ public final class ProtosSourceLayoutView {
         CONTEXTUAL_FOR_BEFORE_STOP,
         CONTEXTUAL_FOR_AFTER_STOP,
         CONTEXTUAL_FOR_BEFORE_STEP,
+        CONTEXTUAL_MATCH_BEFORE_LPAREN,
+        CONTEXTUAL_MATCH_AFTER_LPAREN,
+        CONTEXTUAL_MATCH_BEFORE_RPAREN,
+        CONTEXTUAL_MATCH_BEFORE_TABLE,
+        MAP_TABLE_EMPTY,
+        MAP_TABLE_BEFORE_FIRST_ENTRY,
+        MAP_TABLE_AFTER_LAST_ENTRY,
+        MAP_ENTRY_BEFORE_COLON,
+        MAP_ENTRY_AFTER_COLON,
         NON_LOCAL_RETURN_OPERAND,
         NAMED_ARGUMENT_BEFORE_COLON,
         NAMED_ARGUMENT_AFTER_COLON,
@@ -207,6 +217,7 @@ public final class ProtosSourceLayoutView {
         GROUP,
         ARRAY_CONSTRUCTION,
         MAP_CONSTRUCTION,
+        CONTEXTUAL_MATCH,
         CLOSURE_EXPRESSION_BODY,
         CLOSURE_BLOCK_BODY
     }
@@ -502,6 +513,17 @@ public final class ProtosSourceLayoutView {
 
         List<StructuralFormProjection> projectedForms =
                 new ArrayList<>();
+        // A contextual match table is written without '%': it is projected
+        // only through its owning CONTEXTUAL_MATCH form.
+        Map<Object, Boolean> contextualMatchTables =
+                new IdentityHashMap<>();
+        for (StructuralNode structuralNode :
+                structuralIndex.nodes) {
+            if (structuralNode.node()
+                    instanceof SurfaceContextualMatch match) {
+                contextualMatchTables.put(match.table(), Boolean.TRUE);
+            }
+        }
 
         for (StructuralNode structuralNode :
                 structuralIndex.nodes) {
@@ -520,7 +542,15 @@ public final class ProtosSourceLayoutView {
                                 StructuralFormKind
                                         .ARRAY_CONSTRUCTION));
             } else if (node
-                    instanceof SurfaceMapConstruction) {
+                    instanceof SurfaceContextualMatch) {
+                projectedForms.add(
+                        new StructuralFormProjection(
+                                structuralNode.path(),
+                                StructuralFormKind
+                                        .CONTEXTUAL_MATCH));
+            } else if (node
+                    instanceof SurfaceMapConstruction map
+                    && !contextualMatchTables.containsKey(map)) {
                 projectedForms.add(
                         new StructuralFormProjection(
                                 structuralNode.path(),
@@ -909,6 +939,14 @@ public final class ProtosSourceLayoutView {
 
             if (boundary.isEmpty()) {
                 boundary =
+                        contextualMatchHeaderBoundary(
+                                occurrence.span(),
+                                tokenOccurrences,
+                                structuralIndex);
+            }
+
+            if (boundary.isEmpty()) {
+                boundary =
                         nonLocalReturnOperandBoundary(
                                 occurrence.span(),
                                 structuralIndex);
@@ -936,6 +974,14 @@ public final class ProtosSourceLayoutView {
                                 occurrence.span(),
                                 tokenOccurrences,
                                 sourceFacts,
+                                structuralIndex);
+            }
+
+            if (boundary.isEmpty()) {
+                boundary =
+                        mapTableCommentBoundary(
+                                occurrence.span(),
+                                tokenOccurrences,
                                 structuralIndex);
             }
 
@@ -1098,6 +1144,106 @@ public final class ProtosSourceLayoutView {
                         new ResolvedBoundary(
                                 ownerPath.orElseThrow(),
                                 conditionPath.orElseThrow(),
+                                kind,
+                                Optional.empty()));
+            }
+        }
+
+        return Optional.empty();
+    }
+
+    /**
+     * Contextual match header comments, between header tokens but outside
+     * the subject and the table: between {@code match} and {@code (}, or
+     * between that {@code (} and the subject (both attach from the
+     * contextual node to its subject); between the subject and {@code )}, or
+     * between {@code )} and the table's opening brace (both attach from the
+     * subject to the actual table). No trailing Closure is involved.
+     */
+    private static Optional<ResolvedBoundary>
+            contextualMatchHeaderBoundary(
+                    SourceSpan comment,
+                    List<TokenOccurrence> tokenOccurrences,
+                    StructuralIndex structuralIndex) {
+        for (StructuralNode structuralNode : structuralIndex.nodes) {
+            if (!(structuralNode.node()
+                    instanceof SurfaceContextualMatch match)) {
+                continue;
+            }
+
+            int ownerStart = match.span().startOffset();
+            int subjectStart = match.subject().span().startOffset();
+            int subjectEnd = match.subject().span().endOffset();
+            int tableStart = match.table().span().startOffset();
+            if (comment.startOffset() < ownerStart
+                    || comment.endOffset() > tableStart
+                    || (comment.startOffset() < subjectEnd
+                            && comment.endOffset() > subjectStart)) {
+                continue;
+            }
+
+            TokenOccurrence keyword = null;
+            TokenOccurrence open = null;
+            for (TokenOccurrence occurrence : tokenOccurrences) {
+                if (occurrence.span().startOffset() < ownerStart) {
+                    continue;
+                }
+                if (keyword == null) {
+                    keyword = occurrence;
+                    continue;
+                }
+                open = occurrence;
+                break;
+            }
+            TokenOccurrence close =
+                    lastRightParenthesisBefore(
+                            tokenOccurrences,
+                            subjectEnd,
+                            tableStart);
+
+            if (keyword == null
+                    || open == null
+                    || close == null
+                    || keyword.token().type() != TokenType.IDENTIFIER
+                    || open.token().type() != TokenType.LPAREN) {
+                continue;
+            }
+
+            CommentBoundaryKind kind;
+            Object preceding;
+            Object following;
+            if (comment.startOffset() >= keyword.span().endOffset()
+                    && comment.endOffset() <= open.span().startOffset()) {
+                kind = CommentBoundaryKind.CONTEXTUAL_MATCH_BEFORE_LPAREN;
+                preceding = match;
+                following = match.subject();
+            } else if (comment.startOffset() >= open.span().endOffset()
+                    && comment.endOffset() <= subjectStart) {
+                kind = CommentBoundaryKind.CONTEXTUAL_MATCH_AFTER_LPAREN;
+                preceding = match;
+                following = match.subject();
+            } else if (comment.startOffset() >= subjectEnd
+                    && comment.endOffset() <= close.span().startOffset()) {
+                kind = CommentBoundaryKind.CONTEXTUAL_MATCH_BEFORE_RPAREN;
+                preceding = match.subject();
+                following = match.table();
+            } else if (comment.startOffset() >= close.span().endOffset()) {
+                kind = CommentBoundaryKind.CONTEXTUAL_MATCH_BEFORE_TABLE;
+                preceding = match.subject();
+                following = match.table();
+            } else {
+                continue;
+            }
+
+            Optional<StructuralPath> precedingPath =
+                    structuralIndex.pathOf(preceding);
+            Optional<StructuralPath> followingPath =
+                    structuralIndex.pathOf(following);
+            if (precedingPath.isPresent() && followingPath.isPresent()) {
+                return Optional.of(
+                        new ResolvedBoundary(
+                                precedingPath.orElseThrow(),
+                                followingPath.orElseThrow(),
                                 kind,
                                 Optional.empty()));
             }
@@ -1500,6 +1646,129 @@ public final class ProtosSourceLayoutView {
         }
 
         return result;
+    }
+
+    /**
+     * Comments at the edges of a braced Map entry table or around an entry's
+     * own {@code :}. A table is any Map construction entry table, written with
+     * {@code %} or as the table of a contextual match. Ownership is decided
+     * only from the actual opening and closing brace tokens and the actual
+     * entry colon token, so these comments never migrate outside the braces
+     * or across the colon. Intervals of distinct tables are disjoint, because
+     * a nested table lies inside an entry's key or value.
+     */
+    private static Optional<ResolvedBoundary>
+            mapTableCommentBoundary(
+                    SourceSpan comment,
+                    List<TokenOccurrence> tokenOccurrences,
+                    StructuralIndex structuralIndex) {
+        for (StructuralNode structuralNode : structuralIndex.nodes) {
+            if (!(structuralNode.node()
+                    instanceof SurfaceMapConstruction table)) {
+                continue;
+            }
+
+            SourceSpan tableSpan = table.span();
+            if (comment.startOffset() < tableSpan.startOffset()
+                    || comment.endOffset() > tableSpan.endOffset()) {
+                continue;
+            }
+
+            TokenOccurrence open =
+                    firstTokenOfTypeBetween(
+                            tokenOccurrences,
+                            TokenType.LBRACE,
+                            tableSpan.startOffset(),
+                            tableSpan.endOffset());
+            TokenOccurrence close = null;
+            for (TokenOccurrence occurrence : tokenOccurrences) {
+                if (occurrence.token().type() == TokenType.RBRACE
+                        && occurrence.span().endOffset()
+                                == tableSpan.endOffset()) {
+                    close = occurrence;
+                    break;
+                }
+            }
+            if (open == null || close == null) {
+                continue;
+            }
+
+            List<SurfaceMapConstruction.Entry> entries = table.entries();
+            Object preceding = null;
+            Object following = null;
+            CommentBoundaryKind kind = null;
+
+            if (entries.isEmpty()) {
+                if (comment.startOffset() >= open.span().endOffset()
+                        && comment.endOffset() <= close.span().startOffset()) {
+                    kind = CommentBoundaryKind.MAP_TABLE_EMPTY;
+                    preceding = table;
+                    following = table;
+                }
+            } else {
+                SurfaceMapConstruction.Entry first = entries.get(0);
+                SurfaceMapConstruction.Entry last =
+                        entries.get(entries.size() - 1);
+                if (comment.startOffset() >= open.span().endOffset()
+                        && comment.endOffset()
+                                <= first.span().startOffset()) {
+                    kind = CommentBoundaryKind.MAP_TABLE_BEFORE_FIRST_ENTRY;
+                    preceding = table;
+                    following = first;
+                } else if (comment.startOffset() >= last.span().endOffset()
+                        && comment.endOffset() <= close.span().startOffset()) {
+                    kind = CommentBoundaryKind.MAP_TABLE_AFTER_LAST_ENTRY;
+                    preceding = last;
+                    following = table;
+                } else {
+                    for (SurfaceMapConstruction.Entry entry : entries) {
+                        int keyEnd = entry.key().span().endOffset();
+                        int valueStart = entry.value().span().startOffset();
+                        if (comment.startOffset() < keyEnd
+                                || comment.endOffset() > valueStart) {
+                            continue;
+                        }
+                        TokenOccurrence colon =
+                                firstTokenOfTypeBetween(
+                                        tokenOccurrences,
+                                        TokenType.COLON,
+                                        keyEnd,
+                                        valueStart);
+                        if (colon == null) {
+                            break;
+                        }
+                        if (comment.endOffset() <= colon.span().startOffset()) {
+                            kind = CommentBoundaryKind.MAP_ENTRY_BEFORE_COLON;
+                        } else if (comment.startOffset()
+                                >= colon.span().endOffset()) {
+                            kind = CommentBoundaryKind.MAP_ENTRY_AFTER_COLON;
+                        }
+                        preceding = entry.key();
+                        following = entry.value();
+                        break;
+                    }
+                }
+            }
+
+            if (kind == null) {
+                continue;
+            }
+
+            Optional<StructuralPath> precedingPath =
+                    structuralIndex.pathOf(preceding);
+            Optional<StructuralPath> followingPath =
+                    structuralIndex.pathOf(following);
+            if (precedingPath.isPresent() && followingPath.isPresent()) {
+                return Optional.of(
+                        new ResolvedBoundary(
+                                precedingPath.orElseThrow(),
+                                followingPath.orElseThrow(),
+                                kind,
+                                Optional.empty()));
+            }
+        }
+
+        return Optional.empty();
     }
 
     private static Optional<ResolvedBoundary> sequenceBoundary(
@@ -1935,6 +2204,14 @@ public final class ProtosSourceLayoutView {
                                 array.arguments().get(index),
                                 path.child("argument", index));
                     }
+                }
+                case SurfaceContextualMatch match -> {
+                    registerExpression(
+                            match.subject(),
+                            path.child("subject"));
+                    registerExpression(
+                            match.table(),
+                            path.child("table"));
                 }
                 case SurfaceMapConstruction map -> {
                     for (int index = 0;

@@ -175,9 +175,13 @@ contextual `while` (D210-Q2) and `if`/`else` (D211) expressions reinterpret exac
 call shapes, and the contextual `until` suffix (D212) reinterprets one exact
 braced-body shape, without reserving these spellings.
 
-Under D131, `match`, `case`, `when`, `exact`, and `captures` have no
-matching-specific contextual structural meaning. They remain ordinary
-identifier/member-name spellings wherever the ordinary grammar admits those
+Under D131, `case`, `when`, `exact`, and `captures` have no matching-specific
+contextual structural meaning, and no spelling introduces pattern grammar. The
+only contextual structural meaning of `match` is the D263-C contextual `match`
+expression (Optional Control-flow Sugar), which reinterprets one exact call
+shape followed by an attached braced entry table without reserving the
+spelling. Every other occurrence of these spellings remains an ordinary
+identifier/member-name spelling wherever the ordinary grammar admits those
 categories. In particular, D073's ordinary `pattern.match(subject)` selector is
 ordinary member/call syntax.
 
@@ -716,6 +720,12 @@ Removing the dedicated matching grammar does not reserve future syntax. A later
 explicit decision may add sugar over the protocol-first model, but Core v0.1
 contains no dormant parser grammar for the removed forms.
 
+D263-C adds exactly one such sugar: the contextual `match` expression
+(Optional Control-flow Sugar, Contextual `match` expression), a mandatory
+desugaring to an ordinary `caseOf` send whose argument is an ordinary Map
+construction of ordinary Closures. It reuses the Map construction entry
+grammar unchanged and restores none of the removed forms above.
+
 Slot creation and assignment have the lowest precedence.
 
 > Root invariant: `Object` is the only object without a delegation parent; every other object has exactly one.
@@ -1015,6 +1025,11 @@ construction syntax.
 `%{...}` is expression-position Map construction only. D131 defines no
 pattern-position Map grammar; structural Map matching is ordinary
 `matcherMap.match(subject)` behavior owned by `semantics/MATCHING.md`.
+
+The braced `"{", map-construction-sequence, "}"` table, with exactly the entry,
+newline, `;`, and empty-table rules above, is also the table of the D263-C
+contextual `match` expression (Optional Control-flow Sugar), which is written
+without `%`.
 
 ## 13. Parenthesized Expressions
 
@@ -1615,9 +1630,9 @@ means a named argument, intentionally replacing its former slot-creation
 meaning; use `f((a: 10))` when the latter is intended.
 
 Recognition of the already-defined exact contextual `if`, `while`, numeric and
-generic `for`, postfix `until`, and contextual `return` forms precedes this
-ordinary-argument reinterpretation. Their matched condition, header or operand
-expressions retain ordinary `:` semantics. When that contextual syntax is not
+generic `for`, `match` (D263-C), postfix `until`, and contextual `return` forms
+precedes this ordinary-argument reinterpretation. Their matched condition,
+subject, header or operand expressions retain ordinary `:` semantics. When that contextual syntax is not
 matched (including when a callee is grouped), any ordinary parenthesized call
 uses the named-argument rule. A trailing braced Closure, when attached by the
 existing grammar, remains one final positional argument and can collide with a
@@ -1671,6 +1686,13 @@ Bracket syntax lowers to the ordinary `at` / `atPut` protocol. Indexed access is
 The final postfix operation of a chain determines its role as a target: a final member suffix permits `:` or `=`; a final index suffix permits `=` only (see Slot-Creation and Assignment Targets).
 
 Receiver-aware semantic lowering still distinguishes a member invocation such as `dog.speak()` from a plain invocation such as `f()`, so that `this` and `methodHome` are preserved correctly.
+
+Within this postfix grammar, a call suffix on the bare, ungrouped identifier
+`match` with exactly one non-spread explicit argument and an attached `{` is the
+D263-C contextual `match` expression (Optional Control-flow Sugar,
+`contextual-match-suffix` in the Compact EBNF). Its result is an ordinary
+postfix-foundation result, so later member, call, and index suffixes apply to
+the complete contextual expression.
 
 ## 19. Trailing Closures
 
@@ -1838,6 +1860,12 @@ with its optional `else` suffix (D211, Optional Control-flow Sugar) use exactly
 this attachment rule for their braced bodies; the D211 `else` suffix applies the
 same no-intervening-`NEWLINE` requirement between the true branch and `else` and
 between `else` and its braced body.
+
+The D263-C contextual `match` expression uses the same no-intervening-`NEWLINE`
+attachment condition for its braced table, but the attached braces are a Map
+construction entry table, never a trailing closure: once the exact contextual
+`match` header and an attached `{` are recognized, the braces are parsed only
+by the entry-table grammar and are not retried as a trailing closure.
 
 ## 20. Object Construction vs Trailing Closure
 
@@ -2640,7 +2668,10 @@ The contextual `return` spelling of non-local return is specified by
 D234-B2-S1 (Contextual `return` expression). There is no second return
 mechanism. Contextual generic and numeric `for` are specified by
 D231-F2-PURE (Contextual `for` expression); they are iteration sugar over
-ordinary `each`/`eachStep` sends, not a second loop mechanism.
+ordinary `each`/`eachStep` sends, not a second loop mechanism. Contextual
+`match` is specified by D263-C (Contextual `match` expression); it is
+selection sugar over the ordinary `caseOf` send, not a second matching
+mechanism.
 
 ### Contextual `return` expression (D234-B2-S1)
 
@@ -2861,6 +2892,137 @@ lexical lookups, and no synthetic name is introduced. No loop-specific
 canonical node, `break`, `continue`, iterator protocol, or runtime primitive
 exists; `^` and `return` remain non-local returns, not loop exits.
 
+### Contextual `match` expression (D263-C)
+
+```ebnf
+contextual-match-expression =
+    "match",
+    "(",
+    [ layout ],
+    expression,
+    [ layout ],
+    ")",
+    "{",
+    map-construction-sequence,
+    "}" ;
+```
+
+The form is recognized only when, in the ordinary postfix call grammar:
+
+- the call receiver is the bare, ungrouped identifier `match` (not a member
+  name and not a parenthesized expression);
+- the argument list contains exactly one explicit argument, and that argument
+  is not a `...` spread; and
+- the next parser token after the closing `)` is `{`, with no intervening
+  logical `NEWLINE` token, under the same token-sequence condition as the
+  trailing-closure attachment rule (Trailing Closures).
+
+Recognition follows the contextual `if`, `while`, and `for` model. The subject
+is the single explicit argument expression taken before the D237 named-argument
+reinterpretation (Calls and Arguments), so it is an ordinary expression:
+
+```protos
+match(flag: true) {
+    true: 11
+    Any: 23
+}
+```
+
+creates the ordinary slot `flag` as part of evaluating the subject; it is not
+a named argument.
+
+Once the exact header and the attached `{` are recognized, the parser commits
+to the entry table: the braces are parsed only by the `map-construction-sequence`
+production of Map Construction Expressions, unchanged, including its newline,
+`;`, empty-table, and separator rules. A malformed table is a syntax error; it
+is never retried as an ordinary trailing closure or object body. An empty
+table `match(subject) {}` is valid.
+
+Each entry's key is parsed and evaluated exactly as a Map construction key.
+Each entry's right-hand side is a complete `expression`, classified
+syntactically, after disregarding only outer grouping parentheses:
+
+- when the resulting root is an explicit Closure literal, the original
+  right-hand side expression, including any grouping, is the action unchanged;
+- otherwise the action is an ordinary parameterless lexical Closure whose body
+  is a sequence containing exactly that right-hand side expression.
+
+The classification inspects only the syntactic root. It never evaluates the
+expression, consults bindings, or inspects runtime values: a bare name whose
+value is a Closure, or an expression that invokes a Closure, is wrapped as an
+expression like any other. Ordinary postfix composition and expression nesting
+inside the right-hand side are unaffected.
+
+In particular,
+
+```protos
+0: { x: 10 }
+```
+
+has an object expression as its right-hand side; its implicit action is
+equivalent to
+
+```protos
+0: () => ({ x: 10 })
+```
+
+and returns an ordinary object, whereas
+
+```protos
+0: () => { x: 10 }
+```
+
+is an explicit Closure literal whose braced body executes the slot creation
+`x: 10`.
+
+Mandatory desugaring:
+
+```protos
+result: match(value) {
+    0: 11
+    1: 23
+    2: 37
+    Any: 53
+}
+```
+
+is the ordinary message send
+
+```protos
+result: value.caseOf(%{
+    0: () => 11
+    1: () => 23
+    2: () => 37
+    Any: () => 53
+})
+```
+
+The subject is the ordinary send receiver, evaluated once and eagerly. The
+table is an ordinary Map construction, including its ordinary lexical `Map`
+lookup and factory eligibility (Map Construction Expressions). Explicit
+Closure actions keep their parameters, defaults, rest parameter, and body
+exactly as written. The send uses the ordinary selector `caseOf` under
+ordinary lookup, including user-defined overrides; selection, invocation,
+results, and errors are owned by `semantics/MATCHING.md`. The `match` token is
+not a lexical lookup, and no synthetic guest-visible name, matching-specific
+canonical node, pattern grammar, binding form, or runtime primitive is
+introduced. Later member, call, and index suffixes apply to the complete
+contextual expression.
+
+For this exact shape only, the contextual interpretation takes precedence over
+a lexical binding named `match`: such a binding is not consulted. Every other
+spelling keeps its ordinary meaning, including:
+
+```text
+match(value)
+(match)(value) { body }
+object.match(value) { body }
+match(value, callback)
+match(...arguments) { body }
+match(value)
+{ body }
+```
+
 ## 37. Futures and Errors Require No New Grammar
 
 Asynchronous execution:
@@ -3070,6 +3232,7 @@ postfix-operation =
       ".", member-name
     | call-suffix
     | contextual-for-suffix
+    | contextual-match-suffix
     | "[", expression, "]" ;
 
 call-suffix =
@@ -3086,14 +3249,46 @@ contextual-for-suffix =
           [ ",", [ layout ], expression ], [ layout ], ")",
           braced-closure-body ;
 
+(* D263-C: on the bare identifier "match", exactly one non-spread explicit
+   argument followed by an attached "{" is reinterpreted contextually as the
+   section 36 Contextual `match` expression; the braces are the Map
+   construction entry table, never a trailing closure, and "match" stays an
+   ordinary identifier. *)
+contextual-match-suffix =
+    "(", [ layout ], expression, [ layout ], ")",
+    "{", map-construction-sequence, "}" ;
+
 primary-expression =
       literal
     | identifier
     | intrinsic-reference
     | super-message-send
     | object-expression
+    | map-construction-expression
     | closure-expression
     | parenthesized-expression ;
+
+map-construction-expression =
+    "%", "{", map-construction-sequence, "}" ;
+
+map-construction-sequence =
+    [ newline-run ],
+    [ map-construction-line-items ],
+    [ newline-run ] ;
+
+map-construction-line-items =
+    map-construction-line,
+    { newline-run, map-construction-line } ;
+
+map-construction-line =
+    map-construction-entry,
+    { ";", map-construction-entry } ;
+
+map-construction-entry =
+    binary-expression,
+    ":",
+    [ newline-run ],
+    expression ;
 
 intrinsic-reference =
       "this"

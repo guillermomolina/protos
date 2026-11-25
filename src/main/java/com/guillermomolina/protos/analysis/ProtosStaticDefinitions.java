@@ -25,6 +25,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceBinary;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualFor;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualIf;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualMatch;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualUntil;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
@@ -461,6 +462,42 @@ final class ProtosStaticDefinitions {
                 }
                 case SurfaceArrayConstruction array -> {
                     analyzeArguments(array.arguments(), facts);
+                    opaqueInvocationBarrier(facts);
+                }
+                case SurfaceContextualMatch match -> {
+                    // Contextual match lowers to the ordinary
+                    // subject.caseOf(%{ ... }) send: the subject is the send
+                    // receiver, the table is an ordinary Map construction, and
+                    // every action is a Closure constructed but not run here. An
+                    // implicit action is a parameterless Closure whose body is
+                    // the written expression, analyzed in its own deferred scope
+                    // keyed by the stable table entry, so that a scope owned by
+                    // the expression itself (an object body) keeps its own key.
+                    analyzeReceiver(match.subject(), facts);
+                    if (!done) {
+                        opaqueInvocationBarrier(facts);
+                    }
+                    for (SurfaceMapConstruction.Entry entry : match.table().entries()) {
+                        if (done) {
+                            break;
+                        }
+                        analyze(entry.key(), facts);
+                        if (done) {
+                            break;
+                        }
+                        SurfaceExpression action = entry.value();
+                        if (SurfaceContextualMatch.isImplicitAction(action)) {
+                            inScope(
+                                    entry,
+                                    false,
+                                    true,
+                                    action.span().startOffset(),
+                                    () -> analyze(action, new Facts()));
+                        } else {
+                            analyze(action, facts);
+                        }
+                        opaqueInvocationBarrier(facts);
+                    }
                     opaqueInvocationBarrier(facts);
                 }
                 case SurfaceMapConstruction map -> {

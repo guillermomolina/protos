@@ -29,7 +29,10 @@ There is no postfix `subject match { ... }` expression, no `case` grammar, no
 matching-only binders, wildcard, guards, OR-pattern institution, exact/remainder
 pattern syntax, or `captures(...)` source form in Core v0.1.
 
-The words `match`, `case`, `when`, `exact`, and `captures` are ordinary names.
+The words `case`, `when`, `exact`, and `captures` are ordinary names. `match`
+is also an ordinary name, except in the one exact contextual
+`match(subject) { ... }` selection form described below, which is sugar over
+the ordinary `caseOf` message.
 
 ## The root matcher protocol
 
@@ -218,6 +221,79 @@ case succeeds, `caseOf` signals one fresh ordinary Error.
 Because the carrier is an ordinary normal Map, its normal unique-key,
 hash/equality, and insertion-order semantics are part of the model.
 
+## Contextual `match(subject) { ... }`
+
+For ordinary multi-way selection, the idiomatic spelling is the contextual
+`match` expression:
+
+```protos
+result: match(value) {
+    0: 11
+    1: 23
+    2: 37
+    Any: 53
+}
+```
+
+It is exactly the ordinary send:
+
+```protos
+result: value.caseOf(%{
+    0: () => 11
+    1: () => 23
+    2: () => 37
+    Any: () => 53
+})
+```
+
+The braces after `match(subject)` hold the same entries as a `%{ ... }` Map
+construction, written without `%`. Each right-hand side becomes an action:
+
+- an explicit Closure literal, possibly in parentheses, is used exactly as
+  written, so its parameters receive the matcher's captures:
+
+  ```protos
+  result: match(value) {
+      [1, Capture]: x => x
+      [Capture, Capture]: (x, y) => x + y
+      Any: null
+  }
+  ```
+
+- any other expression is wrapped in an implicit zero-parameter Closure, so
+  `Any: null` means `Any: () => null`. The decision looks only at the written
+  syntax: a bare name whose value is a Closure is wrapped (and so returned, not
+  called), and an object literal stays an object, so `0: { x: 10 }` means
+  `0: () => ({ x: 10 })`, whereas `0: () => { x: 10 }` runs a braced Closure
+  body.
+
+A zero-parameter action ignores any captures the matcher produced.
+
+The usual `caseOf` rules apply unchanged:
+
+- actions are lazy: only the selected action runs;
+- the subject is evaluated once, and every key (matcher-producing expression)
+  is evaluated eagerly, in source order, while the cases Map is built, before
+  `caseOf` starts selecting;
+- keys follow ordinary Map key semantics, so equal duplicate keys signal an
+  Error during construction, before `caseOf` is even looked up;
+- the first reached matcher that succeeds is selected;
+- when no matcher succeeds, `caseOf` signals an ordinary Error;
+- `caseOf` is looked up on the subject normally, so a custom `caseOf` receives
+  the ordinary Map of matchers and callables.
+
+The form is recognized only for a bare `match` with exactly one non-spread
+argument and a `{` on the same logical line. To call an ordinary function named
+`match` with a trailing Closure, group the callee:
+
+```protos
+(match)(value) { body }
+```
+
+Use explicit `caseOf` when the protocol itself is the subject, when forwarding
+an existing cases Map or callable objects, or when demonstrating the
+equivalence.
+
 ## Guard-like behavior needs no special syntax
 
 Core v0.1 has no matching-specific `when` syntax. A matcher simply implements the
@@ -263,7 +339,7 @@ captures(...)
 ```
 
 Those forms are not supported in Core v0.1. Use ordinary `match` and `caseOf`
-messages instead.
+messages, or the contextual `match(subject) { ... }` selection sugar, instead.
 
 ## Practical checklist
 
@@ -275,7 +351,8 @@ messages instead.
 5. Use `Any` for unconditional zero-capture success.
 6. Use Arrays for exact-length structural matching.
 7. Use Maps for open/subset structural matching.
-8. Use `value.caseOf(cases)` for ordered multi-way selection.
+8. Use `match(value) { ... }`, or `value.caseOf(cases)` directly, for ordered
+   multi-way selection.
 9. Remember that Map keys still follow ordinary Map `hash` / `==` semantics.
 10. Treat `caseOf` no-selection as Error unless a case explicitly succeeds.
 

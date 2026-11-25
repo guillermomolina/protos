@@ -879,97 +879,6 @@ formatBracedSequence: (sequence, level, layout) => {
     result
 }
 
-formatMapEntry: (entry, level, layout) => {
-    formatExpression(
-        entry.key,
-        level,
-        layout
-    ) +
-    ": " +
-    formatExpression(
-        entry.value,
-        level,
-        layout
-    )
-}
-
-formatMapEntries: (entries, level, layout) => {
-    result: ""
-    index: 0
-
-    while(index < entries.size()) {
-        if(index > 0) {
-            kind:
-                separatorKind(
-                    layout,
-                    entries[index - 1],
-                    entries[index]
-                )
-
-            result =
-                result +
-                formatSequenceBoundary(
-                    entries[index - 1],
-                    entries[index],
-                    kind,
-                    level,
-                    layout
-                )
-        }
-
-        result =
-            result +
-            formatMapEntry(
-                entries[index],
-                level,
-                layout
-            )
-
-        index = index + 1
-    }
-
-    result
-}
-
-formatMap: (entries, level, layout) => {
-    result: "%{}"
-
-    if(entries.size() > 0) {
-        multiline:
-            usesLogicalNewline(
-                entries,
-                layout
-            )
-
-        if(multiline) {
-            result =
-                "%{\n" +
-                indent(level + 1) +
-                formatMapEntries(
-                    entries,
-                    level + 1,
-                    layout
-                ) +
-                "\n" +
-                indent(level) +
-                "}"
-        }
-
-        multiline.ifFalse(() => {
-            result =
-                "%{ " +
-                formatMapEntries(
-                    entries,
-                    level + 1,
-                    layout
-                ) +
-                " }"
-        })
-    }
-
-    result
-}
-
 formatObjectItem: (item, level, layout) => {
     prefix: ""
 
@@ -1577,6 +1486,152 @@ formatTrailingClosureSeparator: (
     result
 }
 
+// An entry keeps comments on their own side of its ':'.
+formatMapEntry: (entry, level, layout) => {
+    formatExpression(
+        entry.key,
+        level,
+        layout
+    ) +
+    contextualCommentsBeforeSeparator(
+        entry.key,
+        "MAP_ENTRY_BEFORE_COLON",
+        layout
+    ) +
+    ": " +
+    contextualHeaderComments(
+        entry.key,
+        "MAP_ENTRY_AFTER_COLON",
+        false,
+        layout
+    ) +
+    formatExpression(
+        entry.value,
+        level,
+        layout
+    )
+}
+
+formatMapEntries: (entries, level, layout) => {
+    result: ""
+    index: 0
+
+    while(index < entries.size()) {
+        if(index > 0) {
+            kind:
+                separatorKind(
+                    layout,
+                    entries[index - 1],
+                    entries[index]
+                )
+
+            result =
+                result +
+                formatSequenceBoundary(
+                    entries[index - 1],
+                    entries[index],
+                    kind,
+                    level,
+                    layout
+                )
+        }
+
+        result =
+            result +
+            formatMapEntry(
+                entries[index],
+                level,
+                layout
+            )
+
+        index = index + 1
+    }
+
+    result
+}
+
+// Shared braced entry table of ordinary Map construction (prefix "%") and of
+// contextual match (empty prefix). Comments just inside the braces belong to
+// the table itself and are rendered between the actual braces.
+formatBracedEntries: (prefix, table, level, layout) => {
+    entries: table.entries
+    result:
+        prefix +
+        "{" +
+        contextualHeaderComments(
+            table,
+            "MAP_TABLE_EMPTY",
+            true,
+            layout
+        ) +
+        "}"
+
+    if(entries.size() > 0) {
+        multiline:
+            usesLogicalNewline(
+                entries,
+                layout
+            )
+
+        before:
+            contextualHeaderComments(
+                table,
+                "MAP_TABLE_BEFORE_FIRST_ENTRY",
+                false,
+                layout
+            )
+
+        rendered:
+            formatMapEntries(
+                entries,
+                level + 1,
+                layout
+            )
+
+        after:
+            contextualCommentsBeforeSeparator(
+                entries[entries.size() - 1],
+                "MAP_TABLE_AFTER_LAST_ENTRY",
+                layout
+            )
+
+        if(multiline) {
+            result =
+                prefix +
+                "{\n" +
+                indent(level + 1) +
+                before +
+                rendered +
+                after +
+                "\n" +
+                indent(level) +
+                "}"
+        }
+
+        multiline.ifFalse(() => {
+            result =
+                prefix +
+                "{ " +
+                before +
+                rendered +
+                after +
+                " }"
+        })
+    }
+
+    result
+}
+
+formatMap: (table, level, layout) => {
+    formatBracedEntries(
+        "%",
+        table,
+        level,
+        layout
+    )
+}
+
+
 formatCall: (call, level, layout) => {
     trailingPath:
         trailingClosurePath(
@@ -2014,6 +2069,51 @@ formatExpression = (node, level, layout) => {
             )
     }
 
+    // The source form is kept rather than expanded to its caseOf equivalent:
+    // entry values are formatted exactly as written, and the table's opening
+    // brace stays on the header line because a logical newline before it
+    // would end the contextual expression and change its parse.
+    if(kind == "CONTEXTUAL_MATCH") {
+        formatted =
+            "match" +
+            contextualHeaderComments(
+                node,
+                "CONTEXTUAL_MATCH_BEFORE_LPAREN",
+                true,
+                layout
+            ) +
+            "(" +
+            contextualHeaderComments(
+                node,
+                "CONTEXTUAL_MATCH_AFTER_LPAREN",
+                false,
+                layout
+            ) +
+            formatExpression(
+                node.subject,
+                level,
+                layout
+            ) +
+            contextualCommentsBeforeSeparator(
+                node.subject,
+                "CONTEXTUAL_MATCH_BEFORE_RPAREN",
+                layout
+            ) +
+            ") " +
+            contextualHeaderComments(
+                node.subject,
+                "CONTEXTUAL_MATCH_BEFORE_TABLE",
+                false,
+                layout
+            ) +
+            formatBracedEntries(
+                "",
+                node.table,
+                level,
+                layout
+            )
+    }
+
     if(kind == "ARRAY_CONSTRUCTION") {
         formatted =
             formatArray(
@@ -2026,7 +2126,7 @@ formatExpression = (node, level, layout) => {
     if(kind == "MAP_CONSTRUCTION") {
         formatted =
             formatMap(
-                node.entries,
+                node,
                 level,
                 layout
             )
@@ -2340,6 +2440,27 @@ formatBody: (sourceLayout) => {
                     "CONTEXTUAL_FOR_BEFORE_STEP")) &&
             (comment.placement == "EMBEDDED_BETWEEN_TOKENS")
 
+        contextualMatchComment:
+            ((comment.boundaryKind ==
+                "CONTEXTUAL_MATCH_BEFORE_LPAREN") ||
+                (comment.boundaryKind ==
+                    "CONTEXTUAL_MATCH_AFTER_LPAREN") ||
+                (comment.boundaryKind ==
+                    "CONTEXTUAL_MATCH_BEFORE_RPAREN") ||
+                (comment.boundaryKind ==
+                    "CONTEXTUAL_MATCH_BEFORE_TABLE")) &&
+            (comment.placement == "EMBEDDED_BETWEEN_TOKENS")
+
+        mapTableComment:
+            ((comment.boundaryKind == "MAP_TABLE_EMPTY") ||
+                (comment.boundaryKind ==
+                    "MAP_TABLE_BEFORE_FIRST_ENTRY") ||
+                (comment.boundaryKind ==
+                    "MAP_TABLE_AFTER_LAST_ENTRY") ||
+                (comment.boundaryKind == "MAP_ENTRY_BEFORE_COLON") ||
+                (comment.boundaryKind == "MAP_ENTRY_AFTER_COLON")) &&
+            (comment.placement == "EMBEDDED_BETWEEN_TOKENS")
+
         nonLocalReturnComment:
             (comment.boundaryKind ==
                 "NON_LOCAL_RETURN_OPERAND") &&
@@ -2369,6 +2490,8 @@ formatBody: (sourceLayout) => {
             contextualIfComment ||
             contextualUntilComment ||
             contextualForComment ||
+            contextualMatchComment ||
+            mapTableComment ||
             nonLocalReturnComment ||
             namedArgumentComment ||
             embeddedComment).ifFalse(() => {

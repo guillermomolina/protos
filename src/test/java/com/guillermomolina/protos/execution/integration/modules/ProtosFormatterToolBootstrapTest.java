@@ -22,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.analysis.ProtosDocumentSnapshot;
@@ -31,9 +32,11 @@ import com.guillermomolina.protos.analysis.ProtosStaticParseResult;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualFor;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualIf;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualMatch;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualUntil;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
 import com.guillermomolina.protos.parser.ast.SurfaceExpression;
+import com.guillermomolina.protos.parser.ast.SurfaceMapConstruction;
 import com.guillermomolina.protos.parser.ast.SurfaceObject;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
@@ -1718,6 +1721,401 @@ final class ProtosFormatterToolBootstrapTest {
                 "(for)(i,a,b){body}",
                 "(for)(i, a, b) { body }",
                 SurfaceCall.class);
+    }
+
+    @Test
+    void i176FormatsContextualMatchWithoutExpandingTheSugar()
+            throws Exception {
+        assertFormatsIdempotently(
+                "match(x){}",
+                "match(x) {}",
+                SurfaceContextualMatch.class);
+        assertFormatsIdempotently(
+                "match( x ){0:1;Any:2}",
+                "match(x) { 0: 1; Any: 2 }",
+                SurfaceContextualMatch.class);
+        assertFormatsIdempotently(
+                "match(x){\n0:{ x: 10 }\n[Capture]:(k=>k)\n"
+                        + "[Capture, Capture]:(a,b)=>a+b\nAny:null\n}",
+                "match(x) {\n"
+                        + "    0: { x: 10 }\n"
+                        + "    [Capture]: (k => k)\n"
+                        + "    [Capture, Capture]: (a, b) => a + b\n"
+                        + "    Any: null\n"
+                        + "}",
+                SurfaceContextualMatch.class);
+        assertFormatsIdempotently(
+                "match(a){\n0:match(b){1:2\nAny:3}\nAny:4\n}",
+                "match(a) {\n"
+                        + "    0: match(b) {\n"
+                        + "        1: 2\n"
+                        + "        Any: 3\n"
+                        + "    }\n"
+                        + "    Any: 4\n"
+                        + "}",
+                SurfaceContextualMatch.class);
+        assertFormatsIdempotently(
+                "match /* a */ (/* b */ x /* c */) /* d */ {Any:1}",
+                "match /* a */ (/* b */ x /* c */) /* d */ { Any: 1 }",
+                SurfaceContextualMatch.class);
+        assertFormatsIdempotently(
+                "(match)(x){body}",
+                "(match)(x) { body }",
+                SurfaceCall.class);
+        assertFormatsIdempotently(
+                "%{0:()=>1}",
+                "%{ 0: () => 1 }",
+                SurfaceMapConstruction.class);
+
+        String source = "r:match(x){0:{ x: 10 }\n[Capture]:(k=>k)\nAny:() => { y: 1 }}";
+        String formatted = formatOnce(source, 1761L);
+        assertEquals(
+                canonicalOf(source, 1762L),
+                canonicalOf(formatted, 1763L),
+                "formatting must preserve the contextual match canonical semantics");
+        assertEquals(formatted, formatOnce(formatted, 1764L));
+        assertTrue(formatted.contains("match(x) {"));
+        assertFalse(formatted.contains("caseOf"));
+        assertTrue(formatted.contains("0: { x: 10 }"));
+        assertTrue(formatted.contains("[Capture]: (k => k)"));
+    }
+
+    @Test
+    void i176PreservesContextualMatchCommentsAndSemantics()
+            throws Exception {
+        long version = 1770L;
+        for (String source : List.of(
+                "match(x) { /* empty */ }",
+                "match(x) { /* first */ 0: 1 }",
+                "match(x) { 0: /* value */ 1 }",
+                "match(x) {\n    0: 1\n    // next\n    Any: 2\n}",
+                "match /* a1 */ /* a2 */ (/* b1 */ /* b2 */ x /* c1 */ /* c2 */) "
+                        + "/* d1 */ /* d2 */ { Any: 1 }",
+                "match(a) {\n    0: match /* inner */ (b) {\n        1: 2\n"
+                        + "        // nested\n        Any: 3\n    }\n    // outer\n    Any: 4\n}",
+                "match(x) { [Capture]: /* grouped */ (k => k) }",
+                "match(x) { [Capture]: (k => k /* body */) }",
+                "match(x) {\n    0: {\n        y: 1\n        // object\n        z: 2\n    }\n}")) {
+            assertContextualMatchFormatting(source, SurfaceContextualMatch.class, version);
+            version += 10;
+        }
+    }
+
+    @Test
+    void i176SharesMapSeparatorCommentPreservation() throws Exception {
+        for (String table : List.of(
+                "{\n    0: 1 // next\n    Any: 2\n}",
+                "{\n    0: 1\n    // between\n    Any: 2\n}",
+                "{\n    0: 1\n\n    // separated\n\n    Any: 2\n}")) {
+            assertBoundaryPreservation("match(x) " + table, "match(x) " + table + "\n");
+            assertBoundaryPreservation("%" + table, "%" + table + "\n");
+        }
+    }
+
+    @Test
+    void i176PreservesNestedTablesObjectsAndHeaderComments() throws Exception {
+        long version = 2100L;
+        for (Object[] entry : List.of(
+                new Object[] {
+                    "match(x) {\n"
+                            + "    0: match(y) {\n"
+                            + "        1: 10 // nested\n"
+                            + "        Any: 20\n"
+                            + "    }\n"
+                            + "    // outer\n"
+                            + "    Any: {\n"
+                            + "        first: 1\n"
+                            + "        // object\n"
+                            + "        second: 2\n"
+                            + "    }\n"
+                            + "}",
+                    SurfaceContextualMatch.class},
+                new Object[] {
+                    "%{\n"
+                            + "    0: match(y) {\n"
+                            + "        1: 10 // nested\n"
+                            + "        Any: 20\n"
+                            + "    }\n"
+                            + "}",
+                    SurfaceMapConstruction.class},
+                new Object[] {
+                    "run: () => {\n"
+                            + "    match(y) {\n"
+                            + "        1: 10\n"
+                            + "        // inside\n"
+                            + "        Any: 20\n"
+                            + "    }\n"
+                            + "}",
+                    com.guillermomolina.protos.parser.ast.SurfaceSlotCreation.class},
+                new Object[] {
+                    "match /* first */ (/* second */ x /* third */) /* fourth */ {\n"
+                            + "    0: 10\n"
+                            + "    Any: 20\n"
+                            + "}",
+                    SurfaceContextualMatch.class},
+                new Object[] {
+                    "match(x) { Any: { value: 10 } }.value",
+                    com.guillermomolina.protos.parser.ast.SurfaceMember.class},
+                new Object[] {
+                    "match(x) { Any: [1, 2] }[0]",
+                    com.guillermomolina.protos.parser.ast.SurfaceIndex.class},
+                new Object[] {
+                    "match(x) { Any: handler }(42)",
+                    SurfaceCall.class})) {
+            @SuppressWarnings("unchecked")
+            Class<? extends SurfaceExpression> kind =
+                    (Class<? extends SurfaceExpression>) entry[1];
+            assertContextualMatchFormatting((String) entry[0], kind, version);
+            version += 10;
+        }
+    }
+
+    /**
+     * Each candidate changes source the formatter must preserve. Where the
+     * change is canonically invisible, only the source-preservation
+     * projection distinguishes it.
+     */
+    @Test
+    void i176SourcePreservationRejectsContextualMatchRewrites() throws Exception {
+        String[][] canonicallyEquivalent = {
+            // Dropped comment between entries.
+            {"match(x) {\n    0: 1\n    // between\n    Any: 2\n}",
+                "match(x) {\n    0: 1\n    Any: 2\n}"},
+            // Duplicated header comment.
+            {"match /* h */ (x) { Any: 1 }",
+                "match /* h */ /* h */ (x) { Any: 1 }"},
+            // Reordered distinct comments.
+            {"match /* a */ (/* b */ x) { Any: 1 }",
+                "match /* b */ (/* a */ x) { Any: 1 }"},
+            // Comment moved from the nested table into the outer table.
+            {"match(x) {\n    0: match(y) {\n        1: 10\n        // nested\n"
+                    + "        Any: 20\n    }\n    Any: 30\n}",
+                "match(x) {\n    0: match(y) {\n        1: 10\n        Any: 20\n"
+                        + "    }\n    // nested\n    Any: 30\n}"},
+            // Comment moved to another entry boundary.
+            {"match(x) {\n    0: 1\n    // moved\n    1: 2\n    Any: 3\n}",
+                "match(x) {\n    0: 1\n    1: 2\n    // moved\n    Any: 3\n}"},
+            // Contextual match rewritten to explicit caseOf.
+            {"match(x) { Any: 1 }",
+                "x.caseOf(%{ Any: () => 1 })"},
+            // Comment moved outside an empty table.
+            {"match(x) { /* empty */ }",
+                "match(x /* empty */) {}"},
+            {"f(%{ /* empty */ })",
+                "f(/* empty */ %{})"},
+            // Comment moved from the table prefix into the header.
+            {"match(x) { /* first */ 0: 1 }",
+                "match(x /* first */) { 0: 1 }"},
+            // Comment moved across an entry colon.
+            {"match(x) { 0: /* value */ 1 }",
+                "match(x) { 0 /* value */: 1 }"},
+            {"%{ 0: /* value */ 1 }",
+                "%{ 0 /* value */: 1 }"},
+            // Comment moved across the closing brace.
+            {"match(x) { 0: 1 /* last */ }.value",
+                "match(x) { 0: 1 } /* last */.value"},
+            {"%{ 0: 1 /* last */ }.size()",
+                "%{ 0: 1 } /* last */.size()"},
+        };
+        long version = 2300L;
+        for (String[] pair : canonicallyEquivalent) {
+            assertEquals(
+                    canonicalOf(pair[0], version),
+                    canonicalOf(pair[1], version + 1),
+                    "canonical semantics must not reveal the rewrite: " + pair[1]);
+            assertPreservationRejects(pair[0], pair[1], version + 2);
+            assertGuestPreservation(pair[0], pair[1], false);
+            version += 10;
+        }
+
+        String[][] semanticallyDistinct = {
+            // Implicit Object-valued action rewritten to a braced Closure body.
+            {"match(x) { 1: { value: 10 } }",
+                "match(x) { 1: () => { value: 10 } }"},
+            // Ordinary grouped match call rewritten to contextual syntax.
+            {"(match)(x) { 10 }",
+                "match(x) { Any: 10 }"},
+        };
+        for (String[] pair : semanticallyDistinct) {
+            assertFalse(
+                    canonicalOf(pair[0], version).equals(canonicalOf(pair[1], version + 1)),
+                    pair[1]);
+            assertPreservationRejects(pair[0], pair[1], version + 2);
+            assertGuestPreservation(pair[0], pair[1], false);
+            version += 10;
+        }
+    }
+
+    private static void assertPreservationRejects(
+            String original, String candidate, long version) {
+        ProtosStaticAnalysisCore analysis = new ProtosStaticAnalysisCore();
+        ProtosDocumentSnapshot originalSnapshot =
+                new ProtosDocumentSnapshot("memory:i176-negative-original", version, original);
+        ProtosDocumentSnapshot candidateSnapshot =
+                new ProtosDocumentSnapshot("memory:i176-negative-candidate", version + 1, candidate);
+        assertInstanceOf(ProtosStaticParseResult.Parsed.class, analysis.parse(originalSnapshot));
+        assertInstanceOf(ProtosStaticParseResult.Parsed.class, analysis.parse(candidateSnapshot));
+        assertThrows(
+                org.opentest4j.AssertionFailedError.class,
+                () -> assertSourcePreservationInvariants(
+                        analysis.sourceLayout(originalSnapshot).preservationProjection(),
+                        analysis.sourceLayout(candidateSnapshot).preservationProjection(),
+                        original,
+                        candidate),
+                candidate);
+    }
+
+    @Test
+    void i176PlacesEmbeddedTableAndColonCommentsOnTheirOwnBoundaries()
+            throws Exception {
+        for (String source : List.of(
+                "match(x) { /* empty */ }",
+                "%{ /* empty */ }",
+                "match(x) { /* first */ 0: 1 }",
+                "%{ /* first */ 0: 1 }",
+                "match(x) { 0: 1 /* last */ }",
+                "%{ 0: 1 /* last */ }",
+                "match(x) { 0 /* before */: /* after */ 1 }",
+                "%{ 0 /* before */: /* after */ 1 }",
+                "match(x /* header */) { /* first */ 0: 1 /* last */ }",
+                "match(x) /* before table */ { /* first */ 0: 1 }",
+                "match(x /* same */) { /* same */ 0: /* same */ 1 /* same */ }",
+                "%{ /* same */ 0: /* same */ 1 /* same */ }",
+                "match(a /* mid */ + b) { Any: 1 }",
+                "match(x) {\n"
+                        + "    0: match(y) { /* inner */ Any: 10 }\n"
+                        + "    // between\n"
+                        + "    Any: /* outer */ 20\n"
+                        + "}",
+                "%{\n"
+                        + "    0: %{ /* inner */ 1: 10 }\n"
+                        + "    // between\n"
+                        + "    1: /* outer */ 20\n"
+                        + "}")) {
+            // Each source is already canonical: every comment must stay at
+            // exactly its written token position.
+            assertBoundaryPreservation(source, source + "\n");
+            assertGuestPreservation(source, formatOnce(source, 2500L), true);
+        }
+    }
+
+    /**
+     * Own-line and end-of-line comments at the start or end of a braced
+     * entry table have no supported structural boundary; the formatter fails
+     * closed for them exactly as it does for ordinary Map construction.
+     */
+    @Test
+    void i176UnsupportedTableEdgeCommentsFailClosedLikeMapConstruction() {
+        long version = 1960L;
+        for (String table : List.of(
+                "{\n    0: 1\n    // between\n    1: 20 /* outer */\n}",
+                "{\n    // first\n    0: 1\n}",
+                "{\n    0: 1 // last\n}",
+                "{\n    0: 1\n    /* trailing */\n}")) {
+            String contextual = "match(x) " + table;
+            String map = "%" + table;
+            long contextualVersion = version;
+            long mapVersion = version + 1;
+            assertThrows(Exception.class, () -> formatOnce(map, mapVersion), map);
+            assertThrows(
+                    Exception.class,
+                    () -> formatOnce(contextual, contextualVersion),
+                    contextual);
+            version += 10;
+        }
+    }
+
+    @Test
+    void i176PreservesPostfixSuffixesAndOrdinaryMatchCalls()
+            throws Exception {
+        assertContextualMatchFormatting(
+                "match(x) { Any: o }.name",
+                com.guillermomolina.protos.parser.ast.SurfaceMember.class,
+                1900L);
+        assertContextualMatchFormatting(
+                "match(x) { Any: f }(1)",
+                SurfaceCall.class,
+                1910L);
+        assertContextualMatchFormatting(
+                "match(x) { Any: items }[0]",
+                com.guillermomolina.protos.parser.ast.SurfaceIndex.class,
+                1920L);
+        assertContextualMatchFormatting(
+                "(match)(x) { body }",
+                SurfaceCall.class,
+                1930L);
+        assertContextualMatchFormatting(
+                "(match)(/* argument */ x) /* block */ { body }",
+                SurfaceCall.class,
+                1940L);
+    }
+
+    /**
+     * Formats once and checks that both sources parse, keep the same
+     * span-independent canonical semantics, keep every comment exactly once,
+     * keep the top-level syntactic form, and format idempotently.
+     */
+    private static void assertContextualMatchFormatting(
+            String source,
+            Class<? extends SurfaceExpression> expectedKind,
+            long version)
+            throws Exception {
+        assertInstanceOf(
+                expectedKind,
+                new ProtosStaticAnalysisCore()
+                        .sourceLayout(
+                                new ProtosDocumentSnapshot(
+                                        "memory:i176-source", version, source))
+                        .program()
+                        .expressions()
+                        .get(0),
+                source);
+
+        String formatted = formatOnce(source, version + 1);
+        ProtosSourceLayoutView formattedView =
+                new ProtosStaticAnalysisCore()
+                        .sourceLayout(
+                                new ProtosDocumentSnapshot(
+                                        "memory:i176-formatted", version + 2, formatted));
+        assertEquals(1, formattedView.program().expressions().size(), formatted);
+        assertInstanceOf(expectedKind, formattedView.program().expressions().get(0), formatted);
+
+        assertEquals(
+                canonicalOf(source, version + 3),
+                canonicalOf(formatted, version + 4),
+                "formatting must preserve canonical semantics:\n" + source + "\n" + formatted);
+        ProtosStaticAnalysisCore analysis = new ProtosStaticAnalysisCore();
+        assertSourcePreservationInvariants(
+                analysis.sourceLayout(
+                                new ProtosDocumentSnapshot(
+                                        "memory:i176-preservation-original", version + 6, source))
+                        .preservationProjection(),
+                analysis.sourceLayout(
+                                new ProtosDocumentSnapshot(
+                                        "memory:i176-preservation-formatted", version + 7, formatted))
+                        .preservationProjection(),
+                source,
+                formatted);
+        assertEquals(commentCount(source), commentCount(formatted), formatted);
+        for (String comment : List.of(
+                "/* empty */", "// first", "/* first */", "/* value */", "// next",
+                "// last", "/* trailing */", "/* a1 */", "/* a2 */", "/* b1 */",
+                "/* b2 */", "/* c1 */", "/* c2 */", "/* d1 */", "/* d2 */",
+                "/* inner */", "// nested", "// outer", "/* grouped */", "/* body */",
+                "// object", "/* argument */", "/* block */", "// separated",
+                "// between", "/* second */", "/* third */", "/* fourth */", "// inside")) {
+            assertEquals(
+                    source.split(java.util.regex.Pattern.quote(comment), -1).length,
+                    formatted.split(java.util.regex.Pattern.quote(comment), -1).length,
+                    comment + " in\n" + formatted);
+        }
+        if (expectedKind == SurfaceContextualMatch.class) {
+            assertTrue(formatted.startsWith("match"), formatted);
+            assertFalse(formatted.contains("caseOf"), formatted);
+            assertFalse(formatted.contains("%{"), formatted);
+        }
+        assertGuestPreservation(source, formatted, true);
+        assertEquals(formatted, formatOnce(formatted, version + 5));
     }
 
     @Test

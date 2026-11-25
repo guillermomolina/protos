@@ -269,6 +269,18 @@ and `semantics/CALLABLES.md` (Return Semantics). Every other spelling of
 recognition limits and its desugaring to the ordinary `whileTrue` send, by
 `PROTOS_GRAMMAR.md`.
 
+`match` is not a reserved word. The exact contextual expression
+`match(subject) { key: action ... }` is approved (D263-C) as mandatory syntax
+sugar over ordinary `caseOf`, ordinary Map construction, and ordinary Closure
+creation: the subject becomes the receiver of an ordinary `caseOf` send whose
+single argument is an ordinary Map construction, and each entry action is its
+explicit Closure literal or an implicit parameterless Closure around the
+written expression. Its recognition limits, action classification, and
+desugaring are defined by `PROTOS_GRAMMAR.md` (Contextual `match` expression);
+selection semantics remain owned by `semantics/MATCHING.md`. Every other
+spelling of `match` keeps its ordinary identifier, call, and member meaning,
+and no pattern grammar or matching runtime primitive exists.
+
 ## 34. Core Language Invariants
 
 ```text
