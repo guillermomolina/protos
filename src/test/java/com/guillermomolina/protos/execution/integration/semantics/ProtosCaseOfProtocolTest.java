@@ -536,4 +536,260 @@ class ProtosCaseOfProtocolTest {
 
         assertSame(Boolean.TRUE, result);
     }
+
+    // PERF044: caseOf sends lowered in the enclosing root keep every
+    // observable effect of the ordinary standard caseOf.
+
+    private static void assertTrue(ProtosPrelude prelude, String source) {
+        assertSame(Boolean.TRUE, evaluate(prelude, source));
+    }
+
+    @Test
+    void perf044ContextualAndExplicitSelectFirstMiddleLastAndAny() throws Exception {
+        assertTrue(core(), """
+                contextual: (value) => match(value) { 0: 11; 1: 23; 2: 37; Any: 53 }
+                explicit: (value) => value.caseOf(%{
+                    0: () => 11
+                    1: () => 23
+                    2: () => 37
+                    Any: () => 53
+                })
+                (contextual(0) == 11) && (explicit(0) == 11) &&
+                    (contextual(1) == 23) && (explicit(1) == 23) &&
+                    (contextual(2) == 37) && (explicit(2) == 37) &&
+                    (contextual(9) == 53) && (explicit(9) == 53)
+                """);
+    }
+
+    @Test
+    void perf044DynamicTableSelectsLikeLiteralTable() throws Exception {
+        assertTrue(core(), """
+                cases: %{
+                    0: () => 11
+                    [Capture, 2]: (first) => first + 100
+                    Any: () => 53
+                }
+                (0.caseOf(cases) == 11) && ([7, 2].caseOf(cases) == 107) &&
+                    ("x".caseOf(cases) == 53)
+                """);
+    }
+
+    @Test
+    void perf044SubjectIsEvaluatedExactlyOnce() throws Exception {
+        assertTrue(core(), """
+                state: { count: 0 }
+                subject: () => {
+                    state.count = state.count + 1
+                    2
+                }
+                selected: subject().caseOf(%{ 0: () => 0; 1: () => 1; 2: () => 2 })
+                contextual: match(subject()) { 0: 0; 2: 2; Any: 9 }
+                (selected == 2) && (contextual == 2) && (state.count == 2)
+                """);
+    }
+
+    @Test
+    void perf044KeysAreEagerAndActionsLazy() throws Exception {
+        assertTrue(core(), """
+                state: { keys: 0; order: 0; ran: 0 }
+                key: (value) => {
+                    state.keys = state.keys + 1
+                    state.order = state.order * 10 + value + 1
+                    value
+                }
+                result: 1.caseOf(%{
+                    key(0): () => { state.ran = state.ran + 10 }
+                    key(1): () => { state.ran = state.ran + 1 }
+                    key(2): () => { state.ran = state.ran + 100 }
+                })
+                (state.keys == 3) && (state.order == 123) && (state.ran == 1) && (result == 1)
+                """);
+    }
+
+    @Test
+    void perf044DuplicateKeysSignalBeforeSelection() throws Exception {
+        assertTrue(core(), """
+                state: { selected: false }
+                caught: Error.handle(
+                    () => 1.caseOf(%{ 1: () => { state.selected = true }; 1: () => 2 }),
+                    (error) => "duplicate")
+                (caught == "duplicate") && (state.selected == false)
+                """);
+    }
+
+    @Test
+    void perf044CustomCaseOfReceivesTheActualMap() throws Exception {
+        assertTrue(core(), """
+                state: { seen: null }
+                subject: { caseOf: (cases) => {
+                    state.seen = cases
+                    "custom"
+                } }
+                table: %{ 1: () => "standard" }
+                (subject.caseOf(table) == "custom") && (state.seen === table) &&
+                    (match(subject) { Any: "standard" } == "custom")
+                """);
+    }
+
+    @Test
+    void perf044CustomMatchersMixWithStandardMatchersInOrder() throws Exception {
+        assertTrue(core(), """
+                state: { order: 0 }
+                Even: { match: (subject) => {
+                    state.order = state.order * 10 + 1
+                    (subject % 2) == 0
+                } }
+                Pair: { match: (subject) => {
+                    state.order = state.order * 10 + 2
+                    [subject, subject]
+                } }
+                result: 3.caseOf(%{
+                    1: () => "one"
+                    Even: () => "even"
+                    Pair: (a, b) => a + b
+                    Any: () => "unreached"
+                })
+                (result == 6) && (state.order == 12)
+                """);
+    }
+
+    @Test
+    void perf044CustomEqualityRunsInPatternDirection() throws Exception {
+        assertTrue(core(), """
+                state: { last: null }
+                LooseBase: {
+                    hash: () => 0
+                    equalTo: (other) => {
+                        state.last = other
+                        true
+                    }
+                }
+                Loose: LooseBase.alias("equalTo", "==")
+                result: 5.caseOf(%{ Loose: () => "pattern" })
+                (result == "pattern") && (state.last == 5)
+                """);
+    }
+
+    @Test
+    void perf044EarlierMatcherChangesLaterMatcher() throws Exception {
+        assertTrue(core(), """
+                Late: { match: (subject) => false }
+                First: { match: (subject) => {
+                    Late.match = (other) => true
+                    false
+                } }
+                1.caseOf(%{ First: () => "first"; Late: () => "late" }) == "late"
+                """);
+    }
+
+    @Test
+    void perf044InvalidMatcherResultsSignal() throws Exception {
+        assertTrue(core(), """
+                Bad: { match: (subject) => 1 }
+                Empty: { match: (subject) => [] }
+                badCaught: Error.handle(() => 1.caseOf(%{ Bad: () => 0 }), (error) => "bad")
+                emptyCaught: Error.handle(() => 1.caseOf(%{ Empty: () => 0 }), (error) => "empty")
+                (badCaught == "bad") && (emptyCaught == "empty")
+                """);
+    }
+
+    @Test
+    void perf044TableMutationDuringMatchingUsesTheObservedSnapshot() throws Exception {
+        assertTrue(core(), """
+                cases: Map()
+                Mutating: { match: (subject) => {
+                    cases[1] = () => "added"
+                    false
+                } }
+                cases[Mutating] = () => "mutating"
+                caught: Error.handle(() => 1.caseOf(cases), (error) => "none")
+                (caught == "none") && (1.caseOf(cases) == "added")
+                """);
+    }
+
+    @Test
+    void perf044SelectedFalseAndNullResultsAreNotMatcherOutcomes() throws Exception {
+        assertTrue(core(), """
+                (match(1) { 1: false; Any: true } == false) &&
+                    (match(1) { 1: null; Any: true } == null)
+                """);
+    }
+
+    @Test
+    void perf044ErrorsAndNonLocalReturnPropagateFromMatchersAndActions() throws Exception {
+        assertTrue(core(), """
+                Failing: { match: (subject) => Error.signal() }
+                caught: Error.handle(() => 1.caseOf(%{ Failing: () => 0 }), (error) => "caught")
+                early: () => {
+                    1.caseOf(%{ 1: () => { return "returned" } })
+                    "fell through"
+                }
+                (caught == "caught") && (early() == "returned")
+                """);
+    }
+
+    @Test
+    void perf044CachedSelectionObservesALaterCaseOfOverride() throws Exception {
+        assertTrue(core(), """
+                Base: {}
+                subject: Base()
+                select: (value) => match(value) { Any: "standard" }
+                first: select(subject)
+                Base.createSlot("caseOf", (cases) => "override")
+                second: select(subject)
+                (first == "standard") && (second == "override")
+                """);
+    }
+
+    @Test
+    void perf044CopiedStandardCaseOfKeepsItsOrdinarySemantics() throws Exception {
+        assertTrue(core(), """
+                holder: { caseOf: Object.caseOf }
+                holder.caseOf(%{ Any: () => "copied" }) == "copied"
+                """);
+    }
+
+    @Test
+    void perf044EveryPrimitiveCarrierSubjectSelectsStandardCaseOf() throws Exception {
+        assertTrue(core(), """
+                select: (value) => match(value) {
+                    1: "integer"
+                    2.5: "float"
+                    false: "boolean"
+                    Any: "other"
+                }
+                (select(1) == "integer") && (select(2.5) == "float") &&
+                    (select(false) == "boolean") && (select("s") == "other") &&
+                    (select(1.0) == "integer")
+                """);
+    }
+
+    @Test
+    void perf044ActionsReceiveZeroOneAndManyCapturesInOrder() throws Exception {
+        assertTrue(core(), """
+                Triple: { match: (subject) => [subject, subject + 1, subject + 2] }
+                none: 1.caseOf(%{ 1: () => "none" })
+                one: 1.caseOf(%{ Capture: (value) => value * 10 })
+                many: 1.caseOf(%{ Triple: (a, b, c) => (a * 100) + (b * 10) + c })
+                (none == "none") && (one == 10) && (many == 123)
+                """);
+    }
+
+    @Test
+    void perf044ActionsMutateCapturedVariables() throws Exception {
+        assertTrue(core(), """
+                run: () => {
+                    total: 0
+                    for(value in [0, 1, 2, 3]) {
+                        match(value) {
+                            0: () => { total = total + 1 }
+                            1: () => { total = total + 10 }
+                            Any: () => { total = total + 100 }
+                        }
+                    }
+                    total
+                }
+                run() == 211
+                """);
+    }
 }

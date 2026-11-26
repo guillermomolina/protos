@@ -8,6 +8,11 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.233-SNAPSHOT
+
+- **PERF044.** Inline standard caseOf over Map tables into the enclosing bytecode root.
+- Replay source commit `c6488cc8aa3e2a8e27988794e982774587da1401` with implementation-version metadata; preserve its source, tests and baseline content.
+
 ## 0.4.232-SNAPSHOT
 
 - **I184 / D270-D / D270-D1-B.** Add explicit TCP transport retirement through the source-backed `TcpConnection.abort()` operation, including irreversible admission cutover and escalation of pending ordinary close.

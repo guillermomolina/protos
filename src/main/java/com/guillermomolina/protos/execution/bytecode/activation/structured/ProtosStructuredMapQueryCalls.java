@@ -40,7 +40,8 @@ final class ProtosStructuredMapQueryCalls {
         private final ProtosStandardMapProtocol.StableAssociation[] subjectSnapshot;
         private final List<Object> childMatchers = new ArrayList<>();
         private final List<Object> selectedValues = new ArrayList<>();
-        private final List<Object> captures = new ArrayList<>();
+        /* Allocated at the first consumed capture; a zero-capture match never allocates it. */
+        private List<Object> captures;
 
         private int requirementIndex;
         private int candidateIndex;
@@ -232,16 +233,33 @@ final class ProtosStructuredMapQueryCalls {
         }
 
         ProtosCallRequest prepareChildMatcher() {
+            return ProtosCallRequest.send(
+                    currentChildMatcher(),
+                    "match",
+                    activation,
+                    new Object[] {currentChildSubject()});
+        }
+
+        /*
+         * The current mapped-value matcher. Every requirement has already
+         * been resolved, so the lowering sends it {@code match} through the
+         * ordinary specialized invocation operations.
+         */
+        Object currentChildMatcher() {
             if (!hasChildMatcher()) {
                 throw new IllegalStateException(
                         "Map.match child matcher requested after terminal outcome");
             }
+            return childMatchers.get(childIndex);
+        }
 
-            return ProtosCallRequest.send(
-                    childMatchers.get(childIndex),
-                    "match",
-                    activation,
-                    new Object[] {selectedValues.get(childIndex)});
+        /* The mapped value resolved for the current requirement. */
+        Object currentChildSubject() {
+            if (!hasChildMatcher()) {
+                throw new IllegalStateException(
+                        "Map.match child matcher requested after terminal outcome");
+            }
+            return selectedValues.get(childIndex);
         }
 
         void acceptChildOutcome(Object outcome) {
@@ -273,6 +291,9 @@ final class ProtosStructuredMapQueryCalls {
                 for (int captureIndex = 0;
                         captureIndex < observedCaptures.length();
                         captureIndex++) {
+                    if (captures == null) {
+                        captures = new ArrayList<>();
+                    }
                     captures.add(observedCaptures.at(captureIndex));
                 }
                 childIndex++;
@@ -302,7 +323,7 @@ final class ProtosStructuredMapQueryCalls {
                 return Boolean.FALSE;
             }
 
-            if (captures.isEmpty()) {
+            if (captures == null || captures.isEmpty()) {
                 return Boolean.TRUE;
             }
 

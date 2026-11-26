@@ -277,7 +277,8 @@ final class ProtosStructuredEachCalls {
         private final ProtosActivation activation;
         private final ProtosIndexedSnapshot matcherSnapshot;
         private final ProtosIndexedSnapshot subjectSnapshot;
-        private final List<Object> captures = new ArrayList<>();
+        /* Allocated at the first consumed capture; a zero-capture match never allocates it. */
+        private List<Object> captures;
         private int index;
         private boolean mismatch;
 
@@ -318,16 +319,33 @@ final class ProtosStructuredEachCalls {
         }
 
         ProtosCallRequest prepareCurrent() {
+            return ProtosCallRequest.send(
+                    currentMatcher(),
+                    "match",
+                    activation,
+                    new Object[] {currentSubject()});
+        }
+
+        /*
+         * The current child matcher, read from the matcher snapshot; the
+         * lowering sends it {@code match} through the ordinary specialized
+         * invocation operations.
+         */
+        Object currentMatcher() {
             if (!hasNext()) {
                 throw new IllegalStateException(
                         "Array.match child requested after terminal outcome");
             }
+            return matcherSnapshot.at(index);
+        }
 
-            return ProtosCallRequest.send(
-                    matcherSnapshot.at(index),
-                    "match",
-                    activation,
-                    new Object[] {subjectSnapshot.at(index)});
+        /* The subject element at the current index, from the subject snapshot. */
+        Object currentSubject() {
+            if (!hasNext()) {
+                throw new IllegalStateException(
+                        "Array.match child requested after terminal outcome");
+            }
+            return subjectSnapshot.at(index);
         }
 
         void acceptCurrent(Object outcome) {
@@ -359,6 +377,9 @@ final class ProtosStructuredEachCalls {
                 for (int captureIndex = 0;
                         captureIndex < observedCaptures.length();
                         captureIndex++) {
+                    if (captures == null) {
+                        captures = new ArrayList<>();
+                    }
                     captures.add(observedCaptures.at(captureIndex));
                 }
                 index++;
@@ -380,7 +401,7 @@ final class ProtosStructuredEachCalls {
                 return Boolean.FALSE;
             }
 
-            if (captures.isEmpty()) {
+            if (captures == null || captures.isEmpty()) {
                 return Boolean.TRUE;
             }
 

@@ -51,6 +51,7 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosLexicalCell;
 import com.guillermomolina.protos.runtime.ProtosModuleBindingLocation;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
+import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -5861,6 +5862,270 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         @Specialization
         public static Object perform(StructuredNativeInvocation prepared) {
             return prepared.prepareStructuredCaseOf();
+        }
+    }
+
+    /**
+     * The ordinary {@code caseOf} send of an already evaluated subject and
+     * case argument, run in the enclosing root. When the behavior selected
+     * for {@code caseOf} on the subject is the standard Object.caseOf body and
+     * the argument is a Map, the insertion-ordered association snapshot is
+     * established in {@code state} and the operation answers true; the
+     * lowering then selects and invokes each reached matcher and the
+     * committed action through the ordinary specialized invocation
+     * operations. Any other selection or argument stores nothing and answers
+     * false, and the lowering keeps the ordinary send, which signals every
+     * argument Error itself. Nothing is invoked here.
+     */
+    @Operation(storeBytecodeIndex = true)
+    @ConstantOperand(type = LocalAccessor.class, name = "state")
+    public static final class GetCaseOfSnapshot {
+        /*
+         * An ordinary object subject that does not own caseOf: the inherited
+         * structural selection is cached per receiver Shape and shared by
+         * every receiver with the same direct parent, exactly as the
+         * standard Array each selection. An all-FROZEN chain is classified
+         * once; otherwise the selected value is re-read and classified on
+         * each execution, so an in-place slot rewrite is observed.
+         */
+        @Specialization(
+                guards = {
+                    "cases.getClass() == mapClass",
+                    "subject.usesObjectStorageForRuntime()",
+                    "subjectShape.check(subject)",
+                    "selection != null",
+                    "hasSelectionParent(subject, selection)",
+                    "frozen || selection.isValid()"
+                },
+                limit = "3",
+                excludeForUncached = true)
+        public static boolean doObject(
+                LocalAccessor state,
+                ProtosObjectValue subject,
+                ProtosMapValue cases,
+                ProtosActivation activation,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode,
+                @Cached("cases.getClass()") Class<?> mapClass,
+                @Cached("subject.getShape()") Shape subjectShape,
+                @Cached("selectInherited(subject, subjectShape)")
+                        ProtosValueLookup.StructuralSelection selection,
+                @Cached("allOwnersFrozen(selection)") boolean frozen,
+                @Cached("frozenStandard(frozen, selection)") boolean frozenStandard) {
+            if (frozen ? !frozenStandard : !isStandard(selection)) {
+                return false;
+            }
+            state.setObject(bytecode, frame, new PreparedCaseOfCall(subject, cases, activation));
+            return true;
+        }
+
+        /*
+         * A primitive carrier subject (Integer, Float or Boolean), whose
+         * delegation parent is decided by its carrier class and the
+         * observing Prelude alone: the selection from that parent is cached
+         * per class and Prelude.
+         */
+        @Specialization(
+                guards = {
+                    "cases.getClass() == mapClass",
+                    "isPrimitiveCarrier(subject)",
+                    "subject.getClass() == subjectClass",
+                    "preludeOf(frame) == cachedPrelude",
+                    "selection != null",
+                    "frozen || selection.isValid()"
+                },
+                limit = "3",
+                excludeForUncached = true)
+        public static boolean doPrimitive(
+                LocalAccessor state,
+                Object subject,
+                ProtosMapValue cases,
+                ProtosActivation activation,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode,
+                @Cached("cases.getClass()") Class<?> mapClass,
+                @Cached("subject.getClass()") Class<?> subjectClass,
+                @Cached("preludeOf(frame)") ProtosPrelude cachedPrelude,
+                @Cached("selectFromCarrierParent(subject, cachedPrelude)")
+                        ProtosValueLookup.StructuralSelection selection,
+                @Cached("allOwnersFrozen(selection)") boolean frozen,
+                @Cached("frozenStandard(frozen, selection)") boolean frozenStandard) {
+            if (frozen ? !frozenStandard : !isStandard(selection)) {
+                return false;
+            }
+            state.setObject(bytecode, frame, new PreparedCaseOfCall(subject, cases, activation));
+            return true;
+        }
+
+        /*
+         * Every other subject representation, and sites past the cached
+         * limit: the complete ordinary selection. It replaces no cached
+         * entry.
+         */
+        @Specialization
+        @InliningCutoff
+        public static boolean doGeneric(
+                LocalAccessor state,
+                Object subject,
+                ProtosMapValue cases,
+                ProtosActivation activation,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode) {
+            if (!selectsStandard(subject, preludeOf(frame))) {
+                return false;
+            }
+            state.setObject(bytecode, frame, new PreparedCaseOfCall(subject, cases, activation));
+            return true;
+        }
+
+        /* A non-Map argument keeps the ordinary send, which signals its Error. */
+        @Fallback
+        public static boolean doOther(
+                LocalAccessor state, Object subject, Object cases, Object activation) {
+            return false;
+        }
+
+        static ProtosPrelude preludeOf(VirtualFrame frame) {
+            return ProtosFrameArguments.admittedPreludeOrNull(frame.getArguments());
+        }
+
+        static boolean isPrimitiveCarrier(Object subject) {
+            return subject instanceof Long
+                    || subject instanceof Double
+                    || subject instanceof Boolean;
+        }
+
+        static boolean hasSelectionParent(
+                ProtosObjectValue subject,
+                ProtosValueLookup.StructuralSelection selection) {
+            return ProtosValueLookup.hasSelectionParent(subject, selection);
+        }
+
+        static boolean allOwnersFrozen(ProtosValueLookup.StructuralSelection selection) {
+            return selection != null && selection.allOwnersFrozen();
+        }
+
+        static boolean isStandard(ProtosValueLookup.StructuralSelection selection) {
+            return ProtosStandardObjectProtocol.isCanonicalStandardCaseOfSelection(
+                    selection.read(), selection.home());
+        }
+
+        /* Specialization time only: the classification of an all-FROZEN chain. */
+        static boolean frozenStandard(
+                boolean frozen, ProtosValueLookup.StructuralSelection selection) {
+            return frozen && isStandard(selection);
+        }
+
+        /* Specialization time only: null when the subject owns caseOf. */
+        @TruffleBoundary
+        static ProtosValueLookup.StructuralSelection selectInherited(
+                ProtosObjectValue subject, Shape subjectShape) {
+            if (!subject.usesObjectStorageForRuntime()
+                    || ProtosValueLookup.hasProperty(subjectShape, "caseOf")) {
+                return null;
+            }
+            Object parent = subject.parent().orElse(null);
+            return parent == null ? null : ProtosValueLookup.selectStructural(parent, "caseOf");
+        }
+
+        /* Specialization time only: null without an observing Prelude. */
+        @TruffleBoundary
+        static ProtosValueLookup.StructuralSelection selectFromCarrierParent(
+                Object subject, ProtosPrelude prelude) {
+            if (prelude == null) {
+                return null;
+            }
+            try {
+                return ProtosValueLookup.delegationParent(subject, prelude)
+                        .map(parent -> ProtosValueLookup.selectStructural(parent, "caseOf"))
+                        .orElse(null);
+            } catch (RuntimeException unavailable) {
+                return null;
+            }
+        }
+
+        @TruffleBoundary
+        static boolean selectsStandard(Object subject, ProtosPrelude prelude) {
+            try {
+                return ProtosValueLookup.lookup(subject, "caseOf", prelude)
+                        .map(found -> ProtosStandardObjectProtocol
+                                .isCanonicalStandardCaseOfSelection(found.value(), found.home()))
+                        .orElse(false);
+            } catch (UnsupportedOperationException unsupportedRepresentation) {
+                return false;
+            }
+        }
+    }
+
+    /**
+     * The matcher of the current caseOf association, read directly from the
+     * observed snapshot. A source root sends it {@code match} through
+     * {@code GetMethod} and {@code CallUnaryMethod}; no call request is
+     * prepared.
+     */
+    @Operation
+    public static final class StructuredMatcher {
+        @Specialization
+        public static Object caseOf(PreparedCaseOfCall prepared) {
+            return prepared.currentMatcher();
+        }
+
+    }
+
+    /**
+     * The action committed by a caseOf selection. With no successful matcher
+     * the ordinary no-selection Error is signalled here.
+     */
+    @Operation(storeBytecodeIndex = true)
+    public static final class CaseOfSelectedAction {
+        @Specialization
+        public static Object perform(PreparedCaseOfCall prepared) {
+            return prepared.selectedAction();
+        }
+    }
+
+    /** Whether a caseOf matcher has succeeded, committing its action. */
+    @Operation
+    public static final class CaseOfCommitted {
+        @Specialization
+        public static boolean perform(PreparedCaseOfCall prepared) {
+            return prepared.committed();
+        }
+    }
+
+    /** Whether the committed caseOf action receives no captures. */
+    @Operation
+    public static final class CaseOfSelectedNilary {
+        @Specialization
+        public static boolean perform(PreparedCaseOfCall prepared) {
+            return prepared.selectedArguments().length == 0;
+        }
+    }
+
+    /** Whether the committed caseOf action receives exactly one capture. */
+    @Operation
+    public static final class CaseOfSelectedUnary {
+        @Specialization
+        public static boolean perform(PreparedCaseOfCall prepared) {
+            return prepared.selectedArguments().length == 1;
+        }
+    }
+
+    /** The single capture of a committed unary caseOf action. */
+    @Operation
+    public static final class CaseOfSelectedCapture {
+        @Specialization
+        public static Object perform(PreparedCaseOfCall prepared) {
+            return prepared.selectedArguments()[0];
+        }
+    }
+
+    /** The captures the committed caseOf action receives, in order. */
+    @Operation
+    public static final class CaseOfSelectedArguments {
+        @Specialization
+        public static Object[] perform(PreparedCaseOfCall prepared) {
+            return prepared.selectedArguments();
         }
     }
 

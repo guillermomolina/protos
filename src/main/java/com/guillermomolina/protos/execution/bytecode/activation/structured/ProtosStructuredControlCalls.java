@@ -38,6 +38,9 @@ final class ProtosStructuredControlCalls {
     private ProtosStructuredControlCalls() {}
 
     static final class PreparedCaseOfCall {
+        /* The packet of a Boolean success; never mutated by its consumers. */
+        private static final Object[] NO_CAPTURES = new Object[0];
+
         private final Object subject;
         /* Insertion-ordered (matcher, action) pairs of the case Map. */
         private final ProtosIndexedSnapshot cases;
@@ -66,21 +69,72 @@ final class ProtosStructuredControlCalls {
             this.cases = caseMap.associationIndexedSnapshot();
         }
 
+        /*
+         * The state over an argument already established as a Map by the
+         * standard caseOf selection; the snapshot is the one the packet form
+         * observes.
+         */
+        PreparedCaseOfCall(
+                Object subject,
+                ProtosMapValue cases,
+                ProtosActivation activation) {
+            this.subject = java.util.Objects.requireNonNull(subject, "subject");
+            this.activation = java.util.Objects.requireNonNull(activation, "activation");
+            this.cases = cases.associationIndexedSnapshot();
+        }
+
         boolean needsMatcher() {
             return selectedAction == null && index < cases.length();
         }
 
         ProtosCallRequest prepareMatcher() {
+            return ProtosCallRequest.send(
+                    currentMatcher(),
+                    "match",
+                    activation,
+                    new Object[] {subject});
+        }
+
+        /*
+         * The matcher of the current association, read from the observed
+         * snapshot; the lowering sends it {@code match} with {@link
+         * #subject()} through the ordinary specialized invocation operations.
+         */
+        Object currentMatcher() {
             if (!needsMatcher()) {
                 throw new IllegalStateException(
                         "Object.caseOf matcher requested after selection or exhaustion");
             }
+            return cases.keyAt(index);
+        }
 
-            return ProtosCallRequest.send(
-                    cases.keyAt(index),
-                    "match",
-                    activation,
-                    new Object[] {subject});
+        Object subject() {
+            return subject;
+        }
+
+        /* Whether a matcher has succeeded and its action is committed. */
+        boolean committed() {
+            return selectedAction != null;
+        }
+
+        /*
+         * The action of the committed association; with no selection the
+         * ordinary no-selection Error is signalled here, exactly where
+         * prepareSelectedAction signals it.
+         */
+        Object selectedAction() {
+            if (selectedAction == null) {
+                throw ProtosCoreErrors.signal(
+                        activation,
+                        ProtosCoreErrors.newError(activation));
+            }
+            return selectedAction;
+        }
+
+        /* The captures consumed from the successful matcher, in order. */
+        Object[] selectedArguments() {
+            selectedAction();
+            return selectedArguments;
         }
 
         void acceptMatcher(Object outcome) {
@@ -96,7 +150,7 @@ final class ProtosStructuredControlCalls {
 
             if (outcome == Boolean.TRUE) {
                 selectedAction = cases.valueAt(index);
-                selectedArguments = new Object[0];
+                selectedArguments = NO_CAPTURES;
                 return;
             }
 

@@ -49,6 +49,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalSuperSend;
 import com.guillermomolina.protos.source.SourceSpan;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.bytecode.BytecodeConfig;
+import com.oracle.truffle.api.bytecode.BytecodeLabel;
 import com.oracle.truffle.api.bytecode.BytecodeLocal;
 import com.oracle.truffle.api.bytecode.BytecodeRootNodes;
 import com.oracle.truffle.api.bytecode.LocalAccessor;
@@ -3364,6 +3365,7 @@ final class CanonicalToBytecodeLowerer {
                 || hasVectorArgument(send.arguments())
                 || primitiveNumericSendCandidate(send)
                 || indexedProtocolSend(send)
+                || caseOfSend(send)
                 || ControlSelector.of(send.message(), send.arguments()) != null
                 || nativeBooleanControl(
                         send.message(), send.arguments()) != null) {
@@ -10747,6 +10749,13 @@ final class CanonicalToBytecodeLowerer {
             emitRangeIterationSend(builder, send, result, scratch, childResult, resumeValue);
             return;
         }
+        if (caseOfSend(send)
+                && result != null && scratch != null
+                && childResult != null && resumeValue != null) {
+            emitCaseOfSend(builder, send, result, scratch, childResult, resumeValue,
+                    primitiveCarrierResult);
+            return;
+        }
         emitDispatchedInvocation(
                 builder, InvocationShape.SEND, send.receiver(), send.message(), send.arguments(),
                 result, scratch, childResult, resumeValue,
@@ -10976,6 +10985,248 @@ final class CanonicalToBytecodeLowerer {
 
         builder.endBlock();
         builder.endTag(StandardTags.CallTag.class);
+    }
+
+    /*
+     * An ordinary {@code caseOf} send of one positional argument, whatever
+     * its source spelling: contextual match and an explicit caseOf send have
+     * the same canonical send. Spread and named packets keep the ordinary
+     * invocation lowering.
+     */
+    private static boolean caseOfSend(CanonicalSend send) {
+        return "caseOf".equals(send.message())
+                && !send.contextual()
+                && send.arguments().size() == 1
+                && !hasVectorArgument(send.arguments())
+                && !hasNamedArgument(send.arguments());
+    }
+
+    /*
+     * Upper bound of the compiler-visible alternatives emitted for a case
+     * table written as a Map construction; associations past it, or added by
+     * a program-defined factory, are recognized by the trailing loop.
+     */
+    private static final int MAX_UNROLLED_CASE_ALTERNATIVES = 16;
+
+    /**
+     * An ordinary {@code caseOf} send, run in this root.
+     *
+     * <ol>
+     *   <li>The subject is evaluated exactly once, then the case argument
+     *       with its ordinary semantics (a Map construction runs its factory,
+     *       hashing, equality and duplicate-key checks as written).
+     *   <li>{@code GetCaseOfSnapshot} selects {@code caseOf} on the subject at
+     *       the ordinary dispatch point. Only for the standard Object.caseOf
+     *       body over a Map does it establish the insertion-ordered
+     *       association snapshot; any other selection takes the ordinary
+     *       send of the already evaluated operands.
+     *   <li>For a table written as a Map construction, one compiler-visible
+     *       alternative per written entry follows, each selecting and
+     *       invoking its own matcher at its own {@code GetMethod} and
+     *       {@code CallUnaryMethod} site, so each alternative keeps its own
+     *       specialized caches (a standard Object, Any, Capture, Array or
+     *       Map matcher, or a program-defined one). The first success
+     *       invokes its action inside its own alternative, through that
+     *       alternative's own invocation site, and branches to the end. The associations are
+     *       read from the observed snapshot, never from the source entries,
+     *       so a factory that changes the resulting associations cannot
+     *       misassociate a matcher. The trailing loop recognizes any further
+     *       association, and is the whole recognition for a dynamically
+     *       supplied table.
+     *   <li>After the loop, the action it committed is invoked through the
+     *       ordinary nilary, unary or variable-arity invocation; with no
+     *       success the ordinary no-selection Error is signalled.
+     * </ol>
+     *
+     * A pending matcher or action composes through this root's
+     * continuation, so a resumption continues at the suspended send without
+     * repeating the subject, the table, the snapshot or any earlier matcher.
+     */
+    private void emitCaseOfSend(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalSend send,
+            BytecodeLocal result,
+            BytecodeLocal scratch,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue,
+            boolean primitiveCarrierResult) {
+        // The selection observes the Prelude, like GetMethod.
+        currentRootMayRequirePrelude = true;
+        noteDynamicInvocation();
+
+        builder.beginTag(StandardTags.CallTag.class);
+        builder.beginBlock();
+
+        BytecodeLocal subject = builder.createLocal("caseOfSubject", null);
+        stageOperand(builder, send.receiver(), subject,
+                scratch, childResult, resumeValue, this::emitBodyExpressionToLocal);
+        CanonicalExpression table = send.arguments().get(0);
+        BytecodeLocal cases = builder.createLocal("caseOfTable", null);
+        stageOperand(builder, table, cases,
+                scratch, childResult, resumeValue, this::emitBodyExpressionToLocal);
+
+        BytecodeLocal state = builder.createLocal("caseOfState", null);
+        builder.beginIfThenElse();
+        builder.beginGetCaseOfSnapshot(state);
+        builder.emitLoadLocal(subject);
+        builder.emitLoadLocal(cases);
+        emitCurrentActivation(builder);
+        builder.endGetCaseOfSnapshot();
+
+        builder.beginBlock();
+        BytecodeLabel end = builder.createLabel();
+        BytecodeLocal matcher = builder.createLocal("caseOfMatcher", null);
+        BytecodeLocal outcome = builder.createLocal("caseOfOutcome", null);
+        int alternatives = table instanceof CanonicalMapConstruction construction
+                ? Math.min(construction.entries().size(), MAX_UNROLLED_CASE_ALTERNATIVES)
+                : 0;
+        for (int alternative = 0; alternative < alternatives; alternative++) {
+            builder.beginIfThen();
+            builder.beginStructuredHasNext(ProtosStructuredPhase.CHILD);
+            builder.emitLoadLocal(state);
+            builder.endStructuredHasNext();
+            builder.beginBlock();
+            emitCaseOfRecognition(builder, state, subject, matcher, outcome,
+                    childResult, resumeValue);
+            // A success runs its action inside this alternative, then leaves.
+            builder.beginIfThen();
+            builder.beginCaseOfCommitted();
+            builder.emitLoadLocal(state);
+            builder.endCaseOfCommitted();
+            builder.beginBlock();
+            emitCaseOfSelectedAction(builder, state, result, childResult, resumeValue);
+            builder.emitClearLocal(state);
+            builder.emitBranch(end);
+            builder.endBlock();
+            builder.endIfThen();
+            builder.endBlock();
+            builder.endIfThen();
+        }
+        builder.beginWhile();
+        builder.beginStructuredHasNext(ProtosStructuredPhase.CHILD);
+        builder.emitLoadLocal(state);
+        builder.endStructuredHasNext();
+        builder.beginBlock();
+        emitCaseOfRecognition(builder, state, subject, matcher, outcome,
+                childResult, resumeValue);
+        builder.endBlock();
+        builder.endWhile();
+        // The committed association of the loop, or the no-selection Error.
+        emitCaseOfSelectedAction(builder, state, result, childResult, resumeValue);
+        builder.emitClearLocal(state);
+        builder.emitLabel(end);
+        builder.endBlock();
+
+        builder.beginBlock();
+        emitDispatchedSendOfLocals(
+                builder, "caseOf", subject, java.util.List.of(cases),
+                result, childResult, resumeValue);
+        builder.endBlock();
+
+        builder.endIfThenElse();
+
+        builder.endBlock();
+        builder.endTag(StandardTags.CallTag.class);
+    }
+
+    /*
+     * One caseOf recognition: the current association's matcher is read
+     * from the snapshot, {@code match} is selected on it at this point and
+     * invoked with the subject through this site's own specialized
+     * invocation, and the outcome is validated by the shared caseOf
+     * acceptance, which commits on the first success.
+     */
+    private void emitCaseOfRecognition(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            BytecodeLocal state,
+            BytecodeLocal subject,
+            BytecodeLocal matcher,
+            BytecodeLocal outcome,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        builder.beginStoreLocal(matcher);
+        builder.beginStructuredMatcher();
+        builder.emitLoadLocal(state);
+        builder.endStructuredMatcher();
+        builder.endStoreLocal();
+        emitDispatchedSendOfLocals(
+                builder, "match", matcher, java.util.List.of(subject),
+                outcome, childResult, resumeValue);
+        builder.emitClearLocal(matcher);
+        builder.beginStructuredAcceptChildOutcome(ProtosStructuredPhase.CHILD);
+        builder.emitLoadLocal(state);
+        builder.emitLoadAndClearTempLocal(outcome);
+        builder.endStructuredAcceptChildOutcome();
+    }
+
+    /*
+     * The committed caseOf action, invoked with exactly the consumed
+     * captures: the nilary invocation for a Boolean success, the unary one
+     * for a single capture, the variable-arity invocation otherwise. Its result is the
+     * caseOf result as is.
+     */
+    private void emitCaseOfSelectedAction(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            BytecodeLocal state,
+            BytecodeLocal result,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        BytecodeLocal action = builder.createLocal("caseOfAction", null);
+        builder.beginStoreLocal(action);
+        builder.beginCaseOfSelectedAction();
+        builder.emitLoadLocal(state);
+        builder.endCaseOfSelectedAction();
+        builder.endStoreLocal();
+
+        builder.beginIfThenElse();
+        builder.beginCaseOfSelectedNilary();
+        builder.emitLoadLocal(state);
+        builder.endCaseOfSelectedNilary();
+
+        builder.beginBlock();
+        emitDispatchedCall(
+                builder, action, java.util.List.of(), null,
+                childResult, result, resumeValue, false);
+        builder.endBlock();
+
+        builder.beginIfThenElse();
+        builder.beginCaseOfSelectedUnary();
+        builder.emitLoadLocal(state);
+        builder.endCaseOfSelectedUnary();
+
+        builder.beginBlock();
+        BytecodeLocal capture = builder.createLocal("caseOfCapture", null);
+        builder.beginStoreLocal(capture);
+        builder.beginCaseOfSelectedCapture();
+        builder.emitLoadLocal(state);
+        builder.endCaseOfSelectedCapture();
+        builder.endStoreLocal();
+        emitDispatchedCall(
+                builder, action, java.util.List.of(capture), null,
+                childResult, result, resumeValue, false);
+        builder.emitClearLocal(capture);
+        builder.endBlock();
+
+        builder.beginBlock();
+        builder.beginStoreLocal(childResult);
+        builder.beginCallVarargsMethod(false);
+        builder.emitLoadLocal(action);
+        builder.beginCaseOfSelectedArguments();
+        builder.emitLoadLocal(state);
+        builder.endCaseOfSelectedArguments();
+        builder.endCallVarargsMethod();
+        builder.endStoreLocal();
+        emitDispatchedContinuationComposition(builder, childResult, resumeValue);
+        builder.beginStoreLocal(result);
+        builder.beginMaterializePrimitiveNumericCarrier(true);
+        builder.emitLoadAndClearTempLocal(childResult);
+        builder.endMaterializePrimitiveNumericCarrier();
+        builder.endStoreLocal();
+        builder.endBlock();
+
+        builder.endIfThenElse();
+        builder.endIfThenElse();
+        builder.emitClearLocal(action);
     }
 
     /*
