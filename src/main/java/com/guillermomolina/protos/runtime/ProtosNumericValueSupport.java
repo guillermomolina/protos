@@ -1055,6 +1055,15 @@ public final class ProtosNumericValueSupport {
      * reference-equality shortcut owned by ProtosIdentity.
      */
     public static boolean sameCurrentFamilyIdentity(Object left, Object right) {
+        if (ProtosComplexNumericSupport.isComplex(left)
+                && ProtosComplexNumericSupport.isComplex(right)) {
+            return ProtosComplexNumericSupport.sameComplex(left, right);
+        }
+        return sameCurrentRealIdentity(left, right);
+    }
+
+    /** Terminal Integer/Fraction/Float identity; Complex components cannot be Complex. */
+    static boolean sameCurrentRealIdentity(Object left, Object right) {
         if (isCurrentInteger(left) && isCurrentInteger(right)) {
             return sameInteger(left, right);
         }
@@ -1070,10 +1079,6 @@ public final class ProtosNumericValueSupport {
         if (isFraction(left) && isFraction(right)) {
             return sameFraction(left, right);
         }
-        if (ProtosComplexNumericSupport.isComplex(left)
-                && ProtosComplexNumericSupport.isComplex(right)) {
-            return ProtosComplexNumericSupport.sameComplex(left, right);
-        }
         return false;
     }
 
@@ -1082,6 +1087,14 @@ public final class ProtosNumericValueSupport {
      * callers retain their generic-object fallback for every other value.
      */
     public static long currentNumericIdentityHash(Object value) {
+        if (ProtosComplexNumericSupport.isComplex(value)) {
+            return tagged(41, ProtosComplexNumericSupport.componentIdentityHash(value));
+        }
+        return currentRealIdentityHash(value);
+    }
+
+    /** Terminal identity hash for the real families admitted by Complex.requireComponent. */
+    static long currentRealIdentityHash(Object value) {
         if (isCurrentInteger(value)) {
             return tagged(1, integerHashCode(value));
         }
@@ -1094,9 +1107,6 @@ public final class ProtosNumericValueSupport {
         }
         if (isFraction(value)) {
             return tagged(37, fractionComponentHash(value));
-        }
-        if (ProtosComplexNumericSupport.isComplex(value)) {
-            return tagged(41, ProtosComplexNumericSupport.componentIdentityHash(value));
         }
         throw new IllegalArgumentException("value is not a current numeric family");
     }

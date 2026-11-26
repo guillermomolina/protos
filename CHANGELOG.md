@@ -8,6 +8,11 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.242-SNAPSHOT
+
+- **PERF044.** Remove recursive Complex component identity and hashing dispatch.
+- Replay source commit `b631d5fbca3fbc70b420acea583e18a1cec9fe5f` with implementation-version metadata; preserve its source, tests and baseline content.
+
 ## 0.4.241-SNAPSHOT
 
 - **PERF044.** Restore explicit node binding, isolate large Integer normalization behind a Truffle boundary and refresh PE baselines.

@@ -100,8 +100,8 @@ public final class ProtosComplexNumericSupport {
     static boolean sameComplex(Object left, Object right) {
         ComplexState a = state(left);
         ComplexState b = state(right);
-        return ProtosNumericValueSupport.sameCurrentFamilyIdentity(a.real(), b.real())
-                && ProtosNumericValueSupport.sameCurrentFamilyIdentity(
+        return ProtosNumericValueSupport.sameCurrentRealIdentity(a.real(), b.real())
+                && ProtosNumericValueSupport.sameCurrentRealIdentity(
                         a.imaginary(), b.imaginary());
     }
 
@@ -109,8 +109,8 @@ public final class ProtosComplexNumericSupport {
     static int componentIdentityHash(Object complex) {
         ComplexState state = state(complex);
         return Long.hashCode(
-                31L * ProtosNumericValueSupport.currentNumericIdentityHash(state.real())
-                        + ProtosNumericValueSupport.currentNumericIdentityHash(
+                31L * ProtosNumericValueSupport.currentRealIdentityHash(state.real())
+                        + ProtosNumericValueSupport.currentRealIdentityHash(
                                 state.imaginary()));
     }
 
