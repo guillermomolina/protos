@@ -2,6 +2,7 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -19,7 +20,7 @@ import org.junit.jupiter.api.Test;
 class ProtosMapConstructionFPrimeBytecodeFoundationTest {
 
     @Test
-    void bytecodeConstructionFactoryPreparationUsesFPrimeEligibility()
+    void bytecodeDirectConstructionUsesFPrimeEligibility()
             throws Exception {
         ProtosPrelude prelude = prelude();
         ProtosActivation activation = prelude.newModuleActivation();
@@ -27,32 +28,25 @@ class ProtosMapConstructionFPrimeBytecodeFoundationTest {
         ProtosObjectValue inherited =
                 new ProtosObjectValue(prelude.mapPrototype());
 
-        // I115: the factory call is a request for the shared dispatcher; its
-        // selected method is bound to the inherited receiver.
-        ProtosCallRequest prepared =
-                (ProtosCallRequest)
-                        ProtosBytecodeRootNode.MapConstructionFactoryCall
-                                .perform(false, activation, inherited);
+        // The direct construction makes the actual factory the parent and
+        // prepares no guest call.
+        ProtosMapValue produced =
+                ProtosStandardMapProtocol.constructStandardForMapConstruction(
+                        inherited, activation);
 
+        assertSame(inherited, produced.parent().orElseThrow());
         assertSame(
                 inherited,
-                ((ProtosBoundMethod) prepared.callable()).receiver());
-
-        ProtosMapValue produced = new ProtosMapValue(inherited);
-
-        assertSame(
-                produced,
-                ProtosBytecodeRootNode.MapConstructionFactoryCall
-                        .perform(true, activation, produced));
+                ProtosStandardMapProtocol
+                        .standardMapConstructionOrNull(inherited, prelude)
+                        .parent()
+                        .orElseThrow());
 
         assertThrows(
                 ProtosSignalException.class,
                 () ->
-                        ProtosBytecodeRootNode.MapConstructionFactoryCall
-                                .perform(
-                                        true,
-                                        activation,
-                                        Boolean.TRUE));
+                        ProtosStandardMapProtocol.constructStandardForMapConstruction(
+                                Boolean.TRUE, activation));
 
         ProtosObjectValue copied =
                 new ProtosObjectValue(prelude.mapPrototype());
@@ -63,11 +57,14 @@ class ProtosMapConstructionFPrimeBytecodeFoundationTest {
                         .readLocalSlot("construct")
                         .orElseThrow());
 
+        assertNull(
+                ProtosStandardMapProtocol.standardMapConstructionOrNull(
+                        copied, prelude));
         assertThrows(
                 ProtosSignalException.class,
                 () ->
-                        ProtosBytecodeRootNode.MapConstructionFactoryCall
-                                .perform(false, activation, copied));
+                        ProtosStandardMapProtocol.constructStandardForMapConstruction(
+                                copied, activation));
 
         /*
          * D239-C1: a customized call selection on the factory receiver is
@@ -77,11 +74,14 @@ class ProtosMapConstructionFPrimeBytecodeFoundationTest {
                 new ProtosObjectValue(prelude.mapPrototype());
         customCall.createLocalSlot("call", Boolean.TRUE);
 
+        assertNull(
+                ProtosStandardMapProtocol.standardMapConstructionOrNull(
+                        customCall, prelude));
         assertThrows(
                 ProtosSignalException.class,
                 () ->
-                        ProtosBytecodeRootNode.MapConstructionFactoryCall
-                                .perform(false, activation, customCall));
+                        ProtosStandardMapProtocol.constructStandardForMapConstruction(
+                                customCall, activation));
     }
 
     @Test

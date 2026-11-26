@@ -5635,30 +5635,119 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     // ---- Map construction ----------------------------------------------------------
 
     /**
-     * Prepares the Map construction factory invocation on {@code value} (the
-     * factory): D239-C1 canonical Object.call then canonical Map.construct
-     * are verified and the selected construct is prepared once with zero
-     * arguments. With {@code finish} it validates its result {@code value}.
-     * The guest factory invocation runs between the two instructions.
+     * Constructs the Map of a %{...} literal directly from its evaluated
+     * factory, with the organization of MakeArray: D239-C1 requires the
+     * factory to select exactly the standard Object.call and the standard
+     * Map.construct whose home is the observing Prelude's canonical Map
+     * binding, and the new empty Map has the actual factory as its parent.
+     * No guest call is made and no CallRequest is prepared.
+     *
+     * A cached entry is installed only for an ordinary factory whose call and
+     * construct selections are owned by FROZEN chains and are standard for
+     * the cached Prelude; a FROZEN chain keeps that classification, and the
+     * Prelude bindings, including Map, are FROZEN. Every other factory is
+     * selected completely on every execution. Unlike MakeArray, an
+     * incompatible factory is never invoked: it raises the ordinary Error,
+     * with the authentic activation obtained only on that path.
      */
-    @Operation
-    @ConstantOperand(type = boolean.class, name = "finish")
-    public static final class MapConstructionFactoryCall {
-        @Specialization
-        public static Object perform(boolean finish, ProtosActivation activation, Object value) {
-            if (finish) {
-                return ProtosStandardMapProtocol
-                        .requireMapConstructionResult(
-                                value,
-                                activation);
-            }
-            ProtosSlotLookupResult selected =
-                    ProtosStandardMapProtocol
-                            .selectFactoryConstructForMapConstruction(
-                                    value,
-                                    activation);
+    @Operation(storeBytecodeIndex = false)
+    public static final class MakeMap {
+        @Specialization(
+                guards = {
+                    "closure != null",
+                    "closure == cachedClosure",
+                    "cachedPrelude != null",
+                    "factory == cachedFactory",
+                    "standard"
+                },
+                limit = "3",
+                excludeForUncached = true)
+        public static ProtosMapValue doCapturedStandard(
+                ProtosObjectValue factory,
+                @Bind VirtualFrame frame,
+                @Bind("capturedClosure(frame)") ProtosClosureValue closure,
+                @Cached("closure") ProtosClosureValue cachedClosure,
+                @Cached("cachedClosure.preludeOrNullForRuntime()") ProtosPrelude cachedPrelude,
+                @Cached("factory") ProtosObjectValue cachedFactory,
+                @Cached("frozenStandardFactory(cachedFactory, cachedPrelude)") boolean standard) {
+            return ProtosStandardMapProtocol.newStandardMap(cachedFactory);
+        }
 
-            return ProtosCallRequest.method(selected, value, new Object[0], activation);
+        @Specialization(
+                guards = {
+                    "factory == cachedFactory",
+                    "prelude == cachedPrelude",
+                    "standard"
+                },
+                limit = "3",
+                excludeForUncached = true)
+        public static ProtosMapValue doStandard(
+                ProtosObjectValue factory,
+                @Bind VirtualFrame frame,
+                @Bind("admittedPrelude(frame)") ProtosPrelude prelude,
+                @Cached("prelude") ProtosPrelude cachedPrelude,
+                @Cached("factory") ProtosObjectValue cachedFactory,
+                @Cached("frozenStandardFactory(cachedFactory, cachedPrelude)") boolean standard) {
+            return ProtosStandardMapProtocol.newStandardMap(cachedFactory);
+        }
+
+        @Specialization
+        @StoreBytecodeIndex
+        @InliningCutoff
+        public static ProtosMapValue doSelected(
+                Object factory,
+                @Bind VirtualFrame frame,
+                @Bind ProtosBytecodeRootNode root) {
+            ProtosMapValue constructed =
+                    ProtosStandardMapProtocol.standardMapConstructionOrNull(
+                            factory, admittedPrelude(frame));
+            if (constructed != null) {
+                return constructed;
+            }
+            return ProtosStandardMapProtocol.constructStandardForMapConstruction(
+                    factory, lexicalActivation(frame, root));
+        }
+
+        /* As MakeArray.capturedClosure. */
+        @NonIdempotent
+        static ProtosClosureValue capturedClosure(VirtualFrame frame) {
+            return MakeArray.capturedClosure(frame);
+        }
+
+        /* As MakeArray.admittedPrelude. */
+        @NonIdempotent
+        static ProtosPrelude admittedPrelude(VirtualFrame frame) {
+            return MakeArray.admittedPrelude(frame);
+        }
+
+        /*
+         * Specialization time only: whether the ordinary factory's call and
+         * construct selections are owned by FROZEN chains, select the
+         * canonical Object.call and the standard Map.construct homed at the
+         * Prelude's canonical Map binding. The construct chain runs from the
+         * factory to that home, so the factory delegates to it.
+         */
+        @TruffleBoundary
+        static boolean frozenStandardFactory(ProtosObjectValue factory, ProtosPrelude prelude) {
+            if (prelude == null || !MakeArray.isOrdinaryFactory(factory)) {
+                return false;
+            }
+            try {
+                ProtosValueLookup.StructuralSelection call =
+                        ProtosValueLookup.selectStructural(factory, "call");
+                ProtosValueLookup.StructuralSelection construct =
+                        ProtosValueLookup.selectStructural(factory, "construct");
+                return call != null
+                        && construct != null
+                        && call.allOwnersFrozen()
+                        && construct.allOwnersFrozen()
+                        && ProtosStandardObjectProtocol.isCanonicalStandardCallSelection(
+                                call.read(), call.home())
+                        && ProtosStandardMapProtocol.isCanonicalStandardConstructSelection(
+                                construct.read(), construct.home(), prelude);
+            } catch (IllegalStateException | UnsupportedOperationException unavailable) {
+                return false;
+            }
         }
     }
 

@@ -313,17 +313,111 @@ public final class ProtosStandardMapProtocol {
 
  private static Object construct(ProtosActivation a, List<?> x) {
   arity(a, x, 0);
-  ProtosPrelude prelude = a.prelude().orElse(null);
+  ProtosMapValue constructed =
+          standardConstructionOrNull(a.receiver(), a.prelude().orElse(null));
+  if (constructed == null) {
+   throw err(a);
+  }
+  return constructed;
+ }
+
+ /**
+  * The validated storage construction of standard Map.construct, shared by
+  * the installed native body and the direct Map literal construction: the
+  * receiver must delegate to the observing Prelude's canonical Map binding,
+  * and becomes the parent of the new empty Map. Answers null when the
+  * receiver is not admitted; the caller then raises its ordinary Error.
+  */
+ static ProtosMapValue standardConstructionOrNull(
+         Object receiver,
+         ProtosPrelude prelude) {
   Object canonical =
           prelude == null
                   ? null
                   : prelude.bindings().readLocalSlot("Map").orElse(null);
   if (!(canonical instanceof ProtosObjectValue p)
-          || !(a.receiver() instanceof ProtosObjectValue r)
+          || !(receiver instanceof ProtosObjectValue r)
           || !delegatesTo(r, p)) {
-   throw err(a);
+   return null;
   }
-  return new ProtosMapValue(r);
+  return newStandardMap(r);
+ }
+
+ /**
+  * The storage allocation of an admitted standard construction. The caller
+  * has already established the standard call and construct selections and
+  * the receiver's delegation to the canonical Map binding.
+  */
+ static ProtosMapValue newStandardMap(ProtosObjectValue receiver) {
+  return new ProtosMapValue(receiver);
+ }
+
+ /**
+  * Whether {@code construct} is the installed standard Map.construct and
+  * {@code home} is the observing Prelude's canonical Map binding. The
+  * Prelude bindings are FROZEN, so the answer holds for the Prelude.
+  */
+ static boolean isCanonicalStandardConstructSelection(
+         Object construct,
+         ProtosObjectValue home,
+         ProtosPrelude prelude) {
+  return prelude != null
+          && construct instanceof ProtosClosureValue behavior
+          && behavior.nativeBody().orElse(null) == STANDARD_CONSTRUCT_BODY
+          && prelude.bindings().readLocalSlot("Map").orElse(null) == home;
+ }
+
+ /**
+  * The direct %{...} factory construction without an activation: the
+  * complete call and construct selections of the observing Prelude, then
+  * the shared storage construction. Answers null when the factory is not
+  * admitted; the caller then reports the ordinary Error through
+  * {@link #constructStandardForMapConstruction}.
+  */
+ static ProtosMapValue standardMapConstructionOrNull(
+         Object factory,
+         ProtosPrelude prelude) {
+  if (prelude == null) {
+   return null;
+  }
+  try {
+   ProtosSlotLookupResult call =
+           ProtosValueLookup.lookup(factory, "call", prelude).orElse(null);
+   if (call == null
+           || !(call.value() instanceof ProtosClosureValue behavior)
+           || !ProtosStandardObjectProtocol.isStandardCallImplementation(behavior)
+           || !call.home().isRootObject()) {
+    return null;
+   }
+   ProtosSlotLookupResult construct =
+           ProtosValueLookup.lookup(factory, "construct", prelude).orElse(null);
+   if (construct == null
+           || !isCanonicalStandardConstructSelection(
+                   construct.value(), construct.home(), prelude)) {
+    return null;
+   }
+  } catch (UnsupportedOperationException unsupportedRepresentation) {
+   return null;
+  }
+  return standardConstructionOrNull(factory, prelude);
+ }
+
+ /**
+  * The direct %{...} factory construction with the caller's authority: the
+  * D239-C1 selections, which raise the ordinary Error for an incompatible
+  * factory, followed by the shared storage construction. It never invokes
+  * the selected construct through a guest call.
+  */
+ static ProtosMapValue constructStandardForMapConstruction(
+         Object factory,
+         ProtosActivation caller) {
+  selectFactoryConstructForMapConstruction(factory, caller);
+  ProtosMapValue constructed =
+          standardConstructionOrNull(factory, caller.prelude().orElse(null));
+  if (constructed == null) {
+   throw err(caller);
+  }
+  return constructed;
  }
 
  private static Object at(ProtosActivation a, List<?> x) {
