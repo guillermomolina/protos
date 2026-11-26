@@ -1288,4 +1288,203 @@ final class ProtosHostEntryFutureSuspensionTest {
                     assertEquals(0, f.slot("unselected"), "unselected action never runs");
                 });
     }
+
+    /*
+     * Selected caseOf actions around a suspension. An action that reads only
+     * its own parameters and bindings runs inline in the enclosing root; one
+     * that reads a module binding keeps its ordinary invocation. Unselected
+     * actions count through a module binding and must never run.
+     */
+    private static void assertSelectedOnly(Fixture f) {
+        assertEquals(0, f.slot("unselected"), "unselected action never runs");
+    }
+
+    /* A suspension inside an ordinary nilary selected action. */
+    @Test
+    void caseOfSuspensionInsideTheSelectedAction() throws Exception {
+        runSuspendedOnce(
+                "selected nilary action suspends",
+                COUNTED_CASES
+                        + """
+                        run: () => {
+                            r: 1.caseOf(%{
+                                0: () => { unselected = unselected + 1 }
+                                1: () => {
+                                    acted = acted + 1
+                                    waitAt() + 1
+                                }
+                                Any: () => { unselected = unselected + 1 }
+                            })
+                            after = after + 1
+                            r
+                        }
+                        """,
+                41L,
+                42L,
+                f -> {
+                    assertEquals(1, f.slot("acted"), "selected action once");
+                    assertSelectedOnly(f);
+                });
+    }
+
+    /* A suspension inside an inline action body that receives two captures. */
+    @Test
+    void caseOfSuspensionInsideAnInlineActionWithCaptures() throws Exception {
+        runSuspendedOnce(
+                "inline action with captures suspends",
+                COUNTED_CASES
+                        + """
+                        prepared: () => {
+                            before = before + 1
+                            [gateBox.current, 1]
+                        }
+                        run: () => {
+                            r: prepared().caseOf(%{
+                                [Capture, 0]: (g, n) => 0
+                                [Capture, Capture]: (g, n) => g.value() + n
+                                Any: () => { unselected = unselected + 1 }
+                            })
+                            after = after + 1
+                            r
+                        }
+                        """,
+                41L,
+                42L,
+                ProtosHostEntryFutureSuspensionTest::assertSelectedOnly);
+    }
+
+    /* A suspended key expression, then an inline action with one capture. */
+    @Test
+    void caseOfTableSuspensionThenInlineAction() throws Exception {
+        runSuspendedOnce(
+                "table suspends, inline action",
+                COUNTED_CASES
+                        + """
+                        run: () => {
+                            r: [1, 2].caseOf(%{
+                                [waitAt(), Capture]: (n) => n + 40
+                                Any: () => { unselected = unselected + 1 }
+                            })
+                            after = after + 1
+                            r
+                        }
+                        """,
+                1L,
+                42L,
+                ProtosHostEntryFutureSuspensionTest::assertSelectedOnly);
+    }
+
+    /* A suspended matcher answering captures, then an inline two-parameter action. */
+    @Test
+    void caseOfRecognitionSuspensionThenInlineAction() throws Exception {
+        runSuspendedOnce(
+                "matcher suspends, inline action",
+                COUNTED_CASES
+                        + """
+                        Pairing: { match: (subject) => [waitAt(), subject] }
+                        run: () => {
+                            r: 41.caseOf(%{
+                                Pairing: (a, b) => a + b
+                                Any: () => { unselected = unselected + 1 }
+                            })
+                            after = after + 1
+                            r
+                        }
+                        """,
+                1L,
+                42L,
+                ProtosHostEntryFutureSuspensionTest::assertSelectedOnly);
+    }
+
+    /* A suspension inside an ordinary positional action that reads a module binding. */
+    @Test
+    void caseOfSuspensionInsideAnOrdinaryPositionalAction() throws Exception {
+        runSuspendedOnce(
+                "ordinary positional action suspends",
+                COUNTED_CASES
+                        + """
+                        run: () => {
+                            r: [1].caseOf(%{
+                                [Capture]: (n) => {
+                                    acted = acted + 1
+                                    waitAt() + n
+                                }
+                                Any: () => { unselected = unselected + 1 }
+                            })
+                            after = after + 1
+                            r
+                        }
+                        """,
+                41L,
+                42L,
+                f -> {
+                    assertEquals(1, f.slot("acted"), "selected action once");
+                    assertSelectedOnly(f);
+                });
+    }
+
+    /* An Error raised by an inline action after its resumption is handled by the guest. */
+    @Test
+    void caseOfInlineActionErrorAfterResumptionUnwinds() throws Exception {
+        runSuspendedOnce(
+                "inline action signals after resumption",
+                COUNTED_CASES
+                        + """
+                        prepared: () => {
+                            before = before + 1
+                            [gateBox.current]
+                        }
+                        run: () => {
+                            r: Error.handle(
+                                () => prepared().caseOf(%{
+                                    [Capture]: (g) => g.value().missingSelector()
+                                    Any: () => { unselected = unselected + 1 }
+                                }),
+                                (caught) => 7)
+                            after = after + 1
+                            r
+                        }
+                        """,
+                1L,
+                7L,
+                ProtosHostEntryFutureSuspensionTest::assertSelectedOnly);
+    }
+
+    /* A callable object selected after the subject resumed is invoked through its call. */
+    @Test
+    void caseOfCustomCallableActionAfterResumption() throws Exception {
+        runSuspendedOnce(
+                "custom callable action after resumption",
+                COUNTED_CASES
+                        + """
+                        Custom: { call: (n) => n + 1 }
+                        run: () => {
+                            r: waitAt().caseOf(%{
+                                Capture: Custom
+                                Any: () => { unselected = unselected + 1 }
+                            })
+                            after = after + 1
+                            r
+                        }
+                        """,
+                41L,
+                42L,
+                ProtosHostEntryFutureSuspensionTest::assertSelectedOnly);
+    }
+
+    /* A Future answered by an inline action is the result itself, never awaited. */
+    @Test
+    void caseOfInlineActionFutureResultIsNotAwaited() {
+        try (Context context = newContext()) {
+            Fixture f = new Fixture(context, """
+                    run: () => {
+                        gate: gateBox.current
+                        r: [gate].caseOf(%{ [Capture]: (future) => future })
+                        r === gate
+                    }
+                    """);
+            assertTrue(f.member("run").execute().asBoolean());
+            assertEquals(0, f.gate.observerCountForTesting(), "the Future was not observed");
+        }
+    }
 }

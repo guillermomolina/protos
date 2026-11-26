@@ -8,6 +8,11 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.238-SNAPSHOT
+
+- **PERF044.** Inline admitted selected caseOf action bodies and invoke other actions through fixed arities up to four captures.
+- Replay source commit `61c2b2d84a52213019bb9ece0e01b8d24ef07f08` with implementation-version metadata; preserve its source, tests and baseline content.
+
 ## 0.4.237-SNAPSHOT
 
 - **PERF044.** Select standard Map key hash and equality directly and transport the inherited Prelude to Prelude-free source Closures, including from resumed callers.

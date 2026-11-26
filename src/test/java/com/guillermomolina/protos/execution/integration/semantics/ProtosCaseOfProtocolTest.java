@@ -792,4 +792,190 @@ class ProtosCaseOfProtocolTest {
                 run() == 211
                 """);
     }
+
+    /*
+     * Selected actions: a written action that reads only its own parameters
+     * and bindings runs inline in the enclosing root, every other action is
+     * invoked. Both paths keep the ordinary caseOf semantics.
+     */
+    @Test
+    void perf044FirstSuccessRunsOnlyItsOwnAction() throws Exception {
+        assertTrue(core(), """
+                state: { matched: 0; ran: 0 }
+                Counting: { match: (subject) => {
+                    state.matched = state.matched + 1
+                    false
+                } }
+                r: 2.caseOf(%{
+                    Counting: () => 0
+                    2: () => 20
+                    2.5: () => { state.ran = state.ran + 1 }
+                    Any: () => 99
+                })
+                (r == 20) && (state.matched == 1) && (state.ran == 0)
+                """);
+    }
+
+    @Test
+    void perf044UnreachedActionsAreNotValidatedAsCallable() throws Exception {
+        assertTrue(core(), """
+                (1.caseOf(%{ 1: () => "ok"; 2: 5 }) == "ok") &&
+                    ([1].caseOf(%{ [Capture]: (n) => n + 1; Any: "not callable" }) == 2)
+                """);
+    }
+
+    @Test
+    void perf044DynamicAndCustomCallableActionsRemainAuthoritative() throws Exception {
+        assertTrue(core(), """
+                dynamic: (a, b) => a - b
+                Callable: { call: (a, b) => a * b }
+                changed: (n) => n
+                changed.call: (n) => n + 100
+                ([9, 4].caseOf(%{ [Capture, Capture]: dynamic }) == 5) &&
+                    ([6, 7].caseOf(%{ [Capture, Capture]: Callable }) == 42) &&
+                    (1.caseOf(%{ Capture: changed }) == 101)
+                """);
+    }
+
+    @Test
+    void perf044CaseOfRedefinitionBypassesInlineActions() throws Exception {
+        assertTrue(core(), """
+                Base: {}
+                subject: Base()
+                select: (value) => value.caseOf(%{ Capture: (x) => "standard" })
+                first: select(subject)
+                Base.createSlot("caseOf", (cases) => "override")
+                second: select(subject)
+                (first == "standard") && (second == "override")
+                """);
+    }
+
+    @Test
+    void perf044ActionsReceiveZeroToFiveCaptures() throws Exception {
+        assertTrue(core(), """
+                zero: 1.caseOf(%{ 1: () => "zero" })
+                one: [1].caseOf(%{ [Capture]: (a) => a })
+                two: [1, 2].caseOf(%{ [Capture, Capture]: (a, b) => (a * 10) + b })
+                three: [1, 2, 3].caseOf(%{ [Capture, Capture, Capture]: (a, b, c) => (a * 100) + (b * 10) + c })
+                four: [1, 2, 3, 4].caseOf(%{ [Capture, Capture, Capture, Capture]: (a, b, c, d) => (a * 1000) + (b * 100) + (c * 10) + d })
+                five: [1, 2, 3, 4, 5].caseOf(%{ [Capture, Capture, Capture, Capture, Capture]: (a, b, c, d, e) => a + b + c + d + e })
+                (zero == "zero") && (one == 1) && (two == 12) && (three == 123) &&
+                    (four == 1234) && (five == 15)
+                """);
+    }
+
+    @Test
+    void perf044CapturesKeepTheirGuestIdentities() throws Exception {
+        assertTrue(core(), """
+                object: {}
+                array: [1]
+                single: [object].caseOf(%{ [Capture]: (o) => o })
+                pair: [object, array].caseOf(%{ [Capture, Capture]: (o, a) => [o, a] })
+                (single === object) && (pair[0] === object) && (pair[1] === array)
+                """);
+    }
+
+    @Test
+    void perf044CaptureArrayMutationAfterConsumptionKeepsThePacket() throws Exception {
+        assertTrue(core(), """
+                box: { held: null }
+                held: [box, 2]
+                box.held = held
+                Holding: { match: (subject) => held }
+                r: 0.caseOf(%{ Holding: (b, n) => {
+                    b.held[1] = 99
+                    n
+                } })
+                (r == 2) && (held[1] == 99)
+                """);
+    }
+
+    @Test
+    void perf044MissingExtraDefaultAndRestArgumentsKeepOrdinarySemantics() throws Exception {
+        assertTrue(core(), """
+                outcome: (thunk) => Error.handle(thunk, (error) => "error")
+                extra: (a) => a
+                missing: (a, b) => b
+                defaulted: (a, b: 5) => a + b
+                rest: (first, ...others) => others.size()
+                (outcome(() => extra(1, 2)) ==
+                        outcome(() => [1, 2].caseOf(%{ [Capture, Capture]: (a) => a }))) &&
+                    (outcome(() => missing(1)) ==
+                        outcome(() => [1].caseOf(%{ [Capture]: (a, b) => b }))) &&
+                    ([1].caseOf(%{ [Capture]: (a, b: 5) => a + b }) == defaulted(1)) &&
+                    ([1, 2, 3].caseOf(%{ [Capture, Capture, Capture]: (first, ...others) => others.size() }) ==
+                        rest(1, 2, 3))
+                """);
+    }
+
+    @Test
+    void perf044ActionResultsArePreservedExactly() throws Exception {
+        assertTrue(core(), """
+                object: {}
+                array: [1, 2]
+                (1.caseOf(%{ 1: () => false; Any: () => true }) == false) &&
+                    (1.caseOf(%{ 1: () => null; Any: () => true }) == null) &&
+                    (1.caseOf(%{ 1: () => 7 }) == 7) &&
+                    (1.caseOf(%{ 1: () => 2.5 }) == 2.5) &&
+                    ([object].caseOf(%{ [Capture]: (o) => o }) === object) &&
+                    ([array].caseOf(%{ [Capture]: (a) => a }) === array) &&
+                    ((1.caseOf(%{ 1: () => () => 5 }))() == 5) &&
+                    ([3].caseOf(%{ [Capture]: (n) => [n, n] }).size() == 2)
+                """);
+    }
+
+    @Test
+    void perf044InlineActionBindingsAreFreshPerExecution() throws Exception {
+        assertTrue(core(), """
+                select: (value) => value.caseOf(%{ Capture: (n) => {
+                    local: n * 10
+                    local = local + 1
+                    local
+                } })
+                run: () => {
+                    sum: 0
+                    for(v in [1, 2, 3]) {
+                        sum = sum + select(v)
+                    }
+                    sum
+                }
+                (select(1) == 11) && (select(5) == 51) && (run() == 63)
+                """);
+    }
+
+    @Test
+    void perf044ActionObservingItsContextKeepsItsActivation() throws Exception {
+        assertTrue(core(), """
+                run: () => {
+                    own: context
+                    observed: 1.caseOf(%{ 1: () => {
+                        mine: 4
+                        context
+                    } })
+                    (observed !== own) && observed.hasSlot("mine")
+                }
+                run()
+                """);
+    }
+
+    @Test
+    void perf044CapturedVariablesErrorsAndReturnsKeepTheirAuthority() throws Exception {
+        assertTrue(core(), """
+                counter: () => {
+                    total: 0
+                    for(v in [1, 2]) {
+                        v.caseOf(%{ Capture: (n) => { total = total + n } })
+                    }
+                    total
+                }
+                early: () => {
+                    [1].caseOf(%{ [Capture]: (n) => { return n + 41 } })
+                    0
+                }
+                caught: Error.handle(
+                    () => [1].caseOf(%{ [Capture]: (n) => n.missingSelector() }),
+                    (error) => "caught")
+                (counter() == 3) && (early() == 42) && (caught == "caught")
+                """);
+    }
 }

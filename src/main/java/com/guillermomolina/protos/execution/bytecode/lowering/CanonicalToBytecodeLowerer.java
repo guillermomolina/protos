@@ -4978,7 +4978,8 @@ final class CanonicalToBytecodeLowerer {
                 preparedCall,
                 childResult,
                 resumeValue,
-                false);
+                false,
+                java.util.Map.of());
     }
 
     private void emitDefaultMapConstruction(
@@ -4995,9 +4996,17 @@ final class CanonicalToBytecodeLowerer {
                 preparedCall,
                 childResult,
                 resumeValue,
-                true);
+                true,
+                java.util.Map.of());
     }
 
+    /*
+     * The ordinary construction of a written Map. {@code retainedValues}
+     * maps a written entry position to a local that also receives that
+     * entry's evaluated value, the same value the Map receives, right after
+     * its single evaluation (empty for an ordinary construction): an
+     * enclosing caseOf keeps the identity of the action it may run inline.
+     */
     private void emitMapConstruction(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalMapConstruction map,
@@ -5005,7 +5014,8 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue,
-            boolean defaultContext) {
+            boolean defaultContext,
+            java.util.Map<Integer, BytecodeLocal> retainedValues) {
         requireDefaultScratch(
                 result,
                 preparedCall,
@@ -5049,7 +5059,8 @@ final class CanonicalToBytecodeLowerer {
         builder.endMakeMap();
         builder.endStoreLocal();
 
-        for (CanonicalMapConstruction.Entry entry : map.entries()) {
+        for (int entryPosition = 0; entryPosition < map.entries().size(); entryPosition++) {
+            CanonicalMapConstruction.Entry entry = map.entries().get(entryPosition);
             BytecodeLocal key =
                     builder.createLocal(
                             defaultContext
@@ -5105,6 +5116,12 @@ final class CanonicalToBytecodeLowerer {
                         preparedCall,
                         childResult,
                         resumeValue);
+            }
+            BytecodeLocal retained = retainedValues.get(entryPosition);
+            if (retained != null) {
+                builder.beginStoreLocal(retained);
+                builder.emitLoadLocal(value);
+                builder.endStoreLocal();
             }
 
             builder.beginStoreLocal(initialDefinition);
@@ -11038,15 +11055,21 @@ final class CanonicalToBytecodeLowerer {
      *       {@code CallUnaryMethod} site, so each alternative keeps its own
      *       specialized caches (a standard Object, Any, Capture, Array or
      *       Map matcher, or a program-defined one). The first success
-     *       invokes its action inside its own alternative, through that
-     *       alternative's own invocation site, and branches to the end. The associations are
+     *       runs its action inside its own alternative and branches to the
+     *       end. A literal action admitted by {@link #admitsInlineCaseAction}
+     *       has its evaluated value retained by the Map construction; when
+     *       the committed action is that very Closure under the canonical
+     *       call selection, its body runs in this root with the captures
+     *       bound to its parameter locals. Any other action is invoked
+     *       through that alternative's own invocation site. The associations are
      *       read from the observed snapshot, never from the source entries,
      *       so a factory that changes the resulting associations cannot
      *       misassociate a matcher. The trailing loop recognizes any further
      *       association, and is the whole recognition for a dynamically
      *       supplied table.
      *   <li>After the loop, the action it committed is invoked through the
-     *       ordinary nilary, unary or variable-arity invocation; with no
+     *       ordinary fixed-arity (up to four captures) or variable-arity
+     *       invocation; with no
      *       success the ordinary no-selection Error is signalled.
      * </ol>
      *
@@ -11074,8 +11097,34 @@ final class CanonicalToBytecodeLowerer {
                 scratch, childResult, resumeValue, this::emitBodyExpressionToLocal);
         CanonicalExpression table = send.arguments().get(0);
         BytecodeLocal cases = builder.createLocal("caseOfTable", null);
-        stageOperand(builder, table, cases,
-                scratch, childResult, resumeValue, this::emitBodyExpressionToLocal);
+        int alternatives = table instanceof CanonicalMapConstruction written
+                ? Math.min(written.entries().size(), MAX_UNROLLED_CASE_ALTERNATIVES)
+                : 0;
+        // Per unrolled alternative, its admitted literal action and the
+        // local retaining that action's evaluated value, or null.
+        CanonicalClosure[] inlineActions = new CanonicalClosure[alternatives];
+        BytecodeLocal[] retainedActions = new BytecodeLocal[alternatives];
+        java.util.Map<Integer, BytecodeLocal> retainedValues = new java.util.HashMap<>();
+        if (table instanceof CanonicalMapConstruction written) {
+            ControlSiteContext context = currentControlSiteContext();
+            for (int alternative = 0; alternative < alternatives; alternative++) {
+                CanonicalExpression action = written.entries().get(alternative).value();
+                if (admitsInlineCaseAction(action, context)) {
+                    inlineActions[alternative] = (CanonicalClosure) action;
+                    retainedActions[alternative] =
+                            builder.createLocal("caseOfRetainedAction", null);
+                    retainedValues.put(alternative, retainedActions[alternative]);
+                }
+            }
+        }
+        if (table instanceof CanonicalMapConstruction written && !retainedValues.isEmpty()) {
+            // The same ordinary construction, also retaining those values.
+            emitMapConstruction(builder, written, cases,
+                    scratch, childResult, resumeValue, false, retainedValues);
+        } else {
+            stageOperand(builder, table, cases,
+                    scratch, childResult, resumeValue, this::emitBodyExpressionToLocal);
+        }
 
         BytecodeLocal state = builder.createLocal("caseOfState", null);
         builder.beginIfThenElse();
@@ -11089,9 +11138,6 @@ final class CanonicalToBytecodeLowerer {
         BytecodeLabel end = builder.createLabel();
         BytecodeLocal matcher = builder.createLocal("caseOfMatcher", null);
         BytecodeLocal outcome = builder.createLocal("caseOfOutcome", null);
-        int alternatives = table instanceof CanonicalMapConstruction construction
-                ? Math.min(construction.entries().size(), MAX_UNROLLED_CASE_ALTERNATIVES)
-                : 0;
         for (int alternative = 0; alternative < alternatives; alternative++) {
             builder.beginIfThen();
             builder.beginStructuredHasNext(ProtosStructuredPhase.CHILD);
@@ -11106,8 +11152,11 @@ final class CanonicalToBytecodeLowerer {
             builder.emitLoadLocal(state);
             builder.endCaseOfCommitted();
             builder.beginBlock();
-            emitCaseOfSelectedAction(builder, state, result, childResult, resumeValue);
+            emitCaseOfSelectedAction(builder, state,
+                    inlineActions[alternative], retainedActions[alternative],
+                    result, scratch, childResult, resumeValue);
             builder.emitClearLocal(state);
+            emitClearLocals(builder, retainedActions);
             builder.emitBranch(end);
             builder.endBlock();
             builder.endIfThen();
@@ -11124,12 +11173,17 @@ final class CanonicalToBytecodeLowerer {
         builder.endBlock();
         builder.endWhile();
         // The committed association of the loop, or the no-selection Error.
-        emitCaseOfSelectedAction(builder, state, result, childResult, resumeValue);
+        // The retained values are dead here: no association past the
+        // unrolled alternatives is ever run inline.
+        emitClearLocals(builder, retainedActions);
+        emitCaseOfSelectedAction(builder, state, null, null,
+                result, scratch, childResult, resumeValue);
         builder.emitClearLocal(state);
         builder.emitLabel(end);
         builder.endBlock();
 
         builder.beginBlock();
+        emitClearLocals(builder, retainedActions);
         emitDispatchedSendOfLocals(
                 builder, "caseOf", subject, java.util.List.of(cases),
                 result, childResult, resumeValue);
@@ -11169,16 +11223,92 @@ final class CanonicalToBytecodeLowerer {
         builder.endStructuredAcceptChildOutcome();
     }
 
+    /* Fixed-arity positional invocations exist through this capture count. */
+    private static final int MAX_FIXED_CASE_ACTION_CAPTURES = 4;
+
     /*
-     * The committed caseOf action, invoked with exactly the consumed
-     * captures: the nilary invocation for a Boolean success, the unary one
-     * for a single capture, the variable-arity invocation otherwise. Its result is the
-     * caseOf result as is.
+     * Whether the literal {@code action} of a written case entry, which the
+     * Map construction still materializes as an ordinary Closure, may have
+     * its source body emitted in this root as the execution of that very
+     * Closure. Only an action whose execution cannot observe that it runs
+     * here instead of in its own activation is admitted:
+     *
+     * <ul>
+     *   <li>at most four ordinary parameters, none with a default or rest;
+     *   <li>no observable ReturnHome and no observable context;
+     *   <li>no own or free cell, no captured creator context and no
+     *       inherited lexical environment: every bare reference resolves in
+     *       its own scope, so the Closure's retained lexical authority is
+     *       never consulted and need not be reconstructed;
+     *   <li>the established inline callback proof for its arity (nilary
+     *       control body, or fixed-parameter iteration callback), including
+     *       the absence of any persistent frame authority.
+     * </ul>
+     *
+     * Any other action keeps its ordinary invocation.
+     */
+    private boolean admitsInlineCaseAction(
+            CanonicalExpression action, ControlSiteContext context) {
+        if (!(action instanceof CanonicalClosure closure)
+                || closure.parameters().size() > MAX_FIXED_CASE_ACTION_CAPTURES
+                || compilationFacts.mayObserveReturnHome(closure)) {
+            return false;
+        }
+        CanonicalBindingAnalysis analysis = compilationFacts.isolatedClosureAnalysis(closure);
+        CanonicalLexicalScope scope = analysis.scopeOf(closure).orElse(null);
+        if (scope == null
+                || scope.observesContext()
+                || !scope.freeCells().isEmpty()
+                || !scope.cellNamesInDeclarationOrder().isEmpty()
+                || CanonicalCompilationFacts.capturesCreatorContext(closure, analysis)
+                || CanonicalCompilationFacts.requiresInheritedLexicalEnvironment(
+                        closure, analysis)) {
+            return false;
+        }
+        CanonicalLexicalScope wholeTreeScope =
+                context.analysis() == null
+                        ? null
+                        : context.analysis().scopeOf(closure).orElse(null);
+        if (wholeTreeScope != null
+                && (wholeTreeScope.observesContext()
+                        || !wholeTreeScope.freeCells().isEmpty()
+                        || !wholeTreeScope.cellNamesInDeclarationOrder().isEmpty())) {
+            return false;
+        }
+        return closure.parameters().isEmpty()
+                ? admitsNormalInlineControlBody(closure, context)
+                : admitsEachInlineCallback(closure, context, closure.parameters().size());
+    }
+
+    private static void emitClearLocals(
+            ProtosBytecodeRootNodeGen.Builder builder, BytecodeLocal[] locals) {
+        for (BytecodeLocal local : locals) {
+            if (local != null) {
+                builder.emitClearLocal(local);
+            }
+        }
+    }
+
+    /*
+     * The committed caseOf action with exactly the consumed captures; its
+     * result is the caseOf result as is.
+     *
+     * When {@code inlineAction} is given (an admitted literal action of
+     * this alternative, whose evaluated value {@code retained} holds), the
+     * committed action is first checked to be that very Closure, selected
+     * through the canonical standard call and receiving exactly as many
+     * captures as it has parameters; then its body runs here with each
+     * capture bound once to its parameter local, and no action invocation
+     * takes place. Otherwise, and for every other action, the ordinary
+     * invocation runs (emitCaseOfActionInvocation).
      */
     private void emitCaseOfSelectedAction(
             ProtosBytecodeRootNodeGen.Builder builder,
             BytecodeLocal state,
+            CanonicalClosure inlineAction,
+            BytecodeLocal retained,
             BytecodeLocal result,
+            BytecodeLocal scratch,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
         BytecodeLocal action = builder.createLocal("caseOfAction", null);
@@ -11188,34 +11318,88 @@ final class CanonicalToBytecodeLowerer {
         builder.endCaseOfSelectedAction();
         builder.endStoreLocal();
 
+        if (inlineAction == null) {
+            emitCaseOfActionInvocation(builder, state, action, result, childResult, resumeValue);
+            builder.emitClearLocal(action);
+            return;
+        }
+        java.util.List<CanonicalParameter> parameters = inlineAction.parameters();
         builder.beginIfThenElse();
-        builder.beginCaseOfSelectedNilary();
+        builder.beginIsInlineCaseAction(parameters.size());
         builder.emitLoadLocal(state);
-        builder.endCaseOfSelectedNilary();
+        builder.emitLoadLocal(action);
+        builder.emitLoadLocal(retained);
+        builder.endIsInlineCaseAction();
 
         builder.beginBlock();
-        emitDispatchedCall(
-                builder, action, java.util.List.of(), null,
-                childResult, result, resumeValue, false);
+        builder.emitClearLocal(action);
+        java.util.Map<String, BytecodeLocal> binders = new java.util.LinkedHashMap<>();
+        for (int position = 0; position < parameters.size(); position++) {
+            String name = parameters.get(position).name();
+            // The local the inline region allocates for this binding.
+            BytecodeLocal binder = builder.createLocal(
+                    NORMAL_INLINE_CALLBACK_BINDING_LOCAL_PREFIX + name,
+                    nextInlineCallbackRegion + 1);
+            builder.beginStoreLocal(binder);
+            builder.beginCaseOfSelectedCapture(position);
+            builder.emitLoadLocal(state);
+            builder.endCaseOfSelectedCapture();
+            builder.endStoreLocal();
+            binders.put(name, binder);
+        }
+        emitInlineControlClosureBody(
+                builder, inlineAction, InlineBodyResult.STORE, result,
+                scratch, childResult, resumeValue, false, binders);
+        for (BytecodeLocal binder : binders.values()) {
+            builder.emitClearLocal(binder);
+        }
         builder.endBlock();
-
-        builder.beginIfThenElse();
-        builder.beginCaseOfSelectedUnary();
-        builder.emitLoadLocal(state);
-        builder.endCaseOfSelectedUnary();
 
         builder.beginBlock();
-        BytecodeLocal capture = builder.createLocal("caseOfCapture", null);
-        builder.beginStoreLocal(capture);
-        builder.beginCaseOfSelectedCapture();
-        builder.emitLoadLocal(state);
-        builder.endCaseOfSelectedCapture();
-        builder.endStoreLocal();
-        emitDispatchedCall(
-                builder, action, java.util.List.of(capture), null,
-                childResult, result, resumeValue, false);
-        builder.emitClearLocal(capture);
+        emitCaseOfActionInvocation(builder, state, action, result, childResult, resumeValue);
+        builder.emitClearLocal(action);
         builder.endBlock();
+
+        builder.endIfThenElse();
+    }
+
+    /*
+     * The ordinary invocation of the committed caseOf {@code action}, of any
+     * callable kind, with exactly the consumed captures: the fixed-arity
+     * invocation for up to four captures, the variable-arity one otherwise.
+     */
+    private void emitCaseOfActionInvocation(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            BytecodeLocal state,
+            BytecodeLocal action,
+            BytecodeLocal result,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        for (int count = 0; count <= MAX_FIXED_CASE_ACTION_CAPTURES; count++) {
+            builder.beginIfThenElse();
+            builder.beginCaseOfSelectedCaptureCount(count);
+            builder.emitLoadLocal(state);
+            builder.endCaseOfSelectedCaptureCount();
+
+            builder.beginBlock();
+            java.util.List<BytecodeLocal> captures = new java.util.ArrayList<>(count);
+            for (int position = 0; position < count; position++) {
+                BytecodeLocal capture = builder.createLocal("caseOfCapture", null);
+                builder.beginStoreLocal(capture);
+                builder.beginCaseOfSelectedCapture(position);
+                builder.emitLoadLocal(state);
+                builder.endCaseOfSelectedCapture();
+                builder.endStoreLocal();
+                captures.add(capture);
+            }
+            emitDispatchedCall(
+                    builder, action, captures, null,
+                    childResult, result, resumeValue, false);
+            for (BytecodeLocal capture : captures) {
+                builder.emitClearLocal(capture);
+            }
+            builder.endBlock();
+        }
 
         builder.beginBlock();
         builder.beginStoreLocal(childResult);
@@ -11234,9 +11418,9 @@ final class CanonicalToBytecodeLowerer {
         builder.endStoreLocal();
         builder.endBlock();
 
-        builder.endIfThenElse();
-        builder.endIfThenElse();
-        builder.emitClearLocal(action);
+        for (int count = 0; count <= MAX_FIXED_CASE_ACTION_CAPTURES; count++) {
+            builder.endIfThenElse();
+        }
     }
 
     /*
