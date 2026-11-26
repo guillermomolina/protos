@@ -84,11 +84,25 @@ import com.oracle.truffle.api.strings.TruffleString;
  * a mutable chain checks every examined {@code Shape} and reads the owner's
  * current slot on every execution, so an in-place reassignment is observed
  * and a structural change (removal, recreation, shadowing) misses the entry.
- * A selected slot that does not hold a Closure, and every other receiver
- * representation (large Integer, Fraction, Complex, instance-retained
- * prototypes, foreign projections) or site past the cached limits, use
- * {@link #doGeneric}: the complete ordinary lookup, which raises the ordinary
- * Errors and replaces no cached entry.
+ * A selected slot that does not hold a Closure takes the complete selection,
+ * which raises the ordinary Error.
+ *
+ * <p>The complete ordinary selection ({@link #select}) is reached through
+ * one general entry per receiver family, each delimited by the same
+ * representation guard as its cached entries: Shape-backed ordinary objects
+ * ({@link #doObjectGeneral}), SmallInteger ({@link #doLongGeneral}), double
+ * ({@link #doDoubleGeneral}), represented Float
+ * ({@link #doFloatValueGeneral}), String ({@link #doStringGeneral}),
+ * Boolean and null ({@link #doRootDelegatedGeneral}), and every remaining
+ * representation (map-backed objects, large Integer, Fraction, Complex,
+ * instance-retained prototypes, foreign projections) through
+ * {@link #doOtherGeneral}, whose guard is the complement of the preceding
+ * families. No general entry replaces a cached entry, and none admits a
+ * receiver of another family: a family that has used the complete
+ * selection never prevents an unseen family from installing its own cached
+ * entry. Within one family, once its general entry is active a receiver no
+ * installed entry admits takes that general entry instead of installing a
+ * further entry; the installed entries remain authoritative.
  */
 @GenerateUncached
 @GenerateInline(false)
@@ -138,7 +152,7 @@ abstract class ProtosExperimentalGetMethodNode extends Node {
             // The receiver travels separately and is its own methodHome.
             return direct ? closure : new ProtosBoundMethod(closure, receiver, receiver);
         }
-        return selectNonClosure(frame, cachedSelector, receiver, root);
+        return selectComplete(frame, cachedSelector, receiver, root);
     }
 
     /*
@@ -169,7 +183,7 @@ abstract class ProtosExperimentalGetMethodNode extends Node {
             @Cached("receiver.getShape()") Shape receiverShape,
             @Cached("selectInherited(receiver, cachedSelector)") StructuralSelection selection,
             @Cached("allOwnersFrozen(selection)") boolean frozen,
-            @Cached(value = "frozenValue(frozen, selection)", neverDefault = false)
+            @Cached("frozenValue(frozen, selection)")
                     Object frozenSelected) {
         return bindSelected(
                 frame, cachedSelector, receiver, root, selection,
@@ -203,7 +217,7 @@ abstract class ProtosExperimentalGetMethodNode extends Node {
             @Cached("selectFromBinding(cachedPrelude, SMALL_INTEGER_BINDING, cachedSelector)")
                     StructuralSelection selection,
             @Cached("allOwnersFrozen(selection)") boolean frozen,
-            @Cached(value = "frozenValue(frozen, selection)", neverDefault = false)
+            @Cached("frozenValue(frozen, selection)")
                     Object frozenSelected) {
         return bindSelected(
                 frame, cachedSelector, receiver, root, selection,
@@ -233,7 +247,7 @@ abstract class ProtosExperimentalGetMethodNode extends Node {
             @Cached("selectFromBinding(cachedPrelude, FLOAT_BINDING, cachedSelector)")
                     StructuralSelection selection,
             @Cached("allOwnersFrozen(selection)") boolean frozen,
-            @Cached(value = "frozenValue(frozen, selection)", neverDefault = false)
+            @Cached("frozenValue(frozen, selection)")
                     Object frozenSelected) {
         return bindSelected(
                 frame, cachedSelector, receiver, root, selection,
@@ -266,7 +280,7 @@ abstract class ProtosExperimentalGetMethodNode extends Node {
             @Cached("selectFromBinding(cachedPrelude, FLOAT_BINDING, cachedSelector)")
                     StructuralSelection selection,
             @Cached("allOwnersFrozen(selection)") boolean frozen,
-            @Cached(value = "frozenValue(frozen, selection)", neverDefault = false)
+            @Cached("frozenValue(frozen, selection)")
                     Object frozenSelected) {
         return bindSelected(
                 frame, cachedSelector, receiver, root, selection,
@@ -299,7 +313,7 @@ abstract class ProtosExperimentalGetMethodNode extends Node {
             @Cached("selectFromBinding(cachedPrelude, STRING_BINDING, cachedSelector)")
                     StructuralSelection selection,
             @Cached("allOwnersFrozen(selection)") boolean frozen,
-            @Cached(value = "frozenValue(frozen, selection)", neverDefault = false)
+            @Cached("frozenValue(frozen, selection)")
                     Object frozenSelected) {
         return bindSelected(
                 frame, cachedSelector, receiver, root, selection,
@@ -328,7 +342,7 @@ abstract class ProtosExperimentalGetMethodNode extends Node {
             @Cached("selector") TruffleString cachedSelector,
             @Cached("selectFromRoot(cachedSelector)") StructuralSelection selection,
             @Cached("allOwnersFrozen(selection)") boolean frozen,
-            @Cached(value = "frozenValue(frozen, selection)", neverDefault = false)
+            @Cached("frozenValue(frozen, selection)")
                     Object frozenSelected) {
         return bindSelected(
                 frame, cachedSelector, receiver, root, selection,
@@ -336,24 +350,99 @@ abstract class ProtosExperimentalGetMethodNode extends Node {
     }
 
     /*
-     * The complete selection: every other representation, a non-Closure
-     * selection, and sites past the cached limits. It replaces no cached
-     * entry.
+     * The general entries. Each admits exactly one receiver family, so the
+     * complete selection used by one family never handles a receiver of
+     * another family before that family has specialized. None replaces a
+     * cached entry.
      */
+
+    /* A Shape-backed exact ordinary receiver no cached entry admits. */
+    @Specialization(
+            guards = {"isOrdinaryObject(receiver)", "receiver.usesObjectStorageForRuntime()"})
+    @InliningCutoff
+    static Object doObjectGeneral(
+            VirtualFrame frame,
+            TruffleString selector,
+            boolean direct,
+            ProtosObjectValue receiver,
+            @Bind("rootOf($node)") ProtosBytecodeRootNode root) {
+        return selectComplete(frame, selector, receiver, root);
+    }
+
+    /* A SmallInteger receiver no cached entry admits. */
     @Specialization
     @InliningCutoff
-    static Object doGeneric(
+    static Object doLongGeneral(
+            VirtualFrame frame,
+            TruffleString selector,
+            boolean direct,
+            long receiver,
+            @Bind("rootOf($node)") ProtosBytecodeRootNode root) {
+        return selectComplete(frame, selector, receiver, root);
+    }
+
+    /* A double receiver no cached entry admits. */
+    @Specialization
+    @InliningCutoff
+    static Object doDoubleGeneral(
+            VirtualFrame frame,
+            TruffleString selector,
+            boolean direct,
+            double receiver,
+            @Bind("rootOf($node)") ProtosBytecodeRootNode root) {
+        return selectComplete(frame, selector, receiver, root);
+    }
+
+    /* A represented Float receiver no cached entry admits. */
+    @Specialization
+    @InliningCutoff
+    static Object doFloatValueGeneral(
+            VirtualFrame frame,
+            TruffleString selector,
+            boolean direct,
+            ProtosFloatValue receiver,
+            @Bind("rootOf($node)") ProtosBytecodeRootNode root) {
+        return selectComplete(frame, selector, receiver, root);
+    }
+
+    /* A String receiver no cached entry admits. */
+    @Specialization
+    @InliningCutoff
+    static Object doStringGeneral(
+            VirtualFrame frame,
+            TruffleString selector,
+            boolean direct,
+            ProtosStringValue receiver,
+            @Bind("rootOf($node)") ProtosBytecodeRootNode root) {
+        return selectComplete(frame, selector, receiver, root);
+    }
+
+    /* A Boolean or null receiver no cached entry admits. */
+    @Specialization(guards = "isRootDelegated(receiver)")
+    @InliningCutoff
+    static Object doRootDelegatedGeneral(
             VirtualFrame frame,
             TruffleString selector,
             boolean direct,
             Object receiver,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root) {
-        Object caller = frame.getArguments();
-        return select(
-                ProtosNumericValueSupport.guestValue(receiver),
-                selector.toJavaStringUncached(),
-                root,
-                caller);
+        return selectComplete(frame, selector, receiver, root);
+    }
+
+    /*
+     * Every receiver outside the preceding families, normalized to its guest
+     * value before the complete selection.
+     */
+    @Specialization(guards = "isOtherRepresentation(receiver)")
+    @InliningCutoff
+    static Object doOtherGeneral(
+            VirtualFrame frame,
+            TruffleString selector,
+            boolean direct,
+            Object receiver,
+            @Bind("rootOf($node)") ProtosBytecodeRootNode root) {
+        return selectComplete(
+                frame, selector, ProtosNumericValueSupport.guestValue(receiver), root);
     }
 
     /*
@@ -371,10 +460,11 @@ abstract class ProtosExperimentalGetMethodNode extends Node {
         if (selected instanceof ProtosClosureValue closure) {
             return new ProtosBoundMethod(closure, receiver, selection.home());
         }
-        return selectNonClosure(frame, selector, receiver, root);
+        return selectComplete(frame, selector, receiver, root);
     }
 
-    private static Object selectNonClosure(
+    /* The complete ordinary selection with the actual caller arguments. */
+    private static Object selectComplete(
             VirtualFrame frame,
             TruffleString selector,
             Object receiver,
@@ -388,6 +478,23 @@ abstract class ProtosExperimentalGetMethodNode extends Node {
 
     static boolean isRootDelegated(Object receiver) {
         return ProtosBytecodeRootNode.StandardKeySelectionNode.isRootDelegated(receiver);
+    }
+
+    /*
+     * Classifies only which general entry owns the receiver: true for every
+     * receiver outside the Shape-backed ordinary, SmallInteger, Float,
+     * String and root-delegated families. It decides no delegation.
+     */
+    static boolean isOtherRepresentation(Object receiver) {
+        if (receiver instanceof Long
+                || receiver instanceof Double
+                || receiver instanceof ProtosFloatValue
+                || receiver instanceof ProtosStringValue
+                || isRootDelegated(receiver)) {
+            return false;
+        }
+        return !(isOrdinaryObject(receiver)
+                && ((ProtosObjectValue) receiver).usesObjectStorageForRuntime());
     }
 
     static boolean hasSelectionParent(
@@ -534,7 +641,7 @@ abstract class ProtosExperimentalGetMethodNode extends Node {
     }
 
     /*
-     * I115-H7-R1: the Protos root executing this operation. In a proxied
+     * The Protos root executing this operation. In a proxied
      * node the default root bind is typed Node, so it is resolved from the
      * enclosing BytecodeNode.
      */

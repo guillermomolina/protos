@@ -20,6 +20,7 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -31,6 +32,7 @@ import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
 import com.guillermomolina.protos.runtime.ProtosActorModuleState;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
@@ -65,6 +67,8 @@ import org.junit.jupiter.api.Test;
 final class ProtosPerf038ITerminalMethodSendTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final int PAST_CACHE_LIMITS = 12;
+    /** A large Integer literal: a receiver only the complete selection admits. */
+    private static final String BIG = "100000000000000000000";
 
     private static final String CANONICAL = """
             receiver: {
@@ -835,6 +839,452 @@ final class ProtosPerf038ITerminalMethodSendTest {
         System.out.println("PERF038_I_EXPLICIT_EXTRACTION=PASS");
     }
 
+    /*
+     * Independent selection families. Each test first executes the complete
+     * selection of another receiver family at the same GetMethod site, then
+     * reads the generated cache of the family under test: a semantic result
+     * alone would not distinguish an installed entry from the general entry.
+     */
+
+    /** A complete selection first never prevents SmallInteger specialization. */
+    @Test
+    void generalSelectionFirstLeavesSmallIntegerSpecialization() throws Exception {
+        withCore(module -> {
+            evaluate("same: (x, y) => { x.match(y) }\n", "perf044a8r1-long-define.protos", module);
+            enterCachedTier("same", module);
+            runGeneralMatch("same", module);
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                assertSame(Boolean.TRUE, evaluate("same(" + i + ", " + i + ")\n", "perf044a8r1-long-1.protos", module));
+                assertSame(Boolean.FALSE, evaluate("same(" + i + ", " + (i + 1) + ")\n", "perf044a8r1-long-2.protos", module));
+            }
+            assertEquals(1, getMethodEntries("same", module, "doLong").size(),
+                    "the SmallInteger entry is installed after a complete selection");
+        });
+        System.out.println("PERF044_A8_R1_GENERAL_FIRST_SMALL_INTEGER=PASS");
+    }
+
+    /** A complete selection first never prevents any represented family from specializing. */
+    @Test
+    void generalSelectionFirstLeavesEveryRepresentedFamily() throws Exception {
+        withCore(module -> {
+            evaluate("""
+                    sameDouble: (x, y) => { x.match(y) }
+                    sameFloat: (x, y) => { x.match(y) }
+                    sameString: (x, y) => { x.match(y) }
+                    sameRoot: (x, y) => { x.match(y) }
+                    """, "perf044a8r1-families-define.protos", module);
+            module.context().createLocalSlot("d1", Double.valueOf(2.5));
+            module.context().createLocalSlot("d2", Double.valueOf(3.5));
+            module.context().createLocalSlot("f1", new ProtosFloatValue(2.5));
+            module.context().createLocalSlot("f2", new ProtosFloatValue(3.5));
+            for (String site : List.of("sameDouble", "sameFloat", "sameString", "sameRoot")) {
+                enterCachedTier(site, module);
+                runGeneralMatch(site, module);
+            }
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                assertSame(Boolean.TRUE, evaluate("sameDouble(d1, d1)\n", "perf044a8r1-double-1.protos", module));
+                assertSame(Boolean.FALSE, evaluate("sameDouble(d1, d2)\n", "perf044a8r1-double-2.protos", module));
+                assertSame(Boolean.TRUE, evaluate("sameDouble(d2, d2)\n", "perf044a8r1-double-3.protos", module));
+                assertSame(Boolean.TRUE, evaluate("sameFloat(f1, f1)\n", "perf044a8r1-float-1.protos", module));
+                assertSame(Boolean.FALSE, evaluate("sameFloat(f1, f2)\n", "perf044a8r1-float-2.protos", module));
+                assertSame(Boolean.TRUE, evaluate("sameFloat(f2, f2)\n", "perf044a8r1-float-3.protos", module));
+                assertSame(Boolean.TRUE, evaluate("sameString(\"s" + i + "\", \"s" + i + "\")\n", "perf044a8r1-string-1.protos", module));
+                assertSame(Boolean.FALSE, evaluate("sameString(\"s" + i + "\", \"t" + i + "\")\n", "perf044a8r1-string-2.protos", module));
+                assertSame(Boolean.TRUE, evaluate("sameRoot(true, true)\n", "perf044a8r1-root-1.protos", module));
+                assertSame(Boolean.FALSE, evaluate("sameRoot(false, true)\n", "perf044a8r1-root-2.protos", module));
+                assertSame(Boolean.TRUE, evaluate("sameRoot(null, null)\n", "perf044a8r1-root-3.protos", module));
+            }
+            assertEquals(1, getMethodEntries("sameDouble", module, "doDouble").size(),
+                    "the double entry is installed after a complete selection");
+            assertEquals(1, getMethodEntries("sameFloat", module, "doFloatValue").size(),
+                    "the represented Float entry is installed after a complete selection");
+            assertEquals(1, getMethodEntries("sameString", module, "doString").size(),
+                    "the String entry is installed after a complete selection");
+            assertEquals(1, getMethodEntries("sameRoot", module, "doRootDelegated").size(),
+                    "the root-delegated entry is installed after a complete selection");
+        });
+        System.out.println("PERF044_A8_R1_GENERAL_FIRST_REPRESENTED=PASS");
+    }
+
+    /** A complete selection first never prevents own or inherited object specialization. */
+    @Test
+    void generalSelectionFirstLeavesShapeBackedObjectFamilies() throws Exception {
+        withCore(module -> {
+            evaluate("""
+                    first: { pick: (value) => { value + 1 } }
+                    second: { pick: (value) => { value + 2 } }
+                    base: {
+                        value: 0
+                        pick: (delta) => { value + delta }
+                    }
+                    left: base { value: 10 }
+                    right: base { value: 20 }
+                    run: (r, n) => { r.pick(n) }
+                    runInherited: (r, n) => { r.pick(n) }
+                    """, "perf044a8r1-objects-define.protos", module);
+            enterCachedTier("run", module);
+            enterCachedTier("runInherited", module);
+            ProtosObjectValue slotNotFound = errorPrototype("SlotNotFound", module);
+            assertSame(slotNotFound, errorParent(
+                    () -> evaluate("run(" + BIG + ", 1)\n", "perf044a8r1-objects-1.protos", module)));
+            assertSame(slotNotFound, errorParent(
+                    () -> evaluate("runInherited(" + BIG + ", 1)\n", "perf044a8r1-objects-2.protos", module)));
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                assertInteger(i + 1, evaluate("run(first, " + i + ")\n", "perf044a8r1-objects-3.protos", module));
+                assertInteger(i + 2, evaluate("run(second, " + i + ")\n", "perf044a8r1-objects-4.protos", module));
+                assertInteger(i + 10, evaluate("runInherited(left, " + i + ")\n", "perf044a8r1-objects-5.protos", module));
+                assertInteger(i + 20, evaluate("runInherited(right, " + i + ")\n", "perf044a8r1-objects-6.protos", module));
+            }
+            assertFalse(getMethodEntries("run", module, "doOwn").isEmpty(),
+                    "the own-method entry is installed after a complete selection");
+            List<Object> inherited = getMethodEntries("runInherited", module, "doInherited");
+            assertFalse(inherited.isEmpty(),
+                    "the inherited entry is installed after a complete selection");
+            for (Object entry : inherited) {
+                assertSame(object("base", module), inheritedSelection(entry).home(),
+                        "the real owner is the methodHome");
+            }
+        });
+        System.out.println("PERF044_A8_R1_GENERAL_FIRST_OBJECTS=PASS");
+    }
+
+    /** An installed entry stays installed and authoritative across another family's complete selection. */
+    @Test
+    void installedEntrySurvivesAnotherFamilyCompleteSelection() throws Exception {
+        withCore(module -> {
+            evaluate("""
+                    same: (x, y) => { x.match(y) }
+                    first: { pick: (value) => { value + 1 } }
+                    run: (r, n) => { r.pick(n) }
+                    """, "perf044a8r1-survive-define.protos", module);
+            enterCachedTier("same", module);
+            enterCachedTier("run", module);
+            for (int i = 0; i < 3; i++) {
+                assertSame(Boolean.TRUE, evaluate("same(" + i + ", " + i + ")\n", "perf044a8r1-survive-1.protos", module));
+                assertInteger(i + 1, evaluate("run(first, " + i + ")\n", "perf044a8r1-survive-2.protos", module));
+            }
+            List<Object> longEntries = getMethodEntries("same", module, "doLong");
+            assertEquals(1, longEntries.size());
+            Object installedLong = longEntries.get(0);
+            Object installedOwn = assertSingleEntryFor(object("first", module), module);
+
+            runGeneralMatch("same", module);
+            assertSame(errorPrototype("SlotNotFound", module), errorParent(
+                    () -> evaluate("run(" + BIG + ", 1)\n", "perf044a8r1-survive-3.protos", module)));
+
+            for (int i = 10; i < 10 + PAST_CACHE_LIMITS; i++) {
+                assertSame(Boolean.TRUE, evaluate("same(" + i + ", " + i + ")\n", "perf044a8r1-survive-4.protos", module));
+                assertSame(Boolean.FALSE, evaluate("same(" + i + ", " + (i + 1) + ")\n", "perf044a8r1-survive-5.protos", module));
+                assertInteger(i + 1, evaluate("run(first, " + i + ")\n", "perf044a8r1-survive-6.protos", module));
+            }
+            longEntries = getMethodEntries("same", module, "doLong");
+            assertEquals(1, longEntries.size(), "no further SmallInteger entry");
+            assertSame(installedLong, longEntries.get(0), "the SmallInteger entry is unchanged");
+            assertSame(installedOwn, assertSingleEntryFor(object("first", module), module),
+                    "the own-method entry is unchanged");
+        });
+        System.out.println("PERF044_A8_R1_ENTRY_SURVIVES_GENERAL=PASS");
+    }
+
+    /**
+     * Saturating the inherited family (more distinct Shapes than its limit)
+     * activates that family's general entry; other families still install
+     * their own entries, and the saturated family's installed entries stay
+     * within its unchanged limit.
+     */
+    @Test
+    void saturatedFamilyLeavesOtherFamiliesSpecializing() throws Exception {
+        withCore(module -> {
+            evaluate("""
+                    same: (x, y) => { x.match(y) }
+                    o1: { a1: 1 }
+                    o2: { a2: 1 }
+                    o3: { a3: 1 }
+                    o4: { a4: 1 }
+                    o5: { a5: 1 }
+                    """, "perf044a8r1-saturate-define.protos", module);
+            enterCachedTier("same", module);
+            for (int round = 0; round < 3; round++) {
+                for (int k = 1; k <= 5; k++) {
+                    assertSame(Boolean.TRUE, evaluate("same(o" + k + ", o" + k + ")\n", "perf044a8r1-saturate-1.protos", module));
+                    assertSame(Boolean.FALSE, evaluate("same(o" + k + ", 1)\n", "perf044a8r1-saturate-2.protos", module));
+                }
+            }
+            int inherited = getMethodEntries("same", module, "doInherited").size();
+            assertTrue(inherited >= 1 && inherited <= 3,
+                    "the inherited family keeps its bounded limit: " + inherited);
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                assertSame(Boolean.TRUE, evaluate("same(" + i + ", " + i + ")\n", "perf044a8r1-saturate-3.protos", module));
+                assertSame(Boolean.TRUE, evaluate("same(\"s" + i + "\", \"s" + i + "\")\n", "perf044a8r1-saturate-4.protos", module));
+                assertSame(Boolean.TRUE, evaluate("same(true, true)\n", "perf044a8r1-saturate-5.protos", module));
+            }
+            assertEquals(1, getMethodEntries("same", module, "doLong").size(),
+                    "SmallInteger specializes after another family saturated");
+            assertEquals(1, getMethodEntries("same", module, "doString").size(),
+                    "String specializes after another family saturated");
+            assertEquals(1, getMethodEntries("same", module, "doRootDelegated").size(),
+                    "Boolean specializes after another family saturated");
+            assertEquals(inherited, getMethodEntries("same", module, "doInherited").size(),
+                    "the saturated family's entries are unchanged");
+            for (int k = 1; k <= 5; k++) {
+                assertSame(Boolean.TRUE, evaluate("same(o" + k + ", o" + k + ")\n", "perf044a8r1-saturate-6.protos", module));
+            }
+        });
+        System.out.println("PERF044_A8_R1_SATURATION_INDEPENDENCE=PASS");
+    }
+
+    /**
+     * Mutable selection stays authoritative after an unrelated complete
+     * selection: reassignment, shadowing, removal, recreation and distinct
+     * parents, on the same GetMethod node throughout.
+     */
+    @Test
+    void mutableSelectionAfterUnrelatedCompleteSelection() throws Exception {
+        withCore(module -> {
+            evaluate("""
+                    first: { pick: (value) => { value + 1 } }
+                    second: { pick: (value) => { value + 2 } }
+                    base: {
+                        value: 0
+                        pick: (delta) => { value + delta }
+                    }
+                    left: base { value: 1 }
+                    right: base { value: 2 }
+                    otherBase: { pick: (delta) => { delta + 100 } }
+                    stranger: otherBase { value: 1 }
+                    run: (r, n) => { r.pick(n) }
+                    """, "perf044a8r1-mutable-define.protos", module);
+            enterCachedTier("run", module);
+            ProtosObjectValue slotNotFound = errorPrototype("SlotNotFound", module);
+            assertSame(slotNotFound, errorParent(
+                    () -> evaluate("run(" + BIG + ", 1)\n", "perf044a8r1-mutable-1.protos", module)));
+            for (int i = 0; i < 3; i++) {
+                assertInteger(i + 1, evaluate("run(first, " + i + ")\n", "perf044a8r1-mutable-2.protos", module));
+                assertInteger(i + 2, evaluate("run(second, " + i + ")\n", "perf044a8r1-mutable-3.protos", module));
+                assertInteger(i + 1, evaluate("run(left, " + i + ")\n", "perf044a8r1-mutable-4.protos", module));
+                assertInteger(i + 100, evaluate("run(stranger, " + i + ")\n", "perf044a8r1-mutable-5.protos", module));
+            }
+            Node site = operationNode("run", module, "GetMethod_Node");
+            assertFalse(getMethodEntries("run", module, "doOwn").isEmpty(), "own entry installed");
+            assertFalse(getMethodEntries("run", module, "doInherited").isEmpty(), "inherited entry installed");
+            // An unrelated complete selection after the entries were installed.
+            assertSame(slotNotFound, errorParent(
+                    () -> evaluate("run(" + BIG + ", 2)\n", "perf044a8r1-mutable-6.protos", module)));
+
+            evaluate("first.pick = (value) => { value * 3 }\n", "perf044a8r1-mutable-own.protos", module);
+            assertInteger(15, evaluate("run(first, 5)\n", "perf044a8r1-mutable-7.protos", module));
+            assertInteger(7, evaluate("run(second, 5)\n", "perf044a8r1-mutable-8.protos", module));
+
+            evaluate("base.pick = (delta) => { (value * 10) + delta }\n", "perf044a8r1-mutable-inh.protos", module);
+            assertInteger(11, evaluate("run(left, 1)\n", "perf044a8r1-mutable-9.protos", module));
+            assertInteger(21, evaluate("run(right, 1)\n", "perf044a8r1-mutable-10.protos", module));
+            assertInteger(101, evaluate("run(stranger, 1)\n", "perf044a8r1-mutable-11.protos", module));
+
+            ProtosClosureValue shadow = assertInstanceOf(ProtosClosureValue.class,
+                    evaluate("(delta) => { delta + 1000 }\n", "perf044a8r1-mutable-shadow.protos", module));
+            object("left", module).createLocalSlot("pick", shadow);
+            assertInteger(1001, evaluate("run(left, 1)\n", "perf044a8r1-mutable-12.protos", module));
+            assertInteger(21, evaluate("run(right, 1)\n", "perf044a8r1-mutable-13.protos", module));
+
+            ProtosObjectValue base = object("base", module);
+            base.removeLocalSlot("pick");
+            assertSame(slotNotFound, errorParent(
+                    () -> evaluate("run(right, 1)\n", "perf044a8r1-mutable-14.protos", module)));
+            ProtosClosureValue recreated = assertInstanceOf(ProtosClosureValue.class,
+                    evaluate("(delta) => { delta - 1 }\n", "perf044a8r1-mutable-recreate.protos", module));
+            base.createLocalSlot("pick", recreated);
+            assertInteger(4, evaluate("run(right, 5)\n", "perf044a8r1-mutable-15.protos", module));
+            assertInteger(1005, evaluate("run(left, 5)\n", "perf044a8r1-mutable-16.protos", module));
+            assertInteger(105, evaluate("run(stranger, 5)\n", "perf044a8r1-mutable-17.protos", module));
+            assertSame(site, operationNode("run", module, "GetMethod_Node"),
+                    "the same GetMethod node observed every change");
+        });
+        System.out.println("PERF044_A8_R1_MUTABLE_AFTER_GENERAL=PASS");
+    }
+
+    /*
+     * Independent SEND1 invocation families. The native method is an
+     * explicitly constructed native Closure; the source methods are ordinary
+     * guest methods. Cache evidence is read from the send's CallBinaryMethod:
+     * the direct source PIC entries, the bound-source specialization data
+     * holding its inlined cached function dispatcher, and the generic CallNode.
+     */
+
+    /** A native invocation first never disables the raw source PIC. */
+    @Test
+    void nativeSendFirstLeavesRawSourcePic() throws Exception {
+        withCore(module -> {
+            defineSendFixture(module);
+            enterCachedTier("run", module);
+            for (int i = 0; i < 3; i++) {
+                assertInteger(10, evaluate("run(nativeHolder, 5)\n", "perf044a8r1-send-native.protos", module));
+            }
+            assertNotNull(field(operationNode("run", module, "CallBinaryMethod_Node"), "callGenericSend_call_"),
+                    "the native method used the generic SEND1");
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                assertInteger(i + 1, evaluate("run(ownA, " + i + ")\n", "perf044a8r1-send-own.protos", module));
+            }
+            assertEquals(1, tierEntries("run", module).size(),
+                    "the raw source PIC is installed after a native invocation");
+        });
+        System.out.println("PERF044_A8_R1_NATIVE_THEN_RAW_SOURCE=PASS");
+    }
+
+    /** A native invocation first never disables bound source invocation. */
+    @Test
+    void nativeSendFirstLeavesBoundSourceInvocation() throws Exception {
+        withCore(module -> {
+            defineSendFixture(module);
+            enterCachedTier("run", module);
+            for (int i = 0; i < 3; i++) {
+                assertInteger(10, evaluate("run(nativeHolder, 5)\n", "perf044a8r1-send-native.protos", module));
+            }
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                // super proves the real methodHome; tag proves the actual receiver.
+                assertInteger(1000 + i + 10, evaluate("run(heir1, " + i + ")\n", "perf044a8r1-send-heir-1.protos", module));
+                assertInteger(1000 + i + 20, evaluate("run(heir2, " + i + ")\n", "perf044a8r1-send-heir-2.protos", module));
+            }
+            assertBoundSourceInstalled("run", module);
+            assertEquals(0, tierEntries("run", module).size(), "no raw source callable was sent");
+        });
+        System.out.println("PERF044_A8_R1_NATIVE_THEN_BOUND_SOURCE=PASS");
+    }
+
+    /** Source, then native, then the same source: the installed PIC entry stays authoritative. */
+    @Test
+    void sourceNativeSourceKeepsSourceSpecialization() throws Exception {
+        withCore(module -> {
+            defineSendFixture(module);
+            enterCachedTier("run", module);
+            for (int i = 0; i < 3; i++) {
+                assertInteger(i + 1, evaluate("run(ownA, " + i + ")\n", "perf044a8r1-send-sns-1.protos", module));
+                assertInteger(1000 + i + 10, evaluate("run(heir1, " + i + ")\n", "perf044a8r1-send-sns-2.protos", module));
+            }
+            List<Object> before = tierEntries("run", module);
+            assertEquals(1, before.size());
+            for (int i = 0; i < 3; i++) {
+                assertInteger(2 * i, evaluate("run(nativeHolder, " + i + ")\n", "perf044a8r1-send-sns-3.protos", module));
+            }
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                assertInteger(i + 1, evaluate("run(ownA, " + i + ")\n", "perf044a8r1-send-sns-4.protos", module));
+                assertInteger(1000 + i + 10, evaluate("run(heir1, " + i + ")\n", "perf044a8r1-send-sns-5.protos", module));
+            }
+            List<Object> after = tierEntries("run", module);
+            assertEquals(1, after.size(), "no PIC entry was added or removed");
+            assertSame(before.get(0), after.get(0), "the installed PIC entry is unchanged");
+            assertBoundSourceInstalled("run", module);
+        });
+        System.out.println("PERF044_A8_R1_SOURCE_NATIVE_SOURCE=PASS");
+    }
+
+    /** Raw and bound source families specialize independently in both arrival orders. */
+    @Test
+    void rawAndBoundSourceFamiliesAreIndependent() throws Exception {
+        withCore(module -> {
+            defineSendFixture(module);
+            evaluate("runBoundFirst: (r, n) => { r.m(n) }\n", "perf044a8r1-send-order-define.protos", module);
+            enterCachedTier("run", module);
+            enterCachedTier("runBoundFirst", module);
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                assertInteger(i + 1, evaluate("run(ownA, " + i + ")\n", "perf044a8r1-send-order-1.protos", module));
+                assertInteger(i + 2, evaluate("run(ownB, " + i + ")\n", "perf044a8r1-send-order-2.protos", module));
+                assertInteger(1000 + i + 10, evaluate("run(heir1, " + i + ")\n", "perf044a8r1-send-order-3.protos", module));
+                assertInteger(1000 + i + 20, evaluate("run(heir2, " + i + ")\n", "perf044a8r1-send-order-4.protos", module));
+            }
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                assertInteger(1000 + i + 20, evaluate("runBoundFirst(heir2, " + i + ")\n", "perf044a8r1-send-order-5.protos", module));
+                assertInteger(1000 + i + 10, evaluate("runBoundFirst(heir1, " + i + ")\n", "perf044a8r1-send-order-6.protos", module));
+                assertInteger(i + 2, evaluate("runBoundFirst(ownB, " + i + ")\n", "perf044a8r1-send-order-7.protos", module));
+                assertInteger(i + 1, evaluate("runBoundFirst(ownA, " + i + ")\n", "perf044a8r1-send-order-8.protos", module));
+            }
+            for (String site : List.of("run", "runBoundFirst")) {
+                assertEquals(2, cachedEntries(site, module, "CallBinaryMethod_Node", "callDirectSourceSend_cache").size(),
+                        site + ": one raw source PIC entry per own method");
+                assertBoundSourceInstalled(site, module);
+            }
+        });
+        System.out.println("PERF044_A8_R1_RAW_BOUND_INDEPENDENT=PASS");
+    }
+
+    /**
+     * The inherited root Object.match needs a Context-local execution
+     * projection. After a native match at the same site, the selected source
+     * method still runs through the bound-source cached function dispatcher,
+     * which entered the projection of this Context.
+     */
+    @Test
+    void nativeSendFirstLeavesContextLocalProjectedSourceInvocation() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue match = assertInstanceOf(ProtosClosureValue.class,
+                    ProtosObjectValue.rootObject().readLocalSlot("match").orElseThrow());
+            assertTrue(match.requiresContextLocalExecutionProjectionForRuntime(),
+                    "Object.match is a Context-local projection fixture");
+            ProtosObjectValue nativeMatcher = new ProtosObjectValue(ProtosObjectValue.rootObject());
+            nativeMatcher.createLocalSlot("match", nativeClosure((activation, supplied) -> Boolean.TRUE));
+            module.context().createLocalSlot("nativeMatcher", nativeMatcher);
+            evaluate("""
+                    plainA: { tag: 1 }
+                    plainB: { tag: 2 }
+                    probe: (p, s) => { p.match(s) }
+                    """, "perf044a8r1-projection-define.protos", module);
+            enterCachedTier("probe", module);
+            for (int i = 0; i < 3; i++) {
+                assertSame(Boolean.TRUE, evaluate("probe(nativeMatcher, 1)\n", "perf044a8r1-projection-1.protos", module));
+            }
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                assertSame(Boolean.TRUE, evaluate("probe(plainA, plainA)\n", "perf044a8r1-projection-2.protos", module));
+                assertSame(Boolean.FALSE, evaluate("probe(plainA, plainB)\n", "perf044a8r1-projection-3.protos", module));
+                assertSame(Boolean.TRUE, evaluate("probe(plainB, plainB)\n", "perf044a8r1-projection-4.protos", module));
+            }
+            assertBoundSourceInstalled("probe", module);
+            ProtosLanguageContext languageContext = ProtosLanguageContext.current();
+            int projected = languageContext.projectedBytecodeExecutionPlanCountForTesting();
+            assertTrue(projected >= 1, "a Context-local projection exists");
+            assertNotSame(match.executionPlan().orElseThrow(),
+                    languageContext.bytecodeExecutionPlanForDefinition(
+                            match.definition(), match.executionPlan().orElseThrow()),
+                    "this Context executes its own projection of Object.match");
+            assertEquals(projected, languageContext.projectedBytecodeExecutionPlanCountForTesting(),
+                    "the projection was created by the selected sends themselves");
+        });
+        System.out.println("PERF044_A8_R1_PROJECTION_AFTER_NATIVE=PASS");
+    }
+
+    /** The shared SEND1 fixture: native, own source and inherited source methods named m. */
+    private static void defineSendFixture(ProtosActivation module) {
+        ProtosObjectValue nativeHolder = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        nativeHolder.createLocalSlot("m", nativeClosure(
+                (activation, supplied) -> ProtosNumericValueSupport.integer(
+                        2 * Long.parseLong(integerValue(supplied.get(0))))));
+        module.context().createLocalSlot("nativeHolder", nativeHolder);
+        evaluate("""
+                ownA: { m: (value) => { value + 1 } }
+                ownB: { m: (value) => { value + 2 } }
+                top: { m: (value) => { value + 1000 } }
+                heirBase: top { m: (value) => { super.m(value) + (tag * 10) } }
+                heir1: heirBase { tag: 1 }
+                heir2: heirBase { tag: 2 }
+                run: (r, n) => { r.m(n) }
+                """, "perf044a8r1-send-define.protos", module);
+    }
+
+    /** The bound-source specialization of the site's SEND1 was installed and its dispatcher specialized. */
+    private static void assertBoundSourceInstalled(String function, ProtosActivation module)
+            throws Exception {
+        Object data = field(operationNode(function, module, "CallBinaryMethod_Node"), "callBoundSourceSend_cache");
+        assertNotNull(data, function + ": the bound-source SEND1 is installed");
+        assertNotEquals(0, field(data, "callBoundSourceSend_state_0_"),
+                function + ": its cached function dispatcher specialized");
+    }
+
+    /** Executes the complete selection of a large Integer at a {@code (x, y) => x.match(y)} site. */
+    private static void runGeneralMatch(String function, ProtosActivation module) {
+        assertSame(Boolean.TRUE, evaluate(function + "(" + BIG + ", " + BIG + ")\n",
+                "perf044a8r1-general-1.protos", module));
+        assertSame(Boolean.FALSE, evaluate(function + "(" + BIG + ", 1)\n",
+                "perf044a8r1-general-2.protos", module));
+    }
+
     private static ProtosClosureValue nativeClosure(
             com.guillermomolina.protos.runtime.callables.ProtosNativeClosureBody body) {
         return ProtosClosureValue.suspensionCapableNativeClosure(body, body);
@@ -940,6 +1390,21 @@ final class ProtosPerf038ITerminalMethodSendTest {
         }
         assertEquals(1, sites, "expected exactly one " + nodeName + " site in " + function);
         return entries;
+    }
+
+    /** The single cached operation node named {@code nodeName} of {@code function}. */
+    private static Node operationNode(String function, ProtosActivation module, String nodeName)
+            throws Exception {
+        Node[] cachedNodes = (Node[]) field(functionRoot(function, module).getBytecodeNode(), "cachedNodes_");
+        Node found = null;
+        for (Node node : cachedNodes) {
+            if (node != null && node.getClass().getSimpleName().equals(nodeName)) {
+                assertSame(null, found, "expected exactly one " + nodeName + " site in " + function);
+                found = node;
+            }
+        }
+        assertNotNull(found, "expected one " + nodeName + " site in " + function);
+        return found;
     }
 
     private static Object field(Object owner, String name) throws ReflectiveOperationException {

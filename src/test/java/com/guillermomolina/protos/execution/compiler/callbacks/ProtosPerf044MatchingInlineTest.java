@@ -349,6 +349,71 @@ final class ProtosPerf044MatchingInlineTest {
         assertSame(Boolean.TRUE, run(source));
     }
 
+    /**
+     * One stable dynamic-table site and one contextual match meet pattern
+     * representations in varying order: a large Integer (complete
+     * selection), SmallInteger, Float, String, an ordinary custom matcher,
+     * Any and Capture. Every result is the ordinary matching result, so a
+     * family reached earlier never changes a later family's outcome. This
+     * evidence is semantic: cache installation for the same families is
+     * observed by ProtosPerf038ITerminalMethodSendTest.
+     */
+    @Test
+    void varyingPatternFamiliesKeepEveryMatchingResult() throws Exception {
+        String source = """
+                big: 100000000000000000000
+                Custom: { match: (subject) => subject == "custom" }
+                tables: [
+                    %{ big: () => "big"; 7: () => "seven"; 2.5: () => "float"; "s": () => "string"; Custom: () => "custom"; Capture: (c) => c },
+                    %{ "s": () => "string"; Custom: () => "custom"; 2.5: () => "float"; 7: () => "seven"; big: () => "big"; Any: () => "any" },
+                    %{ Custom: () => "custom"; 2.5: () => "float"; big: () => "big"; "s": () => "string"; 7: () => "seven"; Capture: (c) => c }
+                ]
+                explicit: (value, table) => value.caseOf(table)
+                contextual: (value) => match(value) {
+                    100000000000000000000: "big"
+                    7: "seven"
+                    2.5: "float"
+                    "s": "string"
+                    Custom: "custom"
+                    Any: "any"
+                }
+                state: { mismatches: 0 }
+                check: (actual, expected) => {
+                    (actual == expected).ifFalse(() => {
+                        state.mismatches = state.mismatches + 1
+                    })
+                }
+                rounds: [0, 1, 2, 3, 4, 5]
+                rounds.each((round) => {
+                    table: tables[round % 3]
+                    other: if(round % 3 == 1) { "any" } else { 99 }
+                    if(round % 2 == 0) {
+                        check(explicit(big, table), "big")
+                        check(explicit(7, table), "seven")
+                        check(explicit(2.5, table), "float")
+                        check(explicit("s", table), "string")
+                        check(explicit("custom", table), "custom")
+                        check(contextual(big), "big")
+                        check(contextual(2.5), "float")
+                        check(contextual("custom"), "custom")
+                    } else {
+                        check(explicit("custom", table), "custom")
+                        check(explicit("s", table), "string")
+                        check(explicit(2.5, table), "float")
+                        check(explicit(7, table), "seven")
+                        check(explicit(big, table), "big")
+                        check(contextual("s"), "string")
+                        check(contextual(7), "seven")
+                        check(contextual(big), "big")
+                    }
+                    check(explicit(99, table), other)
+                    check(contextual(99), "any")
+                })
+                state.mismatches == 0
+                """;
+        assertSame(Boolean.TRUE, run(source));
+    }
+
     private static Object run(String source) throws Exception {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
         return ProtosTestExecutionSupport.evaluate(source, prelude.newModuleActivation());

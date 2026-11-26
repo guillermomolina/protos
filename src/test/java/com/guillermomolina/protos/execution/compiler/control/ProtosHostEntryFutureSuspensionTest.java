@@ -1627,6 +1627,40 @@ final class ProtosHostEntryFutureSuspensionTest {
                 f -> {});
     }
 
+    /*
+     * One SEND1 site first invokes a native method (the extracted native
+     * Object.caseOf held in an own slot, whose action ignores its subject),
+     * then, after the caller suspended and resumed, an inherited source
+     * method of the same selector, then the native method again: the native
+     * invocation never captures the later source family, which keeps the
+     * actual receiver (value), the real methodHome (super) and the inherited
+     * Prelude.
+     */
+    @Test
+    void nativeSendThenSuspendedInheritedSourceSendAtOneSite() throws Exception {
+        runSuspendedOnce(
+                "native then inherited source at one site across resumption",
+                WAIT_AT
+                        + """
+                        cases: %{ Any: (subject) => 3 }
+                        nativeBox: { m: Object.caseOf }
+                        Top: { m: (n) => n + 1 }
+                        Middle: Top { m: (n) => super.m(n) + value }
+                        leaf: Middle { value: 10 }
+                        pick: (r, a) => r.m(a)
+                        run: () => {
+                            first: pick(nativeBox, cases)
+                            v: waitAt()
+                            r: pick(leaf, v)
+                            again: pick(nativeBox, cases)
+                            after = after + 1
+                            (first * 1000) + (again * 100) + r
+                        }
+                        """,
+                5L,
+                3316L);
+    }
+
     /* An inherited method keeps the real methodHome for super and this after resumption. */
     @Test
     void inheritedMethodHomeAfterResumption() throws Exception {
