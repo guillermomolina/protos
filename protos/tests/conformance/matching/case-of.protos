@@ -374,6 +374,89 @@ tests: [
         }
         Assertions.require(match(subject()) { 0: "a"; 1: "b"; Any: "c" } == "b")
         Assertions.require(state.count == 1)
+    }),
+    Test("integer case tables preserve signed endpoints and omitted defaults", () => {
+        select: (value) => match(value) {
+            -9223372036854775808: 11
+            -1: 23
+            9223372036854775807: 37
+        }
+        Assertions.require(select(-9223372036854775808) == 11)
+        Assertions.require(select(-1) == 23)
+        Assertions.require(select(9223372036854775807) == 37)
+        Assertions.signals(Error, () => { select(0) })
+    }),
+    Test("integer case tables have no sixteen alternative limit", () => {
+        select: (value) => match(value) {
+            0: 0; 1: 2; 2: 4; 3: 6; 4: 8; 5: 10
+            6: 12; 7: 14; 8: 16; 9: 18; 10: 20; 11: 22
+            12: 24; 13: 26; 14: 28; 15: 30; 16: 32; 17: 34
+            18: 36; 19: 38; 20: 40
+            Any: 53
+        }
+        for(value in [0, 1, 10, 16, 20]) {
+            Assertions.require(select(value) == value * 2)
+        }
+        Assertions.require(select(21) == 53)
+    }),
+    Test("shadowed Any keeps ordinary recognition and capture results", () => {
+        Any: { match: (subject) => [subject + 1] }
+        Assertions.require(match(9) { 1: 11; Any: (value) => value * 2 } == 20)
+    }),
+    Test("shadowed Any can mismatch after the Integer cases", () => {
+        Any: { match: (subject) => false }
+        Assertions.require(match(1) { 1: 11; Any: 53 } == 11)
+        Assertions.signals(Error, () => { match(9) { 1: 11; Any: 53 } })
+    }),
+    Test("duplicate Integer spellings still fail before an earlier recognition", () => {
+        Assertions.signals(Error, () => { match(1) { 1: 11; 0x1: 23 } })
+        Assertions.signals(Error, () => { match(0) { 0: 11; -0: 23 } })
+    }),
+    Test("a later key Error precedes any earlier selected action", () => {
+        log: ""
+        later: () => {
+            log = log + "key"
+            Error().signal()
+        }
+        Assertions.signals(Error, () => {
+            match(1) { 1: log = log + "action"; later(): 23 }
+        })
+        Assertions.require(log == "key")
+    }),
+    Test("noncanonical Map factory fails before evaluating keys and actions", () => {
+        log: ""
+        key: () => { log = log + "key"; 1 }
+        Map: { construct: () => { log = log + "factory"; null } }
+        Assertions.signals(Error, () => { 1.caseOf(%{ key(): () => 11 }) })
+        Assertions.require(log == "")
+    }),
+    Test("ordinary case construction retains key value and hash order", () => {
+        log: ""
+        key: {
+            hash: () => { log = log + "h"; 1 }
+            match: (subject) => true
+        }
+        makeKey: () => { log = log + "k"; key }
+        makeAction: () => { log = log + "v"; () => 42 }
+        result: 1.caseOf(%{ makeKey(): makeAction() })
+        Assertions.require(result == 42)
+        Assertions.require(log == "kvh")
+    }),
+    Test("selected Integer actions compose genuine Future suspension", () => {
+        result: match(1) {
+            0: 11
+            1: (() => 42).future().value()
+            Any: 53
+        }
+        Assertions.require(result == 42)
+    }),
+    Test("ordinary Object match retains non Boolean equality results", () => {
+        Base: { equalTo: (subject) => 7 }
+        matcher: Base.alias("equalTo", "==")
+        Assertions.require(matcher.match(1) == 7)
+        Assertions.signals(Error, () => { 1.caseOf(%{ matcher: () => 42 }) })
+        Assertions.require(41.match(41) === true)
+        Assertions.require(41.match(42) === false)
     })
 ]
 tests.freeze()

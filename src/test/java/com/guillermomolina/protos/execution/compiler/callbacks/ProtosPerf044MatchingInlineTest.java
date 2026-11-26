@@ -18,26 +18,40 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
+import com.guillermomolina.protos.runtime.ProtosActorModuleState;
+import com.guillermomolina.protos.runtime.ProtosTask;
+import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosMapValue;
+import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.semantic.Canonicalizer;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
+import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
 import com.oracle.truffle.api.bytecode.Instruction;
 import com.oracle.truffle.api.source.Source;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
+import org.graalvm.polyglot.Context;
 
 /**
  * PERF044: ordinary {@code caseOf} sends, whatever their source spelling,
  * run their standard recognition in the enclosing root as compiler-visible
- * alternatives, each selecting its matcher through its own ordinary
- * {@code GetMethod}/{@code CallUnaryMethod} site, with no case-table call
- * request; standard Array.match and Map.match children use the same send.
+ * alternatives. Admitted literal Integer tables use primitive comparisons;
+ * the ordinary Map path keeps per-alternative method selection and invocation.
+ * Standard Array.match and Map.match children share primitive recognition.
  */
 final class ProtosPerf044MatchingInlineTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
@@ -434,6 +448,274 @@ final class ProtosPerf044MatchingInlineTest {
                     (ids[Complex(1, 0.0)] == "positive") &&
                     (ids[Complex(1, -0.0)] == "negative") && (ids.size() == 4)
                 """));
+    }
+
+    @Test
+    void admittedRegionContainsOnlyPrimitiveRecognitionAndInlineActions() {
+        ProtosTestExecutionSupport.callEntered(() -> {
+            List<Instruction> region = directRegion(lower(EXPLICIT));
+            List<String> operations = region.stream().map(ProtosInstructionNames::of).toList();
+            assertEquals(3, count(operations, "CaseLongEquals"));
+            for (String forbidden : List.of("MakeMap", "PrepareMapInitialDefinition",
+                    "StructuredTryStandardKeyOperation", "GetCaseOfSnapshot", "StructuredMatcher",
+                    "StructuredHasNext", "StructuredAcceptChildOutcome", "CaseOfCommitted",
+                    "CaseOfSelectedAction", "CaseOfSelectedCaptureCount", "CaseOfSelectedCapture",
+                    "IsInlineCaseAction", "GetMethod", "CallBinaryMethod", "CallNilaryMethod",
+                    "MaterializeClosure", "CurrentActivation", "ResumeDispatchedContinuation")) {
+                assertEquals(0, count(operations, forbidden), () -> forbidden + ": " + region);
+            }
+            assertTrue(region.stream().anyMatch(instruction -> instruction.getName().equals("branch")),
+                    "successful admission branches past ordinary Map construction");
+            assertTrue(region.stream().anyMatch(instruction -> instruction.getName().equals("clear.local")),
+                    "admission releases the factory and Any before executing an action");
+            return null;
+        });
+    }
+
+    @Test
+    void primitiveRegionHasNoSixteenAlternativeLimit() {
+        StringBuilder source = new StringBuilder("20.caseOf(%{\n");
+        for (int key = 0; key <= 20; key++) {
+            source.append(key).append(": () => ").append(key * 2).append('\n');
+        }
+        source.append("})");
+        ProtosTestExecutionSupport.callEntered(() -> {
+            List<String> region = directRegion(lower(source.toString())).stream()
+                    .map(ProtosInstructionNames::of).toList();
+            assertEquals(21, count(region, "CaseLongEquals"));
+            assertEquals(1, count(region, "CaseOfNoSelection"));
+            assertEquals(0, count(region, "StructuredMatcher"));
+            return null;
+        });
+    }
+
+    @Test
+    void dynamicIntegerSubjectsSelectEveryPositionAndDefault() throws Exception {
+        for (long value : new long[] {0, 1, 2, 9}) {
+            long expected = switch ((int) value) { case 0 -> 11; case 1 -> 23; case 2 -> 37; default -> 53; };
+            assertEquals(expected, run(EXPLICIT.replace("value: 2", "value: " + value)));
+            assertEquals(expected, run(CONTEXTUAL.replace("value: 2", "value: " + value)));
+        }
+    }
+
+    @Test
+    void negativeAndSigned64EndpointsHaveExactValues() throws Exception {
+        String source = """
+                value: -9223372036854775808
+                match(value) {
+                    -9223372036854775808: 11
+                    -1: 23
+                    9223372036854775807: 37
+                    Any: 53
+                }
+                """;
+        assertEquals(1, count(names(source), "AdmitsDirectLongCaseOf"));
+        assertEquals(11L, run(source));
+        assertEquals(23L, run(source.replace("value: -9223372036854775808", "value: -1")));
+        assertEquals(37L, run(source.replace("value: -9223372036854775808", "value: 9223372036854775807")));
+    }
+
+    @Test
+    void noDefaultPreservesSuccessAndTheOrdinaryError() throws Exception {
+        assertEquals(23L, run("1.caseOf(%{ 0: () => 11; 1: () => 23 })"));
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
+        ProtosSignalException failure = assertThrows(ProtosSignalException.class,
+                () -> ProtosTestExecutionSupport.evaluate(
+                        "2.caseOf(%{ 0: () => 11; 1: () => 23 })", prelude.newModuleActivation()));
+        assertSame(prelude.errorPrototype(), failure.error().parent().orElseThrow());
+        assertThrows(ProtosSignalException.class, () -> run("2.caseOf(%{})"));
+    }
+
+    @Test
+    void exactDuplicateValuesAndDynamicKeysNeverElideConstruction() throws Exception {
+        for (String source : List.of(
+                "1.caseOf(%{ 1: () => 11; 0x1: () => 23 })",
+                "0.caseOf(%{ 0: () => 11; -0: () => 23 })",
+                "key: () => 1\n1.caseOf(%{ key(): () => 11 })",
+                "action: () => 11\n1.caseOf(%{ 1: action })")) {
+            assertEquals(0, count(names(source), "AdmitsDirectLongCaseOf"), source);
+        }
+        assertThrows(ProtosSignalException.class,
+                () -> run("1.caseOf(%{ 1: () => 11; 0x1: () => 23 })"));
+    }
+
+    @Test
+    void lexicalAnyAndCustomCaseOfKeepTheirActualObjects() throws Exception {
+        assertEquals(37L, run("""
+                Any: { match: (subject) => false }
+                match(1) { 1: 37; Any: 53 }
+                """));
+        assertThrows(ProtosSignalException.class, () -> run("""
+                Any: { match: (subject) => false }
+                match(9) { 1: 37; Any: 53 }
+                """));
+        assertEquals(53L, run("""
+                Any: { match: (subject) => [subject] }
+                match(9) { 1: 37; Any: (value) => value + 44 }
+                """));
+        assertSame(Boolean.TRUE, run("""
+                saved: { table: null }
+                subject: { caseOf: (table) => { saved.table = table; 7 } }
+                selected: match(subject) { 0: 11; 1: 23; Any: 53 }
+                (selected == 7) && (saved.table[0]() == 11) && (saved.table[Any]() == 53)
+                """));
+    }
+
+    @Test
+    void authenticBootstrapCertifiesOnlyItsActualAnyAndIntegerBehavior() throws Exception {
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
+        Object any = prelude.bindings().readLocalSlot("Any").orElseThrow();
+        ProtosObjectValue factory = (ProtosObjectValue) prelude.bindings().readLocalSlot("Map").orElseThrow();
+        assertTrue(ProtosBytecodeRootNode.AdmitsDirectLongCaseOf.frozenTable(factory, prelude, false));
+        assertTrue(ProtosBytecodeRootNode.AdmitsDirectLongCaseOf.frozenTable(factory, prelude, true));
+        assertTrue(ProtosBytecodeRootNode.AdmitsStandardCaseAny.frozenAny((ProtosObjectValue) any, prelude));
+        ProtosPrelude synthetic = new ProtosPrelude(prelude.bindings(), prelude.contextPrototype());
+        assertFalse(synthetic.isStandardAnyForRuntime(any));
+        assertFalse(ProtosBytecodeRootNode.AdmitsDirectLongCaseOf.frozenTable(factory, synthetic, false));
+        assertFalse(ProtosBytecodeRootNode.AdmitsStandardCaseAny.frozenAny((ProtosObjectValue) any, synthetic));
+        assertEquals(37L, ProtosTestExecutionSupport.evaluate(EXPLICIT, synthetic.newModuleActivation()));
+        ProtosObjectValue customFactory = new ProtosObjectValue(factory);
+        customFactory.createLocalSlot("call", factory.readLocalSlot("construct").orElseThrow());
+        customFactory.freeze();
+        assertFalse(ProtosBytecodeRootNode.AdmitsDirectLongCaseOf.frozenTable(customFactory, prelude, false));
+        ProtosObjectValue customAny = new ProtosObjectValue((ProtosObjectValue) any);
+        customAny.freeze();
+        assertFalse(ProtosBytecodeRootNode.AdmitsStandardCaseAny.frozenAny(customAny, prelude));
+    }
+
+    @Test
+    void primitiveMatchAndNestedActionsReturnTheirExactNormalResults() throws Exception {
+        assertSame(Boolean.TRUE, run("""
+                matcher: 41
+                subject: 41
+                first: matcher.match(subject)
+                second: matcher.match(subject + 1)
+                selected: match(1) { 0: false; 1: match(2) { 2: null }; Any: true }
+                first && (second == false) && (selected === null)
+                """));
+    }
+
+    @Test
+    void frozenNoncanonicalHashAndEqualityKeepTheirOrdinaryEffects() throws Exception {
+        ProtosPrelude core = new ProtosCoreBootstrap().bootstrap(CORE);
+        AtomicInteger hashes = new AtomicInteger();
+        ProtosObjectValue customHash = new ProtosObjectValue(core.smallIntegerPrototype());
+        customHash.createLocalSlot("hash", ProtosClosureValue.nativeClosure((activation, supplied) -> {
+            hashes.incrementAndGet();
+            return 0L;
+        }));
+        customHash.freeze();
+        ProtosPrelude hashed = matchingPrelude(core, customHash);
+        assertFalse(ProtosBytecodeRootNode.AdmitsDirectLongCaseOf.frozenTable(
+                (ProtosObjectValue) core.bindings().readLocalSlot("Map").orElseThrow(), hashed, false));
+        assertEquals(37L, ProtosTestExecutionSupport.evaluate(EXPLICIT, hashed.newModuleActivation()));
+        assertEquals(3, hashes.get(), "each Integer key is hashed before any action is selected");
+
+        ProtosObjectValue customEquality = new ProtosObjectValue(core.smallIntegerPrototype());
+        customEquality.createLocalSlot("==", ProtosClosureValue.nativeClosure((activation, supplied) -> 7L));
+        customEquality.freeze();
+        ProtosPrelude compared = matchingPrelude(core, customEquality);
+        assertFalse(ProtosBytecodeRootNode.AdmitsStandardLongMatch.frozenLongMatch(compared));
+        assertEquals(7L, ProtosTestExecutionSupport.evaluate("1.match(1)", compared.newModuleActivation()),
+                "Object.match returns custom equality results without coercion");
+        assertThrows(ProtosSignalException.class, () -> ProtosTestExecutionSupport.evaluate(
+                "1.caseOf(%{ 1: () => 37 })", compared.newModuleActivation()));
+    }
+
+    @Test
+    void redefinedIntegerCaseOfReceivesTheRealMapAndLiteralActions() throws Exception {
+        ProtosPrelude core = new ProtosCoreBootstrap().bootstrap(CORE);
+        ProtosObjectValue custom = new ProtosObjectValue(core.smallIntegerPrototype());
+        custom.createLocalSlot("caseOf", ProtosClosureValue.nativeClosure(
+                (activation, supplied) -> supplied.get(0)));
+        custom.freeze();
+        ProtosPrelude prelude = matchingPrelude(core, custom);
+        assertFalse(ProtosBytecodeRootNode.AdmitsDirectLongCaseOf.frozenTable(
+                (ProtosObjectValue) core.bindings().readLocalSlot("Map").orElseThrow(), prelude, false));
+        Object result = ProtosTestExecutionSupport.evaluate(EXPLICIT, prelude.newModuleActivation());
+        assertTrue(result instanceof ProtosMapValue);
+        ProtosMapValue table = (ProtosMapValue) result;
+        assertEquals(4, table.associationSnapshot().size());
+        for (Map.Entry<Object, Object> association : table.associationSnapshot()) {
+            assertTrue(association.getValue() instanceof ProtosClosureValue,
+                    "the custom consumer observes the materialized literal Closure");
+        }
+    }
+
+    @Test
+    void admittedSelectedActionReallySuspendsAndResumes() throws Exception {
+        String program = """
+                value: 1
+                match(value) {
+                    0: 11
+                    1: (() => 42).future().value()
+                    Any: 53
+                }
+                """;
+        assertEquals(1, count(names(program), "AdmitsDirectLongCaseOf"));
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
+                ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+                ProtosActivation module = prelude.newModuleActivation(
+                        new ProtosActorModuleState(), null, prelude.newExecutionContext(), domain);
+                CallTarget top = ProtosLanguageContext.current().parsePublic(
+                        Source.newBuilder(ProtosLanguage.ID, program, "matching-suspension.protos")
+                                .mimeType(ProtosLanguage.MIME_TYPE).build());
+                ProtosTask task = domain.createTask(
+                        null, current -> ProtosBytecodeTaskExecution.execute(current, top, module));
+                assertTrue(domain.dispatchOne());
+                assertEquals(ProtosTask.State.SUSPENDED, task.state());
+                for (int step = 0; step < 10 && domain.dispatchOne(); step++) {
+                    // Drain only this bounded Future/task interaction.
+                }
+                assertEquals(ProtosTask.State.COMPLETED, task.state());
+                assertEquals(42L, task.result().orElseThrow());
+            } finally {
+                context.leave();
+            }
+        }
+    }
+
+    /* Retain real bootstrap certificates while changing only the tested primitive delegation. */
+    private static ProtosPrelude matchingPrelude(ProtosPrelude core, ProtosObjectValue smallInteger) {
+        ProtosObjectValue bindings = new ProtosObjectValue(core.contextPrototype());
+        core.bindings().localSlotsSnapshot().forEach((name, value) ->
+                bindings.createLocalSlot(name, name.equals("SmallInteger") ? smallInteger : value));
+        bindings.freeze();
+        ProtosObjectValue any = (ProtosObjectValue) core.bindings().readLocalSlot("Any").orElseThrow();
+        ProtosObjectValue root = ProtosObjectValue.rootObject();
+        return new ProtosPrelude(bindings, core.contextPrototype(),
+                null, null, null, null, null, null, Map.of(), List.of(), Map.of(),
+                null, null, null, null, null,
+                any, (ProtosClosureValue) any.readLocalSlot("match").orElseThrow(),
+                (ProtosClosureValue) root.readLocalSlot("match").orElseThrow(),
+                (ProtosClosureValue) root.readLocalSlot("==").orElseThrow(),
+                (ProtosClosureValue) core.integerPrototype().readLocalSlot("negated").orElseThrow());
+    }
+
+    /* Follow admission's false branch; ordinary instructions remain outside this interval. */
+    private static List<Instruction> directRegion(ProtosBytecodeRootNode root) {
+        List<Instruction> instructions = root.getBytecodeNode().getInstructionsAsList();
+        Instruction admission = instructions.stream()
+                .filter(instruction -> ProtosInstructionNames.of(instruction).endsWith("AdmitsDirectLongCaseOf"))
+                .findFirst().orElseThrow();
+        Instruction guard = instructions.stream()
+                .filter(instruction -> instruction.getBytecodeIndex() > admission.getBytecodeIndex())
+                .findFirst().orElseThrow();
+        assertTrue(guard.getName().contains("branch.false"), guard.toString());
+        int fallback = guard.getArguments().stream()
+                .filter(argument -> argument.getKind() == Instruction.Argument.Kind.BYTECODE_INDEX)
+                .findFirst().orElseThrow().asBytecodeIndex();
+        int start = instructions.stream()
+                .filter(instruction -> instruction.getBytecodeIndex() > guard.getBytecodeIndex()
+                        && instruction.getBytecodeIndex() < fallback)
+                .filter(instruction -> ProtosInstructionNames.of(instruction).endsWith("AdmitsStandardCaseAny"))
+                .mapToInt(Instruction::getBytecodeIndex).max().orElse(guard.getBytecodeIndex());
+        return instructions.stream().filter(instruction -> instruction.getBytecodeIndex() > start
+                && instruction.getBytecodeIndex() < fallback).toList();
     }
 
     private static Object run(String source) throws Exception {

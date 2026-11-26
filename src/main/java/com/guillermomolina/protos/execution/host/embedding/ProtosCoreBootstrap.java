@@ -432,8 +432,13 @@ public final class ProtosCoreBootstrap {
         }
         ProtosStandardArrayProtocol.install(arrayPrototype);
 
-        requirePrototype(
+        ProtosObjectValue anyPrototype = requirePrototype(
                 bootstrapContext, "Any", ProtosObjectValue.rootObject());
+        ProtosClosureValue anyMatchMethod = requireSourceBackedClosure(anyPrototype, "match");
+        ProtosClosureValue objectMatchMethod =
+                requireSourceBackedClosure(ProtosObjectValue.rootObject(), "match");
+        ProtosClosureValue objectEqualsMethod =
+                requireSourceBackedClosure(ProtosObjectValue.rootObject(), "==");
         requirePrototype(
                 bootstrapContext, "Capture", ProtosObjectValue.rootObject());
 
@@ -696,7 +701,12 @@ public final class ProtosCoreBootstrap {
                 filesystemOpenMethod,
                 entropyPrototype,
                 clockPrototype,
-                executionProtocols);
+                executionProtocols,
+                anyPrototype,
+                anyMatchMethod,
+                objectMatchMethod,
+                objectEqualsMethod,
+                requireSourceBackedClosure(integerPrototype, "negated"));
         // The source-backed facility hides its runtime behind guest code, so the Prelude keeps
         // that identity privately for runtimeForPrelude (semantic transfer and Actor consumers).
         prelude.bindModuleRuntimeForRuntime(moduleRuntime);

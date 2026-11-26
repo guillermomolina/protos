@@ -4148,6 +4148,30 @@ final class CanonicalToBytecodeLowerer {
             boolean terminal,
             Runnable loadReceiver,
             Runnable loadArgument) {
+        boolean primitiveMatch = selector.equals("match");
+        if (primitiveMatch) {
+            builder.beginConditional();
+            builder.beginAdmitsStandardLongMatch();
+            loadReceiver.run();
+            loadArgument.run();
+            builder.endAdmitsStandardLongMatch();
+            builder.beginCaseLongEquals();
+            loadReceiver.run();
+            loadArgument.run();
+            builder.endCaseLongEquals();
+        }
+        emitSelectedDirectMethodSend(builder, selector, terminal, loadReceiver, loadArgument);
+        if (primitiveMatch) {
+            builder.endConditional();
+        }
+    }
+
+    private static void emitSelectedDirectMethodSend(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            String selector,
+            boolean terminal,
+            Runnable loadReceiver,
+            Runnable loadArgument) {
         builder.beginCallBinaryMethod(terminal, true);
         builder.beginGetMethod(
                 TruffleString.fromJavaStringUncached(
@@ -4160,32 +4184,122 @@ final class CanonicalToBytecodeLowerer {
         builder.endCallBinaryMethod();
     }
 
+    private void emitComposedDirectMatchValue(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            Runnable loadMatcher,
+            Runnable loadSubject,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue,
+            boolean primitiveCarrierResult) {
+        currentRootMayRequirePrelude = true;
+        builder.beginConditional();
+        builder.beginAdmitsStandardLongMatch();
+        loadMatcher.run();
+        loadSubject.run();
+        builder.endAdmitsStandardLongMatch();
+        builder.beginCaseLongEquals();
+        loadMatcher.run();
+        loadSubject.run();
+        builder.endCaseLongEquals();
+        emitComposedDirectUnaryValue(builder,
+                () -> emitSelectedDirectMethodSend(builder, "match", false, loadMatcher, loadSubject),
+                childResult, resumeValue, primitiveCarrierResult);
+        builder.endConditional();
+    }
+
+    private void emitComposedDirectUnaryOperands(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            InvocationShape shape,
+            CanonicalExpression receiver,
+            String selector,
+            CanonicalExpression argument,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue,
+            boolean primitiveCarrierResult) {
+        if (shape != InvocationShape.SEND || !"match".equals(selector)) {
+            emitComposedDirectUnaryValue(builder,
+                    () -> emitDirectUnaryOperation(builder, shape, receiver, selector, argument, true, false),
+                    childResult, resumeValue, primitiveCarrierResult);
+            return;
+        }
+        noteDynamicInvocation();
+        builder.beginTag(StandardTags.CallTag.class);
+        builder.beginBlock();
+        builder.beginBindStackValue();
+        emitDirectUnaryOperand(builder, receiver, false);
+        StackValue matcher = builder.endBindStackValue();
+        builder.beginBindStackValue();
+        emitDirectUnaryOperand(builder, argument, true);
+        StackValue subject = builder.endBindStackValue();
+        emitComposedDirectMatchValue(builder,
+                () -> builder.emitLoadStackValue(matcher),
+                () -> builder.emitLoadStackValue(subject),
+                childResult, resumeValue, primitiveCarrierResult);
+        builder.endBlock();
+        builder.endTag(StandardTags.CallTag.class);
+    }
+
+    private void emitComposedDirectUnaryExpression(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalExpression expression,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue,
+            boolean primitiveCarrierResult) {
+        if (expression instanceof CanonicalSend send) {
+            emitComposedDirectUnaryOperands(builder, InvocationShape.SEND, send.receiver(),
+                    send.message(), send.arguments().get(0), childResult, resumeValue,
+                    primitiveCarrierResult);
+        } else {
+            emitComposedDirectUnaryValue(builder,
+                    () -> emitDirectUnaryValue(builder, expression, true),
+                    childResult, resumeValue, primitiveCarrierResult);
+        }
+    }
+
     /*
-     * The ordinary match send of a staged matcher and subject through the
-     * direct method send, composing a suspended result in this root; the
-     * completed outcome is stored in {@code outcome}.
+     * A real case table consumes primitive recognition directly. Only an
+     * ordinary matcher result requires staging and continuation composition.
      */
     private void emitDirectMatchSend(
             ProtosBytecodeRootNodeGen.Builder builder,
             BytecodeLocal matcher,
             BytecodeLocal subject,
+            BytecodeLocal state,
             BytecodeLocal outcome,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
         noteDynamicInvocation();
+        currentRootMayRequirePrelude = true;
+        builder.beginTag(StandardTags.CallTag.class);
+        builder.beginIfThenElse();
+        builder.beginAdmitsStandardLongMatch();
+        builder.emitLoadLocal(matcher);
+        builder.emitLoadLocal(subject);
+        builder.endAdmitsStandardLongMatch();
+
+        builder.beginStructuredAcceptChildOutcome(ProtosStructuredPhase.CHILD);
+        builder.emitLoadLocal(state);
+        builder.beginCaseLongEquals();
+        builder.emitLoadLocal(matcher);
+        builder.emitLoadLocal(subject);
+        builder.endCaseLongEquals();
+        builder.endStructuredAcceptChildOutcome();
+
+        builder.beginBlock();
         builder.beginStoreLocal(outcome);
-        emitComposedDirectUnaryValue(
-                builder,
-                () -> {
-                    builder.beginTag(StandardTags.CallTag.class);
-                    emitDirectMethodSend(
-                            builder, "match", false,
-                            () -> builder.emitLoadLocal(matcher),
-                            () -> builder.emitLoadLocal(subject));
-                    builder.endTag(StandardTags.CallTag.class);
-                },
+        emitComposedDirectUnaryValue(builder,
+                () -> emitSelectedDirectMethodSend(builder, "match", false,
+                        () -> builder.emitLoadLocal(matcher),
+                        () -> builder.emitLoadLocal(subject)),
                 childResult, resumeValue, false);
         builder.endStoreLocal();
+        builder.beginStructuredAcceptChildOutcome(ProtosStructuredPhase.CHILD);
+        builder.emitLoadLocal(state);
+        builder.emitLoadAndClearTempLocal(outcome);
+        builder.endStructuredAcceptChildOutcome();
+        builder.endBlock();
+        builder.endIfThenElse();
+        builder.endTag(StandardTags.CallTag.class);
     }
 
     /**
@@ -4527,9 +4641,8 @@ final class CanonicalToBytecodeLowerer {
         }
         if (isDirectUnaryCall(expression)) {
             builder.beginStoreLocal(target);
-            emitComposedDirectUnaryValue(
-                    builder,
-                    () -> emitDirectUnaryValue(builder, expression, true),
+            emitComposedDirectUnaryExpression(
+                    builder, expression,
                     childResult, resumeValue, false);
             builder.endStoreLocal();
             return;
@@ -5016,13 +5129,29 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal resumeValue,
             boolean defaultContext,
             java.util.Map<Integer, BytecodeLocal> retainedValues) {
+        emitMapConstruction(builder, map, result, preparedCall, childResult, resumeValue,
+                defaultContext, retainedValues, null, null, null);
+    }
+
+    private void emitMapConstruction(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalMapConstruction map,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue,
+            boolean defaultContext,
+            java.util.Map<Integer, BytecodeLocal> retainedValues,
+            BytecodeLocal evaluatedFactory,
+            BytecodeLocal evaluatedAny,
+            BytecodeLocal anyEvaluated) {
         requireDefaultScratch(
                 result,
                 preparedCall,
                 childResult,
                 resumeValue);
 
-        BytecodeLocal factoryValue =
+        BytecodeLocal factoryValue = evaluatedFactory != null ? evaluatedFactory :
                 builder.createLocal(
                         defaultContext
                                 ? "defaultMapConstructionFactory"
@@ -5035,22 +5164,14 @@ final class CanonicalToBytecodeLowerer {
                                 : "mapConstructionValue",
                         null);
 
-        if (defaultContext) {
-            emitDefaultExpressionToLocal(
-                    builder,
-                    map.factory(),
-                    factoryValue,
-                    preparedCall,
-                    childResult,
-                    resumeValue);
-        } else {
-            emitBodyExpressionToLocal(
-                    builder,
-                    map.factory(),
-                    factoryValue,
-                    preparedCall,
-                    childResult,
-                    resumeValue);
+        if (evaluatedFactory == null) {
+            if (defaultContext) {
+                emitDefaultExpressionToLocal(builder, map.factory(), factoryValue,
+                        preparedCall, childResult, resumeValue);
+            } else {
+                emitBodyExpressionToLocal(builder, map.factory(), factoryValue,
+                        preparedCall, childResult, resumeValue);
+            }
         }
 
         builder.beginStoreLocal(mapValue);
@@ -5086,36 +5207,30 @@ final class CanonicalToBytecodeLowerer {
                                     : "mapInitialDefinitionCallbackResult",
                             null);
 
+            boolean reusedAny = evaluatedAny != null && entryPosition == map.entries().size() - 1;
+            if (reusedAny) {
+                builder.beginIfThenElse();
+                builder.emitLoadLocal(anyEvaluated);
+                builder.beginStoreLocal(key);
+                builder.emitLoadLocal(evaluatedAny);
+                builder.endStoreLocal();
+            }
             if (defaultContext) {
-                emitDefaultExpressionToLocal(
-                        builder,
-                        entry.key(),
-                        key,
-                        preparedCall,
-                        childResult,
-                        resumeValue);
-                emitDefaultExpressionToLocal(
-                        builder,
-                        entry.value(),
-                        value,
-                        preparedCall,
-                        childResult,
-                        resumeValue);
+                emitDefaultExpressionToLocal(builder, entry.key(), key,
+                        preparedCall, childResult, resumeValue);
             } else {
-                emitBodyExpressionToLocal(
-                        builder,
-                        entry.key(),
-                        key,
-                        preparedCall,
-                        childResult,
-                        resumeValue);
-                emitBodyExpressionToLocal(
-                        builder,
-                        entry.value(),
-                        value,
-                        preparedCall,
-                        childResult,
-                        resumeValue);
+                emitBodyExpressionToLocal(builder, entry.key(), key,
+                        preparedCall, childResult, resumeValue);
+            }
+            if (reusedAny) {
+                builder.endIfThenElse();
+            }
+            if (defaultContext) {
+                emitDefaultExpressionToLocal(builder, entry.value(), value,
+                        preparedCall, childResult, resumeValue);
+            } else {
+                emitBodyExpressionToLocal(builder, entry.value(), value,
+                        preparedCall, childResult, resumeValue);
             }
             BytecodeLocal retained = retainedValues.get(entryPosition);
             if (retained != null) {
@@ -6735,11 +6850,8 @@ final class CanonicalToBytecodeLowerer {
                 builder.beginStoreLocal(result);
             }
 
-            emitComposedDirectUnaryValue(
-                    builder,
-                    () -> emitDirectUnaryOperation(
-                            builder, shape, receiver, selector,
-                            arguments.get(0), true, false),
+            emitComposedDirectUnaryOperands(
+                    builder, shape, receiver, selector, arguments.get(0),
                     childResult, resumeValue, primitiveCarrierResult);
 
             if (result == null) {
@@ -7135,9 +7247,8 @@ final class CanonicalToBytecodeLowerer {
             return;
         }
         if (isDirectUnaryCall(expression)) {
-            emitComposedDirectUnaryValue(
-                    builder,
-                    () -> emitDirectUnaryValue(builder, expression, true),
+            emitComposedDirectUnaryExpression(
+                    builder, expression,
                     childResult, resumeValue, primitiveCarrierResult);
             return;
         }
@@ -7199,9 +7310,8 @@ final class CanonicalToBytecodeLowerer {
         }
         if (isDirectUnaryCall(expression)) {
             builder.beginDiscardValue();
-            emitComposedDirectUnaryValue(
-                    builder,
-                    () -> emitDirectUnaryValue(builder, expression, true),
+            emitComposedDirectUnaryExpression(
+                    builder, expression,
                     childResult, resumeValue, true);
             builder.endDiscardValue();
             return;
@@ -9846,9 +9956,8 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
         if (isDirectUnaryCall(expression)) {
-            emitComposedDirectUnaryValue(
-                    builder,
-                    () -> emitDirectUnaryValue(builder, expression, true),
+            emitComposedDirectUnaryExpression(
+                    builder, expression,
                     childResult, resumeValue, true);
             return;
         }
@@ -9924,9 +10033,8 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal resumeValue) {
         if (isDirectUnaryCall(expression)) {
             builder.beginStoreLocal(target);
-            emitComposedDirectUnaryValue(
-                    builder,
-                    () -> emitDirectUnaryValue(builder, expression, true),
+            emitComposedDirectUnaryExpression(
+                    builder, expression,
                     childResult, resumeValue, true);
             builder.endStoreLocal();
             return;
@@ -11085,6 +11193,177 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal childResult,
             BytecodeLocal resumeValue,
             boolean primitiveCarrierResult) {
+        long[] keys = directLongCaseKeys(send.arguments().get(0));
+        if (keys == null) {
+            emitOrdinaryCaseOfSend(builder, send, result, scratch, childResult, resumeValue,
+                    primitiveCarrierResult, null, null, null, null);
+            return;
+        }
+        CanonicalMapConstruction table = (CanonicalMapConstruction) send.arguments().get(0);
+        boolean hasAny = keys.length < table.entries().size();
+        boolean negatedKeys = table.entries().stream()
+                .limit(keys.length).anyMatch(entry -> entry.key() instanceof CanonicalSend);
+        currentRootMayRequirePrelude = true;
+        builder.beginTag(StandardTags.CallTag.class);
+        builder.beginBlock();
+        Runnable loadSubject;
+        if (isDirectUnaryOperand(send.receiver())) {
+            builder.beginBindStackValue();
+            emitDirectUnaryOperand(builder, send.receiver(), false);
+            StackValue subject = builder.endBindStackValue();
+            loadSubject = () -> builder.emitLoadStackValue(subject);
+        } else {
+            BytecodeLocal subject = builder.createLocal("directCaseSubject", null);
+            stageOperand(builder, send.receiver(), subject, scratch, childResult, resumeValue,
+                    this::emitBodyExpressionToLocal);
+            loadSubject = () -> builder.emitLoadLocal(subject);
+        }
+        BytecodeLocal factory = builder.createLocal("directCaseFactory", null);
+        stageOperand(builder, table.factory(), factory, scratch, childResult, resumeValue,
+                this::emitBodyExpressionToLocal);
+        BytecodeLocal any = hasAny ? builder.createLocal("directCaseAny", null) : null;
+        BytecodeLocal anyEvaluated = hasAny ? builder.createLocal("directCaseAnyEvaluated", null) : null;
+        if (hasAny) {
+            builder.beginStoreLocal(anyEvaluated);
+            builder.emitLoadConstant(false);
+            builder.endStoreLocal();
+        }
+        BytecodeLabel end = builder.createLabel();
+        builder.beginIfThen();
+        builder.beginAdmitsDirectLongCaseOf(negatedKeys);
+        builder.emitLoadLocal(factory);
+        loadSubject.run();
+        builder.endAdmitsDirectLongCaseOf();
+        builder.beginBlock();
+        if (hasAny) {
+            // Earlier entries are now proven pure, before this ordinary lexical evaluation.
+            stageOperand(builder, table.entries().get(keys.length).key(), any,
+                    scratch, childResult, resumeValue, this::emitBodyExpressionToLocal);
+            builder.beginStoreLocal(anyEvaluated);
+            builder.emitLoadConstant(true);
+            builder.endStoreLocal();
+            builder.beginIfThen();
+            builder.beginAdmitsStandardCaseAny();
+            builder.emitLoadLocal(any);
+            builder.endAdmitsStandardCaseAny();
+            builder.beginBlock();
+            builder.emitClearLocal(any);
+            builder.emitClearLocal(anyEvaluated);
+        }
+        builder.emitClearLocal(factory);
+        builder.beginStoreLocal(result);
+        emitDirectLongCaseAlternatives(builder, table, keys, loadSubject,
+                scratch, childResult, resumeValue, primitiveCarrierResult);
+        builder.endStoreLocal();
+        builder.emitBranch(end);
+        if (hasAny) {
+            builder.endBlock();
+            builder.endIfThen();
+        }
+        builder.endBlock();
+        builder.endIfThen();
+        emitOrdinaryCaseOfSend(builder, send, result, scratch, childResult, resumeValue,
+                primitiveCarrierResult, loadSubject, factory, any, anyEvaluated);
+        builder.emitClearLocal(factory);
+        if (hasAny) {
+            builder.emitClearLocal(any);
+            builder.emitClearLocal(anyEvaluated);
+        }
+        builder.emitLabel(end);
+        builder.endBlock();
+        builder.endTag(StandardTags.CallTag.class);
+    }
+
+    /* Compilation-only classification; duplicate values retain ordinary construction timing. */
+    private long[] directLongCaseKeys(CanonicalExpression expression) {
+        if (!(expression instanceof CanonicalMapConstruction table)) {
+            return null;
+        }
+        int count = table.entries().size();
+        if (count > 0 && table.entries().get(count - 1).key() instanceof CanonicalLookup lookup
+                && lookup.name().equals("Any")) {
+            count--;
+        }
+        long[] keys = new long[count];
+        java.util.Set<Long> distinct = new java.util.HashSet<>();
+        ControlSiteContext context = currentControlSiteContext();
+        for (int position = 0; position < table.entries().size(); position++) {
+            CanonicalMapConstruction.Entry entry = table.entries().get(position);
+            if (!(entry.value() instanceof CanonicalClosure action)
+                    || !action.parameters().isEmpty() || !admitsInlineCaseAction(action, context)) {
+                return null;
+            }
+            if (position < count) {
+                BigInteger exact = exactCaseInteger(entry.key());
+                if (exact == null || exact.bitLength() > 63 || !distinct.add(exact.longValue())) {
+                    return null;
+                }
+                keys[position] = exact.longValue();
+            }
+        }
+        return keys;
+    }
+
+    private BigInteger exactCaseInteger(CanonicalExpression expression) {
+        if (expression instanceof CanonicalLiteral literal
+                && literal.kind() == CanonicalLiteral.Kind.NUMBER) {
+            Object descriptor = numberLiteralDescriptor(literal);
+            return descriptor instanceof Long small ? BigInteger.valueOf(small)
+                    : descriptor instanceof BigInteger large ? large : null;
+        }
+        if (expression instanceof CanonicalSend send && send.message().equals("negated")
+                && send.arguments().isEmpty() && send.receiver() instanceof CanonicalLiteral) {
+            BigInteger operand = exactCaseInteger(send.receiver());
+            return operand == null ? null : operand.negate();
+        }
+        return null;
+    }
+
+    private void emitDirectLongCaseAlternatives(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalMapConstruction table,
+            long[] keys,
+            Runnable loadSubject,
+            BytecodeLocal scratch,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue,
+            boolean primitiveCarrierResult) {
+        for (int position = 0; position < keys.length; position++) {
+            builder.beginConditional();
+            builder.beginCaseLongEquals();
+            builder.emitLoadConstant(keys[position]);
+            loadSubject.run();
+            builder.endCaseLongEquals();
+            emitInlineControlClosureBody(builder,
+                    (CanonicalClosure) table.entries().get(position).value(),
+                    InlineBodyResult.STACK, null, scratch, childResult, resumeValue,
+                    primitiveCarrierResult);
+        }
+        if (keys.length < table.entries().size()) {
+            emitInlineControlClosureBody(builder,
+                    (CanonicalClosure) table.entries().get(keys.length).value(),
+                    InlineBodyResult.STACK, null, scratch, childResult, resumeValue,
+                    primitiveCarrierResult);
+        } else {
+            builder.emitCaseOfNoSelection();
+        }
+        for (int position = 0; position < keys.length; position++) {
+            builder.endConditional();
+        }
+    }
+
+    private void emitOrdinaryCaseOfSend(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalSend send,
+            BytecodeLocal result,
+            BytecodeLocal scratch,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue,
+            boolean primitiveCarrierResult,
+            Runnable loadSubject,
+            BytecodeLocal evaluatedFactory,
+            BytecodeLocal evaluatedAny,
+            BytecodeLocal anyEvaluated) {
         // The selection observes the Prelude, like GetMethod.
         currentRootMayRequirePrelude = true;
         noteDynamicInvocation();
@@ -11093,8 +11372,14 @@ final class CanonicalToBytecodeLowerer {
         builder.beginBlock();
 
         BytecodeLocal subject = builder.createLocal("caseOfSubject", null);
-        stageOperand(builder, send.receiver(), subject,
-                scratch, childResult, resumeValue, this::emitBodyExpressionToLocal);
+        if (loadSubject == null) {
+            stageOperand(builder, send.receiver(), subject,
+                    scratch, childResult, resumeValue, this::emitBodyExpressionToLocal);
+        } else {
+            builder.beginStoreLocal(subject);
+            loadSubject.run();
+            builder.endStoreLocal();
+        }
         CanonicalExpression table = send.arguments().get(0);
         BytecodeLocal cases = builder.createLocal("caseOfTable", null);
         int alternatives = table instanceof CanonicalMapConstruction written
@@ -11117,10 +11402,12 @@ final class CanonicalToBytecodeLowerer {
                 }
             }
         }
-        if (table instanceof CanonicalMapConstruction written && !retainedValues.isEmpty()) {
+        if (table instanceof CanonicalMapConstruction written
+                && (!retainedValues.isEmpty() || evaluatedFactory != null)) {
             // The same ordinary construction, also retaining those values.
             emitMapConstruction(builder, written, cases,
-                    scratch, childResult, resumeValue, false, retainedValues);
+                    scratch, childResult, resumeValue, false, retainedValues,
+                    evaluatedFactory, evaluatedAny, anyEvaluated);
         } else {
             stageOperand(builder, table, cases,
                     scratch, childResult, resumeValue, this::emitBodyExpressionToLocal);
@@ -11215,12 +11502,8 @@ final class CanonicalToBytecodeLowerer {
         builder.emitLoadLocal(state);
         builder.endStructuredMatcher();
         builder.endStoreLocal();
-        emitDirectMatchSend(builder, matcher, subject, outcome, childResult, resumeValue);
+        emitDirectMatchSend(builder, matcher, subject, state, outcome, childResult, resumeValue);
         builder.emitClearLocal(matcher);
-        builder.beginStructuredAcceptChildOutcome(ProtosStructuredPhase.CHILD);
-        builder.emitLoadLocal(state);
-        builder.emitLoadAndClearTempLocal(outcome);
-        builder.endStructuredAcceptChildOutcome();
     }
 
     /* Fixed-arity positional invocations exist through this capture count. */

@@ -35,6 +35,11 @@ public final class ProtosPrelude {
     private final ProtosObjectValue contextPrototype;
     private final ProtosObjectValue errorPrototype;
     private final Object arrayPrototypeBinding;
+    private final ProtosObjectValue runtimeAnyPrototype;
+    private final ProtosClosureValue runtimeAnyMatchMethod;
+    private final ProtosClosureValue runtimeObjectMatchMethod;
+    private final ProtosClosureValue runtimeObjectEqualsMethod;
+    private final ProtosClosureValue runtimeIntegerNegatedMethod;
     private final ProtosObjectValue runtimeBytesPrototype;
     private final ProtosObjectValue runtimeActorRefPrototype;
     private final ProtosObjectValue runtimeTcpConnectionPrototype;
@@ -405,6 +410,51 @@ public final class ProtosPrelude {
             ProtosObjectValue runtimeEntropyPrototype,
             ProtosObjectValue runtimeClockPrototype,
             ExecutionProtocols runtimeExecutionProtocols) {
+        this(bindings, contextPrototype, runtimeBytesPrototype, runtimeActorRefPrototype,
+                runtimeTcpConnectionPrototype, runtimeTcpListenerPrototype,
+                runtimeIpAddressPrototype, runtimeIpEndpointPrototype, standardModuleMembers,
+                semanticTransferFamilies, lazyStandardModuleMembers, runtimeTcpAcceptorPrototype,
+                runtimeFilesystemOpenMethod, runtimeEntropyPrototype, runtimeClockPrototype,
+                runtimeExecutionProtocols, null, null, null, null, null);
+    }
+
+    public ProtosPrelude(
+            ProtosObjectValue bindings,
+            ProtosObjectValue contextPrototype,
+            ProtosObjectValue runtimeBytesPrototype,
+            ProtosObjectValue runtimeActorRefPrototype,
+            ProtosObjectValue runtimeTcpConnectionPrototype,
+            ProtosObjectValue runtimeTcpListenerPrototype,
+            ProtosObjectValue runtimeIpAddressPrototype,
+            ProtosObjectValue runtimeIpEndpointPrototype,
+            Map<ProtosModuleKey, Map<String, ProtosObjectValue>>
+                    standardModuleMembers,
+            List<ProtosSemanticTransferFamily> semanticTransferFamilies,
+            Map<ProtosModuleKey, Map<String, Supplier<ProtosObjectValue>>>
+                    lazyStandardModuleMembers,
+            ProtosObjectValue runtimeTcpAcceptorPrototype,
+            ProtosClosureValue runtimeFilesystemOpenMethod,
+            ProtosObjectValue runtimeEntropyPrototype,
+            ProtosObjectValue runtimeClockPrototype,
+            ExecutionProtocols runtimeExecutionProtocols,
+            ProtosObjectValue runtimeAnyPrototype,
+            ProtosClosureValue runtimeAnyMatchMethod,
+            ProtosClosureValue runtimeObjectMatchMethod,
+            ProtosClosureValue runtimeObjectEqualsMethod,
+            ProtosClosureValue runtimeIntegerNegatedMethod) {
+        requireFrozenDirectChildOfObject(runtimeAnyPrototype, "Any");
+        for (ProtosClosureValue method : new ProtosClosureValue[] {
+                runtimeAnyMatchMethod, runtimeObjectMatchMethod,
+                runtimeObjectEqualsMethod, runtimeIntegerNegatedMethod}) {
+            if (method != null && (method.definition() == null || method.nativeBody().isPresent())) {
+                throw new IllegalArgumentException("runtime matching methods must be source-backed Closures");
+            }
+        }
+        this.runtimeAnyPrototype = runtimeAnyPrototype;
+        this.runtimeAnyMatchMethod = runtimeAnyMatchMethod;
+        this.runtimeObjectMatchMethod = runtimeObjectMatchMethod;
+        this.runtimeObjectEqualsMethod = runtimeObjectEqualsMethod;
+        this.runtimeIntegerNegatedMethod = runtimeIntegerNegatedMethod;
         if (runtimeFilesystemOpenMethod != null
                 && (runtimeFilesystemOpenMethod.definition() == null
                         || runtimeFilesystemOpenMethod.nativeBody().isPresent())) {
@@ -815,6 +865,27 @@ public final class ProtosPrelude {
     /** Nullable-safe identity test used only by isolation transfer machinery. */
     public boolean isTcpListenerPrototypeForRuntime(Object candidate) {
         return runtimeTcpListenerPrototype != null && candidate == runtimeTcpListenerPrototype;
+    }
+
+    /** Bootstrap identities only; synthetic Preludes do not certify standard matching. */
+    public boolean isStandardAnyForRuntime(Object candidate) {
+        return runtimeAnyPrototype != null && candidate == runtimeAnyPrototype;
+    }
+
+    public boolean isStandardAnyMatchForRuntime(Object candidate) {
+        return runtimeAnyMatchMethod != null && candidate == runtimeAnyMatchMethod;
+    }
+
+    public boolean isStandardObjectMatchForRuntime(Object candidate) {
+        return runtimeObjectMatchMethod != null && candidate == runtimeObjectMatchMethod;
+    }
+
+    public boolean isStandardIntegerNegatedForRuntime(Object candidate) {
+        return runtimeIntegerNegatedMethod != null && candidate == runtimeIntegerNegatedMethod;
+    }
+
+    public boolean isStandardObjectEqualsForRuntime(Object candidate) {
+        return runtimeObjectEqualsMethod != null && candidate == runtimeObjectEqualsMethod;
     }
 
     /**

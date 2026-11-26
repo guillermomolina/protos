@@ -33,6 +33,7 @@ import com.guillermomolina.protos.runtime.ProtosActorModuleState;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
+import com.guillermomolina.protos.runtime.ProtosExecutionContextValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
@@ -722,7 +723,7 @@ final class ProtosPerf038ITerminalMethodSendTest {
      */
     @Test
     void representedReceiversShareOneSelectionPerFamily() throws Exception {
-        withCore(module -> {
+        withUncertifiedCore(module -> {
             evaluate("same: (x, y) => { x.match(y) }\n", "perf044a8-repr-define.protos", module);
             enterCachedTier("same", module);
             for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
@@ -864,6 +865,78 @@ final class ProtosPerf038ITerminalMethodSendTest {
         System.out.println("PERF038_I_EXPLICIT_EXTRACTION=PASS");
     }
 
+    @Test
+    void genericLocalProducersKeepLongAndDoubleGeneralSelection() throws Exception {
+        withCore(module -> {
+            ProtosPrelude core = module.prelude().orElseThrow();
+            ProtosObjectValue small = new ProtosObjectValue(
+                    new ProtosExecutionContextValue(core.smallIntegerPrototype()));
+            ProtosObjectValue floating = new ProtosObjectValue(
+                    new ProtosExecutionContextValue(core.floatPrototype()));
+            Object match = ProtosObjectValue.rootObject().readLocalSlot("match").orElseThrow();
+            small.createLocalSlot("match", match);
+            floating.createLocalSlot("match", match);
+            ProtosObjectValue bindings = new ProtosObjectValue(core.contextPrototype());
+            core.bindings().localSlotsSnapshot().forEach((name, value) -> bindings.createLocalSlot(
+                    name, name.equals("SmallInteger") ? small : name.equals("Float") ? floating : value));
+            bindings.freeze();
+            ProtosPrelude synthetic = new ProtosPrelude(bindings, core.contextPrototype());
+            ProtosActivation caller = synthetic.newModuleActivation();
+            caller.context().createLocalSlot("doubleValue", Double.valueOf(2.5));
+            evaluate("""
+                    inherited: { read: (value) => value + 10 }
+                    receiver: inherited { tag: 1 }
+                    same: (value, expected) => {
+                        operand: if(true) { value } else { receiver }
+                        operand.match(expected)
+                    }
+                    """, "perf044-generic-producer-define.protos", caller);
+            enterCachedTier("same", caller);
+            assertSame(Boolean.TRUE, evaluate("same(1, 1)", "perf044-long-cached.protos", caller));
+            assertSame(Boolean.TRUE, evaluate("same(doubleValue, doubleValue)", "perf044-double-cached.protos", caller));
+            assertEquals(1, getMethodEntries("same", caller, "doLong").size());
+            assertEquals(1, getMethodEntries("same", caller, "doDouble").size());
+            Node site = operationNode("same", caller, "GetMethod_Node");
+            // Removing the own selectors exposes non-Shape Context bridges:
+            // complete lookup still inherits Object.match, structural selection cannot.
+            small.removeLocalSlot("match");
+            floating.removeLocalSlot("match");
+            assertSame(null, ProtosValueLookup.selectStructural(small, "match"));
+            assertSame(null, ProtosValueLookup.selectStructural(floating, "match"));
+            for (int round = 0; round < PAST_CACHE_LIMITS; round++) {
+                for (String value : List.of("1", "doubleValue", "receiver", "\"text\"", "true")) {
+                    assertSame(Boolean.TRUE, evaluate("same(" + value + ", " + value + ")",
+                            "perf044-generic-producer.protos", caller));
+                }
+                assertSame(Boolean.FALSE, evaluate("same(1, 2)", "perf044-generic-long-false.protos", caller));
+                assertSame(Boolean.FALSE, evaluate("same(doubleValue, 3.5)", "perf044-generic-double-false.protos", caller));
+            }
+            assertFalse(getMethodEntries("same", caller, "doInherited").isEmpty());
+            assertFalse(getMethodEntries("same", caller, "doRootDelegated").isEmpty(),
+                    "other families still install their independent cached selections");
+            for (String family : List.of("doLong", "doDouble")) {
+                for (Object entry : getMethodEntries("same", caller, family)) {
+                    assertFalse(inheritedSelection(entry).isValid(),
+                            "the numeric cached selections cannot serve the general phase");
+                }
+            }
+            small.createLocalSlot("match", match);
+            floating.createLocalSlot("match", match);
+            assertSame(Boolean.TRUE, evaluate("same(1, 1)", "perf044-long-recovery.protos", caller));
+            assertSame(Boolean.TRUE, evaluate("same(doubleValue, doubleValue)", "perf044-double-recovery.protos", caller));
+            for (String family : List.of("doLong", "doDouble")) {
+                boolean validSelection = false;
+                for (Object entry : getMethodEntries("same", caller, family)) {
+                    validSelection |= inheritedSelection(entry).isValid();
+                }
+                assertTrue(validSelection,
+                        family + " has a valid cached selection after its general selection was active");
+            }
+            assertSame(site, operationNode("same", caller, "GetMethod_Node"),
+                    "cached, general and recovered selections use the same GetMethod node");
+        });
+    }
+
     /*
      * Independent selection families. Each test first executes the complete
      * selection of another receiver family at the same GetMethod site, then
@@ -874,7 +947,7 @@ final class ProtosPerf038ITerminalMethodSendTest {
     /** A complete selection first never prevents SmallInteger specialization. */
     @Test
     void generalSelectionFirstLeavesSmallIntegerSpecialization() throws Exception {
-        withCore(module -> {
+        withUncertifiedCore(module -> {
             evaluate("same: (x, y) => { x.match(y) }\n", "perf044a8r1-long-define.protos", module);
             enterCachedTier("same", module);
             runGeneralMatch("same", module);
@@ -976,7 +1049,7 @@ final class ProtosPerf038ITerminalMethodSendTest {
     /** An installed entry stays installed and authoritative across another family's complete selection. */
     @Test
     void installedEntrySurvivesAnotherFamilyCompleteSelection() throws Exception {
-        withCore(module -> {
+        withUncertifiedCore(module -> {
             evaluate("""
                     same: (x, y) => { x.match(y) }
                     first: { pick: (value) => { value + 1 } }
@@ -1019,7 +1092,7 @@ final class ProtosPerf038ITerminalMethodSendTest {
      */
     @Test
     void saturatedFamilyLeavesOtherFamiliesSpecializing() throws Exception {
-        withCore(module -> {
+        withUncertifiedCore(module -> {
             evaluate("""
                     same: (x, y) => { x.match(y) }
                     o1: { a1: 1 }
@@ -1552,11 +1625,23 @@ final class ProtosPerf038ITerminalMethodSendTest {
     }
 
     private static void withCore(CoreTest test) throws Exception {
+        withCore(test, true);
+    }
+
+    /** These cache oracles exercise GetMethod, including on Integer/Integer matching. */
+    private static void withUncertifiedCore(CoreTest test) throws Exception {
+        withCore(test, false);
+    }
+
+    private static void withCore(CoreTest test, boolean certifyMatching) throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
                 ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
+                if (!certifyMatching) {
+                    prelude = new ProtosPrelude(prelude.bindings(), prelude.contextPrototype());
+                }
                 test.run(prelude.newModuleActivation());
             } finally {
                 context.leave();

@@ -5955,6 +5955,248 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
+    /** Physical equality, reachable only after ordinary matching selection is admitted. */
+    @Operation(storeBytecodeIndex = false)
+    public static final class CaseLongEquals {
+        @Specialization
+        public static boolean compare(long left, long right) {
+            return left == right;
+        }
+    }
+
+    /** Pure selection proof shared by standalone and table-driven Integer matching. */
+    @Operation(storeBytecodeIndex = false)
+    public static final class AdmitsStandardLongMatch {
+        @Specialization(
+                guards = {"closure != null", "closure == cachedClosure",
+                        "cachedPrelude != null", "standard"},
+                limit = "3", excludeForUncached = true)
+        public static boolean doCaptured(
+                long matcher, long subject,
+                @Bind VirtualFrame frame,
+                @Bind("capturedClosure(frame)") ProtosClosureValue closure,
+                @Cached("closure") ProtosClosureValue cachedClosure,
+                @Cached("cachedClosure.preludeOrNullForRuntime()") ProtosPrelude cachedPrelude,
+                @Cached("frozenLongMatch(cachedPrelude)") boolean standard) {
+            return true;
+        }
+
+        @Specialization(
+                guards = {"prelude == cachedPrelude", "standard"},
+                limit = "3", excludeForUncached = true)
+        public static boolean doAdmitted(
+                long matcher, long subject,
+                @Bind VirtualFrame frame,
+                @Bind("admittedPrelude(frame)") ProtosPrelude prelude,
+                @Cached("prelude") ProtosPrelude cachedPrelude,
+                @Cached("frozenLongMatch(cachedPrelude)") boolean standard) {
+            return true;
+        }
+
+        @Specialization
+        public static boolean doOther(Object matcher, Object subject) {
+            return false;
+        }
+
+        @NonIdempotent
+        static ProtosClosureValue capturedClosure(VirtualFrame frame) {
+            return MakeArray.capturedClosure(frame);
+        }
+
+        @NonIdempotent
+        static ProtosPrelude admittedPrelude(VirtualFrame frame) {
+            return MakeArray.admittedPrelude(frame);
+        }
+
+        static boolean frozenCanonicalCall(Object receiver) {
+            ProtosValueLookup.StructuralSelection call =
+                    ProtosValueLookup.selectStructural(receiver, "call");
+            return call != null && call.allOwnersFrozen()
+                    && ProtosStandardObjectProtocol.isCanonicalStandardCallSelection(
+                            call.read(), call.home());
+        }
+
+        /* Classified once per immutable Prelude and shared by every literal key. */
+        @TruffleBoundary
+        static boolean frozenLongMatch(ProtosPrelude prelude) {
+            if (prelude == null) {
+                return false;
+            }
+            ProtosValueLookup.StructuralSelection match = StandardKeySelectionNode.selectFromBinding(
+                    prelude, StandardKeySelectionNode.SMALL_INTEGER_BINDING, "match");
+            ProtosValueLookup.StructuralSelection equal = StandardKeySelectionNode.selectFromBinding(
+                    prelude, StandardKeySelectionNode.SMALL_INTEGER_BINDING, "==");
+            return match != null && match.allOwnersFrozen()
+                    && match.home() == ProtosObjectValue.rootObject()
+                    && prelude.isStandardObjectMatchForRuntime(match.read())
+                    && equal != null && equal.allOwnersFrozen()
+                    && StandardKeySelectionNode.standard("==", 0L, equal, prelude)
+                    && frozenCanonicalCall(match.read())
+                    && frozenCanonicalCall(equal.read())
+                    && frozenCanonicalCall(ProtosObjectValue.rootObject());
+        }
+    }
+
+    /** Admission precedes the elision of construction, hashing and action materialization. */
+    @Operation(storeBytecodeIndex = false)
+    @ConstantOperand(type = boolean.class, name = "negatedKeys")
+    public static final class AdmitsDirectLongCaseOf {
+        @Specialization(
+                guards = {"closure != null", "closure == cachedClosure",
+                        "cachedPrelude != null", "factory == cachedFactory", "standard"},
+                limit = "3", excludeForUncached = true)
+        public static boolean doCaptured(
+                boolean negatedKeys, ProtosObjectValue factory, long subject,
+                @Bind VirtualFrame frame,
+                @Bind("capturedClosure(frame)") ProtosClosureValue closure,
+                @Cached("closure") ProtosClosureValue cachedClosure,
+                @Cached("cachedClosure.preludeOrNullForRuntime()") ProtosPrelude cachedPrelude,
+                @Cached("factory") ProtosObjectValue cachedFactory,
+                @Cached("frozenTable(cachedFactory, cachedPrelude, negatedKeys)") boolean standard) {
+            return true;
+        }
+
+        @Specialization(
+                guards = {"prelude == cachedPrelude", "factory == cachedFactory", "standard"},
+                limit = "3", excludeForUncached = true)
+        public static boolean doAdmitted(
+                boolean negatedKeys, ProtosObjectValue factory, long subject,
+                @Bind VirtualFrame frame,
+                @Bind("admittedPrelude(frame)") ProtosPrelude prelude,
+                @Cached("prelude") ProtosPrelude cachedPrelude,
+                @Cached("factory") ProtosObjectValue cachedFactory,
+                @Cached("frozenTable(cachedFactory, cachedPrelude, negatedKeys)") boolean standard) {
+            return true;
+        }
+
+        @Specialization
+        public static boolean doOther(boolean negatedKeys, Object factory, Object subject) {
+            return false;
+        }
+
+        @NonIdempotent
+        static ProtosClosureValue capturedClosure(VirtualFrame frame) {
+            return MakeArray.capturedClosure(frame);
+        }
+
+        @NonIdempotent
+        static ProtosPrelude admittedPrelude(VirtualFrame frame) {
+            return MakeArray.admittedPrelude(frame);
+        }
+
+        @TruffleBoundary
+        static boolean frozenNegation(ProtosPrelude prelude) {
+            for (String name : new String[] {StandardKeySelectionNode.SMALL_INTEGER_BINDING, "BigInteger"}) {
+                ProtosValueLookup.StructuralSelection negated =
+                        StandardKeySelectionNode.selectFromBinding(prelude, name, "negated");
+                if (negated == null || !negated.allOwnersFrozen()
+                        || !prelude.isStandardIntegerNegatedForRuntime(negated.read())
+                        || !AdmitsStandardLongMatch.frozenCanonicalCall(negated.read())) {
+                    return false;
+                }
+            }
+            return ProtosNumericSelectionNode.frozenStandardLongOperators(prelude, "-");
+        }
+
+        @TruffleBoundary
+        static boolean frozenTable(ProtosObjectValue factory, ProtosPrelude prelude, boolean negatedKeys) {
+            if (!MakeMap.frozenStandardFactory(factory, prelude)
+                    || !AdmitsStandardLongMatch.frozenLongMatch(prelude)
+                    || (negatedKeys && !frozenNegation(prelude))) {
+                return false;
+            }
+            ProtosValueLookup.StructuralSelection caseOf = StandardKeySelectionNode.selectFromBinding(
+                    prelude, StandardKeySelectionNode.SMALL_INTEGER_BINDING, "caseOf");
+            ProtosValueLookup.StructuralSelection hash = StandardKeySelectionNode.selectFromBinding(
+                    prelude, StandardKeySelectionNode.SMALL_INTEGER_BINDING, "hash");
+            return caseOf != null && caseOf.allOwnersFrozen() && GetCaseOfSnapshot.isStandard(caseOf)
+                    && hash != null && hash.allOwnersFrozen()
+                    && StandardKeySelectionNode.standard("hash", 0L, hash, prelude)
+                    && AdmitsStandardLongMatch.frozenCanonicalCall(hash.read())
+                    && AdmitsStandardLongMatch.frozenCanonicalCall(caseOf.read());
+        }
+    }
+
+    /** The evaluated lexical value, never the identifier spelling, certifies Any. */
+    @Operation(storeBytecodeIndex = false)
+    public static final class AdmitsStandardCaseAny {
+        @Specialization(
+                guards = {"closure != null", "closure == cachedClosure",
+                        "cachedPrelude != null", "value == cachedValue", "standard"},
+                limit = "3", excludeForUncached = true)
+        public static boolean doCaptured(
+                ProtosObjectValue value,
+                @Bind VirtualFrame frame,
+                @Bind("capturedClosure(frame)") ProtosClosureValue closure,
+                @Cached("closure") ProtosClosureValue cachedClosure,
+                @Cached("cachedClosure.preludeOrNullForRuntime()") ProtosPrelude cachedPrelude,
+                @Cached("value") ProtosObjectValue cachedValue,
+                @Cached("frozenAny(cachedValue, cachedPrelude)") boolean standard) {
+            return true;
+        }
+
+        @Specialization(
+                guards = {"prelude == cachedPrelude", "value == cachedValue", "standard"},
+                limit = "3", excludeForUncached = true)
+        public static boolean doAdmitted(
+                ProtosObjectValue value,
+                @Bind VirtualFrame frame,
+                @Bind("admittedPrelude(frame)") ProtosPrelude prelude,
+                @Cached("prelude") ProtosPrelude cachedPrelude,
+                @Cached("value") ProtosObjectValue cachedValue,
+                @Cached("frozenAny(cachedValue, cachedPrelude)") boolean standard) {
+            return true;
+        }
+
+        @Specialization
+        public static boolean doOther(Object value) {
+            return false;
+        }
+
+        @NonIdempotent
+        static ProtosClosureValue capturedClosure(VirtualFrame frame) {
+            return MakeArray.capturedClosure(frame);
+        }
+
+        @NonIdempotent
+        static ProtosPrelude admittedPrelude(VirtualFrame frame) {
+            return MakeArray.admittedPrelude(frame);
+        }
+
+        @TruffleBoundary
+        static boolean frozenAny(ProtosObjectValue value, ProtosPrelude prelude) {
+            if (prelude == null || !prelude.isStandardAnyForRuntime(value)) {
+                return false;
+            }
+            ProtosValueLookup.StructuralSelection match = ProtosValueLookup.selectStructural(value, "match");
+            ProtosValueLookup.StructuralSelection hash = ProtosValueLookup.selectStructural(value, "hash");
+            ProtosValueLookup.StructuralSelection equal = ProtosValueLookup.selectStructural(value, "==");
+            // Ordinary identity equality cannot duplicate any preceding Integer key.
+            return match != null && match.allOwnersFrozen() && match.home() == value
+                    && prelude.isStandardAnyMatchForRuntime(match.read())
+                    && hash != null && hash.allOwnersFrozen()
+                    && ProtosStandardHashSupport.isCanonicalStandardHashSelection(
+                            value, hash.read(), hash.home(), prelude)
+                    && equal != null && equal.allOwnersFrozen()
+                    && equal.home() == ProtosObjectValue.rootObject()
+                    && prelude.isStandardObjectEqualsForRuntime(equal.read())
+                    && AdmitsStandardLongMatch.frozenCanonicalCall(match.read())
+                    && AdmitsStandardLongMatch.frozenCanonicalCall(hash.read())
+                    && AdmitsStandardLongMatch.frozenCanonicalCall(equal.read());
+        }
+    }
+
+    /** Preserve the ordinary no-selection Error while keeping activation off successful paths. */
+    @Operation(storeBytecodeIndex = true)
+    public static final class CaseOfNoSelection {
+        @Specialization
+        @InliningCutoff
+        public static Object fail(@Bind VirtualFrame frame, @Bind ProtosBytecodeRootNode root) {
+            ProtosActivation activation = lexicalActivation(frame, root);
+            throw ProtosCoreErrors.signal(activation, ProtosCoreErrors.newError(activation));
+        }
+    }
+
     /**
      * The ordinary {@code caseOf} send of an already evaluated subject and
      * case argument, run in the enclosing root. When the behavior selected
