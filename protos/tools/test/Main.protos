@@ -562,7 +562,11 @@ finalOutcome: null
 // LogicalCaseRunner scheduling, fresh Case Processes or Test body invocation.
 if(listCases) {
     listingWriter: TextWriter(process.stdout(), process.stdoutEncoding())
-    listingWriter.writeLine(CaseSelection.listing(logicalProjections)).value()
+    CaseSelection.writeListing(
+        logicalProjections,
+        listingWriter
+    )
+    listingWriter.writeLine("").value()
 
     finalOutcome =
         Runner.testRunOutcomeCompletedWithExit(

@@ -46,6 +46,20 @@ final class ProtosTestToolCaseSelectionTest {
             CaseRef: import("./CaseRef.protos")
             Selection: import("./CaseSelection.protos")
             TestValue: import("std:test/test")
+            JSON: import("std:json/json")
+            Accumulator: import("./ArrayAccumulator.protos")
+
+            captureListing: (projections) => {
+                chunks: Accumulator.create()
+                writer: JSON.eventWriter((chunk) => {
+                    Accumulator.append(chunks, chunk)
+                })
+                Selection.emitListing(projections, (event) => {
+                    writer.feed(event)
+                })
+                writer.finish()
+                "".concat(...Accumulator.finish(chunks))
+            }
 
             calls: {
                 value: 0
@@ -212,7 +226,7 @@ final class ProtosTestToolCaseSelectionTest {
                                 Selection.requireComplete(selection)
 
                                 Array(
-                                    Selection.listing(Array(projection)),
+                                    captureListing(Array(projection)),
                                     calls.value
                                 )
                                 """);
@@ -237,8 +251,8 @@ final class ProtosTestToolCaseSelectionTest {
     }
 
     /*
-     * PERF031-I: the listing accumulates entries across several projections in projection
-     * order, then CasePlan order within each, exactly as the former prefix-copy construction.
+     * The incremental listing traverses projections in projection order, then CasePlan order
+     * within each projection.
      * Exact refs are supplied in reverse order and still list in CasePlan order.
      */
     @Test
@@ -272,11 +286,11 @@ final class ProtosTestToolCaseSelectionTest {
                                 Selection.requireComplete(selection)
 
                                 Array(
-                                    Selection.listing(Array(
+                                    captureListing(Array(
                                         Selection.projection(projection, retained),
                                         Selection.projection(otherProjection, otherRetained)
                                     )),
-                                    Selection.listing(Array()),
+                                    captureListing(Array()),
                                     calls.value
                                 )
                                 """);
@@ -572,7 +586,7 @@ final class ProtosTestToolCaseSelectionTest {
                                     Assertions.require(found)
                                     index = index + 1
                                 }
-                                Selection.listing(selectedProjections)
+                                captureListing(selectedProjections)
                                 run = run + 1
                             }
                             Assertions.require(maximum - minimum <= 1)
@@ -614,7 +628,7 @@ final class ProtosTestToolCaseSelectionTest {
                                 Discovery.projectionSignature(projection))
                             Assertions.require(Discovery.projectionSignature(selected).size() == 3)
                             Assertions.require(Discovery.projectionPlan(selected)[0] === original)
-                            Selection.listing(Array(selected))
+                            captureListing(Array(selected))
                         }
                         calls.value == 0
                         """);
@@ -675,7 +689,7 @@ final class ProtosTestToolCaseSelectionTest {
                             }
                             if(run > 3) {
                                 Assertions.require(retained.size() == 0)
-                                Assertions.require(Selection.listing(Array(
+                                Assertions.require(captureListing(Array(
                                     Selection.projection(projection, retained))) ==
                                     "{\\"schema\\":\\"protos.test.cases/v1\\",\\"cases\\":[]}")
                             }
@@ -745,7 +759,7 @@ final class ProtosTestToolCaseSelectionTest {
                         retained: Selection.retain(selection, Discovery.projectionPlan(original))
                         Selection.requireComplete(selection)
                         selected: Selection.projection(original, retained)
-                        Selection.listing(Array(selected))
+                        captureListing(Array(selected))
                         Assertions.require(observed.containsKey("b").not())
                         for(entry in Discovery.projectionPlan(selected)) {
                             Discovery.resolveSelectedTest(controlled,
@@ -755,6 +769,175 @@ final class ProtosTestToolCaseSelectionTest {
                             observed.containsKey("a").not() && observed.containsKey("c").not() &&
                             (calls.value == 0)
                         """);
+    }
+
+    @Test
+    void bug043IncrementalListingPreservesEveryCaseAndDisplay() throws Exception {
+        StringBuilder fixture = new StringBuilder(SUITE);
+        StringBuilder expected = new StringBuilder("{\"schema\":\"protos.test.cases/v1\",\"cases\":[");
+        // Generated at test execution time; no large fixture or registered Cases are added.
+        String selectorPrefix = "quote\" backslash\\ comma, line\n tab\t ñ 😀 " + "x".repeat(4096);
+        for (int projectionIndex = 0; projectionIndex < 2; projectionIndex++) {
+            String path = "synthetic-" + projectionIndex + ".protos";
+            fixture.append("\nsynthetic").append(projectionIndex)
+                    .append(": Discovery.projectionFromModule(Array(\"corpus\", ")
+                    .append(quoted(path)).append("), { tests: Array(\n");
+            for (int index = 0; index < 64; index++) {
+                String selector = selectorPrefix + index;
+                if (index > 0) {
+                    fixture.append(",\n");
+                }
+                fixture.append("TestValue(").append(quoted(selector)).append(", body)");
+                String payload = "[[\"corpus\"," + jsonQuoted(path) + "]," + jsonQuoted(selector) + "]";
+                String identity = "v1." + HexFormat.of().formatHex(payload.getBytes(StandardCharsets.UTF_8));
+                if (projectionIndex != 0 || index != 0) {
+                    expected.append(',');
+                }
+                expected.append("{\"ref\":").append(jsonQuoted(identity))
+                        .append(",\"display\":").append(jsonQuoted("corpus:" + path + "::" + selector))
+                        .append('}');
+            }
+            fixture.append("\n) })\n");
+        }
+        expected.append("]}");
+        String expectedDocument = expected.toString();
+        org.junit.jupiter.api.Assertions.assertTrue(
+                expectedDocument.getBytes(StandardCharsets.UTF_8).length > 1_048_576);
+        fixture.append("""
+
+                observed: captureListing(Array(synthetic0, synthetic1))
+                parsed: JSON.parse(observed)
+                Assertions: import("std:test/assertions")
+                Assertions.require(parsed.kind == "object")
+                Assertions.require(parsed.value.size() == 2)
+                Assertions.require(parsed.value["schema"].value == "protos.test.cases/v1")
+                Assertions.require(parsed.value["cases"].kind == "array")
+                Assertions.require(parsed.value["cases"].value.size() == 128)
+                for(record in parsed.value["cases"].value) {
+                    Assertions.require(record.kind == "object")
+                    Assertions.require(record.value.size() == 2)
+                    Assertions.require(record.value["ref"].kind == "string")
+                    Assertions.require(record.value["display"].kind == "string")
+                }
+                Assertions.require(calls.value == 0)
+                observed
+                """);
+        assertEquals(expectedDocument, evaluateString(fixture.toString()));
+    }
+
+    @Test
+    void bug043ListingAwaitsEveryWrite() throws Exception {
+        assertTrue(SUITE + recordingWriterFixture() + """
+
+                result: Selection.writeListing(Array(projection), sink)
+                Assertions.require(result === null)
+                Assertions.require(state.started == 26)
+                Assertions.require(state.completed == state.started)
+                Assertions.require(state.finished)
+                Assertions.require(state.output == expectedListing)
+                calls.value == 0
+                """);
+    }
+
+    @Test
+    void bug043ListingStopsAfterWriteFailure() throws Exception {
+        assertTrue(SUITE + recordingWriterFixture() + """
+
+                state.failAt = 4
+                observed: Assertions.signals(Error, () => {
+                    Selection.writeListing(Array(projection), sink)
+                })
+                Assertions.require(observed === stored)
+                Assertions.require(state.started == 4)
+                Assertions.require(state.completed == 3)
+                Assertions.require(state.finished.not())
+                Assertions.require(state.output == "{\\"schema\\":\\"protos.test.cases/v1\\"")
+                repeated: Assertions.signals(Error, () => { state.failed.value() })
+                Assertions.require(repeated === stored)
+                (state.started == 4) && (calls.value == 0)
+                """);
+    }
+
+    @Test
+    void bug043ListingFinishFailurePropagates() throws Exception {
+        assertTrue(SUITE + recordingWriterFixture() + """
+
+                state.failAt = 26
+                observed: Assertions.signals(Error, () => {
+                    Selection.writeListing(Array(projection), sink)
+                })
+                Assertions.require(observed === stored)
+                Assertions.require(state.started == 26)
+                Assertions.require(state.completed == 25)
+                Assertions.require(state.finished.not())
+                Assertions.require(state.output == expectedListing)
+                calls.value == 0
+                """);
+    }
+
+    /** Future bodies record completion separately from write invocation, including finish's barrier. */
+    private static String recordingWriterFixture() {
+        return """
+
+                Assertions: import("std:test/assertions")
+                expectedListing: %s
+                stored: Error()
+                state: {
+                    started: 0
+                    completed: 0
+                    finished: false
+                    failAt: -1
+                    failed: null
+                    output: ""
+                }
+                sink: null
+                sink = {
+                    writeText: (text) => {
+                        Assertions.require(state.started == state.completed)
+                        Assertions.require(state.finished.not())
+                        state.started = state.started + 1
+                        position: state.started
+                        completion: (() => {
+                            if(position == state.failAt) { stored.signal() }
+                            if(text == "") {
+                                Assertions.require(state.output == expectedListing)
+                                state.finished = true
+                            }
+                            state.output = state.output + text
+                            state.completed = state.completed + 1
+                            sink
+                        }).future()
+                        if(position == state.failAt) { state.failed = completion }
+                        completion
+                    }
+                }
+                """.formatted(quoted("{\"schema\":\"protos.test.cases/v1\",\"cases\":["
+                        + listed("first") + "," + listed("second") + "," + listed("third") + "]}"));
+    }
+
+    /** Independent JSON spelling for expected identities, displays, and guest fixture literals. */
+    private static String quoted(String text) {
+        return quoted(text, false);
+    }
+
+    private static String jsonQuoted(String text) {
+        return quoted(text, true);
+    }
+
+    private static String quoted(String text, boolean json) {
+        StringBuilder result = new StringBuilder("\"");
+        for (int index = 0; index < text.length(); index++) {
+            char ch = text.charAt(index);
+            switch (ch) {
+                case '"' -> result.append("\\\"");
+                case '\\' -> result.append("\\\\");
+                case '\n' -> result.append(json ? "\\u000a" : "\\n");
+                case '\r' -> result.append(json ? "\\u000d" : "\\r");
+                case '\t' -> result.append(json ? "\\u0009" : "\\t");
+                default -> result.append(ch);
+            }
+        }
+        return result.append('"').toString();
     }
 
     private static String listed(String selector) {

@@ -8,6 +8,12 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.228-SNAPSHOT
+
+- **BUG043.** Serialize `protos test --list-cases` incrementally through the existing JSON event writer so complete listings can exceed single-write standard-stream admission capacity.
+- Await each event write and the final completion operation before writing the single trailing newline; preserve authoritative Case order and propagate output failures without retrying or closing the borrowed writer. Individual encoded scalars remain subject to output admission capacity.
+- Add full-repository listing reconstruction from four ordered shards, large synthetic Unicode listing coverage, and ordered-write, completion and failure regressions; migrate existing exact listing assertions to the incremental emitter.
+
 ## 0.4.227-SNAPSHOT
 
 - **I178-A / D264-B′.** Add deterministic distributed Test Tool sharding through paired `--shard-count` and `--shard-run` options, using exact positive ordinary Integers and global round-robin selection after source and exact CaseRef filters.

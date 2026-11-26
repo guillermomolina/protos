@@ -27,7 +27,6 @@ JSON: import("std:json/json")
 Arrays: import("std:collections/array")
 Discovery: import("./Discovery.protos")
 CaseRef: import("./CaseRef.protos")
-ArrayAccumulator: import("./ArrayAccumulator.protos")
 
 selectionError: () => {
     Error().signal()
@@ -122,31 +121,46 @@ requireComplete: (selection) => {
     null
 }
 
-// protos.test.cases/v1 discovery document over the final selected
-// projections, in authoritative logical CasePlan order.
-// PERF031-I: entries are accumulated without re-copying the listed prefix
-// for every Case.
-listing: (projections) => {
-    accumulated: ArrayAccumulator.create()
-
-    for(selected in projections) {
-        for(entry in Discovery.projectionPlan(selected)) {
-            ArrayAccumulator.append(
-                accumulated,
-                JSON.object(
-                    "ref", JSON.string(CaseRef.ref(entry)),
-                    "display", JSON.string(CaseRef.display(entry))
-                )
-            )
+// The selected plan is serialized incrementally because output admission is
+// finite. Each event write completes before the next event; individual encoded
+// scalars still have to fit the output facility's admission capacity.
+emitListing: (projections, emit) => {
+    event: (kind, value) => {
+        {
+            kind: kind
+            value: value
         }
     }
 
-    cases: ArrayAccumulator.finish(accumulated)
+    emit(event("objectStart", null))
+    emit(event("name", "schema"))
+    emit(event("string", "protos.test.cases/v1"))
+    emit(event("name", "cases"))
+    emit(event("arrayStart", null))
 
-    JSON.encode(
-        JSON.object(
-            "schema", JSON.string("protos.test.cases/v1"),
-            "cases", JSON.array(...cases)
-        )
-    )
+    for(selected in projections) {
+        for(entry in Discovery.projectionPlan(selected)) {
+            emit(event("objectStart", null))
+            emit(event("name", "ref"))
+            emit(event("string", CaseRef.ref(entry)))
+            emit(event("name", "display"))
+            emit(event("string", CaseRef.display(entry)))
+            emit(event("objectEnd", null))
+        }
+    }
+
+    emit(event("arrayEnd", null))
+    emit(event("objectEnd", null))
+    null
+}
+
+writeListing: (projections, textWriter) => {
+    stream: JSON.writeEvents(textWriter)
+
+    emitListing(projections, (event) => {
+        stream.feed(event).value()
+    })
+
+    stream.finish().value()
+    null
 }

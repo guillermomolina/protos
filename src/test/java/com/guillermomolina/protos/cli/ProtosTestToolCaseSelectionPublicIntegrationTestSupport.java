@@ -76,6 +76,112 @@ abstract class ProtosTestToolCaseSelectionPublicIntegrationTestSupport {
         return "v1." + HexFormat.of().formatHex(payload.getBytes(StandardCharsets.UTF_8));
     }
 
+    record ListedCase(String ref, String display, String serialized) {}
+
+    static String listingDocument(java.util.List<ListedCase> cases) {
+        StringBuilder result = new StringBuilder("{\"schema\":\"protos.test.cases/v1\",\"cases\":[");
+        for (ListedCase entry : cases) {
+            if (result.charAt(result.length() - 1) != '[') {
+                result.append(',');
+            }
+            result.append(entry.serialized());
+        }
+        return result.append("]}\n").toString();
+    }
+
+    /** Strict reader for this exact public schema, preserving each serialized record verbatim. */
+    static java.util.List<ListedCase> completeListing(String text) {
+        ListingCursor cursor = new ListingCursor(text);
+        cursor.take("{\"schema\":\"protos.test.cases/v1\",\"cases\":[");
+        java.util.List<ListedCase> result = new java.util.ArrayList<>();
+        if (!text.startsWith("]", cursor.offset)) {
+            boolean more = true;
+            while (more) {
+                int start = cursor.offset;
+                cursor.take("{\"ref\":");
+                String ref = cursor.string();
+                cursor.take(",\"display\":");
+                String display = cursor.string();
+                cursor.take("}");
+                result.add(new ListedCase(ref, display, text.substring(start, cursor.offset)));
+                more = text.startsWith(",", cursor.offset);
+                if (more) {
+                    cursor.take(",");
+                }
+            }
+        }
+        cursor.take("]}\n");
+        assertEquals(text.length(), cursor.offset, "trailing content after listing");
+        return result;
+    }
+
+    private static final class ListingCursor {
+        private final String text;
+        private int offset;
+
+        ListingCursor(String text) {
+            this.text = text;
+        }
+
+        void take(String expected) {
+            org.junit.jupiter.api.Assertions.assertTrue(text.startsWith(expected, offset),
+                    "invalid listing framing at " + offset);
+            offset += expected.length();
+        }
+
+        String string() {
+            take("\"");
+            StringBuilder decoded = new StringBuilder();
+            while (offset < text.length()) {
+                char ch = text.charAt(offset++);
+                if (ch == '"') {
+                    for (int index = 0; index < decoded.length(); index++) {
+                        char unit = decoded.charAt(index);
+                        if (Character.isHighSurrogate(unit)) {
+                            org.junit.jupiter.api.Assertions.assertTrue(
+                                    index + 1 < decoded.length()
+                                            && Character.isLowSurrogate(decoded.charAt(index + 1)),
+                                    "unpaired JSON surrogate");
+                            index++;
+                        } else {
+                            org.junit.jupiter.api.Assertions.assertFalse(
+                                    Character.isLowSurrogate(unit), "unpaired JSON surrogate");
+                        }
+                    }
+                    return decoded.toString();
+                }
+                org.junit.jupiter.api.Assertions.assertTrue(ch >= 0x20, "unescaped control");
+                if (ch == '\\') {
+                    org.junit.jupiter.api.Assertions.assertTrue(offset < text.length());
+                    char escape = text.charAt(offset++);
+                    switch (escape) {
+                        case '"', '\\', '/' -> decoded.append(escape);
+                        case 'b' -> decoded.append('\b');
+                        case 'f' -> decoded.append('\f');
+                        case 'n' -> decoded.append('\n');
+                        case 'r' -> decoded.append('\r');
+                        case 't' -> decoded.append('\t');
+                        case 'u' -> {
+                            org.junit.jupiter.api.Assertions.assertTrue(offset + 4 <= text.length());
+                            int value = 0;
+                            for (int i = 0; i < 4; i++) {
+                                char digit = text.charAt(offset++);
+                                int hex = "0123456789abcdef".indexOf(Character.toLowerCase(digit));
+                                org.junit.jupiter.api.Assertions.assertTrue(hex >= 0, "invalid JSON escape");
+                                value = value * 16 + hex;
+                            }
+                            decoded.append((char) value);
+                        }
+                        default -> throw new AssertionError("invalid JSON escape");
+                    }
+                } else {
+                    decoded.append(ch);
+                }
+            }
+            throw new AssertionError("unterminated JSON String");
+        }
+    }
+
     static R run(String... args) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         ByteArrayOutputStream err = new ByteArrayOutputStream();
