@@ -8,6 +8,10 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.229-SNAPSHOT
+
+- **BUG043.** Reconcile the Test Tool architectural regression with incremental Case listing emission, preserving validation-before-publication checks.
+
 ## 0.4.228-SNAPSHOT
 
 - **BUG043.** Serialize `protos test --list-cases` incrementally through the existing JSON event writer so complete listings can exceed single-write standard-stream admission capacity.

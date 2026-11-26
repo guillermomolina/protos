@@ -189,7 +189,7 @@ final class ProtosTestToolFileSelectionMainAdoptionTest {
         int retain = source.indexOf("CaseSelection.retain(", discovery);
         int projection = source.indexOf("CaseSelection.projection(", retain);
         int complete = source.indexOf("CaseSelection.requireComplete(caseSelection)", projection);
-        int listing = source.indexOf("CaseSelection.listing(logicalProjections)", complete);
+        int listing = source.indexOf("CaseSelection.writeListing(\n        logicalProjections,\n        listingWriter\n    )", complete);
         int groups = source.indexOf("suiteGroupAssignments: Array()", complete);
         int scheduler = source.indexOf("logicalCompletions:", groups);
 
