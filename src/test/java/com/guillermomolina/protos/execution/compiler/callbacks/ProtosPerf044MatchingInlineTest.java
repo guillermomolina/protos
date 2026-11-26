@@ -414,6 +414,28 @@ final class ProtosPerf044MatchingInlineTest {
         assertSame(Boolean.TRUE, run(source));
     }
 
+    @Test
+    void complexPatternsKeepExactEqualityAndSeparateIdentityKeys() throws Exception {
+        assertSame(Boolean.TRUE, run("""
+                big: 100000000000000000001
+                exact: Complex(big, 1/2)
+                table: %{ exact: () => "exact"; Complex(1, 2): () => "mixed"; Any: () => "other" }
+                select: (value) => value.caseOf(table)
+                ids: IdentityMap()
+                ids[Complex(big, 1/2)] = "exact"
+                ids[Complex(big, 0.5)] = "float"
+                ids[Complex(1, 0.0)] = "positive"
+                ids[Complex(1, -0.0)] = "negative"
+                (select(Complex(big, 2/4)) == "exact") &&
+                    (select(Complex(1.0, 2.0)) == "mixed") &&
+                    (select(Complex(big + 1, 1/2)) == "other") &&
+                    (ids[Complex(big, 2/4)] == "exact") &&
+                    (ids[Complex(big, 0.5)] == "float") &&
+                    (ids[Complex(1, 0.0)] == "positive") &&
+                    (ids[Complex(1, -0.0)] == "negative") && (ids.size() == 4)
+                """));
+    }
+
     private static Object run(String source) throws Exception {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
         return ProtosTestExecutionSupport.evaluate(source, prelude.newModuleActivation());

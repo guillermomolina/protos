@@ -376,6 +376,69 @@ final class ProtosComplexSemanticsTest {
     }
 
     @Test
+    void everyComponentFamilyKeepsIdentityHashesAndIdentityMapLookup() throws IOException {
+        ProtosPrelude prelude = corePrelude();
+        ProtosActivation caller = prelude.newModuleActivation();
+        BigInteger huge = BigInteger.ONE.shiftLeft(1000).add(BigInteger.ONE);
+        Object[] components = {
+            Long.MIN_VALUE, Long.MAX_VALUE,
+            ProtosNumericValueSupport.integerFromHost(huge, prelude),
+            ProtosNumericValueSupport.integerFromHost(huge.add(BigInteger.ONE), prelude),
+            divide(1, 3, prelude), 0.0, -0.0, 1.5,
+            Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY
+        };
+        Object[] twins = {
+            Long.MIN_VALUE, Long.MAX_VALUE,
+            ProtosNumericValueSupport.integerFromHost(new BigInteger(huge.toString()), prelude),
+            ProtosNumericValueSupport.integerFromHost(huge.add(BigInteger.ONE), prelude),
+            divide(2, 6, prelude), new ProtosFloatValue(0.0), new ProtosFloatValue(-0.0),
+            new ProtosFloatValue(1.5),
+            new ProtosFloatValue(Double.longBitsToDouble(0xfff8000000000123L)),
+            new ProtosFloatValue(Double.POSITIVE_INFINITY),
+            new ProtosFloatValue(Double.NEGATIVE_INFINITY)
+        };
+        // Freeze the existing real-family tags and hash values as well as the Complex mix.
+        int[] tags = {1, 1, 1, 1, 37, 30, 30, 30, 30, 30, 30};
+        int[] hashes = {
+            BigInteger.valueOf(Long.MIN_VALUE).hashCode(),
+            BigInteger.valueOf(Long.MAX_VALUE).hashCode(),
+            huge.hashCode(), huge.add(BigInteger.ONE).hashCode(), 34,
+            Long.hashCode(0L), Long.hashCode(0x8000000000000000L),
+            Long.hashCode(Double.doubleToRawLongBits(1.5)),
+            Long.hashCode(0x7ff8000000000000L),
+            Long.hashCode(0x7ff0000000000000L), Long.hashCode(0xfff0000000000000L)
+        };
+        Object map = new com.guillermomolina.protos.runtime.ProtosIdentityMapValue(
+                prelude.identityMapPrototype());
+        for (int r = 0; r < components.length; r++) {
+            long realHash = ((long) tags[r] << 32) ^ Integer.toUnsignedLong(hashes[r]);
+            assertEquals(realHash, ProtosIdentity.identityHash(components[r]));
+            for (int i = 0; i < components.length; i++) {
+                Object value = complex(components[r], components[i], prelude);
+                Object twin = complex(twins[r], twins[i], prelude);
+                assertNotSame(value, twin);
+                assertTrue(ProtosIdentity.identical(value, twin));
+                assertTrue(ProtosIdentity.identical(twin, value));
+                long imaginaryHash = ((long) tags[i] << 32)
+                        ^ Integer.toUnsignedLong(hashes[i]);
+                long expected = (41L << 32)
+                        ^ Integer.toUnsignedLong(Long.hashCode(31L * realHash + imaginaryHash));
+                assertEquals(expected, ProtosIdentity.identityHash(value));
+                assertEquals(expected, ProtosIdentity.identityHash(twin));
+                assertFalse(ProtosIdentity.identical(value,
+                        complex(components[(r + 1) % components.length], components[i], prelude)));
+                assertFalse(ProtosIdentity.identical(value,
+                        complex(components[r], components[(i + 1) % components.length], prelude)));
+                long marker = (long) r * components.length + i;
+                ProtosInvocation.invokeMessage(map, "atPut", List.of(value, marker), caller);
+                assertEquals(marker, ProtosInvocation.invokeMessage(map, "at", List.of(twin), caller));
+            }
+        }
+        assertEquals((long) components.length * components.length,
+                ProtosInvocation.invokeMessage(map, "size", List.of(), caller));
+    }
+
+    @Test
     void normalHashFollowsMathematicalEquality() throws IOException {
         ProtosPrelude prelude = corePrelude();
         ProtosActivation caller = prelude.newModuleActivation();
