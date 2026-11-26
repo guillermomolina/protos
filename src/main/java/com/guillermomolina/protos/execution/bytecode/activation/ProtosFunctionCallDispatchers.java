@@ -948,10 +948,17 @@ final class ProtosFunctionCallDispatchers {
      * transports the exact Activation. Callee slot 3 never contains arrays.
      * Frame-null host entry retains its explicit caller, as does entry
      * without a source Bytecode callee root.
+     *
+     * A selected source Closure without its own Prelude inherits the
+     * observing caller's admitted Prelude. It is transported even before
+     * the effective root has registered NEEDS_CALLER_PRELUDE, so the first
+     * invocation never depends on an older physical caller frame (a resumed
+     * caller has none). Nothing is published to obtain it.
      */
     private static Object prepareCallerForCallee(
             VirtualFrame frame,
             ProtosBytecodeRootNode callee,
+            ProtosClosureValue closure,
             Object explicitCaller) {
 
         if (frame == null || callee == null) {
@@ -973,12 +980,18 @@ final class ProtosFunctionCallDispatchers {
         }
 
         if (callee.hasCallerNeed(
-                ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE)) {
+                ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE)
+                || inheritsCallerPrelude(closure)) {
             return ProtosFrameArguments.admittedPreludeOrNull(
                     frame.getArguments());
         }
 
         return null;
+    }
+
+    /** The selected source Closure owns no Prelude, so it inherits its caller's. */
+    private static boolean inheritsCallerPrelude(ProtosClosureValue closure) {
+        return closure != null && closure.preludeOrNullForRuntime() == null;
     }
 
     /** Select from the actual executable, never a cached Closure's plan. */
@@ -1135,7 +1148,7 @@ final class ProtosFunctionCallDispatchers {
             ProtosClosureValue closure,
             Object[] arguments,
             Object explicitCaller) {
-        Object caller = prepareCallerForCallee(frame, callee, explicitCaller);
+        Object caller = prepareCallerForCallee(frame, callee, closure, explicitCaller);
         ProtosFrameArguments.completeDispatchedHeader(
                 arguments, closure, caller, ProtosReturnHome.unobservable());
         if (!omitsTaskTransport(frame, callee, explicitCaller)) {
@@ -1172,7 +1185,7 @@ final class ProtosFunctionCallDispatchers {
             ProtosClosureValue closure,
             Object[] arguments,
             Object explicitCaller) {
-        Object caller = prepareCallerForCallee(frame, callee, explicitCaller);
+        Object caller = prepareCallerForCallee(frame, callee, closure, explicitCaller);
         ProtosFrameArguments.completeDispatchedHeader(
                 arguments, closure, caller,
                 closure.capturedReturnHomeOrNullForRuntime());
@@ -1378,7 +1391,7 @@ final class ProtosFunctionCallDispatchers {
                 @Cached InlinedConditionProfile closureHeaderPresence,
                 @Cached InlinedConditionProfile callerActivationPresence,
                 @Cached InlinedConditionProfile suspensionPresence) {
-            Object caller = prepareCallerForCallee(frame, callee, explicitCaller);
+            Object caller = prepareCallerForCallee(frame, callee, closure, explicitCaller);
             ProtosReturnHome home = invocationHome(closure, callee);
             ProtosFrameArguments.completeDispatchedHeader(arguments, closure, caller, home);
             ProtosTask task = prepareInvocationTask(
@@ -1436,7 +1449,7 @@ final class ProtosFunctionCallDispatchers {
                 @Cached InlinedConditionProfile closureHeaderPresence,
                 @Cached InlinedConditionProfile callerActivationPresence,
                 @Cached InlinedConditionProfile suspensionPresence) {
-            Object caller = prepareCallerForCallee(frame, callee, explicitCaller);
+            Object caller = prepareCallerForCallee(frame, callee, closure, explicitCaller);
             ProtosReturnHome home = invocationHome(closure, calleeRootOrNull(target));
             ProtosFrameArguments.completeDispatchedHeader(arguments, closure, caller, home);
             ProtosTask task = prepareInvocationTask(

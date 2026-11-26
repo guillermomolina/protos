@@ -255,6 +255,26 @@ final class ProtosCurrentNumericRelations {
         static final Object VALUE = ProtosNumericValueSupport.integer(2146959360L);
     }
 
+    /**
+     * The normal hash of a Float: the canonical NaN hash, the exact Integer
+     * hash of an integral value, otherwise the non-integral hash, signed
+     * zero hashing as zero. {@code prelude} owns a hash outside the
+     * signed-64 range.
+     */
+    static Object floatNormalHash(double number, ProtosPrelude prelude) {
+        if (Double.isNaN(number)) {
+            return NaNNormalHash.VALUE;
+        }
+
+        Object integral =
+                ProtosBinary64Rounding.integralBinary64(number, prelude);
+
+        return integral != null
+                ? integral
+                : ProtosNumericValueSupport.integer(
+                        Double.hashCode(number == 0.0 ? 0.0 : number));
+    }
+
     /** {@code prelude} owns a hash outside the signed-64 range. */
     static Object normalHash(Object value, ProtosPrelude prelude) {
         if (ProtosNumericValueSupport.isCurrentInteger(value)) {
@@ -262,20 +282,8 @@ final class ProtosCurrentNumericRelations {
         }
 
         if (ProtosNumericValueSupport.isCurrentFloat(value)) {
-            double number =
-                    ProtosNumericValueSupport.currentFloatValue(value);
-
-            if (Double.isNaN(number)) {
-                return NaNNormalHash.VALUE;
-            }
-
-            Object integral =
-                    ProtosBinary64Rounding.integralBinary64(number, prelude);
-
-            return integral != null
-                    ? integral
-                    : ProtosNumericValueSupport.integer(
-                            Double.hashCode(number == 0.0 ? 0.0 : number));
+            return floatNormalHash(
+                    ProtosNumericValueSupport.currentFloatValue(value), prelude);
         }
 
         if (ProtosNumericValueSupport.isFraction(value)) {

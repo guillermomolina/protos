@@ -31,9 +31,13 @@ import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
+import java.util.stream.Stream;
 import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.Value;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 /**
  * PLAT054-3E2 / I086: HOST-FUT-1 ({@code FUTURES_AND_TASKS.md} §29, Suspendible host-initiated
@@ -703,6 +707,106 @@ final class ProtosHostEntryFutureSuspensionTest {
         return f.gate.state();
     }
 
+    /*
+     * Map keys whose custom hash or == observes the pending gate. The stored
+     * key shares the waiting key's hash, so the waiting equality is reached
+     * at the first candidate; mutate succeeds only outside every comparison
+     * scope of m.
+     */
+    private static final String SUSPENDING_MAP_KEYS =
+            """
+            m: Map()
+            WaitingHash: {
+                hash: () => {
+                    before = before + 1
+                    gateBox.current.value()
+                }
+            }
+            waiting: WaitingHash {}
+            Plain: {
+                hash: () => 41
+                equalTo: (other) => false
+            }.alias("equalTo", "==")
+            WaitingEquality: {
+                hash: () => 41
+                equalTo: (other) => {
+                    before = before + 1
+                    gateBox.current.value() == 1
+                }
+            }.alias("equalTo", "==")
+            first: Plain {}
+            second: Plain {}
+            m[first] = "first"
+            m[second] = "second"
+            probe: WaitingEquality {}
+            runHash: () => {
+                r: %{ 1: "one"; waiting: "w"; 2: "two" }
+                after = after + 1
+                (r.size() == 3) && (r[1] == "one") && (r[2] == "two")
+            }
+            runEquality: () => {
+                r: m.atIfAbsent(probe, () => "none")
+                after = after + 1
+                r == "first"
+            }
+            mutate: () => {
+                m["late"] = 1
+                m.size()
+            }
+            runEqualityHandled: () => {
+                r: Error.handle(() => m.atIfAbsent(probe, () => "none"), (caught) => true)
+                after = after + 1
+                r && (mutate() == 3)
+            }
+            """;
+
+    @Test
+    void customMapKeyHashSuspendsAndResumesWithoutReplay() throws Exception {
+        try (Context context = newContext()) {
+            Fixture f = new Fixture(context, SUSPENDING_MAP_KEYS);
+            Entry entry = new Entry(f.member("runHash"));
+            entry.awaitSuspended(() -> f.gate.observerCountForTesting() == 1);
+            assertEquals(1, f.slot("before"));
+            assertEquals(0, f.slot("after"));
+            f.resolve(41);
+            assertEquals(Boolean.TRUE, entry.await());
+            assertEquals(1, f.slot("before"), "the suspended hash was not repeated");
+            assertEquals(1, f.slot("after"));
+        }
+    }
+
+    @Test
+    void customMapKeyEqualitySuspendsAtItsCandidateAndLeavesTheComparisonScope()
+            throws Exception {
+        try (Context context = newContext()) {
+            Fixture f = new Fixture(context, SUSPENDING_MAP_KEYS);
+            Value mutate = f.member("mutate");
+            Entry entry = new Entry(f.member("runEquality"));
+            entry.awaitSuspended(() -> f.gate.observerCountForTesting() == 1);
+            assertEquals(1, f.slot("before"));
+            f.resolve(1);
+            assertEquals(Boolean.TRUE, entry.await(), "resumed at the first candidate");
+            assertEquals(1, f.slot("before"), "no equality was repeated");
+            assertEquals(1, f.slot("after"));
+            assertEquals(3L, mutate.execute().asLong(), "comparison scope left");
+        }
+    }
+
+    @Test
+    void customMapKeyEqualityErrorPropagatesAndLeavesTheComparisonScope() throws Exception {
+        // An Error escaping a host entry ends its Process, so the guest handles
+        // it and then mutates m inside the same entry.
+        try (Context context = newContext()) {
+            Fixture f = new Fixture(context, SUSPENDING_MAP_KEYS);
+            Entry entry = new Entry(f.member("runEqualityHandled"));
+            entry.awaitSuspended(() -> f.gate.observerCountForTesting() == 1);
+            assertTrue(f.gate.fail(f.failureError()));
+            assertEquals(Boolean.TRUE, entry.await(), "Error handled; comparison scope left");
+            assertEquals(1, f.slot("before"), "no equality was repeated");
+            assertEquals(1, f.slot("after"));
+        }
+    }
+
     @Test
     void nativeClosureEntryOnTheGenericPathSuspendsThroughItsCallbacks() throws Exception {
         try (Context context = newContext()) {
@@ -737,8 +841,11 @@ final class ProtosHostEntryFutureSuspensionTest {
      * identically at the subject, a key expression, a reached matcher, and the selected action,
      * and resume without replaying completed effects.
      */
-    @Test
-    void i176ContextualMatchSuspendsLikeExplicitCaseOfWithoutReplay() throws Exception {
+    @ParameterizedTest(name = "{0} / {1}: {2}")
+    @MethodSource("i176Variants")
+    void i176ContextualMatchSuspendsLikeExplicitCaseOfWithoutReplay(
+            String position, String spelling, String selection, long resolution)
+            throws Exception {
         String waitAt =
                 """
                 waitAt: () => {
@@ -749,42 +856,436 @@ final class ProtosHostEntryFutureSuspensionTest {
                     match: (subject) => waitAt() == subject
                 }
                 """;
+        runSuspendedOnce(
+                position + " / " + spelling + ": " + selection,
+                waitAt
+                        + "run: () => {\n"
+                        + "    r: "
+                        + selection
+                        + "\n    after = after + 1\n"
+                        + "    r\n"
+                        + "}\n",
+                resolution,
+                42L);
+    }
+
+    /* The four suspension positions, each in its contextual and explicit spelling. */
+    static Stream<Arguments> i176Variants() {
         String[][] cases = {
-            {"match(waitAt()) { Capture: v => v + 1 }",
+            {"subject", "match(waitAt()) { Capture: v => v + 1 }",
                 "waitAt().caseOf(%{ Capture: v => v + 1 })", "41"},
-            {"match(1) { waitAt(): 42; Any: 0 }",
+            {"key", "match(1) { waitAt(): 42; Any: 0 }",
                 "1.caseOf(%{ waitAt(): () => 42; Any: () => 0 })", "1"},
-            {"match(41) { Gate: 42; Any: 0 }",
+            {"matcher", "match(41) { Gate: 42; Any: 0 }",
                 "41.caseOf(%{ Gate: () => 42; Any: () => 0 })", "41"},
-            {"match(1) { 1: waitAt() + 1 }",
+            {"action", "match(1) { 1: waitAt() + 1 }",
                 "1.caseOf(%{ 1: () => waitAt() + 1 })", "41"},
         };
-        for (String[] pair : cases) {
-            for (int spelling = 0; spelling < 2; spelling++) {
-                String selection = pair[spelling];
-                try (Context context = newContext()) {
-                    Fixture f =
-                            new Fixture(
-                                    context,
-                                    waitAt
-                                            + "run: () => {\n"
-                                            + "    r: "
-                                            + selection
-                                            + "\n    after = after + 1\n"
-                                            + "    r\n"
-                                            + "}\n");
-                    Entry entry = new Entry(f.member("run"));
-                    entry.awaitSuspended(() -> f.gate.observerCountForTesting() == 1);
-                    assertEquals(1, f.slot("before"), selection);
-                    assertEquals(0, f.slot("after"), selection);
-                    f.resolve(Long.parseLong(pair[2]));
-                    assertEquals(42L, entry.await(), selection);
-                    assertEquals(1, f.slot("before"), "no replay: " + selection);
-                    assertEquals(1, f.slot("after"), selection);
-                    assertEquals(0, f.gate.observerCountForTesting());
-                    assertCompactState(f);
-                }
-            }
+        Stream.Builder<Arguments> variants = Stream.builder();
+        for (String[] variant : cases) {
+            long resolution = Long.parseLong(variant[3]);
+            variants.add(Arguments.of(variant[0], "contextual", variant[1], resolution));
+            variants.add(Arguments.of(variant[0], "explicit", variant[2], resolution));
         }
+        return variants.build();
+    }
+
+    /* The suspending key expression shared by the isolation tests below. */
+    private static final String WAIT_AT =
+            """
+            waitAt: () => {
+                before = before + 1
+                gateBox.current.value()
+            }
+            """;
+
+    /**
+     * Runs {@code run} of {@code program} as one host entry that suspends
+     * exactly once on the gate, resolves the gate with {@code resolution} and
+     * asserts the exact result without replay of completed effects.
+     * {@code afterCompletion} runs further host-side assertions while the
+     * Context is still open.
+     */
+    private static void runSuspendedOnce(
+            String stage, String program, long resolution, Object expected) throws Exception {
+        runSuspendedOnce(stage, program, resolution, expected, fixture -> {});
+    }
+
+    private static void runSuspendedOnce(
+            String stage,
+            String program,
+            long resolution,
+            Object expected,
+            java.util.function.Consumer<Fixture> afterCompletion)
+            throws Exception {
+        try (Context context = newContext()) {
+            Fixture f = new Fixture(context, program);
+            Entry entry = new Entry(f.member("run"));
+            entry.awaitSuspended(() -> f.gate.observerCountForTesting() == 1);
+            assertEquals(1, f.gate.observerCountForTesting(), stage + ": one gate waiter");
+            assertEquals(1, f.slot("before"), stage + ": before resolution");
+            assertEquals(0, f.slot("after"), stage + ": before resolution");
+            f.resolve(resolution);
+            Object outcome = entry.await();
+            if (outcome instanceof Throwable failure) {
+                throw new AssertionError(stage + ": entry failed after resolution", failure);
+            }
+            assertEquals(expected, outcome, stage + ": result");
+            assertEquals(1, f.slot("before"), stage + ": no replay");
+            assertEquals(1, f.slot("after"), stage + ": completed once");
+            assertEquals(0, f.gate.observerCountForTesting(), stage + ": no remaining observer");
+            assertCompactState(f);
+            afterCompletion.accept(f);
+        }
+    }
+
+    /* Map construction alone: key suspension, resumption, hash, insertion, second entry. */
+    @Test
+    void mapLiteralKeyExpressionSuspendsWithoutReplay() throws Exception {
+        runSuspendedOnce(
+                "suspended key, construction only",
+                WAIT_AT
+                        + """
+                        run: () => {
+                            table: %{ waitAt(): 42; Any: 0 }
+                            after = after + 1
+                            table.size()
+                        }
+                        """,
+                1L,
+                2L);
+    }
+
+    /* The resumed key is the exact Integer 1 and both associations are found. */
+    @Test
+    void mapLiteralResumedKeyRetainsExactValue() throws Exception {
+        runSuspendedOnce(
+                "suspended key, lookups",
+                WAIT_AT
+                        + """
+                        run: () => {
+                            table: %{ waitAt(): 42; Any: 0 }
+                            after = after + 1
+                            (table.size() == 2) &&
+                                (table[1] == 42) &&
+                                (table[Any] == 0)
+                        }
+                        """,
+                1L,
+                Boolean.TRUE);
+    }
+
+    /* The recorded associations, observed host-side without any guest Map accessor. */
+    @Test
+    void mapLiteralResumedKeyPreservesAssociationSnapshot() throws Exception {
+        runSuspendedOnce(
+                "suspended key, association snapshot",
+                "observedTable: null\n"
+                        // Any as the guest's ordinary binding resolution sees it.
+                        + "observedAny: Any\n"
+                        + WAIT_AT
+                        + """
+                        run: () => {
+                            observedTable = %{ waitAt(): 42; Any: 0 }
+                            after = after + 1
+                            true
+                        }
+                        """,
+                1L,
+                Boolean.TRUE,
+                f -> {
+                    Object table = f.module.readLocalSlot("observedTable").orElseThrow();
+                    assertTrue(
+                            table instanceof com.guillermomolina.protos.runtime.ProtosMapValue,
+                            "observedTable is a Map: " + table);
+                    com.guillermomolina.protos.runtime.ProtosIndexedSnapshot snapshot =
+                            ((com.guillermomolina.protos.runtime.ProtosMapValue) table)
+                                    .associationIndexedSnapshot();
+                    Object any = f.module.readLocalSlot("observedAny").orElseThrow();
+                    assertEquals(2, snapshot.length());
+                    assertEquals("1", integerText(snapshot.keyAt(0)));
+                    assertEquals("42", integerText(snapshot.valueAt(0)));
+                    assertSame(any, snapshot.keyAt(1));
+                    assertEquals("0", integerText(snapshot.valueAt(1)));
+                });
+    }
+
+    private static String integerText(Object value) {
+        assertTrue(
+                com.guillermomolina.protos.runtime.ProtosNumericValueSupport.isCurrentInteger(value),
+                "a semantic Integer: " + value);
+        return com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(value);
+    }
+
+    /* The resumed value and the ordinary match send, without any Map. */
+    @Test
+    void standaloneMatchAfterKeyExpressionSuspension() throws Exception {
+        runSuspendedOnce(
+                "resumed value, match",
+                WAIT_AT
+                        + """
+                        run: () => {
+                            key: waitAt()
+                            result: key.match(1)
+                            after = after + 1
+                            result
+                        }
+                        """,
+                1L,
+                Boolean.TRUE);
+    }
+
+    /*
+     * Repeated standalone match in one Context: the first entry suspends and
+     * resumes; the second observes the already resolved gate. Neither depends
+     * on another Context having invoked Object.match.
+     */
+    @Test
+    void standaloneMatchRepeatedInOneContextAfterSuspension() throws Exception {
+        try (Context context = newContext()) {
+            Fixture f = new Fixture(context, WAIT_AT
+                    + """
+                    run: () => {
+                        key: waitAt()
+                        result: key.match(1)
+                        after = after + 1
+                        result
+                    }
+                    """);
+            Entry first = new Entry(f.member("run"));
+            first.awaitSuspended(() -> f.gate.observerCountForTesting() == 1);
+            f.resolve(1);
+            assertEquals(Boolean.TRUE, first.await(), "first execution");
+            assertEquals(1, f.slot("before"));
+            assertEquals(1, f.slot("after"));
+            assertEquals(Boolean.TRUE, f.member("run").execute().asBoolean(), "repeated execution");
+            assertEquals(2, f.slot("before"));
+            assertEquals(2, f.slot("after"));
+            assertCompactState(f);
+        }
+    }
+
+    /* A source Closure created and first invoked after resumption selects standard ==. */
+    @Test
+    void firstSourceNumericInvocationAfterSuspension() throws Exception {
+        runSuspendedOnce(
+                "first invocation after resumption, equality",
+                WAIT_AT
+                        + """
+                        run: () => {
+                            key: waitAt()
+                            check: (value) => { value == 1 }
+                            result: check(key)
+                            after = after + 1
+                            result
+                        }
+                        """,
+                1L,
+                Boolean.TRUE);
+    }
+
+    /* Addition, ordering and equality through source methods first sent after resumption. */
+    @Test
+    void sourceNumericOperationsAfterSuspension() throws Exception {
+        runSuspendedOnce(
+                "addition, ordering and equality after resumption",
+                WAIT_AT
+                        + """
+                        ops: {
+                            add: (a, b) => { a + b }
+                            less: (a, b) => { a < b }
+                            same: (a, b) => { a == b }
+                        }
+                        run: () => {
+                            key: waitAt()
+                            sum: ops.add(key, 2)
+                            ordered: ops.less(key, 2)
+                            equal: ops.same(key, 1)
+                            after = after + 1
+                            (sum == 3) && ordered && equal
+                        }
+                        """,
+                1L,
+                Boolean.TRUE);
+    }
+
+    /*
+     * The inherited Object.match body entered after resumption selects the
+     * receiver's custom == exactly once; standard Number equality between a
+     * custom object and 5 would answer false.
+     */
+    @Test
+    void inheritedMatchSelectsCustomEqualityAfterSuspension() throws Exception {
+        runSuspendedOnce(
+                "custom equality through inherited match",
+                WAIT_AT
+                        + """
+                        equalities: 0
+                        Custom: {
+                            equalTo: (other) => {
+                                equalities = equalities + 1
+                                other == 5
+                            }
+                        }.alias("equalTo", "==")
+                        custom: Custom {}
+                        run: () => {
+                            key: waitAt()
+                            result: custom.match(key + 4)
+                            after = after + 1
+                            result
+                        }
+                        """,
+                1L,
+                Boolean.TRUE,
+                f -> assertEquals(1, f.slot("equalities"), "custom equality ran exactly once"));
+    }
+
+    /* The resumed value and the ordinary == send, without any Map. */
+    @Test
+    void ordinaryEqualityAfterKeyExpressionSuspension() throws Exception {
+        runSuspendedOnce(
+                "resumed value, equality",
+                WAIT_AT
+                        + """
+                        run: () => {
+                            key: waitAt()
+                            result: key == 1
+                            after = after + 1
+                            result
+                        }
+                        """,
+                1L,
+                Boolean.TRUE);
+    }
+
+    /* caseOf over a table constructed by an earlier statement, not staged as its argument. */
+    @Test
+    void caseOfWithPreviouslyConstructedSuspendedTable() throws Exception {
+        runSuspendedOnce(
+                "constructed table, caseOf",
+                WAIT_AT
+                        + """
+                        run: () => {
+                            table: %{ waitAt(): () => 42; Any: () => 0 }
+                            result: 1.caseOf(table)
+                            after = after + 1
+                            result
+                        }
+                        """,
+                1L,
+                42L);
+    }
+
+    /* The suspended first key cannot match; Any must still be selected. */
+    @Test
+    void caseOfDefaultMatcherAfterSuspendedKey() throws Exception {
+        runSuspendedOnce(
+                "default matcher, explicit",
+                WAIT_AT
+                        + """
+                        run: () => {
+                            result: 2.caseOf(%{
+                                waitAt(): () => 42
+                                Any: () => 99
+                            })
+                            after = after + 1
+                            result
+                        }
+                        """,
+                1L,
+                99L);
+    }
+
+    @Test
+    void contextualMatchDefaultMatcherAfterSuspendedKey() throws Exception {
+        runSuspendedOnce(
+                "default matcher, contextual",
+                WAIT_AT
+                        + """
+                        run: () => {
+                            result: match(2) {
+                                waitAt(): 42
+                                Any: 99
+                            }
+                            after = after + 1
+                            result
+                        }
+                        """,
+                1L,
+                99L);
+    }
+
+    /*
+     * Counters for the later matcher, the selected action and every
+     * unselected action; key evaluations are counted by before.
+     */
+    private static final String COUNTED_CASES =
+            WAIT_AT
+                    + """
+                    matched: 0
+                    acted: 0
+                    unselected: 0
+                    Later: {
+                        match: (subject) => {
+                            matched = matched + 1
+                            subject == 2
+                        }
+                    }
+                    """;
+
+    @Test
+    void caseOfSuspendedKeyAndActionEffectsAreNotRepeated() throws Exception {
+        runSuspendedOnce(
+                "counted, first pattern succeeds",
+                COUNTED_CASES
+                        + """
+                        run: () => {
+                            result: 1.caseOf(%{
+                                waitAt(): () => {
+                                    acted = acted + 1
+                                    42
+                                }
+                                Later: () => {
+                                    unselected = unselected + 1
+                                    0
+                                }
+                            })
+                            after = after + 1
+                            result
+                        }
+                        """,
+                1L,
+                42L,
+                f -> {
+                    assertEquals(0, f.slot("matched"), "later matcher not reached");
+                    assertEquals(1, f.slot("acted"), "selected action once");
+                    assertEquals(0, f.slot("unselected"), "unselected action never runs");
+                });
+        runSuspendedOnce(
+                "counted, later matcher succeeds",
+                COUNTED_CASES
+                        + """
+                        run: () => {
+                            result: 2.caseOf(%{
+                                waitAt(): () => {
+                                    unselected = unselected + 1
+                                    42
+                                }
+                                Later: () => {
+                                    acted = acted + 1
+                                    7
+                                }
+                            })
+                            after = after + 1
+                            result
+                        }
+                        """,
+                1L,
+                7L,
+                f -> {
+                    assertEquals(1, f.slot("matched"), "later matcher once");
+                    assertEquals(1, f.slot("acted"), "selected action once");
+                    assertEquals(0, f.slot("unselected"), "unselected action never runs");
+                });
     }
 }

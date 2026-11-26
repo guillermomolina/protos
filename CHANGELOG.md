@@ -8,6 +8,11 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.237-SNAPSHOT
+
+- **PERF044.** Select standard Map key hash and equality directly and transport the inherited Prelude to Prelude-free source Closures, including from resumed callers.
+- Replay source commit `64ff094929042b58b769f0db88e93db2cd526806` with implementation-version metadata; preserve its source, tests and baseline content.
+
 ## 0.4.236-SNAPSHOT
 
 - **PERF044.** Construct standard Map literals directly from the evaluated factory without a guest factory call.

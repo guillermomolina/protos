@@ -1808,6 +1808,159 @@ final class ProtosI115BDeferredCallerTest {
         });
     }
 
+    /**
+     * The first invocation of a source Closure without its own Prelude
+     * inherits the observing caller's actual Prelude through B5[3], before
+     * its effective root has registered any caller need and without an
+     * older physical caller frame to walk. Direct and indirect dispatch
+     * transport the same authority, and nothing is published.
+     */
+    @Test
+    void firstPreludeFreeInvocationInheritsTheCallersActualPrelude() throws Exception {
+        withCore(module -> {
+            ProtosPrelude other = otherPreludeModule().prelude().orElseThrow();
+            assertNotSame(module.prelude().orElseThrow(), other);
+            ProtosClosureValue callerClosure = ownPrelude(closure("() => 0", module), other);
+            for (boolean indirect : new boolean[] {false, true}) {
+                ProtosClosureValue callee = executablePreludeFree(closure("(x) => { x == 1 }", module));
+                RootCallTarget target = directTarget(callee);
+                ProtosBytecodeRootNode root = (ProtosBytecodeRootNode) target.getRootNode();
+                assertFalse(root.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE),
+                        "the callee is not pre-warmed");
+                assertFalse(root.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION));
+                Object[] callerArguments = ProtosFrameArguments.compactDirectClosureCallOneNoHome(
+                        callerClosure, (Object) null, SUPPLIED);
+                var frame = com.oracle.truffle.api.Truffle.getRuntime().createVirtualFrame(
+                        callerArguments,
+                        com.oracle.truffle.api.frame.FrameDescriptor.newBuilder().build());
+                Object[] arguments = ProtosFrameArguments.functionCallArguments(new Object[] {1L});
+                Object outcome = indirect
+                        ? ProtosFunctionCallDispatchersFactory.FunctionIndirectInvokeNodeGen
+                                .getUncached()
+                                .execute(frame, null, target, root, callee, arguments, null)
+                        : ProtosFunctionCallDispatchersFactory.FunctionDirectInvokeNodeGen
+                                .getUncached()
+                                .execute(frame, null,
+                                        com.oracle.truffle.api.nodes.DirectCallNode.create(target),
+                                        root, callee, arguments, null);
+                assertEquals(Boolean.TRUE, ProtosNumericValueSupport.guestValue(outcome),
+                        "indirect=" + indirect);
+                assertSame(other, arguments[3],
+                        "the caller's actual Prelude is transported (indirect=" + indirect + ")");
+                assertUnpublished(callerArguments);
+                assertFalse(root.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION));
+            }
+        });
+    }
+
+    /**
+     * An explicitly supplied semantic caller stays authoritative for a
+     * Prelude-free callee even under a physical frame of another Prelude.
+     */
+    @Test
+    void explicitCallerStaysAuthoritativeForPreludeFreeCallee() throws Exception {
+        withCore(module -> {
+            ProtosPrelude other = otherPreludeModule().prelude().orElseThrow();
+            ProtosClosureValue frameClosure = ownPrelude(closure("() => 0", module), other);
+            var frame = com.oracle.truffle.api.Truffle.getRuntime().createVirtualFrame(
+                    ProtosFrameArguments.compactDirectClosureCallOneNoHome(
+                            frameClosure, (Object) null, SUPPLIED),
+                    com.oracle.truffle.api.frame.FrameDescriptor.newBuilder().build());
+            ProtosActivation requested = ProtosActivation.forClosureInvocation(
+                    closure("() => 1", module), List.of(), module.prelude().orElseThrow());
+            ProtosClosureValue callee = executablePreludeFree(closure("(x) => { x == 1 }", module));
+            RootCallTarget target = directTarget(callee);
+            ProtosBytecodeRootNode root = (ProtosBytecodeRootNode) target.getRootNode();
+            Object[] arguments = ProtosFrameArguments.functionCallArguments(new Object[] {1L});
+            Object outcome = ProtosFunctionCallDispatchersFactory.FunctionDirectInvokeNodeGen
+                    .getUncached()
+                    .execute(frame, null,
+                            com.oracle.truffle.api.nodes.DirectCallNode.create(target),
+                            root, callee, arguments, requested);
+            assertEquals(Boolean.TRUE, ProtosNumericValueSupport.guestValue(outcome));
+            assertSame(requested, arguments[3], "the explicit caller is never replaced");
+        });
+    }
+
+    /**
+     * A Prelude-free Closure calling another Prelude-free Closure: the first
+     * invocation of the chain forwards the inherited Prelude through every
+     * link, without warming invocations.
+     */
+    @Test
+    void transitivePreludeFreeChainInheritsOnFirstInvocation() throws Exception {
+        withCore(module -> {
+            ProtosPrelude other = otherPreludeModule().prelude().orElseThrow();
+            ProtosClosureValue callerClosure = ownPrelude(closure("() => 0", module), other);
+            ProtosClosureValue inner = executablePreludeFree(closure("(x) => { x == 1 }", module));
+            ProtosClosureValue outer = executablePreludeFree(closure("(f, x) => { f(x) }", module));
+            RootCallTarget target = directTarget(outer);
+            ProtosBytecodeRootNode outerRoot = (ProtosBytecodeRootNode) target.getRootNode();
+            ProtosBytecodeRootNode innerRoot =
+                    (ProtosBytecodeRootNode) directTarget(inner).getRootNode();
+            assertFalse(outerRoot.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE));
+            assertFalse(innerRoot.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE));
+            var frame = com.oracle.truffle.api.Truffle.getRuntime().createVirtualFrame(
+                    ProtosFrameArguments.compactDirectClosureCallOneNoHome(
+                            callerClosure, (Object) null, SUPPLIED),
+                    com.oracle.truffle.api.frame.FrameDescriptor.newBuilder().build());
+            Object[] arguments =
+                    ProtosFrameArguments.functionCallArguments(new Object[] {inner, 1L});
+            Object outcome = ProtosFunctionCallDispatchersFactory.FunctionDirectInvokeNodeGen
+                    .getUncached()
+                    .execute(frame, null,
+                            com.oracle.truffle.api.nodes.DirectCallNode.create(target),
+                            outerRoot, outer, arguments, null);
+            assertEquals(Boolean.TRUE, ProtosNumericValueSupport.guestValue(outcome));
+            assertSame(other, arguments[3]);
+            assertFalse(outerRoot.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION));
+            assertFalse(innerRoot.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION));
+        });
+    }
+
+    /**
+     * An ordinary Closure that owns its Prelude keeps the compact route:
+     * no caller payload, no publication, no registered need and no
+     * invalidation across repeated direct and indirect invocations.
+     */
+    @Test
+    void ownPreludeCalleeKeepsTheNullCallerPayload() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue callerClosure = closure("() => 0", module);
+            ProtosClosureValue callee = closure("(x) => { x == 1 }", module);
+            assertSame(module.prelude().orElseThrow(), callee.preludeOrNullForRuntime());
+            RootCallTarget target = directTarget(callee);
+            ProtosBytecodeRootNode root = (ProtosBytecodeRootNode) target.getRootNode();
+            assertFalse(root.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE));
+            var stable = root.callerNeedsStability();
+            var callNode = com.oracle.truffle.api.nodes.DirectCallNode.create(target);
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                Object[] callerArguments = ProtosFrameArguments.compactDirectClosureCallOneNoHome(
+                        callerClosure, (Object) null, SUPPLIED);
+                var frame = com.oracle.truffle.api.Truffle.getRuntime().createVirtualFrame(
+                        callerArguments,
+                        com.oracle.truffle.api.frame.FrameDescriptor.newBuilder().build());
+                Object[] direct = ProtosFrameArguments.functionCallArguments(new Object[] {1L});
+                assertEquals(Boolean.TRUE, ProtosNumericValueSupport.guestValue(
+                        ProtosFunctionCallDispatchersFactory.FunctionDirectInvokeNodeGen
+                                .getUncached()
+                                .execute(frame, null, callNode, root, callee, direct, null)));
+                Object[] indirect = ProtosFrameArguments.functionCallArguments(new Object[] {1L});
+                assertEquals(Boolean.TRUE, ProtosNumericValueSupport.guestValue(
+                        ProtosFunctionCallDispatchersFactory.FunctionIndirectInvokeNodeGen
+                                .getUncached()
+                                .execute(frame, null, target, root, callee, indirect, null)));
+                assertSame(null, direct[3], "no caller payload");
+                assertSame(null, indirect[3], "no caller payload");
+                assertUnpublished(callerArguments);
+            }
+            assertFalse(root.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE));
+            assertFalse(root.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_EXACT_ACTIVATION));
+            assertSame(stable, root.callerNeedsStability(), "no repeated invalidation");
+            assertTrue(stable.isValid());
+        });
+    }
+
     // ---- helpers ---------------------------------------------------------------------
 
     /** The same definition and captures, without an own prelude; never executed. */
@@ -1816,6 +1969,18 @@ final class ProtosI115BDeferredCallerTest {
                 template.definition(),
                 template.capturedLexicalContexts(),
                 template.capturedReceiver());
+    }
+
+    /** The same definition, captures and execution plan, without an own prelude; executable. */
+    private static ProtosClosureValue executablePreludeFree(ProtosClosureValue template) {
+        return new ProtosClosureValue(
+                template.definition(),
+                template.capturedLexicalContexts(),
+                template.capturedReceiver(),
+                template.methodHome().orElse(null),
+                template.returnHome().orElse(null),
+                null,
+                template.executionPlan().orElseThrow());
     }
 
     /** The same definition and captures, with {@code prelude} as its own prelude; never executed. */

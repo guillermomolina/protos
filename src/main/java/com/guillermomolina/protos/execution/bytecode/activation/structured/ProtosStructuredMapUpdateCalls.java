@@ -64,6 +64,25 @@ final class ProtosStructuredMapUpdateCalls {
             this.value = java.util.Objects.requireNonNull(value, "value");
         }
 
+        /* The query key: the receiver of both the hash and the equality send. */
+        Object comparisonKey() {
+            return key;
+        }
+
+        /* The representative key of the current candidate: the equality argument. */
+        Object candidateKey() {
+            if (!needsEquality()) {
+                throw new IllegalStateException(
+                        "Map initial definition candidate key requested without a candidate");
+            }
+            return candidates.get(index).key();
+        }
+
+        /* The exact semantic caller of the hash and equality sends. */
+        ProtosActivation comparisonCaller() {
+            return activation;
+        }
+
         void enterComparison() {
             if (comparisonEntered) {
                 throw new IllegalStateException(
@@ -88,10 +107,7 @@ final class ProtosStructuredMapUpdateCalls {
                         "Map initial-definition hash callback prepared after hash acceptance");
             }
             return ProtosCallRequest.send(
-                    key,
-                    "hash",
-                    activation,
-                    new Object[0]);
+                    comparisonKey(), "hash", comparisonCaller(), new Object[0]);
         }
 
         void acceptHash(Object result) {
@@ -129,10 +145,10 @@ final class ProtosStructuredMapUpdateCalls {
             }
 
             return ProtosCallRequest.send(
-                    key,
+                    comparisonKey(),
                     "==",
-                    activation,
-                    new Object[] {candidates.get(index).key()});
+                    comparisonCaller(),
+                    new Object[] {candidateKey()});
         }
 
         void acceptEquality(Object result) {
@@ -217,6 +233,25 @@ final class ProtosStructuredMapUpdateCalls {
             this.newValue = supplied[1];
         }
 
+        /* The query key: the receiver of both the hash and the equality send. */
+        Object comparisonKey() {
+            return key;
+        }
+
+        /* The representative key of the current candidate: the equality argument. */
+        Object candidateKey() {
+            if (!needsEquality()) {
+                throw new IllegalStateException(
+                        "Map.atPut candidate key requested without a candidate");
+            }
+            return candidates.get(index).key();
+        }
+
+        /* The exact semantic caller of the hash and equality sends. */
+        ProtosActivation comparisonCaller() {
+            return activation;
+        }
+
         void enterComparison() {
             if (comparisonEntered) {
                 throw new IllegalStateException(
@@ -240,7 +275,8 @@ final class ProtosStructuredMapUpdateCalls {
                 throw new IllegalStateException(
                         "Map.atPut hash callback prepared after hash acceptance");
             }
-            return ProtosCallRequest.send(key, "hash", activation, new Object[0]);
+            return ProtosCallRequest.send(
+                    comparisonKey(), "hash", comparisonCaller(), new Object[0]);
         }
 
         void acceptHash(Object result) {
@@ -274,10 +310,10 @@ final class ProtosStructuredMapUpdateCalls {
                         "Map.atPut equality callback requested without a candidate");
             }
             return ProtosCallRequest.send(
-                    key,
+                    comparisonKey(),
                     "==",
-                    activation,
-                    new Object[] {candidates.get(index).key()});
+                    comparisonCaller(),
+                    new Object[] {candidateKey()});
         }
 
         void acceptEquality(Object result) {
@@ -368,6 +404,25 @@ final class ProtosStructuredMapUpdateCalls {
             this.key = supplied[0];
         }
 
+        /* The query key: the receiver of both the hash and the equality send. */
+        Object comparisonKey() {
+            return key;
+        }
+
+        /* The representative key of the current candidate: the equality argument. */
+        Object candidateKey() {
+            if (!needsEquality()) {
+                throw new IllegalStateException(
+                        "Map.remove candidate key requested without a candidate");
+            }
+            return candidates.get(index).key();
+        }
+
+        /* The exact semantic caller of the hash and equality sends. */
+        ProtosActivation comparisonCaller() {
+            return activation;
+        }
+
         void enterComparison() {
             if (comparisonEntered) {
                 throw new IllegalStateException(
@@ -391,7 +446,8 @@ final class ProtosStructuredMapUpdateCalls {
                 throw new IllegalStateException(
                         "Map.remove hash callback prepared after hash acceptance");
             }
-            return ProtosCallRequest.send(key, "hash", activation, new Object[0]);
+            return ProtosCallRequest.send(
+                    comparisonKey(), "hash", comparisonCaller(), new Object[0]);
         }
 
         void acceptHash(Object result) {
@@ -425,10 +481,10 @@ final class ProtosStructuredMapUpdateCalls {
                         "Map.remove equality callback requested without a candidate");
             }
             return ProtosCallRequest.send(
-                    key,
+                    comparisonKey(),
                     "==",
-                    activation,
-                    new Object[] {candidates.get(index).key()});
+                    comparisonCaller(),
+                    new Object[] {candidateKey()});
         }
 
         void acceptEquality(Object result) {

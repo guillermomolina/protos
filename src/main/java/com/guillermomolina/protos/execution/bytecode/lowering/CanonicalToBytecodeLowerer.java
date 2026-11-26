@@ -5116,34 +5116,23 @@ final class CanonicalToBytecodeLowerer {
             builder.endPrepareMapInitialDefinition();
             builder.endStoreLocal();
 
-            builder.beginStructuredAdvance(ProtosStructuredPhase.ENTER_COMPARISON);
-            builder.emitLoadLocal(initialDefinition);
-            builder.endStructuredAdvance();
-
-            builder.beginTryFinally(
-                    () -> {
-                        builder.beginStructuredAdvance(ProtosStructuredPhase.LEAVE_COMPARISON);
-                        builder.emitLoadLocal(initialDefinition);
-                        builder.endStructuredAdvance();
-                    });
-
-            builder.beginBlock();
-
-            builder.beginStoreLocal(preparedCall);
-            builder.beginStructuredPrepareChildCall(ProtosStructuredPhase.HASH);
-            builder.emitLoadLocal(initialDefinition);
-            builder.endStructuredPrepareChildCall();
-            builder.endStoreLocal();
-
-            emitRequestInvocation(
+            ProtosStructuredDispatchLowerer.emitMapKeyComparison(
                     builder,
-                    callbackResult,
+                    ProtosStructuredPhase.HASH,
+                    initialDefinition,
                     preparedCall,
-                    childResult,
-                    resumeValue);
-
-            builder.endBlock();
-            builder.endTryFinally();
+                    callbackResult,
+                    () -> {
+                        // As the end of emitRequestInvocation.
+                        builder.emitClearLocal(childResult);
+                        builder.emitClearLocal(resumeValue);
+                    },
+                    () -> emitRequestInvocation(
+                            builder,
+                            callbackResult,
+                            preparedCall,
+                            childResult,
+                            resumeValue));
 
             builder.beginStructuredAcceptChildOutcome(ProtosStructuredPhase.HASH);
             builder.emitLoadLocal(initialDefinition);
@@ -5158,34 +5147,23 @@ final class CanonicalToBytecodeLowerer {
 
             builder.beginBlock();
 
-            builder.beginStructuredAdvance(ProtosStructuredPhase.ENTER_COMPARISON);
-            builder.emitLoadLocal(initialDefinition);
-            builder.endStructuredAdvance();
-
-            builder.beginTryFinally(
-                    () -> {
-                        builder.beginStructuredAdvance(ProtosStructuredPhase.LEAVE_COMPARISON);
-                        builder.emitLoadLocal(initialDefinition);
-                        builder.endStructuredAdvance();
-                    });
-
-            builder.beginBlock();
-
-            builder.beginStoreLocal(preparedCall);
-            builder.beginStructuredPrepareChildCall(ProtosStructuredPhase.EQUALITY);
-            builder.emitLoadLocal(initialDefinition);
-            builder.endStructuredPrepareChildCall();
-            builder.endStoreLocal();
-
-            emitRequestInvocation(
+            ProtosStructuredDispatchLowerer.emitMapKeyComparison(
                     builder,
-                    callbackResult,
+                    ProtosStructuredPhase.EQUALITY,
+                    initialDefinition,
                     preparedCall,
-                    childResult,
-                    resumeValue);
-
-            builder.endBlock();
-            builder.endTryFinally();
+                    callbackResult,
+                    () -> {
+                        // As the end of emitRequestInvocation.
+                        builder.emitClearLocal(childResult);
+                        builder.emitClearLocal(resumeValue);
+                    },
+                    () -> emitRequestInvocation(
+                            builder,
+                            callbackResult,
+                            preparedCall,
+                            childResult,
+                            resumeValue));
 
             builder.beginStructuredAcceptChildOutcome(ProtosStructuredPhase.EQUALITY);
             builder.emitLoadLocal(initialDefinition);
