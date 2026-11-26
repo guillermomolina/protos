@@ -8,6 +8,12 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.225-SNAPSHOT
+
+- **BUG041.** Correct external child custody completion ordering: host close reclamation now waits for the dependent stages already returned by the existing termination and transport-retirement callbacks, so success is reported only after the discharging callback finished registry removal and admission return.
+- Remove the redundant host-side re-invocations of the supervisor and transport callbacks; a native termination whose runtime recording is still in progress is never escalated to forced termination. Guest wait observation, endpoint-release recording, custody refusal and retry are unchanged.
+- Add deterministic custody regressions for blocked registry publication, held recording callbacks, pending endpoint release, exceptional transport retirement, independence of the native terminal observation from transport retirement, and single-invocation Process-level reclamation.
+
 ## 0.4.224-SNAPSHOT
 
 - **GITHUB026.** Distribute mandatory CI across independent validation runners with deterministic Java test sharding and revision-bound coverage aggregation.

@@ -163,6 +163,17 @@ public final class ProtosExternalChildValue implements ProtosRepresentedValue {
     private boolean custodyReleased;
     private boolean transportRetired;
     private boolean admissionReleased;
+    /**
+     * Dependent stage of the native termination stage: completes only after the recording of the
+     * supervisor result, including any custody discharge it performed, returned. The native stage
+     * reports the native event; this stage reports that the runtime finished processing it.
+     */
+    private final CompletionStage<TerminalOutcome> recordedTermination;
+    /**
+     * Dependent stage of the native transport retirement: completes only after the recording of
+     * the retirement, including any custody discharge it performed, returned.
+     */
+    private final CompletionStage<Void> recordedTransportRetirement;
 
     ProtosExternalChildValue(
             ProtosPrelude.ExecutionProtocols protocols,
@@ -180,8 +191,10 @@ public final class ProtosExternalChildValue implements ProtosRepresentedValue {
         for (Stream stream : Stream.values()) {
             handles.put(stream, HandleState.HELD);
         }
-        nativeChild.termination().whenComplete(this::supervisorFinished);
-        nativeChild.transportRetired().whenComplete(this::transportFinished);
+        this.recordedTermination =
+                nativeChild.termination().whenComplete(this::supervisorFinished);
+        this.recordedTransportRetirement =
+                nativeChild.transportRetired().whenComplete(this::transportFinished);
     }
 
     public ProtosProcessRuntime ownerForRuntime() {
@@ -364,6 +377,13 @@ public final class ProtosExternalChildValue implements ProtosRepresentedValue {
      * child is never reclaimed again and no reap is ever repeated. Runs on the host closing
      * thread, never in an Actor turn and never with a Process monitor held.
      *
+     * <p>Success is published only after every callback that may discharge custody returned: the
+     * recorded termination, the recorded transport retirement and each recorded handle release
+     * complete only after their custody processing (registry removal and admission return)
+     * finished, whereas the custody flag alone is set before that processing runs. A native
+     * termination whose recording is still in progress is not a live child: it is never escalated
+     * to forced termination, and the attempt simply reports that custody is not yet discharged.
+     *
      * @return true when the native child is known to be reaped, all its handles released and its
      *     transport retired
      */
@@ -375,22 +395,23 @@ public final class ProtosExternalChildValue implements ProtosRepresentedValue {
             }
         }
         enterHostOnlyCustodyForRuntime();
-        java.util.concurrent.CompletableFuture<TerminalOutcome> stage =
+        java.util.concurrent.CompletableFuture<TerminalOutcome> nativeTermination =
                 nativeChild.termination().toCompletableFuture();
-        TerminalOutcome reaped = awaitReap(stage, graceMillis);
-        if (reaped == null && !stage.isCompletedExceptionally()) {
+        java.util.concurrent.CompletableFuture<TerminalOutcome> recorded =
+                recordedTermination.toCompletableFuture();
+        TerminalOutcome reaped = awaitReap(recorded, graceMillis);
+        // Only a native child whose termination is still pending can still be running.
+        if (reaped == null && !nativeTermination.isDone()) {
             try {
                 nativeChild.requestForcedTermination();
             } catch (IOException | RuntimeException failure) {
                 return false;
             }
-            reaped = awaitReap(stage, graceMillis);
+            reaped = awaitReap(recorded, graceMillis);
         }
         if (reaped == null) {
             return false;
         }
-        // The waiter may return before the stage's own callback ran; recording is idempotent.
-        supervisorFinished(reaped, null);
         if (!awaitReleases(graceMillis) || !awaitTransport(graceMillis)) {
             return false;
         }
@@ -404,12 +425,13 @@ public final class ProtosExternalChildValue implements ProtosRepresentedValue {
     }
 
     /**
-     * Waits at most {@code millis} for the transport to retire. A normal completion is recorded
-     * at once, since the waiter may return before the stage's own callback ran.
+     * Waits at most {@code millis} for the recorded transport retirement, which completes only
+     * after its callback, including any custody discharge, returned. An exceptional or cancelled
+     * retirement is never success.
      */
     private boolean awaitTransport(long millis) {
         try {
-            nativeChild.transportRetired()
+            recordedTransportRetirement
                     .toCompletableFuture()
                     .get(millis, java.util.concurrent.TimeUnit.MILLISECONDS);
         } catch (InterruptedException interrupted) {
@@ -420,13 +442,13 @@ public final class ProtosExternalChildValue implements ProtosRepresentedValue {
                 | java.util.concurrent.TimeoutException notRetired) {
             return false;
         }
-        transportFinished(null, null);
         return true;
     }
 
     /**
-     * The verified outcome, or null when the supervisor did not establish the reap in time or
-     * failed. A failed supervisor is never treated as a reap.
+     * The verified outcome once its recording returned, or null when the supervisor did not
+     * establish the reap in time, failed, or its recording is still in progress. A failed
+     * supervisor is never treated as a reap.
      */
     private static TerminalOutcome awaitReap(
             java.util.concurrent.CompletableFuture<TerminalOutcome> stage, long millis) {

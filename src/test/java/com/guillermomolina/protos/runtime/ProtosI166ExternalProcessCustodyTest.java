@@ -74,7 +74,7 @@ final class ProtosI166ExternalProcessCustodyTest {
      * A stream listed in {@code uncertainRelease} reports an uncertain (failed) release.
      */
     private static final class ControlledChild implements ProtosExternalChildValue.NativeChild {
-        final CompletableFuture<TerminalOutcome> termination = new CompletableFuture<>();
+        final CompletableFuture<TerminalOutcome> termination;
         volatile CompletableFuture<Void> transport = CompletableFuture.completedFuture(null);
         final AtomicInteger terminationRequests = new AtomicInteger();
         final AtomicInteger forcedRequests = new AtomicInteger();
@@ -89,6 +89,20 @@ final class ProtosI166ExternalProcessCustodyTest {
         final AtomicBoolean refuseForced = new AtomicBoolean();
         /** When set, serves STDOUT instead of the immediate-EOF lane. */
         volatile ProtosByteIoFlow.Backend stdoutLane;
+        /**
+         * Streams whose physical release stays pending until the test completes the listed
+         * stage; every other stream keeps the immediate completion.
+         */
+        final java.util.Map<ProtosExternalChildValue.Stream, CompletableFuture<Boolean>> pendingRelease =
+                new java.util.EnumMap<>(ProtosExternalChildValue.Stream.class);
+
+        ControlledChild() {
+            this(new CompletableFuture<>());
+        }
+
+        ControlledChild(CompletableFuture<TerminalOutcome> termination) {
+            this.termination = termination;
+        }
 
         @Override
         public ProtosByteIoFlow.Backend lane(ProtosExternalChildValue.Stream stream) {
@@ -122,6 +136,11 @@ final class ProtosI166ExternalProcessCustodyTest {
                 return previous;
             }
             releaseCalls.incrementAndGet();
+            CompletableFuture<Boolean> pending = pendingRelease.get(stream);
+            if (pending != null) {
+                releases.put(stream, pending);
+                return pending;
+            }
             boolean confirmed = !uncertainRelease.contains(stream);
             if (confirmed) {
                 closedStreams.incrementAndGet();
@@ -1583,4 +1602,581 @@ final class ProtosI166ExternalProcessCustodyTest {
         }
     }
 
+    /**
+     * Native stage whose registered callbacks wait for an explicit gate after the native result is
+     * already set, so a test can observe a completed native stage while the runtime recording of
+     * it is still in progress. The dependent stage is the real one returned by
+     * {@code super.whenComplete}; it completes only after the registered action returned.
+     */
+    private static final class GatedCallbackFuture<T> extends CompletableFuture<T> {
+        final CountDownLatch callbackEntered = new CountDownLatch(1);
+        final CountDownLatch callbackGate = new CountDownLatch(1);
+
+        @Override
+        public CompletableFuture<T> whenComplete(
+                java.util.function.BiConsumer<? super T, ? super Throwable> action) {
+            return super.whenComplete((value, failure) -> {
+                callbackEntered.countDown();
+                try {
+                    if (!callbackGate.await(10, TimeUnit.SECONDS)) {
+                        throw new IllegalStateException("callback gate was never opened");
+                    }
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException("callback gate interrupted", interrupted);
+                }
+                action.accept(value, failure);
+            });
+        }
+    }
+
+    /**
+     * Waits, bounded, until {@code thread} is blocked entering {@code monitor} while the calling
+     * thread owns it. Observes JVM thread state only; never assumes progress from elapsed time.
+     */
+    private static void awaitBlockedOnMonitor(Thread thread, Object monitor) {
+        java.lang.management.ThreadMXBean threads =
+                java.lang.management.ManagementFactory.getThreadMXBean();
+        long owner = Thread.currentThread().threadId();
+        int identity = System.identityHashCode(monitor);
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        while (true) {
+            java.lang.management.ThreadInfo info = threads.getThreadInfo(thread.threadId());
+            if (info != null
+                    && info.getThreadState() == Thread.State.BLOCKED
+                    && info.getLockInfo() != null
+                    && info.getLockInfo().getIdentityHashCode() == identity
+                    && info.getLockOwnerId() == owner) {
+                return;
+            }
+            assertTrue(thread.isAlive(), thread.getName() + " finished without blocking on the monitor");
+            assertTrue(System.nanoTime() < deadline, thread.getName() + " never blocked on the monitor");
+            Thread.onSpinWait();
+        }
+    }
+
+    /** Starts a test-owned thread that runs one host reclamation with a zero budget. */
+    private static Thread startZeroBudgetReclamation(
+            ProtosExternalChildValue child, CompletableFuture<Boolean> result) {
+        Thread reclaimer = new Thread(() -> {
+            try {
+                result.complete(child.reclaimForHostCloseRuntime(0));
+            } catch (Throwable failure) {
+                result.completeExceptionally(failure);
+            }
+        }, "bug041-reclaimer");
+        reclaimer.start();
+        return reclaimer;
+    }
+
+    /**
+     * Starts a test-owned thread that runs exactly one Process-level host reclamation with the
+     * given budget; no retry and no guest code.
+     */
+    private static Thread startProcessReclamation(
+            ProtosProcessRuntime process, long graceMillis, CompletableFuture<Boolean> result) {
+        Thread reclaimer = new Thread(() -> {
+            try {
+                result.complete(process.reclaimExternalChildrenForHostClose(graceMillis));
+            } catch (Throwable failure) {
+                result.completeExceptionally(failure);
+            }
+        }, "bug041-process-reclaimer");
+        reclaimer.start();
+        return reclaimer;
+    }
+
+    /**
+     * Waits, bounded, until {@code reclaimer} is parked inside the real Process-level reclamation
+     * path, within the child's {@code waitMethod} ({@code awaitReap} or {@code awaitTransport}),
+     * while its result is still unpublished. Observes JVM thread state and stack frames only.
+     */
+    private static void awaitReclamationWaitingForRecording(
+            Thread reclaimer, String waitMethod, CompletableFuture<Boolean> result) {
+        java.lang.management.ThreadMXBean threads =
+                java.lang.management.ManagementFactory.getThreadMXBean();
+        String childClass = ProtosExternalChildValue.class.getName();
+        String processClass = ProtosProcessRuntime.class.getName();
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        while (true) {
+            assertFalse(result.isDone(), "reclamation published its result before waiting in " + waitMethod);
+            assertTrue(reclaimer.isAlive(), "reclamation finished before waiting in " + waitMethod);
+            java.lang.management.ThreadInfo info =
+                    threads.getThreadInfo(reclaimer.threadId(), Integer.MAX_VALUE);
+            if (info != null
+                    && (info.getThreadState() == Thread.State.WAITING
+                            || info.getThreadState() == Thread.State.TIMED_WAITING)) {
+                boolean inWait = false;
+                boolean inChildReclamation = false;
+                boolean inProcessReclamation = false;
+                for (StackTraceElement frame : info.getStackTrace()) {
+                    inWait |= childClass.equals(frame.getClassName())
+                            && waitMethod.equals(frame.getMethodName());
+                    inChildReclamation |= childClass.equals(frame.getClassName())
+                            && "reclaimForHostCloseRuntime".equals(frame.getMethodName());
+                    inProcessReclamation |= processClass.equals(frame.getClassName())
+                            && "reclaimExternalChildrenForHostClose".equals(frame.getMethodName());
+                }
+                if (inWait && inChildReclamation && inProcessReclamation && !result.isDone()) {
+                    return;
+                }
+            }
+            assertTrue(System.nanoTime() < deadline, "reclamation never waited in " + waitMethod);
+            Thread.onSpinWait();
+        }
+    }
+
+    private static void joinTestThread(Thread thread) throws InterruptedException {
+        thread.join(10_000);
+        assertFalse(thread.isAlive(), thread.getName() + " did not finish");
+    }
+
+    /**
+     * BUG041: transport retirement is the last native obligation and its callback is blocked in
+     * Process registry removal. Observing the custody flag is not enough: host reclamation must
+     * not report success until the callback, registry removal and admission return finished.
+     */
+    @Test
+    void bug041TransportReclamationWaitsForCustodyPublication() throws Exception {
+        ControlledChild nativeChild = new ControlledChild();
+        CompletableFuture<Void> pumps = new CompletableFuture<>();
+        nativeChild.transport = pumps;
+        try (Context context = granted()) {
+            ProtosProcessRuntime process = process(context);
+            ProtosExternalExecutionCapabilityValue grant =
+                    process.rootExecutionForRuntime().orElseThrow();
+            ProtosExternalExecutionCapabilityValue.Admission admission =
+                    grant.reserveChildForRuntime();
+            assertNotNull(admission);
+            ProtosExternalChildValue child =
+                    grant.newChildForRuntime(process, nativeChild, admission);
+            assertTrue(process.registerExternalChildForRuntime(child));
+            // 1. verified reap; 2. host-only custody; 3. three confirmed releases.
+            nativeChild.termination.complete(TerminalOutcome.exited(0));
+            child.enterHostOnlyCustodyForRuntime();
+            assertTrue(child.reapedForRuntime());
+            for (ProtosExternalChildValue.Stream stream : ProtosExternalChildValue.Stream.values()) {
+                assertFalse(child.endpointHandleHeldForRuntime(stream));
+            }
+            // 4. transport is the last obligation; 5. one admission stays reserved.
+            assertFalse(child.custodyReleasedForRuntime());
+            assertEquals(1, grant.admittedChildrenForRuntime());
+
+            Thread completer = new Thread(() -> pumps.complete(null), "bug041-transport-completion");
+            CompletableFuture<Boolean> whileBlocked = new CompletableFuture<>();
+            Thread reclaimer = null;
+            try {
+                synchronized (process) {
+                    completer.start();
+                    awaitBlockedOnMonitor(completer, process);
+                    reclaimer = startZeroBudgetReclamation(child, whileBlocked);
+                    assertFalse(whileBlocked.get(10, TimeUnit.SECONDS),
+                            "success was reported while registry removal was still blocked");
+                    assertTrue(process.externalChildrenForRuntime().contains(child));
+                }
+            } finally {
+                if (reclaimer != null) {
+                    joinTestThread(reclaimer);
+                }
+                joinTestThread(completer);
+            }
+
+            assertFalse(process.externalChildrenForRuntime().contains(child));
+            assertTrue(child.custodyReleasedForRuntime());
+            assertEquals(0, grant.admittedChildrenForRuntime());
+            assertTrue(child.reclaimForHostCloseRuntime(0));
+            assertTrue(child.hostCloseReclaimedForRuntime());
+            assertTrue(child.reclaimForHostCloseRuntime(0));
+            assertEquals(3, nativeChild.releaseCalls.get());
+            assertEquals(3, nativeChild.closedStreams.get());
+            assertEquals(0, nativeChild.forcedRequests.get());
+            admission.release();
+            assertEquals(0, grant.admittedChildrenForRuntime());
+        }
+    }
+
+    /**
+     * BUG041: the verified reap is the last native obligation and its recording callback is
+     * blocked in Process registry removal. A completed native termination is not completed
+     * custody, and it is never escalated to a forced termination.
+     */
+    @Test
+    void bug041SupervisorReclamationWaitsForCustodyPublication() throws Exception {
+        ControlledChild nativeChild = new ControlledChild();
+        try (Context context = granted()) {
+            ProtosProcessRuntime process = process(context);
+            ProtosExternalExecutionCapabilityValue grant =
+                    process.rootExecutionForRuntime().orElseThrow();
+            ProtosExternalExecutionCapabilityValue.Admission admission =
+                    grant.reserveChildForRuntime();
+            assertNotNull(admission);
+            ProtosExternalChildValue child =
+                    grant.newChildForRuntime(process, nativeChild, admission);
+            assertTrue(process.registerExternalChildForRuntime(child));
+            // Transport already retired (fixture default); every release confirmed while live.
+            child.enterHostOnlyCustodyForRuntime();
+            assertEquals(1, nativeChild.terminationRequests.get());
+            for (ProtosExternalChildValue.Stream stream : ProtosExternalChildValue.Stream.values()) {
+                assertFalse(child.endpointHandleHeldForRuntime(stream));
+            }
+            assertFalse(child.reapedForRuntime());
+            assertEquals(1, grant.admittedChildrenForRuntime());
+
+            Thread completer = new Thread(
+                    () -> nativeChild.termination.complete(TerminalOutcome.exited(0)),
+                    "bug041-termination-completion");
+            CompletableFuture<Boolean> whileBlocked = new CompletableFuture<>();
+            Thread reclaimer = null;
+            try {
+                synchronized (process) {
+                    completer.start();
+                    awaitBlockedOnMonitor(completer, process);
+                    assertTrue(nativeChild.termination.isDone());
+                    reclaimer = startZeroBudgetReclamation(child, whileBlocked);
+                    assertFalse(whileBlocked.get(10, TimeUnit.SECONDS),
+                            "success was reported while the reap recording was still blocked");
+                    assertTrue(process.externalChildrenForRuntime().contains(child));
+                }
+            } finally {
+                if (reclaimer != null) {
+                    joinTestThread(reclaimer);
+                }
+                joinTestThread(completer);
+            }
+
+            assertEquals(0, nativeChild.forcedRequests.get(),
+                    "a completed native termination must never be escalated");
+            assertFalse(process.externalChildrenForRuntime().contains(child));
+            assertTrue(child.custodyReleasedForRuntime());
+            assertEquals(0, grant.admittedChildrenForRuntime());
+            assertTrue(child.reclaimForHostCloseRuntime(0));
+            assertEquals(3, nativeChild.releaseCalls.get());
+            assertEquals(3, nativeChild.closedStreams.get());
+            assertEquals(0, nativeChild.forcedRequests.get());
+            admission.release();
+        }
+    }
+
+    /**
+     * BUG041: the native terminal observation exposed to the guest wait mechanism completes with
+     * the verified outcome while transport retirement, custody and admission are still pending.
+     */
+    @Test
+    void bug041TerminalObservationDoesNotWaitForTransportRetirement() throws Exception {
+        ControlledChild nativeChild = new ControlledChild();
+        CompletableFuture<Void> pumps = new CompletableFuture<>();
+        nativeChild.transport = pumps;
+        try (Context context = granted()) {
+            ProtosProcessRuntime process = process(context);
+            ProtosExternalExecutionCapabilityValue grant =
+                    process.rootExecutionForRuntime().orElseThrow();
+            ProtosExternalExecutionCapabilityValue.Admission admission =
+                    grant.reserveChildForRuntime();
+            assertNotNull(admission);
+            ProtosExternalChildValue child =
+                    grant.newChildForRuntime(process, nativeChild, admission);
+            assertTrue(process.registerExternalChildForRuntime(child));
+            TerminalOutcome verified = TerminalOutcome.exited(0);
+            nativeChild.termination.complete(verified);
+
+            CompletableFuture<TerminalOutcome> first = child.terminationForRuntime().toCompletableFuture();
+            CompletableFuture<TerminalOutcome> second = child.terminationForRuntime().toCompletableFuture();
+            assertTrue(first.isDone());
+            assertSame(verified, first.getNow(null));
+            assertSame(verified, second.getNow(null));
+            assertFalse(pumps.isDone());
+            assertFalse(child.custodyReleasedForRuntime());
+            assertTrue(process.externalChildrenForRuntime().contains(child));
+            assertEquals(1, grant.admittedChildrenForRuntime());
+            assertFalse(child.reclaimForHostCloseRuntime(0));
+
+            pumps.complete(null);
+            assertTrue(child.reclaimForHostCloseRuntime(0));
+            assertFalse(process.externalChildrenForRuntime().contains(child));
+            assertEquals(0, grant.admittedChildrenForRuntime());
+            assertEquals(0, nativeChild.forcedRequests.get());
+            admission.release();
+        }
+    }
+
+    /**
+     * BUG041: the native termination completed but its recording callback is held. Host
+     * reclamation sees pending custody processing, not a live child: it fails without any forced
+     * termination and succeeds once the callback returned.
+     */
+    @Test
+    void bug041RecordedReapPendingAfterNativeExitDoesNotForceTermination() throws Exception {
+        GatedCallbackFuture<TerminalOutcome> termination = new GatedCallbackFuture<>();
+        ControlledChild nativeChild = new ControlledChild(termination);
+        try (Context context = granted()) {
+            ProtosProcessRuntime process = process(context);
+            ProtosExternalExecutionCapabilityValue grant =
+                    process.rootExecutionForRuntime().orElseThrow();
+            ProtosExternalExecutionCapabilityValue.Admission admission =
+                    grant.reserveChildForRuntime();
+            assertNotNull(admission);
+            ProtosExternalChildValue child =
+                    grant.newChildForRuntime(process, nativeChild, admission);
+            assertTrue(process.registerExternalChildForRuntime(child));
+            child.enterHostOnlyCustodyForRuntime();
+            assertEquals(1, nativeChild.terminationRequests.get());
+
+            Thread completer = new Thread(
+                    () -> termination.complete(TerminalOutcome.exited(0)),
+                    "bug041-gated-termination-completion");
+            try {
+                completer.start();
+                assertTrue(termination.callbackEntered.await(10, TimeUnit.SECONDS));
+                assertTrue(termination.isDone());
+                assertNull(child.outcomeForRuntime(), "the recording callback is still held");
+                assertFalse(child.reclaimForHostCloseRuntime(0));
+                assertEquals(0, nativeChild.forcedRequests.get(),
+                        "pending recording after native exit must not force termination");
+                assertTrue(process.externalChildrenForRuntime().contains(child));
+                assertEquals(1, grant.admittedChildrenForRuntime());
+            } finally {
+                termination.callbackGate.countDown();
+                joinTestThread(completer);
+            }
+
+            assertEquals(TerminalOutcome.exited(0), child.outcomeForRuntime());
+            assertTrue(child.custodyReleasedForRuntime());
+            assertFalse(process.externalChildrenForRuntime().contains(child));
+            assertEquals(0, grant.admittedChildrenForRuntime());
+            assertTrue(child.reclaimForHostCloseRuntime(0));
+            assertTrue(child.reclaimForHostCloseRuntime(0));
+            assertEquals(3, nativeChild.releaseCalls.get());
+            assertEquals(3, nativeChild.closedStreams.get());
+            assertEquals(0, nativeChild.forcedRequests.get());
+            admission.release();
+        }
+    }
+
+    /**
+     * BUG041: with the reap verified and the transport retired, one pending endpoint release keeps
+     * custody; its recorded completion discharges the child through the existing path.
+     */
+    @Test
+    void bug041PendingEndpointReleasePreventsSuccessfulReclamation() {
+        ControlledChild nativeChild = new ControlledChild();
+        CompletableFuture<Boolean> pendingStderr = new CompletableFuture<>();
+        nativeChild.pendingRelease.put(ProtosExternalChildValue.Stream.STDERR, pendingStderr);
+        try (Context context = granted()) {
+            ProtosProcessRuntime process = process(context);
+            ProtosExternalExecutionCapabilityValue grant =
+                    process.rootExecutionForRuntime().orElseThrow();
+            ProtosExternalExecutionCapabilityValue.Admission admission =
+                    grant.reserveChildForRuntime();
+            assertNotNull(admission);
+            ProtosExternalChildValue child =
+                    grant.newChildForRuntime(process, nativeChild, admission);
+            assertTrue(process.registerExternalChildForRuntime(child));
+            try {
+                nativeChild.termination.complete(TerminalOutcome.exited(0));
+                child.enterHostOnlyCustodyForRuntime();
+                assertFalse(child.endpointHandleHeldForRuntime(ProtosExternalChildValue.Stream.STDIN));
+                assertFalse(child.endpointHandleHeldForRuntime(ProtosExternalChildValue.Stream.STDOUT));
+                assertTrue(child.endpointHandleHeldForRuntime(ProtosExternalChildValue.Stream.STDERR));
+
+                assertFalse(child.reclaimForHostCloseRuntime(0));
+                assertTrue(process.externalChildrenForRuntime().contains(child));
+                assertEquals(1, grant.admittedChildrenForRuntime());
+                assertFalse(child.custodyReleasedForRuntime());
+            } finally {
+                pendingStderr.complete(true);
+            }
+
+            assertFalse(child.endpointHandleHeldForRuntime(ProtosExternalChildValue.Stream.STDERR));
+            assertFalse(child.endpointReleaseUncertainForRuntime(ProtosExternalChildValue.Stream.STDERR));
+            assertTrue(child.custodyReleasedForRuntime());
+            assertFalse(process.externalChildrenForRuntime().contains(child));
+            assertEquals(0, grant.admittedChildrenForRuntime());
+            assertTrue(child.reclaimForHostCloseRuntime(0));
+            assertEquals(3, nativeChild.releaseCalls.get());
+            assertEquals(0, nativeChild.forcedRequests.get());
+            admission.release();
+        }
+    }
+
+    /**
+     * BUG041: an exceptional transport retirement is never retirement. With the reap verified and
+     * every release confirmed, the child keeps custody, its registration and its admission, and
+     * no host-close success is published; the Context close is refused like any other genuine
+     * outstanding custody.
+     */
+    @Test
+    void bug041ExceptionalTransportRetirementNeverDischargesCustody() {
+        ControlledChild nativeChild = new ControlledChild();
+        nativeChild.transport = CompletableFuture.failedFuture(new IOException("transport lost"));
+        ProtosProcessRuntime process;
+        ProtosExternalChildValue child;
+        ProtosExternalExecutionCapabilityValue grant;
+        try (Context context = granted()) {
+            process = process(context);
+            grant = process.rootExecutionForRuntime().orElseThrow();
+            ProtosExternalExecutionCapabilityValue.Admission admission =
+                    grant.reserveChildForRuntime();
+            assertNotNull(admission);
+            child = grant.newChildForRuntime(process, nativeChild, admission);
+            assertTrue(process.registerExternalChildForRuntime(child));
+            nativeChild.termination.complete(TerminalOutcome.exited(0));
+            child.enterHostOnlyCustodyForRuntime();
+            for (ProtosExternalChildValue.Stream stream : ProtosExternalChildValue.Stream.values()) {
+                assertFalse(child.endpointHandleHeldForRuntime(stream));
+            }
+
+            assertFalse(child.reclaimForHostCloseRuntime(1));
+            assertFalse(child.custodyReleasedForRuntime());
+            assertFalse(child.hostCloseReclaimedForRuntime());
+            assertTrue(process.externalChildrenForRuntime().contains(child));
+            assertEquals(1, grant.admittedChildrenForRuntime());
+            assertEquals(0, nativeChild.forcedRequests.get());
+        }
+        assertFalse(child.custodyReleasedForRuntime());
+        assertFalse(child.hostCloseReclaimedForRuntime());
+        assertTrue(process.externalCustodyOutstandingForRuntime());
+        assertEquals(1, grant.admittedChildrenForRuntime());
+        assertEquals(3, nativeChild.releaseCalls.get());
+    }
+
+    /**
+     * BUG041: one Process-level reclamation with a positive budget waits for the held recording
+     * of a completed native termination and succeeds in that same invocation once it returns.
+     */
+    @Test
+    void bug041ProcessReclamationWaitsForRecordedTermination() throws Exception {
+        GatedCallbackFuture<TerminalOutcome> termination = new GatedCallbackFuture<>();
+        ControlledChild nativeChild = new ControlledChild(termination);
+        try (Context context = granted()) {
+            ProtosProcessRuntime process = process(context);
+            ProtosExternalExecutionCapabilityValue grant =
+                    process.rootExecutionForRuntime().orElseThrow();
+            ProtosExternalExecutionCapabilityValue.Admission admission =
+                    grant.reserveChildForRuntime();
+            assertNotNull(admission);
+            ProtosExternalChildValue child =
+                    grant.newChildForRuntime(process, nativeChild, admission);
+            assertTrue(process.registerExternalChildForRuntime(child));
+            assertTrue(nativeChild.transport.isDone());
+            assertFalse(nativeChild.transport.isCompletedExceptionally());
+            child.enterHostOnlyCustodyForRuntime();
+            for (ProtosExternalChildValue.Stream stream : ProtosExternalChildValue.Stream.values()) {
+                assertFalse(child.endpointHandleHeldForRuntime(stream));
+            }
+            assertFalse(child.reapedForRuntime());
+
+            Thread completer = new Thread(
+                    () -> termination.complete(TerminalOutcome.exited(0)),
+                    "bug041-gated-termination-completion");
+            CompletableFuture<Boolean> reclaimed = new CompletableFuture<>();
+            Thread reclaimer = null;
+            try {
+                completer.start();
+                assertTrue(termination.callbackEntered.await(10, TimeUnit.SECONDS));
+                assertTrue(termination.isDone());
+                assertFalse(child.reapedForRuntime(), "termination recording is still held");
+                assertTrue(process.externalChildrenForRuntime().contains(child));
+                assertEquals(1, grant.admittedChildrenForRuntime());
+
+                reclaimer = startProcessReclamation(process, 10_000, reclaimed);
+                awaitReclamationWaitingForRecording(reclaimer, "awaitReap", reclaimed);
+                assertFalse(reclaimed.isDone());
+                assertTrue(process.externalChildrenForRuntime().contains(child));
+                assertEquals(1, grant.admittedChildrenForRuntime());
+                assertEquals(0, nativeChild.forcedRequests.get());
+            } finally {
+                termination.callbackGate.countDown();
+                joinTestThread(completer);
+                if (reclaimer != null) {
+                    joinTestThread(reclaimer);
+                }
+            }
+            assertTrue(reclaimed.get(10, TimeUnit.SECONDS),
+                    "the same reclamation invocation must succeed once recording returned");
+
+            assertTrue(child.reapedForRuntime());
+            assertTrue(child.custodyReleasedForRuntime());
+            assertTrue(child.hostCloseReclaimedForRuntime());
+            assertTrue(process.externalChildrenForRuntime().isEmpty());
+            assertTrue(process.nativeChildrenForRuntime().isEmpty());
+            assertFalse(process.externalCustodyOutstandingForRuntime());
+            assertEquals(0, grant.admittedChildrenForRuntime());
+            assertEquals(3, nativeChild.releaseCalls.get());
+            assertEquals(0, nativeChild.forcedRequests.get());
+            admission.release();
+            assertEquals(0, grant.admittedChildrenForRuntime());
+        }
+    }
+
+    /**
+     * BUG041: one Process-level reclamation with a positive budget waits for the held recording
+     * of a completed transport retirement and succeeds in that same invocation once it returns.
+     */
+    @Test
+    void bug041ProcessReclamationWaitsForRecordedTransportRetirement() throws Exception {
+        ControlledChild nativeChild = new ControlledChild();
+        GatedCallbackFuture<Void> transport = new GatedCallbackFuture<>();
+        nativeChild.transport = transport;
+        try (Context context = granted()) {
+            ProtosProcessRuntime process = process(context);
+            ProtosExternalExecutionCapabilityValue grant =
+                    process.rootExecutionForRuntime().orElseThrow();
+            ProtosExternalExecutionCapabilityValue.Admission admission =
+                    grant.reserveChildForRuntime();
+            assertNotNull(admission);
+            ProtosExternalChildValue child =
+                    grant.newChildForRuntime(process, nativeChild, admission);
+            assertTrue(process.registerExternalChildForRuntime(child));
+            nativeChild.termination.complete(TerminalOutcome.exited(0));
+            assertTrue(child.reapedForRuntime());
+            child.enterHostOnlyCustodyForRuntime();
+            for (ProtosExternalChildValue.Stream stream : ProtosExternalChildValue.Stream.values()) {
+                assertFalse(child.endpointHandleHeldForRuntime(stream));
+            }
+            assertFalse(child.custodyReleasedForRuntime());
+            assertEquals(1, grant.admittedChildrenForRuntime());
+
+            Thread completer = new Thread(
+                    () -> transport.complete(null), "bug041-gated-transport-completion");
+            CompletableFuture<Boolean> reclaimed = new CompletableFuture<>();
+            Thread reclaimer = null;
+            try {
+                completer.start();
+                assertTrue(transport.callbackEntered.await(10, TimeUnit.SECONDS));
+                assertTrue(transport.isDone());
+                assertFalse(child.custodyReleasedForRuntime(), "transport recording is still held");
+                assertTrue(process.externalChildrenForRuntime().contains(child));
+                assertEquals(1, grant.admittedChildrenForRuntime());
+
+                reclaimer = startProcessReclamation(process, 10_000, reclaimed);
+                awaitReclamationWaitingForRecording(reclaimer, "awaitTransport", reclaimed);
+                assertFalse(reclaimed.isDone());
+                assertTrue(process.externalChildrenForRuntime().contains(child));
+                assertEquals(1, grant.admittedChildrenForRuntime());
+            } finally {
+                transport.callbackGate.countDown();
+                joinTestThread(completer);
+                if (reclaimer != null) {
+                    joinTestThread(reclaimer);
+                }
+            }
+            assertTrue(reclaimed.get(10, TimeUnit.SECONDS),
+                    "the same reclamation invocation must succeed once recording returned");
+
+            assertTrue(child.reapedForRuntime());
+            for (ProtosExternalChildValue.Stream stream : ProtosExternalChildValue.Stream.values()) {
+                assertFalse(child.endpointHandleHeldForRuntime(stream));
+            }
+            assertTrue(child.custodyReleasedForRuntime());
+            assertTrue(child.hostCloseReclaimedForRuntime());
+            assertTrue(process.externalChildrenForRuntime().isEmpty());
+            assertTrue(process.nativeChildrenForRuntime().isEmpty());
+            assertFalse(process.externalCustodyOutstandingForRuntime());
+            assertEquals(0, grant.admittedChildrenForRuntime());
+            assertEquals(3, nativeChild.releaseCalls.get());
+            assertEquals(0, nativeChild.forcedRequests.get());
+            admission.release();
+            assertEquals(0, grant.admittedChildrenForRuntime());
+        }
+    }
 }
