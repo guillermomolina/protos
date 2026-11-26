@@ -319,8 +319,50 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
     }
 
     /*
+     * SEND1 of a source method already selected by GetMethod as a bound
+     * method (an inherited selection, or a non-direct own selection). No
+     * further selection is performed: the B5 header carries the one
+     * positional argument, the selection's actual receiver and real
+     * methodHome are written, and the selected Closure is invoked through
+     * the cached function dispatcher, which keys the actual Closure, the
+     * entered Context and its effective Context-local target. Suspension
+     * and terminal completion are those of every source call. Declared
+     * before the generic SEND1, which never replaces it.
+     */
+    @Specialization(
+            guards = {
+                    "methodSend",
+                    "isSourceFunction(method.callable())"
+            })
+    static Object callBoundSourceSend(
+            VirtualFrame frame,
+            boolean terminal,
+            boolean methodSend,
+            ProtosBoundMethod method,
+            Object receiver,
+            Object a0,
+            @Bind Node inliningTarget,
+            @Bind("bytecodeOf($node)") BytecodeNode bytecode,
+            @Bind("bytecode.getBytecodeIndex(frame)") int bytecodeIndex,
+            @Bind("rootOf($node)") ProtosBytecodeRootNode root,
+            @Exclusive @Cached ProtosFunctionCallDispatchers.FunctionCachedCallNode call) {
+        Object[] arguments = ProtosFrameArguments.dispatchedCall1(
+                null, receiver, receiverHomeOrNull(receiver),
+                null, null, a0);
+        ProtosFrameArguments.bindMethod(
+                arguments, method.receiver(), method.methodHome());
+        Object outcome = call.execute(
+                frame, inliningTarget, terminal, method.callable(), arguments,
+                null, root,
+                ProtosFunctionCallDispatchers.currentContext(inliningTarget));
+        return ProtosTailCallContinuation.completeCall(
+                terminal, outcome, bytecode, bytecodeIndex);
+    }
+
+    /*
      * Generic SEND1 covers polymorphic selection, cached-PIC misses,
-     * native methods and selected bound methods. Its B5 suffix still
+     * native methods and selected bound methods of native or foreign
+     * callables. Its B5 suffix still
      * contains exactly one supplied positional argument.
      */
     @Specialization(

@@ -8,6 +8,11 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.239-SNAPSHOT
+
+- **PERF044.** Select methods by Shape, shared inherited and Prelude-bound represented selections and invoke selected bound source methods through the cached function dispatcher.
+- Replay source commit `c32b647a6a4d52a6e236928f2d81028481ba251c` with implementation-version metadata; preserve its source, tests and baseline content.
+
 ## 0.4.238-SNAPSHOT
 
 - **PERF044.** Inline admitted selected caseOf action bodies and invoke other actions through fixed arities up to four captures.

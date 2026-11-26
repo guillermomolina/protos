@@ -236,6 +236,56 @@ final class ProtosCurrentNumericRelationsTest {
         assertSame(Boolean.TRUE, result);
     }
 
+    /*
+     * Alternating receiver representations and selectors at shared operator
+     * sites: custom + and == of ordinary receivers sharing a Shape, and the
+     * exact numeric, String, Boolean and null laws, stay correct whichever
+     * representation each cached selection last observed.
+     */
+    @Test
+    void alternatingRepresentationsAndSelectorsKeepEachSelection() throws IOException {
+        ProtosPrelude prelude = corePrelude();
+        Object result = ProtosTestExecutionSupport.evaluate(
+                """
+                BoxBase: {
+                    value: 0
+                    plusOp: (other) => value + other + 1000
+                    eqOp: (other) => other == value
+                }
+                Box: BoxBase.alias("plusOp", "+").alias("eqOp", "==")
+                b1: Box { value: 1 }
+                b2: Box { value: 2 }
+                add: (l, r) => l + r
+                eq: (l, r) => l == r
+                state: { mismatches: 0 }
+                check: (actual, expected) => {
+                    (actual == expected).ifFalse(() => {
+                        state.mismatches = state.mismatches + 1
+                    })
+                }
+                rounds: [1, 2, 3]
+                rounds.each((round) => {
+                    check(add(b1, round), 1001 + round)
+                    check(add(1, round), 1 + round)
+                    check(add(b2, round), 1002 + round)
+                    check(add(1.5, round), 1.5 + round)
+                    check(add(b1, round), 1001 + round)
+                    check(eq(b1, 1), true)
+                    check(eq(b2, 1), false)
+                    check(eq(round, round), true)
+                    check(eq(round, round + 0.0), true)
+                    check(eq(round + 0.5, round), false)
+                    check(eq("a", "a"), true)
+                    check(eq(true, true), true)
+                    check(eq(null, null), true)
+                    check(eq(b2, 2), true)
+                })
+                state.mismatches == 0
+                """,
+                prelude.newModuleActivation());
+        assertSame(Boolean.TRUE, result);
+    }
+
     @Test
     void primitiveFloatHashSharesTheRepresentedFloatHash() throws IOException {
         ProtosPrelude prelude = corePrelude();

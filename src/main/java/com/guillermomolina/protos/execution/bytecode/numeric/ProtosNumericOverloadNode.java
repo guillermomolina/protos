@@ -21,6 +21,7 @@ import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.dsl.Cached;
+import com.oracle.truffle.api.dsl.Cached.Exclusive;
 import com.oracle.truffle.api.dsl.GenerateInline;
 import com.oracle.truffle.api.dsl.GenerateUncached;
 import com.oracle.truffle.api.dsl.Specialization;
@@ -35,8 +36,10 @@ import com.oracle.truffle.api.strings.TruffleString;
  *
  * <p>Selection is the send selection of {@code GetMethod}. At a site that
  * observes few selectors, each selector owns a cached {@code GetMethod}
- * child, so its structural selection cache (receiver identity, observed
- * Shapes and the current slot value) is never shared between selectors; the
+ * child, so its selection entries (keyed by the selector, the receiver
+ * representation, its Shape or observing Prelude, and the structural
+ * selection whose current slot value is read) are never shared between
+ * selectors; the
  * child is executed in non-direct mode, so the selection always carries the
  * original receiver and the selected methodHome. Past that limit the
  * complete uncached selection is used. In both cases the shared
@@ -78,7 +81,7 @@ abstract class ProtosNumericOverloadNode extends Node {
             @Cached("selector") String cachedSelector,
             @Cached("toTruffleString(cachedSelector)") TruffleString cachedName,
             @Cached ProtosExperimentalGetMethodNode getMethod,
-            @Cached ProtosFunctionCallDispatchers.CallNode call) {
+            @Exclusive @Cached ProtosFunctionCallDispatchers.CallNode call) {
         Object method = getMethod.execute(
                 frame, cachedName, false,
                 ProtosNumericValueSupport.guestValue(receiver));
@@ -97,7 +100,7 @@ abstract class ProtosNumericOverloadNode extends Node {
             ProtosBytecodeRootNode root,
             BytecodeNode bytecode,
             int bytecodeIndex,
-            @Cached ProtosFunctionCallDispatchers.CallNode call) {
+            @Exclusive @Cached ProtosFunctionCallDispatchers.CallNode call) {
         Object method = ProtosExperimentalGetMethodNode.select(
                 ProtosNumericValueSupport.guestValue(receiver),
                 selector,

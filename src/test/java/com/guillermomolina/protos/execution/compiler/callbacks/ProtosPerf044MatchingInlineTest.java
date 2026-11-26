@@ -280,6 +280,75 @@ final class ProtosPerf044MatchingInlineTest {
         assertEquals(2L, run(source));
     }
 
+    /*
+     * Repeated contextual, explicit and dynamic matching through the shared
+     * method selection: varying SmallInteger, Float, mixed-number, String,
+     * Boolean, null, Any and Capture patterns, ordinary matchers sharing a
+     * Shape, a reassigned matcher, and custom equality reached through the
+     * inherited Object.match, which runs exactly once per reached pattern.
+     * This evidence is semantic: it does not observe cache admission.
+     */
+    @Test
+    void repeatedMatchingKeepsEveryMatcherResult() throws Exception {
+        String source = """
+                calls: { eq: 0 }
+                CustomBase: {
+                    equalTo: (other) => {
+                        calls.eq = calls.eq + 1
+                        other == 42
+                    }
+                }
+                Custom: CustomBase.alias("equalTo", "==")
+                heir: Custom()
+                first: { match: (subject) => subject == 1 }
+                second: { match: (subject) => subject == 2 }
+                mutable: { match: (subject) => false }
+                classify: (value) => match(value) {
+                    0: "zero"
+                    1.5: "float"
+                    true: "true"
+                    false: "false"
+                    "text": "string"
+                    null: "null"
+                    first: "first"
+                    second: "second"
+                    heir: "custom"
+                    [Capture]: (c) => c
+                    Any: "any"
+                }
+                explicit: (value, table) => value.caseOf(table)
+                table: %{ 0: () => "zero"; Capture: (c) => c }
+                state: { mismatches: 0 }
+                check: (actual, expected) => {
+                    (actual == expected).ifFalse(() => {
+                        state.mismatches = state.mismatches + 1
+                    })
+                }
+                rounds: [1, 2, 3, 4, 5]
+                rounds.each((round) => {
+                    check(classify(0), "zero")
+                    check(classify(1.5), "float")
+                    check(classify(1.0), "first")
+                    check(classify(2), "second")
+                    check(classify(true), "true")
+                    check(classify(false), "false")
+                    check(classify("text"), "string")
+                    check(classify(null), "null")
+                    check(classify(42), "custom")
+                    check(classify(round + 10), "any")
+                    check(classify([round]), round)
+                    check(explicit(0, table), "zero")
+                    check(explicit(round, table), round)
+                    check(round.caseOf(%{ 0: () => "zero"; Any: () => "other" }), "other")
+                    mutable.match = (subject) => subject == round
+                    check(mutable.match(round), true)
+                    check(mutable.match(round + 1), false)
+                })
+                (state.mismatches == 0) && (calls.eq == 15)
+                """;
+        assertSame(Boolean.TRUE, run(source));
+    }
+
     private static Object run(String source) throws Exception {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
         return ProtosTestExecutionSupport.evaluate(source, prelude.newModuleActivation());

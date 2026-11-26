@@ -203,6 +203,78 @@ class ProtosAPlusExecutionProjectionTest {
         }
     }
 
+    /*
+     * Repeated sends of match from one compiled guest site select the shared
+     * root Object.match source Closure, inherited by receivers sharing a
+     * Shape and parent and by SmallInteger receivers of the observing
+     * Prelude. Each entered Context executes its own projection of that
+     * Closure, created by the selected send itself; the actual receiver is
+     * bound and its custom equality result is returned unchanged.
+     */
+    private static final String SELECTED_MATCH_PROGRAM =
+            """
+            EqBase: { equalTo: (other) => [this, other] }
+            Eq: EqBase.alias("equalTo", "==")
+            a: Eq()
+            b: Eq()
+            probe: (pattern, subject) => pattern.match(subject)
+            state: { mismatches: 0 }
+            rounds: [1, 2, 3, 4]
+            rounds.each((round) => {
+                ra: probe(a, round)
+                rb: probe(b, round)
+                ((ra[0] === a) && (ra[1] == round) && (rb[0] === b) && (rb[1] == round) &&
+                        probe(round, round) && (probe(round, round + 1) == false))
+                    .ifFalse(() => { state.mismatches = state.mismatches + 1 })
+            })
+            state.mismatches == 0
+            """;
+
+    @Test
+    void selectedInheritedSourceMethodExecutesEachEnteredContextProjection() throws Exception {
+        ProtosClosureValue match = rootClosure("match");
+        ProtosClosureExecutionPlan template = match.executionPlan().orElseThrow();
+        assertTrue(match.requiresContextLocalExecutionProjectionForRuntime());
+        ProtosClosureExecutionPlan[] projections = new ProtosClosureExecutionPlan[2];
+        for (int index = 0; index < projections.length; index++) {
+            ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
+            ProtosActivation module = prelude.newModuleActivation();
+            int slot = index;
+            try (ProtosPolyglotExecutionContext context =
+                    ProtosPolyglotExecutionContext.open(
+                            InputStream.nullInputStream(),
+                            OutputStream.nullOutputStream(),
+                            OutputStream.nullOutputStream())) {
+                Object result =
+                        context.callEntered(
+                                () -> {
+                                    Object outcome =
+                                            ProtosTestExecutionSupport.evaluate(
+                                                    SELECTED_MATCH_PROGRAM, module);
+                                    ProtosLanguageContext languageContext =
+                                            ProtosLanguageContext.current();
+                                    int before =
+                                            languageContext
+                                                    .projectedBytecodeExecutionPlanCountForTesting();
+                                    assertTrue(before >= 1, "the selected send projected Object.match");
+                                    projections[slot] =
+                                            languageContext.bytecodeExecutionPlanForDefinition(
+                                                    match.definition(), template);
+                                    assertEquals(
+                                            before,
+                                            languageContext
+                                                    .projectedBytecodeExecutionPlanCountForTesting(),
+                                            "Object.match was projected by the selected send itself");
+                                    return outcome;
+                                });
+                assertSame(Boolean.TRUE, result);
+            }
+        }
+        assertNotSame(template, projections[0]);
+        assertNotSame(projections[0], projections[1], "each Context keeps its own projection");
+        assertSame(template, match.executionPlan().orElseThrow());
+    }
+
     // D241-B / I148: the private source Filesystem open method uses the same per-Context
     // projection as the shared root Closures; its per-capability binding keeps that requirement.
     @Test
