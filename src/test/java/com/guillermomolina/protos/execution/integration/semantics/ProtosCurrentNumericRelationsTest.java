@@ -192,6 +192,50 @@ final class ProtosCurrentNumericRelationsTest {
                 () -> ProtosCurrentNumericRelations.normalHash(BigInteger.ONE, null));
     }
 
+    @Test
+    void overloadedEqualityStaysCorrectAcrossCachedSelections() throws IOException {
+        ProtosPrelude prelude = corePrelude();
+
+        Object result = ProtosTestExecutionSupport.evaluate(
+                """
+                calls: {
+                    yes: 0
+                    no: 0
+                }
+                yes: { equals: (other) => {
+                    calls.yes = calls.yes + 1
+                    true
+                } }.alias("equals", "==")
+                no: { equals: (other) => {
+                    calls.no = calls.no + 1
+                    false
+                } }.alias("equals", "==")
+                child: yes {}
+                receivers: [yes, no, child, yes, no, child, 1, 1.0, "a", true, null]
+                expected: [true, false, true, true, false, true, true, true, false, false, false]
+                state: {
+                    mismatches: 0
+                    rounds: 0
+                }
+                rounds: [1, 2, 3]
+                rounds.each((round) => {
+                    state.rounds = state.rounds + 1
+                    n: 0
+                    receivers.each((r) => {
+                        ((r == 1) === expected[n]).ifFalse(() => {
+                            state.mismatches = state.mismatches + 1
+                        })
+                        n = n + 1
+                    })
+                })
+                ok: (state.rounds == 3) && (state.mismatches == 0) && (calls.yes == 12) && (calls.no == 6)
+                ok
+                """,
+                prelude.newModuleActivation());
+
+        assertSame(Boolean.TRUE, result);
+    }
+
     private static String hash(Object number, ProtosPrelude prelude) {
         return com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(
                 ProtosCurrentNumericRelations.normalHash(number, prelude));

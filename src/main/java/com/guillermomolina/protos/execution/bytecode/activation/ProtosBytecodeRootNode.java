@@ -5931,7 +5931,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     "subject.getClass() == subjectClass",
                     "prelude == cachedPrelude",
                     "selection != null",
-                    "boundParent(binding, selection)",
+                    "boundParent(subjectClass, binding, selection)",
                     "frozen || selection.isValid()"
                 },
                 limit = "3",
@@ -5987,6 +5987,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return false;
         }
 
+        /* The caller's Prelude is observed from the frame on each execution. */
+        @NonIdempotent
         static ProtosPrelude preludeOf(VirtualFrame frame) {
             return ProtosFrameArguments.admittedPreludeOrNull(frame.getArguments());
         }
@@ -6017,12 +6019,16 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
          */
         @NonIdempotent
         static boolean boundParent(
+                Class<?> subjectClass,
                 ProtosValueLookup.StructuralSelection binding,
                 ProtosValueLookup.StructuralSelection selection) {
-            if (binding == null) {
+            if (subjectClass == Boolean.class) {
                 return selection.origin() == ProtosObjectValue.rootObject();
             }
-            return binding.isValid() && binding.read() == selection.origin();
+            // An absent Integer or Float prototype binding never admits.
+            return binding != null
+                    && binding.isValid()
+                    && binding.read() == selection.origin();
         }
 
         static boolean isPrimitiveCarrier(Object subject) {

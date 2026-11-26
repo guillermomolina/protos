@@ -26,21 +26,26 @@ import com.oracle.truffle.api.dsl.GenerateUncached;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.Node;
+import com.oracle.truffle.api.strings.TruffleString;
 
 /**
  * Invokes the behavior selected for a binary operator selector when it is
  * not the standard numeric or String operator. Both operands were already
  * evaluated, once, by the enclosing operation; selection happens only now.
  *
- * <p>This is the single cold path of a non-standard operator. The complete
- * send selection of {@code GetMethod} chooses the behavior, and the shared
- * {@link ProtosFunctionCallDispatchers.CallNode} invokes it exactly as an
- * ordinary send: the receiver and the owning methodHome, the caller,
- * Prelude, ReturnHome, guest Errors, non-local control transfers and
- * suspensions are those of that selection and dispatcher. A suspended
- * result is returned unchanged to a non-terminal site, which composes it in
- * its own bytecode; a terminal site wraps it in the terminal transport
- * carrying its call location.
+ * <p>Selection is the send selection of {@code GetMethod}. At a site that
+ * observes few selectors, each selector owns a cached {@code GetMethod}
+ * child, so its structural selection cache (receiver identity, observed
+ * Shapes and the current slot value) is never shared between selectors; the
+ * child is executed in non-direct mode, so the selection always carries the
+ * original receiver and the selected methodHome. Past that limit the
+ * complete uncached selection is used. In both cases the shared
+ * {@link ProtosFunctionCallDispatchers.CallNode} invokes the selection
+ * exactly as an ordinary send: the caller, Prelude, ReturnHome, guest
+ * Errors, non-local control transfers and suspensions are those of that
+ * dispatcher. A suspended result is returned unchanged to a non-terminal
+ * site, which composes it in its own bytecode; a terminal site wraps it in
+ * the terminal transport carrying its call location.
  */
 @GenerateUncached
 @GenerateInline(false)
@@ -56,8 +61,32 @@ abstract class ProtosNumericOverloadNode extends Node {
             BytecodeNode bytecode,
             int bytecodeIndex);
 
+    /* Cached selection per selector, followed by the ordinary dispatcher. */
+    @Specialization(
+            guards = "selector == cachedSelector",
+            limit = "3",
+            excludeForUncached = true)
+    static Object doCached(
+            VirtualFrame frame,
+            boolean terminal,
+            String selector,
+            Object receiver,
+            Object argument,
+            ProtosBytecodeRootNode root,
+            BytecodeNode bytecode,
+            int bytecodeIndex,
+            @Cached("selector") String cachedSelector,
+            @Cached("toTruffleString(cachedSelector)") TruffleString cachedName,
+            @Cached ProtosExperimentalGetMethodNode getMethod,
+            @Cached ProtosFunctionCallDispatchers.CallNode call) {
+        Object method = getMethod.execute(
+                frame, cachedName, false,
+                ProtosNumericValueSupport.guestValue(receiver));
+        return invoke(frame, terminal, method, argument, root, bytecode, bytecodeIndex, call);
+    }
+
     /* The complete send selection followed by the ordinary dispatcher. */
-    @Specialization
+    @Specialization(replaces = "doCached")
     @InliningCutoff
     static Object doGeneric(
             VirtualFrame frame,
@@ -74,6 +103,18 @@ abstract class ProtosNumericOverloadNode extends Node {
                 selector,
                 root,
                 frame.getArguments());
+        return invoke(frame, terminal, method, argument, root, bytecode, bytecodeIndex, call);
+    }
+
+    private static Object invoke(
+            VirtualFrame frame,
+            boolean terminal,
+            Object method,
+            Object argument,
+            ProtosBytecodeRootNode root,
+            BytecodeNode bytecode,
+            int bytecodeIndex,
+            ProtosFunctionCallDispatchers.CallNode call) {
         Object outcome = call.execute(
                 frame, terminal, method,
                 ProtosFrameArguments.dispatchedCall1(
@@ -83,5 +124,9 @@ abstract class ProtosNumericOverloadNode extends Node {
                 null, root);
         return ProtosTailCallContinuation.completeCall(
                 terminal, outcome, bytecode, bytecodeIndex);
+    }
+
+    static TruffleString toTruffleString(String selector) {
+        return TruffleString.fromJavaStringUncached(selector, TruffleString.Encoding.UTF_16);
     }
 }
