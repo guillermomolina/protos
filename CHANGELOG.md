@@ -8,6 +8,11 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.235-SNAPSHOT
+
+- **PERF044.** Cache operator overload selection per selector and reject absent numeric prototype bindings in caseOf carrier admission.
+- Replay source commit `c1a87742eafa6d580d2ab7718440e4c557673e5a` with implementation-version metadata; preserve its source, tests and baseline content.
+
 ## 0.4.234-SNAPSHOT
 
 - **PERF044.** Lower ordinary == to a direct numeric equality operation and send caseOf and standalone match matchers through the direct method send.
