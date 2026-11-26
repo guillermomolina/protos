@@ -268,6 +268,12 @@ public final class ProtosBinary64Rounding {
         if (value >= -0x1p63 && value < 0x1p63) {
             return ProtosNumericValueSupport.integer((long) value);
         }
+        return largeIntegralBinary64Value(value, prelude);
+    }
+
+    /* Integer normalization also inspects the BigInteger and must stay inside the boundary. */
+    @TruffleBoundary
+    private static Object largeIntegralBinary64Value(double value, ProtosPrelude prelude) {
         return ProtosNumericValueSupport.integer(largeIntegralBinary64(value), prelude);
     }
 

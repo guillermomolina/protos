@@ -446,7 +446,7 @@ abstract class ProtosNumericSelectionNode extends Node {
             VirtualFrame frame,
             String selector,
             Object receiver,
-            @Bind Node node) {
+            @Bind("$node") Node node) {
         ProtosPrelude prelude = prelude(frame, node);
         if (prototype(receiver, prelude) == null) {
             return false;

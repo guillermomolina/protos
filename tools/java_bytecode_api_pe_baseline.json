@@ -315,6 +315,42 @@
       "pe_reachability": "NOT_PE_REACHABLE"
     },
     {
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/numeric/ProtosNumericSelectionNode.java",
+      "class": "ProtosNumericSelectionNode",
+      "method": "executingRootOrNull(Node)",
+      "family": "BytecodeNode",
+      "operation": "get",
+      "arity": 1,
+      "arguments": "NODE_ARGUMENT=node",
+      "occurrence": 0,
+      "provenance": "NODE_ARGUMENT=HELPER_PARAMETER",
+      "pe_reachability": "PE_REACHABLE_PROVEN"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/numeric/ProtosRichCompareEqNode.java",
+      "class": "ProtosRichCompareEqNode",
+      "method": "rootOf(Node)",
+      "family": "BytecodeNode",
+      "operation": "get",
+      "arity": 1,
+      "arguments": "NODE_ARGUMENT=node",
+      "occurrence": 0,
+      "provenance": "NODE_ARGUMENT=HELPER_PARAMETER",
+      "pe_reachability": "NOT_PE_REACHABLE"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/numeric/ProtosRichCompareEqNode.java",
+      "class": "ProtosRichCompareEqNode",
+      "method": "bytecodeOf(Node)",
+      "family": "BytecodeNode",
+      "operation": "get",
+      "arity": 1,
+      "arguments": "NODE_ARGUMENT=node",
+      "occurrence": 0,
+      "provenance": "NODE_ARGUMENT=HELPER_PARAMETER",
+      "pe_reachability": "NOT_PE_REACHABLE"
+    },
+    {
       "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/numeric/ProtosRichCompareGeNode.java",
       "class": "ProtosRichCompareGeNode",
       "method": "rootOf(Node)",
