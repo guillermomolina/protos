@@ -38,6 +38,7 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosTask;
+import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.bytecode.Instruction;
@@ -529,22 +530,282 @@ final class ProtosPerf038ITerminalMethodSendTest {
 
     private static Object assertSingleEntryFor(Object receiver, ProtosActivation module)
             throws Exception {
-        // The selection cache of the send keys every observed receiver; the
-        // eligible one has exactly one valid entry.
+        // The own-method selection entries of the send are keyed by Shape,
+        // never by receiver identity; exactly one admits the eligible receiver.
+        ProtosObjectValue object = assertInstanceOf(ProtosObjectValue.class, receiver);
         List<Object> entries = new ArrayList<>();
-        for (Object candidate : selectionEntries("run", module)) {
-            if (field(candidate, "cachedReceiver_") == receiver) {
+        for (Object candidate : getMethodEntries("run", module, "doOwn")) {
+            if (((com.oracle.truffle.api.object.Shape) field(candidate, "cachedShape_"))
+                    .check(object)) {
                 entries.add(candidate);
             }
         }
-        assertEquals(1, entries.size(), "only the eligible receiver is admitted");
+        assertEquals(1, entries.size(), "exactly one own-method entry admits the receiver");
         Object entry = entries.get(0);
-        assertSame(receiver, field(entry, "cachedReceiver_"));
-        Object selection = field(entry, "cachedSelection_");
-        java.lang.reflect.Method isValid = selection.getClass().getDeclaredMethod("isValid");
-        isValid.setAccessible(true);
-        assertTrue((Boolean) isValid.invoke(selection));
+        assertNotNull(field(entry, "getter_"));
         return entry;
+    }
+
+    /**
+     * Own-method selection is keyed by Shape, not by receiver identity:
+     * receivers sharing a Shape keep their own current Closures, and an
+     * in-place reassignment is observed.
+     */
+    @Test
+    void ownMethodSelectionIsSharedByShapeAndReadsEachReceiver() throws Exception {
+        withCore(module -> {
+            evaluate("""
+                    first: { pick: (value) => { value + 1 } }
+                    second: { pick: (value) => { value + 2 } }
+                    run: (r, n) => { r.pick(n) }
+                    """, "perf044a8-own-define.protos", module);
+            enterCachedTier("run", module);
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                assertInteger(i + 1, evaluate("run(first, " + i + ")\n", "perf044a8-own-1.protos", module));
+                assertInteger(i + 2, evaluate("run(second, " + i + ")\n", "perf044a8-own-2.protos", module));
+            }
+            List<Object> own = getMethodEntries("run", module, "doOwn");
+            if (object("first", module).getShape() == object("second", module).getShape()) {
+                assertEquals(1, own.size(), "receivers sharing a Shape share one entry");
+            } else {
+                assertEquals(2, own.size(), "one entry per observed Shape");
+            }
+
+            evaluate("first.pick = (value) => { value * 3 }\n", "perf044a8-own-mutate.protos", module);
+            assertInteger(15, evaluate("run(first, 5)\n", "perf044a8-own-3.protos", module));
+            assertInteger(7, evaluate("run(second, 5)\n", "perf044a8-own-4.protos", module));
+        });
+        System.out.println("PERF044_A8_OWN_SHAPE_SELECTION=PASS");
+    }
+
+    /**
+     * Inherited selection is shared by receivers with the same Shape and the
+     * same direct parent, never across distinct parents; reassignment,
+     * shadowing, removal and recreation are observed.
+     */
+    @Test
+    void inheritedSelectionIsSharedPerParentAndObservesMutation() throws Exception {
+        withCore(module -> {
+            evaluate("""
+                    base: {
+                        value: 0
+                        pick: (delta) => { value + delta }
+                    }
+                    left: base { value: 1 }
+                    right: base { value: 2 }
+                    otherBase: { pick: (delta) => { delta + 100 } }
+                    stranger: otherBase { value: 1 }
+                    run: (r, n) => { r.pick(n) }
+                    """, "perf044a8-inherited-define.protos", module);
+            enterCachedTier("run", module);
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                assertInteger(1 + i, evaluate("run(left, " + i + ")\n", "perf044a8-inh-1.protos", module));
+                assertInteger(2 + i, evaluate("run(right, " + i + ")\n", "perf044a8-inh-2.protos", module));
+                assertInteger(100 + i, evaluate("run(stranger, " + i + ")\n", "perf044a8-inh-3.protos", module));
+            }
+            ProtosObjectValue base = object("base", module);
+            ProtosObjectValue otherBase = object("otherBase", module);
+            int fromBase = 0;
+            int fromOther = 0;
+            for (Object entry : getMethodEntries("run", module, "doInherited")) {
+                ProtosValueLookup.StructuralSelection selection = inheritedSelection(entry);
+                if (selection.origin() == base) {
+                    assertSame(base, selection.home(), "the real owner is the methodHome");
+                    fromBase++;
+                } else if (selection.origin() == otherBase) {
+                    fromOther++;
+                }
+            }
+            if (object("left", module).getShape() == object("right", module).getShape()) {
+                assertEquals(1, fromBase, "same Shape and parent share one selection");
+            }
+            assertEquals(1, fromOther, "a distinct parent never shares the base selection");
+
+            // In-place reassignment of the inherited slot.
+            evaluate("base.pick = (delta) => { (value * 10) + delta }\n",
+                    "perf044a8-inh-mutate.protos", module);
+            assertInteger(11, evaluate("run(left, 1)\n", "perf044a8-inh-4.protos", module));
+            assertInteger(21, evaluate("run(right, 1)\n", "perf044a8-inh-5.protos", module));
+            assertInteger(101, evaluate("run(stranger, 1)\n", "perf044a8-inh-6.protos", module));
+
+            // Shadowing in one receiver only.
+            ProtosClosureValue shadow = assertInstanceOf(ProtosClosureValue.class,
+                    evaluate("(delta) => { delta + 1000 }\n", "perf044a8-inh-shadow.protos", module));
+            object("left", module).createLocalSlot("pick", shadow);
+            assertInteger(1001, evaluate("run(left, 1)\n", "perf044a8-inh-7.protos", module));
+            assertInteger(21, evaluate("run(right, 1)\n", "perf044a8-inh-8.protos", module));
+
+            // Removal, then recreation, of the selected slot.
+            ProtosObjectValue slotNotFound = errorPrototype("SlotNotFound", module);
+            base.removeLocalSlot("pick");
+            assertSame(slotNotFound, errorParent(
+                    () -> evaluate("run(right, 1)\n", "perf044a8-inh-9.protos", module)));
+            ProtosClosureValue recreated = assertInstanceOf(ProtosClosureValue.class,
+                    evaluate("(delta) => { delta - 1 }\n", "perf044a8-inh-recreate.protos", module));
+            base.createLocalSlot("pick", recreated);
+            assertInteger(4, evaluate("run(right, 5)\n", "perf044a8-inh-10.protos", module));
+            assertInteger(1005, evaluate("run(left, 5)\n", "perf044a8-inh-11.protos", module));
+        });
+        System.out.println("PERF044_A8_INHERITED_SHARED_SELECTION=PASS");
+    }
+
+    /** An inherited selection keeps the real owner as methodHome for super and this. */
+    @Test
+    void inheritedSelectionKeepsTheRealMethodHome() throws Exception {
+        withCore(module -> {
+            evaluate("""
+                    top: { read: (d) => { d + 1 } }
+                    middle: top {
+                        read: (d) => { super.read(d) + 10 }
+                        self: (ignored) => { this }
+                    }
+                    first: middle { tag: 1 }
+                    second: middle { tag: 2 }
+                    readOf: (r, d) => { r.read(d) }
+                    selfOf: (r) => { r.self(0) }
+                    """, "perf044a8-home-define.protos", module);
+            enterCachedTier("readOf", module);
+            enterCachedTier("selfOf", module);
+            Object first = object("first", module);
+            Object second = object("second", module);
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                assertInteger(11 + i, evaluate("readOf(first, " + i + ")\n", "perf044a8-home-1.protos", module));
+                assertInteger(11 + i, evaluate("readOf(second, " + i + ")\n", "perf044a8-home-2.protos", module));
+                assertSame(first, evaluate("selfOf(first)\n", "perf044a8-home-3.protos", module));
+                assertSame(second, evaluate("selfOf(second)\n", "perf044a8-home-4.protos", module));
+            }
+        });
+        System.out.println("PERF044_A8_INHERITED_METHOD_HOME=PASS");
+    }
+
+    /** A cached site keeps the ordinary Error and SlotNotFound selection failures. */
+    @Test
+    void cachedSelectionKeepsSelectionErrors() throws Exception {
+        withCore(module -> {
+            evaluate("""
+                    good: { pick: (value) => { value } }
+                    holder: { pick: 5 }
+                    heir: holder { tag: 1 }
+                    plain: { other: 1 }
+                    run: (r, n) => { r.pick(n) }
+                    """, "perf044a8-errors-define.protos", module);
+            enterCachedTier("run", module);
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                assertInteger(i, evaluate("run(good, " + i + ")\n", "perf044a8-errors-1.protos", module));
+            }
+            ProtosObjectValue error = errorPrototype("Error", module);
+            ProtosObjectValue slotNotFound = errorPrototype("SlotNotFound", module);
+            for (int i = 0; i < 3; i++) {
+                assertSame(error, errorParent(
+                        () -> evaluate("run(holder, 1)\n", "perf044a8-errors-2.protos", module)),
+                        "an own non-Closure selection is Error");
+                assertSame(error, errorParent(
+                        () -> evaluate("run(heir, 1)\n", "perf044a8-errors-3.protos", module)),
+                        "an inherited non-Closure selection is Error");
+                assertSame(slotNotFound, errorParent(
+                        () -> evaluate("run(plain, 1)\n", "perf044a8-errors-4.protos", module)),
+                        "a missing selector is SlotNotFound");
+            }
+            assertInteger(3, evaluate("run(good, 3)\n", "perf044a8-errors-5.protos", module));
+        });
+        System.out.println("PERF044_A8_SELECTION_ERRORS=PASS");
+    }
+
+    /**
+     * Represented receivers: one entry per family and Prelude, never per
+     * value; a polymorphic site returning to an earlier family reuses its
+     * entry.
+     */
+    @Test
+    void representedReceiversShareOneSelectionPerFamily() throws Exception {
+        withCore(module -> {
+            evaluate("same: (x, y) => { x.match(y) }\n", "perf044a8-repr-define.protos", module);
+            enterCachedTier("same", module);
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                assertSame(Boolean.TRUE, evaluate("same(" + i + ", " + i + ")\n", "perf044a8-repr-1.protos", module));
+                assertSame(Boolean.FALSE, evaluate("same(" + i + ", " + (i + 1) + ")\n", "perf044a8-repr-2.protos", module));
+            }
+            assertEquals(1, getMethodEntries("same", module, "doLong").size(),
+                    "every SmallInteger value shares one entry");
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                assertSame(Boolean.TRUE, evaluate("same(" + i + ".5, " + i + ".5)\n", "perf044a8-repr-3.protos", module));
+                assertSame(Boolean.FALSE, evaluate("same(" + i + ".5, " + i + ".25)\n", "perf044a8-repr-4.protos", module));
+                assertSame(Boolean.TRUE, evaluate("same(\"s" + i + "\", \"s" + i + "\")\n", "perf044a8-repr-5.protos", module));
+                assertSame(Boolean.FALSE, evaluate("same(\"s" + i + "\", \"t" + i + "\")\n", "perf044a8-repr-6.protos", module));
+            }
+            int primitiveFloat = getMethodEntries("same", module, "doDouble").size();
+            int representedFloat = getMethodEntries("same", module, "doFloatValue").size();
+            assertTrue(primitiveFloat <= 1 && representedFloat <= 1
+                            && primitiveFloat + representedFloat >= 1,
+                    "every Float value shares one entry per Float representation");
+            assertEquals(1, getMethodEntries("same", module, "doString").size(),
+                    "every String value shares one entry");
+            for (int i = 0; i < 3; i++) {
+                assertSame(Boolean.TRUE, evaluate("same(true, true)\n", "perf044a8-repr-7.protos", module));
+                assertSame(Boolean.FALSE, evaluate("same(false, true)\n", "perf044a8-repr-8.protos", module));
+                assertSame(Boolean.TRUE, evaluate("same(null, null)\n", "perf044a8-repr-9.protos", module));
+                assertSame(Boolean.FALSE, evaluate("same(null, 1)\n", "perf044a8-repr-10.protos", module));
+            }
+            assertEquals(1, getMethodEntries("same", module, "doRootDelegated").size(),
+                    "Boolean and null share the root Object selection");
+            // Back to the first family after polymorphism.
+            assertSame(Boolean.TRUE, evaluate("same(41, 41)\n", "perf044a8-repr-11.protos", module));
+            assertSame(Boolean.FALSE, evaluate("same(41, 42)\n", "perf044a8-repr-12.protos", module));
+            assertEquals(1, getMethodEntries("same", module, "doLong").size(),
+                    "returning to SmallInteger reuses its entry");
+        });
+        System.out.println("PERF044_A8_REPRESENTED_SELECTION=PASS");
+    }
+
+    /**
+     * A selected source method of a represented receiver binds the actual
+     * receiver: different String and SmallInteger values reach their own
+     * equality result through the shared inherited Object.match.
+     */
+    @Test
+    void representedSelectionBindsTheActualReceiver() throws Exception {
+        withCore(module -> {
+            evaluate("""
+                    probe: (x) => { x.match(x) }
+                    other: (x, y) => { x.match(y) }
+                    """, "perf044a8-actual-define.protos", module);
+            enterCachedTier("probe", module);
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                assertSame(Boolean.TRUE, evaluate("probe(\"v" + i + "\")\n", "perf044a8-actual-1.protos", module));
+                assertSame(Boolean.TRUE, evaluate("probe(" + (i * 7) + ")\n", "perf044a8-actual-2.protos", module));
+                assertSame(Boolean.FALSE, evaluate("other(\"v" + i + "\", \"v" + (i + 1) + "\")\n", "perf044a8-actual-3.protos", module));
+            }
+        });
+        System.out.println("PERF044_A8_REPRESENTED_ACTUAL_RECEIVER=PASS");
+    }
+
+    /**
+     * Distinct selectors never share a selection: the numeric overload
+     * child is reused per selector and each GetMethod entry guards its
+     * selector, so alternating custom operators keep their own behavior.
+     */
+    @Test
+    void distinctSelectorsKeepDistinctSelections() throws Exception {
+        withCore(module -> {
+            evaluate("""
+                    Box: {
+                        value: 0
+                        plus: (other) => { value + other + 1000 }
+                        minus: (other) => { value - other - 1000 }
+                    }.alias("plus", "+").alias("minus", "-")
+                    box: Box { value: 5 }
+                    plus: (r, n) => { r + n }
+                    minus: (r, n) => { r - n }
+                    """, "perf044a8-selectors-define.protos", module);
+            enterCachedTier("plus", module);
+            enterCachedTier("minus", module);
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                assertInteger(1005 + i, evaluate("plus(box, " + i + ")\n", "perf044a8-selectors-1.protos", module));
+                assertInteger(-995 - i, evaluate("minus(box, " + i + ")\n", "perf044a8-selectors-2.protos", module));
+                assertInteger(i + 1, evaluate("plus(" + i + ", 1)\n", "perf044a8-selectors-3.protos", module));
+            }
+        });
+        System.out.println("PERF044_A8_DISTINCT_SELECTORS=PASS");
     }
 
     @Test
@@ -627,10 +888,36 @@ final class ProtosPerf038ITerminalMethodSendTest {
         return cachedEntries(function, module, "CallBinaryMethod_Node", "callDirectSourceSend_cache");
     }
 
-    /** The receiver-keyed selection cache of the send's GetMethod. */
-    private static List<Object> selectionEntries(String function, ProtosActivation module)
+    /** The entries of one selection specialization of the send's single GetMethod. */
+    private static List<Object> getMethodEntries(
+            String function, ProtosActivation module, String specialization) throws Exception {
+        // The generated cache field drops the specialization's "do" prefix.
+        String name = Character.toLowerCase(specialization.charAt(2)) + specialization.substring(3);
+        return cachedEntries(function, module, "GetMethod_Node", name + "_cache");
+    }
+
+    /** The shared inherited selection of a {@code doInherited} entry. */
+    private static ProtosValueLookup.StructuralSelection inheritedSelection(Object entry)
             throws Exception {
-        return cachedEntries(function, module, "GetMethod_Node", "cached_cache");
+        return assertInstanceOf(
+                ProtosValueLookup.StructuralSelection.class, field(entry, "selection_"));
+    }
+
+    private static ProtosObjectValue object(String name, ProtosActivation module) {
+        return assertInstanceOf(
+                ProtosObjectValue.class, module.context().readLocalSlot(name).orElseThrow());
+    }
+
+    private static ProtosObjectValue errorPrototype(String name, ProtosActivation module) {
+        return assertInstanceOf(
+                ProtosObjectValue.class,
+                evaluate(name + "\n", "perf044a8-error-prototype.protos", module));
+    }
+
+    private static ProtosObjectValue errorParent(Runnable send) {
+        ProtosSignalException failure = assertThrows(ProtosSignalException.class, send::run);
+        return assertInstanceOf(
+                ProtosObjectValue.class, failure.error().parent().orElseThrow());
     }
 
     private static List<Object> cachedEntries(

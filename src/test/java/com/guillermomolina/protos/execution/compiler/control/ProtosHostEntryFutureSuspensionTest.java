@@ -918,6 +918,21 @@ final class ProtosHostEntryFutureSuspensionTest {
             Object expected,
             java.util.function.Consumer<Fixture> afterCompletion)
             throws Exception {
+        runSuspendedOnce(stage, program, resolution, expected, fixture -> {}, afterCompletion);
+    }
+
+    /*
+     * As above; {@code whileSuspended} runs host-side while the entry is
+     * parked on the gate, before the gate is resolved.
+     */
+    private static void runSuspendedOnce(
+            String stage,
+            String program,
+            long resolution,
+            Object expected,
+            java.util.function.Consumer<Fixture> whileSuspended,
+            java.util.function.Consumer<Fixture> afterCompletion)
+            throws Exception {
         try (Context context = newContext()) {
             Fixture f = new Fixture(context, program);
             Entry entry = new Entry(f.member("run"));
@@ -925,6 +940,7 @@ final class ProtosHostEntryFutureSuspensionTest {
             assertEquals(1, f.gate.observerCountForTesting(), stage + ": one gate waiter");
             assertEquals(1, f.slot("before"), stage + ": before resolution");
             assertEquals(0, f.slot("after"), stage + ": before resolution");
+            whileSuspended.accept(f);
             f.resolve(resolution);
             Object outcome = entry.await();
             if (outcome instanceof Throwable failure) {
@@ -1486,5 +1502,153 @@ final class ProtosHostEntryFutureSuspensionTest {
             assertTrue(f.member("run").execute().asBoolean());
             assertEquals(0, f.gate.observerCountForTesting(), "the Future was not observed");
         }
+    }
+
+    /* An inherited source method first invoked after the caller resumed. */
+    @Test
+    void inheritedSourceMethodFirstInvokedAfterResumption() throws Exception {
+        runSuspendedOnce(
+                "inherited method after resumption",
+                WAIT_AT
+                        + """
+                        Base: {
+                            value: 0
+                            add: (n) => value + n
+                        }
+                        child: Base { value: 10 }
+                        run: () => {
+                            v: waitAt()
+                            r: child.add(v)
+                            after = after + 1
+                            r
+                        }
+                        """,
+                5L,
+                15L);
+    }
+
+    /* An inherited source method that itself suspends resumes its own state. */
+    @Test
+    void inheritedSourceMethodSuspendsWithoutReplay() throws Exception {
+        runSuspendedOnce(
+                "suspending inherited method",
+                WAIT_AT
+                        + """
+                        Base: { wait: (n) => waitAt() + n }
+                        child: Base { tag: 1 }
+                        run: () => {
+                            r: child.wait(100)
+                            after = after + 1
+                            r
+                        }
+                        """,
+                1L,
+                101L);
+    }
+
+    /* Primitive patterns select the inherited Object.match after resumption. */
+    @Test
+    void primitivePatternMatchingAfterResumption() throws Exception {
+        runSuspendedOnce(
+                "primitive patterns after resumption",
+                WAIT_AT
+                        + """
+                        run: () => {
+                            v: waitAt()
+                            r: match(v) {
+                                0: 10
+                                1.5: 15
+                                7: 70
+                                Any: 0
+                            }
+                            ok: 7.match(v) && (1.5.match(v) == false) && (7.0.match(v) == true)
+                            after = after + 1
+                            if(ok) { r } else { -1 }
+                        }
+                        """,
+                7L,
+                70L);
+    }
+
+    /* Custom equality reached through the inherited Object.match runs once after resumption. */
+    @Test
+    void customEqualityThroughObjectMatchAfterResumption() throws Exception {
+        runSuspendedOnce(
+                "custom equality through Object.match after resumption",
+                WAIT_AT
+                        + """
+                        eqCalls: 0
+                        EqBase: {
+                            equalTo: (other) => {
+                                eqCalls = eqCalls + 1
+                                other * 2
+                            }
+                        }
+                        Eq: EqBase.alias("equalTo", "==")
+                        pattern: Eq()
+                        run: () => {
+                            v: waitAt()
+                            r: pattern.match(v)
+                            after = after + 1
+                            r
+                        }
+                        """,
+                21L,
+                42L,
+                f -> assertEquals(1, f.slot("eqCalls"), "the custom equality runs once"));
+    }
+
+    /* A selected inherited method reassigned while the caller is suspended is observed. */
+    @Test
+    void selectedMethodReassignedBeforeResumptionIsObserved() throws Exception {
+        runSuspendedOnce(
+                "inherited method reassigned while suspended",
+                WAIT_AT
+                        + """
+                        Base: { pick: (n) => n + 1 }
+                        child: Base { tag: 1 }
+                        replacement: (n) => n + 100
+                        run: () => {
+                            first: child.pick(0)
+                            v: waitAt()
+                            r: child.pick(v)
+                            after = after + 1
+                            first + r
+                        }
+                        """,
+                5L,
+                106L,
+                f -> {
+                    ProtosObjectValue base =
+                            (ProtosObjectValue) f.module.readLocalSlot("Base").orElseThrow();
+                    base.assignLocalSlot(
+                            "pick", f.module.readLocalSlot("replacement").orElseThrow());
+                },
+                f -> {});
+    }
+
+    /* An inherited method keeps the real methodHome for super and this after resumption. */
+    @Test
+    void inheritedMethodHomeAfterResumption() throws Exception {
+        runSuspendedOnce(
+                "inherited methodHome after resumption",
+                WAIT_AT
+                        + """
+                        Top: { read: (d) => d + 1 }
+                        Middle: Top {
+                            read: (d) => super.read(d) + 10
+                            self: (ignored) => this
+                        }
+                        leaf: Middle { tag: 1 }
+                        run: () => {
+                            v: waitAt()
+                            r: leaf.read(v)
+                            same: leaf.self(v) === leaf
+                            after = after + 1
+                            if(same) { r } else { -1 }
+                        }
+                        """,
+                5L,
+                16L);
     }
 }

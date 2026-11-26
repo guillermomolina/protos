@@ -6265,7 +6265,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * Shape proves only the presence of a local {@code call} slot, whose
      * value is checked on every execution.
      */
-    @Operation
+    @Operation(storeBytecodeIndex = false)
     @ConstantOperand(type = int.class, name = "count")
     public static final class IsInlineCaseAction {
         @Specialization(
@@ -6285,8 +6285,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         ProtosStandardObjectProtocol.CanonicalRootCallSelection rootSelection,
                 @Cached(value = "retained.getShape()", allowUncached = true)
                         Shape cachedShape,
-                @Cached(value = "callSlotGetter(cachedShape)", allowUncached = true,
-                        neverDefault = false)
+                @Cached(value = "callSlotGetter(cachedShape)", allowUncached = true)
                         PropertyGetter cachedLocalCallGetter) {
             return prepared.selectedCaptureCount() == count
                     && ProtosFunctionCallDispatchers.hasCanonicalCallSelectionForShape(

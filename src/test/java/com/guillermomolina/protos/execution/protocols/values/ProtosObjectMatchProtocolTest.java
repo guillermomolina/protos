@@ -174,4 +174,55 @@ class ProtosObjectMatchProtocolTest {
                 (before == true) && (thing.match(1) == "custom")
                 """));
     }
+
+    /*
+     * One shared send selects the inherited source Object.match for
+     * receivers sharing a Shape and parent; each execution sends the
+     * actual pattern's custom equality exactly once and returns its
+     * non-Boolean result unchanged.
+     */
+    @Test
+    void sharedInheritedObjectMatchReturnsEachCustomEqualityResult() throws Exception {
+        assertSame(Boolean.TRUE, evaluate(core(), """
+                calls: { n: 0 }
+                Base: {
+                    equalTo: (other) => {
+                        calls.n = calls.n + 1
+                        [other]
+                    }
+                }
+                Eq: Base.alias("equalTo", "==")
+                a: Eq()
+                b: Eq()
+                probe: (pattern, subject) => pattern.match(subject)
+                r1: probe(a, 1)
+                r2: probe(b, 2)
+                r3: probe(a, 3)
+                r4: probe(b, "four")
+                (r1[0] == 1) && (r2[0] == 2) && (r3[0] == 3) && (r4[0] == "four") &&
+                    (r1.size() == 1) && (calls.n == 4)
+                """));
+    }
+
+    /*
+     * A shared inherited matcher selection observes in-place reassignment
+     * of the inherited slot and shadowing by one receiver only.
+     */
+    @Test
+    void sharedInheritedMatcherObservesReassignmentAndShadowing() throws Exception {
+        assertSame(Boolean.TRUE, evaluate(core(), """
+                Proto: { match: (subject) => "first" }
+                x: Proto()
+                y: Proto()
+                probe: (pattern, subject) => pattern.match(subject)
+                before: [probe(x, 0), probe(y, 0), probe(x, 1)]
+                Proto.match = (subject) => "second"
+                after: [probe(x, 0), probe(y, 0)]
+                x.createSlot("match", (subject) => "own")
+                shadowed: [probe(x, 0), probe(y, 0), probe(x, 1)]
+                (before[0] == "first") && (before[1] == "first") && (before[2] == "first") &&
+                    (after[0] == "second") && (after[1] == "second") &&
+                    (shadowed[0] == "own") && (shadowed[1] == "second") && (shadowed[2] == "own")
+                """));
+    }
 }

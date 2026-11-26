@@ -20,10 +20,12 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
+import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
+import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import com.guillermomolina.protos.runtime.ProtosValueLookup.StructuralSelection;
 import com.guillermomolina.protos.runtime.lookup.ProtosSlotLookupResult;
@@ -41,29 +43,52 @@ import com.oracle.truffle.api.dsl.NonIdempotent;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.Node;
+import com.oracle.truffle.api.object.PropertyGetter;
+import com.oracle.truffle.api.object.Shape;
 import com.oracle.truffle.api.strings.TruffleString;
 
 /**
- * I115: proxied as the {@code GetMethod}
- * operation: the selection half of every ordinary send. The receiver was
- * evaluated once by the caller bytecode; the selector is a constant operand.
+ * Proxied as the {@code GetMethod} operation: the selection half of every
+ * ordinary send. The receiver was evaluated once by the caller bytecode; the
+ * selector is a constant operand.
  * Ordinary selection returns a {@link ProtosBoundMethod} carrying the
- * selected Closure, receiver and methodHome. Direct cached selection returns
- * the raw Closure only when the receiver itself owns the selected slot (an
- * inherited selection keeps its owning methodHome); D188 foreign member selection returns its read callable.
- * Nothing is prepared or executed here.
+ * selected Closure, receiver and methodHome. Direct selection returns the
+ * raw Closure only when the receiver itself owns the selected slot (an
+ * inherited selection keeps its owning methodHome); D188 foreign member
+ * selection returns its read callable. Nothing is prepared or executed here.
  *
- * <p>{@link #doCached} is the selection cache (at most three entries),
- * guarded by receiver identity and a structural selection whose observed
- * {@code Shape}s must still match along the delegation chain; it reads the
- * current value of the selected property, so a reassignment is observed and
- * a structural change (removal, recreation, shadowing) misses the entry. A cached slot
- * that no longer holds a Closure falls to {@link #doGeneric}, which performs
- * the complete lookup and raises its Errors.
+ * <p>Selection and binding are distinct: each cached entry selects the
+ * owner and the current Closure; the actual evaluated receiver is bound on
+ * every execution. Every cached entry guards the selector identity, so a
+ * child reused for several selectors never answers one selector with the
+ * selection of another. The cached entries are:
  *
- * <p>RECORDED DIVERGENCE (I115-H7-R3): the cached selection is installed
- * with a {@code null} prelude and is not re-validated against a later change
- * of the caller's prelude.
+ * <ul>
+ *   <li>{@link #doOwn}: an exact ordinary receiver owning the selector. The
+ *       cached {@code Shape} proves the local slot; the receiver's current
+ *       value is read through the cached {@link PropertyGetter}, so receivers
+ *       sharing the Shape keep their own Closures.
+ *   <li>{@link #doInherited}: an exact ordinary receiver not owning the
+ *       selector. One structural selection from the receiver's direct parent
+ *       is shared by every receiver with this Shape and that exact parent;
+ *       its home is the real owner.
+ *   <li>{@link #doLong}, {@link #doDouble}, {@link #doFloatValue},
+ *       {@link #doString}: a SmallInteger, Float or String receiver, selected from the prototype of the
+ *       observing Prelude's FROZEN binding, cached per Prelude identity and
+ *       never per receiver value.
+ *   <li>{@link #doRootDelegated}: a Boolean or null receiver, selected from
+ *       the fixed root Object.
+ * </ul>
+ *
+ * <p>A chain whose examined owners are all FROZEN caches its selected value;
+ * a mutable chain checks every examined {@code Shape} and reads the owner's
+ * current slot on every execution, so an in-place reassignment is observed
+ * and a structural change (removal, recreation, shadowing) misses the entry.
+ * A selected slot that does not hold a Closure, and every other receiver
+ * representation (large Integer, Fraction, Complex, instance-retained
+ * prototypes, foreign projections) or site past the cached limits, use
+ * {@link #doGeneric}: the complete ordinary lookup, which raises the ordinary
+ * Errors and replaces no cached entry.
  */
 @GenerateUncached
 @GenerateInline(false)
@@ -71,47 +96,251 @@ import com.oracle.truffle.api.strings.TruffleString;
 @ConstantOperand(type = TruffleString.class, name = "selector")
 @ConstantOperand(type = boolean.class, name = "direct")
 abstract class ProtosExperimentalGetMethodNode extends Node {
+    static final String SMALL_INTEGER_BINDING =
+            ProtosBytecodeRootNode.StandardKeySelectionNode.SMALL_INTEGER_BINDING;
+    static final String FLOAT_BINDING =
+            ProtosBytecodeRootNode.StandardKeySelectionNode.FLOAT_BINDING;
+    static final String STRING_BINDING =
+            ProtosBytecodeRootNode.StandardKeySelectionNode.STRING_BINDING;
 
     abstract Object execute(
             VirtualFrame frame, TruffleString selector,
             boolean direct, Object receiver);
 
+    /*
+     * An exact ordinary receiver owning the selector. The receiver identity
+     * is not cached: the Shape proves the local slot and its current value
+     * is read from the actual receiver.
+     */
     @Specialization(
             excludeForUncached = true,
             guards = {
-                "receiver == cachedReceiver",
-                "cachedSelection != null",
-                "selectionStillValid(cachedSelection)",
-                "selectsClosure(cachedSelection)"
+                "selector == cachedSelector",
+                "isOrdinaryObject(receiver)",
+                "receiver.usesObjectStorageForRuntime()",
+                "cachedShape.check(receiver)",
+                "getter != null",
+                "getter.accepts(receiver)"
             },
             limit = "3")
     @ForceQuickening
-    static Object doCached(
+    static Object doOwn(
+            VirtualFrame frame,
+            TruffleString selector,
+            boolean direct,
+            ProtosObjectValue receiver,
+            @Bind("rootOf($node)") ProtosBytecodeRootNode root,
+            @Cached("selector") TruffleString cachedSelector,
+            @Cached("receiver.getShape()") Shape cachedShape,
+            @Cached("ownGetter(cachedShape, cachedSelector)") PropertyGetter getter) {
+        Object selected = getter.get(receiver);
+        if (selected instanceof ProtosClosureValue closure) {
+            // The receiver travels separately and is its own methodHome.
+            return direct ? closure : new ProtosBoundMethod(closure, receiver, receiver);
+        }
+        return selectNonClosure(frame, cachedSelector, receiver, root);
+    }
+
+    /*
+     * An exact ordinary receiver not owning the selector: the structural
+     * selection from its direct parent is shared by every receiver with
+     * this Shape and that exact parent, never by Shape alone.
+     */
+    @Specialization(
+            excludeForUncached = true,
+            guards = {
+                "selector == cachedSelector",
+                "isOrdinaryObject(receiver)",
+                "receiver.usesObjectStorageForRuntime()",
+                "receiverShape.check(receiver)",
+                "selection != null",
+                "hasSelectionParent(receiver, selection)",
+                "frozen || selection.isValid()"
+            },
+            limit = "3")
+    @ForceQuickening
+    static Object doInherited(
+            VirtualFrame frame,
+            TruffleString selector,
+            boolean direct,
+            ProtosObjectValue receiver,
+            @Bind("rootOf($node)") ProtosBytecodeRootNode root,
+            @Cached("selector") TruffleString cachedSelector,
+            @Cached("receiver.getShape()") Shape receiverShape,
+            @Cached("selectInherited(receiver, cachedSelector)") StructuralSelection selection,
+            @Cached("allOwnersFrozen(selection)") boolean frozen,
+            @Cached(value = "frozenValue(frozen, selection)", neverDefault = false)
+                    Object frozenSelected) {
+        return bindSelected(
+                frame, cachedSelector, receiver, root, selection,
+                frozen ? frozenSelected : selection.read());
+    }
+
+    /*
+     * A SmallInteger receiver: the selection from the prototype of the
+     * observing Prelude's FROZEN SmallInteger binding, shared by every
+     * value. An absent Prelude or a mutable binding installs nothing.
+     */
+    @Specialization(
+            excludeForUncached = true,
+            guards = {
+                "selector == cachedSelector",
+                "prelude == cachedPrelude",
+                "cachedPrelude != null",
+                "selection != null",
+                "frozen || selection.isValid()"
+            },
+            limit = "3")
+    static Object doLong(
+            VirtualFrame frame,
+            TruffleString selector,
+            boolean direct,
+            long receiver,
+            @Bind("rootOf($node)") ProtosBytecodeRootNode root,
+            @Bind("preludeOf(frame, root)") ProtosPrelude prelude,
+            @Cached("selector") TruffleString cachedSelector,
+            @Cached("prelude") ProtosPrelude cachedPrelude,
+            @Cached("selectFromBinding(cachedPrelude, SMALL_INTEGER_BINDING, cachedSelector)")
+                    StructuralSelection selection,
+            @Cached("allOwnersFrozen(selection)") boolean frozen,
+            @Cached(value = "frozenValue(frozen, selection)", neverDefault = false)
+                    Object frozenSelected) {
+        return bindSelected(
+                frame, cachedSelector, receiver, root, selection,
+                frozen ? frozenSelected : selection.read());
+    }
+
+    /* A Float receiver, as {@link #doLong} through the Float binding. */
+    @Specialization(
+            excludeForUncached = true,
+            guards = {
+                "selector == cachedSelector",
+                "prelude == cachedPrelude",
+                "cachedPrelude != null",
+                "selection != null",
+                "frozen || selection.isValid()"
+            },
+            limit = "3")
+    static Object doDouble(
+            VirtualFrame frame,
+            TruffleString selector,
+            boolean direct,
+            double receiver,
+            @Bind("rootOf($node)") ProtosBytecodeRootNode root,
+            @Bind("preludeOf(frame, root)") ProtosPrelude prelude,
+            @Cached("selector") TruffleString cachedSelector,
+            @Cached("prelude") ProtosPrelude cachedPrelude,
+            @Cached("selectFromBinding(cachedPrelude, FLOAT_BINDING, cachedSelector)")
+                    StructuralSelection selection,
+            @Cached("allOwnersFrozen(selection)") boolean frozen,
+            @Cached(value = "frozenValue(frozen, selection)", neverDefault = false)
+                    Object frozenSelected) {
+        return bindSelected(
+                frame, cachedSelector, receiver, root, selection,
+                frozen ? frozenSelected : selection.read());
+    }
+
+    /*
+     * A represented Float receiver: its final representation delegates to
+     * the observing Prelude's Float prototype exactly as a double does.
+     */
+    @Specialization(
+            excludeForUncached = true,
+            guards = {
+                "selector == cachedSelector",
+                "prelude == cachedPrelude",
+                "cachedPrelude != null",
+                "selection != null",
+                "frozen || selection.isValid()"
+            },
+            limit = "3")
+    static Object doFloatValue(
+            VirtualFrame frame,
+            TruffleString selector,
+            boolean direct,
+            ProtosFloatValue receiver,
+            @Bind("rootOf($node)") ProtosBytecodeRootNode root,
+            @Bind("preludeOf(frame, root)") ProtosPrelude prelude,
+            @Cached("selector") TruffleString cachedSelector,
+            @Cached("prelude") ProtosPrelude cachedPrelude,
+            @Cached("selectFromBinding(cachedPrelude, FLOAT_BINDING, cachedSelector)")
+                    StructuralSelection selection,
+            @Cached("allOwnersFrozen(selection)") boolean frozen,
+            @Cached(value = "frozenValue(frozen, selection)", neverDefault = false)
+                    Object frozenSelected) {
+        return bindSelected(
+                frame, cachedSelector, receiver, root, selection,
+                frozen ? frozenSelected : selection.read());
+    }
+
+    /*
+     * A String receiver, as {@link #doLong} through the String binding; the
+     * actual String receiver is bound, never a cached one.
+     */
+    @Specialization(
+            excludeForUncached = true,
+            guards = {
+                "selector == cachedSelector",
+                "prelude == cachedPrelude",
+                "cachedPrelude != null",
+                "selection != null",
+                "frozen || selection.isValid()"
+            },
+            limit = "3")
+    static Object doString(
+            VirtualFrame frame,
+            TruffleString selector,
+            boolean direct,
+            ProtosStringValue receiver,
+            @Bind("rootOf($node)") ProtosBytecodeRootNode root,
+            @Bind("preludeOf(frame, root)") ProtosPrelude prelude,
+            @Cached("selector") TruffleString cachedSelector,
+            @Cached("prelude") ProtosPrelude cachedPrelude,
+            @Cached("selectFromBinding(cachedPrelude, STRING_BINDING, cachedSelector)")
+                    StructuralSelection selection,
+            @Cached("allOwnersFrozen(selection)") boolean frozen,
+            @Cached(value = "frozenValue(frozen, selection)", neverDefault = false)
+                    Object frozenSelected) {
+        return bindSelected(
+                frame, cachedSelector, receiver, root, selection,
+                frozen ? frozenSelected : selection.read());
+    }
+
+    /*
+     * A Boolean or the canonical null: both delegate directly to the fixed
+     * root Object, so no Prelude is read.
+     */
+    @Specialization(
+            excludeForUncached = true,
+            guards = {
+                "isRootDelegated(receiver)",
+                "selector == cachedSelector",
+                "selection != null",
+                "frozen || selection.isValid()"
+            },
+            limit = "3")
+    static Object doRootDelegated(
             VirtualFrame frame,
             TruffleString selector,
             boolean direct,
             Object receiver,
-            @Cached("receiver") Object cachedReceiver,
-            @Cached("selectOrNull(receiver, selector)")
-                    StructuralSelection cachedSelection,
-            @Cached("ownsSelection(cachedReceiver, cachedSelection)") boolean ownSelection) {
-        ProtosClosureValue selected =
-                (ProtosClosureValue) cachedSelection.read();
-        if (direct && ownSelection) {
-            // The receiver travels separately and is its own methodHome.
-            return selected;
-        }
-        // An inherited method keeps the exact object owning the selected
-        // slot as its methodHome, which `super` starts from.
-        return new ProtosBoundMethod(
-                selected, receiver, cachedSelection.home());
+            @Bind("rootOf($node)") ProtosBytecodeRootNode root,
+            @Cached("selector") TruffleString cachedSelector,
+            @Cached("selectFromRoot(cachedSelector)") StructuralSelection selection,
+            @Cached("allOwnersFrozen(selection)") boolean frozen,
+            @Cached(value = "frozenValue(frozen, selection)", neverDefault = false)
+                    Object frozenSelected) {
+        return bindSelected(
+                frame, cachedSelector, receiver, root, selection,
+                frozen ? frozenSelected : selection.read());
     }
 
-    static boolean ownsSelection(Object receiver, StructuralSelection selection) {
-        return selection != null && selection.home() == receiver;
-    }
-
-    @Specialization(replaces = "doCached")
+    /*
+     * The complete selection: every other representation, a non-Closure
+     * selection, and sites past the cached limits. It replaces no cached
+     * entry.
+     */
+    @Specialization
     @InliningCutoff
     static Object doGeneric(
             VirtualFrame frame,
@@ -127,30 +356,105 @@ abstract class ProtosExperimentalGetMethodNode extends Node {
                 caller);
     }
 
-    static boolean isClosure(Object value) {
-        return value instanceof ProtosClosureValue;
+    /*
+     * The inherited selection bound to the actual receiver and the real
+     * owner. A selected value that is not a Closure takes the complete
+     * selection, which raises its ordinary Error.
+     */
+    private static Object bindSelected(
+            VirtualFrame frame,
+            TruffleString selector,
+            Object receiver,
+            ProtosBytecodeRootNode root,
+            StructuralSelection selection,
+            Object selected) {
+        if (selected instanceof ProtosClosureValue closure) {
+            return new ProtosBoundMethod(closure, receiver, selection.home());
+        }
+        return selectNonClosure(frame, selector, receiver, root);
     }
 
-    /* The observed Shapes may change between executions. */
+    private static Object selectNonClosure(
+            VirtualFrame frame,
+            TruffleString selector,
+            Object receiver,
+            ProtosBytecodeRootNode root) {
+        return select(receiver, selector.toJavaStringUncached(), root, frame.getArguments());
+    }
+
+    static boolean isOrdinaryObject(Object receiver) {
+        return ProtosValueLookup.isOrdinaryObject(receiver);
+    }
+
+    static boolean isRootDelegated(Object receiver) {
+        return ProtosBytecodeRootNode.StandardKeySelectionNode.isRootDelegated(receiver);
+    }
+
+    static boolean hasSelectionParent(
+            ProtosObjectValue receiver, StructuralSelection selection) {
+        return ProtosValueLookup.hasSelectionParent(receiver, selection);
+    }
+
+    /*
+     * The observing caller's Prelude, read through the admitted caller
+     * authority exactly as the complete selection reads it, so an
+     * untransported inherited Prelude registers the root's caller need and
+     * nothing is published. Read only by the Prelude-delegated entries.
+     */
     @NonIdempotent
-    static boolean selectionStillValid(StructuralSelection selection) {
-        return selection.isValid();
+    static ProtosPrelude preludeOf(VirtualFrame frame, ProtosBytecodeRootNode root) {
+        return ProtosFunctionCallDispatchers.admittedCallerPrelude(root, frame.getArguments());
     }
 
-    /* The selected slot may be reassigned between executions. */
-    @NonIdempotent
-    static boolean selectsClosure(StructuralSelection selection) {
-        return selection.read() instanceof ProtosClosureValue;
+    /* Specialization time only. */
+    static boolean allOwnersFrozen(StructuralSelection selection) {
+        return selection != null && selection.allOwnersFrozen();
     }
 
-    /* Installation only: the structural selection from an exact ordinary receiver, or null. */
+    /* Specialization time only: the value of an all-FROZEN chain, never of a mutable one. */
+    static Object frozenValue(boolean frozen, StructuralSelection selection) {
+        return frozen && selection.isValid() ? selection.read() : null;
+    }
+
+    /* Specialization time only: the getter of a local selector, or null. */
+    @TruffleBoundary
+    static PropertyGetter ownGetter(Shape shape, TruffleString selector) {
+        return ProtosValueLookup.propertyGetterWithFinalAssumption(shape, selectorName(selector));
+    }
+
+    /* Specialization time only: null when the receiver owns the selector. */
+    @TruffleBoundary
+    static StructuralSelection selectInherited(Object receiver, TruffleString selector) {
+        return ProtosValueLookup.selectInheritedStructural(receiver, selectorName(selector));
+    }
+
+    /* Specialization time only: null without a Prelude or a FROZEN binding. */
+    @TruffleBoundary
+    static StructuralSelection selectFromBinding(
+            ProtosPrelude prelude, String binding, TruffleString selector) {
+        return ProtosBytecodeRootNode.StandardKeySelectionNode.selectFromBinding(
+                prelude, binding, selectorName(selector));
+    }
+
+    /* Specialization time only. */
+    @TruffleBoundary
+    static StructuralSelection selectFromRoot(TruffleString selector) {
+        return ProtosBytecodeRootNode.StandardKeySelectionNode.selectFromRoot(
+                selectorName(selector));
+    }
+
+    @TruffleBoundary
+    private static String selectorName(TruffleString selector) {
+        return selector.toJavaStringUncached().intern();
+    }
+
+    /* The structural selection from an exact ordinary receiver, or null. */
     @TruffleBoundary
     static StructuralSelection selectOrNull(Object receiver, TruffleString selector) {
         if (!ProtosValueLookup.isOrdinaryObject(receiver)) {
             return null;
         }
-        return ProtosValueLookup.selectStructural(
-                receiver, selector.toJavaStringUncached().intern());
+        return ProtosValueLookup.selectStructural(receiver, selectorName(selector));
     }
 
     /**
