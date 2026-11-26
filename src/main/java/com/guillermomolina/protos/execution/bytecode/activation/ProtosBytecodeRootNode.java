@@ -177,6 +177,7 @@ import com.oracle.truffle.api.source.Source;
         })
 @OperationProxy(value = ProtosNumberDivideNode.class, name = "NumberDivide")
 @OperationProxy(value = ProtosRichCompareLtNode.class, name = "RichCompareLt")
+@OperationProxy(value = ProtosRichCompareEqNode.class, name = "RichCompareEq")
 @OperationProxy(value = ProtosRichCompareLeNode.class, name = "RichCompareLe")
 @OperationProxy(value = ProtosRichCompareGtNode.class, name = "RichCompareGt")
 @OperationProxy(value = ProtosRichCompareGeNode.class, name = "RichCompareGe")
@@ -5890,7 +5891,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
          */
         @Specialization(
                 guards = {
-                    "cases.getClass() == mapClass",
                     "subject.usesObjectStorageForRuntime()",
                     "subjectShape.check(subject)",
                     "selection != null",
@@ -5906,7 +5906,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosActivation activation,
                 @Bind VirtualFrame frame,
                 @Bind BytecodeNode bytecode,
-                @Cached("cases.getClass()") Class<?> mapClass,
                 @Cached("subject.getShape()") Shape subjectShape,
                 @Cached("selectInherited(subject, subjectShape)")
                         ProtosValueLookup.StructuralSelection selection,
@@ -5920,18 +5919,19 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
 
         /*
-         * A primitive carrier subject (Integer, Float or Boolean), whose
-         * delegation parent is decided by its carrier class and the
-         * observing Prelude alone: the selection from that parent is cached
-         * per class and Prelude.
+         * A primitive carrier subject (Integer, Float or Boolean). The
+         * selection from its delegation parent is cached per carrier class
+         * and Prelude, and is used only while that Prelude still delegates
+         * the carrier to the same parent object and the selection chain is
+         * valid, so a rebound prototype binding is observed.
          */
         @Specialization(
                 guards = {
-                    "cases.getClass() == mapClass",
                     "isPrimitiveCarrier(subject)",
                     "subject.getClass() == subjectClass",
-                    "preludeOf(frame) == cachedPrelude",
+                    "prelude == cachedPrelude",
                     "selection != null",
+                    "boundParent(binding, selection)",
                     "frozen || selection.isValid()"
                 },
                 limit = "3",
@@ -5943,11 +5943,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosActivation activation,
                 @Bind VirtualFrame frame,
                 @Bind BytecodeNode bytecode,
-                @Cached("cases.getClass()") Class<?> mapClass,
+                @Bind("preludeOf(frame)") ProtosPrelude prelude,
                 @Cached("subject.getClass()") Class<?> subjectClass,
-                @Cached("preludeOf(frame)") ProtosPrelude cachedPrelude,
+                @Cached("prelude") ProtosPrelude cachedPrelude,
                 @Cached("selectFromCarrierParent(subject, cachedPrelude)")
                         ProtosValueLookup.StructuralSelection selection,
+                @Cached("carrierBinding(subject, cachedPrelude)")
+                        ProtosValueLookup.StructuralSelection binding,
                 @Cached("allOwnersFrozen(selection)") boolean frozen,
                 @Cached("frozenStandard(frozen, selection)") boolean frozenStandard) {
             if (frozen ? !frozenStandard : !isStandard(selection)) {
@@ -5987,6 +5989,40 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         static ProtosPrelude preludeOf(VirtualFrame frame) {
             return ProtosFrameArguments.admittedPreludeOrNull(frame.getArguments());
+        }
+
+        /*
+         * Specialization time only: the structural selection of the Prelude
+         * binding that delegates an Integer or Float carrier to its
+         * prototype, as the standard numeric operator selection observes it;
+         * null for a Boolean, whose parent is the fixed root Object.
+         */
+        static ProtosValueLookup.StructuralSelection carrierBinding(
+                Object subject, ProtosPrelude prelude) {
+            if (subject instanceof Boolean) {
+                return null;
+            }
+            return ProtosNumericSelectionNode.selectBinding(
+                    prelude,
+                    subject instanceof Long
+                            ? ProtosNumericSelectionNode.SMALL_INTEGER_BINDING
+                            : ProtosNumericSelectionNode.FLOAT_BINDING);
+        }
+
+        /*
+         * Whether the carrier's prototype binding still selects the origin
+         * of the cached caseOf selection: a Boolean's parent is fixed;
+         * otherwise the binding chain must be unchanged and bound to that
+         * prototype. Reads one slot; invokes nothing.
+         */
+        @NonIdempotent
+        static boolean boundParent(
+                ProtosValueLookup.StructuralSelection binding,
+                ProtosValueLookup.StructuralSelection selection) {
+            if (binding == null) {
+                return selection.origin() == ProtosObjectValue.rootObject();
+            }
+            return binding.isValid() && binding.read() == selection.origin();
         }
 
         static boolean isPrimitiveCarrier(Object subject) {

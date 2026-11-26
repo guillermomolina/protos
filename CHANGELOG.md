@@ -8,6 +8,11 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.234-SNAPSHOT
+
+- **PERF044.** Lower ordinary == to a direct numeric equality operation and send caseOf and standalone match matchers through the direct method send.
+- Replay source commit `d8146a6aba0a5c1b02bbe0c2ef94061e370ceb4c` with implementation-version metadata; preserve its source, tests and baseline content.
+
 ## 0.4.233-SNAPSHOT
 
 - **PERF044.** Inline standard caseOf over Map tables into the enclosing bytecode root.
