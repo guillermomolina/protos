@@ -114,7 +114,6 @@ jobs:
           esac
       - name: Start lane clock
         run: |
-          mkdir -p target/ci-logs
           date +%s > "$RUNNER_TEMP/lane-start"
           printf 'Diagnostic lane: %s (non-authoritative)\n' "$LANE" >> "$GITHUB_STEP_SUMMARY"
       - name: Check out repository
@@ -124,6 +123,9 @@ jobs:
 
       - name: Trust checked-out repository
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Prepare diagnostic log directory
+        run: mkdir -p target/ci-logs
 
       - name: Restore Maven dependency cache
         id: maven-cache
