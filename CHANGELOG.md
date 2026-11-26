@@ -8,6 +8,11 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.241-SNAPSHOT
+
+- **PERF044.** Restore explicit node binding, isolate large Integer normalization behind a Truffle boundary and refresh PE baselines.
+- Replay source commit `c916f522079301c68a4488d8aa16a7c8d56a7ba3` with implementation-version metadata; preserve its source, tests and baseline content.
+
 ## 0.4.240-SNAPSHOT
 
 - **PERF044.** Preserve independent method selection and source invocation specialization families.
