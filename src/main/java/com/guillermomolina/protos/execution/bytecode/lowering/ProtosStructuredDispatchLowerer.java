@@ -257,6 +257,11 @@ final class ProtosStructuredDispatchLowerer {
 
         builder.beginBlock();
 
+        /*
+         * The matcher is invoked with the structured caller explicitly: this
+         * root may run in a continuation or resumer frame, which is never a
+         * substitute for the protocol's caller.
+         */
         builder.beginStoreLocal(structuredMapMatchChild);
         builder.beginStructuredPrepareChildCall(ProtosStructuredPhase.CHILD);
         builder.emitLoadLocal(structuredMapMatch);
@@ -311,6 +316,11 @@ final class ProtosStructuredDispatchLowerer {
 
         builder.beginBlock();
 
+        /*
+         * The matcher is invoked with the structured caller explicitly: this
+         * root may run in a continuation or resumer frame, which is never a
+         * substitute for the protocol's caller.
+         */
         builder.beginStoreLocal(structuredCaseOfMatcher);
         builder.beginStructuredPrepareChildCall(ProtosStructuredPhase.CHILD);
         builder.emitLoadLocal(structuredCaseOf);
@@ -372,6 +382,11 @@ final class ProtosStructuredDispatchLowerer {
 
         builder.beginBlock();
 
+        /*
+         * The matcher is invoked with the structured caller explicitly: this
+         * root may run in a continuation or resumer frame, which is never a
+         * substitute for the protocol's caller.
+         */
         builder.beginStoreLocal(structuredArrayMatchChild);
         builder.beginStructuredPrepareChildCall(ProtosStructuredPhase.CHILD);
         builder.emitLoadLocal(structuredArrayMatch);

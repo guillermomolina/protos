@@ -296,6 +296,43 @@ tests: [
         match: (value, body) => body() + value
         Assertions.require((match)(1) { 41 } == 42)
         Assertions.require(match(1, () => 1) == 2)
+    }),
+
+    // Structural, custom and dynamic tables share the ordinary recognition.
+    Test("case of mixes structural, custom and standard matchers", () => {
+        state: { order: 0 }
+        Probe: { match: (subject) => {
+            state.order = state.order * 10 + 1
+            false
+        } }
+        select: (value) => match(value) {
+            Probe: "probe"
+            [Capture, 2]: (first) => first
+            %{ "k": Capture }: (mapped) => mapped
+            Any: "any"
+        }
+        Assertions.require(select([5, 2]) == 5)
+        Assertions.require(select(%{ "k": 4; "x": 0 }) == 4)
+        Assertions.require(select(0) == "any")
+        Assertions.require(state.order == 111)
+    }),
+    Test("case of over a dynamic table commits the first success", () => {
+        cases: %{
+            0: () => "zero"
+            Capture: (value) => value
+            Any: () => "unreached"
+        }
+        Assertions.require(0.caseOf(cases) == "zero")
+        Assertions.require(7.caseOf(cases) == 7)
+    }),
+    Test("case of evaluates its subject once", () => {
+        state: { count: 0 }
+        subject: () => {
+            state.count = state.count + 1
+            1
+        }
+        Assertions.require(match(subject()) { 0: "a"; 1: "b"; Any: "c" } == "b")
+        Assertions.require(state.count == 1)
     })
 ]
 tests.freeze()
