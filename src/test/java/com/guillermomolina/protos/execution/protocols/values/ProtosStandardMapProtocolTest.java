@@ -203,6 +203,91 @@ class ProtosStandardMapProtocolTest {
         assertSame(map.keyedSnapshot().get(2).value(), later[2].value());
     }
 
+    @Test
+    void standardKeysServeEveryLookupAndUpdateOperation() throws Exception {
+        assertSame(Boolean.TRUE, evaluate(
+                "o: {}\n"
+                        + "m: Map()\n"
+                        + "m[1] = \"int\"\n"
+                        + "m[2.5] = \"float\"\n"
+                        + "m[\"s\"] = \"string\"\n"
+                        + "m[o] = \"object\"\n"
+                        + "m[1180591620717411303424] = \"big\"\n"
+                        + "m[1.0] = \"replaced\"\n"
+                        + "found: (m.at(1) == \"replaced\") && (m[2.5] == \"float\") &&\n"
+                        + "    (m.at(\"s\") == \"string\") && (m[o] == \"object\") &&\n"
+                        + "    (m[1180591620717411303424.0] == \"big\") && (m.size() == 5)\n"
+                        + "contained: m.containsKey(1/1) && !m.containsKey(2) && !m.containsKey({})\n"
+                        + "absent: (m.atIfAbsent(3, () => \"fallback\") == \"fallback\") &&\n"
+                        + "    (m.atIfAbsent(\"s\", () => \"fallback\") == \"string\")\n"
+                        + "removed: (m.remove(2.5) == \"float\") && (m.remove(o) == \"object\") &&\n"
+                        + "    !m.containsKey(2.5) && (m.size() == 3)\n"
+                        + "found && contained && absent && removed"));
+    }
+
+    @Test
+    void customKeysKeepOrdinaryHashAndEqualityAcrossOperations() throws Exception {
+        assertSame(Boolean.TRUE, evaluate(
+                "counts: {\n"
+                        + "    hash: 0\n"
+                        + "    equality: 0\n"
+                        + "}\n"
+                        + "counted: {\n"
+                        + "    hash: () => { counts.hash = counts.hash + 1\n this.h }\n"
+                        + "    equals: (other) => {\n"
+                        + "        counts.equality = counts.equality + 1\n"
+                        + "        this.id == other.id\n"
+                        + "    }\n"
+                        + "}.alias(\"equals\", \"==\")\n"
+                        + "key: (i, hv) => counted {\n"
+                        + "    id: i\n"
+                        + "    h: hv\n"
+                        + "}\n"
+                        + "m: Map()\n"
+                        + "m[key(1, 5)] = \"a\"\n"
+                        + "m[key(2, 5)] = \"b\"\n"
+                        + "afterPut: (counts.hash == 2) && (counts.equality == 1)\n"
+                        + "read: m.at(key(2, 5)) == \"b\"\n"
+                        + "afterRead: (counts.hash == 3) && (counts.equality == 3)\n"
+                        + "missing: !m.containsKey(key(3, 6))\n"
+                        + "afterMissing: (counts.hash == 4) && (counts.equality == 3)\n"
+                        + "fallback: m.atIfAbsent(key(3, 5), () => \"none\") == \"none\"\n"
+                        + "afterFallback: (counts.hash == 5) && (counts.equality == 5)\n"
+                        + "removed: m.remove(key(1, 5)) == \"a\"\n"
+                        + "afterRemove: (counts.hash == 6) && (counts.equality == 6)\n"
+                        + "afterPut && read && afterRead && missing && afterMissing &&\n"
+                        + "    fallback && afterFallback && removed && afterRemove && (m.size() == 1)"));
+    }
+
+    @Test
+    void warmedLookupSiteInvokesOverridingKeyBehavior() throws Exception {
+        assertSame(Boolean.TRUE, evaluate(
+                "calls: 0\n"
+                        + "m: Map()\n"
+                        + "m[1] = \"one\"\n"
+                        + "m[\"s\"] = \"string\"\n"
+                        + "probe: (k) => m.containsKey(k)\n"
+                        + "[1, 2, 3, 4, 5, 6].each((i) => { probe(1)\n probe(\"s\")\n probe(2.5) })\n"
+                        + "Liar: { hash: () => { calls = calls + 1\n 1 }\n"
+                        + "    equals: (other) => { calls = calls + 1\n true } }.alias(\"equals\", \"==\")\n"
+                        + "(probe(Liar {}) == true) && (calls == 2) && probe(1) && !probe(2)"));
+    }
+
+    @Test
+    void storedHashesAreNotRecomputedByLookups() throws Exception {
+        assertSame(Boolean.TRUE, evaluate(
+                "counts: { hash: 0 }\n"
+                        + "counted: {\n"
+                        + "    hash: () => { counts.hash = counts.hash + 1\n 9 }\n"
+                        + "}\n"
+                        + "stored: counted {}\n"
+                        + "m: Map()\n"
+                        + "m[stored] = 1\n"
+                        + "m[\"other\"] = 2\n"
+                        + "lookups: (m[\"other\"] == 2) && !m.containsKey(9) && (m.at(stored) == 1)\n"
+                        + "lookups && (counts.hash == 2)"));
+    }
+
     private static List<Long> hashSources(
             ProtosStandardMapProtocol.StableAssociation[] snapshot) {
         Long[] hashes = new Long[snapshot.length];

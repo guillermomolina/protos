@@ -236,6 +236,70 @@ final class ProtosCurrentNumericRelationsTest {
         assertSame(Boolean.TRUE, result);
     }
 
+    @Test
+    void primitiveFloatHashSharesTheRepresentedFloatHash() throws IOException {
+        ProtosPrelude prelude = corePrelude();
+        double[] values = {
+            0.0, -0.0, 1.5, -2.25, 42.0, Double.NaN,
+            Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY,
+            0x1p52, 0x1p53, 0x1p53 + 2.0, -0x1p53, Math.nextDown(0x1p53),
+            0x1p63, -0x1p63, Math.nextDown(0x1p63), 0x1p70, -0x1p129,
+            Double.MIN_VALUE, Double.MAX_VALUE
+        };
+        for (double value : values) {
+            String primitive = com.guillermomolina.protos.runtime.ProtosNumericValueSupport
+                    .integerDecimalText(ProtosCurrentNumericRelations.floatNormalHash(value, prelude));
+            assertEquals(hash(new ProtosFloatValue(value), prelude), primitive, Double.toString(value));
+            assertEquals(hash(Double.valueOf(value), prelude), primitive, Double.toString(value));
+        }
+    }
+
+    @Test
+    void integerHashIsTheIntegerItselfAcrossTheSigned64Range() throws IOException {
+        ProtosPrelude prelude = corePrelude();
+        for (long value : new long[] {
+            Long.MIN_VALUE, Long.MIN_VALUE + 1, -1L, 0L, 1L,
+            (1L << 53) - 1L, 1L << 53, (1L << 53) + 1L, Long.MAX_VALUE - 1L, Long.MAX_VALUE
+        }) {
+            Long integer = Long.valueOf(value);
+            assertSame(integer, ProtosCurrentNumericRelations.normalHash(integer, prelude));
+        }
+    }
+
+    @Test
+    void equalNumbersHashEquallyAcrossRepresentations() throws IOException {
+        ProtosPrelude prelude = corePrelude();
+        assertEquals(hash(Long.valueOf(1L << 53), prelude),
+                hash(new ProtosFloatValue(0x1p53), prelude));
+        assertEquals(hash(Long.valueOf(Long.MIN_VALUE), prelude),
+                hash(new ProtosFloatValue(-0x1p63), prelude));
+        Object twoPow63 = com.guillermomolina.protos.runtime.ProtosNumericValueSupport
+                .integerFromHost(BigInteger.ONE.shiftLeft(63), prelude);
+        assertEquals(hash(twoPow63, prelude), hash(Double.valueOf(0x1p63), prelude));
+        assertEquals(hash(Long.valueOf(0L), prelude), hash(Double.valueOf(-0.0), prelude));
+        assertFalse(ProtosCurrentNumericRelations.numericEquals(
+                Long.valueOf((1L << 53) + 1L), Double.valueOf(0x1p53)));
+    }
+
+    @Test
+    void fractionAndComplexKeysShareHashesWithEquivalentNumbers() throws IOException {
+        ProtosPrelude prelude = corePrelude();
+        Object result = ProtosTestExecutionSupport.evaluate(
+                """
+                m: Map()
+                m[1/2] = "half"
+                m[3] = "three"
+                m[Complex(1/4, 0)] = "quarter"
+                m[Complex(1, 2)] = "complex"
+                (m[0.5] == "half") && (m[Complex(0.5, 0)] == "half") &&
+                    (m[3.0] == "three") && (m[Complex(3, 0.0)] == "three") &&
+                    (m[0.25] == "quarter") && (m[1/4] == "quarter") &&
+                    (m[Complex(1.0, 2/1)] == "complex") && (m.size() == 4)
+                """,
+                prelude.newModuleActivation());
+        assertSame(Boolean.TRUE, result);
+    }
+
     private static String hash(Object number, ProtosPrelude prelude) {
         return com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(
                 ProtosCurrentNumericRelations.normalHash(number, prelude));

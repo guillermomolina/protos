@@ -91,6 +91,35 @@ final class ProtosStructuredMapQueryCalls {
                     && requirementIndex < matcherSnapshot.length;
         }
 
+        /*
+         * The current requirement's matcher key: the receiver of both the
+         * hash and the equality send.
+         */
+        Object comparisonKey() {
+            if (!hasRequirement()) {
+                throw new IllegalStateException(
+                        "Map.match comparison key requested without a current requirement");
+            }
+            return matcherSnapshot[requirementIndex].key();
+        }
+
+        /*
+         * The current same-hash subject candidate's representative key: the
+         * equality argument. Its recorded hash is never recomputed.
+         */
+        Object candidateKey() {
+            if (!needsEquality()) {
+                throw new IllegalStateException(
+                        "Map.match candidate key requested without a candidate");
+            }
+            return subjectSnapshot[candidateIndex].key();
+        }
+
+        /* The exact semantic caller of the hash and equality sends. */
+        ProtosActivation comparisonCaller() {
+            return activation;
+        }
+
         void enterComparison() {
             if (!hasRequirement()) {
                 throw new IllegalStateException(
@@ -120,10 +149,7 @@ final class ProtosStructuredMapQueryCalls {
             }
 
             return ProtosCallRequest.send(
-                    matcherSnapshot[requirementIndex].key(),
-                    "hash",
-                    activation,
-                    new Object[0]);
+                    comparisonKey(), "hash", comparisonCaller(), new Object[0]);
         }
 
         void acceptHash(Object result) {
@@ -169,10 +195,10 @@ final class ProtosStructuredMapQueryCalls {
             }
 
             return ProtosCallRequest.send(
-                    matcherSnapshot[requirementIndex].key(),
+                    comparisonKey(),
                     "==",
-                    activation,
-                    new Object[] {subjectSnapshot[candidateIndex].key()});
+                    comparisonCaller(),
+                    new Object[] {candidateKey()});
         }
 
         void acceptEquality(Object result) {
@@ -383,6 +409,25 @@ final class ProtosStructuredMapQueryCalls {
                             : null;
         }
 
+        /* The query key: the receiver of both the hash and the equality send. */
+        Object comparisonKey() {
+            return key;
+        }
+
+        /* The representative key of the current candidate: the equality argument. */
+        Object candidateKey() {
+            if (!needsEquality()) {
+                throw new IllegalStateException(
+                        "Map read lookup candidate key requested without a candidate");
+            }
+            return candidates.get(index).key();
+        }
+
+        /* The exact semantic caller of the hash and equality sends. */
+        ProtosActivation comparisonCaller() {
+            return activation;
+        }
+
         void enterComparison() {
             if (comparisonEntered) {
                 throw new IllegalStateException(
@@ -407,10 +452,7 @@ final class ProtosStructuredMapQueryCalls {
                         "Map read lookup hash callback prepared after hash acceptance");
             }
             return ProtosCallRequest.send(
-                    key,
-                    "hash",
-                    activation,
-                    new Object[0]);
+                    comparisonKey(), "hash", comparisonCaller(), new Object[0]);
         }
 
         void acceptHash(Object result) {
@@ -444,10 +486,10 @@ final class ProtosStructuredMapQueryCalls {
                         "Map read lookup equality callback requested without a candidate");
             }
             return ProtosCallRequest.send(
-                    key,
+                    comparisonKey(),
                     "==",
-                    activation,
-                    new Object[] {candidates.get(index).key()});
+                    comparisonCaller(),
+                    new Object[] {candidateKey()});
         }
 
         void acceptEquality(Object result) {

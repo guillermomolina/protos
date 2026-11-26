@@ -24,6 +24,7 @@ import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import com.oracle.truffle.api.Assumption;
+import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
 import com.oracle.truffle.api.dsl.Bind;
@@ -178,7 +179,7 @@ abstract class ProtosNumericSelectionNode extends Node {
             VirtualFrame frame,
             String selector,
             long receiver,
-            @Bind("prelude(frame)") ProtosPrelude prelude,
+            @Bind("prelude(frame, $node)") ProtosPrelude prelude,
             @Cached("selector") String cachedSelector,
             @Cached("prelude") ProtosPrelude cachedPrelude,
             @Cached("selectNumeric(frozenBoundPrototype(selectBinding(cachedPrelude, SMALL_INTEGER_BINDING)), cachedSelector)")
@@ -209,7 +210,7 @@ abstract class ProtosNumericSelectionNode extends Node {
             VirtualFrame frame,
             String selector,
             long receiver,
-            @Bind("prelude(frame)") ProtosPrelude prelude,
+            @Bind("prelude(frame, $node)") ProtosPrelude prelude,
             @Cached("selector") String cachedSelector,
             @Cached("prelude") ProtosPrelude cachedPrelude,
             @Cached("selectNumeric(frozenBoundPrototype(selectBinding(cachedPrelude, SMALL_INTEGER_BINDING)), cachedSelector)")
@@ -311,7 +312,7 @@ abstract class ProtosNumericSelectionNode extends Node {
             VirtualFrame frame,
             String selector,
             double receiver,
-            @Bind("prelude(frame)") ProtosPrelude prelude,
+            @Bind("prelude(frame, $node)") ProtosPrelude prelude,
             @Cached("selector") String cachedSelector,
             @Cached("prelude") ProtosPrelude cachedPrelude,
             @Cached("selectNumeric(frozenBoundPrototype(selectBinding(cachedPrelude, FLOAT_BINDING)), cachedSelector)")
@@ -342,7 +343,7 @@ abstract class ProtosNumericSelectionNode extends Node {
             VirtualFrame frame,
             String selector,
             double receiver,
-            @Bind("prelude(frame)") ProtosPrelude prelude,
+            @Bind("prelude(frame, $node)") ProtosPrelude prelude,
             @Cached("selector") String cachedSelector,
             @Cached("prelude") ProtosPrelude cachedPrelude,
             @Cached("selectNumeric(frozenBoundPrototype(selectBinding(cachedPrelude, FLOAT_BINDING)), cachedSelector)")
@@ -410,7 +411,7 @@ abstract class ProtosNumericSelectionNode extends Node {
             VirtualFrame frame,
             String selector,
             Object receiver,
-            @Bind("prelude(frame)") ProtosPrelude prelude,
+            @Bind("prelude(frame, $node)") ProtosPrelude prelude,
             @Bind("prototype(receiver, prelude)") ProtosObjectValue prototype,
             @Cached("selector") String cachedSelector,
             @Cached("prelude") ProtosPrelude cachedPrelude,
@@ -431,7 +432,7 @@ abstract class ProtosNumericSelectionNode extends Node {
             VirtualFrame frame,
             String selector,
             Object receiver,
-            @Bind("prelude(frame)") ProtosPrelude prelude) {
+            @Bind("prelude(frame, $node)") ProtosPrelude prelude) {
         return false;
     }
 
@@ -441,18 +442,46 @@ abstract class ProtosNumericSelectionNode extends Node {
      */
     @Specialization
     @InliningCutoff
-    static boolean doUncached(VirtualFrame frame, String selector, Object receiver) {
-        ProtosPrelude prelude = prelude(frame);
+    static boolean doUncached(
+            VirtualFrame frame,
+            String selector,
+            Object receiver,
+            @Bind("$node") Node node) {
+        ProtosPrelude prelude = prelude(frame, node);
         if (prototype(receiver, prelude) == null) {
             return false;
         }
         return selectStandard(selector, receiver, prelude);
     }
 
-    /* The caller's Prelude may differ between executions of one site. */
+    /*
+     * The caller's Prelude may differ between executions of one site. The
+     * read goes through the dispatcher's admitted caller authority, so an
+     * untransported inherited Prelude registers the executing root's caller
+     * need exactly as ordinary method selection does.
+     */
     @NonIdempotent
-    static ProtosPrelude prelude(VirtualFrame frame) {
-        return ProtosFrameArguments.admittedPreludeOrNull(frame.getArguments());
+    static ProtosPrelude prelude(VirtualFrame frame, Node node) {
+        return ProtosFunctionCallDispatchers.admittedCallerPrelude(
+                executingRootOrNull(node), frame.getArguments());
+    }
+
+    /*
+     * The semantic root owning this adopted selection, resolved through its
+     * Bytecode DSL operation; a continuation shares its root's bytecode, so
+     * this is never the physical continuation root. An uncached or
+     * unadopted node has no owner and registers nothing: producers still
+     * transport the inherited Prelude explicitly.
+     */
+    static ProtosBytecodeRootNode executingRootOrNull(Node node) {
+        if (node == null || !node.isAdoptable() || node.getParent() == null) {
+            return null;
+        }
+        BytecodeNode bytecode = BytecodeNode.get(node);
+        return bytecode != null
+                        && bytecode.getBytecodeRootNode() instanceof ProtosBytecodeRootNode root
+                ? root
+                : null;
     }
 
     /*

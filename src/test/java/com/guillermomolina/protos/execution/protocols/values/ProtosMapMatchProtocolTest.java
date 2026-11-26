@@ -434,6 +434,150 @@ class ProtosMapMatchProtocolTest {
                                 """));
     }
 
+    private static final String TRACED_MATCH_KEYS =
+            """
+            trace: ""
+            Keyed: {
+                hash: () => {
+                    trace = trace + "h" + this.id
+                    5
+                }
+                equalTo: (other) => {
+                    trace = trace + "e" + this.id + other.id
+                    this.id == other.id
+                }
+            }.alias("equalTo", "==")
+            k: (i) => Keyed { id: i }
+            Child: {
+                match: (subject) => {
+                    trace = trace + "c" + subject
+                    true
+                }
+            }
+            matcher: Map()
+            subject: Map()
+            subject[k("a")] = "1"
+            subject[k("b")] = "2"
+            """;
+
+    @Test
+    void resolvesEveryKeyInCandidateOrderBeforeAnyChild() throws Exception {
+        ProtosPrelude prelude = core();
+
+        Object result =
+                evaluate(
+                        prelude,
+                        TRACED_MATCH_KEYS
+                                + """
+                                matcher[k("b")] = Child
+                                matcher[k("a")] = Child
+                                trace = ""
+                                outcome: matcher.match(subject)
+                                outcome && (trace == "hbebaebbhaeaac2c1")
+                                """);
+
+        assertSame(Boolean.TRUE, result);
+    }
+
+    @Test
+    void unresolvedKeyMismatchesBeforeAnyChild() throws Exception {
+        ProtosPrelude prelude = core();
+
+        Object result =
+                evaluate(
+                        prelude,
+                        TRACED_MATCH_KEYS
+                                + """
+                                matcher[k("a")] = Child
+                                matcher[k("z")] = Child
+                                trace = ""
+                                outcome: matcher.match(subject)
+                                (outcome == false) && (trace == "haeaahzeza" + "ezb")
+                                """);
+
+        assertSame(Boolean.TRUE, result);
+    }
+
+    @Test
+    void resolvesNumericallyEquivalentAndStandardKeys() throws Exception {
+        ProtosPrelude prelude = core();
+
+        Object result =
+                evaluate(
+                        prelude,
+                        """
+                        o: {}
+                        matcher: %{ 1: 10; 1/2: 20; "s": 30; o: 40; 1180591620717411303424: 50 }
+                        subject: %{ 1180591620717411303424.0: 50; o: 40; "s": 30; 0.5: 20; 1.0: 10; 7: 0 }
+                        missing: %{ 2: 10 }
+                        matcher.match(subject) && (missing.match(subject) == false) &&
+                            ((%{ 2.5: 1 }).match(%{ 2.5: 1 }))
+                        """);
+
+        assertSame(Boolean.TRUE, result);
+    }
+
+    @Test
+    void invalidCustomKeyResultsSignalErrors() throws Exception {
+        ProtosPrelude prelude = core();
+
+        assertThrows(
+                ProtosSignalException.class,
+                () ->
+                        evaluate(
+                                prelude,
+                                """
+                                Bad: { hash: () => 1.5 }
+                                matcher: Map()
+                                matcher[1] = 1
+                                subject: Map()
+                                subject[1] = 1
+                                (%{ Bad: 1 }).match(subject)
+                                """));
+
+        assertThrows(
+                ProtosSignalException.class,
+                () ->
+                        evaluate(
+                                prelude,
+                                """
+                                Bad: {
+                                    hash: () => 1
+                                    equalTo: (other) => null
+                                }.alias("equalTo", "==")
+                                subject: Map()
+                                subject[1] = 1
+                                matcher: Map()
+                                matcher[Bad] = 1
+                                matcher.match(subject)
+                                """));
+    }
+
+    @Test
+    void subjectMutationDuringKeyComparisonIsRejected() throws Exception {
+        ProtosPrelude prelude = core();
+
+        assertThrows(
+                ProtosSignalException.class,
+                () ->
+                        evaluate(
+                                prelude,
+                                """
+                                subject: Map()
+                                subject[1] = 1
+                                Hostile: {
+                                    hash: () => 1
+                                    equalTo: (other) => {
+                                        subject["nested"] = 1
+                                        true
+                                    }
+                                }.alias("equalTo", "==")
+                                matcher: Map()
+                                matcher[Hostile] = 1
+                                matcher.match(subject)
+                                """));
+    }
+
     @Test
     void rejectsInheritedMapBehaviorOnIneligibleReceiver() throws Exception {
         ProtosPrelude prelude = core();

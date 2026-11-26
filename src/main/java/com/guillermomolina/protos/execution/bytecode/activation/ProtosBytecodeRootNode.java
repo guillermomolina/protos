@@ -6775,6 +6775,509 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
 
     /**
+     * The query key of a prepared Map protocol: the receiver of both its
+     * {@code hash} and its {@code ==} send.
+     */
+    @Operation(storeBytecodeIndex = false)
+    public static final class StructuredComparisonKey {
+        @Specialization
+        public static Object mapInitialDefinition(PreparedMapInitialDefinition prepared) {
+            return prepared.comparisonKey();
+        }
+
+        @Specialization
+        public static Object mapReadLookup(PreparedMapReadLookupCall prepared) {
+            return prepared.comparisonKey();
+        }
+
+        @Specialization
+        public static Object mapAtPut(PreparedMapAtPutCall prepared) {
+            return prepared.comparisonKey();
+        }
+
+        @Specialization
+        public static Object mapRemove(PreparedMapRemoveCall prepared) {
+            return prepared.comparisonKey();
+        }
+
+        @Specialization
+        public static Object mapMatch(PreparedMapMatchCall prepared) {
+            return prepared.comparisonKey();
+        }
+    }
+
+    /**
+     * The representative key of a prepared Map protocol's current candidate:
+     * the argument of its {@code ==} send. Its recorded hash is reused.
+     */
+    @Operation(storeBytecodeIndex = false)
+    public static final class StructuredComparisonCandidate {
+        @Specialization
+        public static Object mapInitialDefinition(PreparedMapInitialDefinition prepared) {
+            return prepared.candidateKey();
+        }
+
+        @Specialization
+        public static Object mapReadLookup(PreparedMapReadLookupCall prepared) {
+            return prepared.candidateKey();
+        }
+
+        @Specialization
+        public static Object mapAtPut(PreparedMapAtPutCall prepared) {
+            return prepared.candidateKey();
+        }
+
+        @Specialization
+        public static Object mapRemove(PreparedMapRemoveCall prepared) {
+            return prepared.candidateKey();
+        }
+
+        @Specialization
+        public static Object mapMatch(PreparedMapMatchCall prepared) {
+            return prepared.candidateKey();
+        }
+    }
+
+    /**
+     * The exact semantic caller retained by a prepared Map protocol, never
+     * the physical structured-root frame's activation.
+     */
+    @Operation(storeBytecodeIndex = false)
+    public static final class StructuredComparisonCaller {
+        @Specialization
+        public static ProtosActivation mapInitialDefinition(PreparedMapInitialDefinition prepared) {
+            return prepared.comparisonCaller();
+        }
+
+        @Specialization
+        public static ProtosActivation mapReadLookup(PreparedMapReadLookupCall prepared) {
+            return prepared.comparisonCaller();
+        }
+
+        @Specialization
+        public static ProtosActivation mapAtPut(PreparedMapAtPutCall prepared) {
+            return prepared.comparisonCaller();
+        }
+
+        @Specialization
+        public static ProtosActivation mapRemove(PreparedMapRemoveCall prepared) {
+            return prepared.comparisonCaller();
+        }
+
+        @Specialization
+        public static ProtosActivation mapMatch(PreparedMapMatchCall prepared) {
+            return prepared.comparisonCaller();
+        }
+    }
+
+    /**
+     * Attempts a Map protocol's key {@code hash} ({@code HASH} phase) or
+     * {@code ==} ({@code EQUALITY} phase) directly, without a guest call.
+     *
+     * <p>The operation is admitted only when the behavior actually selected
+     * for the phase's selector on the query key, under the Prelude of the
+     * prepared protocol's exact semantic caller, is a standard behavior:
+     * the root Object, Number or String hash at its standard home and for
+     * its receiver domain ({@link ProtosStandardHashSupport}), or the
+     * standard Number equality at the Prelude's Number prototype
+     * ({@link ProtosStandardNumberEqualityProtocol}). Then the exact result
+     * of that behavior, a semantic Integer hash or a canonical Boolean, is
+     * stored in {@code result} and the operation answers true; the
+     * protocol's acceptance validates and consumes it exactly as an invoked
+     * result. The answer is the admission, never the guest equality result.
+     *
+     * <p>Any other selection, including a copied or rebound standard body
+     * and the source Object equality, answers false without invoking
+     * anything, storing anything or changing the prepared state; the
+     * lowering then prepares and dispatches the ordinary send. The
+     * {@code argument} operand is the candidate key in the {@code EQUALITY}
+     * phase and is ignored in the {@code HASH} phase.
+     */
+    @Operation(storeBytecodeIndex = false)
+    @ConstantOperand(type = ProtosStructuredPhase.class, name = "phase")
+    @ConstantOperand(type = LocalAccessor.class, name = "result")
+    public static final class StructuredTryStandardKeyOperation {
+        /* A SmallInteger key: its standard hash is the key itself. */
+        @Specialization
+        public static boolean doLong(
+                ProtosStructuredPhase phase,
+                LocalAccessor result,
+                long receiver,
+                Object argument,
+                ProtosActivation caller,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode,
+                @Shared("selection") @Cached StandardKeySelectionNode selection) {
+            ProtosPrelude prelude = caller.preludeOrNullForRuntime();
+            if (!selection.execute(selector(phase), receiver, prelude)) {
+                return false;
+            }
+            if (phase == ProtosStructuredPhase.HASH) {
+                result.setLong(bytecode, frame, receiver);
+            } else if (argument instanceof Long other) {
+                result.setBoolean(bytecode, frame, receiver == other.longValue());
+            } else {
+                result.setBoolean(bytecode, frame,
+                        ProtosRichCompareEqNode.standardEquals(receiver, argument));
+            }
+            return true;
+        }
+
+        /* A Float key: the shared Float normal hash; binary64 equality between Floats. */
+        @Specialization
+        public static boolean doDouble(
+                ProtosStructuredPhase phase,
+                LocalAccessor result,
+                double receiver,
+                Object argument,
+                ProtosActivation caller,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode,
+                @Shared("selection") @Cached StandardKeySelectionNode selection) {
+            ProtosPrelude prelude = caller.preludeOrNullForRuntime();
+            if (!selection.execute(selector(phase), receiver, prelude)) {
+                return false;
+            }
+            if (phase == ProtosStructuredPhase.HASH) {
+                result.setObject(bytecode, frame,
+                        ProtosCurrentNumericRelations.floatNormalHash(receiver, prelude));
+            } else if (argument instanceof Double other) {
+                result.setBoolean(bytecode, frame, receiver == other.doubleValue());
+            } else {
+                result.setBoolean(bytecode, frame,
+                        ProtosRichCompareEqNode.standardEquals(receiver, argument));
+            }
+            return true;
+        }
+
+        /*
+         * Every other key representation. An admitted hash is computed by the
+         * helper of the standard body the admission proved for the key's
+         * domain; an admitted equality is the standard Number equality.
+         */
+        @Specialization
+        public static boolean doOther(
+                ProtosStructuredPhase phase,
+                LocalAccessor result,
+                Object receiver,
+                Object argument,
+                ProtosActivation caller,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode,
+                @Shared("selection") @Cached StandardKeySelectionNode selection) {
+            ProtosPrelude prelude = caller.preludeOrNullForRuntime();
+            if (!selection.execute(selector(phase), receiver, prelude)) {
+                return false;
+            }
+            if (phase == ProtosStructuredPhase.HASH) {
+                result.setObject(bytecode, frame, standardHash(receiver, prelude));
+            } else {
+                result.setBoolean(bytecode, frame,
+                        ProtosRichCompareEqNode.standardEquals(receiver, argument));
+            }
+            return true;
+        }
+
+        static String selector(ProtosStructuredPhase phase) {
+            return phase == ProtosStructuredPhase.HASH
+                    ? ProtosStandardHashSupport.SELECTOR
+                    : ProtosRichCompareEqNode.SELECTOR;
+        }
+
+        /* The result of the admitted standard hash for the key's domain. */
+        static Object standardHash(Object receiver, ProtosPrelude prelude) {
+            if (ProtosNumericValueSupport.isCurrentNumber(receiver)) {
+                return numberHash(receiver, prelude);
+            }
+            if (receiver instanceof ProtosStringValue string) {
+                return ProtosStandardHashSupport.stringHash(string);
+            }
+            return ProtosStandardHashSupport.objectHash(receiver);
+        }
+
+        /* Fraction, Complex and large Integer hashing stays off the compiled path. */
+        @TruffleBoundary
+        static Object numberHash(Object receiver, ProtosPrelude prelude) {
+            return ProtosCurrentNumericRelations.normalHash(receiver, prelude);
+        }
+    }
+
+    /*
+     * Whether the behavior actually selected for a Map key {@code hash} or
+     * {@code ==} on an evaluated receiver, under an explicitly supplied
+     * observing Prelude, is a standard behavior whose result the structured
+     * key operation computes directly. Nothing is invoked.
+     *
+     * Cached entries are keyed by the selector and the Prelude identity, and
+     * guarded by the structural selection of the selector from the
+     * receiver's actual delegation origin: the FROZEN SmallInteger, Float or
+     * String binding's prototype of that Prelude for a primitive or String
+     * key, root Object for a Boolean or null key, and the direct parent of an
+     * ordinary object key that does not own the slot (its Shape proves it
+     * owns none). A structural change anywhere along the chain misses the
+     * entry. An all-FROZEN chain caches its classification; a mutable chain
+     * re-reads and classifies the selected slot on every execution, so an
+     * in-place reassignment that keeps every Shape is observed.
+     *
+     * Every other receiver, and sites past the cached limits, use the
+     * complete ordinary lookup, which replaces no cached entry.
+     */
+    @GenerateUncached
+    @GenerateInline(false)
+    abstract static class StandardKeySelectionNode extends Node {
+        static final String SMALL_INTEGER_BINDING = ProtosNumericSelectionNode.SMALL_INTEGER_BINDING;
+        static final String FLOAT_BINDING = ProtosNumericSelectionNode.FLOAT_BINDING;
+        static final String STRING_BINDING = "String";
+
+        abstract boolean execute(String selector, Object receiver, ProtosPrelude prelude);
+
+        @Specialization(
+                guards = {
+                    "selector == cachedSelector",
+                    "prelude == cachedPrelude",
+                    "selection != null",
+                    "frozen || selection.isValid()"
+                },
+                limit = "3",
+                excludeForUncached = true)
+        static boolean doLong(
+                String selector,
+                long receiver,
+                ProtosPrelude prelude,
+                @Cached("selector") String cachedSelector,
+                @Cached("prelude") ProtosPrelude cachedPrelude,
+                @Cached("selectFromBinding(cachedPrelude, SMALL_INTEGER_BINDING, cachedSelector)")
+                        ProtosValueLookup.StructuralSelection selection,
+                @Cached("allOwnersFrozen(selection)") boolean frozen,
+                @Cached("frozenStandard(frozen, cachedSelector, receiver, selection, cachedPrelude)")
+                        boolean frozenStandard) {
+            return frozen
+                    ? frozenStandard
+                    : standard(cachedSelector, receiver, selection, cachedPrelude);
+        }
+
+        @Specialization(
+                guards = {
+                    "selector == cachedSelector",
+                    "prelude == cachedPrelude",
+                    "selection != null",
+                    "frozen || selection.isValid()"
+                },
+                limit = "3",
+                excludeForUncached = true)
+        static boolean doDouble(
+                String selector,
+                double receiver,
+                ProtosPrelude prelude,
+                @Cached("selector") String cachedSelector,
+                @Cached("prelude") ProtosPrelude cachedPrelude,
+                @Cached("selectFromBinding(cachedPrelude, FLOAT_BINDING, cachedSelector)")
+                        ProtosValueLookup.StructuralSelection selection,
+                @Cached("allOwnersFrozen(selection)") boolean frozen,
+                @Cached("frozenStandard(frozen, cachedSelector, receiver, selection, cachedPrelude)")
+                        boolean frozenStandard) {
+            return frozen
+                    ? frozenStandard
+                    : standard(cachedSelector, receiver, selection, cachedPrelude);
+        }
+
+        @Specialization(
+                guards = {
+                    "selector == cachedSelector",
+                    "prelude == cachedPrelude",
+                    "selection != null",
+                    "frozen || selection.isValid()"
+                },
+                limit = "3",
+                excludeForUncached = true)
+        static boolean doString(
+                String selector,
+                ProtosStringValue receiver,
+                ProtosPrelude prelude,
+                @Cached("selector") String cachedSelector,
+                @Cached("prelude") ProtosPrelude cachedPrelude,
+                @Cached("selectFromBinding(cachedPrelude, STRING_BINDING, cachedSelector)")
+                        ProtosValueLookup.StructuralSelection selection,
+                @Cached("allOwnersFrozen(selection)") boolean frozen,
+                @Cached("frozenStandard(frozen, cachedSelector, receiver, selection, cachedPrelude)")
+                        boolean frozenStandard) {
+            return frozen
+                    ? frozenStandard
+                    : standard(cachedSelector, receiver, selection, cachedPrelude);
+        }
+
+        /* A Boolean or null key delegates directly to the fixed root Object. */
+        @Specialization(
+                guards = {
+                    "isRootDelegated(receiver)",
+                    "selector == cachedSelector",
+                    "prelude == cachedPrelude",
+                    "selection != null",
+                    "frozen || selection.isValid()"
+                },
+                limit = "3",
+                excludeForUncached = true)
+        static boolean doRootDelegated(
+                String selector,
+                Object receiver,
+                ProtosPrelude prelude,
+                @Cached("selector") String cachedSelector,
+                @Cached("prelude") ProtosPrelude cachedPrelude,
+                @Cached("selectFromRoot(cachedSelector)")
+                        ProtosValueLookup.StructuralSelection selection,
+                @Cached("allOwnersFrozen(selection)") boolean frozen,
+                @Cached("frozenStandard(frozen, cachedSelector, receiver, selection, cachedPrelude)")
+                        boolean frozenStandard) {
+            return frozen
+                    ? frozenStandard
+                    : standard(cachedSelector, receiver, selection, cachedPrelude);
+        }
+
+        /*
+         * An ordinary object key that does not own the selector: the
+         * inherited selection is shared by every receiver with this Shape
+         * and the same direct parent; its real owner is the selection home.
+         */
+        @Specialization(
+                guards = {
+                    "receiver.usesObjectStorageForRuntime()",
+                    "selector == cachedSelector",
+                    "prelude == cachedPrelude",
+                    "receiverShape.check(receiver)",
+                    "selection != null",
+                    "hasSelectionParent(receiver, selection)",
+                    "frozen || selection.isValid()"
+                },
+                limit = "3",
+                excludeForUncached = true)
+        static boolean doObject(
+                String selector,
+                ProtosObjectValue receiver,
+                ProtosPrelude prelude,
+                @Cached("selector") String cachedSelector,
+                @Cached("prelude") ProtosPrelude cachedPrelude,
+                @Cached("receiver.getShape()") Shape receiverShape,
+                @Cached("selectInherited(receiver, cachedSelector)")
+                        ProtosValueLookup.StructuralSelection selection,
+                @Cached("allOwnersFrozen(selection)") boolean frozen,
+                @Cached("frozenStandard(frozen, cachedSelector, receiver, selection, cachedPrelude)")
+                        boolean frozenStandard) {
+            return frozen
+                    ? frozenStandard
+                    : standard(cachedSelector, receiver, selection, cachedPrelude);
+        }
+
+        /*
+         * The complete selection, separate from the cached entries and
+         * replacing none of them.
+         */
+        @Specialization
+        @InliningCutoff
+        static boolean doGeneric(String selector, Object receiver, ProtosPrelude prelude) {
+            return selectsStandard(selector, receiver, prelude);
+        }
+
+        static boolean isRootDelegated(Object receiver) {
+            return receiver instanceof Boolean || receiver == ProtosNullValue.INSTANCE;
+        }
+
+        static boolean hasSelectionParent(
+                ProtosObjectValue receiver, ProtosValueLookup.StructuralSelection selection) {
+            return ProtosValueLookup.hasSelectionParent(receiver, selection);
+        }
+
+        static boolean allOwnersFrozen(ProtosValueLookup.StructuralSelection selection) {
+            return selection != null && selection.allOwnersFrozen();
+        }
+
+        /* Specialization time only: the classification of an all-FROZEN chain. */
+        static boolean frozenStandard(
+                boolean frozen,
+                String selector,
+                Object receiver,
+                ProtosValueLookup.StructuralSelection selection,
+                ProtosPrelude prelude) {
+            return frozen
+                    && selection.isValid()
+                    && standard(selector, receiver, selection, prelude);
+        }
+
+        /* The current selected slot value and owner, classified; requires a valid selection. */
+        static boolean standard(
+                String selector,
+                Object receiver,
+                ProtosValueLookup.StructuralSelection selection,
+                ProtosPrelude prelude) {
+            return standard(selector, receiver, selection.read(), selection.home(), prelude);
+        }
+
+        static boolean standard(
+                String selector,
+                Object receiver,
+                Object behavior,
+                ProtosObjectValue home,
+                ProtosPrelude prelude) {
+            if (ProtosStandardHashSupport.SELECTOR.equals(selector)) {
+                return ProtosStandardHashSupport.isCanonicalStandardHashSelection(
+                        receiver, behavior, home, prelude);
+            }
+            return ProtosRichCompareEqNode.SELECTOR.equals(selector)
+                    && ProtosNumericValueSupport.isCurrentNumber(receiver)
+                    && ProtosStandardNumberEqualityProtocol.isCanonicalStandardEqualitySelection(
+                            behavior, home, prelude);
+        }
+
+        /*
+         * Specialization time only: the selection of {@code selector} from the
+         * prototype of the Prelude's own FROZEN binding {@code name}, exactly
+         * as the standard numeric operator selection observes it; null when
+         * the Prelude is absent or the binding is not FROZEN.
+         */
+        @TruffleBoundary
+        static ProtosValueLookup.StructuralSelection selectFromBinding(
+                ProtosPrelude prelude, String name, String selector) {
+            ProtosObjectValue prototype = ProtosNumericSelectionNode.frozenBoundPrototype(
+                    ProtosNumericSelectionNode.selectBinding(prelude, name));
+            return prototype == null
+                    ? null
+                    : ProtosValueLookup.selectStructural(prototype, selector);
+        }
+
+        /* Specialization time only. */
+        @TruffleBoundary
+        static ProtosValueLookup.StructuralSelection selectFromRoot(String selector) {
+            return ProtosValueLookup.selectStructural(ProtosObjectValue.rootObject(), selector);
+        }
+
+        /* Specialization time only: null when the receiver owns the slot. */
+        @TruffleBoundary
+        static ProtosValueLookup.StructuralSelection selectInherited(
+                ProtosObjectValue receiver, String selector) {
+            return ProtosValueLookup.selectInheritedStructural(receiver, selector);
+        }
+
+        /*
+         * The complete selection, observed without invoking anything. A
+         * missing or unsupported selection is not standard: the ordinary
+         * send then raises its own Error.
+         */
+        @TruffleBoundary
+        static boolean selectsStandard(String selector, Object receiver, ProtosPrelude prelude) {
+            if (prelude == null) {
+                return false;
+            }
+            try {
+                return ProtosValueLookup.lookup(receiver, selector, prelude)
+                        .map(found -> standard(
+                                selector, receiver, found.value(), found.home(), prelude))
+                        .orElse(false);
+            } catch (IllegalStateException | UnsupportedOperationException unavailable) {
+                return false;
+            }
+        }
+    }
+
+    /**
      * Accepts the result of a structured protocol's guest child, by the
      * builder-fixed phase: {@code CHILD} the matcher or lower outcome;
      * {@code HASH}/{@code EQUALITY} a Map protocol's guest hash or equality
