@@ -20,6 +20,7 @@ env:
   JAVA_TEST_SHARD_COUNT: "4"
   JAVA_TEST_JOBS: "2"
   PROTOS_TEST_JOBS: "2"
+  PROTOS_TEST_SHARD_COUNT: "4"
 
 defaults:
   run:
@@ -78,6 +79,7 @@ jobs:
       - name: Exercise CI orchestration regressions
         run: |
           python3 tools/tests/test_ci_java_test_shards.py
+          python3 tools/tests/test_ci_protos_test_shards.py
           python3 tools/tests/test_ci_validation_aggregate.py
           python3 tools/tests/test_verify_toolchain.py
       - name: Prepare Java partition plan
@@ -339,7 +341,7 @@ jobs:
           path: |
             target/java-test-reports/serial/
             target/ci-logs/java-serial.log
-  protos-suite:
+  protos-plan:
     timeout-minutes: 120
     runs-on: ubuntu-latest
     container:
@@ -387,10 +389,25 @@ jobs:
 
       - name: Package checkout CLI
         run: make prepare-protos-tests
-      - name: Run protos-suite
+      - name: Obtain complete authoritative Case listing
         run: |
-          mkdir -p target/ci-logs
-          make test-protos-suite 2>&1 | tee target/ci-logs/protos-suite.log
+          mkdir -p target/protos-test-shards target/ci-logs
+          bin/protos test --list-cases > target/protos-test-shards/listing.json 2> target/ci-logs/protos-plan.log
+      - name: Validate revision-bound Protos plan
+        run: >-
+          python3 tools/ci_protos_test_shards.py plan
+          --listing target/protos-test-shards/listing.json
+          --count "$PROTOS_TEST_SHARD_COUNT"
+          --jobs "$PROTOS_TEST_JOBS"
+          --output target/protos-test-shards/plan.json
+      - name: Upload revision-bound Protos plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: protos-plan-${{ github.sha }}
+          if-no-files-found: error
+          path: |
+            target/protos-test-shards/plan.json
+            target/protos-test-shards/listing.json
       - name: Record lane wall time
         if: always()
         run: |
@@ -398,11 +415,115 @@ jobs:
           duration=$(( $(date +%s) - start ))
           printf 'LANE_DURATION_SECONDS=%s\n' "$duration"
           printf 'Wall time: %s seconds\n' "$duration" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload Protos planning diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: protos-plan-diagnostics-${{ github.sha }}
+          if-no-files-found: warn
+          path: |
+            target/protos-test-shards/
+            target/ci-logs/protos-plan.log
+  protos-suite:
+    timeout-minutes: 120
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    env:
+      PROTOS_TEST_SHARD_INDEX: ${{ matrix.shard }}
+    container:
+      image: ghcr.io/guillermomolina/protos-ci@sha256:44e03c759ccd2b57135f5c0bdbb5060563e858601daa73958ab6cbba2ffc5fe3
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --user 0
+
+    steps:
+      - name: Start lane clock
+        run: |
+          mkdir -p target/ci-logs
+          date +%s > "$RUNNER_TEMP/lane-start"
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Trust checked-out repository
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Restore Maven dependency cache
+        id: maven-cache
+        uses: ./.github/actions/maven-cache-restore
+
+      - name: Report available CPU resources
+        run: |
+          printf 'CPU_NPROC=%s\n' "$(nproc)"
+          printf 'CPU_ONLINE=%s\n' "$(getconf _NPROCESSORS_ONLN)"
+          if [ -r /sys/fs/cgroup/cpu.max ]; then
+            printf 'CPU_CGROUP_MAX='
+            cat /sys/fs/cgroup/cpu.max
+          fi
+          if [ -r /proc/meminfo ]; then head -n 5 /proc/meminfo; fi
+          for resource in memory.max memory.current memory.peak; do
+            if [ -r "/sys/fs/cgroup/$resource" ]; then
+              printf '%s=' "$resource"
+              cat "/sys/fs/cgroup/$resource"
+            fi
+          done
+          java -XshowSettings:system -version
+          printf 'JAVA_TEST_JOBS=%s\n' "$JAVA_TEST_JOBS"
+          printf 'PROTOS_TEST_JOBS=%s\n' "$PROTOS_TEST_JOBS"
+
+      - name: Package checkout CLI
+        run: make prepare-protos-tests
+      - name: Obtain authoritative Case listings
+        run: |
+          mkdir -p target/protos-test-evidence
+          bin/protos test --list-cases > target/protos-test-evidence/complete-listing.json
+          bin/protos test --list-cases --shard-count "$PROTOS_TEST_SHARD_COUNT" --shard-run "$PROTOS_TEST_SHARD_INDEX" > target/protos-test-evidence/shard-listing.json
+      # The EXIT trap records make's real status (pipefail) while the step
+      # itself still fails with it.
+      - name: Run protos-suite partition
+        run: |
+          mkdir -p target/ci-logs
+          trap 'printf "%s\n" "$?" > target/ci-logs/protos-suite.exit' EXIT
+          make test-protos-suite PROTOS_TEST_SHARD_COUNT="$PROTOS_TEST_SHARD_COUNT" PROTOS_TEST_SHARD_INDEX="$PROTOS_TEST_SHARD_INDEX" PROTOS_TEST_JOBS="$PROTOS_TEST_JOBS" 2>&1 | tee target/ci-logs/protos-suite.log
+      - name: Record Protos shard evidence
+        if: always()
+        run: >-
+          python3 tools/ci_protos_test_shards.py report
+          --listing target/protos-test-evidence/complete-listing.json
+          --shard-listing target/protos-test-evidence/shard-listing.json
+          --log target/ci-logs/protos-suite.log
+          --exit-status-file target/ci-logs/protos-suite.exit
+          --count "$PROTOS_TEST_SHARD_COUNT"
+          --index "$PROTOS_TEST_SHARD_INDEX"
+          --jobs "$PROTOS_TEST_JOBS"
+          --output target/protos-test-evidence/protos-result.json
+      - name: Record lane wall time
+        if: always()
+        run: |
+          start=$(cat "$RUNNER_TEMP/lane-start" 2>/dev/null || date +%s)
+          duration=$(( $(date +%s) - start ))
+          printf 'LANE_DURATION_SECONDS=%s\n' "$duration"
+          printf 'Wall time: %s seconds\n' "$duration" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload Protos shard evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: protos-evidence-suite-${{ matrix.shard }}-${{ github.sha }}
+          if-no-files-found: warn
+          path: |
+            target/protos-test-evidence/
+            target/ci-logs/protos-suite.log
+            target/ci-logs/protos-suite.exit
       - name: Upload lane diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: protos-suite-${{ github.sha }}
+          name: protos-suite-${{ matrix.shard }}-${{ github.sha }}
           if-no-files-found: warn
           path: |
             target/ci-logs/protos-suite.log
@@ -547,7 +668,7 @@ jobs:
             target/native/*.json
   aggregate:
     if: always()
-    needs: [prepare, compilerability, java-parallel, java-serial, protos-suite, protos-foreign, native-image]
+    needs: [prepare, compilerability, java-parallel, java-serial, protos-plan, protos-suite, protos-foreign, native-image]
     timeout-minutes: 120
     runs-on: ubuntu-latest
     steps:
@@ -566,6 +687,18 @@ jobs:
         with:
           pattern: java-evidence-*-${{ github.sha }}
           path: target/ci-evidence
+      - name: Download revision-bound Protos plan
+        if: always()
+        uses: actions/download-artifact@v4
+        with:
+          name: protos-plan-${{ github.sha }}
+          path: target/protos-test-shards
+      - name: Download Protos execution evidence
+        if: always()
+        uses: actions/download-artifact@v4
+        with:
+          pattern: protos-evidence-*-${{ github.sha }}
+          path: target/ci-protos-evidence
       - name: Verify dependencies and coverage
         if: always()
         env:
@@ -575,6 +708,9 @@ jobs:
           --plan target/java-test-shards/plan.json
           --results target/ci-evidence
           --dependencies "$DEPENDENCY_RESULTS"
+          --protos-plan target/protos-test-shards/plan.json
+          --protos-results target/ci-protos-evidence
+          --protos-shard-count "$PROTOS_TEST_SHARD_COUNT"
           --output target/ci-aggregate/result.json
           --summary "$GITHUB_STEP_SUMMARY"
       - name: Upload aggregate evidence

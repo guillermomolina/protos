@@ -8,6 +8,13 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.230-SNAPSHOT
+
+- **GITHUB026.** Distribute mandatory Protos suite validation across four independent CI runners using authoritative I178 Case sharding and two workers per runner.
+- Publish revision-bound complete Case plans and shard execution evidence, preserving raw listings, terminal summaries and process exit status.
+- Extend fail-closed CI aggregation to reconcile complete ordered CaseRef coverage, disjoint partitions and successful terminal completion counts.
+- Extend workflow contract verification and orchestration regressions while preserving unsharded local validation and all existing mandatory lanes.
+
 ## 0.4.229-SNAPSHOT
 
 - **BUG043.** Reconcile the Test Tool architectural regression with incremental Case listing emission, preserving validation-before-publication checks.

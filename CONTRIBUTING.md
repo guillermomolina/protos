@@ -85,8 +85,8 @@ local slow-test telemetry and reduced-contention confirmation. CI timing remains
 advisory; test outcomes determine acceptance.
 
 GitHub Actions runs independent `prepare`, `compilerability`, `java-parallel`,
-`java-serial`, `protos-suite`, `protos-foreign`, and `native-image` jobs followed by
-`aggregate`. Preparation compiles test classes without running them and publishes
+`java-serial`, `protos-plan`, `protos-suite`, `protos-foreign`, and `native-image`
+jobs followed by `aggregate`. Preparation compiles test classes without running them and publishes
 a revision-bound Java selection plan. Four initial parallel Java partitions use
 two JUnit class workers per runner. The six Makefile-owned serial classes run in
 the separate serial lane. Compilerability retains all of `make check`; Native
@@ -94,13 +94,20 @@ Image retains all of `make test-native`. Each Protos lane packages its own CLI:
 
 ```sh
 make prepare-protos-tests
-make test-protos-suite
+make test-protos-suite PROTOS_TEST_SHARD_COUNT=4 PROTOS_TEST_SHARD_INDEX=1 PROTOS_TEST_JOBS=2
 # On an independent worker, after the same preparation:
 make test-protos-foreign
 ```
 
 The Protos suite still runs through `bin/protos test`; the existing foreign
-provider harness retains its FFM checks. Protos Test Tool sharding is deferred.
+provider harness retains its FFM checks. The independent `protos-plan` job
+packages the checkout and obtains the full authoritative
+`bin/protos test --list-cases` listing. The `protos-suite` matrix runs four independent runners,
+each packaging the same revision, listing its assigned Cases with
+`--list-cases --shard-count 4 --shard-run K`, and executing that shard with two
+workers. `fail-fast: false` lets every shard finish when another fails. No
+compiled target directories are transferred between runners. Ordinary local
+`make test` remains unsharded unless shard controls are explicitly supplied.
 The CI jobs do not additionally execute `make test` or its Java/Protos aggregates.
 
 To reproduce a Java partition locally:
@@ -113,7 +120,10 @@ make test-java-parallel JAVA_TEST_SHARD_COUNT=4 JAVA_TEST_SHARD_INDEX=1 JAVA_TES
 `JAVA_TEST_SHARD_COUNT`, `JAVA_TEST_SHARD_INDEX`, and `JAVA_TEST_SHARD_DIR` control
 planning and selection; `JAVA_TEST_JOBS` controls JUnit concurrency independently.
 `PROTOS_TEST_JOBS` controls the existing Test Tool workers. CI defaults live in the
-workflow's top-level environment (four partitions, two Java/Protos workers).
+workflow's top-level environment (four Java partitions, four Protos shards,
+and two workers per runner in each lane). Protos count/index controls are
+`PROTOS_TEST_SHARD_COUNT` and `PROTOS_TEST_SHARD_INDEX`; they are independent
+of `PROTOS_TEST_JOBS`.
 Changing that initial CI configuration also requires updating its toolchain
 contract and regression fixtures.
 
@@ -140,12 +150,32 @@ there is no manually maintained helper exemption or automatic coverage waiver.
 The always-running aggregate checks every required dependency and exactly one
 revision/digest-bound result per Java partition plus serial evidence. Missing,
 failed, cancelled, skipped, duplicated or inconsistent evidence fails acceptance.
-The unchanged Protos Makefile job result remains its authoritative gate. The
-Actions summary contains lane status, candidate coverage and invocation/skip
+For Protos, it also requires exactly one successful result per expected shard,
+the same revision, complete ordered plan identity, shard count and worker
+configuration. It validates the public `protos.test.cases/v1` listings, rejects
+duplicate or overlapping CaseRefs, checks their complete union and ordered global
+round-robin assignment, and reconciles the retained raw logs and process exit
+status with exactly one terminal summary. Every shard must exit zero, report zero
+failures, and pass exactly as many Cases as it listed; valid empty shards pass.
+Missing, ambiguous or infrastructure-aborted summaries fail acceptance. CaseRefs
+remain opaque, and only the Test Tool assigns execution membership. This evidence
+establishes planned identity coverage and terminal completion quantity, not
+independently observed per-Case successful identities. The Actions summary contains lane status, candidate coverage and invocation/skip
 counts; raw XML, evidence and logs are available in revision-named `java-plan-*`,
-`java-evidence-parallel-*`, `java-evidence-serial-*`, and lane diagnostic artifacts.
+`java-evidence-parallel-*`, `java-evidence-serial-*`, `protos-plan-*`,
+`protos-evidence-suite-<index>-*`, and lane diagnostic artifacts. Java and Protos
+coverage counts remain separate in the aggregate JSON and GitHub summary.
+Reproduce a failed Protos shard on the same revision with the command above,
+substituting its index; use `PROTOS_TEST_JOBS=1` to investigate serially without
+changing membership. Preserve its raw listings, log and exit-status evidence.
 Each lane retains a 120-minute timeout and records elapsed time and runner
 resources without adding a test-duration admission threshold.
+
+The initial four-shard/two-worker configuration is not an optimal-performance
+claim. Phase 1 main CI observed 339 seconds for the Protos suite, including
+294 seconds of test execution, and 629 seconds for Native Image. Measure phase 2
+after publication against those observations before claiming any reduction in
+overall CI duration.
 
 The Maven dependency cache is infrastructure, not validation. Every Maven job
 restores it through `.github/actions/maven-cache-restore`, which computes the

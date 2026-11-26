@@ -490,16 +490,110 @@ def workflow_job_container_image(path, job_id):
 
 
 CI_MAVEN_JOBS = ("prepare", "compilerability", "java-parallel", "java-serial",
-                 "protos-suite", "protos-foreign", "native-image")
+                 "protos-plan", "protos-suite", "protos-foreign", "native-image")
 CI_COMMANDS = {
     "prepare": ["prepare-java-test-shards"],
     "compilerability": ["check"],
     "java-parallel": ["test-java-parallel"],
     "java-serial": ["test-java-serial"],
+    "protos-plan": ["prepare-protos-tests"],
     "protos-suite": ["prepare-protos-tests", "test-protos-suite"],
     "protos-foreign": ["prepare-protos-tests", "test-protos-foreign"],
     "native-image": ["test-native"],
 }
+
+
+PROTOS_SUITE_MAKE = ('make test-protos-suite PROTOS_TEST_SHARD_COUNT="$PROTOS_TEST_SHARD_COUNT" '
+                     'PROTOS_TEST_SHARD_INDEX="$PROTOS_TEST_SHARD_INDEX" PROTOS_TEST_JOBS="$PROTOS_TEST_JOBS" '
+                     '2>&1 | tee target/ci-logs/protos-suite.log')
+PROTOS_COMPLETE_LISTING = "bin/protos test --list-cases > target/protos-test-evidence/complete-listing.json"
+PROTOS_SHARD_LISTING = ('bin/protos test --list-cases --shard-count "$PROTOS_TEST_SHARD_COUNT" '
+                        '--shard-run "$PROTOS_TEST_SHARD_INDEX" > target/protos-test-evidence/shard-listing.json')
+PROTOS_EXIT_TRAP = "trap 'printf \"%s\\n\" \"$?\" > target/ci-logs/protos-suite.exit' EXIT"
+
+
+def step_with(blocks, token):
+    found = [index for index, block in enumerate(blocks) if token in block]
+    return found[0] if len(found) == 1 else None
+
+
+def protos_evidence_contract(path):
+    # type: (Path) -> bool
+    # The plan publishes the complete authoritative listing; each shard records
+    # its own complete and I178 listings, real exit status and summary, and
+    # receives no artifacts, so no compiled directory crosses runners.
+    plan = workflow_job_text(path, "protos-plan")
+    blocks = workflow_step_blocks(plan)
+    valid = "    needs:" not in plan and "actions/download-artifact" not in plan
+    listing = step_with(blocks, "bin/protos test --list-cases > target/protos-test-shards/listing.json")
+    planner = step_with(blocks, "tools/ci_protos_test_shards.py plan")
+    upload = step_with(blocks, "name: protos-plan-${{ github.sha }}")
+    valid = valid and None not in (listing, planner, upload) and listing < planner < upload
+    if valid:
+        preparation = "mkdir -p target/protos-test-shards target/ci-logs"
+        command = "bin/protos test --list-cases > target/protos-test-shards/listing.json"
+        valid = preparation in blocks[listing]
+        valid = valid and blocks[listing].index(preparation) < blocks[listing].index(command)
+        valid = valid and all(token in blocks[planner] for token in (
+            '--count "$PROTOS_TEST_SHARD_COUNT"', '--jobs "$PROTOS_TEST_JOBS"',
+            "--listing target/protos-test-shards/listing.json",
+            "--output target/protos-test-shards/plan.json"))
+        valid = valid and all(token in blocks[upload] for token in (
+            "uses: actions/upload-artifact@v4", "if-no-files-found: error",
+            "target/protos-test-shards/plan.json", "target/protos-test-shards/listing.json"))
+        valid = valid and all("if:" not in blocks[i] for i in (listing, planner, upload))
+
+    suite = workflow_job_text(path, "protos-suite")
+    blocks = workflow_step_blocks(suite)
+    valid = valid and "    needs:" not in suite and "actions/download-artifact" not in suite
+    listings = step_with(blocks, PROTOS_SHARD_LISTING)
+    run = step_with(blocks, PROTOS_SUITE_MAKE)
+    report = step_with(blocks, "tools/ci_protos_test_shards.py report")
+    evidence = step_with(blocks, "name: protos-evidence-suite-${{ matrix.shard }}-${{ github.sha }}")
+    order = [listings, run, report, evidence]
+    valid = valid and None not in order and order == sorted(order)
+    if valid:
+        valid = PROTOS_COMPLETE_LISTING in blocks[listings] and "if:" not in blocks[listings]
+        valid = valid and PROTOS_EXIT_TRAP in blocks[run] and "if:" not in blocks[run]
+        valid = valid and "        if: always()\n" in blocks[report] and all(token in blocks[report] for token in (
+            "--listing target/protos-test-evidence/complete-listing.json",
+            "--shard-listing target/protos-test-evidence/shard-listing.json",
+            "--exit-status-file target/ci-logs/protos-suite.exit", "--log target/ci-logs/protos-suite.log",
+            '--count "$PROTOS_TEST_SHARD_COUNT"', '--index "$PROTOS_TEST_SHARD_INDEX"',
+            '--jobs "$PROTOS_TEST_JOBS"', "--output target/protos-test-evidence/protos-result.json"))
+        valid = valid and "        if: always()\n" in blocks[evidence]
+        valid = valid and all(token in blocks[evidence] for token in (
+            "uses: actions/upload-artifact@v4", "target/protos-test-evidence/",
+            "target/ci-logs/protos-suite.log", "target/ci-logs/protos-suite.exit"))
+    for body in (plan, suite):
+        for block in workflow_step_blocks(body):
+            if "ci_protos_test_shards.py" in block or "bin/protos test --list-cases" in block:
+                valid = valid and not re.search(r"\|\||;|&&|set \+", block)
+    return valid
+
+
+def aggregate_evidence_contract(path):
+    blocks = workflow_step_blocks(workflow_job_text(path, "aggregate"))
+    gate = step_with(blocks, "tools/ci_validation_aggregate.py")
+    if gate is None or "        if: always()\n" not in blocks[gate]:
+        return False
+    if re.search(r"\|\||;|&&|set \+", blocks[gate]):
+        return False
+    for identity, destination in (
+            ("name: protos-plan-${{ github.sha }}", "target/protos-test-shards"),
+            ("pattern: protos-evidence-*-${{ github.sha }}", "target/ci-protos-evidence")):
+        download = step_with(blocks, identity)
+        if download is None or download >= gate:
+            return False
+        block = blocks[download]
+        if not all(token in block for token in (
+                "uses: actions/download-artifact@v4", "        if: always()\n", "path: " + destination)):
+            return False
+        if "merge-multiple: true" in block:
+            return False
+    return all(token in blocks[gate] for token in (
+        "--protos-plan target/protos-test-shards/plan.json",
+        "--protos-results target/ci-protos-evidence"))
 
 
 def workflow_job_test_command(path, job_id):
@@ -532,8 +626,11 @@ def workflow_job_test_command(path, job_id):
     valid = valid and "    if: always()" in aggregate
     for token in ("tools/ci_validation_aggregate.py", "--plan", "--results", "--dependencies",
                   "${{ toJSON(needs) }}", "actions/download-artifact@v4", "java-plan-${{ github.sha }}",
-                  "java-evidence-*-${{ github.sha }}"):
+                  "java-evidence-*-${{ github.sha }}", "protos-plan-${{ github.sha }}",
+                  "protos-evidence-*-${{ github.sha }}", "--protos-plan", "--protos-results",
+                  '--protos-shard-count "$PROTOS_TEST_SHARD_COUNT"'):
         valid = valid and token in aggregate
+    valid = valid and protos_evidence_contract(path) and aggregate_evidence_contract(path)
     for name in ("java-parallel", "java-serial"):
         body = workflow_job_text(path, name)
         valid = valid and "    needs: prepare" in body
@@ -547,9 +644,17 @@ def workflow_job_test_workers(path, job_id):
     top = text.split("\njobs:\n", 1)[0]
     bounded = all(re.search(r'^  %s: "%s"$' % (name, value), top, re.MULTILINE)
                   for name, value in (("JAVA_TEST_SHARD_COUNT", "4"), ("JAVA_TEST_JOBS", "2"),
-                                      ("PROTOS_TEST_JOBS", "2")))
-    # Reject job-local worker overrides that bypass the bounded defaults.
-    bounded = bounded and not re.search(r"(?m)^      (JAVA_TEST_JOBS|PROTOS_TEST_JOBS):", text)
+                                      ("PROTOS_TEST_JOBS", "2"), ("PROTOS_TEST_SHARD_COUNT", "4")))
+    # Reject job-local worker or Protos count overrides that bypass the bounded defaults.
+    bounded = bounded and not re.search(
+        r"(?m)^ {6,}(JAVA_TEST_JOBS|PROTOS_TEST_JOBS|PROTOS_TEST_SHARD_COUNT):", text)
+    # The Protos matrix enumerates exactly every index of the declared count,
+    # never cancels siblings, and passes each control to the Makefile explicitly.
+    suite = workflow_job_text(path, "protos-suite")
+    for token in ("    strategy:\n      fail-fast: false\n      matrix:\n        shard: [1, 2, 3, 4]\n",
+                  "    env:\n      PROTOS_TEST_SHARD_INDEX: ${{ matrix.shard }}\n", PROTOS_SUITE_MAKE):
+        bounded = bounded and token in suite
+    bounded = bounded and len(re.findall(r"(?m)^\s+shard: ", suite)) == 1
     parallel = workflow_job_text(path, "java-parallel")
     prepare = workflow_job_text(path, "prepare")
     for token in ("fail-fast: false", "shard: ${{ fromJSON(needs.prepare.outputs.indices) }}",
@@ -559,9 +664,10 @@ def workflow_job_test_workers(path, job_id):
     for token in ("count: ${{ steps.plan.outputs.count }}", "indices: ${{ steps.plan.outputs.indices }}",
                   "tools/ci_java_test_shards.py outputs", '>> "$GITHUB_OUTPUT"'):
         bounded = bounded and token in prepare
-    return "4 shards; Java=2 Protos=2" if bounded else "<drift:distributed.workers>"
+    return CI_WORKERS_EXPECTED if bounded else "<drift:distributed.workers>"
 
 
+CI_WORKERS_EXPECTED = "Java 4 shards; Protos 4 shards; Java=2 Protos=2"
 MAVEN_CACHE_ACTION = "./.github/actions/maven-cache-restore"
 MAVEN_CACHE_SAVE_JOB = "prepare"
 MAVEN_CACHE_EXPECTED = "shared restore; computed key; explicit prepare save"
@@ -946,7 +1052,8 @@ def diagnostics_workflow_contract(root, expected_image):
 
     isolation = yaml_keys(jobs, 2) == ["diagnose"]
     isolation = isolation and not re.search(r"(?<![A-Za-z0-9_])ci_validation_aggregate\.py", text)
-    for token in ("aggregate-", "java-evidence-", "java-plan-${{",
+    for token in ("aggregate-", "java-evidence-", "java-plan-${{", "protos-evidence-",
+                  "protos-plan-${{", "ci_protos_test_shards",
                   "releases", "git push", "git commit", "gh release", "contents: write"):
         isolation = isolation and token not in text
     isolation = isolation and not re.search(r"\$\{\{\s*inputs\.", "\n".join(jobs))
@@ -1038,7 +1145,7 @@ def audit_bindings(root, contract):
                  expected_image if all(image == expected_image for image in images) else " | ".join(images)))
     rows.append(("ci.tests.command", "distributed validation gates",
                  workflow_job_test_command(ci_workflow, "aggregate")))
-    rows.append(("ci.tests.workers", "4 shards; Java=2 Protos=2",
+    rows.append(("ci.tests.workers", CI_WORKERS_EXPECTED,
                  workflow_job_test_workers(ci_workflow, "java-parallel")))
     caches = [workflow_job_maven_cache_contract(ci_workflow, name) for name in CI_MAVEN_JOBS]
     if not maven_cache_action_contract(root):

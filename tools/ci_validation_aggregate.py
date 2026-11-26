@@ -18,21 +18,34 @@
 import argparse
 import json
 from pathlib import Path
+import re
 import sys
 
 from ci_java_test_shards import check_plan, require, revision, write_json, RESULT_SCHEMA
+import ci_protos_test_shards as protos_shards
 
 LANES = ("prepare", "compilerability", "java-parallel", "java-serial",
-         "protos-suite", "protos-foreign", "native-image")
+         "protos-plan", "protos-suite", "protos-foreign", "native-image")
 
 
-def aggregate(plan, results, dependencies, rev):
-    check_plan(plan)
-    require(plan["revision"] == rev, "revision mismatch")
+def check_dependencies(dependencies):
     require(isinstance(dependencies, dict), "malformed dependency evidence")
     require(set(dependencies) == set(LANES), "missing or unexpected workflow dependencies")
     require(all(isinstance(dependencies[name], dict) and dependencies[name].get("result") == "success" for name in LANES),
             "failed, cancelled, skipped or missing dependency result")
+
+
+def aggregate(plan, results, dependencies, rev, protos_plan, protos_results, protos_shard_count):
+    """Java and Protos evidence are accepted independently and reported separately."""
+    check_dependencies(dependencies)
+    java = java_coverage(plan, results, rev)
+    protos = protos_shards.check_results(protos_plan, protos_results, rev, protos_shard_count)
+    return dict(java, dependencies={n: dependencies[n]["result"] for n in LANES}, protos=protos)
+
+
+def java_coverage(plan, results, rev):
+    check_plan(plan)
+    require(plan["revision"] == rev, "revision mismatch")
     expected = {("parallel", s["index"]): s["classes"] for s in plan["shards"]}
     expected[("serial", 1)] = plan["serialInventory"]
     seen, assigned_union, observed_union = set(), set(), set()
@@ -85,8 +98,7 @@ def aggregate(plan, results, dependencies, rev):
     require(seen == set(expected), "missing Java execution result")
     require(assigned_union == set(plan["candidateInventory"]), "incomplete candidate coverage")
     return dict(schema="protos.ci.validation-result/v1", revision=rev, planDigest=plan["digest"],
-                status="pass", dependencies={n: dependencies[n]["result"] for n in LANES},
-                assignedCandidateCount=len(assigned_union), observedCandidateCount=len(observed_union),
+                status="pass", assignedCandidateCount=len(assigned_union), observedCandidateCount=len(observed_union),
                 unresolvedCandidateCount=0, **totals)
 
 
@@ -100,11 +112,49 @@ def summary(result, dependencies):
     if result["status"] == "pass":
         lines += ["", "Java candidates: %s assigned; %s observed executing; 0 unresolved." %
                   (result["assignedCandidateCount"], result["observedCandidateCount"]),
-                  "Executed invocations: %s; skipped: %s; failures: %s; errors: %s." %
+                  "Java executed invocations: %s; skipped: %s; failures: %s; errors: %s." %
                   tuple(result[k] for k in ("testCount", "skippedCount", "failureCount", "errorCount"))]
+        protos = result["protos"]
+        lines += ["", "Protos Cases: %s planned across %s shards (%s workers each); %s passed; %s failed." %
+                  (protos["plannedCaseCount"], protos["shardCount"], protos["jobs"],
+                   protos["passedCaseCount"], protos["failedCaseCount"]),
+                  "Protos evidence covers planned CaseRef identity and terminal completion counts.",
+                  "", "| Protos shard | Planned | Passed |", "| --- | --- | --- |"]
+        lines += ["| %s | %s | %s |" % (s["index"], s["plannedCaseCount"], s["passedCaseCount"])
+                  for s in protos["shards"]]
     else:
         lines += ["", result["reason"]]
     return "\n".join(lines) + "\n"
+
+
+def read_json(path):
+    return json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=protos_shards.unique_object)
+
+
+def read_protos_evidence(plan_path, results_path, rev):
+    """Reconcile derived evidence with the retained public output, fail closed.
+
+    upload-artifact preserves the common target/ root for shard evidence, so
+    each protos-test-evidence directory has its matching ci-logs sibling.
+    """
+    plan = read_json(plan_path)
+    complete_text = (plan_path.parent / "listing.json").read_text(encoding="utf-8")
+    expected_plan = protos_shards.make_plan(complete_text, plan["shardCount"], plan["jobs"], rev)
+    require(plan == expected_plan, "Protos plan disagrees with authoritative listing")
+    results = []
+    for path in sorted(results_path.rglob("protos-result.json")):
+        result = read_json(path)
+        logs = path.parent.parent / "ci-logs"
+        status = (logs / "protos-suite.exit").read_text(encoding="utf-8").strip()
+        require(bool(re.fullmatch(r"[0-9]+", status)), "invalid recorded exit status")
+        expected = protos_shards.shard_result(
+            result["shardCount"], result["shardIndex"], result["jobs"],
+            (path.parent / "complete-listing.json").read_text(encoding="utf-8"),
+            (path.parent / "shard-listing.json").read_text(encoding="utf-8"),
+            (logs / "protos-suite.log").read_text(encoding="utf-8"), int(status), rev)
+        require(result == expected, "Protos result disagrees with authoritative output")
+        results.append(result)
+    return plan, results
 
 
 def main():
@@ -112,18 +162,24 @@ def main():
     parser.add_argument("--plan", required=True, type=Path)
     parser.add_argument("--results", required=True, type=Path)
     parser.add_argument("--dependencies", required=True)
+    parser.add_argument("--protos-plan", required=True, type=Path)
+    parser.add_argument("--protos-results", required=True, type=Path)
+    parser.add_argument("--protos-shard-count", required=True, type=int)
     parser.add_argument("--revision")
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--summary", required=True, type=Path)
     args = parser.parse_args()
     dependencies = {}
     try:
-        dependencies = json.loads(args.dependencies)
+        dependencies = json.loads(args.dependencies, object_pairs_hook=protos_shards.unique_object)
         require(isinstance(dependencies, dict), "invalid dependency evidence")
-        plan = json.loads(args.plan.read_text(encoding="utf-8"))
+        plan = read_json(args.plan)
         files = sorted(args.results.rglob("result.json"))
-        results = [json.loads(file.read_text(encoding="utf-8")) for file in files]
-        result = aggregate(plan, results, dependencies, revision(args.revision))
+        results = [read_json(file) for file in files]
+        rev = revision(args.revision)
+        protos_plan, protos_results = read_protos_evidence(args.protos_plan, args.protos_results, rev)
+        result = aggregate(plan, results, dependencies, rev,
+                           protos_plan, protos_results, args.protos_shard_count)
     except (ValueError, TypeError, KeyError, OSError) as error:
         result = dict(schema="protos.ci.validation-result/v1", status="fail", reason=str(error))
     write_json(args.output, result)

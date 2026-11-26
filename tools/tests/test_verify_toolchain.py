@@ -75,6 +75,68 @@ SAVE_STEP = """      - name: Save Maven dependency cache
 """ % SAVE_KEY
 
 
+PROTOS_MATRIX = """    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    env:
+      PROTOS_TEST_SHARD_INDEX: ${{ matrix.shard }}
+"""
+PROTOS_PLAN_STEPS = """      - name: Obtain complete listing
+        run: |
+          mkdir -p target/protos-test-shards target/ci-logs
+          bin/protos test --list-cases > target/protos-test-shards/listing.json 2> target/ci-logs/protos-plan.log
+      - name: Plan
+        run: >-
+          python3 tools/ci_protos_test_shards.py plan
+          --listing target/protos-test-shards/listing.json
+          --count "$PROTOS_TEST_SHARD_COUNT"
+          --jobs "$PROTOS_TEST_JOBS"
+          --output target/protos-test-shards/plan.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: protos-plan-${{ github.sha }}
+          if-no-files-found: error
+          path: |
+            target/protos-test-shards/plan.json
+            target/protos-test-shards/listing.json
+"""
+PROTOS_RUN = ('make test-protos-suite PROTOS_TEST_SHARD_COUNT="$PROTOS_TEST_SHARD_COUNT" '
+              'PROTOS_TEST_SHARD_INDEX="$PROTOS_TEST_SHARD_INDEX" PROTOS_TEST_JOBS="$PROTOS_TEST_JOBS" '
+              '2>&1 | tee target/ci-logs/protos-suite.log')
+PROTOS_TRAP = "trap 'printf \"%s\\n\" \"$?\" > target/ci-logs/protos-suite.exit' EXIT"
+PROTOS_SUITE_STEPS = """      - name: Obtain listings
+        run: |
+          bin/protos test --list-cases > target/protos-test-evidence/complete-listing.json
+          bin/protos test --list-cases --shard-count "$PROTOS_TEST_SHARD_COUNT" --shard-run "$PROTOS_TEST_SHARD_INDEX" > target/protos-test-evidence/shard-listing.json
+      - name: Run partition
+        run: |
+          %s
+          %s
+      - name: Record evidence
+        if: always()
+        run: >-
+          python3 tools/ci_protos_test_shards.py report
+          --listing target/protos-test-evidence/complete-listing.json
+          --shard-listing target/protos-test-evidence/shard-listing.json
+          --log target/ci-logs/protos-suite.log
+          --exit-status-file target/ci-logs/protos-suite.exit
+          --count "$PROTOS_TEST_SHARD_COUNT"
+          --index "$PROTOS_TEST_SHARD_INDEX"
+          --jobs "$PROTOS_TEST_JOBS"
+          --output target/protos-test-evidence/protos-result.json
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: protos-evidence-suite-${{ matrix.shard }}-${{ github.sha }}
+          path: |
+            target/protos-test-evidence/
+            target/ci-logs/protos-suite.log
+            target/ci-logs/protos-suite.exit
+""" % (PROTOS_TRAP, PROTOS_RUN)
+
+
 def write(path, text):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
@@ -110,6 +172,8 @@ def ci_job(name, image, command, cache_action="actions/cache/save@v6", workers="
 """
     elif name == "java-serial":
         extra = "    needs: prepare\n"
+    elif name == "protos-suite":
+        extra = PROTOS_MATRIX
     body = "  %s:\n%s    container:\n      image: %s\n    steps:\n" % (name, extra, image)
     body += RESTORE_STEP
     if name in ("java-parallel", "java-serial"):
@@ -118,6 +182,10 @@ def ci_job(name, image, command, cache_action="actions/cache/save@v6", workers="
           name: java-plan-${{ github.sha }}
 """
     body += "".join("      - name: Execute target\n        run: %s\n" % c for c in command.split("\n"))
+    if name == "protos-plan":
+        body += PROTOS_PLAN_STEPS
+    elif name == "protos-suite":
+        body += PROTOS_SUITE_STEPS
     if name == "prepare":
         body += SAVE_STEP.replace("actions/cache/save@v6", cache_action)
         body += '      - run: python3 tools/ci_java_test_shards.py outputs >> "$GITHUB_OUTPUT"\n'
@@ -130,7 +198,8 @@ def ci_workflow(test_image, test_command, cache_action="actions/cache/save@v6", 
         "compilerability": "make check",
         "java-parallel": test_command,
         "java-serial": "make test-java-serial",
-        "protos-suite": "make prepare-protos-tests\nmake test-protos-suite",
+        "protos-plan": "make prepare-protos-tests",
+        "protos-suite": "make prepare-protos-tests",
         "protos-foreign": "make prepare-protos-tests\nmake test-protos-foreign",
         "native-image": "make test-native",
     }
@@ -145,6 +214,7 @@ env:
   JAVA_TEST_SHARD_COUNT: "4"
   JAVA_TEST_JOBS: "%s"
   PROTOS_TEST_JOBS: "%s"
+  PROTOS_TEST_SHARD_COUNT: "4"
 defaults:
   run:
     shell: bash
@@ -154,7 +224,7 @@ jobs:
                     for name, command in commands.items())
     return text + """  aggregate:
     if: always()
-    needs: [prepare, compilerability, java-parallel, java-serial, protos-suite, protos-foreign, native-image]
+    needs: [prepare, compilerability, java-parallel, java-serial, protos-plan, protos-suite, protos-foreign, native-image]
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -162,7 +232,19 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           pattern: java-evidence-*-${{ github.sha }}
-      - run: python3 tools/ci_validation_aggregate.py --plan p --results r --dependencies "$DEPENDENCIES"
+      - uses: actions/download-artifact@v4
+        if: always()
+        with:
+          name: protos-plan-${{ github.sha }}
+          path: target/protos-test-shards
+      - uses: actions/download-artifact@v4
+        if: always()
+        with:
+          pattern: protos-evidence-*-${{ github.sha }}
+          path: target/ci-protos-evidence
+      - name: Verify dependencies and coverage
+        if: always()
+        run: python3 tools/ci_validation_aggregate.py --plan p --results r --dependencies "$DEPENDENCIES" --protos-plan target/protos-test-shards/plan.json --protos-results target/ci-protos-evidence --protos-shard-count "$PROTOS_TEST_SHARD_COUNT"
         env:
           DEPENDENCIES: ${{ toJSON(needs) }}
 """
@@ -545,17 +627,21 @@ Java version: 25.0.5.0.3, vendor: GraalVM Community, runtime: /opt/graalvm-commu
         workflow_cache = module["workflow_job_maven_cache_contract"]
         workflow = tmp / "distributed-fixture.yml"
         good_ci = ci_workflow(CI_IMAGE, "make test-java-parallel")
+        expected_workers = module["CI_WORKERS_EXPECTED"]
         write(workflow, good_ci)
+        require(workflow_workers(workflow, "java-parallel") == expected_workers,
+                "distributed worker fixture was rejected")
         require(workflow_command(workflow, "aggregate") == "distributed validation gates",
                 "distributed fixture was rejected")
         for lane in ("prepare", "compilerability", "java-parallel", "java-serial",
-                     "protos-suite", "protos-foreign", "native-image", "aggregate"):
+                     "protos-plan", "protos-suite", "protos-foreign", "native-image", "aggregate"):
             write(workflow, good_ci.replace("  " + lane + ":\n", "  missing-lane:\n", 1))
             require(workflow_command(workflow, "aggregate") != "distributed validation gates",
                     "missing lane accepted: " + lane)
         for before, after in (("  push:\n", "  disabled-push:\n"),
                               ("  pull_request:\n", "  disabled-pr:\n"),
                               ("native-image]", "protos-suite]"),
+                              ("protos-plan, protos-suite", "protos-suite"),
                               ("run: make check", "continue-on-error: true\n        run: make check")):
             write(workflow, good_ci.replace(before, after, 1))
             require(workflow_command(workflow, "aggregate") != "distributed validation gates",
@@ -570,8 +656,65 @@ Java version: 25.0.5.0.3, vendor: GraalVM Community, runtime: /opt/graalvm-commu
                               ("fail-fast: false", "fail-fast: true"),
                               ("fromJSON(needs.prepare.outputs.indices)", "fromJSON('[1,2,3,4]')")):
             write(workflow, good_ci.replace(before, after, 1))
-            require(workflow_workers(workflow, "java-parallel") != "4 shards; Java=2 Protos=2",
+            require(workflow_workers(workflow, "java-parallel") != expected_workers,
                     "unbounded worker configuration accepted: " + before)
+        protos_matrix_drift = (
+            ("Protos shard count", 'PROTOS_TEST_SHARD_COUNT: "4"', 'PROTOS_TEST_SHARD_COUNT: "3"'),
+            ("incomplete Protos matrix", "shard: [1, 2, 3, 4]", "shard: [1, 2, 3]"),
+            ("out-of-range Protos matrix", "shard: [1, 2, 3, 4]", "shard: [1, 2, 3, 5]"),
+            ("repeated Protos matrix index", "shard: [1, 2, 3, 4]", "shard: [1, 2, 3, 4, 4]"),
+            ("Protos fail-fast", "      fail-fast: false\n      matrix:\n        shard: [1, 2, 3, 4]",
+             "      fail-fast: true\n      matrix:\n        shard: [1, 2, 3, 4]"),
+            ("job-local Protos count", "      PROTOS_TEST_SHARD_INDEX: ${{ matrix.shard }}\n",
+             "      PROTOS_TEST_SHARD_INDEX: ${{ matrix.shard }}\n      PROTOS_TEST_SHARD_COUNT: \"1\"\n"),
+            ("fixed Protos index", "PROTOS_TEST_SHARD_INDEX: ${{ matrix.shard }}", "PROTOS_TEST_SHARD_INDEX: 1"),
+            ("unsharded Protos run", PROTOS_RUN, "make test-protos-suite 2>&1 | tee target/ci-logs/protos-suite.log"),
+        )
+        for label, before, after in protos_matrix_drift:
+            text = good_ci.replace(before, after, 1)
+            require(text != good_ci, "Protos matrix fixture did not apply: " + label)
+            write(workflow, text)
+            require(workflow_workers(workflow, "java-parallel") != expected_workers,
+                    "weakened Protos matrix accepted: " + label)
+        protos_evidence_drift = (
+            ("missing Protos plan log directory",
+             "mkdir -p target/protos-test-shards target/ci-logs",
+             "mkdir -p target/protos-test-shards"),
+            ("conditional aggregate", "      - name: Verify dependencies and coverage\n        if: always()\n",
+             "      - name: Verify dependencies and coverage\n"),
+            ("merged evidence", "          path: target/ci-protos-evidence\n",
+             "          path: target/ci-protos-evidence\n          merge-multiple: true\n"),
+            ("wrong evidence destination", "path: target/ci-protos-evidence", "path: target/other-evidence"),
+            ("missing raw exit upload", "            target/ci-logs/protos-suite.exit\n", ""),
+            ("missing plan listing upload", "            target/protos-test-shards/listing.json\n", ""),
+            ("missing Protos plan download", "          name: protos-plan-${{ github.sha }}\n          path: target/protos-test-shards",
+             "          name: other-${{ github.sha }}\n          path: target/protos-test-shards"),
+            ("missing Protos evidence download", "pattern: protos-evidence-*-${{ github.sha }}",
+             "pattern: other-*-${{ github.sha }}"),
+            ("missing Protos aggregate count", '--protos-shard-count "$PROTOS_TEST_SHARD_COUNT"', ""),
+            ("missing complete plan listing",
+             "          bin/protos test --list-cases > target/protos-test-shards/listing.json 2> target/ci-logs/protos-plan.log\n",
+             "          true\n"),
+            ("tolerant Protos plan upload", "          if-no-files-found: error\n", "          if-no-files-found: warn\n"),
+            ("missing shard listing", "--shard-run \"$PROTOS_TEST_SHARD_INDEX\" >", "--shard-run 1 >"),
+            ("lost exit status", PROTOS_TRAP + "\n", ""),
+            ("conditional Protos run", "      - name: Run partition\n",
+             "      - name: Run partition\n        if: success()\n"),
+            ("conditional evidence", "      - name: Record evidence\n        if: always()\n",
+             "      - name: Record evidence\n        if: success()\n"),
+            ("missing exit evidence", "--exit-status-file target/ci-logs/protos-suite.exit", ""),
+            ("conditional evidence upload", "      - name: Upload evidence\n        if: always()\n",
+             "      - name: Upload evidence\n"),
+            ("transferred Protos directories", "      - name: Obtain listings\n",
+             "      - uses: actions/download-artifact@v4\n      - name: Obtain listings\n"),
+            ("dependent Protos shards", PROTOS_MATRIX, "    needs: protos-plan\n" + PROTOS_MATRIX),
+        )
+        for label, before, after in protos_evidence_drift:
+            text = good_ci.replace(before, after, 1)
+            require(text != good_ci, "Protos evidence fixture did not apply: " + label)
+            write(workflow, text)
+            require(workflow_command(workflow, "aggregate") != "distributed validation gates",
+                    "weakened Protos evidence accepted: " + label)
         write(workflow, good_ci.replace(CI_IMAGE, STALE_CI_IMAGE, 1))
         require(workflow_image(workflow, "prepare") != CI_IMAGE, "single-job image drift accepted")
         write(workflow, good_ci.replace("actions/cache/save@v6", "actions/cache/save@v5", 1))
@@ -582,7 +725,7 @@ Java version: 25.0.5.0.3, vendor: GraalVM Community, runtime: /opt/graalvm-commu
         expected_cache = module["MAVEN_CACHE_EXPECTED"]
         write(workflow, good_ci)
         for lane in ("prepare", "compilerability", "java-parallel", "java-serial",
-                     "protos-suite", "protos-foreign", "native-image"):
+                     "protos-plan", "protos-suite", "protos-foreign", "native-image"):
             require(workflow_cache(workflow, lane) == expected_cache,
                     "good cache lifecycle rejected: " + lane)
         combined = good_ci.replace(
@@ -627,8 +770,8 @@ Java version: 25.0.5.0.3, vendor: GraalVM Community, runtime: /opt/graalvm-commu
                 ("tolerant validation step",
                  good_ci.replace("run: make check", "continue-on-error: true\n        run: make check", 1)),
                 ("tolerant aggregation step",
-                 good_ci.replace("      - run: python3 tools/ci_validation_aggregate.py",
-                                 "      - continue-on-error: true\n        run: python3 tools/ci_validation_aggregate.py", 1)),
+                 good_ci.replace("        run: python3 tools/ci_validation_aggregate.py",
+                                 "        continue-on-error: true\n        run: python3 tools/ci_validation_aggregate.py", 1)),
                 ("job-level tolerance",
                  good_ci.replace("  native-image:\n", "  native-image:\n    continue-on-error: true\n", 1)),
                 ("tolerance with expression",

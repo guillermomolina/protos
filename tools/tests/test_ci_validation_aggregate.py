@@ -24,7 +24,23 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import ci_java_test_shards as shards
+import ci_protos_test_shards as protos
 import ci_validation_aggregate as gate
+
+
+def listing(refs):
+    return json.dumps({"schema": protos.LISTING_SCHEMA,
+                       "cases": [{"ref": ref, "display": "Case " + ref} for ref in refs]})
+
+
+def protos_evidence(refs, count, jobs, rev):
+    """A complete passing distributed run, partitioned as the Test Tool would."""
+    plan = protos.make_plan(listing(refs), count, jobs, rev)
+    results = [protos.shard_result(count, index, jobs, listing(refs), listing(refs[index - 1::count]),
+                                   "[suite] done\n%s passed, 0 failed\n" % len(refs[index - 1::count]),
+                                   0, rev)
+               for index in range(1, count + 1)]
+    return plan, results
 
 
 class AggregateTests(unittest.TestCase):
@@ -47,9 +63,16 @@ class AggregateTests(unittest.TestCase):
                                      candidateCounts={c: dict(executed=1, skipped=0) for c in classes},
                                      testCount=1, failureCount=0, errorCount=0, skippedCount=0,
                                      mavenExitCode=0, status="pass"))
+        self.refs = ["case-%s" % n for n in range(1, 8)]
+        self.protos_count = 4
+        self.protos_plan, self.protos_results = protos_evidence(self.refs, 4, 2, self.rev)
 
     def accept(self):
-        return gate.aggregate(self.plan, self.results, self.dependencies, self.rev)
+        return gate.aggregate(self.plan, self.results, self.dependencies, self.rev,
+                              self.protos_plan, self.protos_results, self.protos_count)
+
+    def rebind_protos(self):
+        self.protos_plan, self.protos_results = protos_evidence(self.refs, 4, 2, self.rev)
 
     def test_local_aggregation_without_revision(self):
         from unittest.mock import patch
@@ -63,6 +86,7 @@ class AggregateTests(unittest.TestCase):
             for result in self.results:
                 result["revision"] = self.rev
                 result["planDigest"] = self.plan["digest"]
+            self.rebind_protos()
 
             accepted = self.accept()
             self.assertEqual(accepted["status"], "pass")
@@ -81,6 +105,7 @@ class AggregateTests(unittest.TestCase):
             for result in self.results:
                 result["revision"] = self.rev
                 result["planDigest"] = self.plan["digest"]
+            self.rebind_protos()
 
             self.results[0]["revision"] = "b" * 40
 
@@ -202,11 +227,202 @@ class AggregateTests(unittest.TestCase):
         output, summary = directory / "result.json", directory / "summary.md"
         argv = ["aggregate", "--plan", str(directory / "missing.json"), "--results", str(directory),
                 "--dependencies", json.dumps(self.dependencies), "--revision", self.rev,
+                "--protos-plan", str(directory / "missing-protos.json"),
+                "--protos-results", str(directory), "--protos-shard-count", "4",
                 "--output", str(output), "--summary", str(summary)]
         with patch.object(sys, "argv", argv):
             self.assertEqual(gate.main(), 1)
         self.assertEqual(json.loads(output.read_text())["status"], "fail")
         self.assertIn("Acceptance: **fail**", summary.read_text())
+
+
+    # Protos Case evidence: coverage counts stay separate from Java.
+
+    def reject(self, pattern=None):
+        if pattern is None:
+            with self.assertRaises((ValueError, KeyError, TypeError)):
+                self.accept()
+        else:
+            with self.assertRaisesRegex(ValueError, pattern):
+                self.accept()
+
+    def test_protos_four_disjoint_partitions_accepted_separately(self):
+        accepted = self.accept()
+        self.assertEqual(accepted["assignedCandidateCount"], 3)
+        self.assertEqual(accepted["protos"]["plannedCaseCount"], 7)
+        self.assertEqual(accepted["protos"]["passedCaseCount"], 7)
+        self.assertEqual([s["plannedCaseCount"] for s in accepted["protos"]["shards"]], [2, 2, 2, 1])
+        self.assertEqual(accepted["dependencies"]["protos-plan"], "success")
+        text = gate.summary(dict(accepted), self.dependencies)
+        self.assertIn("Java candidates: 3 assigned", text)
+        self.assertIn("Protos Cases: 7 planned across 4 shards (2 workers each); 7 passed; 0 failed.", text)
+        self.assertIn("| protos-plan | success |", text)
+
+    def test_protos_empty_partitions_accepted(self):
+        self.refs = ["only-a", "only-b"]
+        self.rebind_protos()
+        accepted = self.accept()
+        self.assertEqual([s["plannedCaseCount"] for s in accepted["protos"]["shards"]], [1, 1, 0, 0])
+        self.assertEqual(self.protos_results[3]["cases"], [])
+        self.assertEqual(self.protos_results[3]["status"], "pass")
+
+    def test_protos_missing_repeated_or_out_of_range_indices(self):
+        original = copy.deepcopy(self.protos_results)
+        for index in range(4):
+            self.protos_results = original[:index] + original[index + 1:]
+            with self.subTest(missing=index + 1):
+                self.reject("missing Protos shard result")
+        self.protos_results = original + [copy.deepcopy(original[0])]
+        self.reject("unexpected or duplicate Protos result")
+        for bad in (0, 5, "1", None):
+            self.protos_results = copy.deepcopy(original)
+            self.protos_results[0]["shardIndex"] = bad
+            with self.subTest(index=bad):
+                self.reject("unexpected or duplicate Protos result")
+        self.protos_results = []
+        self.reject("missing Protos shard result")
+
+    def test_protos_missing_unexpected_or_duplicated_case_refs(self):
+        for label, cases, pattern in (
+                ("missing", ["case-1"], "incomplete Protos Case coverage"),
+                ("unexpected", ["case-1", "case-5", "case-99"], "unexpected CaseRef"),
+                ("within", ["case-1", "case-1", "case-5"], "duplicate CaseRef within partition"),
+                ("across", ["case-1", "case-5", "case-2"], "overlapping CaseRefs across partitions")):
+            original = copy.deepcopy(self.protos_results)
+            self.protos_results[0]["cases"] = cases
+            self.protos_results[0]["passedCount"] = self.protos_results[0]["completedCount"] = len(cases)
+            with self.subTest(label=label):
+                self.reject(pattern)
+            self.protos_results = original
+
+    def test_protos_incorrect_ordering_or_assignment(self):
+        for label, first, second in (
+                ("reordered", ["case-5", "case-1"], None),
+                ("swapped", ["case-2", "case-6"], ["case-1", "case-5"]),
+                ("contiguous", ["case-1", "case-2"], ["case-5", "case-6"])):
+            original = copy.deepcopy(self.protos_results)
+            self.protos_results[0]["cases"] = first
+            if second is not None:
+                self.protos_results[1]["cases"] = second
+            with self.subTest(label=label):
+                self.reject("round-robin")
+            self.protos_results = original
+
+    def test_protos_revision_identity_and_count_mismatches(self):
+        for key, value, pattern in (("revision", "b" * 40, "identity mismatch"),
+                                    ("planDigest", "0" * 64, "identity mismatch"),
+                                    ("shardCount", 3, "configuration mismatch"),
+                                    ("jobs", 1, "configuration mismatch")):
+            original = copy.deepcopy(self.protos_results)
+            self.protos_results[2][key] = value
+            with self.subTest(key=key):
+                self.reject(pattern)
+            self.protos_results = original
+        self.protos_count = 3
+        self.reject("Protos shard count mismatch")
+        self.protos_count = 4
+        stale = copy.deepcopy(self.protos_plan)
+        stale["revision"] = "b" * 40
+        stale["digest"] = shards.digest(stale)
+        self.protos_plan = stale
+        self.reject("Protos plan revision mismatch")
+
+    def test_protos_plan_tampering_and_schema(self):
+        original = copy.deepcopy(self.protos_plan)
+        for change in (dict(schema="unknown"), dict(cases=self.refs[:-1]), dict(cases=[]),
+                       dict(cases=self.refs + [self.refs[0]]), dict(jobs=0), dict(shardCount=0)):
+            self.protos_plan = copy.deepcopy(original)
+            self.protos_plan.update(change)
+            self.protos_plan["digest"] = shards.digest(self.protos_plan)
+            with self.subTest(change=change):
+                self.reject()
+        self.protos_plan = copy.deepcopy(original)
+        self.protos_plan["cases"] = list(reversed(self.refs))
+        with self.subTest(change="digest not recomputed"):
+            self.reject("Protos plan digest mismatch")
+        for evidence in (None, {}, {"schema": protos.RESULT_SCHEMA}, dict(original)):
+            self.protos_plan = copy.deepcopy(original)
+            self.protos_results = copy.deepcopy(self.protos_results)
+            self.protos_results[0] = evidence
+            with self.subTest(evidence=evidence):
+                self.reject()
+
+    def test_protos_failed_aborted_and_concealed_failures(self):
+        for change in (dict(exitStatus=2), dict(outcome="infrastructure-aborted"),
+                       dict(failedCount=1), dict(passedCount=1), dict(completedCount=3),
+                       dict(status="fail"), dict(reasons=["nonzero process exit status 2"]),
+                       dict(exitStatus=-1), dict(passedCount="2"), dict(shardCount=4.0), dict(jobs=2.0)):
+            original = copy.deepcopy(self.protos_results)
+            self.protos_results[0].update(change)
+            with self.subTest(change=change):
+                self.reject()
+            self.protos_results = original
+
+    def test_protos_plan_dependency_required(self):
+        del self.dependencies["protos-plan"]
+        self.reject("missing or unexpected workflow dependencies")
+        for status in ("failure", "cancelled", "skipped"):
+            self.dependencies["protos-plan"] = {"result": status}
+            with self.subTest(status=status):
+                self.reject("failed, cancelled, skipped or missing dependency result")
+
+    def test_protos_cli_reads_downloaded_evidence(self):
+        from unittest.mock import patch
+        directory = Path(self.temporary.name)
+        shards.write_json(directory / "plan.json", self.plan)
+        for result in self.results:
+            shards.write_json(directory / "java" / ("%s-%s" % (result["lane"], result["shardIndex"]))
+                              / "result.json", result)
+        shards.write_json(directory / "protos-plan.json", self.protos_plan)
+        (directory / "listing.json").write_text(listing(self.refs), encoding="utf-8")
+        for result in self.protos_results:
+            artifact = directory / "protos" / ("protos-evidence-suite-%s" % result["shardIndex"])
+            evidence = artifact / "protos-test-evidence"
+            shards.write_json(evidence / "protos-result.json", result)
+            (evidence / "complete-listing.json").write_text(listing(self.refs), encoding="utf-8")
+            (evidence / "shard-listing.json").write_text(listing(result["cases"]), encoding="utf-8")
+            logs = artifact / "ci-logs"
+            logs.mkdir()
+            (logs / "protos-suite.log").write_text("%s passed, 0 failed\n" % len(result["cases"]), encoding="utf-8")
+            (logs / "protos-suite.exit").write_text("0\n", encoding="utf-8")
+        output, summary = directory / "aggregate.json", directory / "summary.md"
+        argv = ["aggregate", "--plan", str(directory / "plan.json"), "--results", str(directory / "java"),
+                "--dependencies", json.dumps(self.dependencies), "--revision", self.rev,
+                "--protos-plan", str(directory / "protos-plan.json"),
+                "--protos-results", str(directory / "protos"), "--protos-shard-count", "4",
+                "--output", str(output), "--summary", str(summary)]
+        with patch.object(sys, "argv", argv):
+            self.assertEqual(gate.main(), 0)
+        self.assertEqual(json.loads(output.read_text())["protos"]["passedCaseCount"], 7)
+        evidence = directory / "protos" / "protos-evidence-suite-3" / "protos-test-evidence"
+        raw_paths = [directory / "listing.json", evidence / "complete-listing.json",
+                     evidence / "shard-listing.json", evidence.parent / "ci-logs" / "protos-suite.log",
+                     evidence.parent / "ci-logs" / "protos-suite.exit"]
+        for path in raw_paths:
+            original = path.read_text(encoding="utf-8")
+            with self.subTest(missing=path.name):
+                path.unlink()
+                with patch.object(sys, "argv", argv):
+                    self.assertEqual(gate.main(), 1)
+            path.write_text(original, encoding="utf-8")
+            malformed = "1" if path.suffix == ".exit" else "{}"
+            with self.subTest(malformed=path.name):
+                path.write_text(malformed, encoding="utf-8")
+                with patch.object(sys, "argv", argv):
+                    self.assertEqual(gate.main(), 1)
+            path.write_text(original, encoding="utf-8")
+        result_path = evidence / "protos-result.json"
+        original = result_path.read_text(encoding="utf-8")
+        result_path.write_text(original.replace('"exitStatus": 0', '"exitStatus": 1, "exitStatus": 0'),
+                               encoding="utf-8")
+        with patch.object(sys, "argv", argv):
+            self.assertEqual(gate.main(), 1)
+        self.assertIn("duplicate JSON", json.loads(output.read_text())["reason"])
+        result_path.write_text(original, encoding="utf-8")
+        (evidence / "protos-result.json").unlink()
+        with patch.object(sys, "argv", argv):
+            self.assertEqual(gate.main(), 1)
+        self.assertEqual(json.loads(output.read_text())["reason"], "missing Protos shard result")
 
 
 if __name__ == "__main__":
