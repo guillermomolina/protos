@@ -8,6 +8,11 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.240-SNAPSHOT
+
+- **PERF044.** Preserve independent method selection and source invocation specialization families.
+- Replay source commit `caf4a470a8ed2ad6af09b5324dc8c7c7d88920ef` with implementation-version metadata; preserve its source, tests and baseline content.
+
 ## 0.4.239-SNAPSHOT
 
 - **PERF044.** Select methods by Shape, shared inherited and Prelude-bound represented selections and invoke selected bound source methods through the cached function dispatcher.

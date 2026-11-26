@@ -49,6 +49,15 @@ import com.oracle.truffle.api.profiles.InlinedConditionProfile;
  * Ordinary CALL2 receives two positional arguments. Immediate SEND1
  * receives an independently transported receiver and one positional
  * argument. Both use the existing B5 frame layout and dispatcher family.
+ *
+ * <p>SEND1 invokes the callable GetMethod already selected, in three
+ * independent families: a raw source Closure ({@link #callDirectSourceSend},
+ * then {@link #callRawSourceSend}), a bound method carrying a source Closure
+ * ({@link #callBoundSourceSend}), and every other callable
+ * ({@link #callGenericSend}). No family's guard admits another family's
+ * callable and none replaces another family, so a native or foreign
+ * invocation at a site never prevents a later source method from
+ * specializing.
  */
 @GenerateUncached
 @GenerateInline(false)
@@ -319,6 +328,44 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
     }
 
     /*
+     * SEND1 of a raw source Closure that the identity-keyed direct PIC does
+     * not admit (past its limit, a multi-Context engine, or a Closure without
+     * a single-Context target). As in the direct PIC, the actual receiver is
+     * its own methodHome. The already selected Closure is invoked through the
+     * cached function dispatcher, which keys the actual Closure, the entered
+     * Context and its effective Context-local target; no callable selection
+     * is repeated. The installed direct PIC entries are not replaced.
+     */
+    @Specialization(
+            guards = {
+                    "methodSend",
+                    "isSourceFunction(callable)"
+            })
+    @InliningCutoff
+    static Object callRawSourceSend(
+            VirtualFrame frame,
+            boolean terminal,
+            boolean methodSend,
+            ProtosClosureValue callable,
+            Object receiver,
+            Object a0,
+            @Bind Node inliningTarget,
+            @Bind("bytecodeOf($node)") BytecodeNode bytecode,
+            @Bind("bytecode.getBytecodeIndex(frame)") int bytecodeIndex,
+            @Bind("rootOf($node)") ProtosBytecodeRootNode root,
+            @Exclusive @Cached ProtosFunctionCallDispatchers.FunctionCachedCallNode call) {
+        Object[] arguments = ProtosFrameArguments.dispatchedCall1(
+                null, receiver, receiverHomeOrNull(receiver),
+                null, null, a0);
+        Object outcome = call.execute(
+                frame, inliningTarget, terminal, callable, arguments,
+                null, root,
+                ProtosFunctionCallDispatchers.currentContext(inliningTarget));
+        return ProtosTailCallContinuation.completeCall(
+                terminal, outcome, bytecode, bytecodeIndex);
+    }
+
+    /*
      * SEND1 of a source method already selected by GetMethod as a bound
      * method (an inherited selection, or a non-direct own selection). No
      * further selection is performed: the B5 header carries the one
@@ -326,8 +373,8 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
      * methodHome are written, and the selected Closure is invoked through
      * the cached function dispatcher, which keys the actual Closure, the
      * entered Context and its effective Context-local target. Suspension
-     * and terminal completion are those of every source call. Declared
-     * before the generic SEND1, which never replaces it.
+     * and terminal completion are those of every source call. The generic
+     * SEND1 never admits its callable.
      */
     @Specialization(
             guards = {
@@ -360,14 +407,16 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
     }
 
     /*
-     * Generic SEND1 covers polymorphic selection, cached-PIC misses,
-     * native methods and selected bound methods of native or foreign
-     * callables. Its B5 suffix still
-     * contains exactly one supplied positional argument.
+     * Generic SEND1 covers every selected callable that is neither a source
+     * Closure nor a bound method carrying one: native methods, bound native
+     * methods, foreign callables and any other callable value. Its B5 suffix
+     * still contains exactly one supplied positional argument.
      */
     @Specialization(
-            guards = "methodSend",
-            replaces = "callDirectSourceSend")
+            guards = {
+                    "methodSend",
+                    "!isSourceSelection(callable)"
+            })
     @InliningCutoff
     static Object callGenericSend(
             VirtualFrame frame,
@@ -448,6 +497,15 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
 
     static boolean isSourceFunction(ProtosClosureValue callable) {
         return ProtosFunctionCallDispatchers.CallNode.isSourceFunction(callable);
+    }
+
+    /* A source Closure, raw or bound: the callables the source SEND1 families own. */
+    static boolean isSourceSelection(Object callable) {
+        if (callable instanceof ProtosClosureValue closure) {
+            return isSourceFunction(closure);
+        }
+        return callable instanceof ProtosBoundMethod method
+                && isSourceFunction(method.callable());
     }
 
     // Proxy nodes bind through their operation node. The interpreter stores
