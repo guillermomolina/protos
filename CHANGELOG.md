@@ -8,6 +8,13 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.224-SNAPSHOT
+
+- **GITHUB026.** Distribute mandatory CI across independent validation runners with deterministic Java test sharding and revision-bound coverage aggregation.
+- Replace post-job Maven cache handling with a deterministic tracked-POM key, shared restore action and explicit non-blocking cache save.
+- Add isolated CI diagnostics for cache storage and retrieval, repeated HTTP termination tests and individual Java test shards.
+- Verify workflow contracts and preserve fail-closed validation and aggregation.
+
 ## 0.4.223-SNAPSHOT
 
 - **I176 / D263-C.** Add contextual `match(subject) { key: action ... }` syntax as mandatory sugar for the ordinary `subject.caseOf(%{ ... })` send; a non-Closure action becomes an implicit parameterless Closure, explicit Closure actions are kept unchanged, and the canonical form is identical to explicit `caseOf` with no new canonical, bytecode or runtime machinery.
