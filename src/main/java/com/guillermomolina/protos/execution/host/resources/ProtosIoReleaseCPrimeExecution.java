@@ -28,6 +28,7 @@ import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.bytecode.BytecodeConfig;
 import com.oracle.truffle.api.bytecode.BytecodeLocal;
 import com.oracle.truffle.api.bytecode.BytecodeRootNodes;
+import com.oracle.truffle.api.interop.TruffleObject;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -197,7 +198,9 @@ public final class ProtosIoReleaseCPrimeExecution {
         }
     }
 
-    public static final class Outcome {
+    // Private root result: automatic root instrumentation requires an interop carrier.
+    // No guest members or operations are exported by this transport.
+    public static final class Outcome implements TruffleObject {
         private final ProtosObjectValue error;
 
         private Outcome(ProtosObjectValue error) {

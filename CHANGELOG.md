@@ -8,6 +8,11 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.226-SNAPSHOT
+
+- **BUG042.** Mark the private buffered-reader and lifecycle-release root result carriers as Truffle interop values so automatic root instrumentation can observe their completion without a host ClassCastException. The carriers export no guest members or operations.
+- Restore the full APL Part 5 notice in the buffered-reader execution source.
+
 ## 0.4.225-SNAPSHOT
 
 - **BUG041.** Correct external child custody completion ordering: host close reclamation now waits for the dependent stages already returned by the existing termination and transport-retirement callbacks, so success is reported only after the discharging callback finished registry removal and admission return.
