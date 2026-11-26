@@ -3639,7 +3639,7 @@ final class CanonicalToBytecodeLowerer {
 
     private static boolean isStructuredSelector(String selector) {
         return switch (selector) {
-            case "ensure", "caseOf", "import", "match", "each",
+            case "ensure", "caseOf", "import", "each",
                     "eachStep", "atPut", "atIfAbsent", "remove",
                     "open", "listenTcp", "spawn" -> true;
             default -> false;
@@ -4118,19 +4118,10 @@ final class CanonicalToBytecodeLowerer {
             StackValue argumentValue = builder.endBindStackValue();
 
             // D237: receiver, then argument, then selection and the call.
-            builder.beginCallBinaryMethod(terminal, true);
-
-            builder.beginGetMethod(
-                    TruffleString.fromJavaStringUncached(
-                            selector, TruffleString.Encoding.UTF_16),
-                    true);
-            builder.emitLoadStackValue(receiverValue);
-            builder.endGetMethod();
-
-            builder.emitLoadStackValue(receiverValue);
-            builder.emitLoadStackValue(argumentValue);
-
-            builder.endCallBinaryMethod();
+            emitDirectMethodSend(
+                    builder, selector, terminal,
+                    () -> builder.emitLoadStackValue(receiverValue),
+                    () -> builder.emitLoadStackValue(argumentValue));
             builder.endBlock();
         } else {
             throw new AssertionError(
@@ -4142,6 +4133,59 @@ final class CanonicalToBytecodeLowerer {
         if (!primitiveCarrierResult) {
             builder.endMaterializePrimitiveNumericCarrier();
         }
+    }
+
+    /*
+     * The direct one-argument method send of already evaluated operands:
+     * the behavior is selected on the receiver at this point, then invoked
+     * with the receiver and the argument by the site's own direct source
+     * send cache, or by its generic send for any other selection. The
+     * Runnables emit operand loads at compilation time.
+     */
+    private static void emitDirectMethodSend(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            String selector,
+            boolean terminal,
+            Runnable loadReceiver,
+            Runnable loadArgument) {
+        builder.beginCallBinaryMethod(terminal, true);
+        builder.beginGetMethod(
+                TruffleString.fromJavaStringUncached(
+                        selector, TruffleString.Encoding.UTF_16),
+                true);
+        loadReceiver.run();
+        builder.endGetMethod();
+        loadReceiver.run();
+        loadArgument.run();
+        builder.endCallBinaryMethod();
+    }
+
+    /*
+     * The ordinary match send of a staged matcher and subject through the
+     * direct method send, composing a suspended result in this root; the
+     * completed outcome is stored in {@code outcome}.
+     */
+    private void emitDirectMatchSend(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            BytecodeLocal matcher,
+            BytecodeLocal subject,
+            BytecodeLocal outcome,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        noteDynamicInvocation();
+        builder.beginStoreLocal(outcome);
+        emitComposedDirectUnaryValue(
+                builder,
+                () -> {
+                    builder.beginTag(StandardTags.CallTag.class);
+                    emitDirectMethodSend(
+                            builder, "match", false,
+                            () -> builder.emitLoadLocal(matcher),
+                            () -> builder.emitLoadLocal(subject));
+                    builder.endTag(StandardTags.CallTag.class);
+                },
+                childResult, resumeValue, false);
+        builder.endStoreLocal();
     }
 
     /**
@@ -6044,7 +6088,7 @@ final class CanonicalToBytecodeLowerer {
                 && result == null
                 && value instanceof CanonicalSend numeric
                 && directCellNumericValue(numeric)
-                && !isOrderingSelector(numeric.message())) {
+                && !isComparisonSelector(numeric.message())) {
             /*
              * The producer commits and releases a synchronous result itself.
              * Only a suspended selection reaches the deferred cell write in
@@ -9750,6 +9794,15 @@ final class CanonicalToBytecodeLowerer {
                 && !hasVectorArgument(call.arguments());
     }
 
+    /*
+     * A comparison operation: an ordering or the ordinary equality. Its
+     * operation has neither a terminal transport nor a result-cell commit;
+     * only an ordering requires a canonical Boolean result.
+     */
+    private static boolean isComparisonSelector(String selector) {
+        return isOrderingSelector(selector) || "==".equals(selector);
+    }
+
     private static boolean isOrderingSelector(String selector) {
         return "<".equals(selector) || "<=".equals(selector)
                 || ">".equals(selector) || ">=".equals(selector);
@@ -9757,7 +9810,7 @@ final class CanonicalToBytecodeLowerer {
 
     private static boolean primitiveNumericSelector(String selector) {
         return switch (selector) {
-            case "+", "-", "*", "/", "div", "mod", "<", "<=", ">", ">=" -> true;
+            case "+", "-", "*", "/", "div", "mod", "<", "<=", ">", ">=", "==" -> true;
             default -> false;
         };
     }
@@ -10100,7 +10153,7 @@ final class CanonicalToBytecodeLowerer {
      * completion) in a genuine source root body with direct operands.
      */
     private boolean admitsTerminalNumericSend(CanonicalSend send) {
-        return !isOrderingSelector(send.message())
+        return !isComparisonSelector(send.message())
                 && currentActivationLocal == null
                 && !currentInlineClosureCallBody
                 && currentNormalCallbackScalarLocals.isEmpty();
@@ -10121,6 +10174,7 @@ final class CanonicalToBytecodeLowerer {
             case "<=" -> builder.beginRichCompareLe(outcome);
             case ">" -> builder.beginRichCompareGt(outcome);
             case ">=" -> builder.beginRichCompareGe(outcome);
+            case "==" -> builder.beginRichCompareEq(outcome);
             default -> throw new AssertionError("not a numeric selector: " + selector);
         }
     }
@@ -10138,6 +10192,7 @@ final class CanonicalToBytecodeLowerer {
             case "<=" -> builder.endRichCompareLe();
             case ">" -> builder.endRichCompareGt();
             case ">=" -> builder.endRichCompareGe();
+            case "==" -> builder.endRichCompareEq();
             default -> throw new AssertionError("not a numeric selector: " + selector);
         }
     }
@@ -11149,9 +11204,7 @@ final class CanonicalToBytecodeLowerer {
         builder.emitLoadLocal(state);
         builder.endStructuredMatcher();
         builder.endStoreLocal();
-        emitDispatchedSendOfLocals(
-                builder, "match", matcher, java.util.List.of(subject),
-                outcome, childResult, resumeValue);
+        emitDirectMatchSend(builder, matcher, subject, outcome, childResult, resumeValue);
         builder.emitClearLocal(matcher);
         builder.beginStructuredAcceptChildOutcome(ProtosStructuredPhase.CHILD);
         builder.emitLoadLocal(state);

@@ -558,6 +558,13 @@ abstract class ProtosNumericSelectionNode extends Node {
     /* Whether a selected behavior and its owner are the standard operator. */
     static boolean standard(String selector, Object receiver, Object behavior,
             ProtosObjectValue home, ProtosPrelude prelude) {
+        if ("==".equals(selector)) {
+            // Only a receiver of the standard Number domain selecting the
+            // installed Number equality at the Prelude's Number prototype.
+            return ProtosNumericValueSupport.isCurrentNumber(receiver)
+                    && ProtosStandardNumberEqualityProtocol.isCanonicalStandardEqualitySelection(
+                            behavior, home, prelude);
+        }
         if (receiver instanceof ProtosStringValue) {
             return "+".equals(selector)
                     && ProtosStandardStringProtocol.isStandardConcatenationBehavior(behavior);

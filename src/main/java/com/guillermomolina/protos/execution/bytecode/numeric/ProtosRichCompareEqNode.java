@@ -1,0 +1,118 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
+
+package com.guillermomolina.protos.execution;
+
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
+import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
+import com.oracle.truffle.api.bytecode.BytecodeNode;
+import com.oracle.truffle.api.bytecode.ConstantOperand;
+import com.oracle.truffle.api.bytecode.LocalAccessor;
+import com.oracle.truffle.api.bytecode.OperationProxy;
+import com.oracle.truffle.api.bytecode.StoreBytecodeIndex;
+import com.oracle.truffle.api.dsl.Bind;
+import com.oracle.truffle.api.dsl.Cached;
+import com.oracle.truffle.api.dsl.Cached.Shared;
+import com.oracle.truffle.api.dsl.Fallback;
+import com.oracle.truffle.api.dsl.GenerateInline;
+import com.oracle.truffle.api.dsl.GenerateUncached;
+import com.oracle.truffle.api.dsl.Specialization;
+import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.api.nodes.Node;
+
+/**
+ * The ordinary equality send {@code ==}. Primitive specializations execute
+ * only while the standard Number equality is the behavior selected for the
+ * original receiver under the caller's Prelude, and store the canonical
+ * Boolean of the standard numeric equality law directly. The generic
+ * specialization re-checks the selection: a standard selection answers
+ * canonical false for a non-Number argument and otherwise applies the
+ * complete numeric equality kernel; any other selection invokes the selected
+ * implementation through {@link ProtosNumericOverloadNode}, whose result,
+ * possibly a suspended invocation or a non-Boolean value, is the exact
+ * ordinary result. Unlike an ordering, the result of a non-standard
+ * equality is never validated.
+ *
+ * <p>The operation stores its result in the {@code outcome} local and
+ * answers whether that result must be composed as a continuation.
+ */
+@GenerateUncached
+@GenerateInline(false)
+@ConstantOperand(type = LocalAccessor.class, name = "outcome")
+@OperationProxy.Proxyable(allowUncached = true, storeBytecodeIndex = false)
+abstract class ProtosRichCompareEqNode extends Node {
+    static final String SELECTOR = "==";
+
+    abstract boolean execute(VirtualFrame frame, LocalAccessor outcome, Object left, Object right);
+
+    @Specialization(guards = "selection.execute(frame, SELECTOR, left)")
+    static boolean doLL(VirtualFrame frame, LocalAccessor outcome, long left, long right,
+            @Shared("selection") @Cached ProtosNumericSelectionNode selection,
+            @Bind("bytecodeOf($node)") BytecodeNode bytecode) {
+        outcome.setBoolean(bytecode, frame, left == right);
+        return false;
+    }
+
+    /* Float equality of the standard law is primitive binary64 equality. */
+    @Specialization(guards = "selection.execute(frame, SELECTOR, left)")
+    static boolean doDD(VirtualFrame frame, LocalAccessor outcome, double left, double right,
+            @Shared("selection") @Cached ProtosNumericSelectionNode selection,
+            @Bind("bytecodeOf($node)") BytecodeNode bytecode) {
+        outcome.setBoolean(bytecode, frame, left == right);
+        return false;
+    }
+
+    @Fallback
+    @StoreBytecodeIndex
+    @InliningCutoff
+    static boolean doGeneric(
+            VirtualFrame frame, LocalAccessor outcome, Object left, Object right,
+            @Bind Node node,
+            @Bind("rootOf($node)") ProtosBytecodeRootNode root,
+            @Shared("selection") @Cached ProtosNumericSelectionNode selection,
+            @Cached ProtosNumericOverloadNode overload,
+            @Bind("bytecodeOf($node)") BytecodeNode bytecode) {
+        if (selection.execute(frame, SELECTOR, left)) {
+            outcome.setBoolean(bytecode, frame, standardEquals(left, right));
+            return false;
+        }
+        return ProtosBytecodeRootNode.StoreAndTestContinuation.storeResult(
+                outcome, overload.execute(frame, false, SELECTOR, left, right,
+                root, bytecode, bytecode.getBytecodeIndex(frame)), frame, bytecode);
+    }
+
+    /*
+     * The standard Number equality over a Number receiver: canonical false
+     * for any non-Number argument, otherwise the exact numeric law, mixed
+     * representations included.
+     */
+    static boolean standardEquals(Object left, Object right) {
+        Object receiver = ProtosNumericValueSupport.guestValue(left);
+        Object argument = ProtosNumericValueSupport.guestValue(right);
+        return ProtosNumericValueSupport.isCurrentNumber(argument)
+                && ProtosStandardNumberEqualityProtocol.numericEquals(receiver, argument);
+    }
+
+    static ProtosBytecodeRootNode rootOf(Node node) {
+        return (ProtosBytecodeRootNode) BytecodeNode.get(node).getBytecodeRootNode();
+    }
+
+    /* The bytecode node executing this operation, resolved from the proxied node. */
+    static BytecodeNode bytecodeOf(Node node) {
+        return BytecodeNode.get(node);
+    }
+}

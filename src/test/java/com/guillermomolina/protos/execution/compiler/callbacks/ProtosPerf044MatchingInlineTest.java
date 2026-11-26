@@ -86,6 +86,8 @@ final class ProtosPerf044MatchingInlineTest {
         assertEquals(5, count(names, "CaseOfSelectedAction"));
         assertTrue(count(names, "CallNilaryMethod") >= 5,
                 "each alternative invokes its own action through its own site");
+        assertTrue(count(names, "CallBinaryMethod") >= 5,
+                "each matcher is sent match through the direct method send");
         assertEquals(0, count(names, "PrepareStructuredCaseOf"),
                 "no case matcher or action goes through the structured root");
         assertTrue(names.stream().anyMatch(name -> name.equals("branch")),
@@ -103,6 +105,33 @@ final class ProtosPerf044MatchingInlineTest {
         assertEquals(1, count(names, "StructuredMatcher"));
         assertEquals(0, count(names, "CaseOfCommitted"));
         assertEquals(1, count(names, "CaseOfSelectedAction"));
+    }
+
+    @Test
+    void ordinaryEqualityLowersToTheDirectEqualityOperation() {
+        List<String> names = names("""
+                left: 1
+                right: 2
+                left = 3
+                right = 3
+                same: left == right
+                same
+                """);
+        assertTrue(count(names, "RichCompareEq") >= 1,
+                "== uses the direct equality operation");
+        assertEquals(0, count(names, "RequireCanonicalBooleanResult"),
+                "an ordinary == result is not validated as an ordering is");
+    }
+
+    @Test
+    void standaloneMatchUsesTheDirectMethodSend() {
+        List<String> names = names("""
+                pattern: 1
+                subject: 1
+                pattern.match(subject)
+                """);
+        assertTrue(count(names, "CallBinaryMethod") >= 1,
+                "standalone match is no longer excluded from the direct send");
     }
 
     @Test

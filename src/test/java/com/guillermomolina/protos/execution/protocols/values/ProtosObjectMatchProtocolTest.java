@@ -122,4 +122,56 @@ class ProtosObjectMatchProtocolTest {
 
         assertSame(ProtosNullValue.INSTANCE, result);
     }
+
+    // PERF044: ordinary == runs through the direct equality operation; its
+    // standard Number law and every non-standard result are unchanged.
+
+    @Test
+    void perf044DirectNumberEqualityKeepsTheExactNumericLaw() throws Exception {
+        assertSame(Boolean.TRUE, evaluate(core(), """
+                nan: 0.0 / 0.0
+                inf: 1.0 / 0.0
+                big: 9223372036854775807 + 1
+                (1 == 1) && ((1 == 2) == false) &&
+                    (1.5 == 1.5) && (1 == 1.0) && (1.0 == 1) &&
+                    ((nan == nan) == false) && (0.0 == -0.0) &&
+                    (inf == inf) && ((inf == 9223372036854775807) == false) &&
+                    ((9007199254740993 == 9007199254740992.0) == false) &&
+                    (9007199254740992 == 9007199254740992.0) &&
+                    (big == big) && ((big == 9223372036854775807) == false) &&
+                    ((1 == "1") == false) && ((1 == null) == false)
+                """));
+    }
+
+    @Test
+    void perf044CustomEqualityResultIsReturnedUnvalidated() throws Exception {
+        assertSame(Boolean.TRUE, evaluate(core(), """
+                OddBase: { equalTo: (other) => 7 }
+                Odd: OddBase.alias("equalTo", "==")
+                Odd2: Odd()
+                (Odd2 == 1) == 7
+                """));
+    }
+
+    @Test
+    void perf044StandaloneMatchReturnsTheExactMatcherResult() throws Exception {
+        assertSame(Boolean.TRUE, evaluate(core(), """
+                Seven: { match: (subject) => 7 }
+                pattern: Seven
+                subject: 1
+                (pattern.match(subject) == 7) && (1.match(1) == true) &&
+                    (1.match(1.0) == true) && (Any.match(subject) == true)
+                """));
+    }
+
+    @Test
+    void perf044RedefinedObjectMatchIsSelected() throws Exception {
+        assertSame(Boolean.TRUE, evaluate(core(), """
+                Thing: {}
+                thing: Thing()
+                before: thing.match(thing)
+                Thing.createSlot("match", (subject) => "custom")
+                (before == true) && (thing.match(1) == "custom")
+                """));
+    }
 }
