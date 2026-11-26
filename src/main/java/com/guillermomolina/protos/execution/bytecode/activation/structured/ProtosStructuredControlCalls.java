@@ -137,6 +137,24 @@ final class ProtosStructuredControlCalls {
             return selectedArguments;
         }
 
+        /* The number of captures consumed from the successful matcher. */
+        int selectedCaptureCount() {
+            return selectedArguments().length;
+        }
+
+        /*
+         * The consumed capture at {@code position}, which the caller has
+         * validated against {@link #selectedCaptureCount}.
+         */
+        Object selectedCapture(int position) {
+            Object[] captures = selectedArguments();
+            if (position < 0 || position >= captures.length) {
+                throw new IllegalStateException(
+                        "Object.caseOf capture read outside the committed packet");
+            }
+            return captures[position];
+        }
+
         void acceptMatcher(Object outcome) {
             if (!needsMatcher()) {
                 throw new IllegalStateException(

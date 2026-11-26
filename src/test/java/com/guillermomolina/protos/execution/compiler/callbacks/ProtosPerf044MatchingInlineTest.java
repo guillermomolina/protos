@@ -186,6 +186,105 @@ final class ProtosPerf044MatchingInlineTest {
         assertSame(Boolean.TRUE, result);
     }
 
+    @Test
+    void admittedNilaryConstantActionsRunTheirBodiesInTheAlternative() throws Exception {
+        List<String> names = names(EXPLICIT);
+        // One admission per written alternative; the trailing loop invokes.
+        assertEquals(4, count(names, "IsInlineCaseAction"));
+        assertEquals(names, names(CONTEXTUAL),
+                "the contextual spelling gets the same admitted actions");
+        assertEquals(37L, run(EXPLICIT));
+        assertEquals(37L, run(CONTEXTUAL));
+    }
+
+    @Test
+    void admittedNilaryNonConstantActionRunsItsBody() throws Exception {
+        String source = """
+                value: 3
+                value.caseOf(%{
+                    1: () => 0
+                    3: () => (6 * 7) + 1
+                })
+                """;
+        assertEquals(2, count(names(source), "IsInlineCaseAction"));
+        assertEquals(43L, run(source));
+    }
+
+    @Test
+    void admittedPositionalActionsBindOneToFourCaptures() throws Exception {
+        String source = """
+                one: 5.caseOf(%{ Capture: (a) => a * 2 })
+                two: [1, 2].caseOf(%{ [Capture, Capture]: (a, b) => (a * 10) + b })
+                three: [1, 2, 3].caseOf(%{
+                    [Capture, Capture, Capture]: (a, b, c) => (a * 100) + (b * 10) + c
+                })
+                four: [1, 2, 3, 4].caseOf(%{
+                    [Capture, Capture, Capture, Capture]: (a, b, c, d) => (a * 1000) + (b * 100) + (c * 10) + d
+                })
+                (one == 10) && (two == 12) && (three == 123) && (four == 1234)
+                """;
+        assertEquals(4, count(names(source), "IsInlineCaseAction"));
+        assertSame(Boolean.TRUE, run(source));
+    }
+
+    @Test
+    void nonLiteralActionsUseTheFixedArityInvocation() throws Exception {
+        String source = """
+                pairAction: (a, b) => a - b
+                [9, 4].caseOf(%{ [Capture, Capture]: pairAction })
+                """;
+        List<String> names = names(source);
+        assertEquals(0, count(names, "IsInlineCaseAction"),
+                "an action that is not a written Closure is never run inline");
+        assertTrue(count(names, "CallBinaryMethod") >= 2,
+                "two captures reach the binary invocation");
+        assertTrue(count(names, "CallTernaryMethod") >= 1);
+        assertTrue(count(names, "CallQuaternaryMethod") >= 1);
+        assertEquals(5L, run(source));
+    }
+
+    @Test
+    void moreThanFourCapturesKeepTheVariableArityInvocation() throws Exception {
+        String source = """
+                [1, 2, 3, 4, 5].caseOf(%{
+                    [Capture, Capture, Capture, Capture, Capture]: (a, b, c, d, e) => a + b + c + d + e
+                })
+                """;
+        List<String> names = names(source);
+        assertEquals(0, count(names, "IsInlineCaseAction"),
+                "five parameters exceed the fixed invocations");
+        assertTrue(count(names, "CallVarargsMethod") >= 1);
+        assertEquals(15L, run(source));
+    }
+
+    @Test
+    void entriesPastTheUnrollBudgetKeepOrdinaryInvocation() throws Exception {
+        StringBuilder source = new StringBuilder("20.caseOf(%{\n");
+        for (int key = 0; key <= 20; key++) {
+            source.append("    ").append(key).append(": () => ").append(key * 2).append('\n');
+        }
+        source.append("})\n");
+        List<String> names = names(source.toString());
+        assertEquals(16, count(names, "IsInlineCaseAction"),
+                "only the unrolled alternatives admit their actions");
+        assertEquals(40L, run(source.toString()));
+    }
+
+    @Test
+    void dynamicTablesNeverAdmitAnInlineAction() throws Exception {
+        String source = """
+                cases: %{ 0: () => 1; Any: () => 2 }
+                5.caseOf(cases)
+                """;
+        assertEquals(0, count(names(source), "IsInlineCaseAction"));
+        assertEquals(2L, run(source));
+    }
+
+    private static Object run(String source) throws Exception {
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
+        return ProtosTestExecutionSupport.evaluate(source, prelude.newModuleActivation());
+    }
+
     private static int count(List<String> names, String operation) {
         return (int) names.stream().filter(name -> name.endsWith(operation)).count();
     }

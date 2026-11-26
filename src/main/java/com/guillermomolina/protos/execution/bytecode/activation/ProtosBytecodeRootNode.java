@@ -6224,30 +6224,104 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
-    /** Whether the committed caseOf action receives no captures. */
+    /**
+     * Whether the committed caseOf action receives exactly {@code count}
+     * consumed captures.
+     */
     @Operation
-    public static final class CaseOfSelectedNilary {
+    @ConstantOperand(type = int.class, name = "count")
+    public static final class CaseOfSelectedCaptureCount {
         @Specialization
-        public static boolean perform(PreparedCaseOfCall prepared) {
-            return prepared.selectedArguments().length == 0;
+        public static boolean perform(int count, PreparedCaseOfCall prepared) {
+            return prepared.selectedCaptureCount() == count;
         }
     }
 
-    /** Whether the committed caseOf action receives exactly one capture. */
+    /**
+     * The consumed capture at {@code position} of a committed caseOf action
+     * whose capture count the emitted code has already established.
+     */
     @Operation
-    public static final class CaseOfSelectedUnary {
-        @Specialization
-        public static boolean perform(PreparedCaseOfCall prepared) {
-            return prepared.selectedArguments().length == 1;
-        }
-    }
-
-    /** The single capture of a committed unary caseOf action. */
-    @Operation
+    @ConstantOperand(type = int.class, name = "position")
     public static final class CaseOfSelectedCapture {
         @Specialization
-        public static Object perform(PreparedCaseOfCall prepared) {
-            return prepared.selectedArguments()[0];
+        public static Object perform(int position, PreparedCaseOfCall prepared) {
+            return prepared.selectedCapture(position);
+        }
+    }
+
+    /**
+     * Whether the committed caseOf {@code action} is exactly the Closure
+     * {@code retained} that this root created for a written case entry, and
+     * invoking it would run that Closure's own source body through the
+     * canonical standard Closure call: so that body, emitted in this root by
+     * the compiler, may run in its place, binding exactly the {@code count}
+     * captures its fixed parameters receive. It never invokes anything and
+     * signals nothing; a false answer keeps the ordinary invocation.
+     *
+     * <p>The Closure definition is final, so identity with the retained
+     * value proves the emitted source definition. The canonical {@code call}
+     * selection is the established one of the nilary call site: a cached
+     * Shape proves only the presence of a local {@code call} slot, whose
+     * value is checked on every execution.
+     */
+    @Operation
+    @ConstantOperand(type = int.class, name = "count")
+    public static final class IsInlineCaseAction {
+        @Specialization(
+                guards = {
+                    "action == retained",
+                    "isSourceFunction(retained)",
+                    "!retained.requiresContextLocalExecutionProjectionForRuntime()",
+                    "cachedShape.check(retained)"
+                },
+                limit = "2")
+        public static boolean doCached(
+                int count,
+                PreparedCaseOfCall prepared,
+                ProtosClosureValue action,
+                ProtosClosureValue retained,
+                @Cached(value = "rootCallSelection()", allowUncached = true)
+                        ProtosStandardObjectProtocol.CanonicalRootCallSelection rootSelection,
+                @Cached(value = "retained.getShape()", allowUncached = true)
+                        Shape cachedShape,
+                @Cached(value = "callSlotGetter(cachedShape)", allowUncached = true,
+                        neverDefault = false)
+                        PropertyGetter cachedLocalCallGetter) {
+            return prepared.selectedCaptureCount() == count
+                    && ProtosFunctionCallDispatchers.hasCanonicalCallSelectionForShape(
+                            retained, rootSelection, cachedShape, cachedLocalCallGetter);
+        }
+
+        /* Another committed action (a dynamic or reassociated one) is never inlined. */
+        @Specialization(guards = "action != retained")
+        public static boolean doDistinct(
+                int count, PreparedCaseOfCall prepared, Object action, Object retained) {
+            return false;
+        }
+
+        @Specialization(replaces = "doCached")
+        public static boolean doGeneric(
+                int count, PreparedCaseOfCall prepared, Object action, Object retained) {
+            return action == retained
+                    && prepared.selectedCaptureCount() == count
+                    && retained instanceof ProtosClosureValue closure
+                    && isSourceFunction(closure)
+                    && !closure.requiresContextLocalExecutionProjectionForRuntime()
+                    && ProtosFunctionCallDispatchers.hasCanonicalCallSelection(
+                            closure, rootCallSelection());
+        }
+
+        static boolean isSourceFunction(ProtosClosureValue closure) {
+            return ProtosFunctionCallDispatchers.CallNode.isSourceFunction(closure);
+        }
+
+        static ProtosStandardObjectProtocol.CanonicalRootCallSelection rootCallSelection() {
+            return ProtosStandardObjectProtocol.canonicalRootCallSelectionOrNullForRuntime();
+        }
+
+        static PropertyGetter callSlotGetter(Shape shape) {
+            return ProtosFunctionCallDispatchers.callSlotGetter(shape);
         }
     }
 
