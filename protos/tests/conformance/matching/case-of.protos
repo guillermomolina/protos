@@ -325,6 +325,47 @@ tests: [
         Assertions.require(0.caseOf(cases) == "zero")
         Assertions.require(7.caseOf(cases) == 7)
     }),
+    Test("contextual match repeatedly selects the default", () => {
+        select: () => {
+            value: 3
+            match(value) {
+                0: 11
+                1: 23
+                2: 37
+                Any: 53
+            }
+        }
+        i: 0
+        while(i < 2000) {
+            Assertions.require(select() == 53)
+            i = i + 1
+        }
+    }),
+    Test("contextual integer matching repeats inside a while loop", () => {
+        accumulate: () => {
+            i: 0
+            sink: 0
+
+            while(i < 1000) {
+                value: i % 4
+                result: match(value) {
+                    0: 11
+                    1: 23
+                    2: 37
+                    Any: 53
+                }
+                sink = sink + result
+                i = i + 1
+            }
+
+            sink
+        }
+        invocation: 0
+        while(invocation < 10) {
+            Assertions.require(accumulate() == 31000)
+            invocation = invocation + 1
+        }
+    }),
     Test("case of evaluates its subject once", () => {
         state: { count: 0 }
         subject: () => {

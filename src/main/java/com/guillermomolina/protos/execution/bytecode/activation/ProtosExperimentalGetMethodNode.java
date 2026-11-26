@@ -50,7 +50,9 @@ import com.oracle.truffle.api.strings.TruffleString;
 /**
  * Proxied as the {@code GetMethod} operation: the selection half of every
  * ordinary send. The receiver was evaluated once by the caller bytecode; the
- * selector is a constant operand.
+ * selector is a constant operand. Numeric families consume an Object receiver
+ * and use explicit Long or Double representation guards for SmallInteger and
+ * primitive Float selection.
  * Ordinary selection returns a {@link ProtosBoundMethod} carrying the
  * selected Closure, receiver and methodHome. Direct selection returns the
  * raw Closure only when the receiver itself owns the selected slot (an
@@ -90,7 +92,7 @@ import com.oracle.truffle.api.strings.TruffleString;
  * <p>The complete ordinary selection ({@link #select}) is reached through
  * one general entry per receiver family, each delimited by the same
  * representation guard as its cached entries: Shape-backed ordinary objects
- * ({@link #doObjectGeneral}), SmallInteger ({@link #doLongGeneral}), double
+ * ({@link #doObjectGeneral}), Long-backed SmallInteger ({@link #doLongGeneral}), Double-backed Float
  * ({@link #doDoubleGeneral}), represented Float
  * ({@link #doFloatValueGeneral}), String ({@link #doStringGeneral}),
  * Boolean and null ({@link #doRootDelegatedGeneral}), and every remaining
@@ -198,6 +200,7 @@ abstract class ProtosExperimentalGetMethodNode extends Node {
     @Specialization(
             excludeForUncached = true,
             guards = {
+                "isLong(receiver)",
                 "selector == cachedSelector",
                 "prelude == cachedPrelude",
                 "cachedPrelude != null",
@@ -209,7 +212,7 @@ abstract class ProtosExperimentalGetMethodNode extends Node {
             VirtualFrame frame,
             TruffleString selector,
             boolean direct,
-            long receiver,
+            Object receiver,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
             @Bind("preludeOf(frame, root)") ProtosPrelude prelude,
             @Cached("selector") TruffleString cachedSelector,
@@ -228,6 +231,7 @@ abstract class ProtosExperimentalGetMethodNode extends Node {
     @Specialization(
             excludeForUncached = true,
             guards = {
+                "isDouble(receiver)",
                 "selector == cachedSelector",
                 "prelude == cachedPrelude",
                 "cachedPrelude != null",
@@ -239,7 +243,7 @@ abstract class ProtosExperimentalGetMethodNode extends Node {
             VirtualFrame frame,
             TruffleString selector,
             boolean direct,
-            double receiver,
+            Object receiver,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root,
             @Bind("preludeOf(frame, root)") ProtosPrelude prelude,
             @Cached("selector") TruffleString cachedSelector,
@@ -370,25 +374,25 @@ abstract class ProtosExperimentalGetMethodNode extends Node {
     }
 
     /* A SmallInteger receiver no cached entry admits. */
-    @Specialization
+    @Specialization(guards = "isLong(receiver)")
     @InliningCutoff
     static Object doLongGeneral(
             VirtualFrame frame,
             TruffleString selector,
             boolean direct,
-            long receiver,
+            Object receiver,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root) {
         return selectComplete(frame, selector, receiver, root);
     }
 
     /* A double receiver no cached entry admits. */
-    @Specialization
+    @Specialization(guards = "isDouble(receiver)")
     @InliningCutoff
     static Object doDoubleGeneral(
             VirtualFrame frame,
             TruffleString selector,
             boolean direct,
-            double receiver,
+            Object receiver,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root) {
         return selectComplete(frame, selector, receiver, root);
     }
@@ -480,14 +484,22 @@ abstract class ProtosExperimentalGetMethodNode extends Node {
         return ProtosBytecodeRootNode.StandardKeySelectionNode.isRootDelegated(receiver);
     }
 
+    static boolean isLong(Object receiver) {
+        return receiver instanceof Long;
+    }
+
+    static boolean isDouble(Object receiver) {
+        return receiver instanceof Double;
+    }
+
     /*
      * Classifies only which general entry owns the receiver: true for every
      * receiver outside the Shape-backed ordinary, SmallInteger, Float,
      * String and root-delegated families. It decides no delegation.
      */
     static boolean isOtherRepresentation(Object receiver) {
-        if (receiver instanceof Long
-                || receiver instanceof Double
+        if (isLong(receiver)
+                || isDouble(receiver)
                 || receiver instanceof ProtosFloatValue
                 || receiver instanceof ProtosStringValue
                 || isRootDelegated(receiver)) {
