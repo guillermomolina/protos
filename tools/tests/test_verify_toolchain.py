@@ -17,6 +17,7 @@
 from __future__ import print_function
 
 import json
+import re
 import runpy
 import subprocess
 import sys
@@ -55,12 +56,42 @@ STALE_CI_IMAGE = (
 )
 
 
+REPOSITORY = Path(__file__).resolve().parents[2]
+CACHE_ACTION_PATH = Path(".github") / "actions" / "maven-cache-restore" / "action.yml"
+DIAGNOSTICS_PATH = Path(".github") / "workflows" / "ci-diagnostics.yml"
+
+RESTORE_STEP = """      - name: Restore Maven dependency cache
+        id: maven-cache
+        uses: ./.github/actions/maven-cache-restore
+"""
+SAVE_KEY = "${{ steps.maven-cache.outputs.cache-key }}"
+SAVE_STEP = """      - name: Save Maven dependency cache
+        if: success() && steps.maven-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v6
+        with:
+          path: /root/.m2/repository
+          key: %s
+""" % SAVE_KEY
+
+
 def write(path, text):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
 
 
-def ci_job(name, image, command, cache_action="actions/cache@v6", workers="2"):
+def cache_action_text():
+    # The shared restore action is exercised as committed.
+    return (REPOSITORY / CACHE_ACTION_PATH).read_text(encoding="utf-8")
+
+
+def diagnostics_text(image):
+    # The committed diagnostic workflow, rebound to the fixture CI image.
+    text = (REPOSITORY / DIAGNOSTICS_PATH).read_text(encoding="utf-8")
+    return re.sub(r"(?m)^(\s+image: ).+$", lambda m: m.group(1) + image, text)
+
+
+def ci_job(name, image, command, cache_action="actions/cache/save@v6", workers="2"):
     extra = ""
     if name == "prepare":
         extra = """    outputs:
@@ -80,13 +111,7 @@ def ci_job(name, image, command, cache_action="actions/cache@v6", workers="2"):
     elif name == "java-serial":
         extra = "    needs: prepare\n"
     body = "  %s:\n%s    container:\n      image: %s\n    steps:\n" % (name, extra, image)
-    body += """      - uses: actions/cache@v6
-        with:
-          path: /root/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven-
-""".replace("actions/cache@v6", cache_action)
+    body += RESTORE_STEP
     if name in ("java-parallel", "java-serial"):
         body += """      - uses: actions/download-artifact@v4
         with:
@@ -94,11 +119,12 @@ def ci_job(name, image, command, cache_action="actions/cache@v6", workers="2"):
 """
     body += "".join("      - name: Execute target\n        run: %s\n" % c for c in command.split("\n"))
     if name == "prepare":
+        body += SAVE_STEP.replace("actions/cache/save@v6", cache_action)
         body += '      - run: python3 tools/ci_java_test_shards.py outputs >> "$GITHUB_OUTPUT"\n'
     return body
 
 
-def ci_workflow(test_image, test_command, cache_action="actions/cache@v6", workers="2"):
+def ci_workflow(test_image, test_command, cache_action="actions/cache/save@v6", workers="2"):
     commands = {
         "prepare": "make prepare-java-test-shards",
         "compilerability": "make check",
@@ -228,9 +254,9 @@ def make_fixture(
     test_command = "make test-protos" if ci_command_drift else "make test-java-parallel"
     test_workers = "6" if ci_workers_drift else "2"
     test_cache_action = (
-        "actions/cache@v5"
+        "actions/cache/save@v5"
         if ci_cache_drift
-        else "actions/cache@v6"
+        else "actions/cache/save@v6"
     )
     if old_c_state:
         dist_components = "24.0.0"
@@ -257,6 +283,8 @@ actual_version=25.0.5.0.3
             test_workers,
         ),
     )
+    write(root / CACHE_ACTION_PATH, cache_action_text())
+    write(root / DIAGNOSTICS_PATH, diagnostics_text(test_ci_image))
 
     if old_c_state:
         write(
@@ -546,8 +574,253 @@ Java version: 25.0.5.0.3, vendor: GraalVM Community, runtime: /opt/graalvm-commu
                     "unbounded worker configuration accepted: " + before)
         write(workflow, good_ci.replace(CI_IMAGE, STALE_CI_IMAGE, 1))
         require(workflow_image(workflow, "prepare") != CI_IMAGE, "single-job image drift accepted")
-        write(workflow, good_ci.replace("actions/cache@v6", "actions/cache@v5", 1))
+        write(workflow, good_ci.replace("actions/cache/save@v6", "actions/cache/save@v5", 1))
         require("drift" in workflow_cache(workflow, "prepare"), "single-job cache drift accepted")
+
+        # Maven cache lifecycle: one shared restore per job, one explicit
+        # non-blocking save in prepare consuming the precomputed key.
+        expected_cache = module["MAVEN_CACHE_EXPECTED"]
+        write(workflow, good_ci)
+        for lane in ("prepare", "compilerability", "java-parallel", "java-serial",
+                     "protos-suite", "protos-foreign", "native-image"):
+            require(workflow_cache(workflow, lane) == expected_cache,
+                    "good cache lifecycle rejected: " + lane)
+        combined = good_ci.replace(
+            "        uses: ./.github/actions/maven-cache-restore\n",
+            "        uses: actions/cache@v6\n        with:\n          path: /root/.m2/repository\n"
+            "          key: k\n", 1)
+        hashed_key = "${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}"
+        lifecycle_drift = (
+            ("combined cache action", "prepare", combined),
+            ("hashFiles save key", "prepare", good_ci.replace(SAVE_KEY, hashed_key, 1)),
+            ("recomputed save key", "prepare",
+             good_ci.replace(SAVE_KEY, "${{ runner.os }}-maven-${{ github.sha }}", 1)),
+            ("incorrect save path", "prepare",
+             good_ci.replace("          path: /root/.m2/repository\n", "          path: /root/.m2\n", 1)),
+            ("incorrect save version", "prepare",
+             good_ci.replace("actions/cache/save@v6", "actions/cache/save@v5", 1)),
+            ("missing save", "prepare", good_ci.replace(SAVE_STEP, "", 1)),
+            ("blocking save", "prepare",
+             good_ci.replace("        continue-on-error: true\n", "", 1)),
+            ("missing shared restore", "native-image",
+             good_ci.replace("  native-image:\n    container:\n      image: %s\n    steps:\n%s"
+                             % (CI_IMAGE, RESTORE_STEP),
+                             "  native-image:\n    container:\n      image: %s\n    steps:\n" % CI_IMAGE, 1)),
+            ("save from unexpected job", "compilerability",
+             good_ci.replace("        run: make check\n", "        run: make check\n" + SAVE_STEP, 1)),
+            ("restore after validation", "compilerability",
+             good_ci.replace("  compilerability:\n    container:\n      image: %s\n    steps:\n%s"
+                             "      - name: Execute target\n        run: make check\n"
+                             % (CI_IMAGE, RESTORE_STEP),
+                             "  compilerability:\n    container:\n      image: %s\n    steps:\n"
+                             "      - name: Execute target\n        run: make check\n%s"
+                             % (CI_IMAGE, RESTORE_STEP), 1)),
+        )
+        for label, lane, text in lifecycle_drift:
+            require(text != good_ci, "cache drift fixture did not apply: " + label)
+            write(workflow, text)
+            require(workflow_cache(workflow, lane) != expected_cache,
+                    "cache lifecycle drift accepted: " + label)
+        for label, text in (
+                ("combined cache action", combined),
+                ("hashFiles expression", good_ci.replace(SAVE_KEY, hashed_key, 1)),
+                ("tolerant validation step",
+                 good_ci.replace("run: make check", "continue-on-error: true\n        run: make check", 1)),
+                ("tolerant aggregation step",
+                 good_ci.replace("      - run: python3 tools/ci_validation_aggregate.py",
+                                 "      - continue-on-error: true\n        run: python3 tools/ci_validation_aggregate.py", 1)),
+                ("job-level tolerance",
+                 good_ci.replace("  native-image:\n", "  native-image:\n    continue-on-error: true\n", 1)),
+                ("tolerance with expression",
+                 good_ci.replace("        continue-on-error: true\n",
+                                 "        continue-on-error: ${{ always() }}\n", 1))):
+            require(text != good_ci, "suppression fixture did not apply: " + label)
+            write(workflow, text)
+            require(workflow_command(workflow, "aggregate") != "distributed validation gates",
+                    "failure suppression accepted: " + label)
+
+        action_contract = module["maven_cache_action_contract"]
+        action_root = tmp / "cache-action"
+        good_action = cache_action_text()
+        write(action_root / CACHE_ACTION_PATH, good_action)
+        require(action_contract(action_root), "shared restore action rejected")
+        for label, before, after in (
+                ("incorrect action path", "path: /root/.m2/repository", "path: /root/.m2"),
+                ("incorrect restore version", "actions/cache/restore@v6", "actions/cache/restore@v5"),
+                ("combined action", "actions/cache/restore@v6", "actions/cache@v6"),
+                ("hashFiles key", "key: ${{ steps.key.outputs.key }}",
+                 "key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}"),
+                ("lost restore prefix", "          ${{ runner.os }}-maven-\n", "          maven-\n"),
+                ("missing cache-hit output", "  cache-hit:\n", "  hit:\n")):
+            require(good_action.count(before) == 1, "action fixture anchor missing: " + label)
+            write(action_root / CACHE_ACTION_PATH, good_action.replace(before, after, 1))
+            require(not action_contract(action_root), "shared action drift accepted: " + label)
+        (action_root / CACHE_ACTION_PATH).unlink()
+        require(not action_contract(action_root), "missing shared restore action accepted")
+
+        diagnostics_contract = module["diagnostics_workflow_contract"]
+        expected_diagnostics = module["DIAGNOSTIC_EXPECTED"]
+        push_branches = module["workflow_push_branches"]
+        permissions = module["workflow_permissions"]
+        selection = module["diagnostic_selection"]
+
+        # Line-bounded extraction never consumes later workflow sections.
+        bounded = ("on:\n  push:\n    branches:\n      - a\n  workflow_dispatch:\n    inputs:\n"
+                   "      x:\n        options:\n          - y\n"
+                   "permissions:\n  contents: read\n  packages: read\n\n"
+                   "concurrency:\n  group: g\nenv:\n  A: \"1\"\njobs:\n  j:\n    runs-on: x\n")
+        require(push_branches(bounded) == ["a"], "branch extraction consumed later sections")
+        require(permissions(bounded) == {"contents": "read", "packages": "read"},
+                "permissions extraction consumed later sections")
+        require(permissions("permissions:\n  contents: read\n    nested: x\n") is None,
+                "malformed permissions block accepted")
+
+        diag_root = tmp / "diagnostics"
+        good_diag = diagnostics_text(CI_IMAGE)
+        require(push_branches(good_diag) == ["ci-validation", "ci-validation-http", "ci-validation-java-2"],
+                "diagnostic branches not extracted exactly")
+        require(permissions(good_diag) == {"contents": "read", "packages": "read"},
+                "diagnostic permissions not extracted exactly")
+        require(selection(good_diag, "push", "ci-validation-http")
+                == {"LANE": "http-root-failure", "SHARD": "1", "REPETITIONS": "20"},
+                "HTTP bootstrap branch does not select 20 repetitions")
+        require(selection(good_diag, "push", "ci-validation-java-2")
+                == {"LANE": "java-shard", "SHARD": "2", "REPETITIONS": "1"},
+                "Java bootstrap branch does not select shard 2")
+        require(selection(good_diag, "push", "ci-validation")["LANE"] == "cache",
+                "cache bootstrap branch does not select the cache lane")
+        require(selection(good_diag, "push", "main")["LANE"] == "invalid",
+                "an undeclared branch selects a runnable lane")
+
+        def diagnostic_drift(text, image=CI_IMAGE):
+            write(diag_root / DIAGNOSTICS_PATH, text)
+            result = diagnostics_contract(diag_root, image)
+            if result == expected_diagnostics:
+                return set()
+            match = re.match(r"^<drift:ci\.diagnostics:(.+)>$", result)
+            return set(match.group(1).split(",")) if match else {result}
+
+        def remove_step(text, name):
+            begin = text.index("      - name: %s\n" % name)
+            finish = text.index("      - name: ", begin + 1)
+            return text[:begin] + text[finish:]
+
+        def insert_after(text, anchor, addition):
+            require(text.count(anchor) == 1, "diagnostic fixture anchor not unique: " + anchor)
+            return text.replace(anchor, anchor + addition, 1)
+
+        require(diagnostic_drift(good_diag) == set(), "diagnostic workflow rejected")
+        require(diagnostic_drift(good_diag, STALE_CI_IMAGE) == {"image"},
+                "stale expected image not isolated to the image contract")
+
+        suppress = "        continue-on-error: true\n"
+        cases = (
+            ("stale workflow image", good_diag.replace(CI_IMAGE, STALE_CI_IMAGE), {"image"}),
+            ("automatic main execution",
+             good_diag.replace("      - ci-validation\n", "      - main\n", 1), {"branches"}),
+            ("additional main branch",
+             insert_after(good_diag, "      - ci-validation-java-2\n", "      - main\n"), {"branches"}),
+            ("wildcard branch",
+             insert_after(good_diag, "      - ci-validation-java-2\n", "      - ci-validation-*\n"), {"branches"}),
+            ("pull request trigger",
+             good_diag.replace("  workflow_dispatch:\n", "  pull_request:\n  workflow_dispatch:\n", 1), {"triggers"}),
+            ("pull request target trigger",
+             good_diag.replace("  workflow_dispatch:\n", "  pull_request_target:\n  workflow_dispatch:\n", 1),
+             {"triggers"}),
+            ("changed HTTP lane mapping",
+             good_diag.replace("'ci-validation-http' && 'http-root-failure'", "'ci-validation-http' && 'cache'", 1),
+             {"push_lanes"}),
+            ("changed HTTP repetitions",
+             good_diag.replace("'ci-validation-http' && '20'", "'ci-validation-http' && '5'", 1), {"push_lanes"}),
+            ("changed Java shard",
+             good_diag.replace("'ci-validation-java-2' && '2'", "'ci-validation-java-2' && '3'", 1), {"push_lanes"}),
+            ("runnable fallback lane",
+             good_diag.replace("|| 'invalid' }}", "|| 'cache' }}", 1), {"push_lanes"}),
+            ("unknown input",
+             good_diag.replace("      shard:\n", "      command:\n        description: Shell\n"
+                               "        type: string\n      shard:\n", 1), {"inputs.declaration"}),
+            ("unrestricted lane input",
+             good_diag.replace("        type: choice\n        default: cache\n",
+                               "        type: string\n        default: cache\n", 1), {"inputs.declaration"}),
+            ("unbounded repetitions",
+             good_diag.replace('          - "20"\n', '          - "20"\n          - "1000"\n', 1), {"inputs.choices"}),
+            ("missing lane choice",
+             good_diag.replace("          - http-root-failure\n", "", 1), {"inputs.choices"}),
+            ("missing shard validation",
+             good_diag.replace("            1|2|3|4) ;;\n", "            *) ;;\n", 1), {"input_validation"}),
+            ("permissive lane validation",
+             good_diag.replace("|http-root-failure) ;;", "|http-root-failure|*) ;;", 1), {"input_validation"}),
+            ("write permission",
+             good_diag.replace("  contents: read\n", "  contents: write\n", 1), {"permissions", "isolation"}),
+            ("different runner",
+             good_diag.replace("    runs-on: ubuntu-latest\n", "    runs-on: self-hosted\n", 1), {"runner"}),
+            ("worker drift",
+             good_diag.replace('  JAVA_TEST_JOBS: "2"\n', '  JAVA_TEST_JOBS: "4"\n', 1), {"workers"}),
+            ("no obsolete cancellation",
+             good_diag.replace("  cancel-in-progress: true\n", "  cancel-in-progress: false\n", 1), {"concurrency"}),
+            ("hashFiles expression",
+             good_diag.replace("key: ${{ steps.maven-cache.outputs.cache-key }}",
+                               "key: ${{ hashFiles('**/pom.xml') }}", 1), {"cache_lifecycle"}),
+            ("bypassed shared restore",
+             good_diag.replace("uses: ./.github/actions/maven-cache-restore", "uses: actions/cache/restore@v6", 1),
+             {"cache_lifecycle"}),
+            ("missing diagnostic save", remove_step(good_diag, "Save cache round-trip marker"), {"cache_roundtrip"}),
+            ("missing exact restore", remove_step(good_diag, "Restore cache round-trip marker"), {"cache_roundtrip"}),
+            ("fallback restore keys",
+             insert_after(good_diag, "          fail-on-cache-miss: true\n",
+                          "          restore-keys: protos-ci-diagnostic-roundtrip-\n"), {"cache_roundtrip"}),
+            ("missing marker removal", remove_step(good_diag, "Remove local cache round-trip marker"),
+             {"cache_roundtrip"}),
+            ("missing marker verification", remove_step(good_diag, "Verify cache round-trip marker"),
+             {"cache_roundtrip"}),
+            ("suppressed marker verification",
+             insert_after(good_diag, "      - name: Verify cache round-trip marker\n", suppress),
+             {"failure_suppression"}),
+            ("suppressed HTTP diagnostic",
+             insert_after(good_diag, "      - name: Repeat HTTP root-actor failure test\n", suppress),
+             {"failure_suppression"}),
+            ("suppressed Java shard",
+             insert_after(good_diag, "      - name: Run selected Java parallel partition\n", suppress),
+             {"failure_suppression"}),
+            ("ignored Java shard status",
+             good_diag.replace("tee target/ci-logs/java-parallel.log\n",
+                               "tee target/ci-logs/java-parallel.log || true\n", 1), {"failure_suppression"}),
+            ("HTTP automatic retries",
+             good_diag.replace("-Dsurefire.rerunFailingTestsCount=0", "-Dsurefire.rerunFailingTestsCount=2", 1),
+             {"http_execution"}),
+            ("HTTP accepts no executed test",
+             good_diag.replace("status=97", "status=0", 1), {"http_execution"}),
+            ("aggregation replacement",
+             good_diag.replace("      - name: Record lane wall time\n",
+                               "      - name: Aggregate\n        run: python3 tools/ci_validation_aggregate.py\n"
+                               "      - name: Record lane wall time\n", 1), {"isolation"}),
+            ("foreign artifact name",
+             good_diag.replace("name: ci-diagnostics-${{ env.LANE }}", "name: diag-${{ env.LANE }}", 1),
+             {"artifacts"}),
+            ("mandatory artifact name",
+             good_diag.replace("name: ci-diagnostics-${{ env.LANE }}", "name: java-evidence-${{ env.LANE }}", 1),
+             {"artifacts", "isolation"}),
+        )
+        for label, text, expected in cases:
+            require(text != good_diag, "diagnostic fixture did not apply: " + label)
+            actual = diagnostic_drift(text)
+            require(actual == expected,
+                    "diagnostic drift %s reported %s, expected %s" % (label, sorted(actual), sorted(expected)))
+        (diag_root / DIAGNOSTICS_PATH).unlink()
+        require(diagnostics_contract(diag_root, CI_IMAGE) != expected_diagnostics,
+                "missing diagnostic workflow accepted")
+
+        # The toolchain audit reports the specific failing diagnostic contract.
+        root = tmp / "diagnostic-branch-drift"
+        make_fixture(root)
+        result = run(verifier, root, "check", "development")
+        require(result.returncode == 0, "aligned diagnostic fixture failed", result)
+        write(root / DIAGNOSTICS_PATH,
+              diagnostics_text(CI_IMAGE).replace("      - ci-validation\n", "      - main\n", 1))
+        result = run(verifier, root, "check", "development")
+        require(result.returncode == 1, "diagnostic branch drift did not fail closed", result)
+        require("<drift:ci.diagnostics:branches>" in result.stdout,
+                "diagnostic drift did not name the failing contract", result)
 
         root = tmp / "ci-command-drift"
         make_fixture(root, ci_command_drift=True)

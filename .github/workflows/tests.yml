@@ -53,12 +53,8 @@ jobs:
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Restore Maven dependency cache
-        uses: actions/cache@v6
-        with:
-          path: /root/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven-
+        id: maven-cache
+        uses: ./.github/actions/maven-cache-restore
 
       - name: Report available CPU resources
         run: |
@@ -97,6 +93,15 @@ jobs:
           path: |
             target/java-test-shards/plan.json
             target/java-test-shards/*.includes
+      # Explicit, non-blocking save with the key computed before validation;
+      # no post-job step recomputes the key over a populated workspace.
+      - name: Save Maven dependency cache
+        if: success() && steps.maven-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v6
+        with:
+          path: /root/.m2/repository
+          key: ${{ steps.maven-cache.outputs.cache-key }}
       - name: Record lane wall time
         if: always()
         run: |
@@ -136,12 +141,8 @@ jobs:
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Restore Maven dependency cache
-        uses: actions/cache@v6
-        with:
-          path: /root/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven-
+        id: maven-cache
+        uses: ./.github/actions/maven-cache-restore
 
       - name: Report available CPU resources
         run: |
@@ -215,12 +216,8 @@ jobs:
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Restore Maven dependency cache
-        uses: actions/cache@v6
-        with:
-          path: /root/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven-
+        id: maven-cache
+        uses: ./.github/actions/maven-cache-restore
 
       - name: Report available CPU resources
         run: |
@@ -295,12 +292,8 @@ jobs:
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Restore Maven dependency cache
-        uses: actions/cache@v6
-        with:
-          path: /root/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven-
+        id: maven-cache
+        uses: ./.github/actions/maven-cache-restore
 
       - name: Report available CPU resources
         run: |
@@ -370,12 +363,8 @@ jobs:
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Restore Maven dependency cache
-        uses: actions/cache@v6
-        with:
-          path: /root/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven-
+        id: maven-cache
+        uses: ./.github/actions/maven-cache-restore
 
       - name: Report available CPU resources
         run: |
@@ -443,12 +432,8 @@ jobs:
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Restore Maven dependency cache
-        uses: actions/cache@v6
-        with:
-          path: /root/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven-
+        id: maven-cache
+        uses: ./.github/actions/maven-cache-restore
 
       - name: Report available CPU resources
         run: |
@@ -516,12 +501,8 @@ jobs:
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Restore Maven dependency cache
-        uses: actions/cache@v6
-        with:
-          path: /root/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven-
+        id: maven-cache
+        uses: ./.github/actions/maven-cache-restore
 
       - name: Report available CPU resources
         run: |

@@ -41,6 +41,7 @@ DEVELOPMENT_BINDINGS = {
     "ci.tests.command",
     "ci.tests.workers",
     "ci.tests.maven_cache",
+    "ci.diagnostics.contract",
 }
 
 MAVEN_PROVISIONING_MODEL = "ol10-rpm:maven+maven-unbound"
@@ -511,7 +512,8 @@ def workflow_job_test_command(path, job_id):
     valid = len(ids) == len(expected) and set(ids) == expected
     valid = valid and "\n  push:\n" in text and "\n  pull_request:\n" in text
     valid = valid and "pull_request_target" not in text
-    valid = valid and "continue-on-error:" not in text
+    valid = valid and continue_on_error_confined(text)
+    valid = valid and "hashFiles(" not in text and not re.search(r"actions/cache@", text)
     valid = valid and "devcontainers/ci@" not in text
     shells = re.findall(r"(?m)^\s*shell: (.+)$", text)
     valid = valid and shells == ["bash"]
@@ -560,21 +562,409 @@ def workflow_job_test_workers(path, job_id):
     return "4 shards; Java=2 Protos=2" if bounded else "<drift:distributed.workers>"
 
 
+MAVEN_CACHE_ACTION = "./.github/actions/maven-cache-restore"
+MAVEN_CACHE_SAVE_JOB = "prepare"
+MAVEN_CACHE_EXPECTED = "shared restore; computed key; explicit prepare save"
+MAVEN_CACHE_KEY_REF = "${{ steps.maven-cache.outputs.cache-key }}"
+
+
+def workflow_step_blocks(text):
+    # Split a job body into its step blocks (six-space "- " list items).
+    return re.split(r"(?m)^      - ", text)[1:]
+
+
+def continue_on_error_confined(text):
+    # Failure tolerance is permitted only on explicit Maven cache save steps;
+    # job-level and validation/aggregation tolerance stay forbidden.
+    steps = []  # type: List[List[str]]
+    for line in text.splitlines():
+        if line.startswith("      - "):
+            steps.append([line])
+        elif line.startswith("      ") and steps:
+            steps[-1].append(line)
+        else:
+            if "continue-on-error" in line:
+                return False
+            steps.append([])
+    for step in steps:
+        body = "\n".join(step)
+        tolerances = re.findall(r"(?m)^\s*-?\s*continue-on-error:\s*(.*?)\s*$", body)
+        if not tolerances:
+            continue
+        if tolerances != ["true"]:
+            return False
+        if not re.search(r"(?m)^\s*uses: actions/cache/save@v6\s*$", body):
+            return False
+        if re.search(r"(?m)^\s*-?\s*run:", body):
+            return False
+    return True
+
+
+def maven_cache_action_contract(root):
+    # type: (Path) -> bool
+    path = root / ".github" / "actions" / "maven-cache-restore" / "action.yml"
+    if not path.is_file():
+        return False
+    text = path.read_text(encoding="utf-8")
+    valid = bool(re.search(r"(?m)^  using: composite\s*$", text))
+    valid = valid and "hashFiles(" not in text and not re.search(r"actions/cache@", text)
+    restores = re.findall(r"(?m)^\s*uses: (actions/cache/restore@\S+)\s*$", text)
+    valid = valid and restores == ["actions/cache/restore@v6"]
+    valid = valid and "actions/cache/save@" not in text
+    valid = valid and bool(re.search(r"(?m)^\s*path: /root/\.m2/repository\s*$", text))
+    valid = valid and bool(re.search(
+        r"(?m)^\s*key: " + re.escape("${{ steps.key.outputs.key }}") + r"\s*$", text))
+    valid = valid and bool(re.search(
+        r"(?m)^\s*restore-keys: \|\n\s*" + re.escape("${{ runner.os }}-maven-") + r"\s*$", text))
+    for token in ("import hashlib", "hashlib.sha256", "ls-files", "missing root pom.xml",
+                  "value: ${{ steps.key.outputs.key }}", "value: ${{ steps.restore.outputs.cache-hit }}"):
+        valid = valid and token in text
+    valid = valid and bool(re.search(r"(?m)^  cache-key:\s*$", text))
+    valid = valid and bool(re.search(r"(?m)^  cache-hit:\s*$", text))
+    key_step = text.find("id: key")
+    restore_step = text.find("uses: actions/cache/restore@")
+    valid = valid and 0 <= key_step < restore_step
+    return valid
+
+
 def workflow_job_maven_cache_contract(path, job_id):
     text = workflow_job_text(path, job_id)
-    blocks = re.split(r"(?m)^      - ", text)
-    caches = [block for block in blocks if re.search(r"(?m)^\s*(?:uses: )?actions/cache@", block)
-              or "uses: actions/cache@" in block]
-    valid = len(caches) == 1
+    blocks = workflow_step_blocks(text)
+    valid = "hashFiles(" not in text and not re.search(r"actions/cache@", text)
+    valid = valid and "actions/cache/restore@" not in text
+    restores = [i for i, block in enumerate(blocks)
+                if re.search(r"(?m)^\s*uses: " + re.escape(MAVEN_CACHE_ACTION) + r"\s*$", block)]
+    valid = valid and len(restores) == 1
     if valid:
-        cache = caches[0]
-        valid = bool(re.search(r"(?m)^\s*uses: actions/cache@v6\s*$", cache))
-        valid = valid and bool(re.search(r"(?m)^\s*path: /root/\.m2/repository\s*$", cache))
-        valid = valid and bool(re.search(
-            r"(?m)^\s*key: " + re.escape("${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}") + r"\s*$", cache))
-        valid = valid and bool(re.search(
-            r"(?m)^\s*restore-keys: \|\n\s*" + re.escape("${{ runner.os }}-maven-") + r"\s*$", cache))
-    return "actions/cache@v6 /root/.m2/repository pom-hash" if valid else "<drift:%s.maven_cache>" % job_id
+        restore = blocks[restores[0]]
+        valid = bool(re.search(r"(?m)^\s*id: maven-cache\s*$", restore))
+        # The key is computed by the restore action before any validation.
+        makes = [i for i, block in enumerate(blocks) if re.search(r"(?m)\bmake\s+[a-zA-Z0-9_-]+", block)]
+        valid = valid and all(restores[0] < i for i in makes)
+        saves = [i for i, block in enumerate(blocks) if "actions/cache/save@" in block]
+        if job_id == MAVEN_CACHE_SAVE_JOB:
+            valid = valid and len(saves) == 1
+            if valid:
+                save = blocks[saves[0]]
+                valid = bool(re.search(r"(?m)^\s*uses: actions/cache/save@v6\s*$", save))
+                valid = valid and bool(re.search(r"(?m)^\s*path: /root/\.m2/repository\s*$", save))
+                keys = re.findall(r"(?m)^\s*key: (.+?)\s*$", save)
+                valid = valid and keys == [MAVEN_CACHE_KEY_REF]
+                valid = valid and bool(re.search(
+                    r"(?m)^\s*if: success\(\) && steps\.maven-cache\.outputs\.cache-hit != 'true'\s*$", save))
+                valid = valid and bool(re.search(r"(?m)^\s*continue-on-error: true\s*$", save))
+                valid = valid and all(i < saves[0] for i in makes)
+        else:
+            valid = valid and not saves
+    return MAVEN_CACHE_EXPECTED if valid else "<drift:%s.maven_cache>" % job_id
+
+
+DIAGNOSTIC_LANES = ("cache", "prepare", "compilerability", "java-shard", "java-serial",
+                    "protos-suite", "protos-foreign", "native-image", "http-root-failure")
+DIAGNOSTIC_EXPECTED = "isolated manual/ci-validation diagnostics"
+DIAGNOSTIC_BRANCHES = ("ci-validation", "ci-validation-http", "ci-validation-java-2")
+DIAGNOSTIC_PUSH_SELECTIONS = {
+    "ci-validation": {"LANE": "cache", "SHARD": "1", "REPETITIONS": "1"},
+    "ci-validation-http": {"LANE": "http-root-failure", "SHARD": "1", "REPETITIONS": "20"},
+    "ci-validation-java-2": {"LANE": "java-shard", "SHARD": "2", "REPETITIONS": "1"},
+}
+DIAGNOSTIC_INPUT_KEYS = {"description", "type", "default", "options"}
+DIAGNOSTIC_ROUNDTRIP_PATH = "target/ci-cache-roundtrip"
+DIAGNOSTIC_ROUNDTRIP_KEY = "${{ steps.cache-roundtrip-key.outputs.key }}"
+DIAGNOSTIC_SELECTION_CASES = (
+    'case "$LANE" in',
+    "            " + "|".join(DIAGNOSTIC_LANES) + ") ;;",
+    'case "$SHARD" in',
+    "            1|2|3|4) ;;",
+    'case "$REPETITIONS" in',
+    "            1|5|10|20) ;;",
+)
+
+
+def line_indent(line):
+    # type: (str) -> int
+    return len(line) - len(line.lstrip(" "))
+
+
+def yaml_block(lines, key, indent):
+    # Lines strictly inside the mapping entry `key:` at exactly `indent`.
+    # The block ends at the first content line indented at or above the
+    # header, so later sibling sections are never consumed.
+    if lines is None:
+        return None
+    header = " " * indent + key + ":"
+    for index, line in enumerate(lines):
+        if line.rstrip() != header:
+            continue
+        body = []
+        for following in lines[index + 1:]:
+            stripped = following.strip()
+            if stripped and not stripped.startswith("#") and line_indent(following) <= indent:
+                break
+            body.append(following)
+        return body
+    return None
+
+
+def yaml_content(lines):
+    # type: (List[str]) -> List[str]
+    return [line for line in lines if line.strip() and not line.strip().startswith("#")]
+
+
+def yaml_keys(lines, indent):
+    # Direct child keys at exactly `indent`, in order.
+    if lines is None:
+        return None
+    return [m.group(1) for m in (re.match(r"^ {%d}([A-Za-z0-9_-]+):" % indent, line) for line in lines)
+            if m and line_indent(m.group(0)) == indent]
+
+
+def yaml_scalars(lines, indent):
+    # A flat mapping block: every content line must be `key: value` at indent.
+    if lines is None:
+        return None
+    result = {}  # type: Dict[str, str]
+    for line in yaml_content(lines):
+        match = re.match(r"^ {%d}([A-Za-z0-9_-]+): (.+?)\s*$" % indent, line)
+        if not match or line_indent(line) != indent:
+            return None
+        result[match.group(1)] = match.group(2)
+    return result
+
+
+def yaml_list(lines, indent):
+    # A flat sequence block: every content line must be `- item` at indent.
+    if lines is None:
+        return None
+    items = []
+    for line in yaml_content(lines):
+        match = re.match(r"^ {%d}- (.+?)\s*$" % indent, line)
+        if not match or line_indent(line) != indent:
+            return None
+        items.append(match.group(1).strip('"').strip("'"))
+    return items
+
+
+def workflow_push_branches(text):
+    # type: (str) -> object
+    push = yaml_block(yaml_block(text.splitlines(), "on", 0), "push", 2)
+    if push is None or yaml_keys(push, 4) != ["branches"]:
+        return None
+    return yaml_list(yaml_block(push, "branches", 4), 6)
+
+
+def workflow_permissions(text):
+    # type: (str) -> object
+    return yaml_scalars(yaml_block(text.splitlines(), "permissions", 0), 2)
+
+
+def workflow_dispatch_inputs(text):
+    # type: (str) -> object
+    dispatch = yaml_block(yaml_block(text.splitlines(), "on", 0), "workflow_dispatch", 2)
+    return yaml_block(dispatch, "inputs", 4)
+
+
+def workflow_choice_options(text, name):
+    # type: (str, str) -> List[str]
+    options = yaml_list(yaml_block(yaml_block(workflow_dispatch_inputs(text), name, 6), "options", 8), 10)
+    return options or []
+
+
+def diagnostic_selection(text, event_name, ref_name):
+    # Evaluate the fixed LANE/SHARD/REPETITIONS selection expressions for an
+    # event. Only `cond && 'literal' || ...` chains over event_name/ref_name
+    # and the three declared inputs are understood; anything else is None.
+    env = yaml_scalars(yaml_block(text.splitlines(), "env", 0), 2)
+    if env is None:
+        return None
+    selection = {}  # type: Dict[str, str]
+    for name in ("LANE", "SHARD", "REPETITIONS"):
+        match = re.match(r"^\$\{\{ (.+) \}\}$", env.get(name, ""))
+        if not match:
+            return None
+        chosen = None
+        for term in match.group(1).split(" || "):
+            parts = term.split(" && ")
+            holds = True
+            for condition in parts[:-1]:
+                cond = re.match(r"^github\.(event_name|ref_name) == '([^']+)'$", condition)
+                if not cond:
+                    return None
+                actual = event_name if cond.group(1) == "event_name" else ref_name
+                holds = holds and actual == cond.group(2)
+            value = parts[-1]
+            literal = re.match(r"^'([^']*)'$", value)
+            source = re.match(r"^inputs\.(lane|shard|repetitions)$", value)
+            if not literal and not source:
+                return None
+            if holds and chosen is None:
+                chosen = literal.group(1) if literal else "<input:%s>" % source.group(1)
+        if chosen is None:
+            return None
+        selection[name] = chosen
+    return selection
+
+
+def workflow_steps(lines):
+    # Split a steps block into step texts (six-space "- " list items).
+    steps = []  # type: List[str]
+    for line in lines or []:
+        if line.startswith("      - "):
+            steps.append(line + "\n")
+        elif steps:
+            steps[-1] += line + "\n"
+    return steps
+
+
+def step_field(step, key):
+    # type: (str, str) -> List[str]
+    return re.findall(r"(?m)^ {6,10}(?:- )?%s: (.+?)\s*$" % re.escape(key), step)
+
+
+def diagnostics_workflow_contract(root, expected_image):
+    # type: (Path, str) -> str
+    path = root / ".github" / "workflows" / "ci-diagnostics.yml"
+    if not path.is_file():
+        return "<missing:ci-diagnostics.yml>"
+    text = path.read_text(encoding="utf-8")
+    lines = text.splitlines()
+    jobs = yaml_block(lines, "jobs", 0) or []
+    job = yaml_block(jobs, "diagnose", 2)
+    steps = workflow_steps(yaml_block(job, "steps", 4))
+    env = yaml_scalars(yaml_block(lines, "env", 0), 2) or {}
+    checks = []  # type: List[Tuple[str, bool]]
+
+    on = yaml_block(lines, "on", 0)
+    checks.append(("triggers", bool(re.search(r"(?m)^name: CI Diagnostics\s*$", text))
+                   and yaml_keys(on, 2) == ["push", "workflow_dispatch"]
+                   and "pull_request" not in text))
+    checks.append(("branches", workflow_push_branches(text) == list(DIAGNOSTIC_BRANCHES)))
+
+    inputs = workflow_dispatch_inputs(text)
+    declared = yaml_keys(inputs, 6) == ["lane", "shard", "repetitions"]
+    for name in ("lane", "shard", "repetitions"):
+        block = yaml_block(inputs, name, 6)
+        declared = declared and block is not None and set(yaml_keys(block, 8)) <= DIAGNOSTIC_INPUT_KEYS
+        declared = declared and any(line.strip() == "type: choice" and line_indent(line) == 8
+                                    for line in block or [])
+    checks.append(("inputs.declaration", declared))
+    checks.append(("inputs.choices",
+                   workflow_choice_options(text, "lane") == list(DIAGNOSTIC_LANES)
+                   and workflow_choice_options(text, "shard") == ["1", "2", "3", "4"]
+                   and workflow_choice_options(text, "repetitions") == ["1", "5", "10", "20"]))
+
+    mapping = all(diagnostic_selection(text, "push", branch) == expected
+                  for branch, expected in DIAGNOSTIC_PUSH_SELECTIONS.items())
+    for other in ("main", "ci-validation-other", "feature"):
+        selected = diagnostic_selection(text, "push", other)
+        mapping = mapping and selected is not None and selected["LANE"] == "invalid"
+    mapping = mapping and diagnostic_selection(text, "workflow_dispatch", "main") == {
+        "LANE": "<input:lane>", "SHARD": "<input:shard>", "REPETITIONS": "<input:repetitions>"}
+    checks.append(("push_lanes", mapping))
+
+    first = steps[0] if steps else ""
+    validation = "- name: Validate diagnostic selection\n" in first
+    validation = validation and all(case in first for case in DIAGNOSTIC_SELECTION_CASES)
+    validation = validation and first.count("; false ;;") == 3 and "uses:" not in first
+    checks.append(("input_validation", validation))
+
+    images = re.findall(r"(?m)^[ \t]+image: ([^\n#]+)$", text)
+    checks.append(("image", bool(images) and all(image.strip() == expected_image for image in images)))
+    checks.append(("permissions", workflow_permissions(text) == {"contents": "read", "packages": "read"}
+                   and not re.search(r"(?m)^[ \t]+permissions:", text) and ": write" not in text))
+    checks.append(("runner", re.findall(r"(?m)^[ \t]+runs-on: (.+?)[ \t]*$", text) == ["ubuntu-latest"]))
+    checks.append(("workers", all(env.get(name) == '"%s"' % value for name, value in
+                                  (("JAVA_TEST_SHARD_COUNT", "4"), ("JAVA_TEST_JOBS", "2"),
+                                   ("PROTOS_TEST_JOBS", "2")))
+                   and not re.search(r"(?m)^ {6,}(JAVA_TEST_JOBS|PROTOS_TEST_JOBS):", text)))
+    checks.append(("concurrency", yaml_scalars(yaml_block(lines, "concurrency", 0), 2) == {
+        "group": "ci-diagnostics-${{ github.ref }}", "cancel-in-progress": "true"}))
+
+    def find(predicate):
+        found = [i for i, step in enumerate(steps) if predicate(step)]
+        return found[0] if len(found) == 1 else None
+
+    def uses(step, action):
+        return step_field(step, "uses") == [action]
+
+    restore = find(lambda s: uses(s, MAVEN_CACHE_ACTION))
+    maven_save = find(lambda s: uses(s, "actions/cache/save@v6")
+                      and step_field(s, "path") == ["/root/.m2/repository"])
+    builds = [i for i, s in enumerate(steps) if re.search(r"\b(?:make|mvn)\s+\S", s)]
+    lifecycle = restore is not None and step_field(steps[restore], "id") == ["maven-cache"]
+    lifecycle = lifecycle and all(restore < i for i in builds)
+    lifecycle = lifecycle and maven_save is not None
+    lifecycle = lifecycle and step_field(steps[maven_save], "key") == [MAVEN_CACHE_KEY_REF]
+    lifecycle = lifecycle and "hashFiles(" not in text and not re.search(r"actions/cache@", text)
+    lifecycle = lifecycle and all(step_field(s, "path") in (["/root/.m2/repository"], [DIAGNOSTIC_ROUNDTRIP_PATH])
+                                  for s in steps if re.search(r"actions/cache/(?:save|restore)@", s))
+    checks.append(("cache_lifecycle", lifecycle))
+
+    marker = find(lambda s: step_field(s, "id") == ["cache-roundtrip-key"])
+    rt_save = find(lambda s: uses(s, "actions/cache/save@v6")
+                   and step_field(s, "path") == [DIAGNOSTIC_ROUNDTRIP_PATH])
+    removal = find(lambda s: "rm -rf " + DIAGNOSTIC_ROUNDTRIP_PATH in s)
+    rt_restore = find(lambda s: uses(s, "actions/cache/restore@v6")
+                      and step_field(s, "path") == [DIAGNOSTIC_ROUNDTRIP_PATH])
+    verify = find(lambda s: "- name: Verify cache round-trip marker\n" in s)
+    order = [marker, rt_save, removal, rt_restore, verify]
+    roundtrip = None not in order and order == sorted(order) and maven_save is not None and maven_save < marker
+    if roundtrip:
+        roundtrip = all(token in steps[marker] for token in (
+            "MAVEN_CACHE_KEY: " + MAVEN_CACHE_KEY_REF,
+            'key="protos-ci-diagnostic-roundtrip-${MAVEN_CACHE_KEY}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"',
+            DIAGNOSTIC_ROUNDTRIP_PATH + "/marker.txt"))
+        roundtrip = roundtrip and step_field(steps[rt_save], "key") == [DIAGNOSTIC_ROUNDTRIP_KEY]
+        roundtrip = roundtrip and step_field(steps[rt_restore], "key") == [DIAGNOSTIC_ROUNDTRIP_KEY]
+        roundtrip = roundtrip and step_field(steps[rt_restore], "fail-on-cache-miss") == ["true"]
+        roundtrip = roundtrip and "restore-keys" not in steps[rt_restore]
+        roundtrip = roundtrip and step_field(steps[rt_restore], "id") == ["cache-roundtrip-restore"]
+        roundtrip = roundtrip and all(token in steps[verify] for token in (
+            "ROUNDTRIP_HIT: ${{ steps.cache-roundtrip-restore.outputs.cache-hit }}",
+            '[ "$ROUNDTRIP_HIT" = "true" ]',
+            '[ "$(cat %s/marker.txt)" = "$EXPECTED_MARKER" ]' % DIAGNOSTIC_ROUNDTRIP_PATH))
+    checks.append(("cache_roundtrip", bool(roundtrip)))
+
+    compile_step = find(lambda s: "mvn -B test-compile" in s)
+    http = find(lambda s: "surefire:test@default-test" in s)
+    http_valid = compile_step is not None and http is not None and compile_step < http
+    if http_valid:
+        http_valid = all(token in steps[http] for token in (
+            "HTTP_TEST_CLASS: ProtosHttpHostFactoryIntegrationTest",
+            "HTTP_TEST_METHOD: rootActorFailureTerminatesTheProcessAndRetiresEveryWorker",
+            '"-Dtest=$HTTP_TEST_CLASS#$HTTP_TEST_METHOD"',
+            "-Dsurefire.rerunFailingTestsCount=0",
+            '"-Dprotos.surefire.reports=$reports/run-$run"',
+            "status=97",
+            'first_failure=$run',
+            '[ "$failures" -eq 0 ]'))
+        http_valid = http_valid and steps[http].count("surefire:test@") == 1
+    checks.append(("http_execution", bool(http_valid)))
+    checks.append(("java_shard", find(lambda s: (
+        'make test-java-parallel JAVA_TEST_SHARD_COUNT=4 JAVA_TEST_SHARD_INDEX="$SHARD" JAVA_TEST_JOBS=2' in s
+        and "if: env.LANE == 'java-shard'" in s)) is not None))
+
+    isolation = yaml_keys(jobs, 2) == ["diagnose"]
+    isolation = isolation and not re.search(r"(?<![A-Za-z0-9_])ci_validation_aggregate\.py", text)
+    for token in ("aggregate-", "java-evidence-", "java-plan-${{",
+                  "releases", "git push", "git commit", "gh release", "contents: write"):
+        isolation = isolation and token not in text
+    isolation = isolation and not re.search(r"\$\{\{\s*inputs\.", "\n".join(jobs))
+    checks.append(("isolation", isolation))
+
+    checks.append(("failure_suppression", "continue-on-error" not in text
+                   and not re.search(r"\|\|\s*(?:true|:)\s*$|set \+[eo]", text, flags=re.MULTILINE)
+                   and yaml_scalars(yaml_block(yaml_block(lines, "defaults", 0), "run", 2), 4)
+                   == {"shell": "bash"}))
+
+    uploads = [s for s in steps if uses(s, "actions/upload-artifact@v4")]
+    names = [n for s in uploads for n in step_field(s, "name") if not s.startswith("      - name: " + n)]
+    checks.append(("artifacts", bool(uploads) and len(names) == len(uploads)
+                   and all(n.startswith("ci-diagnostics-${{ env.LANE }}") and n.endswith("-${{ github.sha }}")
+                           for n in names)))
+
+    failed = [name for name, ok in checks if not ok]
+    return DIAGNOSTIC_EXPECTED if not failed else "<drift:ci.diagnostics:%s>" % ",".join(failed)
 
 
 def audit_bindings(root, contract):
@@ -651,9 +1041,13 @@ def audit_bindings(root, contract):
     rows.append(("ci.tests.workers", "4 shards; Java=2 Protos=2",
                  workflow_job_test_workers(ci_workflow, "java-parallel")))
     caches = [workflow_job_maven_cache_contract(ci_workflow, name) for name in CI_MAVEN_JOBS]
-    expected_cache = "actions/cache@v6 /root/.m2/repository pom-hash"
-    rows.append(("ci.tests.maven_cache", expected_cache,
-                 expected_cache if all(cache == expected_cache for cache in caches) else " | ".join(caches)))
+    if not maven_cache_action_contract(root):
+        caches.append("<drift:maven-cache-restore.action>")
+    rows.append(("ci.tests.maven_cache", MAVEN_CACHE_EXPECTED,
+                 MAVEN_CACHE_EXPECTED if all(cache == MAVEN_CACHE_EXPECTED for cache in caches)
+                 else " | ".join(cache for cache in caches if cache != MAVEN_CACHE_EXPECTED)))
+    rows.append(("ci.diagnostics.contract", DIAGNOSTIC_EXPECTED,
+                 diagnostics_workflow_contract(root, expected_image)))
     rows.append((
         "dist.runtime_pom_absent",
         "absent",

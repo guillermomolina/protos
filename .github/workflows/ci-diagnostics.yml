@@ -1,0 +1,352 @@
+# THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+# ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+# DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+# DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+# OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+# THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+# OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+# THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+# FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+# https://github.com/guillermomolina/protos
+#
+# Software distributed under the License is distributed on an "AS IS" basis,
+# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+# the specific language governing rights and limitations under the License.
+
+# Isolated, non-authoritative diagnostics. This workflow never aggregates,
+# never claims repository coverage and never substitutes for the mandatory CI
+# workflow (tests.yml), which must still pass before publication to main.
+#
+# Bootstrap: workflow_dispatch is only offered once this file exists on the
+# default branch. Until then, push the same commit to the exact diagnostic
+# branches below; each selects one fixed lane.
+name: CI Diagnostics
+
+on:
+  push:
+    branches:
+      - ci-validation
+      - ci-validation-http
+      - ci-validation-java-2
+  workflow_dispatch:
+    inputs:
+      lane:
+        description: Diagnostic lane
+        type: choice
+        default: cache
+        options:
+          - cache
+          - prepare
+          - compilerability
+          - java-shard
+          - java-serial
+          - protos-suite
+          - protos-foreign
+          - native-image
+          - http-root-failure
+      shard:
+        description: Java shard index (java-shard lane)
+        type: choice
+        default: "1"
+        options:
+          - "1"
+          - "2"
+          - "3"
+          - "4"
+      repetitions:
+        description: Repetitions (http-root-failure lane)
+        type: choice
+        default: "1"
+        options:
+          - "1"
+          - "5"
+          - "10"
+          - "20"
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: ci-diagnostics-${{ github.ref }}
+  cancel-in-progress: true
+
+# Same worker settings as mandatory CI. Selections reach shell programs only
+# through these environment variables and are validated before any work.
+env:
+  JAVA_TEST_SHARD_COUNT: "4"
+  JAVA_TEST_JOBS: "2"
+  PROTOS_TEST_JOBS: "2"
+  LANE: ${{ github.event_name == 'workflow_dispatch' && inputs.lane || github.event_name == 'push' && github.ref_name == 'ci-validation' && 'cache' || github.event_name == 'push' && github.ref_name == 'ci-validation-http' && 'http-root-failure' || github.event_name == 'push' && github.ref_name == 'ci-validation-java-2' && 'java-shard' || 'invalid' }}
+  SHARD: ${{ github.event_name == 'workflow_dispatch' && inputs.shard || github.event_name == 'push' && github.ref_name == 'ci-validation-java-2' && '2' || '1' }}
+  REPETITIONS: ${{ github.event_name == 'workflow_dispatch' && inputs.repetitions || github.event_name == 'push' && github.ref_name == 'ci-validation-http' && '20' || '1' }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  diagnose:
+    timeout-minutes: 120
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/guillermomolina/protos-ci@sha256:44e03c759ccd2b57135f5c0bdbb5060563e858601daa73958ab6cbba2ffc5fe3
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --user 0
+
+    steps:
+      - name: Validate diagnostic selection
+        run: |
+          printf 'DIAGNOSTIC_LANE=%s SHARD=%s REPETITIONS=%s\n' "$LANE" "$SHARD" "$REPETITIONS"
+          case "$LANE" in
+            cache|prepare|compilerability|java-shard|java-serial|protos-suite|protos-foreign|native-image|http-root-failure) ;;
+            *) printf '::error::Unknown diagnostic lane: %s\n' "$LANE"; false ;;
+          esac
+          case "$SHARD" in
+            1|2|3|4) ;;
+            *) printf '::error::Unknown Java shard index: %s\n' "$SHARD"; false ;;
+          esac
+          case "$REPETITIONS" in
+            1|5|10|20) ;;
+            *) printf '::error::Unsupported repetition count: %s\n' "$REPETITIONS"; false ;;
+          esac
+      - name: Start lane clock
+        run: |
+          mkdir -p target/ci-logs
+          date +%s > "$RUNNER_TEMP/lane-start"
+          printf 'Diagnostic lane: %s (non-authoritative)\n' "$LANE" >> "$GITHUB_STEP_SUMMARY"
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Trust checked-out repository
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Restore Maven dependency cache
+        id: maven-cache
+        uses: ./.github/actions/maven-cache-restore
+        with:
+          fail-on-cache-error: ${{ env.LANE == 'cache' }}
+
+      - name: Report available CPU resources
+        run: |
+          printf 'CPU_NPROC=%s\n' "$(nproc)"
+          printf 'CPU_ONLINE=%s\n' "$(getconf _NPROCESSORS_ONLN)"
+          if [ -r /sys/fs/cgroup/cpu.max ]; then
+            printf 'CPU_CGROUP_MAX='
+            cat /sys/fs/cgroup/cpu.max
+          fi
+          if [ -r /proc/meminfo ]; then head -n 5 /proc/meminfo; fi
+          for resource in memory.max memory.current memory.peak; do
+            if [ -r "/sys/fs/cgroup/$resource" ]; then
+              printf '%s=' "$resource"
+              cat "/sys/fs/cgroup/$resource"
+            fi
+          done
+          java -XshowSettings:system -version
+          printf 'JAVA_TEST_JOBS=%s\n' "$JAVA_TEST_JOBS"
+          printf 'PROTOS_TEST_JOBS=%s\n' "$PROTOS_TEST_JOBS"
+
+      # cache: resolve dependencies only; no compilation, tests or Native Image.
+      - name: Resolve Maven dependencies
+        if: env.LANE == 'cache'
+        run: |
+          mvn -B dependency:go-offline 2>&1 | tee target/ci-logs/cache-resolve.log
+      - name: Save Maven dependency cache
+        id: maven-cache-save
+        if: env.LANE == 'cache' && steps.maven-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: /root/.m2/repository
+          key: ${{ steps.maven-cache.outputs.cache-key }}
+      # A save conclusion does not prove storage: round-trip a small marker
+      # under a separate diagnostic namespace that never matches Maven keys.
+      - name: Create cache round-trip marker
+        id: cache-roundtrip-key
+        if: env.LANE == 'cache'
+        env:
+          MAVEN_CACHE_KEY: ${{ steps.maven-cache.outputs.cache-key }}
+        run: |
+          key="protos-ci-diagnostic-roundtrip-${MAVEN_CACHE_KEY}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          marker="$GITHUB_SHA $GITHUB_RUN_ID $GITHUB_RUN_ATTEMPT"
+          mkdir -p target/ci-cache-roundtrip
+          printf '%s\n' "$marker" > target/ci-cache-roundtrip/marker.txt
+          printf 'key=%s\n' "$key" >> "$GITHUB_OUTPUT"
+          printf 'marker=%s\n' "$marker" >> "$GITHUB_OUTPUT"
+      - name: Save cache round-trip marker
+        id: cache-roundtrip-save
+        if: env.LANE == 'cache'
+        uses: actions/cache/save@v6
+        with:
+          path: target/ci-cache-roundtrip
+          key: ${{ steps.cache-roundtrip-key.outputs.key }}
+      - name: Remove local cache round-trip marker
+        if: env.LANE == 'cache'
+        run: |
+          rm -rf target/ci-cache-roundtrip
+          [ ! -e target/ci-cache-roundtrip/marker.txt ]
+      - name: Restore cache round-trip marker
+        id: cache-roundtrip-restore
+        if: env.LANE == 'cache'
+        uses: actions/cache/restore@v6
+        with:
+          path: target/ci-cache-roundtrip
+          key: ${{ steps.cache-roundtrip-key.outputs.key }}
+          fail-on-cache-miss: true
+      - name: Verify cache round-trip marker
+        if: env.LANE == 'cache'
+        env:
+          ROUNDTRIP_HIT: ${{ steps.cache-roundtrip-restore.outputs.cache-hit }}
+          EXPECTED_MARKER: ${{ steps.cache-roundtrip-key.outputs.marker }}
+        run: |
+          [ "$ROUNDTRIP_HIT" = "true" ]
+          [ -f target/ci-cache-roundtrip/marker.txt ]
+          [ "$(cat target/ci-cache-roundtrip/marker.txt)" = "$EXPECTED_MARKER" ]
+          printf 'CACHE_ROUNDTRIP=verified\n'
+      - name: Report Maven cache lifecycle
+        if: always() && env.LANE == 'cache'
+        env:
+          CACHE_KEY: ${{ steps.maven-cache.outputs.cache-key }}
+          CACHE_HIT: ${{ steps.maven-cache.outputs.cache-hit }}
+          RESTORE_OUTCOME: ${{ steps.maven-cache.outputs.restore-outcome }}
+          SAVE_OUTCOME: ${{ steps.maven-cache-save.outcome }}
+          ROUNDTRIP_KEY: ${{ steps.cache-roundtrip-key.outputs.key }}
+          ROUNDTRIP_SAVE: ${{ steps.cache-roundtrip-save.outcome }}
+          ROUNDTRIP_RESTORE: ${{ steps.cache-roundtrip-restore.outcome }}
+          ROUNDTRIP_HIT: ${{ steps.cache-roundtrip-restore.outputs.cache-hit }}
+        run: |
+          {
+            printf 'MAVEN_CACHE_KEY=%s\n' "$CACHE_KEY"
+            printf 'MAVEN_CACHE_HIT=%s\n' "${CACHE_HIT:-false}"
+            printf 'MAVEN_CACHE_RESTORE=%s\n' "${RESTORE_OUTCOME:-not-run}"
+            printf 'MAVEN_CACHE_SAVE=%s\n' "${SAVE_OUTCOME:-skipped}"
+            printf 'CACHE_ROUNDTRIP_KEY=%s\n' "${ROUNDTRIP_KEY:-none}"
+            printf 'CACHE_ROUNDTRIP_SAVE=%s\n' "${ROUNDTRIP_SAVE:-not-run}"
+            printf 'CACHE_ROUNDTRIP_RESTORE=%s\n' "${ROUNDTRIP_RESTORE:-not-run}"
+            printf 'CACHE_ROUNDTRIP_HIT=%s\n' "${ROUNDTRIP_HIT:-false}"
+          } | tee -a target/ci-logs/cache-lifecycle.log "$GITHUB_STEP_SUMMARY"
+
+      - name: Exercise CI orchestration regressions
+        if: env.LANE == 'prepare'
+        run: |
+          python3 tools/tests/test_ci_java_test_shards.py
+          python3 tools/tests/test_ci_validation_aggregate.py
+          python3 tools/tests/test_verify_toolchain.py
+      - name: Prepare Java partition plan
+        if: env.LANE == 'prepare'
+        run: |
+          make prepare-java-test-shards 2>&1 | tee target/ci-logs/prepare.log
+
+      - name: Check repository
+        if: env.LANE == 'compilerability'
+        run: |
+          make check 2>&1 | tee target/ci-logs/compilerability.log
+
+      - name: Prepare four-shard Java plan
+        if: env.LANE == 'java-shard' || env.LANE == 'java-serial'
+        run: |
+          make prepare-java-test-shards JAVA_TEST_SHARD_COUNT=4 2>&1 | tee target/ci-logs/java-plan.log
+      - name: Run selected Java parallel partition
+        if: env.LANE == 'java-shard'
+        run: |
+          make test-java-parallel JAVA_TEST_SHARD_COUNT=4 JAVA_TEST_SHARD_INDEX="$SHARD" JAVA_TEST_JOBS=2 2>&1 | tee target/ci-logs/java-parallel.log
+      - name: Run Java serial policy
+        if: env.LANE == 'java-serial'
+        run: |
+          make test-java-serial JAVA_TEST_SHARD_COUNT=4 JAVA_TEST_SHARD_INDEX=1 JAVA_SERIAL_REPORTS=target/java-test-reports/serial 2>&1 | tee target/ci-logs/java-serial.log
+
+      - name: Package checkout CLI
+        if: env.LANE == 'protos-suite' || env.LANE == 'protos-foreign'
+        run: make prepare-protos-tests
+      - name: Run protos-suite
+        if: env.LANE == 'protos-suite'
+        run: |
+          make test-protos-suite 2>&1 | tee target/ci-logs/protos-suite.log
+      - name: Run protos-foreign
+        if: env.LANE == 'protos-foreign'
+        run: |
+          make test-protos-foreign 2>&1 | tee target/ci-logs/protos-foreign.log
+
+      - name: Run Native Image tests
+        if: env.LANE == 'native-image'
+        run: |
+          make test-native 2>&1 | tee target/ci-logs/native-image.log
+
+      # Exact existing Surefire test through the configured default-test
+      # execution (native-access argLine, system properties). No retries:
+      # every repetition keeps its own report directory and outcome, and a
+      # repetition without an executed (non-skipped) testcase counts as failed.
+      - name: Compile test classes once
+        if: env.LANE == 'http-root-failure'
+        run: |
+          mvn -B test-compile 2>&1 | tee target/ci-logs/http-root-failure-compile.log
+      - name: Repeat HTTP root-actor failure test
+        if: env.LANE == 'http-root-failure'
+        env:
+          HTTP_TEST_CLASS: ProtosHttpHostFactoryIntegrationTest
+          HTTP_TEST_METHOD: rootActorFailureTerminatesTheProcessAndRetiresEveryWorker
+        run: |
+          reports="$GITHUB_WORKSPACE/target/http-root-failure"
+          mkdir -p "$reports"
+          failures=0
+          first_failure=none
+          for run in $(seq 1 "$REPETITIONS"); do
+            started=$(date +%s)
+            status=0
+            mvn -B surefire:test@default-test \
+              "-Dtest=$HTTP_TEST_CLASS#$HTTP_TEST_METHOD" \
+              -Dsurefire.failIfNoSpecifiedTests=true \
+              -Dsurefire.rerunFailingTestsCount=0 \
+              "-Dprotos.surefire.reports=$reports/run-$run" \
+              > "$reports/run-$run.log" 2>&1 || status=$?
+            executed=$(python3 - "$reports/run-$run" "$HTTP_TEST_METHOD" <<'PY'
+          import glob
+          import sys
+          import xml.etree.ElementTree as ET
+          count = 0
+          for path in glob.glob(sys.argv[1] + "/TEST-*.xml"):
+              for case in ET.parse(path).getroot().iter("testcase"):
+                  if case.get("name", "").startswith(sys.argv[2]) and case.find("skipped") is None:
+                      count += 1
+          print(count)
+          PY
+            ) || executed=0
+            if [ "$status" -eq 0 ] && [ "$executed" -lt 1 ]; then
+              status=97
+            fi
+            elapsed=$(( $(date +%s) - started ))
+            printf 'HTTP_ROOT_FAILURE_RUN=%s status=%s executed=%s elapsed_seconds=%s\n' "$run" "$status" "$executed" "$elapsed" \
+              | tee -a "$reports/summary.txt" "$GITHUB_STEP_SUMMARY"
+            if [ "$status" -ne 0 ]; then
+              failures=$((failures + 1))
+              if [ "$first_failure" = none ]; then first_failure=$run; fi
+              tail -n 80 "$reports/run-$run.log"
+            fi
+          done
+          printf 'HTTP_ROOT_FAILURE_RUNS=%s failures=%s first_failure=%s\n' "$REPETITIONS" "$failures" "$first_failure" \
+            | tee -a "$reports/summary.txt" "$GITHUB_STEP_SUMMARY"
+          [ "$failures" -eq 0 ]
+
+      - name: Record lane wall time
+        if: always()
+        run: |
+          start=$(cat "$RUNNER_TEMP/lane-start" 2>/dev/null || date +%s)
+          duration=$(( $(date +%s) - start ))
+          printf 'LANE_DURATION_SECONDS=%s\n' "$duration"
+          printf 'Wall time: %s seconds\n' "$duration" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-diagnostics-${{ env.LANE }}${{ env.LANE == 'java-shard' && format('-{0}', env.SHARD) || '' }}-${{ github.sha }}
+          if-no-files-found: warn
+          path: |
+            target/ci-logs/
+            target/http-root-failure/
+            target/java-test-shards/plan.json
+            target/java-test-reports/
+            target/native-test-reports/
+            target/*report*

@@ -147,6 +147,74 @@ counts; raw XML, evidence and logs are available in revision-named `java-plan-*`
 Each lane retains a 120-minute timeout and records elapsed time and runner
 resources without adding a test-duration admission threshold.
 
+The Maven dependency cache is infrastructure, not validation. Every Maven job
+restores it through `.github/actions/maven-cache-restore`, which computes the
+key once, before validation, from the tracked POM paths and contents. Only a
+successful `prepare` job saves the cache, in an explicit non-blocking step that
+reuses that key; no post-job step recomputes it over a populated workspace. A
+cache service failure therefore cannot turn successful repository tests into a
+failed run, and it never masks a failed one: failure tolerance is confined to
+the cache steps and `tools/verify_toolchain.py` rejects it anywhere else.
+
+### Diagnostic CI
+
+`CI` (`.github/workflows/tests.yml`) is the mandatory acceptance workflow.
+`CI Diagnostics` (`.github/workflows/ci-diagnostics.yml`) is an isolated,
+non-authoritative aid for reproducing individual CI problems. It never
+aggregates, never claims repository coverage, never publishes anything and
+never substitutes for `CI`. Its artifacts are named
+`ci-diagnostics-<lane>-<revision>` (the Java shard lane adds its index).
+
+GitHub offers manual `workflow_dispatch` only once a workflow exists on the
+default branch. Before `CI Diagnostics` is published, push the same candidate
+commit to the exact diagnostic branches instead; this needs no extra commits and
+does not touch `main`:
+
+```sh
+git push origin HEAD:refs/heads/ci-validation
+git push origin HEAD:refs/heads/ci-validation-http
+git push origin HEAD:refs/heads/ci-validation-java-2
+```
+
+- `ci-validation` runs the cache lane: shared restore, dependency resolution,
+  the ordinary explicit Maven save, and a small run-specific marker round trip
+  (save, local removal, exact-key restore without fallback keys, content
+  check) under a separate `protos-ci-diagnostic-roundtrip-` namespace. A
+  successful cache action status is not proof of storage; the round trip
+  verifies actual storage and retrieval. Cache errors fail this lane visibly.
+- `ci-validation-http` repeats the HTTP root-actor failure test 20 times.
+- `ci-validation-java-2` reruns the original concurrent Java shard 2 with its
+  two JUnit workers. The focused HTTP lane does not establish equivalence with
+  that shard.
+
+No other branch, pull request or `main` push runs diagnostics. Once the workflow
+is on the default branch, a manual dispatch selects one fixed `lane` (`cache`,
+`prepare`, `compilerability`, `java-shard`, `java-serial`, `protos-suite`,
+`protos-foreign`, `native-image`, `http-root-failure`), a Java `shard` (1–4)
+and, for the HTTP lane, `repetitions` (1, 5, 10, 20). An early step rejects any
+other value, so an invalid selection fails instead of silently running nothing.
+There are no free-form commands or test selectors.
+
+The `http-root-failure` lane compiles test classes once and repeats exactly
+`ProtosHttpHostFactoryIntegrationTest#rootActorFailureTerminatesTheProcessAndRetiresEveryWorker`
+through the configured Surefire `default-test` execution, without retries.
+Each repetition keeps its own report directory and must contain an executed,
+non-skipped testcase; any failed repetition fails the lane.
+
+To reproduce that test locally (remove `target/http-root-failure` first):
+
+```sh
+mvn test-compile
+mvn surefire:test@default-test \
+  -Dtest='ProtosHttpHostFactoryIntegrationTest#rootActorFailureTerminatesTheProcessAndRetiresEveryWorker' \
+  -Dsurefire.rerunFailingTestsCount=0 \
+  -Dprotos.surefire.reports="$PWD/target/http-root-failure/run-1"
+```
+
+A green diagnostic lane is not acceptance, and no diagnostic workflow substitutes
+for `CI`. Before publishing to `main`, manually dispatch the full `CI` workflow
+against `ci-validation` and require it to pass.
+
 That is enough for a normal first PR. The sections below explain the project's
 design discipline, validation expectations, AI policy, and detailed review
 standards. `AGENTS.md` remains the source for the project's more detailed

@@ -1,0 +1,106 @@
+# THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+# ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+# DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+# DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+# OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+# THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+# OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+# THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+# FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+# https://github.com/guillermomolina/protos
+#
+# Software distributed under the License is distributed on an "AS IS" basis,
+# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+# the specific language governing rights and limitations under the License.
+
+name: Restore Maven dependency cache
+description: >-
+  Compute the Maven dependency cache key once from tracked POM paths and
+  contents, then restore /root/.m2/repository. The key is exposed so a later
+  explicit actions/cache/save step reuses it instead of recomputing it after
+  validation has populated the workspace.
+
+inputs:
+  fail-on-cache-error:
+    description: >-
+      "true" makes a cache restore error fail this action (diagnostic use).
+      The default keeps cache service unavailability from failing mandatory
+      validation. Key computation errors are never tolerated.
+    required: false
+    default: "false"
+
+outputs:
+  cache-key:
+    description: The computed primary cache key.
+    value: ${{ steps.key.outputs.key }}
+  cache-hit:
+    description: '"true" only for an exact primary-key hit.'
+    value: ${{ steps.restore.outputs.cache-hit }}
+  restore-outcome:
+    description: >-
+      Outcome of the restore step (success or failure). This only reports the
+      action's own status; it does not prove that the cache service stored or
+      returned data.
+    value: ${{ steps.restore.outcome }}
+
+runs:
+  using: composite
+  steps:
+    - name: Compute Maven cache key
+      id: key
+      shell: bash
+      run: |
+        python3 - "$GITHUB_WORKSPACE" "$RUNNER_OS" >> "$GITHUB_OUTPUT" <<'PY'
+        import hashlib
+        import os
+        import subprocess
+        import sys
+
+        root, runner_os = sys.argv[1], sys.argv[2]
+        if not os.path.isfile(os.path.join(root, "pom.xml")):
+            sys.stderr.write("MAVEN_CACHE_KEY_ERROR: missing root pom.xml\n")
+            sys.exit(1)
+        # Tracked POMs only: generated target/ trees are never traversed.
+        listing = subprocess.run(
+            ["git", "-C", root, "ls-files", "-z", "--", "pom.xml", ":(glob)**/pom.xml"],
+            check=True, stdout=subprocess.PIPE).stdout
+        paths = sorted({p for p in listing.decode("utf-8").split("\0") if p})
+        if "pom.xml" not in paths:
+            sys.stderr.write("MAVEN_CACHE_KEY_ERROR: root pom.xml is not tracked\n")
+            sys.exit(1)
+        digest = hashlib.sha256()
+        for path in paths:
+            with open(os.path.join(root, path), "rb") as handle:
+                content = hashlib.sha256(handle.read()).hexdigest()
+            digest.update(("%s\0%s\n" % (path, content)).encode("utf-8"))
+            sys.stderr.write("MAVEN_CACHE_POM=%s sha256=%s\n" % (path, content))
+        key = "%s-maven-%s" % (runner_os, digest.hexdigest())
+        sys.stderr.write("MAVEN_CACHE_KEY=%s\n" % key)
+        print("key=%s" % key)
+        PY
+
+    - name: Restore Maven repository
+      id: restore
+      continue-on-error: true
+      uses: actions/cache/restore@v6
+      with:
+        path: /root/.m2/repository
+        key: ${{ steps.key.outputs.key }}
+        restore-keys: |
+          ${{ runner.os }}-maven-
+
+    - name: Report Maven cache restore
+      shell: bash
+      env:
+        RESTORE_OUTCOME: ${{ steps.restore.outcome }}
+        CACHE_HIT: ${{ steps.restore.outputs.cache-hit }}
+        STRICT: ${{ inputs.fail-on-cache-error }}
+      run: |
+        printf 'MAVEN_CACHE_RESTORE_OUTCOME=%s\n' "$RESTORE_OUTCOME"
+        printf 'MAVEN_CACHE_HIT=%s\n' "${CACHE_HIT:-false}"
+        if [ "$RESTORE_OUTCOME" != "success" ]; then
+          printf '::warning::Maven cache restore outcome: %s\n' "$RESTORE_OUTCOME"
+          if [ "$STRICT" = "true" ]; then
+            false
+          fi
+        fi
