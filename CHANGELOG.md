@@ -8,6 +8,11 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.236-SNAPSHOT
+
+- **PERF044.** Construct standard Map literals directly from the evaluated factory without a guest factory call.
+- Replay source commit `016c912bccd56d13c8adec3ad952d370f12674fc` with implementation-version metadata; preserve its source, tests and baseline content.
+
 ## 0.4.235-SNAPSHOT
 
 - **PERF044.** Cache operator overload selection per selector and reject absent numeric prototype bindings in caseOf carrier admission.

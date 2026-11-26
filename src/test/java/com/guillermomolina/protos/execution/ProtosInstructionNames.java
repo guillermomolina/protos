@@ -59,8 +59,6 @@ public final class ProtosInstructionNames {
                     false, "MaterializeInlineCallbackActivation", true, "LoadInlineCallbackReceiver")),
             Map.entry("LoadInlineLiteralCallPart", Map.of(
                     false, "LoadInlineCallbackActivation", true, "LoadInlineLiteralFallbackCall")),
-            Map.entry("MapConstructionFactoryCall", Map.of(
-                    false, "PrepareMapConstructionFactoryCall", true, "FinishMapConstructionFactoryCall")),
             Map.entry("CurrentActivation", Map.of(false, "CurrentActivation", true, "CurrentCallerReference")),
             Map.entry("StructuredPrepareInlineChildCall", Map.of(
                     false, "StructuredPrepareInlineChildCall",

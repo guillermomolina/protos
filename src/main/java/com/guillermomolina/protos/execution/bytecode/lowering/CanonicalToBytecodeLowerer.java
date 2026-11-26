@@ -5024,12 +5024,6 @@ final class CanonicalToBytecodeLowerer {
                                 ? "defaultMapConstructionValue"
                                 : "mapConstructionValue",
                         null);
-        BytecodeLocal factoryResult =
-                builder.createLocal(
-                        defaultContext
-                                ? "defaultMapConstructionFactoryResult"
-                                : "mapConstructionFactoryResult",
-                        null);
 
         if (defaultContext) {
             emitDefaultExpressionToLocal(
@@ -5049,25 +5043,10 @@ final class CanonicalToBytecodeLowerer {
                     resumeValue);
         }
 
-        builder.beginStoreLocal(preparedCall);
-        builder.beginMapConstructionFactoryCall(false);
-        emitCurrentActivation(builder);
-        builder.emitLoadLocal(factoryValue);
-        builder.endMapConstructionFactoryCall();
-        builder.endStoreLocal();
-
-        emitRequestInvocation(
-                builder,
-                factoryResult,
-                preparedCall,
-                childResult,
-                resumeValue);
-
         builder.beginStoreLocal(mapValue);
-        builder.beginMapConstructionFactoryCall(true);
-        emitCurrentActivation(builder);
-        builder.emitLoadLocal(factoryResult);
-        builder.endMapConstructionFactoryCall();
+        builder.beginMakeMap();
+        builder.emitLoadLocal(factoryValue);
+        builder.endMakeMap();
         builder.endStoreLocal();
 
         for (CanonicalMapConstruction.Entry entry : map.entries()) {
