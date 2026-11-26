@@ -8,6 +8,11 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.244-SNAPSHOT
+
+- **PERF044.** Lower standard Integer case selection to primitive comparisons and inline actions.
+- Replay source commit `22cc30d44ea422a70d0208f1773fe86f34055be2` with implementation-version metadata; preserve its source, tests and baseline content.
+
 ## 0.4.243-SNAPSHOT
 
 - **PERF044.** Use Object operands for numeric method selection and add regressions.

@@ -375,6 +375,7 @@ abstract class ProtosExperimentalGetMethodNode extends Node {
 
     /* A SmallInteger receiver no cached entry admits. */
     @Specialization(guards = "isLong(receiver)")
+    @ForceQuickening
     @InliningCutoff
     static Object doLongGeneral(
             VirtualFrame frame,
@@ -387,6 +388,7 @@ abstract class ProtosExperimentalGetMethodNode extends Node {
 
     /* A double receiver no cached entry admits. */
     @Specialization(guards = "isDouble(receiver)")
+    @ForceQuickening
     @InliningCutoff
     static Object doDoubleGeneral(
             VirtualFrame frame,
