@@ -46,6 +46,30 @@ jobsOption: CommandLine.option(
     help: null
 )
 
+shardCountOption: CommandLine.option(
+    key: "shardCount",
+    long: "shard-count",
+    short: null,
+    minValues: 1,
+    maxValues: 1,
+    minOccurrences: 0,
+    maxOccurrences: 1,
+    valueName: "N",
+    help: null
+)
+
+shardRunOption: CommandLine.option(
+    key: "shardRun",
+    long: "shard-run",
+    short: null,
+    minValues: 1,
+    maxValues: 1,
+    minOccurrences: 0,
+    maxOccurrences: 1,
+    valueName: "K",
+    help: null
+)
+
 resourceCatalogOption: CommandLine.option(
     key: "resourceCatalog",
     long: "resource-catalog",
@@ -112,6 +136,8 @@ commandSpec: CommandLine.command({
     help: null
     options: [
         jobsOption,
+        shardCountOption,
+        shardRunOption,
         resourceCatalogOption,
         fileOption,
         directoryOption,
@@ -132,8 +158,8 @@ commandSpec: CommandLine.command({
 // A selected value token is projected literally and is never reinterpreted as a
 // second option merely because it begins with "-". Unknown tokens, including
 // "--", attached forms such as --jobs=3 and future foreign options, remain
-// ignored exactly as before. The selected value-less --list-cases flag is
-// projected alone.
+// ignored exactly as before, except unsupported attached shard options fail.
+// The selected value-less --list-cases flag is projected alone.
 projectArguments: (arguments) => {
     newBuilder: () => {
         {
@@ -181,6 +207,14 @@ projectArguments: (arguments) => {
 
     builder: newBuilder()
     expectingSelectedValue: false
+    attachedShardPrefixes: Array(
+        Encoding.UTF8.encode("--shard-count="),
+        Encoding.UTF8.encode("--shard-run=")
+    )
+    for(prefix in attachedShardPrefixes) {
+        prefix.freeze()
+    }
+    attachedShardPrefixes.freeze()
 
     for(argument in arguments) {
         wasExpectingSelectedValue: expectingSelectedValue
@@ -193,10 +227,28 @@ projectArguments: (arguments) => {
         wasExpectingSelectedValue.ifFalse(() => {
             selected:
                 (argument === "--jobs") ||
+                (argument === "--shard-count") ||
+                (argument === "--shard-run") ||
                 (argument === "--resource-catalog") ||
                 (argument === "--file") ||
                 (argument === "--directory") ||
                 (argument === "--case")
+
+            // Only unconsumed tokens can be unsupported attached shard options.
+            selected.ifFalse(() => {
+                source: Encoding.UTF8.encode(argument)
+                for(expected in attachedShardPrefixes) {
+                    if(source.size() >= expected.size()) {
+                        matches: true
+                        index: 0
+                        for(octet in expected) {
+                            if(source[index] != octet) { matches = false }
+                            index = index + 1
+                        }
+                        if(matches) { optionError() }
+                    }
+                }
+            })
 
             if(selected) {
                 appendBuilt(builder, argument)
@@ -229,8 +281,18 @@ parse: (arguments) => {
     directoryPathValues: []
     listCasesValue: false
     caseRefValues: []
+    shardCountValue: null
+    shardRunValue: null
 
     for(occurrence in parsed.command.options) {
+        if(occurrence.key == "shardCount") {
+            shardCountValue = parsePositiveInteger(occurrence.value)
+        }
+
+        if(occurrence.key == "shardRun") {
+            shardRunValue = parsePositiveInteger(occurrence.value)
+        }
+
         if(occurrence.key == "jobs") {
             jobsValue = parsePositiveInteger(occurrence.value)
         }
@@ -265,6 +327,13 @@ parse: (arguments) => {
         }
     }
 
+    if((shardCountValue === null) != (shardRunValue === null)) {
+        optionError()
+    }
+    (shardCountValue === null).ifFalse(() => {
+        if(shardRunValue > shardCountValue) { optionError() }
+    })
+
     filePathValues.freeze()
     directoryPathValues.freeze()
     caseRefValues.freeze()
@@ -275,7 +344,9 @@ parse: (arguments) => {
         filePathValues,
         directoryPathValues,
         listCasesValue,
-        caseRefValues
+        caseRefValues,
+        shardCountValue,
+        shardRunValue
     ]
 }
 
@@ -310,4 +381,13 @@ listCases: (arguments) => {
 // order; ref validation and resolution stay with CaseSelection.
 caseRefs: (arguments) => {
     parse(arguments)[5]
+}
+
+
+shardCount: (arguments) => {
+    parse(arguments)[6]
+}
+
+shardRun: (arguments) => {
+    parse(arguments)[7]
 }

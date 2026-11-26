@@ -370,6 +370,69 @@ signals `Assertions.AssertionFailure` when `condition` is `false`, and
 Error. A suite-native source runs only when it belongs to a registered corpus;
 writing such a file elsewhere does not make `protos test` find it.
 
+## Distributed sharding
+
+Independent invocations can share a selected logical CasePlan:
+
+```sh
+protos test --shard-count 4 --shard-run 2
+protos test --shard-count 4 --shard-run 2 --jobs 8
+protos test --list-cases --shard-count 4 --shard-run 2
+```
+
+Shard indices are one-based. Both options must be absent, or each must occur
+exactly once with a separate positive decimal ordinary Integer value satisfying
+`1 <= shard-run <= shard-count`. Leading zeros and Integers larger than signed-64
+are accepted exactly. Incomplete pairs, missing values, duplicate options,
+malformed values, zero, negatives, out-of-range indices and attached forms such
+as `--shard-count=4` fail in the existing Tool Error lane. There is no implicit
+environment configuration.
+
+Sharding applies global round-robin **after** file/directory source selection and
+exact `--case` selection. Zero-based position `i` in the final selected plan goes
+to shard `i mod N + 1`. The position never resets at a source, suite or corpus
+boundary; CLI argument order does not define plan order. Each shard preserves
+canonical relative order. For five selected logical Cases:
+
+```text
+Shard 1: A, D
+Shard 2: B, E
+Shard 3: C
+```
+
+For the same ordered plan, all shards have a complete union and pairwise disjoint
+CaseRefs, with counts differing by at most one. Equal counts do not guarantee
+equal running times. Running one shard does not validate the whole corpus;
+every required shard must complete successfully. Reproduce an assignment using
+the same revision, corpus, selectors and shard configuration; changing the plan
+can change assignments. `--jobs` controls local admission independently and never
+changes membership. Use `--jobs 1` for serial local reproduction.
+
+Each runner still discovers every in-scope source and validates every exact
+reference and discovered identity before listing or scheduling, including Cases
+assigned elsewhere. Existing catalog acquisition and suite-native resource
+restrictions remain in force. A valid empty shard lists exactly
+`{"schema":"protos.test.cases/v1","cases":[]}` or executes no bodies and emits
+normal bootstrap output and `0 passed, 0 failed`, with exit code zero and no Case
+progress groups. Explicit `1/1` is equivalent to unsharded selection.
+
+Listing reports assigned Cases, not independently observed execution results.
+Execution uses those same retained projections, the existing fresh Process per
+Case and private output. Exit classification is unchanged. This is distribution
+between independent invocations, with no distributed scheduler, automatic remote
+placement or cross-run resource reservations.
+
+The Makefile keeps the unsharded default and exposes independent count/index
+controls. Every non-default configuration is forwarded to the Test Tool for
+validation, including empty or invalid overrides:
+
+```sh
+make test-protos-suite \
+    PROTOS_TEST_SHARD_COUNT=4 \
+    PROTOS_TEST_SHARD_INDEX=2 \
+    PROTOS_TEST_JOBS=1
+```
+
 ## Repository test registration integrity
 
 Registration in the repository corpus stays explicit. Adding a new suite-native

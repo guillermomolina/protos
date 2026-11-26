@@ -24,6 +24,50 @@ import org.junit.jupiter.api.Test;
 final class ProtosTestToolCaseExecutionPublicIntegrationTest
         extends ProtosTestToolCaseSelectionPublicIntegrationTestSupport {
     @Test
+    void shardExecutionUsesExistingProgressAndSummaryAtEveryCapacity() {
+        for (String jobs : new String[] {"1", "4"}) {
+            assertShardExecution("2", "1", jobs, 2);
+            assertShardExecution("2", "2", jobs, 2);
+        }
+        assertShardExecution("1", "1", "1", 4);
+        assertShardExecution("4", "3", "1", 1);
+        assertShardExecution("5", "5", "1", 0);
+        assertShardExecution("9223372036854775809", "9223372036854775809", "1", 0);
+    }
+
+    @Test
+    void exactSelectionResolvesBothRequestedCasesBeforeShardExecution() {
+        for (String shard : new String[] {"1", "2"}) {
+            R result = run("test", "--file", PARSE_FILE, "--case", parseRef(3),
+                    "--case", parseRef(0), "--shard-count", "2", "--shard-run", shard);
+            assertCompletedCases(result, 1);
+        }
+    }
+
+    private static void assertShardExecution(String count, String shard, String jobs, int cases) {
+        assertCompletedCases(run("test", "--file", PARSE_FILE, "--shard-count", count,
+                "--shard-run", shard, "--jobs", jobs), cases);
+    }
+
+    private static void assertCompletedCases(R result, int cases) {
+        assertEquals(0, result.code(), result::err);
+        assertEquals(EXPECTED_BOOTSTRAP_STDOUT, result.out());
+        StringBuilder expected = new StringBuilder();
+        if (cases > 0) {
+            expected.append("[library/uri] 0/").append(cases).append('\n');
+            for (int completed = 1; completed <= cases; completed++) {
+                expected.append("[library/uri] ").append(completed).append('/').append(cases);
+                if (completed == cases) {
+                    expected.append(" passed");
+                }
+                expected.append('\n');
+            }
+        }
+        expected.append(cases).append(" passed, 0 failed\n");
+        assertEquals(expected.toString(), result.err());
+    }
+
+    @Test
     void exactCaseExecutesOnlyThatCase() {
         R result = run("test", "--file", PARSE_FILE, "--case", parseRef(2));
 

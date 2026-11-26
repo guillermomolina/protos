@@ -34,12 +34,15 @@ CasePlan: import("./LogicalCasePlan.protos")
 ArrayAccumulator: import("./ArrayAccumulator.protos")
 
 arguments: process.args()
-jobs: Options.jobs(arguments)
-resourceCatalogPath: Options.resourceCatalogPath(arguments)
-filePaths: Options.filePaths(arguments)
-directoryPaths: Options.directoryPaths(arguments)
-listCases: Options.listCases(arguments)
-caseRefs: Options.caseRefs(arguments)
+options: Options.parse(arguments)
+jobs: options[0]
+resourceCatalogPath: options[1]
+filePaths: options[2]
+directoryPaths: options[3]
+listCases: options[4]
+caseRefs: options[5]
+shardCount: options[6]
+shardRun: options[7]
 
 resourceCatalog: ResourceCatalog.empty()
 (resourceCatalogPath === null).ifFalse(() => {
@@ -338,7 +341,7 @@ corpusExecutionRequirements: Map()
 // D185 exact selection intersects the source-scoped discovery below. The
 // complete --case set is validated here; each ref is then resolved only
 // against CaseRefs derived from the Cases this invocation discovers.
-caseSelection: CaseSelection.begin(caseRefs)
+caseSelection: CaseSelection.beginWithShard(caseRefs, shardCount, shardRun)
 
 executionSuiteIndex: 0
 for(planned in executionSuites) {
@@ -453,7 +456,7 @@ for(planned in executionSuites) {
             )
 
         selectedProjection: projection
-        if(caseSelection.active) {
+        if(caseSelection.active || caseSelection.shardActive) {
             selectedProjection =
                 CaseSelection.projection(
                     projection,
@@ -503,10 +506,10 @@ for(planned in executionSuites) {
         }
     }
 
-    // A suite none of whose Cases were exactly selected takes no part in
+    // A suite none of whose Cases survived selection takes no part in
     // progress or scheduling, as with source scopes.
     retainSuite: logicalCaseCount > 0
-    caseSelection.active.ifFalse(() => {
+    (caseSelection.active || caseSelection.shardActive).ifFalse(() => {
         retainSuite = true
     })
 

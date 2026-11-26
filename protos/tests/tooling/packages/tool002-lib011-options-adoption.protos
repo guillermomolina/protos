@@ -89,4 +89,70 @@ Assertions.signals(Error, () => {
     ))
 })
 
+// Shard options append to the original six fields and retain exact Integers.
+Assertions.require(Options.shardCount(Array("test")) === null)
+Assertions.require(Options.shardRun(Array("test")) === null)
+for(pair in Array(Array("1", "1", 1, 1), Array("4", "1", 4, 1),
+    Array("4", "4", 4, 4), Array("0004", "0002", 4, 2),
+    Array("9223372036854775809", "9223372036854775808",
+        9223372036854775809, 9223372036854775808))) {
+    args: Array("test", "--shard-count", pair[0], "--shard-run", pair[1])
+    parsed: Options.parse(args)
+    Assertions.require(parsed[6] == pair[2])
+    Assertions.require(parsed[7] == pair[3])
+    Assertions.require(Options.shardCount(args) == pair[2])
+    Assertions.require(Options.shardRun(args) == pair[3])
+}
+combined: Options.parse(Array("test", "--shard-run", "2", "--jobs", "3",
+    "--file", "one.protos", "--directory", "suite", "--case", "v1.ab",
+    "--list-cases", "--resource-catalog", "catalog.toml", "--shard-count", "4"))
+Assertions.require(combined[0] == 3)
+Assertions.require(combined[1] == "catalog.toml")
+Assertions.require(combined[2][0] == "one.protos")
+Assertions.require(combined[3][0] == "suite")
+Assertions.require(combined[4])
+Assertions.require(combined[5][0] == "v1.ab")
+Assertions.require(combined[6] == 4)
+Assertions.require(combined[7] == 2)
+
+for(args in Array(
+    Array("--shard-run", "1"),
+    Array("--shard-count", "2"),
+    Array("--shard-run", "1", "--shard-count"),
+    Array("--shard-count", "2", "--shard-run"),
+    Array("--shard-count", "2", "--shard-count", "2", "--shard-run", "1"),
+    Array("--shard-count", "2", "--shard-run", "1", "--shard-run", "1"),
+    Array("--shard-count", "1", "--shard-run", "2"),
+    Array("--shard-count=2"),
+    Array("--shard-run=1"),
+    Array("--shard-count=2", "--shard-run=1"),
+    Array("--shard-count=2", "--shard-run", "1"),
+    Array("--shard-count", "2", "--shard-run=1")
+)) {
+    Assertions.signals(Error, () => { Options.parse(args) })
+}
+for(invalid in Array("0", "-1", "1.5", "abc", "", "1e2", "+1", " 1")) {
+    Assertions.signals(Error, () => {
+        Options.parse(Array("--shard-count", invalid, "--shard-run", "1"))
+    })
+    Assertions.signals(Error, () => {
+        Options.parse(Array("--shard-count", "4", "--shard-run", invalid))
+    })
+}
+
+compatibility: Options.parse(Array("--foreign", "--jobs=9",
+    "--resource-catalog=ignored", "--", "--shard-count", "2", "--shard-run", "1"))
+Assertions.require(compatibility[0] == 1)
+Assertions.require(compatibility[1] === null)
+Assertions.require(compatibility[6] == 2)
+for(literal in Array("--shard-count", "--shard-run", "--shard-count=4", "--shard-run=2")) {
+    value: Options.parse(Array("--resource-catalog", literal))
+    Assertions.require(value[1] == literal)
+    Assertions.require(value[6] === null)
+    Assertions.require(value[7] === null)
+    fileValue: Options.parse(Array("--file", literal))
+    Assertions.require(fileValue[2][0] == literal)
+    Assertions.require(fileValue[6] === null)
+}
+
 true

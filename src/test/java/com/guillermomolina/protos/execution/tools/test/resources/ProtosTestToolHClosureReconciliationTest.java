@@ -42,7 +42,8 @@ final class ProtosTestToolHClosureReconciliationTest {
                                 "ProtosTestToolAsyncExecutionScope.java"));
 
         assertTrue(main.contains("arguments: process.args()"));
-        assertTrue(main.contains("jobs: Options.jobs(arguments)"));
+        assertTrue(main.contains("options: Options.parse(arguments)"));
+        assertTrue(main.contains("jobs: options[0]"));
         // TOOL009-B: repository production is logical-only; there is no
         // D108/bounded-Runner repository branch and no across-runs/
         // across-invocation legacy aggregation left.

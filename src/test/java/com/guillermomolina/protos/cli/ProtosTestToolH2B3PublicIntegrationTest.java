@@ -268,7 +268,8 @@ final class ProtosTestToolH2B3PublicIntegrationTest {
         assertTrue(main.contains("SuiteGraph: import(\"./SuiteGraph.protos\")"));
         assertTrue(main.contains("RepositorySuite: import(\"./RepositorySuite.protos\")"));
         assertTrue(main.contains("arguments: process.args()"));
-        assertTrue(main.contains("jobs: Options.jobs(arguments)"));
+        assertTrue(main.contains("options: Options.parse(arguments)"));
+        assertTrue(main.contains("jobs: options[0]"));
         assertTrue(main.contains("leaves: SuiteGraph.flattenLeaves(RepositorySuite.root)"));
         assertTrue(main.contains("testCorpusBindings.hasSlot(corpus)"));
         assertTrue(main.contains("testCorpusBindings.slotValue(corpus)"));

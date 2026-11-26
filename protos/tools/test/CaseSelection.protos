@@ -13,12 +13,12 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-//! D185 exact logical Case selection and the V1 Case listing projection.
+//! Logical Case selection and the V1 Case listing projection.
 //!
-//! Selection is a filter over the already-discovered authoritative CasePlan:
-//! it retains existing CasePlan entries, in CasePlan order, whose derived
-//! CaseRef was explicitly requested. It never decodes a ref and never builds
-//! a sourceAssociation, so ExecutionRequirement, CaseAuthority and resource
+//! Selection filters the already-discovered authoritative CasePlan, retaining
+//! original entries in order after exact CaseRef selection and optional global
+//! round-robin sharding. It never decodes a ref or builds a sourceAssociation,
+//! so ExecutionRequirement, CaseAuthority and resource
 //! authority keep flowing from the retained entry unchanged. Source scopes are
 //! applied before discovery, so a ref outside the active scope is simply
 //! unknown here and fails closed.
@@ -38,6 +38,12 @@ selectionError: () => {
 // exact refs fail rather than being deduplicated. An empty set selects every
 // discovered Case.
 begin: (caseRefs) => {
+    beginWithShard(caseRefs, null, null)
+}
+
+// One invocation owns this state across every source and corpus. Sharding is
+// applied only after exact selection, without changing Case identity or authority.
+beginWithShard: (caseRefs, shardCount, shardRun) => {
     requested: Map()
 
     for(text in caseRefs) {
@@ -53,6 +59,10 @@ begin: (caseRefs) => {
         active: caseRefs.size() > 0
         requested: requested
         discovered: Map()
+        shardActive: (shardCount !== null) && (shardCount > 1)
+        shardCount: shardCount
+        shardRun: shardRun
+        selectedPosition: 0
     }
 }
 
@@ -74,6 +84,13 @@ retain: (selection, cases) => {
             if(retained) {
                 selection.requested[ref] = true
             }
+        }
+
+        if(retained && selection.shardActive) {
+            retained =
+                selection.selectedPosition.mod(selection.shardCount) ==
+                    selection.shardRun - 1
+            selection.selectedPosition = selection.selectedPosition + 1
         }
 
         retained

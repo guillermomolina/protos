@@ -8,6 +8,13 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.227-SNAPSHOT
+
+- **I178-A / D264-B′.** Add deterministic distributed Test Tool sharding through paired `--shard-count` and `--shard-run` options, using exact positive ordinary Integers and global round-robin selection after source and exact CaseRef filters.
+- Share retained logical Case projections between listing and execution; preserve complete discovery signatures, identity, authority, jobs semantics and existing scheduling, with successful empty shards and complete reference validation independent of shard membership.
+- Parse Main options once, reuse encoded attached-form prefixes, and avoid partition arithmetic for absent sharding and explicit `1/1`, without production Java or runtime infrastructure changes.
+- Add option, selection, public listing/execution/rejection and architecture regressions; document shard reproduction and expose independent Makefile shard count/index controls while preserving the unsharded default.
+
 ## 0.4.226-SNAPSHOT
 
 - **GITHUB026.** Distribute mandatory CI across independent validation runners with deterministic Java test sharding and revision-bound coverage aggregation.

@@ -12,6 +12,14 @@ POSIX_PROCESS_LIBRARY := target/native-libs/libprotos_posix_process.so
 DIST_VALIDATE_FLAGS ?= --require-clean-source
 JAVA_TEST_JOBS ?= 6
 PROTOS_TEST_JOBS ?= 8
+PROTOS_TEST_SHARD_COUNT ?= 1
+PROTOS_TEST_SHARD_INDEX ?= 1
+# The Test Tool validates every explicit non-default pair, including empty values.
+ifeq ($(PROTOS_TEST_SHARD_COUNT):$(PROTOS_TEST_SHARD_INDEX),1:1)
+PROTOS_TEST_SHARD_ARGS :=
+else
+PROTOS_TEST_SHARD_ARGS = --shard-count '$(subst ','"'"',$(PROTOS_TEST_SHARD_COUNT))' --shard-run '$(subst ','"'"',$(PROTOS_TEST_SHARD_INDEX))'
+endif
 JAVA_TEST_SHARD_COUNT ?= 1
 JAVA_TEST_SHARD_INDEX ?= 1
 JAVA_TEST_SHARD_DIR ?= target/java-test-shards
@@ -151,6 +159,9 @@ help:
 		'  make test-protos    Build Protos and run the native Protos test suite' \
 		'                      (test-protos-suite + test-protos-foreign, one build)' \
 		'  make test-protos-suite    Run the native Protos test suite (no build)' \
+		'                      Sharding: PROTOS_TEST_SHARD_COUNT=1 PROTOS_TEST_SHARD_INDEX=1' \
+		'                      Independent of local PROTOS_TEST_JOBS admission capacity' \
+		'                      Example: make test-protos-suite PROTOS_TEST_SHARD_COUNT=4 PROTOS_TEST_SHARD_INDEX=2 PROTOS_TEST_JOBS=1' \
 		'  make test-protos-foreign  Run the external foreign-provider tests (no build)' \
 		'  make check          Run compilerability / PE bailout checks: toolchain,' \
 		'                      static PE guards, generated-dispatch BCI and the global' \
@@ -443,7 +454,7 @@ test-protos: prepare-protos-tests
 
 test-protos-suite:
 	@start=$$(date +%s); \
-	bin/protos test --jobs $(PROTOS_TEST_JOBS); \
+	bin/protos test --jobs $(PROTOS_TEST_JOBS) $(PROTOS_TEST_SHARD_ARGS); \
 	status=$$?; \
 	end=$$(date +%s); \
 	printf 'Protos tests total time: %s s\n' "$$((end - start))"; \

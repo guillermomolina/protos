@@ -140,9 +140,10 @@ final class ProtosTestToolResourceCatalogCompositionTest {
 
         assertTrue(main.contains("ResourceCatalog: import(\"./ResourceCatalog.protos\")"));
         assertTrue(main.contains("arguments: process.args()"));
-        assertTrue(main.contains("jobs: Options.jobs(arguments)"));
+        assertTrue(main.contains("options: Options.parse(arguments)"));
+        assertTrue(main.contains("jobs: options[0]"));
         assertTrue(main.contains(
-                "resourceCatalogPath: Options.resourceCatalogPath(arguments)"));
+                "resourceCatalogPath: options[1]"));
         assertTrue(main.contains("resourceCatalog: ResourceCatalog.empty()"));
         assertTrue(main.contains("(resourceCatalogPath === null).ifFalse(() => {"));
         assertTrue(main.contains("catalogAcquirer(resourceCatalogPath)"));

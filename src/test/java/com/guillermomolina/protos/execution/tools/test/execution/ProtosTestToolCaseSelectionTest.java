@@ -501,6 +501,262 @@ final class ProtosTestToolCaseSelectionTest {
                 """);
     }
 
+    @Test
+    void shardsSpanSourcesAndCorporaWithOrderedDisjointBalancedUnion() throws Exception {
+        assertTrue(
+                SUITE
+                        + """
+
+                        Assertions: import("std:test/assertions")
+                        Plan: import("./LogicalCasePlan.protos")
+                        one: Discovery.projectionFromModule(Array("corpus", "one.protos"), {
+                            tests: Array(TestValue("fourth", body))
+                        })
+                        other: Discovery.projectionFromModule(Array("other-corpus", "many.protos"), {
+                            tests: Array(TestValue("fifth", body), TestValue("sixth", body),
+                                TestValue("seventh", body), TestValue("eighth", body))
+                        })
+                        projections: Array(projection, one, other)
+                        complete: Array(...cases, ...Discovery.projectionPlan(one),
+                            ...Discovery.projectionPlan(other))
+                        expected: Array(
+                            Array(2, Array("first", "third", "fifth", "seventh"),
+                                Array("second", "fourth", "sixth", "eighth")),
+                            Array(3, Array("first", "fourth", "seventh"),
+                                Array("second", "fifth", "eighth"), Array("third", "sixth")),
+                            Array(5, Array("first", "sixth"), Array("second", "seventh"),
+                                Array("third", "eighth"), Array("fourth"), Array("fifth")),
+                            Array(10, Array("first"), Array("second"), Array("third"),
+                                Array("fourth"), Array("fifth"), Array("sixth"),
+                                Array("seventh"), Array("eighth"), Array(), Array())
+                        )
+                        for(example in expected) {
+                            count: example[0]
+                            union: Map()
+                            minimum: complete.size()
+                            maximum: 0
+                            run: 1
+                            while(run <= count) {
+                                selection: Selection.beginWithShard(Array(), count, run)
+                                retained: Array()
+                                selectedProjections: Array()
+                                for(original in projections) {
+                                    part: Selection.retain(selection, Discovery.projectionPlan(original))
+                                    retained = Array(...retained, ...part)
+                                    selectedProjections = Array(...selectedProjections,
+                                        Selection.projection(original, part))
+                                }
+                                Selection.requireComplete(selection)
+                                Assertions.require(selection.active.not())
+                                Assertions.require(selection.selectedPosition == complete.size())
+                                Assertions.require(retained.size() == example[run].size())
+                                if(retained.size() < minimum) { minimum = retained.size() }
+                                if(retained.size() > maximum) { maximum = retained.size() }
+                                index: 0
+                                previous: -1
+                                for(entry in retained) {
+                                    Assertions.require(Plan.selector(entry) == example[run][index])
+                                    ref: CaseRef.ref(entry)
+                                    Assertions.require(union.containsKey(ref).not())
+                                    union[ref] = true
+                                    position: 0
+                                    found: false
+                                    for(original in complete) {
+                                        if(entry === original) {
+                                            found = true
+                                            Assertions.require(position > previous)
+                                            previous = position
+                                        }
+                                        position = position + 1
+                                    }
+                                    Assertions.require(found)
+                                    index = index + 1
+                                }
+                                Selection.listing(selectedProjections)
+                                run = run + 1
+                            }
+                            Assertions.require(maximum - minimum <= 1)
+                            for(entry in complete) {
+                                Assertions.require(union.containsKey(CaseRef.ref(entry)))
+                            }
+                        }
+                        calls.value == 0
+                        """);
+    }
+
+    @Test
+    void exactSelectionPrecedesShardingAndPreservesFullSignatureAndEntries() throws Exception {
+        assertTrue(
+                SUITE
+                        + """
+
+                        Assertions: import("std:test/assertions")
+                        Plan: import("./LogicalCasePlan.protos")
+                        for(run in Array(1, 2)) {
+                            selection: Selection.beginWithShard(Array(
+                                CaseRef.ref(cases[2]), CaseRef.ref(cases[0])
+                            ), 2, run)
+                            retained: Selection.retain(selection, cases)
+                            Selection.requireComplete(selection)
+                            Assertions.require(selection.active)
+                            Assertions.require(selection.selectedPosition == 2)
+                            Assertions.require(retained.size() == 1)
+                            original: cases[0]
+                            if(run == 2) { original = cases[2] }
+                            Assertions.require(retained[0] === original)
+                            Assertions.require(Plan.sourceAssociation(retained[0]) ===
+                                Plan.sourceAssociation(original))
+                            Assertions.require(Plan.declarationPosition(retained[0]) ==
+                                Plan.declarationPosition(original))
+                            Assertions.require(CaseRef.ref(retained[0]) == CaseRef.ref(original))
+                            selected: Selection.projection(projection, retained)
+                            Assertions.require(Discovery.projectionSignature(selected) ===
+                                Discovery.projectionSignature(projection))
+                            Assertions.require(Discovery.projectionSignature(selected).size() == 3)
+                            Assertions.require(Discovery.projectionPlan(selected)[0] === original)
+                            Selection.listing(Array(selected))
+                        }
+                        calls.value == 0
+                        """);
+    }
+
+    @Test
+    void absentUnitAndHugeShardsKeepInvocationLocalStateWithoutCountSizedAllocation()
+            throws Exception {
+        assertTrue(
+                SUITE
+                        + """
+
+                        Assertions: import("std:test/assertions")
+                        inactive: Selection.begin(Array())
+                        all: Selection.retain(inactive, cases)
+                        Assertions.require(inactive.selectedPosition == 0)
+                        Assertions.require(inactive.shardActive.not())
+                        unit: Selection.beginWithShard(Array(), 1, 1)
+                        unitCases: Selection.retain(unit, cases)
+                        Assertions.require(unitCases.size() == all.size())
+                        Assertions.require(unit.shardActive === false)
+                        Assertions.require(unit.shardCount == 1)
+                        Assertions.require(unit.shardRun == 1)
+                        Assertions.require(unit.selectedPosition == 0)
+                        unitIndex: 0
+                        for(entry in unitCases) {
+                            Assertions.require(entry === cases[unitIndex])
+                            unitIndex = unitIndex + 1
+                        }
+                        Selection.requireComplete(unit)
+                        exactUnit: Selection.beginWithShard(Array(
+                            CaseRef.ref(cases[2]), CaseRef.ref(cases[0])
+                        ), 1, 1)
+                        exactUnitCases: Selection.retain(exactUnit, cases)
+                        Selection.requireComplete(exactUnit)
+                        Assertions.require(exactUnit.active)
+                        Assertions.require(exactUnit.shardActive === false)
+                        Assertions.require(exactUnitCases.size() == 2)
+                        Assertions.require(exactUnitCases[0] === cases[0])
+                        Assertions.require(exactUnitCases[1] === cases[2])
+                        Assertions.require(exactUnit.selectedPosition == 0)
+                        unresolvedUnit: Selection.beginWithShard(Array(
+                            CaseRef.derive(Array("corpus", "suite.protos"), "missing")
+                        ), 1, 1)
+                        Selection.retain(unresolvedUnit, cases)
+                        Assertions.require(unresolvedUnit.selectedPosition == 0)
+                        Assertions.signals(Error, () => {
+                            Selection.requireComplete(unresolvedUnit)
+                        })
+                        for(run in Array(1, 2, 4, 9223372036854775809)) {
+                            selection: Selection.beginWithShard(Array(), 9223372036854775809, run)
+                            retained: Selection.retain(selection, cases)
+                            Selection.requireComplete(selection)
+                            Assertions.require(selection.selectedPosition == 3)
+                            if(run <= 3) {
+                                Assertions.require(retained.size() == 1)
+                                Assertions.require(retained[0] === cases[run - 1])
+                            }
+                            if(run > 3) {
+                                Assertions.require(retained.size() == 0)
+                                Assertions.require(Selection.listing(Array(
+                                    Selection.projection(projection, retained))) ==
+                                    "{\\"schema\\":\\"protos.test.cases/v1\\",\\"cases\\":[]}")
+                            }
+                        }
+                        exactEmpty: Selection.beginWithShard(Array(CaseRef.ref(cases[0])), 9, 9)
+                        Assertions.require(Selection.retain(exactEmpty, cases).size() == 0)
+                        Selection.requireComplete(exactEmpty)
+                        largePosition: Selection.beginWithShard(Array(), 2, 2)
+                        largePosition.selectedPosition = 9223372036854775809
+                        largeRetained: Selection.retain(largePosition, cases)
+                        Assertions.require(largeRetained.size() == 2)
+                        Assertions.require(largeRetained[0] === cases[0])
+                        Assertions.require(largeRetained[1] === cases[2])
+                        Assertions.require(largePosition.selectedPosition == 9223372036854775812)
+                        (unitCases[0] === cases[0]) && (unitCases[2] === cases[2]) &&
+                            (inactive.selectedPosition == 0) && (calls.value == 0)
+                        """);
+    }
+
+    @Test
+    void emptyShardStillRejectsUnknownRepeatedMalformedAndDuplicateDiscoveredRefs()
+            throws Exception {
+        assertFails(SUITE + """
+
+                selection: Selection.beginWithShard(Array(
+                    CaseRef.derive(Array("corpus", "suite.protos"), "missing")
+                ), 9, 9)
+                Selection.retain(selection, cases)
+                Selection.requireComplete(selection)
+                """);
+        assertFails(SUITE + """
+
+                Selection.beginWithShard(Array(CaseRef.ref(cases[0]), CaseRef.ref(cases[0])), 9, 9)
+                """);
+        assertFails(SUITE + """
+
+                Selection.beginWithShard(Array("invalid"), 9, 9)
+                """);
+        assertFails(SUITE + """
+
+                selection: Selection.beginWithShard(Array(), 9, 9)
+                Selection.retain(selection, cases)
+                Selection.retain(selection, cases)
+                """);
+    }
+
+    @Test
+    void retainedSelectorsResolveOnlyTheirDistinctBodies() throws Exception {
+        assertTrue(
+                SUITE
+                        + """
+
+                        Assertions: import("std:test/assertions")
+                        Plan: import("./LogicalCasePlan.protos")
+                        observed: Map()
+                        controlled: {
+                            tests: Array(
+                                TestValue("a", () => { observed["a"] = true }),
+                                TestValue("b", () => { observed["b"] = true }),
+                                TestValue("c", () => { observed["c"] = true }),
+                                TestValue("d", () => { observed["d"] = true })
+                            )
+                        }
+                        original: Discovery.projectionFromModule(
+                            Array("controlled", "bodies.protos"), controlled)
+                        selection: Selection.beginWithShard(Array(), 2, 2)
+                        retained: Selection.retain(selection, Discovery.projectionPlan(original))
+                        Selection.requireComplete(selection)
+                        selected: Selection.projection(original, retained)
+                        Selection.listing(Array(selected))
+                        Assertions.require(observed.containsKey("b").not())
+                        for(entry in Discovery.projectionPlan(selected)) {
+                            Discovery.resolveSelectedTest(controlled,
+                                Discovery.projectionSignature(selected), Plan.selector(entry)).call()
+                        }
+                        observed.containsKey("b") && observed.containsKey("d") &&
+                            observed.containsKey("a").not() && observed.containsKey("c").not() &&
+                            (calls.value == 0)
+                        """);
+    }
+
     private static String listed(String selector) {
         return "{\"ref\":\""
                 + ref("corpus", "suite.protos", selector)

@@ -118,11 +118,11 @@ final class ProtosTestToolFileSelectionMainAdoptionTest {
 
         assertTrue(
                 source.contains(
-                        "filePaths: Options.filePaths(arguments)"));
+                        "filePaths: options[2]"));
 
         assertTrue(
                 source.contains(
-                        "directoryPaths: Options.directoryPaths(arguments)"));
+                        "directoryPaths: options[3]"));
 
         assertTrue(
                 source.contains(
@@ -139,5 +139,83 @@ final class ProtosTestToolFileSelectionMainAdoptionTest {
         assertTrue(
                 source.contains(
                         "names: suiteGroupNames[suiteIndex]"));
+    }
+
+    @Test
+    void oneOptionsParseFeedsAllBindingsBeforeAcquisitionDiscoveryOrScheduling()
+            throws Exception {
+        String source = Files.readString(MAIN, StandardCharsets.UTF_8);
+        String bindings = """
+                options: Options.parse(arguments)
+                jobs: options[0]
+                resourceCatalogPath: options[1]
+                filePaths: options[2]
+                directoryPaths: options[3]
+                listCases: options[4]
+                caseRefs: options[5]
+                shardCount: options[6]
+                shardRun: options[7]
+                """;
+        String invocation = "Options.parse(arguments)";
+        int parse = source.indexOf(invocation);
+        int arguments = source.indexOf("arguments: process.args()");
+        int bindingsStart = source.indexOf(bindings);
+        int bindingsEnd = bindingsStart + bindings.length();
+
+        assertTrue(arguments >= 0);
+        assertTrue(parse > arguments);
+        assertTrue(source.indexOf(invocation, parse + invocation.length()) < 0);
+        assertTrue(bindingsStart > arguments);
+        assertTrue(source.indexOf("catalogAcquirer(resourceCatalogPath)") > bindingsEnd);
+        assertTrue(source.indexOf("fileSourceResolver(filePath)") > bindingsEnd);
+        assertTrue(source.indexOf("directorySourceResolver(directoryPath)") > bindingsEnd);
+        assertTrue(source.indexOf("logicalCaseDiscovery(") > bindingsEnd);
+        assertTrue(source.indexOf("logicalCompletions:") > bindingsEnd);
+    }
+
+    @Test
+    void oneShardStateSpansDiscoveryAndValidationPrecedesEveryPublicationOrAdmission()
+            throws Exception {
+        String source = Files.readString(MAIN, StandardCharsets.UTF_8);
+        String construction = "CaseSelection.beginWithShard(caseRefs, shardCount, shardRun)";
+        int state = source.indexOf(construction);
+        int traversal = source.indexOf("for(planned in executionSuites)", state);
+        int sourceTraversal = source.indexOf("for(spec in Manifest.planCases(planned.plan))", traversal);
+        int nativeValidation = source.indexOf("Manifest.caseExpectation(spec)", sourceTraversal);
+        int resourceValidation = source.indexOf("Manifest.caseRequirements(spec).size() == 0", nativeValidation);
+        int authorityValidation = source.indexOf("Manifest.caseAuthorityDescriptor(spec)", resourceValidation);
+        int duplicateSource = source.indexOf("sourceSpecs.containsKey(fixtureKey)", authorityValidation);
+        int discovery = source.indexOf("logicalCaseDiscovery(", duplicateSource);
+        int retain = source.indexOf("CaseSelection.retain(", discovery);
+        int projection = source.indexOf("CaseSelection.projection(", retain);
+        int complete = source.indexOf("CaseSelection.requireComplete(caseSelection)", projection);
+        int listing = source.indexOf("CaseSelection.listing(logicalProjections)", complete);
+        int groups = source.indexOf("suiteGroupAssignments: Array()", complete);
+        int scheduler = source.indexOf("logicalCompletions:", groups);
+
+        assertTrue(state >= 0);
+        assertTrue(source.indexOf(construction, state + construction.length()) < 0);
+        assertTrue(traversal > state);
+        assertTrue(sourceTraversal > traversal);
+        assertTrue(nativeValidation > sourceTraversal);
+        assertTrue(resourceValidation > nativeValidation);
+        assertTrue(authorityValidation > resourceValidation);
+        assertTrue(duplicateSource > authorityValidation);
+        assertTrue(discovery > duplicateSource);
+        assertTrue(retain > discovery);
+        assertTrue(source.indexOf("caseSelection.shardActive", sourceTraversal) > discovery);
+        assertTrue(projection > retain);
+        assertTrue(source.contains("logicalProjectionsAccumulator,\n                selectedProjection"));
+        assertTrue(complete > projection);
+        assertTrue(listing > complete);
+        assertTrue(groups > complete);
+        assertTrue(scheduler > groups);
+        assertTrue(source.contains("if(caseSelection.active || caseSelection.shardActive) {"));
+        assertTrue(source.contains("(caseSelection.active || caseSelection.shardActive).ifFalse"));
+        assertTrue(source.contains("""
+                LogicalCaseRunner.run(
+                                logicalProjections,
+                """.strip()));
+        assertTrue(source.contains("if(logicalProjections.size() > 0) {"));
     }
 }
