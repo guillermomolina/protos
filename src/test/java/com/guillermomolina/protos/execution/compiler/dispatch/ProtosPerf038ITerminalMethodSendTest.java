@@ -757,6 +757,31 @@ final class ProtosPerf038ITerminalMethodSendTest {
             assertSame(Boolean.FALSE, evaluate("same(41, 42)\n", "perf044a8-repr-12.protos", module));
             assertEquals(1, getMethodEntries("same", module, "doLong").size(),
                     "returning to SmallInteger reuses its entry");
+            List<Object> longEntries = getMethodEntries("same", module, "doLong");
+            List<Object> doubleEntries = getMethodEntries("same", module, "doDouble");
+            List<Object> floatEntries = getMethodEntries("same", module, "doFloatValue");
+            evaluate("""
+                    plainA: { tag: 1 }
+                    plainB: { tag: 2 }
+                    """, "perf044-repr-objects.protos", module);
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                assertSame(Boolean.TRUE, evaluate("same(plainA, plainA)\n", "perf044-repr-object-1.protos", module));
+                assertSame(Boolean.FALSE, evaluate("same(plainA, plainB)\n", "perf044-repr-object-2.protos", module));
+                assertSame(Boolean.TRUE, evaluate("same(41, 41)\n", "perf044-repr-long-1.protos", module));
+                assertSame(Boolean.FALSE, evaluate("same(41, 42)\n", "perf044-repr-long-2.protos", module));
+                assertSame(Boolean.TRUE, evaluate("same(1.5, 1.5)\n", "perf044-repr-float-1.protos", module));
+                assertSame(Boolean.FALSE, evaluate("same(1.5, 1.25)\n", "perf044-repr-float-2.protos", module));
+                assertSame(longEntries.get(0), getMethodEntries("same", module, "doLong").get(0),
+                        "ordinary-object and Float sends retain the installed SmallInteger entry");
+                assertEquals(longEntries, getMethodEntries("same", module, "doLong"),
+                        "the SmallInteger cache remains independent and reusable");
+                assertEquals(doubleEntries, getMethodEntries("same", module, "doDouble"),
+                        "the primitive Float cache remains installed across other families");
+                assertEquals(floatEntries, getMethodEntries("same", module, "doFloatValue"),
+                        "the represented Float cache remains installed across other families");
+            }
+            assertEquals(1, getMethodEntries("same", module, "doInherited").size(),
+                    "ordinary objects install their independent inherited selection");
         });
         System.out.println("PERF044_A8_REPRESENTED_SELECTION=PASS");
     }

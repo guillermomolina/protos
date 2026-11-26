@@ -8,6 +8,11 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.243-SNAPSHOT
+
+- **PERF044.** Use Object operands for numeric method selection and add regressions.
+- Replay source commit `50b73c4ae549a509cf4be40e179d843e84408930` with implementation-version metadata; preserve its source, tests and baseline content.
+
 ## 0.4.242-SNAPSHOT
 
 - **PERF044.** Remove recursive Complex component identity and hashing dispatch.
