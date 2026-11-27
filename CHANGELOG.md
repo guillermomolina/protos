@@ -8,6 +8,11 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.248-SNAPSHOT
+
+- **PERF044.** Revert literal matching subject comparison and last-use local cleanup fusion.
+- Replay source commit `02348764485eb5a4ef258e7c6fba0234d88fa74f` with implementation-version metadata; preserve its source, tests and baseline content.
+
 ## 0.4.247-SNAPSHOT
 
 - **PERF044.** Fuse literal matching subject comparison and last-use local cleanup.
