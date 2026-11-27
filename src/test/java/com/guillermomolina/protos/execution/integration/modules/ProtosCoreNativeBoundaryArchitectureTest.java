@@ -100,7 +100,6 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
 
     private static final Map<String, Integer> EXPECTED_NON_CORE_NATIVE_PROVIDERS =
             Map.ofEntries(
-                    Map.entry("execution/facilities/ProtosCommandLineArrayConstructionFacility.java", 3),
                     Map.entry("execution/host/embedding/ProtosExactExecutionFacility.java", 2),
                     // LIB021-A: four explicit interop operations; I174 adds private
                     // RootActor session acquisition and library-anchor recognition for std:ffi.
@@ -184,8 +183,6 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                                     "execution/tools/test/catalog/ProtosTestToolFileSelectionFacility.java")
                             || relative.equals(
                                     "execution/tools/test/reporting/ProtosTestToolStalledCaseDiagnosticFacility.java")
-                            || relative.equals(
-                                    "execution/facilities/ProtosCommandLineArrayConstructionFacility.java")
                             || relative.equals(
                                     "execution/facilities/ProtosRegexUnicodeFacility.java")
                             || relative.equals(

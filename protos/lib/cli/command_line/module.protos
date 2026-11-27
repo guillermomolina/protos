@@ -43,10 +43,7 @@ context.removeSlot("_commandLineNormalizers")
 /// Traversal follows D115 Candidate C-prime: the earliest feasible exact-child
 /// boundary, parent-minimum reservation, current-scope `--` escape and
 /// irreversible child scope transfer.
-this.parse: Parser.createParse(_commandLineArrayBuilderFactory)
-
-// The runtime-provisioned factory is captured privately above; it is not module surface.
-context.removeSlot("_commandLineArrayBuilderFactory")
+this.parse: Parser.slotValue("parse")
 
 /// Renders canonical pure help for one exact command path.
 ///

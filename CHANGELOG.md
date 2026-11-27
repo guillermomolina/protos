@@ -8,6 +8,12 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.255-SNAPSHOT
+
+- **I187.** Replace CommandLine's private Java Array builder with invocation-local Protos occurrence buffers that grow geometrically and materialize exact-sized Arrays through the existing Array slice operation.
+- Allocate positional occurrence Arrays at their known final size; remove the native builder facility and its bootstrap registration while preserving the public CommandLine API and parsing behavior.
+- Add regressions for accumulation boundaries, repeatable short-option clusters, token provenance, frozen and independent results, failure isolation, parent/child scopes and absence of native-factory provisioning.
+
 ## 0.4.254-SNAPSHOT
 
 - **I188.** Move Logging's exact binary64 shortest-decimal calculation into one private Protos source component shared by the text and JSON formatters, preserving their public behavior.

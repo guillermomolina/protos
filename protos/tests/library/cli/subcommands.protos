@@ -303,6 +303,67 @@ tests: [
             true
         }
         Assertions.require(tool009LegacyCase())
+    }),
+    Test("parent and child accumulate independent ordered occurrences", () => {
+        CommandLine: import("std:cli/command_line")
+        scope: (name, children) => {
+            CommandLine.command({
+                name: name
+                help: null
+                options: Array(CommandLine.option(
+                    key: name, long: name, short: null,
+                    minValues: 1, maxValues: 1,
+                    minOccurrences: 0, maxOccurrences: null,
+                    valueName: "VALUE", help: null
+                ))
+                positionals: Array(CommandLine.positional(
+                    key: name, minOccurrences: 0, maxOccurrences: null,
+                    valueName: "ARG", help: null
+                ))
+                subcommands: children
+            })
+        }
+        child: scope("child", Array())
+        root: scope("parent", Array(child))
+        parsed: CommandLine.parse(root, Array(
+            "p0", "--parent=a", "p1", "--parent", "b", "--parent=c", "p2",
+            "child",
+            "c0", "--child=x", "c1", "--child", "y", "--child=z", "c2"
+        ))
+        parentResult: parsed.command
+        childResult: parentResult.subcommand
+        Assertions.require(parentResult.tokenIndex === null)
+        Assertions.require(childResult.tokenIndex == 7)
+        Assertions.require(childResult.subcommand === null)
+        Assertions.require((parentResult.options === childResult.options) == false)
+        Assertions.require((parentResult.positionals === childResult.positionals) == false)
+        Assertions.require((parentResult.options === parentResult.positionals) == false)
+        Assertions.require((childResult.options === childResult.positionals) == false)
+        optionValues: Array(Array("a", "b", "c"), Array("x", "y", "z"))
+        positionalValues: Array(Array("p0", "p1", "p2"), Array("c0", "c1", "c2"))
+        scopeIndex: 0
+        for(result in Array(parentResult, childResult)) {
+            offset: scopeIndex * 8
+            Assertions.require(result.options.size() == 3)
+            Assertions.require(result.positionals.size() == 3)
+            optionTokens: Array(1, 3, 5)
+            valueTokens: Array(1, 4, 5)
+            positionalTokens: Array(0, 2, 6)
+            index: 0
+            while(index < 3) {
+                Assertions.require(result.options[index].key == result.name)
+                Assertions.require(result.options[index].spelling == "--" + result.name)
+                Assertions.require(result.options[index].value == optionValues[scopeIndex][index])
+                Assertions.require(result.options[index].tokenIndex == offset + optionTokens[index])
+                Assertions.require(result.options[index].valueTokenIndex == offset + valueTokens[index])
+                Assertions.require(result.positionals[index].key == result.name)
+                Assertions.require(result.positionals[index].value == positionalValues[scopeIndex][index])
+                Assertions.require(result.positionals[index].tokenIndex == offset + positionalTokens[index])
+                index = index + 1
+            }
+            scopeIndex = scopeIndex + 1
+        }
+        null
     })
 ]
 tests.freeze()

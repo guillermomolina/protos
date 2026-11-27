@@ -15,333 +15,424 @@
 
 //! Private command-line parser implementation.
 
-createParse: (arrayBuilderFactory) => {
-    (specification, suppliedArguments) => {
-        validateArray: (value) => {
-            Array.recognizes(value).ifFalse(() => {
-                fail()
-            })
-            value
-        }
+Arrays: import("std:collections/array")
 
-        validateString: (value) => {
-            String.recognizes(value).ifFalse(() => {
-                fail()
-            })
-            value
-        }
-
-        specification.hasSlot("kind").ifFalse(() => {
+parse: (specification, suppliedArguments) => {
+    validateArray: (value) => {
+        Array.recognizes(value).ifFalse(() => {
             fail()
         })
-        (specification.slotValue("kind") == "command").ifFalse(() => {
+        value
+    }
+
+    validateString: (value) => {
+        String.recognizes(value).ifFalse(() => {
             fail()
         })
+        value
+    }
 
-        spec: specification
+    specification.hasSlot("kind").ifFalse(() => {
+        fail()
+    })
+    (specification.slotValue("kind") == "command").ifFalse(() => {
+        fail()
+    })
 
-        validateArray(suppliedArguments)
-        for(entry in suppliedArguments) {
-            validateString(entry)
-        }
+    spec: specification
 
-        arguments: Array(...suppliedArguments)
-        arguments.freeze()
+    validateArray(suppliedArguments)
+    for(entry in suppliedArguments) {
+        validateString(entry)
+    }
 
-        newBuilder: () => {
-            arrayBuilderFactory()
-        }
+    arguments: Array(...suppliedArguments)
+    arguments.freeze()
 
-        appendBuilt: (builder, value) => {
-            builder.append(value)
-        }
+    newOccurrenceBuffer: () => {
+        buffer: Array()
+        count: 0
+        finished: false
 
-        finishBuilder: (builder) => {
-            builder.finish()
-        }
-
-        decodeRange: (source, start, end) => {
-            buffer: Encoding.UTF8.encode("")
-            cursor: start
-            while(cursor < end) {
-                buffer.add(source[cursor])
-                cursor = cursor + 1
-            }
-            Encoding.UTF8.decode(buffer)
-        }
-
-        isAsciiLetter: (octet) => {
-            ((octet >= 65) && (octet <= 90)) ||
-                ((octet >= 97) && (octet <= 122))
-        }
-
-        isAsciiDigit: (octet) => {
-            (octet >= 48) && (octet <= 57)
-        }
-
-        isShortOctet: (octet) => {
-            isAsciiLetter(octet) || isAsciiDigit(octet)
-        }
-
-        allocatePositionals: (scopeSpec, rawPositionals) => {
-            requiredPositionals: 0
-            for(positionalSpec in scopeSpec.positionals) {
-                requiredPositionals =
-                    requiredPositionals + positionalSpec.minOccurrences
-            }
-
-            if(rawPositionals.size() < requiredPositionals) {
-                fail()
-            }
-
-            positionalBuilder: newBuilder()
-            rawIndex: 0
-            laterMinimum: requiredPositionals
-
-            for(positionalSpec in scopeSpec.positionals) {
-                laterMinimum =
-                    laterMinimum - positionalSpec.minOccurrences
-
-                remaining: rawPositionals.size() - rawIndex
-                consume: 0
-
-                if(positionalSpec.maxOccurrences === null) {
-                    consume = remaining
-                }
-
-                (positionalSpec.maxOccurrences === null).ifFalse(() => {
-                    if(positionalSpec.minOccurrences == 1) {
-                        consume = 1
-                    }
-
-                    if(positionalSpec.minOccurrences == 0) {
-                        if(remaining > laterMinimum) {
-                            consume = 1
-                        }
-                    }
-                })
-
-                if(consume < positionalSpec.minOccurrences) {
+        {
+            append: (value) => {
+                if(finished) {
                     fail()
                 }
 
-                consumed: 0
-                while(consumed < consume) {
-                    raw: rawPositionals[rawIndex]
-                    occurrence: {
-                        kind: "positionalOccurrence"
-                        key: positionalSpec.key
-                        value: raw.value
-                        tokenIndex: raw.tokenIndex
+                // Spare capacity stays private; only full buffers are doubled.
+                if(count == buffer.size()) {
+                    if(count == 0) {
+                        buffer = Array(null)
+                    } else {
+                        buffer = Array(...buffer, ...buffer)
                     }
-                    occurrence.freeze()
-                    appendBuilt(positionalBuilder, occurrence)
-
-                    rawIndex = rawIndex + 1
-                    consumed = consumed + 1
                 }
+
+                buffer[count] = value
+                count = count + 1
             }
 
-            (rawIndex == rawPositionals.size()).ifFalse(() => {
-                fail()
-            })
+            finish: () => {
+                if(finished) {
+                    fail()
+                }
 
-            result: finishBuilder(positionalBuilder)
-            result.freeze()
+                finished = true
+                source: buffer
+                buffer = Array()
+                Arrays.slice(source, 0, count)
+            }
+        }
+    }
+
+    decodeRange: (source, start, end) => {
+        buffer: Encoding.UTF8.encode("")
+        cursor: start
+        while(cursor < end) {
+            buffer.add(source[cursor])
+            cursor = cursor + 1
+        }
+        Encoding.UTF8.decode(buffer)
+    }
+
+    isAsciiLetter: (octet) => {
+        ((octet >= 65) && (octet <= 90)) ||
+            ((octet >= 97) && (octet <= 122))
+    }
+
+    isAsciiDigit: (octet) => {
+        (octet >= 48) && (octet <= 57)
+    }
+
+    isShortOctet: (octet) => {
+        isAsciiLetter(octet) || isAsciiDigit(octet)
+    }
+
+    allocatePositionals: (scopeSpec, rawPositionals) => {
+        requiredPositionals: 0
+        for(positionalSpec in scopeSpec.positionals) {
+            requiredPositionals =
+                requiredPositionals + positionalSpec.minOccurrences
         }
 
-        parseScope: null
-        parseScope = (scopeSpec, startIndex, commandTokenIndex) => {
-            scopeSpec.hasSlot("kind").ifFalse(() => {
-                fail()
-            })
-            (scopeSpec.slotValue("kind") == "command").ifFalse(() => {
-                fail()
-            })
+        if(rawPositionals.size() < requiredPositionals) {
+            fail()
+        }
 
-            validateArray(scopeSpec.options)
-            validateArray(scopeSpec.positionals)
-            validateArray(scopeSpec.subcommands)
+        result: Array(...rawPositionals)
+        rawIndex: 0
+        laterMinimum: requiredPositionals
 
-            longOptions: Map()
-            shortOptions: Map()
-            occurrenceCounts: Map()
+        for(positionalSpec in scopeSpec.positionals) {
+            laterMinimum =
+                laterMinimum - positionalSpec.minOccurrences
 
-            for(optionSpec in scopeSpec.options) {
-                occurrenceCounts[optionSpec.key] = 0
+            remaining: rawPositionals.size() - rawIndex
+            consume: 0
 
-                (optionSpec.long === null).ifFalse(() => {
-                    longOptions[optionSpec.long] = optionSpec
-                })
-
-                (optionSpec.short === null).ifFalse(() => {
-                    shortOptions[optionSpec.short] = optionSpec
-                })
+            if(positionalSpec.maxOccurrences === null) {
+                consume = remaining
             }
 
-            childSpecs: Map()
-            for(childSpec in scopeSpec.subcommands) {
-                childSpecs[childSpec.name] = childSpec
-            }
-
-            requiredPositionals: 0
-            boundedMaximumPositionals: 0
-            unboundedPositionals: false
-
-            for(positionalSpec in scopeSpec.positionals) {
-                requiredPositionals =
-                    requiredPositionals + positionalSpec.minOccurrences
-
-                if(positionalSpec.maxOccurrences === null) {
-                    unboundedPositionals = true
+            (positionalSpec.maxOccurrences === null).ifFalse(() => {
+                if(positionalSpec.minOccurrences == 1) {
+                    consume = 1
                 }
 
-                (positionalSpec.maxOccurrences === null).ifFalse(() => {
-                    boundedMaximumPositionals =
-                        boundedMaximumPositionals +
-                        positionalSpec.maxOccurrences
-                })
+                if(positionalSpec.minOccurrences == 0) {
+                    if(remaining > laterMinimum) {
+                        consume = 1
+                    }
+                }
+            })
+
+            if(consume < positionalSpec.minOccurrences) {
+                fail()
             }
 
-            optionBuilder: newBuilder()
-            rawPositionalBuilder: newBuilder()
-            rawPositionalCount: 0
-
-            recordOption: (
-                optionSpec,
-                spelling,
-                tokenIndex,
-                value,
-                valueTokenIndex
-            ) => {
-                count: occurrenceCounts[optionSpec.key]
-
-                (optionSpec.maxOccurrences === null).ifFalse(() => {
-                    if(count >= optionSpec.maxOccurrences) {
-                        fail()
-                    }
-                })
-
-                occurrenceCounts[optionSpec.key] = count + 1
-
+            consumed: 0
+            while(consumed < consume) {
+                raw: rawPositionals[rawIndex]
                 occurrence: {
-                    kind: "optionOccurrence"
-                    key: optionSpec.key
-                    spelling: spelling
-                    tokenIndex: tokenIndex
-                    value: value
-                    valueTokenIndex: valueTokenIndex
+                    kind: "positionalOccurrence"
+                    key: positionalSpec.key
+                    value: raw.value
+                    tokenIndex: raw.tokenIndex
                 }
                 occurrence.freeze()
-                appendBuilt(optionBuilder, occurrence)
+                result[rawIndex] = occurrence
+
+                rawIndex = rawIndex + 1
+                consumed = consumed + 1
+            }
+        }
+
+        (rawIndex == rawPositionals.size()).ifFalse(() => {
+            fail()
+        })
+
+        result.freeze()
+    }
+
+    parseScope: null
+    parseScope = (scopeSpec, startIndex, commandTokenIndex) => {
+        scopeSpec.hasSlot("kind").ifFalse(() => {
+            fail()
+        })
+        (scopeSpec.slotValue("kind") == "command").ifFalse(() => {
+            fail()
+        })
+
+        validateArray(scopeSpec.options)
+        validateArray(scopeSpec.positionals)
+        validateArray(scopeSpec.subcommands)
+
+        longOptions: Map()
+        shortOptions: Map()
+        occurrenceCounts: Map()
+
+        for(optionSpec in scopeSpec.options) {
+            occurrenceCounts[optionSpec.key] = 0
+
+            (optionSpec.long === null).ifFalse(() => {
+                longOptions[optionSpec.long] = optionSpec
+            })
+
+            (optionSpec.short === null).ifFalse(() => {
+                shortOptions[optionSpec.short] = optionSpec
+            })
+        }
+
+        childSpecs: Map()
+        for(childSpec in scopeSpec.subcommands) {
+            childSpecs[childSpec.name] = childSpec
+        }
+
+        requiredPositionals: 0
+        boundedMaximumPositionals: 0
+        unboundedPositionals: false
+
+        for(positionalSpec in scopeSpec.positionals) {
+            requiredPositionals =
+                requiredPositionals + positionalSpec.minOccurrences
+
+            if(positionalSpec.maxOccurrences === null) {
+                unboundedPositionals = true
             }
 
-            recordRawPositional: (value, tokenIndex) => {
-                appendBuilt(
-                    rawPositionalBuilder,
-                    {
-                        value: value
-                        tokenIndex: tokenIndex
-                    }
-                )
-                rawPositionalCount = rawPositionalCount + 1
+            (positionalSpec.maxOccurrences === null).ifFalse(() => {
+                boundedMaximumPositionals =
+                    boundedMaximumPositionals +
+                    positionalSpec.maxOccurrences
+            })
+        }
+
+        optionBuffer: newOccurrenceBuffer()
+        rawPositionalBuffer: newOccurrenceBuffer()
+        rawPositionalCount: 0
+
+        recordOption: (
+            optionSpec,
+            spelling,
+            tokenIndex,
+            value,
+            valueTokenIndex
+        ) => {
+            count: occurrenceCounts[optionSpec.key]
+
+            (optionSpec.maxOccurrences === null).ifFalse(() => {
+                if(count >= optionSpec.maxOccurrences) {
+                    fail()
+                }
+            })
+
+            occurrenceCounts[optionSpec.key] = count + 1
+
+            occurrence: {
+                kind: "optionOccurrence"
+                key: optionSpec.key
+                spelling: spelling
+                tokenIndex: tokenIndex
+                value: value
+                valueTokenIndex: valueTokenIndex
+            }
+            occurrence.freeze()
+            optionBuffer.append(occurrence)
+        }
+
+        recordRawPositional: (value, tokenIndex) => {
+            rawPositionalBuffer.append(
+                {
+                    value: value
+                    tokenIndex: tokenIndex
+                }
+            )
+            rawPositionalCount = rawPositionalCount + 1
+        }
+
+        positionalPrefixFeasible: () => {
+            feasible: rawPositionalCount >= requiredPositionals
+
+            if((feasible) && (unboundedPositionals == false)) {
+                if(rawPositionalCount > boundedMaximumPositionals) {
+                    feasible = false
+                }
             }
 
-            positionalPrefixFeasible: () => {
-                feasible: rawPositionalCount >= requiredPositionals
+            feasible
+        }
 
-                if((feasible) && (unboundedPositionals == false)) {
-                    if(rawPositionalCount > boundedMaximumPositionals) {
-                        feasible = false
-                    }
+        scanIndex: startIndex
+        optionsEnabled: true
+        endOfOptionsIndex: null
+        selectedChild: null
+        selectedChildIndex: null
+
+        while(
+            (scanIndex < arguments.size()) &&
+            (selectedChild === null)
+        ) {
+            token: arguments[scanIndex]
+            source: Encoding.UTF8.encode(token)
+            advance: 1
+            handled: false
+
+            if(optionsEnabled) {
+                if(token == "--") {
+                    endOfOptionsIndex = scanIndex
+                    optionsEnabled = false
+                    handled = true
                 }
 
-                feasible
-            }
-
-            scanIndex: startIndex
-            optionsEnabled: true
-            endOfOptionsIndex: null
-            selectedChild: null
-            selectedChildIndex: null
-
-            while(
-                (scanIndex < arguments.size()) &&
-                (selectedChild === null)
-            ) {
-                token: arguments[scanIndex]
-                source: Encoding.UTF8.encode(token)
-                advance: 1
-                handled: false
-
-                if(optionsEnabled) {
-                    if(token == "--") {
-                        endOfOptionsIndex = scanIndex
-                        optionsEnabled = false
-                        handled = true
+                handled.ifFalse(() => {
+                    optionLike: false
+                    if(source.size() > 0) {
+                        if(source[0] == 45) {
+                            optionLike = true
+                        }
                     }
 
-                    handled.ifFalse(() => {
-                        optionLike: false
-                        if(source.size() > 0) {
-                            if(source[0] == 45) {
-                                optionLike = true
-                            }
+                    if(optionLike) {
+                        if(source.size() == 1) {
+                            fail()
                         }
 
-                        if(optionLike) {
-                            if(source.size() == 1) {
-                                fail()
+                        longForm: source[1] == 45
+
+                        if(longForm) {
+                            equalsIndex: -1
+                            cursor: 2
+                            while(cursor < source.size()) {
+                                if(
+                                    (equalsIndex < 0) &&
+                                    (source[cursor] == 61)
+                                ) {
+                                    equalsIndex = cursor
+                                }
+                                cursor = cursor + 1
                             }
 
-                            longForm: source[1] == 45
+                            nameEnd: source.size()
+                            if(equalsIndex >= 0) {
+                                nameEnd = equalsIndex
+                            }
 
-                            if(longForm) {
-                                equalsIndex: -1
-                                cursor: 2
-                                while(cursor < source.size()) {
-                                    if(
-                                        (equalsIndex < 0) &&
-                                        (source[cursor] == 61)
-                                    ) {
-                                        equalsIndex = cursor
-                                    }
-                                    cursor = cursor + 1
-                                }
+                            longName: decodeRange(source, 2, nameEnd)
+                            longOptions.containsKey(longName).ifFalse(() => {
+                                fail()
+                            })
 
-                                nameEnd: source.size()
-                                if(equalsIndex >= 0) {
-                                    nameEnd = equalsIndex
-                                }
+                            optionSpec: longOptions[longName]
+                            spelling: "--" + optionSpec.long
 
-                                longName: decodeRange(source, 2, nameEnd)
-                                longOptions.containsKey(longName).ifFalse(() => {
+                            if(equalsIndex >= 0) {
+                                (optionSpec.maxValues == 1).ifFalse(() => {
                                     fail()
                                 })
 
-                                optionSpec: longOptions[longName]
-                                spelling: "--" + optionSpec.long
+                                value: decodeRange(
+                                    source,
+                                    equalsIndex + 1,
+                                    source.size()
+                                )
+                                recordOption(
+                                    optionSpec,
+                                    spelling,
+                                    scanIndex,
+                                    value,
+                                    scanIndex
+                                )
+                            }
 
-                                if(equalsIndex >= 0) {
-                                    (optionSpec.maxValues == 1).ifFalse(() => {
+                            (equalsIndex >= 0).ifFalse(() => {
+                                if(optionSpec.maxValues == 1) {
+                                    if(
+                                        (scanIndex + 1) >= arguments.size()
+                                    ) {
                                         fail()
-                                    })
+                                    }
 
-                                    value: decodeRange(
-                                        source,
-                                        equalsIndex + 1,
-                                        source.size()
-                                    )
                                     recordOption(
                                         optionSpec,
                                         spelling,
                                         scanIndex,
-                                        value,
-                                        scanIndex
+                                        arguments[scanIndex + 1],
+                                        scanIndex + 1
+                                    )
+                                    advance = 2
+                                }
+
+                                (optionSpec.maxValues == 1).ifFalse(() => {
+                                    recordOption(
+                                        optionSpec,
+                                        spelling,
+                                        scanIndex,
+                                        null,
+                                        null
+                                    )
+                                })
+                            })
+
+                            handled = true
+                        }
+
+                        longForm.ifFalse(() => {
+                            memberCount: source.size() - 1
+                            cursor: 1
+
+                            while(cursor < source.size()) {
+                                octet: source[cursor]
+                                isShortOctet(octet).ifFalse(() => {
+                                    fail()
+                                })
+
+                                shortName: decodeRange(
+                                    source,
+                                    cursor,
+                                    cursor + 1
+                                )
+                                shortOptions.containsKey(shortName).ifFalse(() => {
+                                    fail()
+                                })
+
+                                optionSpec: shortOptions[shortName]
+                                spelling: "-" + optionSpec.short
+
+                                if(memberCount > 1) {
+                                    (optionSpec.maxValues == 0).ifFalse(() => {
+                                        fail()
+                                    })
+                                    recordOption(
+                                        optionSpec,
+                                        spelling,
+                                        scanIndex,
+                                        null,
+                                        null
                                     )
                                 }
 
-                                (equalsIndex >= 0).ifFalse(() => {
+                                if(memberCount == 1) {
                                     if(optionSpec.maxValues == 1) {
                                         if(
                                             (scanIndex + 1) >= arguments.size()
@@ -368,145 +459,78 @@ createParse: (arrayBuilderFactory) => {
                                             null
                                         )
                                     })
-                                })
-
-                                handled = true
-                            }
-
-                            longForm.ifFalse(() => {
-                                memberCount: source.size() - 1
-                                cursor: 1
-
-                                while(cursor < source.size()) {
-                                    octet: source[cursor]
-                                    isShortOctet(octet).ifFalse(() => {
-                                        fail()
-                                    })
-
-                                    shortName: decodeRange(
-                                        source,
-                                        cursor,
-                                        cursor + 1
-                                    )
-                                    shortOptions.containsKey(shortName).ifFalse(() => {
-                                        fail()
-                                    })
-
-                                    optionSpec: shortOptions[shortName]
-                                    spelling: "-" + optionSpec.short
-
-                                    if(memberCount > 1) {
-                                        (optionSpec.maxValues == 0).ifFalse(() => {
-                                            fail()
-                                        })
-                                        recordOption(
-                                            optionSpec,
-                                            spelling,
-                                            scanIndex,
-                                            null,
-                                            null
-                                        )
-                                    }
-
-                                    if(memberCount == 1) {
-                                        if(optionSpec.maxValues == 1) {
-                                            if(
-                                                (scanIndex + 1) >= arguments.size()
-                                            ) {
-                                                fail()
-                                            }
-
-                                            recordOption(
-                                                optionSpec,
-                                                spelling,
-                                                scanIndex,
-                                                arguments[scanIndex + 1],
-                                                scanIndex + 1
-                                            )
-                                            advance = 2
-                                        }
-
-                                        (optionSpec.maxValues == 1).ifFalse(() => {
-                                            recordOption(
-                                                optionSpec,
-                                                spelling,
-                                                scanIndex,
-                                                null,
-                                                null
-                                            )
-                                        })
-                                    }
-
-                                    cursor = cursor + 1
                                 }
 
-                                handled = true
-                            })
-                        }
-
-                        optionLike.ifFalse(() => {
-                            if(childSpecs.containsKey(token)) {
-                                if(positionalPrefixFeasible()) {
-                                    selectedChild = childSpecs[token]
-                                    selectedChildIndex = scanIndex
-                                    handled = true
-                                }
+                                cursor = cursor + 1
                             }
+
+                            handled = true
                         })
+                    }
+
+                    optionLike.ifFalse(() => {
+                        if(childSpecs.containsKey(token)) {
+                            if(positionalPrefixFeasible()) {
+                                selectedChild = childSpecs[token]
+                                selectedChildIndex = scanIndex
+                                handled = true
+                            }
+                        }
                     })
-                }
-
-                handled.ifFalse(() => {
-                    recordRawPositional(token, scanIndex)
                 })
-
-                scanIndex = scanIndex + advance
             }
 
-            for(optionSpec in scopeSpec.options) {
-                if(
-                    occurrenceCounts[optionSpec.key] <
-                    optionSpec.minOccurrences
-                ) {
-                    fail()
-                }
-            }
-
-            rawPositionals: finishBuilder(rawPositionalBuilder)
-            positionalOccurrences:
-                allocatePositionals(scopeSpec, rawPositionals)
-
-            optionOccurrences: finishBuilder(optionBuilder)
-            optionOccurrences.freeze()
-
-            childResult: null
-            (selectedChild === null).ifFalse(() => {
-                childResult = parseScope(
-                    selectedChild,
-                    scanIndex,
-                    selectedChildIndex
-                )
+            handled.ifFalse(() => {
+                recordRawPositional(token, scanIndex)
             })
 
-            commandResult: {
-                kind: "commandResult"
-                name: scopeSpec.name
-                tokenIndex: commandTokenIndex
-                endOfOptionsIndex: endOfOptionsIndex
-                options: optionOccurrences
-                positionals: positionalOccurrences
-                subcommand: childResult
+            scanIndex = scanIndex + advance
+        }
+
+        for(optionSpec in scopeSpec.options) {
+            if(
+                occurrenceCounts[optionSpec.key] <
+                optionSpec.minOccurrences
+            ) {
+                fail()
             }
-            commandResult.freeze()
         }
 
-        commandResult: parseScope(spec, 0, null)
+        rawPositionals: rawPositionalBuffer.finish()
+        positionalOccurrences:
+            allocatePositionals(scopeSpec, rawPositionals)
 
-        result: {
-            kind: "parseResult"
-            arguments: arguments
-            command: commandResult
+        optionOccurrences: optionBuffer.finish()
+        optionOccurrences.freeze()
+
+        childResult: null
+        (selectedChild === null).ifFalse(() => {
+            childResult = parseScope(
+                selectedChild,
+                scanIndex,
+                selectedChildIndex
+            )
+        })
+
+        commandResult: {
+            kind: "commandResult"
+            name: scopeSpec.name
+            tokenIndex: commandTokenIndex
+            endOfOptionsIndex: endOfOptionsIndex
+            options: optionOccurrences
+            positionals: positionalOccurrences
+            subcommand: childResult
         }
-        result.freeze()
+        commandResult.freeze()
     }
+
+    commandResult: parseScope(spec, 0, null)
+
+    result: {
+        kind: "parseResult"
+        arguments: arguments
+        command: commandResult
+    }
+    result.freeze()
 }
+

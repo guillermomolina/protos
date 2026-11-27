@@ -18,10 +18,12 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import java.nio.file.Path;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
@@ -48,4 +50,16 @@ final class ProtosCommandLineModuleTest {
                 module.localSlotsSnapshot().keySet());
     }
 
+    @Test
+    void commandLineMembersDoNotProvisionNativeArrayBuilder() throws Exception {
+        ProtosStandardLibraryModuleResolver resolver =
+                new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+        ProtosObjectValue context = prelude.newExecutionContext();
+
+        prelude.installStandardModuleMembersForRuntime(
+                ProtosModuleKey.module("std:cli/command_line"), context);
+
+        assertFalse(context.hasLocalSlot("_commandLineArrayBuilderFactory"));
+    }
 }

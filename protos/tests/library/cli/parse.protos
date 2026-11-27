@@ -16,6 +16,34 @@
 Assertions: import("std:test/assertions")
 Test: import("std:test/test")
 
+CommandLine: import("std:cli/command_line")
+
+occurrenceSpec: (maximum, positionalMinimum, positionalMaximum) => {
+    CommandLine.command({
+        name: "tool"
+        help: null
+        options: Array(
+            CommandLine.option(
+                key: "verbose", long: "verbose", short: "v",
+                minValues: 0, maxValues: 0,
+                minOccurrences: 0, maxOccurrences: maximum,
+                valueName: null, help: null
+            ),
+            CommandLine.option(
+                key: "define", long: "define", short: "D",
+                minValues: 1, maxValues: 1,
+                minOccurrences: 0, maxOccurrences: null,
+                valueName: "VALUE", help: null
+            )
+        )
+        positionals: Array(CommandLine.positional(
+            key: "tail", minOccurrences: positionalMinimum,
+            maxOccurrences: positionalMaximum, valueName: "ARG", help: null
+        ))
+        subcommands: Array()
+    })
+}
+
 tests: [
     Test("parse delimiter", () => {
         tool009LegacyCase: () => {
@@ -418,6 +446,170 @@ tests: [
             true
         }
         Assertions.require(tool009LegacyCase())
+    }),
+    Test("occurrence arrays have exact lengths across growth boundaries", () => {
+        spec: occurrenceSpec(null, 0, null)
+        for(length in Array(0, 1, 2, 3, 7, 8, 9, 31, 32, 33, 127, 128, 129)) {
+            input: Array()
+            value: "value"
+            argument: "arg"
+            index: 0
+            while(index < length) {
+                input = Array(...input, "--define", value, argument)
+                value = value + "x"
+                argument = argument + "x"
+                index = index + 1
+            }
+
+            parsed: CommandLine.parse(spec, input)
+            options: parsed.command.options
+            positionals: parsed.command.positionals
+            Assertions.require(parsed.arguments.size() == length * 3)
+            Assertions.require(options.size() == length)
+            Assertions.require(positionals.size() == length)
+            index = 0
+            value = "value"
+            argument = "arg"
+            while(index < length) {
+                Assertions.require(options[index].key == "define")
+                Assertions.require(options[index].spelling == "--define")
+                Assertions.require(options[index].value == value)
+                Assertions.require(options[index].tokenIndex == index * 3)
+                Assertions.require(options[index].valueTokenIndex == index * 3 + 1)
+                Assertions.require(positionals[index].key == "tail")
+                Assertions.require(positionals[index].value == argument)
+                Assertions.require(positionals[index].tokenIndex == index * 3 + 2)
+                value = value + "x"
+                argument = argument + "x"
+                index = index + 1
+            }
+            Assertions.signals(Error, () => { options.marker: true })
+            Assertions.signals(Error, () => { positionals.marker: true })
+            if(length > 0) {
+                Assertions.signals(Error, () => { options[0] = null })
+                Assertions.signals(Error, () => { positionals[0] = null })
+            }
+        }
+        null
+    }),
+    Test("repeatable short clusters retain every flag occurrence", () => {
+        spec: occurrenceSpec(null, 0, null)
+        for(length in Array(1, 2, 3, 7, 8, 9, 31, 32, 33, 127, 128, 129)) {
+            cluster: "-"
+            index: 0
+            while(index < length) {
+                cluster = cluster + "v"
+                index = index + 1
+            }
+            parsed: CommandLine.parse(spec, Array(cluster, "-vv"))
+            options: parsed.command.options
+            Assertions.require(options.size() == length + 2)
+            Assertions.require(parsed.command.positionals.size() == 0)
+            index = 0
+            while(index < options.size()) {
+                expectedToken: 0
+                if(index >= length) { expectedToken = 1 }
+                Assertions.require(options[index].key == "verbose")
+                Assertions.require(options[index].spelling == "-v")
+                Assertions.require(options[index].tokenIndex == expectedToken)
+                Assertions.require(options[index].value === null)
+                Assertions.require(options[index].valueTokenIndex === null)
+                index = index + 1
+            }
+        }
+        null
+    }),
+    Test("mixed occurrences retain provenance and independent snapshots", () => {
+        spec: occurrenceSpec(null, 0, null)
+        input: Array("first", "--define=one", "-D", "two", "second",
+            "--define=three", "--", "--define=four", "-v")
+        first: CommandLine.parse(spec, input)
+        second: CommandLine.parse(spec, input)
+        third: CommandLine.parse(spec, input)
+        Assertions.require((first === second) == false)
+        Assertions.require((first.command === second.command) == false)
+        Assertions.require((first.arguments === second.arguments) == false)
+        Assertions.require((first.command.options === second.command.options) == false)
+        Assertions.require((first.command.positionals === second.command.positionals) == false)
+        Assertions.require((second === third) == false)
+        Assertions.require((second.command === third.command) == false)
+        Assertions.require((second.arguments === third.arguments) == false)
+        Assertions.require((second.command.options === third.command.options) == false)
+        Assertions.require((second.command.positionals === third.command.positionals) == false)
+        for(parsed in Array(first, second, third)) {
+            options: parsed.command.options
+            positionals: parsed.command.positionals
+            Assertions.require(options.size() == 3)
+            Assertions.require(positionals.size() == 4)
+            Assertions.require(parsed.command.endOfOptionsIndex == 6)
+            expectedValues: Array("one", "two", "three")
+            expectedSpellings: Array("--define", "-D", "--define")
+            expectedTokens: Array(1, 2, 5)
+            expectedValueTokens: Array(1, 3, 5)
+            index: 0
+            while(index < 3) {
+                Assertions.require(options[index].key == "define")
+                Assertions.require(options[index].value == expectedValues[index])
+                Assertions.require(options[index].spelling == expectedSpellings[index])
+                Assertions.require(options[index].tokenIndex == expectedTokens[index])
+                Assertions.require(options[index].valueTokenIndex == expectedValueTokens[index])
+                Assertions.require((first.command.options[index] === second.command.options[index]) == false)
+                index = index + 1
+            }
+            expectedPositionals: Array("first", "second", "--define=four", "-v")
+            expectedPositionalTokens: Array(0, 4, 7, 8)
+            index = 0
+            while(index < 4) {
+                Assertions.require(positionals[index].value == expectedPositionals[index])
+                Assertions.require(positionals[index].tokenIndex == expectedPositionalTokens[index])
+                Assertions.require((first.command.positionals[index] === second.command.positionals[index]) == false)
+                index = index + 1
+            }
+        }
+        input[0] = "changed"
+        input[1] = "--define=changed"
+        for(parsed in Array(first, second, third)) {
+            Assertions.require(parsed.arguments[0] == "first")
+            Assertions.require(parsed.arguments[1] == "--define=one")
+            Assertions.require(parsed.command.options[0].value == "one")
+            Assertions.require(parsed.command.positionals[0].value == "first")
+        }
+        null
+    }),
+    Test("failed accumulation does not affect subsequent parses", () => {
+        spec: occurrenceSpec(1, 1, 1)
+        prefix: Array("--define=a", "--define=b", "--define=c", "-v", "target")
+        for(invalid in Array(
+            Array(...prefix, "--unknown"),
+            Array(...prefix, "-v"),
+            Array(...prefix, "excess")
+        )) {
+            Assertions.signals(Error, () => { CommandLine.parse(spec, invalid) })
+            parsed: CommandLine.parse(spec, prefix)
+            Assertions.require(parsed.arguments.size() == 5)
+            Assertions.require(parsed.command.options.size() == 4)
+            Assertions.require(parsed.command.positionals.size() == 1)
+            index: 0
+            for(value in Array("a", "b", "c")) {
+                occurrence: parsed.command.options[index]
+                Assertions.require(occurrence.key == "define")
+                Assertions.require(occurrence.spelling == "--define")
+                Assertions.require(occurrence.tokenIndex == index)
+                Assertions.require(occurrence.value == value)
+                Assertions.require(occurrence.valueTokenIndex == index)
+                index = index + 1
+            }
+            flag: parsed.command.options[3]
+            Assertions.require(flag.key == "verbose")
+            Assertions.require(flag.spelling == "-v")
+            Assertions.require(flag.tokenIndex == 3)
+            Assertions.require(flag.value === null)
+            Assertions.require(flag.valueTokenIndex === null)
+            Assertions.require(parsed.command.positionals[0].key == "tail")
+            Assertions.require(parsed.command.positionals[0].value == "target")
+            Assertions.require(parsed.command.positionals[0].tokenIndex == 4)
+        }
+        null
     })
 ]
 tests.freeze()

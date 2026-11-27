@@ -902,11 +902,6 @@ public final class ProtosCoreBootstrap {
                                 "Range", rangePrototype,
                                 "InvertedRange", invertedRangePrototype)),
                 Map.entry(
-                        ProtosCommandLineArrayConstructionFacility.MODULE_KEY,
-                        Map.of(
-                                ProtosCommandLineArrayConstructionFacility.BOOTSTRAP_SLOT,
-                                ProtosCommandLineArrayConstructionFacility.createFactory())),
-                Map.entry(
                         ProtosRegexUnicodeFacility.MODULE_KEY,
                         Map.of(
                                 ProtosRegexUnicodeFacility.BOOTSTRAP_SLOT,
