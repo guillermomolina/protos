@@ -106,6 +106,17 @@ case "$artifact_mode" in
         ;;
 esac
 
+# Release acceptance includes exhaustive functional coverage at this existing
+# revision-bound B5 gate. Preparation callers already reuse this admission.
+if [ "$artifact_mode" = public-prerelease ]; then
+    candidate_revision=$(git -C "$ROOT" rev-parse HEAD)
+    # Reuse the verified candidate for foreign-provider validation: the ordinary
+    # development packaging target would overwrite this exact archive pathname.
+    PROTOS_FOREIGN_TEST_ARCHIVE="$archive" python3 "$ROOT/scripts/publication_validation.py" \
+        --repo "$ROOT" --base "$release_baseline" --head "$candidate_revision" \
+        --top-level-closure --exhaustive
+fi
+
 # B3 and B4A deliberately use their existing host-sensitive fallback isolation
 # on a non-selected development JDK. Each smoke extracts its own disposable copy;
 # the archive itself must remain byte-for-byte unchanged.

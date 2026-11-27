@@ -34,6 +34,15 @@ contract. Do not advertise generic Java compatibility merely because the shaded
 JAR can start on a particular JDK; Truffle/Graal optimizing-runtime support and
 fallback execution must not be conflated without evidence.
 
+Release candidates require exhaustive functional validation (`FULL`, using
+`make test-all`) bound to the exact candidate revision. Ordinary `make test` and
+selective library validation cannot discharge this obligation. The existing
+release-aware portable B5 admission invokes the shared publication selector with
+`--exhaustive`; release preparation and candidate validation retain that admission.
+Native Image and compilerability obligations remain independent. Do not repeat
+exhaustive execution when an existing accepted revision-bound gate already supplies
+that evidence.
+
 Release automation MUST preserve exact source-revision identity, required
 validation, license/notices, runtime requirements, release metadata, and artifact
 checksums. It MUST NOT automatically turn every successful `main` revision or

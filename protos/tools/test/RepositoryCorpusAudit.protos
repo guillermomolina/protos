@@ -28,6 +28,7 @@
 //! the result does not depend on the order in which any input was enumerated.
 
 Arrays: import("std:collections/array")
+RepositoryTestOwnership: import("./RepositoryTestOwnership.protos")
 ArrayAccumulator: import("./ArrayAccumulator.protos")
 
 /// An intended production source that no registration names.
@@ -62,7 +63,7 @@ requireText: (value) => {
 /// `corpus`, the D126 CorpusId; `caseId`, the plan's CaseSpec identity; and
 /// `authority`, the D133 project identity of the case's CaseAuthority
 /// descriptor, or `null` when the case carries none.
-registration: (path, suite, corpus, caseId, authority) => {
+registration: (path, suite, corpus, caseId, authority, sourcePath: caseId) => {
     (authority === null).ifFalse(() => {
         requireText(authority)
     })
@@ -77,6 +78,7 @@ registration: (path, suite, corpus, caseId, authority) => {
     record: {
         path: requireText(path)
         identity: identity
+        sourcePath: requireText(sourcePath)
     }
     record.freeze()
 }
@@ -186,7 +188,7 @@ diagnostic: (code, path, identity) => {
 /// `registration` records. Several registrations may share one source only
 /// when each carries a distinct D133 project authority. Malformed input fails
 /// rather than producing a diagnostic.
-audit: (physicalSources, intendedSources, exclusions, registrations) => {
+audit: (physicalSources, intendedSources, exclusions, registrations, repositoryOwnership: true) => {
     physical: textSet(physicalSources)
     intended: textSet(intendedSources)
 
@@ -198,6 +200,35 @@ audit: (physicalSources, intendedSources, exclusions, registrations) => {
             reported[key] = true
             ArrayAccumulator.append(diagnostics, Array(key, diagnostic(code, path, identity)))
         })
+    }
+
+    contradictoryPaths: Map()
+    if(repositoryOwnership) {
+        sourceOwners: Map()
+        for(record in registrations) {
+            Error.handle(() => {
+                owner: RepositoryTestOwnership.classify(record.identity.corpus, record.sourcePath)
+                RepositoryTestOwnership.requirePhysicalOwner(record.path, owner)
+                if(sourceOwners.containsKey(record.path)) {
+                    (sourceOwners[record.path] == owner).ifFalse(() => {
+                        contradictoryPaths[record.path] = true
+                    })
+                }
+                sourceOwners[record.path] = owner
+                null
+            }, (error) => {
+                emit("INVALID_TEST_OWNERSHIP", record.path, record.identity)
+                null
+            })
+        }
+    }
+
+    if(repositoryOwnership) {
+        for(record in registrations) {
+            if(contradictoryPaths.containsKey(record.path)) {
+                emit("CONTRADICTORY_TEST_OWNERSHIP", record.path, record.identity)
+            }
+        }
     }
 
     registeredPaths: Map()

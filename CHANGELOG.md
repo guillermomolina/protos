@@ -8,6 +8,14 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.251-SNAPSHOT
+
+- **TOOL015.** Separate ordinary language and tooling validation from Standard Library test execution with `make test-protos-libs`, individual `make test-protos-lib LIB=...` selection, exhaustive `make test-all` and combined `make check-all` gates.
+- Classify authoritative repository sources in ordinary Protos code and select validation scopes before logical discovery, preserving public unfiltered `protos test`, source ordering, CaseRefs, execution authorities and progress grouping.
+- Route CI and publication validation through conservative impact selection, bind distributed plans and results to their repository scopes and candidate revisions, and report unselected libraries separately from successful execution.
+- Require exhaustive functional validation for release candidates while reusing the verified portable archive for foreign-provider tests; retain independent Native Image and compilerability gates.
+- Add ownership, scope, shard-evidence, aggregation and release regressions; separate focused public selection tests from repository-scope and large-listing integration tests, and update development documentation and validation policy.
+
 ## 0.4.250-SNAPSHOT
 
 - **I183 / D266-D1.** Add the ordinary Protos `std:markdown` module with CommonMark 0.31.2 and the selected GFM extensions, fresh semantic trees, optional original scalar source spans and deterministic resource limits.

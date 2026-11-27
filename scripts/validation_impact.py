@@ -88,20 +88,113 @@ PROTOS_CLI_PATH = "src/main/java/com/guillermomolina/protos/cli/ProtosCli.java"
 PROTOS_CLI_TEST_TOOL_METHOD = "    private int runBundledTestTool("
 
 
+# Host-side impact routing only. Actual test membership remains owned by Protos.
+LIBRARY_OWNERS = (
+    "auth/jwt", "cli", "collections", "crypto/hmac_sha256", "crypto/password",
+    "crypto/sha256", "csv", "datetime", "ffi", "http", "inspect", "json",
+    "logging", "markdown", "math/integer", "math/linear-algebra",
+    "network/ip-addresses", "network/ip-endpoints", "network/resolvers",
+    "regex", "runtime", "semver", "test", "text", "text/base64url", "tls", "toml", "uri",
+)
+# Conservative reverse dependencies. Shared foundational libraries have unknown
+# closure and require all libraries; no import parser is used here.
+LIBRARY_DEPENDENTS = {
+    "crypto/sha256": ("crypto/hmac_sha256", "crypto/password", "auth/jwt"),
+    "crypto/hmac_sha256": ("auth/jwt",),
+    "text/base64url": ("auth/jwt",),
+    "network/ip-addresses": ("network/ip-endpoints", "network/resolvers", "http", "tls"),
+    "network/ip-endpoints": ("network/resolvers", "http", "tls"),
+    "network/resolvers": ("http", "tls"),
+    "tls": ("http",), "uri": ("http",),
+    "json": ("toml", "logging", "auth/jwt"),
+    "datetime": ("toml", "logging", "auth/jwt", "http"),
+}
+SHARED_LIBRARIES = frozenset(("collections", "text", "test", "runtime", "inspect"))
+CORE_PREFIXES = tuple("src/main/java/com/guillermomolina/protos/" + part + "/"
+                      for part in ("analysis", "lexer", "parser", "runtime", "semantic", "source", "execution/bytecode", "execution/runtime")) + (
+    "protos/lib/core/", "protos/tests/conformance/",
+)
+
+
 class Selection(object):
-    def __init__(self, impact, test_set, reason, skip_allowed):
-        self.impact = impact
-        self.test_set = test_set
-        self.reason = reason
+    def __init__(self, impact, test_set, reason, skip_allowed, libraries=None):
+        self.impact, self.test_set, self.reason = impact, test_set, reason
         self.skip_allowed = bool(skip_allowed)
+        self.libraries = ("all" if impact == "FULL" else "none") if libraries is None else libraries
 
     def to_dict(self):
         return {
             "validation_impact": self.impact,
             "affected_test_set": self.test_set,
             "full_test_suite": "SKIP_ALLOWED" if self.skip_allowed else "REQUIRED",
+            "library_validation": self.libraries,
             "reason": self.reason,
         }
+
+
+def validate_requirements(data):
+    """Validate the shared selector contract before executing or accepting work."""
+    required = {"validation_impact", "affected_test_set", "full_test_suite", "library_validation", "reason"}
+    if not isinstance(data, dict) or not required <= set(data):
+        raise ValueError("missing validation requirement fields")
+    for key in required - {"library_validation"}:
+        if not isinstance(data[key], str) or not data[key]:
+            raise ValueError("invalid validation requirement: " + key)
+    profile, libraries = data["validation_impact"], data["library_validation"]
+    selected = isinstance(libraries, list) and bool(libraries)
+    if selected:
+        if (not all(isinstance(owner, str) and owner in LIBRARY_OWNERS for owner in libraries)
+                or libraries != sorted(set(libraries))):
+            raise ValueError("invalid selected library owners")
+    elif libraries not in ("none", "all"):
+        raise ValueError("invalid library validation requirement")
+    expected = {"FULL": ("ALL", "REQUIRED"), "CORE": ("ALL", "SKIP_ALLOWED"),
+                "SELECTIVE": ("ALL", "SKIP_ALLOWED"),
+                "TOOL_LOCAL:PACKAGE": (PACKAGE_TEST_SET, "SKIP_ALLOWED")}
+    if profile not in expected or (data["affected_test_set"], data["full_test_suite"]) != expected[profile]:
+        raise ValueError("contradictory validation profile")
+    if ((profile == "FULL" and libraries != "all")
+            or (profile == "SELECTIVE" and not selected)
+            or (profile in ("CORE", "TOOL_LOCAL:PACKAGE") and libraries != "none")):
+        raise ValueError("contradictory profile and library scope")
+    return data
+
+
+def required_scopes(data):
+    validate_requirements(data)
+    libraries = data["library_validation"]
+    return ["core"] + (["libraries"] if libraries == "all" else
+                       ["library:" + owner for owner in libraries] if isinstance(libraries, list) else [])
+
+
+def library_owner(path):
+    for prefix in ("protos/lib/", "protos/tests/library/", "protos/tests/conformance/library/"):
+        if path.startswith(prefix):
+            relative = path[len(prefix):]
+            if prefix == "protos/lib/":
+                aliases = {"math/linear_algebra/": "math/linear-algebra/",
+                           "network/ip_addresses/": "network/ip-addresses/",
+                           "network/ip_endpoints/": "network/ip-endpoints/"}
+                for source, canonical in aliases.items():
+                    if relative.startswith(source):
+                        relative = canonical + relative[len(source):]
+                        break
+            matches = [owner for owner in LIBRARY_OWNERS
+                       if relative == owner or relative.startswith(owner + "/")]
+            if matches:
+                return max(matches, key=len)
+    return None
+
+
+def library_closure(owners):
+    result = set(owners)
+    pending = list(result)
+    while pending:
+        for dependent in LIBRARY_DEPENDENTS.get(pending.pop(), ()):
+            if dependent not in result:
+                result.add(dependent)
+                pending.append(dependent)
+    return sorted(result)
 
 
 def _has_prefix(path, prefixes):
@@ -134,6 +227,13 @@ def _kind(path):
     if _matches(path, TEST_TOOL_SOURCE_GLOBS):
         return "TEST"
 
+    owner = library_owner(path)
+    if owner is not None:
+        return "LIBRARY:" + owner
+    if path.startswith("protos/tests/conformance/library/"):
+        return "FULL"
+    if _has_prefix(path, CORE_PREFIXES):
+        return "CORE"
     return "FULL"
 
 
@@ -177,63 +277,23 @@ def classify_paths(paths, top_level_closure=False, kind_overrides=None):
             False,
         )
 
-    tool_kinds = []
-    first_full_path = None
     overrides = {} if kind_overrides is None else dict(kind_overrides)
+    kinds = [overrides.get(path, _kind(path)) for path in normalized]
+    active = set(kinds) - {"NEUTRAL"}
+    if "FULL" in active or "TEST" in active:
+        return Selection("FULL", "ALL", "unknown, shared or test-selection impact requires exhaustive validation", False)
+    owners = {kind[len("LIBRARY:"):] for kind in active if kind.startswith("LIBRARY:")}
+    if owners & SHARED_LIBRARIES:
+        return Selection("FULL", "ALL", "shared library dependency closure requires all libraries", False)
+    if "PACKAGE" in active and len(active) > 1:
+        return Selection("FULL", "ALL", "cross-boundary Tool impact requires exhaustive validation", False)
+    if owners:
+        return Selection("SELECTIVE", "ALL", "ordinary validation plus conservative library dependency closure",
+                         True, library_closure(owners))
+    if active == {"PACKAGE"} and not top_level_closure:
+        return Selection("TOOL_LOCAL:PACKAGE", PACKAGE_TEST_SET, "bounded Package Tool intermediate validation", True)
+    return Selection("CORE", "ALL", "complete ordinary affected coverage", True)
 
-    for path in normalized:
-        kind = overrides.get(path, _kind(path))
-        if kind in ("PACKAGE", "TEST") and kind not in tool_kinds:
-            tool_kinds.append(kind)
-        if kind == "FULL" and first_full_path is None:
-            first_full_path = path
-
-    tools_touched = bool(tool_kinds)
-
-    if top_level_closure:
-        return Selection(
-            "FULL", "ALL",
-            "top-level executable closure requires complete integrated validation",
-            False,
-        )
-
-    if first_full_path is not None:
-        return Selection(
-            "FULL", "ALL",
-            "shared, unknown, or unmapped delta requires complete validation: "
-            + first_full_path,
-            False,
-        )
-
-    if not tool_kinds:
-        return Selection(
-            "FULL", "ALL",
-            "no bounded Tool-local ownership applies; complete validation is required",
-            False,
-        )
-
-    if len(tool_kinds) != 1:
-        return Selection(
-            "FULL", "ALL",
-            "cross-tool delta touches multiple Tool-owned surfaces and requires complete Maven validation",
-            False,
-        )
-
-    if tool_kinds[0] == "PACKAGE":
-        return Selection(
-            "TOOL_LOCAL:PACKAGE", PACKAGE_TEST_SET,
-            "all executable/test-impact paths are explicitly mapped Package Tool-local",
-            True,
-        )
-
-    if tool_kinds[0] == "TEST":
-        return Selection(
-            "TOOL_LOCAL:TEST", TEST_TOOL_TEST_SET,
-            "all executable/test-impact paths are explicitly mapped Test Tool-local",
-            True,
-        )
-
-    return Selection("FULL", "ALL", "unreachable fail-closed classification", False)
 
 def _java_method_span(source, signature):
     # Return [start,end) for one Java method, failing closed on ambiguity.
@@ -387,24 +447,49 @@ def render_env(selection):
         "AFFECTED_TEST_SET=" + data["affected_test_set"],
         "FULL_TEST_SUITE=" + data["full_test_suite"],
         "VALIDATION_REASON=" + data["reason"],
+        "LIBRARY_VALIDATION=" + json.dumps(data["library_validation"], separators=(",", ":")),
     ))
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo", default=".")
-    parser.add_argument("--base", required=True)
-    parser.add_argument("--head", required=True)
+    parser.add_argument("--base")
+    parser.add_argument("--head")
+    parser.add_argument("--exhaustive", action="store_true")
+    parser.add_argument("--ci-output", help="write revision-bound CI requirements and matrices")
+    parser.add_argument("--shard-count", type=int, default=4)
     parser.add_argument("--top-level-closure", action="store_true")
     parser.add_argument("--format", choices=("env", "json"), default="env")
     args = parser.parse_args(argv)
 
-    selection = classify_delta(
-        os.path.abspath(args.repo),
-        args.base,
-        args.head,
-        top_level_closure=args.top_level_closure,
-    )
+    if args.exhaustive:
+        selection = Selection("FULL", "ALL", "explicit exhaustive validation", False)
+    else:
+        try:
+            if not args.base or not args.head or args.base == "0" * 40:
+                raise ValueError("unavailable revision range")
+            selection = classify_delta(os.path.abspath(args.repo), args.base, args.head,
+                                       top_level_closure=args.top_level_closure)
+        except (ValueError, UnicodeError, subprocess.CalledProcessError):
+            selection = Selection("FULL", "ALL", "unavailable or malformed revision range", False)
+    if args.ci_output:
+        if args.shard_count < 1:
+            parser.error("shard count must be positive")
+        candidate = os.environ.get("GITHUB_SHA", args.head or "")
+        if len(candidate) != 40 or any(c not in "0123456789abcdef" for c in candidate):
+            parser.error("CI requires an exact candidate revision")
+        document = dict(selection.to_dict(), revision=candidate, shardCount=args.shard_count)
+        scopes = required_scopes(document)
+        document["scopes"] = scopes
+        with open(args.ci_output, "w") as stream:
+            json.dump(document, stream, sort_keys=True)
+        print("scopes=" + json.dumps(scopes, separators=(",", ":")))
+        print("planning_matrix=" + json.dumps([dict(scope=scope, scopeIndex=i)
+              for i, scope in enumerate(scopes)], separators=(",", ":")))
+        print("matrix=" + json.dumps([dict(scope=scope, scopeIndex=i, shard=n)
+              for i, scope in enumerate(scopes) for n in range(1, args.shard_count + 1)], separators=(",", ":")))
+        return 0
 
     if args.format == "json":
         print(json.dumps(selection.to_dict(), sort_keys=True))

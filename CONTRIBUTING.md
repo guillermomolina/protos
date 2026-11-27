@@ -60,7 +60,8 @@ external-contributor path is:
 
 7. **Validate according to impact.** For an executable contribution, run
    focused tests for the changed behavior and use the repository's canonical
-   integrated suite (`make test`) when broader/full validation is required by
+   integrated scope (`make test` for ordinary coverage, `make test-all` for
+   exhaustive coverage) required by
    the current repository policy. For a documentation-only contribution,
    inspect links and commands and run the applicable static/integrity checks;
    unrelated executable tests are not automatically required. In either case,
@@ -80,7 +81,11 @@ external-contributor path is:
    human-authored percentages are not required.
 
 The ordinary local validation entry points remain `make test`, `make check`,
-and `make test-native`. `make test` still runs Java followed by Protos, including
+and `make test-native`. `make test` runs Java, core/non-library Protos and foreign
+providers. Select a library with `make test-protos-lib LIB=toml`, all libraries
+with `make test-protos-libs`, or exhaustive integrated coverage with `make test-all`.
+`make check-all` combines the existing check controls and exhaustive functional
+coverage. Ordinary validation includes
 local slow-test telemetry and reduced-contention confirmation. CI timing remains
 advisory; test outcomes determine acceptance.
 
@@ -101,14 +106,22 @@ make test-protos-foreign
 
 The Protos suite still runs through `bin/protos test`; the existing foreign
 provider harness retains its FFM checks. The independent `protos-plan` job
-packages the checkout and obtains the full authoritative
-`bin/protos test --list-cases` listing. The `protos-suite` matrix runs four independent runners,
-each packaging the same revision, listing its assigned Cases with
+packages the checkout and obtains an authoritative listing for each required
+scope. The shared `scripts/validation_impact.py` selector binds requirements to the
+candidate revision and the complete event delta. Unknown impact or unavailable
+revision ranges require exhaustive coverage. Weekly and default manual runs are
+exhaustive. Every run includes core; affected library owners and conservative
+dependents add scoped matrix entries. The `protos-suite` matrix runs four runners
+per required scope,
+each packaging the same revision, listing and executing the same scope and its assigned Cases with
 `--list-cases --shard-count 4 --shard-run K`, and executing that shard with two
 workers. `fail-fast: false` lets every shard finish when another fails. No
 compiled target directories are transferred between runners. Ordinary local
 `make test` remains unsharded unless shard controls are explicitly supplied.
-The CI jobs do not additionally execute `make test` or its Java/Protos aggregates.
+Plans and results bind scope, revision, workers, ordered CaseRefs and digest.
+Aggregation requires every selected scope and shard; unselected libraries are
+reported as `NOT SELECTED`. The CI jobs do not additionally execute `make test`
+or its Java/Protos aggregates.
 
 To reproduce a Java partition locally:
 

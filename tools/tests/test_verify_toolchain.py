@@ -250,6 +250,57 @@ jobs:
 """
 
 
+def scoped_ci_workflow():
+    text = ci_workflow(CI_IMAGE, "make test-java-parallel")
+    text = text.replace("      indices: ${{ steps.plan.outputs.indices }}\n",
+                        "      indices: ${{ steps.plan.outputs.indices }}\n"
+                        "      protos_matrix: ${{ steps.impact.outputs.matrix }}\n"
+                        "      protos_planning_matrix: ${{ steps.impact.outputs.planning_matrix }}\n", 1)
+    selector = """      - name: Select requirements
+        id: impact
+        env:
+          IMPACT_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          IMPACT_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: python3 scripts/validation_impact.py --base "$IMPACT_BASE" --head "$IMPACT_HEAD" --exhaustive --shard-count "$PROTOS_TEST_SHARD_COUNT" --ci-output target/validation-requirements/requirements.json >> "$GITHUB_OUTPUT"
+      - name: Upload requirements
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-requirements-${{ github.sha }}
+          if-no-files-found: error
+          path: target/validation-requirements/requirements.json
+"""
+    text = text.replace("      - run: python3 tools/ci_java_test_shards.py outputs", selector +
+                        "      - run: python3 tools/ci_java_test_shards.py outputs", 1)
+    for job, output in (("protos-plan", "protos_planning_matrix"), ("protos-suite", "protos_matrix")):
+        matrix = ("    needs: prepare\n    strategy:\n      fail-fast: false\n      matrix:\n"
+                  "        include: ${{ fromJSON(needs.prepare.outputs." + output + ") }}\n"
+                  "    env:\n      PROTOS_REPOSITORY_TEST_SCOPE: ${{ matrix.scope }}\n")
+        if job == "protos-suite":
+            matrix += "      PROTOS_TEST_SHARD_INDEX: ${{ matrix.shard }}\n"
+            text = text.replace(PROTOS_MATRIX, matrix, 1)
+        else:
+            text = text.replace("  protos-plan:\n", "  protos-plan:\n" + matrix, 1)
+    text = text.replace('--jobs "$PROTOS_TEST_JOBS"\n',
+                        '--jobs "$PROTOS_TEST_JOBS"\n          --scope "$PROTOS_REPOSITORY_TEST_SCOPE"\n')
+    text = text.replace("name: protos-plan-${{ github.sha }}",
+                        "name: protos-plan-${{ matrix.scopeIndex }}-${{ github.sha }}", 1)
+    text = text.replace("name: protos-plan-${{ github.sha }}",
+                        "pattern: protos-plan-[0-9]*-${{ github.sha }}")
+    text = text.replace("protos-evidence-suite-${{ matrix.shard }}",
+                        "protos-evidence-suite-${{ matrix.scopeIndex }}-${{ matrix.shard }}")
+    text = text.replace("      - name: Verify dependencies and coverage\n", """      - name: Download requirements
+        if: always()
+        uses: actions/download-artifact@v4
+        with:
+          name: validation-requirements-${{ github.sha }}
+          path: target/validation-requirements
+      - name: Verify dependencies and coverage
+""")
+    return text.replace("--protos-plan target/protos-test-shards/plan.json",
+                        "--requirements target/validation-requirements/requirements.json "
+                        "--protos-plan target/protos-test-shards")
+
+
 def make_fixture(
     root,
     *,
@@ -633,6 +684,33 @@ Java version: 25.0.5.0.3, vendor: GraalVM Community, runtime: /opt/graalvm-commu
                 "distributed worker fixture was rejected")
         require(workflow_command(workflow, "aggregate") == "distributed validation gates",
                 "distributed fixture was rejected")
+        scoped_ci = scoped_ci_workflow()
+        write(workflow, scoped_ci)
+        require(workflow_command(workflow, "aggregate") == "distributed validation gates",
+                "scope-bound distributed fixture was rejected")
+        require(workflow_workers(workflow, "java-parallel") == expected_workers,
+                "scope-bound worker fixture was rejected")
+        scoped_drift = (
+            ("selector output", "protos_matrix: ${{ steps.impact.outputs.matrix }}", "protos_matrix: []"),
+            ("event range", "github.event.pull_request.base.sha || github.event.before", "github.event.before"),
+            ("selector count", '--shard-count "$PROTOS_TEST_SHARD_COUNT"', '--shard-count 1'),
+            ("suite matrix", "fromJSON(needs.prepare.outputs.protos_matrix)", "fromJSON('[1,2,3]')"),
+            ("planning matrix", "fromJSON(needs.prepare.outputs.protos_planning_matrix)", "fromJSON('[]')"),
+            ("scope binding", "PROTOS_REPOSITORY_TEST_SCOPE: ${{ matrix.scope }}", "PROTOS_REPOSITORY_TEST_SCOPE: all"),
+            ("scope evidence", '--scope "$PROTOS_REPOSITORY_TEST_SCOPE"', '--scope all'),
+            ("unique artifacts", "protos-evidence-suite-${{ matrix.scopeIndex }}-${{ matrix.shard }}",
+             "protos-evidence-suite-${{ matrix.shard }}"),
+            ("required evidence", "--requirements target/validation-requirements/requirements.json", ""),
+            ("requirements download", "path: target/validation-requirements", "path: target/wrong-requirements"),
+            ("failed selector", '>> "$GITHUB_OUTPUT"', '>> "$GITHUB_OUTPUT" || true'),
+        )
+        for label, before, after in scoped_drift:
+            changed = scoped_ci.replace(before, after)
+            require(changed != scoped_ci, "scoped fixture did not apply: " + label)
+            write(workflow, changed)
+            require(workflow_command(workflow, "aggregate") != "distributed validation gates",
+                    "unsafe scope wiring accepted: " + label)
+        write(workflow, good_ci)
         for lane in ("prepare", "compilerability", "java-parallel", "java-serial",
                      "protos-plan", "protos-suite", "protos-foreign", "native-image", "aggregate"):
             write(workflow, good_ci.replace("  " + lane + ":\n", "  missing-lane:\n", 1))

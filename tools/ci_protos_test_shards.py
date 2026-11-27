@@ -27,6 +27,7 @@ completion quantity; it does not claim independently observed per-Case successes
 
 import argparse
 import hashlib
+import importlib.util
 import json
 from pathlib import Path
 import re
@@ -34,9 +35,14 @@ import sys
 
 from ci_java_test_shards import digest, require, revision, write_json
 
+_impact_spec = importlib.util.spec_from_file_location(
+    "ci_impact_contract", Path(__file__).resolve().parents[1] / "scripts/validation_impact.py")
+impact = importlib.util.module_from_spec(_impact_spec)
+_impact_spec.loader.exec_module(impact)
+
 LISTING_SCHEMA = "protos.test.cases/v1"
-PLAN_SCHEMA = "protos.ci.protos-test-plan/v1"
-RESULT_SCHEMA = "protos.ci.protos-test-result/v1"
+PLAN_SCHEMA = "protos.ci.protos-test-plan/v2"
+RESULT_SCHEMA = "protos.ci.protos-test-result/v2"
 COUNT = r"(0|[1-9][0-9]*)"
 # Progress.finishInvocation terminal summaries, one per outcome status.
 COMPLETED = re.compile(r"^%s passed, %s failed$" % (COUNT, COUNT))
@@ -65,8 +71,8 @@ def listing_entries(text):
     return cases
 
 
-def refs_digest(refs):
-    return hashlib.sha256(json.dumps(refs, separators=(",", ":")).encode()).hexdigest()
+def refs_digest(refs, scope="all"):
+    return hashlib.sha256(json.dumps([scope, refs], separators=(",", ":")).encode()).hexdigest()
 
 
 def positive(value, label):
@@ -81,12 +87,20 @@ def case_refs(values, label):
     return values
 
 
-def make_plan(listing_text, count, jobs, rev=""):
+def repository_scope(value):
+    require(isinstance(value, str), "invalid repository scope")
+    require(value in ("all", "core", "libraries") or
+            value in ["library:" + owner for owner in impact.LIBRARY_OWNERS + ("math", "crypto", "network", "auth")],
+            "invalid repository scope")
+    return value
+
+
+def make_plan(listing_text, count, jobs, rev="", scope="all"):
     refs = [entry["ref"] for entry in listing_entries(listing_text)]
     # As for the Java inventory, a complete corpus without Cases is a discovery failure.
     require(bool(refs), "empty complete Case listing")
-    plan = dict(schema=PLAN_SCHEMA, revision=revision(rev), shardCount=positive(count, "shard count"),
-                jobs=positive(jobs, "job count"), cases=refs, planDigest=refs_digest(refs))
+    plan = dict(schema=PLAN_SCHEMA, scope=repository_scope(scope), revision=revision(rev), shardCount=positive(count, "shard count"),
+                jobs=positive(jobs, "job count"), cases=refs, planDigest=refs_digest(refs, scope))
     plan["digest"] = digest(plan)
     return plan
 
@@ -94,10 +108,11 @@ def make_plan(listing_text, count, jobs, rev=""):
 def check_plan(plan):
     require(isinstance(plan, dict) and plan.get("schema") == PLAN_SCHEMA, "invalid Protos plan schema")
     require(plan.get("digest") == digest(plan), "Protos plan digest mismatch")
+    repository_scope(plan["scope"])
     positive(plan["shardCount"], "Protos shard count")
     positive(plan["jobs"], "Protos job count")
     require(bool(case_refs(plan["cases"], "complete plan")), "empty complete Protos plan")
-    require(plan["planDigest"] == refs_digest(plan["cases"]), "Protos plan identity mismatch")
+    require(plan["planDigest"] == refs_digest(plan["cases"], plan["scope"]), "Protos plan identity mismatch")
     return plan
 
 
@@ -118,7 +133,7 @@ def terminal_summary(log_text):
     return matches[0]
 
 
-def shard_result(count, index, jobs, complete_text, shard_text, log_text, exit_status, rev=""):
+def shard_result(count, index, jobs, complete_text, shard_text, log_text, exit_status, rev="", scope="all"):
     positive(count, "shard count")
     require(type(index) is int and 1 <= index <= count, "invalid shard index")
     positive(jobs, "job count")
@@ -137,8 +152,8 @@ def shard_result(count, index, jobs, complete_text, shard_text, log_text, exit_s
         reasons.append("%s failed Cases" % summary["failedCount"])
     if summary["passedCount"] != len(cases):
         reasons.append("%s passed Cases for %s listed CaseRefs" % (summary["passedCount"], len(cases)))
-    result = dict(schema=RESULT_SCHEMA, revision=revision(rev), shardCount=count, shardIndex=index,
-                  jobs=jobs, planDigest=refs_digest(complete), cases=cases, exitStatus=exit_status,
+    result = dict(schema=RESULT_SCHEMA, scope=repository_scope(scope), revision=revision(rev), shardCount=count, shardIndex=index,
+                  jobs=jobs, planDigest=refs_digest(complete, scope), cases=cases, exitStatus=exit_status,
                   status="fail" if reasons else "pass", reasons=reasons, **summary)
     return result
 
@@ -154,6 +169,7 @@ def check_results(plan, results, rev, expected_count):
     for result in results:
         require(isinstance(result, dict) and result.get("schema") == RESULT_SCHEMA,
                 "malformed Protos evidence")
+        require(repository_scope(result["scope"]) == plan["scope"], "Protos evidence scope mismatch")
         index = result["shardIndex"]
         require(type(index) is int and 1 <= index <= count and index not in seen,
                 "unexpected or duplicate Protos result")
@@ -185,7 +201,7 @@ def check_results(plan, results, rev, expected_count):
                 "Protos terminal count mismatch")
         require(result["status"] == "pass" and result["reasons"] == [], "failed Protos evidence")
         shards.append(dict(index=index, plannedCaseCount=planned, passedCaseCount=planned))
-    return dict(planDigest=plan["planDigest"], shardCount=count, jobs=plan["jobs"],
+    return dict(scope=plan["scope"], planDigest=plan["planDigest"], shardCount=count, jobs=plan["jobs"],
                 plannedCaseCount=len(full), passedCaseCount=len(full), failedCaseCount=0,
                 shards=shards)
 
@@ -205,16 +221,17 @@ def main():
     parser.add_argument("--index", type=int, default=1)
     parser.add_argument("--jobs", type=int, required=True)
     parser.add_argument("--revision")
+    parser.add_argument("--scope", default="all")
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
     try:
         if args.command == "plan":
-            write_json(args.output, make_plan(read(args.listing), args.count, args.jobs, args.revision))
+            write_json(args.output, make_plan(read(args.listing), args.count, args.jobs, args.revision, args.scope))
             return 0
         status_text = read(args.exit_status_file).strip()
         require(bool(re.fullmatch(r"[0-9]+", status_text)), "invalid recorded exit status")
         result = shard_result(args.count, args.index, args.jobs, read(args.listing),
-                              read(args.shard_listing), read(args.log), int(status_text), args.revision)
+                              read(args.shard_listing), read(args.log), int(status_text), args.revision, args.scope)
         write_json(args.output, result)
         for reason in result["reasons"]:
             print("Protos shard evidence: " + reason, file=sys.stderr)

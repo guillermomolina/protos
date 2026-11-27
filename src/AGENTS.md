@@ -147,7 +147,9 @@ can alter executable behavior regardless of its directory. During
 interactive work, use the smallest complete affected test set while the
 change is evolving and defer the integrated full suite until the policy
 requires it. When integrated full validation is required, hand the
-repository Makefile entry point (`make test`) to the human. Use tests to
+repository Makefile entry point (`make test-all`) to the human. Ordinary
+integrated validation uses `make test`; selected library coverage follows the
+shared impact policy. Use tests to
 validate specified semantics, not historical implementation accidents.
 
 ## Implementation architecture

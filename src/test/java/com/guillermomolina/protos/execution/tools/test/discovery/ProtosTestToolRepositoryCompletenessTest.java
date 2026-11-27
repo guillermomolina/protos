@@ -63,7 +63,8 @@ final class ProtosTestToolRepositoryCompletenessTest {
                     "DUPLICATE_REGISTRATION",
                     "AUTHORITY_MISMATCH");
     private static final List<String> OWNERSHIP_CODES =
-            List.of("UNCLASSIFIED_SOURCE", "INVALID_EXCLUSION");
+            List.of("UNCLASSIFIED_SOURCE", "INVALID_EXCLUSION",
+                    "INVALID_TEST_OWNERSHIP", "CONTRADICTORY_TEST_OWNERSHIP");
 
     /** Classified as source text only; never imported or executed. */
     private static final String SUITE_NATIVE_SOURCE =
@@ -355,13 +356,15 @@ final class ProtosTestToolRepositoryCompletenessTest {
                                     physicalSources,
                                     intendedSources,
                                     exclusions,
-                                    registrations
+                                    registrations,
+                                    false
                                 )
                                 reordered: Audit.audit(
                                     Arrays.reverse(physicalSources),
                                     Arrays.reverse(intendedSources),
                                     Arrays.reverse(exclusions),
-                                    Arrays.reverse(registrations)
+                                    Arrays.reverse(registrations),
+                                    false
                                 )
                                 Array(
                                     Audit.report(result),

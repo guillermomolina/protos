@@ -33,6 +33,7 @@ AUD007 isolation contract:
 from __future__ import print_function
 
 import argparse
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -44,6 +45,11 @@ import sys
 import tempfile
 import xml.etree.ElementTree as ElementTree
 
+
+_impact_spec = importlib.util.spec_from_file_location(
+    "publication_impact_contract", Path(__file__).with_name("validation_impact.py"))
+_impact_contract = importlib.util.module_from_spec(_impact_spec)
+_impact_spec.loader.exec_module(_impact_contract)
 
 PRIVATE_MAVEN_PREFIX = "protos-validation-m2-"
 PRIVATE_MAVEN_OWNER = "OWNER.json"
@@ -170,53 +176,26 @@ def observable_untracked_inputs(repo, untracked):
 
 
 def parse_selector_result(text):
+    def unique_fields(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError("duplicate selector field: " + key)
+            result[key] = value
+        return result
+
     try:
-        data = json.loads(text)
+        data = json.loads(text, object_pairs_hook=unique_fields)
     except (TypeError, ValueError) as exc:
         raise PublicationValidationError("selector output is not valid JSON") from exc
 
     if not isinstance(data, dict):
         raise PublicationValidationError("selector output must be a JSON object")
 
-    required = (
-        "validation_impact",
-        "affected_test_set",
-        "full_test_suite",
-        "reason",
-    )
-    missing = [name for name in required if name not in data]
-    if missing:
-        raise PublicationValidationError(
-            "selector output missing fields: " + ",".join(missing)
-        )
-
-    for name in required:
-        if not isinstance(data[name], str) or not data[name]:
-            raise PublicationValidationError(
-                "selector field must be a non-empty string: " + name
-            )
-
-    impact = data["validation_impact"]
-    tests = data["affected_test_set"]
-    full = data["full_test_suite"]
-
-    if impact == "FULL":
-        if tests != "ALL" or full != "REQUIRED":
-            raise PublicationValidationError(
-                "FULL selector result has inconsistent affected/full fields"
-            )
-        return data
-
-    if impact in ("TOOL_LOCAL:PACKAGE", "TOOL_LOCAL:TEST"):
-        if tests == "ALL" or full != "SKIP_ALLOWED":
-            raise PublicationValidationError(
-                "tool-local selector result has inconsistent affected/full fields"
-            )
-        return data
-
-    raise PublicationValidationError(
-        "selector returned unsupported impact class: " + impact
-    )
+    try:
+        return _impact_contract.validate_requirements(data)
+    except ValueError as exc:
+        raise PublicationValidationError("invalid selector output: " + str(exc)) from exc
 
 
 def invoke_source_style_guard(repo, base, head):
@@ -269,7 +248,7 @@ def invoke_legacy_execution_guard(repo, base, head):
         )
     return completed.stdout.strip()
 
-def invoke_selector(repo, base, head, top_level_closure):
+def invoke_selector(repo, base, head, top_level_closure, exhaustive=False):
     selector = Path(repo) / "scripts" / "validation_impact.py"
     if not selector.is_file():
         raise PublicationValidationError(
@@ -290,6 +269,8 @@ def invoke_selector(repo, base, head, top_level_closure):
     ]
     if top_level_closure:
         command.append("--top-level-closure")
+    if exhaustive:
+        command.append("--exhaustive")
 
     completed = subprocess.run(
         command,
@@ -413,9 +394,13 @@ class PrivateMavenRepository(object):
 def validation_command(selection, maven_flags=(), env=None):
     env = os.environ if env is None else env
     maven_flags = list(maven_flags)
-    if selection["validation_impact"] == "FULL":
+    profile = selection["validation_impact"]
+    if profile in ("FULL", "CORE", "SELECTIVE"):
         flags = env.get("MVN_FLAGS", "").split() + maven_flags
-        command = ["make", "test"]
+        command = ["make", {"FULL": "test-all", "CORE": "test", "SELECTIVE": "test-selective"}[profile]]
+        if profile == "SELECTIVE":
+            command.append("LIBRARIES=" + " ".join(selection["library_validation"]))
+        command += ["PROTOS_TEST_SHARD_COUNT=1", "PROTOS_TEST_SHARD_INDEX=1"]
         if flags:
             command.append("MVN_FLAGS=" + " ".join(flags))
         return command
@@ -446,7 +431,7 @@ def _terminate_group(child):
             continue
 
 
-def run(repo, base, head, top_level_closure=False):
+def run(repo, base, head, top_level_closure=False, exhaustive=False):
     repo = Path(repo).resolve()
 
     try:
@@ -462,6 +447,7 @@ def run(repo, base, head, top_level_closure=False):
             base,
             candidate,
             top_level_closure,
+            exhaustive=exhaustive,
         )
     except PublicationValidationError as exc:
         print("PUBLICATION_VALIDATION: FAIL_CLOSED", file=sys.stderr)
@@ -482,9 +468,13 @@ def run(repo, base, head, top_level_closure=False):
     print("VALIDATION_REASON: " + selection["reason"])
 
     print("TOOL_TESTS: INCLUDED_BY_SELECTED_SCOPE")
+    print("LIBRARY_VALIDATION_REQUIRED: " + json.dumps(selection["library_validation"]))
+    if impact in ("CORE", "SELECTIVE"):
+        print("ORDINARY_VALIDATION: REQUIRED")
+        print("UNSELECTED_LIBRARIES: NOT SELECTED")
 
     if top_level_closure:
-        print("TOP_LEVEL_RECONCILIATION: REQUIRED_FULL")
+        print("TOP_LEVEL_RECONCILIATION: COMPLETE_AFFECTED_COVERAGE")
     else:
         print("TOP_LEVEL_RECONCILIATION: NOT_REQUIRED_FOR_THIS_CHILD_SLICE")
 
@@ -508,7 +498,7 @@ def run(repo, base, head, top_level_closure=False):
             print("AFFECTED_TESTS: FAIL")
             print(
                 "FULL_TEST_SUITE: SKIPPED "
-                "(affected tool-local validation failed before publication)"
+                "(selected validation failed before publication)"
             )
         return returncode
 
@@ -519,7 +509,7 @@ def run(repo, base, head, top_level_closure=False):
         print("AFFECTED_TESTS: PASS")
         print(
             "FULL_TEST_SUITE: SKIPPED "
-            "(impact-aware tool-local intermediate publication)"
+            "(outside the selected validation scope)"
         )
 
     print("PUBLICATION_VALIDATION: PASS")
@@ -531,6 +521,7 @@ def main(argv=None):
     parser.add_argument("--base", required=True)
     parser.add_argument("--head", required=True)
     parser.add_argument("--top-level-closure", action="store_true")
+    parser.add_argument("--exhaustive", action="store_true")
     args = parser.parse_args(argv)
 
     def on_term(signum, frame):
@@ -542,6 +533,7 @@ def main(argv=None):
         args.base,
         args.head,
         top_level_closure=args.top_level_closure,
+        exhaustive=args.exhaustive,
     )
 
 

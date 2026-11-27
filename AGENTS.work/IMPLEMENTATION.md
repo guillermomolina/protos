@@ -285,30 +285,39 @@ The governing invariants are:
 
 - focused validation means the complete demonstrated affected set, not one 
 convenient regression; 
-- shared production/library/runtime/compiler/parser/filesystem/module surfaces, 
-cross-tool deltas, unknown/unmapped executable paths, build/generation changes, 
-shared executable test infrastructure, or ambiguous dependency closure require 
-`FULL`; 
-- only explicitly mapped bounded Tool-local deltas may use a reduced profile; 
-- reduced profiles are for intermediate work whose top-level executable owner 
-remains open and whose semantics/architecture are already settled; 
-- closing/reconciling a top-level executable item requires one `FULL` validation 
-over the final closure candidate after cheaper gates pass. 
+- ordinary recognized language/runtime/compiler changes require complete core,
+Java and foreign-provider coverage, with complete affected library coverage when
+conservative dependencies identify it;
+- Test Tool selection/discovery, shared test infrastructure, ambiguous cross-boundary
+impact, unknown executable-impact paths, explicit exhaustive requests and release
+candidates require `FULL`;
+- bounded Package Tool intermediate deltas may retain their justified Tool-local
+profile; top-level closure requires complete affected coverage;
+- `FULL` always means exhaustive functional coverage. Top-level closure alone does
+not require unrelated Standard Library corpora for a recognized core-only change.
 
-The canonical integrated full-suite command is: 
+Repository functional entry points are:
 
-make test 
+- `make test`: ordinary integrated Java/JUnit, core/non-library Protos and foreign
+provider validation, preparing the packaged Protos artifact once.
+- `make test-protos`: core and non-library Protos validation.
+- `make test-protos-libs`: complete registered Standard Library validation.
+- `make test-protos-lib LIB=...`: one canonical library owner, or an explicitly
+supported unambiguous family, including its complete registered corpus.
+- `make test-all`: exhaustive integrated Java, Protos and foreign-provider validation.
+- `make check-all`: existing `make check` controls followed by `make test-all`.
 
-`make test` covers both ordinary Java/JUnit and native Protos tests. Use 
-`make test-java` or `make test-protos` only when exactly one whole lane is the 
-required validation. Direct Maven invocation is appropriate for intentional 
-focal Java/JUnit sets and other bounded Maven-specific checks; unrestricted 
-`mvn test` is not the canonical integrated full-suite command. 
+`CORE` identifies ordinary integrated validation; `SELECTIVE` adds all libraries in
+the conservative affected dependency closure. A library outside that closure is
+`NOT SELECTED`, never passed. `make test-all` is the canonical `FULL` command.
+Unrestricted `mvn test` is not the canonical integrated command. Existing Java
+parallel/serial, Native Image and compilerability obligations remain independent;
+`check-truffle-compilation` remains an explicit audit, never an implicit functional gate.
 
-Do not repeatedly run/request `make test` for intermediate edits. Follow 
-**Interactive validation handoff**: cheapest/highest-signal gates first, then pay 
-for the integrated suite only when impact/closure policy requires it and the 
-candidate plus moving finalization metadata are stable. 
+Follow **Interactive validation handoff** from cheapest evidence to required
+integrated validation. Accumulate focal evidence and do not repeatedly request
+expensive gates after each intermediate edit. Pay for the final required gate
+after the definitive delta and dependency closure are stable.
 
 Expensive validation belongs to exact candidate bytes and relevant dependency 
 state. A pure credential/network/push retry does not invalidate already-passing 

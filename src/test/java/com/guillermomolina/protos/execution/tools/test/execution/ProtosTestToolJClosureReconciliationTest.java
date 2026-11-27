@@ -122,9 +122,25 @@ final class ProtosTestToolJClosureReconciliationTest {
         assertFalse(
                 makefile.contains("test-budget:"),
                 "the repository must not retain a fixed wall-clock validation target");
-        assertTrue(
-                makefile.contains("test: test-java test-protos"),
-                "the canonical Makefile test target must retain Java then Protos test ownership");
+        for (String target : new String[] {"test", "test-all"}) {
+            String recipe = targetRecipe(makefile, target);
+            int javaPhase = recipe.indexOf("$(MAKE) --no-print-directory test-java\n");
+            int preparation = recipe.indexOf("$(MAKE) --no-print-directory prepare-protos-tests\n");
+            int protosPhase = recipe.indexOf("$(MAKE) --no-print-directory test-protos-integrated ");
+            assertTrue(javaPhase >= 0 && preparation > javaPhase && protosPhase > preparation,
+                    "functional validation must serialize Java, preparation and Protos: " + target);
+            assertEquals(1, occurrences(recipe, "$(MAKE) --no-print-directory prepare-protos-tests\n"),
+                    "functional validation must prepare the Protos artifact exactly once: " + target);
+            assertTrue(recipe.contains("PROTOS_REPOSITORY_TEST_SCOPE=$(if $(filter test-all,$@),all,core)"),
+                    "ordinary and exhaustive targets must retain their distinct repository scopes");
+        }
+        String integratedRecipe = targetRecipe(makefile, "test-protos-integrated");
+        assertTrue(integratedRecipe.contains("test-protos-foreign || foreign=$$?"),
+                "a foreign-provider failure must not suppress the Protos suite");
+        assertTrue(integratedRecipe.contains("test-protos-suite || suite=$$?"),
+                "the integrated phase must retain the Protos suite failure status");
+        assertTrue(integratedRecipe.contains("[ $$foreign -eq 0 ] && [ $$suite -eq 0 ]"),
+                "the integrated phase must reject failure of either independent Protos phase");
         assertTrue(
                 makefile.contains("bin/protos test --jobs $(PROTOS_TEST_JOBS)"),
                 "the Makefile must execute the public Protos Test Tool directly");
@@ -185,6 +201,26 @@ final class ProtosTestToolJClosureReconciliationTest {
         assertTrue(cli.contains("if (!status.equals(\"infrastructure-aborted\") || exitCode != 3)"));
         assertFalse(cli.contains("Runner.testRunOutcomeCompletedAcrossRuns("));
         assertFalse(cli.contains("Runner.testRunOutcomeInfrastructureAbortedAcrossInvocation("));
+    }
+
+    /** Locate a recipe even when several targets share its declaration. */
+    private static String targetRecipe(String makefile, String target) {
+        boolean collecting = false;
+        StringBuilder recipe = new StringBuilder();
+        for (String line : makefile.split("\n", -1)) {
+            if (collecting) {
+                if (!line.isEmpty() && !line.startsWith("\t")) {
+                    break;
+                }
+                recipe.append(line).append('\n');
+            } else if (!line.isEmpty() && !Character.isWhitespace(line.charAt(0))
+                    && !line.startsWith("#") && line.contains(":")) {
+                String targets = line.substring(0, line.indexOf(':'));
+                collecting = java.util.Arrays.asList(targets.split("\\s+")).contains(target);
+            }
+        }
+        assertTrue(collecting, "missing Makefile target: " + target);
+        return recipe.toString();
     }
 
     private static int occurrences(String text, String needle) {

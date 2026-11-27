@@ -41,9 +41,9 @@ class ValidationImpactTest(unittest.TestCase):
 
     def assert_test_tool(self, paths):
         result = IMPACT.classify_paths(paths)
-        self.assertEqual("TOOL_LOCAL:TEST", result.impact)
-        self.assertTrue(result.skip_allowed)
-        self.assertEqual(IMPACT.TEST_TOOL_TEST_SET, result.test_set)
+        self.assertEqual("FULL", result.impact)
+        self.assertFalse(result.skip_allowed)
+        self.assertEqual("ALL", result.test_set)
 
     def assert_full(self, paths, closure=False):
         result = IMPACT.classify_paths(paths, top_level_closure=closure)
@@ -176,8 +176,8 @@ class ValidationImpactTest(unittest.TestCase):
                 ["git", "-C", directory, "rev-parse", "HEAD"], text=True).strip()
 
             result = IMPACT.classify_delta(directory, base, head)
-            self.assertEqual("TOOL_LOCAL:TEST", result.impact)
-            self.assertTrue(result.skip_allowed)
+            self.assertEqual("FULL", result.impact)
+            self.assertFalse(result.skip_allowed)
 
             with open(path, "w") as handle:
                 handle.write(
@@ -231,8 +231,8 @@ class ValidationImpactTest(unittest.TestCase):
                 text=True,
             )
             data = json.loads(output)
-            self.assertEqual("TOOL_LOCAL:TEST", data["validation_impact"])
-            self.assertEqual("SKIP_ALLOWED", data["full_test_suite"])
+            self.assertEqual("FULL", data["validation_impact"])
+            self.assertEqual("REQUIRED", data["full_test_suite"])
 
     def test_shared_main_requires_full(self):
         self.assert_full([
@@ -240,7 +240,7 @@ class ValidationImpactTest(unittest.TestCase):
         ])
 
     def test_shared_library_requires_full(self):
-        self.assert_full(["protos/lib/core/Object.protos"])
+        self.assertEqual("CORE", IMPACT.classify_paths(["protos/lib/core/Object.protos"]).impact)
 
     def test_relocated_tool002_fixture_still_test_tool_local(self):
         self.assert_test_tool([
@@ -277,7 +277,7 @@ class ValidationImpactTest(unittest.TestCase):
         self.assert_full([])
 
     def test_top_level_closure_with_tool_change_forces_full(self):
-        self.assert_full(["protos/tools/package/LockDocument.protos"], closure=True)
+        self.assertEqual("CORE", IMPACT.classify_paths(["protos/tools/package/LockDocument.protos"], top_level_closure=True).impact)
 
     def test_top_level_closure_without_tool_change_forces_full(self):
         self.assert_full(
@@ -345,6 +345,36 @@ class ValidationImpactTest(unittest.TestCase):
         for prefix in IMPACT.IGNORED_OBSERVABLE_PREFIXES:
             self.assertTrue(
                 IMPACT.path_is_validation_observable(prefix + "config"))
+
+    def test_library_dependency_closure_and_canonical_paths(self):
+        for path in ("protos/lib/network/ip_addresses/module.protos",
+                     "protos/tests/library/network/ip-addresses/surface.protos"):
+            data = IMPACT.classify_paths([path], top_level_closure=True).to_dict()
+            self.assertEqual("SELECTIVE", data["validation_impact"])
+            self.assertEqual(["http", "network/ip-addresses", "network/ip-endpoints", "network/resolvers", "tls"],
+                             data["library_validation"])
+            IMPACT.validate_requirements(data)
+
+    def test_core_closure_does_not_require_unrelated_libraries(self):
+        data = IMPACT.classify_paths(["protos/lib/core/Object.protos"], top_level_closure=True).to_dict()
+        self.assertEqual("CORE", data["validation_impact"])
+        self.assertEqual(["core"], IMPACT.required_scopes(data))
+
+    def test_shared_libraries_and_unknown_paths_are_exhaustive(self):
+        for path in ("protos/lib/collections/array/module.protos", "protos/lib/new/module.protos",
+                     "protos/tools/test/Discovery.protos", "tools/ci_protos_test_shards.py"):
+            self.assert_full([path])
+
+    def test_malformed_requirements_fail_closed(self):
+        import copy
+        valid = IMPACT.classify_paths(["protos/lib/toml/module.protos"]).to_dict()
+        for patch in ({"library_validation": []}, {"library_validation": ["unknown"]},
+                      {"library_validation": ["toml", "toml"]}, {"validation_impact": "CORE"},
+                      {"full_test_suite": "REQUIRED"}, {"validation_impact": "unrecognized"}):
+            data = copy.deepcopy(valid)
+            data.update(patch)
+            with self.subTest(patch=patch), self.assertRaises(ValueError):
+                IMPACT.validate_requirements(data)
 
 
 if __name__ == "__main__":

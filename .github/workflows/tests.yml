@@ -1,3 +1,18 @@
+# THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+# ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+# DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+# DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+# OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+# THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+# OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+# THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+# FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+# https://github.com/guillermomolina/protos
+#
+# Software distributed under the License is distributed on an "AS IS" basis,
+# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+# the specific language governing rights and limitations under the License.
+
 name: CI
 
 on:
@@ -6,6 +21,13 @@ on:
       - main
   pull_request:
   workflow_dispatch:
+    inputs:
+      exhaustive:
+        description: Require exhaustive functional coverage
+        type: boolean
+        default: true
+  schedule:
+    - cron: '0 3 * * 0'
 
 permissions:
   contents: read
@@ -33,6 +55,8 @@ jobs:
     outputs:
       count: ${{ steps.plan.outputs.count }}
       indices: ${{ steps.plan.outputs.indices }}
+      protos_matrix: ${{ steps.impact.outputs.matrix }}
+      protos_planning_matrix: ${{ steps.impact.outputs.planning_matrix }}
     container:
       image: ghcr.io/guillermomolina/protos-ci@sha256:44e03c759ccd2b57135f5c0bdbb5060563e858601daa73958ab6cbba2ffc5fe3
       credentials:
@@ -82,6 +106,28 @@ jobs:
           python3 tools/tests/test_ci_protos_test_shards.py
           python3 tools/tests/test_ci_validation_aggregate.py
           python3 tools/tests/test_verify_toolchain.py
+          python3 scripts/test_validation_impact.py
+          python3 scripts/test_publication_validation.py
+      - name: Select revision-bound validation requirements
+        id: impact
+        env:
+          IMPACT_EVENT: ${{ github.event_name }}
+          IMPACT_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          IMPACT_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          IMPACT_EXHAUSTIVE: ${{ inputs.exhaustive }}
+        run: |
+          mkdir -p target/validation-requirements
+          args=()
+          if [ "$IMPACT_EVENT" = schedule ] || { [ "$IMPACT_EVENT" = workflow_dispatch ] && [ "$IMPACT_EXHAUSTIVE" != false ]; }; then
+            args+=(--exhaustive)
+          fi
+          python3 scripts/validation_impact.py --base "$IMPACT_BASE" --head "$IMPACT_HEAD" "${args[@]}" --shard-count "$PROTOS_TEST_SHARD_COUNT" --ci-output target/validation-requirements/requirements.json >> "$GITHUB_OUTPUT"
+      - name: Upload validation requirements
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-requirements-${{ github.sha }}
+          if-no-files-found: error
+          path: target/validation-requirements/requirements.json
       - name: Prepare Java partition plan
         run: make prepare-java-test-shards
       - name: Export validated partition matrix
@@ -344,6 +390,13 @@ jobs:
   protos-plan:
     timeout-minutes: 120
     runs-on: ubuntu-latest
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.prepare.outputs.protos_planning_matrix) }}
+    env:
+      PROTOS_REPOSITORY_TEST_SCOPE: ${{ matrix.scope }}
     container:
       image: ghcr.io/guillermomolina/protos-ci@sha256:44e03c759ccd2b57135f5c0bdbb5060563e858601daa73958ab6cbba2ffc5fe3
       credentials:
@@ -399,11 +452,12 @@ jobs:
           --listing target/protos-test-shards/listing.json
           --count "$PROTOS_TEST_SHARD_COUNT"
           --jobs "$PROTOS_TEST_JOBS"
+          --scope "$PROTOS_REPOSITORY_TEST_SCOPE"
           --output target/protos-test-shards/plan.json
       - name: Upload revision-bound Protos plan
         uses: actions/upload-artifact@v4
         with:
-          name: protos-plan-${{ github.sha }}
+          name: protos-plan-${{ matrix.scopeIndex }}-${{ github.sha }}
           if-no-files-found: error
           path: |
             target/protos-test-shards/plan.json
@@ -419,7 +473,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: protos-plan-diagnostics-${{ github.sha }}
+          name: protos-plan-diagnostics-${{ matrix.scopeIndex }}-${{ github.sha }}
           if-no-files-found: warn
           path: |
             target/protos-test-shards/
@@ -427,11 +481,13 @@ jobs:
   protos-suite:
     timeout-minutes: 120
     runs-on: ubuntu-latest
+    needs: prepare
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        include: ${{ fromJSON(needs.prepare.outputs.protos_matrix) }}
     env:
+      PROTOS_REPOSITORY_TEST_SCOPE: ${{ matrix.scope }}
       PROTOS_TEST_SHARD_INDEX: ${{ matrix.shard }}
     container:
       image: ghcr.io/guillermomolina/protos-ci@sha256:44e03c759ccd2b57135f5c0bdbb5060563e858601daa73958ab6cbba2ffc5fe3
@@ -501,6 +557,7 @@ jobs:
           --count "$PROTOS_TEST_SHARD_COUNT"
           --index "$PROTOS_TEST_SHARD_INDEX"
           --jobs "$PROTOS_TEST_JOBS"
+          --scope "$PROTOS_REPOSITORY_TEST_SCOPE"
           --output target/protos-test-evidence/protos-result.json
       - name: Record lane wall time
         if: always()
@@ -513,7 +570,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: protos-evidence-suite-${{ matrix.shard }}-${{ github.sha }}
+          name: protos-evidence-suite-${{ matrix.scopeIndex }}-${{ matrix.shard }}-${{ github.sha }}
           if-no-files-found: warn
           path: |
             target/protos-test-evidence/
@@ -523,7 +580,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: protos-suite-${{ matrix.shard }}-${{ github.sha }}
+          name: protos-suite-${{ matrix.scopeIndex }}-${{ matrix.shard }}-${{ github.sha }}
           if-no-files-found: warn
           path: |
             target/ci-logs/protos-suite.log
@@ -691,8 +748,14 @@ jobs:
         if: always()
         uses: actions/download-artifact@v4
         with:
-          name: protos-plan-${{ github.sha }}
+          pattern: protos-plan-[0-9]*-${{ github.sha }}
           path: target/protos-test-shards
+      - name: Download validation requirements
+        if: always()
+        uses: actions/download-artifact@v4
+        with:
+          name: validation-requirements-${{ github.sha }}
+          path: target/validation-requirements
       - name: Download Protos execution evidence
         if: always()
         uses: actions/download-artifact@v4
@@ -708,7 +771,8 @@ jobs:
           --plan target/java-test-shards/plan.json
           --results target/ci-evidence
           --dependencies "$DEPENDENCY_RESULTS"
-          --protos-plan target/protos-test-shards/plan.json
+          --requirements target/validation-requirements/requirements.json
+          --protos-plan target/protos-test-shards
           --protos-results target/ci-protos-evidence
           --protos-shard-count "$PROTOS_TEST_SHARD_COUNT"
           --output target/ci-aggregate/result.json

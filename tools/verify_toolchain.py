@@ -517,6 +517,55 @@ def step_with(blocks, token):
     return found[0] if len(found) == 1 else None
 
 
+def scoped_workflow(path):
+    text = read_text(path)
+    return any(token in text for token in ("protos_matrix:", "matrix.scope", "--requirements"))
+
+
+def scope_selection_contract(path):
+    """Validate wiring, leaving membership and matrix construction to the shared selector."""
+    prepare = workflow_job_text(path, "prepare")
+    blocks = workflow_step_blocks(prepare)
+    selector = step_with(blocks, "scripts/validation_impact.py")
+    upload = step_with(blocks, "name: validation-requirements-${{ github.sha }}")
+    if selector is None or upload is None or selector >= upload:
+        return False
+    if not all(token in prepare for token in (
+            "protos_matrix: ${{ steps.impact.outputs.matrix }}",
+            "protos_planning_matrix: ${{ steps.impact.outputs.planning_matrix }}")):
+        return False
+    if not all(token in blocks[selector] for token in (
+            "id: impact", "github.event.pull_request.base.sha || github.event.before",
+            "github.event.pull_request.head.sha || github.sha",
+            '--base "$IMPACT_BASE" --head "$IMPACT_HEAD"',
+            '--shard-count "$PROTOS_TEST_SHARD_COUNT"',
+            "--ci-output target/validation-requirements/requirements.json", '--exhaustive',
+            '>> "$GITHUB_OUTPUT"')):
+        return False
+    commands = [line.strip() for line in blocks[selector].splitlines()
+                if "python3 scripts/validation_impact.py" in line]
+    if len(commands) != 1 or re.search(r"\|\||;|&&|set \+", commands[0]):
+        return False
+    if not all(token in blocks[upload] for token in (
+            "uses: actions/upload-artifact@v4", "if-no-files-found: error",
+            "path: target/validation-requirements/requirements.json")):
+        return False
+    if any(re.search(r"(?m)^        if:", blocks[index]) for index in (selector, upload)):
+        return False
+    for name, output in (("protos-plan", "protos_planning_matrix"), ("protos-suite", "protos_matrix")):
+        body = workflow_job_text(path, name)
+        if not all(token in body for token in (
+                "    needs: prepare\n", "      fail-fast: false\n",
+                "        include: ${{ fromJSON(needs.prepare.outputs." + output + ") }}",
+                "      PROTOS_REPOSITORY_TEST_SCOPE: ${{ matrix.scope }}\n")):
+            return False
+        if len(re.findall(r"(?m)^    needs:", body)) != 1:
+            return False
+        if len(re.findall(r"(?m)^        include:", body)) != 1:
+            return False
+    return True
+
+
 def protos_evidence_contract(path):
     # type: (Path) -> bool
     # The plan publishes the complete authoritative listing; each shard records
@@ -524,10 +573,14 @@ def protos_evidence_contract(path):
     # receives no artifacts, so no compiled directory crosses runners.
     plan = workflow_job_text(path, "protos-plan")
     blocks = workflow_step_blocks(plan)
-    valid = "    needs:" not in plan and "actions/download-artifact" not in plan
+    scoped = scoped_workflow(path)
+    valid = (scope_selection_contract(path) if scoped else "    needs:" not in plan)
+    valid = valid and "actions/download-artifact" not in plan
     listing = step_with(blocks, "bin/protos test --list-cases > target/protos-test-shards/listing.json")
     planner = step_with(blocks, "tools/ci_protos_test_shards.py plan")
-    upload = step_with(blocks, "name: protos-plan-${{ github.sha }}")
+    plan_identity = ("name: protos-plan-${{ matrix.scopeIndex }}-${{ github.sha }}" if scoped
+                     else "name: protos-plan-${{ github.sha }}")
+    upload = step_with(blocks, plan_identity)
     valid = valid and None not in (listing, planner, upload) and listing < planner < upload
     if valid:
         preparation = "mkdir -p target/protos-test-shards target/ci-logs"
@@ -542,14 +595,18 @@ def protos_evidence_contract(path):
             "uses: actions/upload-artifact@v4", "if-no-files-found: error",
             "target/protos-test-shards/plan.json", "target/protos-test-shards/listing.json"))
         valid = valid and all("if:" not in blocks[i] for i in (listing, planner, upload))
+        if scoped:
+            valid = valid and '--scope "$PROTOS_REPOSITORY_TEST_SCOPE"' in blocks[planner]
 
     suite = workflow_job_text(path, "protos-suite")
     blocks = workflow_step_blocks(suite)
-    valid = valid and "    needs:" not in suite and "actions/download-artifact" not in suite
+    valid = valid and (scoped or "    needs:" not in suite) and "actions/download-artifact" not in suite
     listings = step_with(blocks, PROTOS_SHARD_LISTING)
     run = step_with(blocks, PROTOS_SUITE_MAKE)
     report = step_with(blocks, "tools/ci_protos_test_shards.py report")
-    evidence = step_with(blocks, "name: protos-evidence-suite-${{ matrix.shard }}-${{ github.sha }}")
+    evidence_identity = ("name: protos-evidence-suite-${{ matrix.scopeIndex }}-${{ matrix.shard }}-${{ github.sha }}"
+                         if scoped else "name: protos-evidence-suite-${{ matrix.shard }}-${{ github.sha }}")
+    evidence = step_with(blocks, evidence_identity)
     order = [listings, run, report, evidence]
     valid = valid and None not in order and order == sorted(order)
     if valid:
@@ -561,6 +618,8 @@ def protos_evidence_contract(path):
             "--exit-status-file target/ci-logs/protos-suite.exit", "--log target/ci-logs/protos-suite.log",
             '--count "$PROTOS_TEST_SHARD_COUNT"', '--index "$PROTOS_TEST_SHARD_INDEX"',
             '--jobs "$PROTOS_TEST_JOBS"', "--output target/protos-test-evidence/protos-result.json"))
+        if scoped:
+            valid = valid and '--scope "$PROTOS_REPOSITORY_TEST_SCOPE"' in blocks[report]
         valid = valid and "        if: always()\n" in blocks[evidence]
         valid = valid and all(token in blocks[evidence] for token in (
             "uses: actions/upload-artifact@v4", "target/protos-test-evidence/",
@@ -579,9 +638,14 @@ def aggregate_evidence_contract(path):
         return False
     if re.search(r"\|\||;|&&|set \+", blocks[gate]):
         return False
-    for identity, destination in (
-            ("name: protos-plan-${{ github.sha }}", "target/protos-test-shards"),
-            ("pattern: protos-evidence-*-${{ github.sha }}", "target/ci-protos-evidence")):
+    scoped = scoped_workflow(path)
+    identities = [
+        ("pattern: protos-plan-[0-9]*-${{ github.sha }}" if scoped else "name: protos-plan-${{ github.sha }}",
+         "target/protos-test-shards"),
+        ("pattern: protos-evidence-*-${{ github.sha }}", "target/ci-protos-evidence")]
+    if scoped:
+        identities.append(("name: validation-requirements-${{ github.sha }}", "target/validation-requirements"))
+    for identity, destination in identities:
         download = step_with(blocks, identity)
         if download is None or download >= gate:
             return False
@@ -591,9 +655,13 @@ def aggregate_evidence_contract(path):
             return False
         if "merge-multiple: true" in block:
             return False
-    return all(token in blocks[gate] for token in (
-        "--protos-plan target/protos-test-shards/plan.json",
-        "--protos-results target/ci-protos-evidence"))
+    plan_argument = "--protos-plan target/protos-test-shards" + ("" if scoped else "/plan.json")
+    valid = all(token in blocks[gate] for token in (
+        plan_argument, "--protos-results target/ci-protos-evidence"))
+    if scoped:
+        valid = valid and "--requirements target/validation-requirements/requirements.json" in blocks[gate]
+        valid = valid and not re.search(r"--protos-plan target/protos-test-shards/", blocks[gate])
+    return valid
 
 
 def workflow_job_test_command(path, job_id):
@@ -626,7 +694,8 @@ def workflow_job_test_command(path, job_id):
     valid = valid and "    if: always()" in aggregate
     for token in ("tools/ci_validation_aggregate.py", "--plan", "--results", "--dependencies",
                   "${{ toJSON(needs) }}", "actions/download-artifact@v4", "java-plan-${{ github.sha }}",
-                  "java-evidence-*-${{ github.sha }}", "protos-plan-${{ github.sha }}",
+                  "java-evidence-*-${{ github.sha }}",
+                  "protos-plan-[0-9]*-${{ github.sha }}" if scoped_workflow(path) else "protos-plan-${{ github.sha }}",
                   "protos-evidence-*-${{ github.sha }}", "--protos-plan", "--protos-results",
                   '--protos-shard-count "$PROTOS_TEST_SHARD_COUNT"'):
         valid = valid and token in aggregate
@@ -651,10 +720,16 @@ def workflow_job_test_workers(path, job_id):
     # The Protos matrix enumerates exactly every index of the declared count,
     # never cancels siblings, and passes each control to the Makefile explicitly.
     suite = workflow_job_text(path, "protos-suite")
-    for token in ("    strategy:\n      fail-fast: false\n      matrix:\n        shard: [1, 2, 3, 4]\n",
-                  "    env:\n      PROTOS_TEST_SHARD_INDEX: ${{ matrix.shard }}\n", PROTOS_SUITE_MAKE):
-        bounded = bounded and token in suite
-    bounded = bounded and len(re.findall(r"(?m)^\s+shard: ", suite)) == 1
+    if scoped_workflow(path):
+        bounded = bounded and scope_selection_contract(path)
+        bounded = bounded and "      PROTOS_TEST_SHARD_INDEX: ${{ matrix.shard }}\n" in suite
+        bounded = bounded and PROTOS_SUITE_MAKE in suite
+        bounded = bounded and not re.search(r"(?m)^\s+shard: ", suite)
+    else:
+        for token in ("    strategy:\n      fail-fast: false\n      matrix:\n        shard: [1, 2, 3, 4]\n",
+                      "    env:\n      PROTOS_TEST_SHARD_INDEX: ${{ matrix.shard }}\n", PROTOS_SUITE_MAKE):
+            bounded = bounded and token in suite
+        bounded = bounded and len(re.findall(r"(?m)^\s+shard: ", suite)) == 1
     parallel = workflow_job_text(path, "java-parallel")
     prepare = workflow_job_text(path, "prepare")
     for token in ("fail-fast: false", "shard: ${{ fromJSON(needs.prepare.outputs.indices) }}",

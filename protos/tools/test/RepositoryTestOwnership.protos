@@ -1,0 +1,201 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Repository automation ownership over authoritative source registrations.
+//! This module neither imports test sources nor interprets logical Case names.
+
+FileSelection: import("./FileSelection.protos")
+Manifest: import("./Manifest.protos")
+Arrays: import("std:collections/array")
+ArrayAccumulator: import("./ArrayAccumulator.protos")
+
+canonicalOwners: Array(
+    "collections",
+    "json",
+    "text",
+    "test",
+    "runtime",
+    "inspect",
+    "toml",
+    "uri",
+    "csv",
+    "cli",
+    "math/integer",
+    "math/linear-algebra",
+    "crypto/sha256",
+    "crypto/hmac_sha256",
+    "crypto/password",
+    "text/base64url",
+    "auth/jwt",
+    "network/ip-addresses",
+    "network/ip-endpoints",
+    "network/resolvers",
+    "semver",
+    "datetime",
+    "regex",
+    "logging",
+    "http",
+    "tls",
+    "ffi",
+    "markdown"
+)
+canonicalOwners.freeze()
+coreCorpora: Array(
+    "protos/corpus/process-snapshot",
+    "protos/corpus/actor",
+    "protos/corpus/group",
+    "protos/corpus/package-toml",
+    "protos/corpus/package-tool/version",
+    "protos/corpus/package-tool/lock",
+    "protos/corpus/package-tool/resolution-input",
+    "protos/corpus/package-tool/content-identity",
+    "protos/corpus/package-tool/resolution-input-lock",
+    "protos/corpus/package-tool/resolution-root",
+    "protos/corpus/package-tool/execution-plan",
+    "protos/corpus/package-tool/project-projection"
+)
+coreCorpora.freeze()
+
+knownOwner: (owner) => {
+    Arrays.contains(canonicalOwners, owner)
+}
+
+// Only these explicit family aliases are accepted. Leaf-name shorthand is
+// deliberately rejected, even when it currently has a single interpretation.
+families: Array("math", "crypto", "network", "auth")
+families.freeze()
+
+normalizeScope: (scope) => {
+    result: scope
+    if(scope === null) {
+        result = "all"
+    }
+    String.recognizes(result).ifFalse(() => { Error().signal() })
+    valid: Arrays.contains(Array("all", "core", "libraries"), result)
+    for(owner in canonicalOwners) {
+        if(result == "library:" + owner) { valid = true }
+    }
+    for(family in families) {
+        if(result == "library:" + family) { valid = true }
+    }
+    valid.ifFalse(() => { Error().signal() })
+    result
+}
+
+// Unknown corpora and unknown sources in the mixed library tree fail closed.
+// A dedicated corpus must agree with its authoritative path prefix.
+classify: (corpus, path) => {
+    Manifest.pathValue(path)
+    owner: null
+    if(corpus == "protos/corpus/conformance") {
+        if(FileSelection.pathWithinDirectory(path, "library")) {
+            for(candidate in canonicalOwners) {
+                if(FileSelection.pathWithinDirectory(path, "library/" + candidate)) {
+                    // A hierarchical module is more specific than its parent.
+                    if((owner === null) || FileSelection.pathWithinDirectory(candidate, owner)) {
+                        owner = candidate
+                    }
+                }
+            }
+            (owner === null).ifTrue(() => { Error().signal() })
+        }
+    } else {
+        matched: Arrays.contains(coreCorpora, corpus)
+        for(candidate in canonicalOwners) {
+            if(corpus == "protos/corpus/library/" + candidate) {
+                FileSelection.pathWithinDirectory(path, candidate).ifFalse(() => {
+                    Error().signal()
+                })
+                // Parent ownership excludes independently registered descendants.
+                for(descendant in canonicalOwners) {
+                    if(FileSelection.pathWithinDirectory(descendant, candidate) &&
+                        FileSelection.pathWithinDirectory(path, descendant)) {
+                        Error().signal()
+                    }
+                }
+                owner = candidate
+                matched = true
+            }
+        }
+        matched.ifFalse(() => { Error().signal() })
+    }
+    owner
+}
+
+sourceInScope: (scope, corpus, path) => {
+    selectedScope: normalizeScope(scope)
+    owner: classify(corpus, path)
+    selected: selectedScope == "all"
+    if(selectedScope == "core") { selected = owner === null }
+    if(selectedScope == "libraries") { selected = (owner === null) == false }
+    (owner === null).ifFalse(() => {
+        if(selectedScope == "library:" + owner) { selected = true }
+        for(family in families) {
+            if((selectedScope == "library:" + family) && FileSelection.pathWithinDirectory(owner, family)) {
+                selected = true
+            }
+        }
+    })
+    selected
+}
+
+selectPlan: (scope, corpus, plan) => {
+    selectedScope: normalizeScope(scope)
+    FileSelection.projectPlan(plan, (spec) => {
+        sourceInScope(selectedScope, corpus, Manifest.casePath(spec))
+    })
+}
+
+// Enumerate actual registered owners, retaining their canonical first-source
+// order. Reserved conventions (such as Markdown) appear only when registered.
+knownLibraries: (plannedSuites) => {
+    seen: Map()
+    accumulator: ArrayAccumulator.create()
+    for(planned in plannedSuites) {
+        for(spec in Manifest.planCases(planned.plan)) {
+            owner: classify(planned.leaf.corpus, Manifest.casePath(spec))
+            (owner === null).ifFalse(() => {
+                seen.containsKey(owner).ifFalse(() => {
+                    seen[owner] = true
+                    ArrayAccumulator.append(accumulator, owner)
+                })
+            })
+        }
+    }
+    result: ArrayAccumulator.finish(accumulator)
+    result.freeze()
+}
+
+// The integrity audit supplies physical paths relative to protos/tests. Reconcile
+// the two established library trees with the corpus/source classification, so a
+// library source cannot masquerade as a core registration.
+requirePhysicalOwner: (path, owner) => {
+    for(prefix in Array("library", "conformance/library")) {
+        if(FileSelection.pathWithinDirectory(path, prefix)) {
+            expectedOwner: null
+            for(candidate in canonicalOwners) {
+                if(FileSelection.pathWithinDirectory(path, prefix + "/" + candidate)) {
+                    if((expectedOwner === null) || FileSelection.pathWithinDirectory(candidate, expectedOwner)) {
+                        expectedOwner = candidate
+                    }
+                }
+            }
+            if((expectedOwner === null) || (expectedOwner != owner)) {
+                Error().signal()
+            }
+        }
+    }
+    null
+}

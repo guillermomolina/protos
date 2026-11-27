@@ -26,6 +26,7 @@
 //! left out of, stale in, or repeated in these plans.
 
 Manifest: import("./Manifest.protos")
+RepositoryTestOwnership: import("./RepositoryTestOwnership.protos")
 
 planFromEntries: (prefix, entries) => {
     cases: Array()
@@ -331,5 +332,8 @@ load: (corpusId) => {
     matched.ifFalse(() => {
         fail()
     })
+    for(spec in Manifest.planCases(selected)) {
+        RepositoryTestOwnership.classify(corpusId, Manifest.casePath(spec))
+    }
     selected
 }

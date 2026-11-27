@@ -17,6 +17,7 @@
 //! progress grouping policy.
 
 SuiteGraph: import("./SuiteGraph.protos")
+RepositoryTestOwnership: import("./RepositoryTestOwnership.protos")
 Arrays: import("std:collections/array")
 
 root: SuiteGraph.suite(
@@ -649,4 +650,9 @@ progressGroupIndex: (leaf, names, casePath, selector) => {
         policyError()
     }
     groupIndex
+}
+
+// Source ownership is independent of presentation policy and SuiteId spelling.
+sourceOwner: (leaf, spec) => {
+    RepositoryTestOwnership.classify(leaf.corpus, import("./Manifest.protos").casePath(spec))
 }

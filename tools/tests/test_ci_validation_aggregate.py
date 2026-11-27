@@ -424,6 +424,61 @@ class AggregateTests(unittest.TestCase):
             self.assertEqual(gate.main(), 1)
         self.assertEqual(json.loads(output.read_text())["reason"], "missing Protos shard result")
 
+    def scoped_fixture(self, libraries):
+        profile = "FULL" if libraries == "all" else "CORE" if libraries == "none" else "SELECTIVE"
+        requirements = dict(protos.impact.Selection(profile, "ALL", "fixture", profile != "FULL", libraries).to_dict(),
+                            revision=self.rev, shardCount=4)
+        requirements["scopes"] = protos.impact.required_scopes(requirements)
+        plans, results = [], []
+        for scope in requirements["scopes"]:
+            refs = [scope + ":one", scope + ":two"]
+            plans.append(protos.make_plan(listing(refs), 4, 2, self.rev, scope))
+            for index in range(1, 5):
+                retained = refs[index - 1::4]
+                results.append(protos.shard_result(4, index, 2, listing(refs), listing(retained),
+                               "%s passed, 0 failed\n" % len(retained), 0, self.rev, scope))
+        return requirements, plans, results
+
+    def accept_scoped(self, requirements, plans, results):
+        return gate.scoped_aggregate(self.plan, self.results, self.dependencies, self.rev,
+                                     requirements, plans, results, 4)
+
+    def test_required_repository_scope_profiles(self):
+        for libraries in ("none", ["toml"], ["http", "toml"], "all"):
+            requirements, plans, results = self.scoped_fixture(libraries)
+            accepted = self.accept_scoped(requirements, plans, results)
+            self.assertEqual(accepted["exhaustive"], libraries == "all")
+            self.assertEqual(accepted["requiredScopes"], requirements["scopes"])
+            if libraries != "all":
+                self.assertEqual("NOT SELECTED", accepted["unselectedLibraries"])
+
+    def test_missing_failed_and_incorrect_scoped_evidence(self):
+        requirements, plans, results = self.scoped_fixture(["toml"])
+        for bad_plans, bad_results in ((plans[:1], results), (plans, results[:-1]),
+                                      (plans + plans[:1], results), (plans, results + results[:1])):
+            with self.assertRaises((ValueError, KeyError)):
+                self.accept_scoped(requirements, bad_plans, bad_results)
+        for patch in (dict(scope="library:uri"), dict(revision="b" * 40), dict(exitStatus=1),
+                      dict(planDigest="0" * 64), dict(status="fail")):
+            altered = copy.deepcopy(results)
+            altered[-1].update(patch)
+            with self.subTest(patch=patch), self.assertRaises(ValueError):
+                self.accept_scoped(requirements, plans, altered)
+        for lane in ("compilerability", "protos-foreign", "native-image", "java-serial"):
+            original = self.dependencies[lane]
+            self.dependencies[lane] = dict(result="skipped")
+            with self.assertRaises(ValueError):
+                self.accept_scoped(requirements, plans, results)
+            self.dependencies[lane] = original
+
+    def test_requirements_cannot_change_revision_or_claim_exhaustive(self):
+        requirements, plans, results = self.scoped_fixture("none")
+        for patch in (dict(revision="b" * 40), dict(validation_impact="FULL"),
+                      dict(scopes=["core", "libraries"]), dict(shardCount=3)):
+            bad = dict(requirements, **patch)
+            with self.assertRaises(ValueError):
+                self.accept_scoped(bad, plans, results)
+
 
 if __name__ == "__main__":
     unittest.main()

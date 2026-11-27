@@ -1,0 +1,118 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Specialized Test Tool suite, invoked by RepositoryCorpusPlansTest through
+//! the existing tool harness (the tooling tree is JUnit-owned).
+
+Ownership: import("./RepositoryTestOwnership.protos")
+Manifest: import("./Manifest.protos")
+FileSelection: import("./FileSelection.protos")
+Discovery: import("./Discovery.protos")
+Audit: import("./RepositoryCorpusAudit.protos")
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+Arrays: import("std:collections/array")
+
+source: (path) => Manifest.caseSpec(Array(path, "suite-native", "-"))
+conformance: "protos/corpus/conformance"
+
+tests: Array(
+    Test("mixed and dedicated corpus ownership", () => {
+        for(pair in Array(
+            Array("library/toml/parser-positive.protos", "toml"),
+            Array("library/toml/official/suite/valid-array.protos", "toml"),
+            Array("library/collections/array-filter.protos", "collections"),
+            Array("library/markdown/parser.protos", "markdown"),
+            Array("library/text/base64url/roundtrip.protos", "text/base64url")
+        )) {
+            Assertions.require(Ownership.classify(conformance, pair[0]) == pair[1])
+        }
+        Assertions.require(Ownership.classify("protos/corpus/library/math/integer", "math/integer/power.protos") == "math/integer")
+        Assertions.require(Ownership.classify(conformance, "integer/arithmetic.protos") === null)
+        Assertions.require(Ownership.classify("protos/corpus/package-toml", "valid/basic.toml") === null)
+        Assertions.require(Ownership.classify("protos/corpus/package-tool/version", "project/tests/toml.protos") === null)
+        Assertions.require(Ownership.sourceInScope("library:math", "protos/corpus/library/math/integer", "math/integer/power.protos"))
+        Assertions.require(Ownership.sourceInScope("library:text", "protos/corpus/library/text/base64url", "text/base64url/roundtrip.protos") == false)
+    }),
+    Test("unknown and contradictory ownership fails closed", () => {
+        Assertions.signals(Error, () => Ownership.classify("unknown", "x.protos"))
+        Assertions.signals(Error, () => Ownership.classify(conformance, "library/unknown/test.protos"))
+        Assertions.signals(Error, () => Ownership.classify("protos/corpus/library/uri", "json/test.protos"))
+        Assertions.signals(Error, () => Ownership.classify(conformance, "library/toml-extra/test.protos"))
+    }),
+    Test("scope input validation and explicit family aliases", () => {
+        Assertions.require(Ownership.normalizeScope(null) == "all")
+        for(scope in Array("all", "core", "libraries", "library:toml", "library:math/integer", "library:math")) {
+            Assertions.require(Ownership.normalizeScope(scope) == scope)
+        }
+        for(scope in Array("", "library:", "library:integer", "library:sha256", "library:unknown", "CORE", " core")) {
+            Assertions.signals(Error, () => Ownership.normalizeScope(scope))
+        }
+    }),
+    Test("projection partitions original entries and preserves canonical order", () => {
+        first: source("integer/first.protos")
+        second: source("library/toml/ordinary.protos")
+        third: source("library/toml/official/suite/valid.protos")
+        fourth: source("library/json/parse.protos")
+        fifth: source("integer/last.protos")
+        entries: Array(first, second, third, fourth, fifth)
+        plan: Array(entries)
+        core: Manifest.planCases(Ownership.selectPlan("core", conformance, plan))
+        libraries: Manifest.planCases(Ownership.selectPlan("libraries", conformance, plan))
+        toml: Manifest.planCases(Ownership.selectPlan("library:toml", conformance, plan))
+        Assertions.require((core.size() + libraries.size()) == entries.size())
+        Assertions.require((core[0] === first) && (core[1] === fifth))
+        Assertions.require((libraries[0] === second) && (libraries[1] === third) && (libraries[2] === fourth))
+        Assertions.require((toml[0] === second) && (toml[1] === third))
+        for(entry in core) { Assertions.require(Arrays.contains(libraries, entry) == false) }
+        directories: Array(Array(conformance, "library/toml"))
+        selected: FileSelection.selectPlanWithDirectories(conformance,
+            Ownership.selectPlan("libraries", conformance, plan), Array(), directories)
+        Assertions.require(Manifest.planCases(selected)[0] === second)
+        Assertions.require(FileSelection.pathWithinDirectory("library/toml-extra/a.protos", "library/toml") == false)
+    }),
+    Test("unselected source is never evaluated for discovery", () => {
+        plan: Array(Array(source("integer/selected.protos"), source("library/toml/unselected.protos")))
+        selected: Ownership.selectPlan("core", conformance, plan)
+        evaluations: 0
+        for(spec in Manifest.planCases(selected)) {
+            Assertions.require(Manifest.casePath(spec) == "integer/selected.protos")
+            evaluations = evaluations + 1
+            module: { tests: Array(Test("selected", () => true)) }
+            Discovery.projectionFromModule(Array(conformance, Manifest.casePath(spec)), module)
+        }
+        Assertions.require(evaluations == 1)
+    }),
+    Test("audit retains distinct authorities and rejects contradictory source owners", () => {
+        path: "shared/source.protos"
+        first: Audit.registration(path, "one", "protos/corpus/conformance", "case-one", "authority-one", "library/toml/test.protos")
+        second: Audit.registration(path, "two", "protos/corpus/conformance", "case-two", "authority-two", "library/toml/test.protos")
+        accepted: Audit.audit(Array(path), Array(path), Array(), Array(first, second), true)
+        Assertions.require(accepted.diagnostics.size() == 0)
+        conflicting: Audit.registration(path, "three", "protos/corpus/conformance", "case-three", "authority-three", "integer/test.protos")
+        rejected: Audit.audit(Array(path), Array(path), Array(), Array(first, conflicting), true)
+        Assertions.require(Arrays.any(rejected.diagnostics, (entry) => entry.code == "CONTRADICTORY_TEST_OWNERSHIP"))
+        reversed: Audit.audit(Array(path), Array(path), Array(), Array(conflicting, first), true)
+        Assertions.require(Audit.report(rejected) == Audit.report(reversed))
+        unknown: Audit.registration(path, "unknown-suite", "unknown-corpus", "unknown-case", null)
+        invalid: Audit.audit(Array(path), Array(path), Array(), Array(unknown), true)
+        Assertions.require(Arrays.any(invalid.diagnostics, (entry) => entry.code == "INVALID_TEST_OWNERSHIP"))
+        libraryPath: "conformance/library/json/parser.protos"
+        masquerading: Audit.registration(libraryPath, "core", conformance, "integer/parser.protos", null)
+        mislabeled: Audit.audit(Array(libraryPath), Array(libraryPath), Array(), Array(masquerading), true)
+        Assertions.require(Arrays.any(mislabeled.diagnostics, (entry) => entry.code == "INVALID_TEST_OWNERSHIP"))
+    })
+)
+tests.freeze()

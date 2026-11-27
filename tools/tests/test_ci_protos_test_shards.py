@@ -163,5 +163,37 @@ class PlanAndCliTests(unittest.TestCase):
         protos.check_plan(json.loads(output.read_text()))
 
 
+class ScopeBindingTests(unittest.TestCase):
+    def test_scoped_plans_and_empty_shards(self):
+        for scope in ("core", "libraries", "library:toml"):
+            plan = protos.make_plan(listing(["a"]), 2, 1, REV, scope)
+            results = [protos.shard_result(2, index, 1, listing(["a"]),
+                       listing(["a"] if index == 1 else []),
+                       "%s passed, 0 failed\n" % (1 if index == 1 else 0), 0, REV, scope)
+                       for index in (1, 2)]
+            self.assertEqual(scope, protos.check_results(plan, results, REV, 2)["scope"])
+            other = dict(results[0], scope="all")
+            with self.assertRaises(ValueError):
+                protos.check_results(plan, [other, results[1]], REV, 2)
+            with self.assertRaises(ValueError):
+                protos.check_results(plan, results, "b" * 40, 2)
+            with self.assertRaises(ValueError):
+                protos.check_results(plan, results[:1], REV, 2)
+            with self.assertRaises(ValueError):
+                protos.check_results(plan, [results[0], results[0]], REV, 2)
+            wrong = dict(results[0], planDigest="0" * 64)
+            with self.assertRaises(ValueError):
+                protos.check_results(plan, [wrong, results[1]], REV, 2)
+
+    def test_invalid_scopes_fail_closed(self):
+        for scope in (None, "", "library:", "library:unknown", "library:../toml", [], "CORE"):
+            with self.subTest(scope=scope), self.assertRaises(ValueError):
+                protos.make_plan(listing(["a"]), 1, 1, REV, scope)
+
+    def test_scope_participates_in_digest(self):
+        self.assertNotEqual(protos.make_plan(listing(["a"]), 1, 1, REV, "core")["planDigest"],
+                            protos.make_plan(listing(["a"]), 1, 1, REV, "libraries")["planDigest"])
+
+
 if __name__ == "__main__":
     unittest.main()

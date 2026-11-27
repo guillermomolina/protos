@@ -433,6 +433,73 @@ make test-protos-suite \
     PROTOS_TEST_JOBS=1
 ```
 
+## Repository development validation scopes
+
+Public `protos test` remains unfiltered: without repository automation input it
+executes the entire original registered suite. There is no new public CLI option.
+The repository Makefile provides separate development gates:
+
+| Command | Functional coverage |
+| --- | --- |
+| `make test` | Java, core/non-library Protos and foreign providers |
+| `make test-protos` | Core/non-library Protos |
+| `make test-protos-libs` | All registered Standard Library corpora |
+| `make test-protos-lib LIB=toml` | Complete TOML corpus, including official cases |
+| `make test-protos-lib LIB=markdown` | Complete Markdown corpus when registered |
+| `make test-protos-foreign` | Independent foreign-provider validation |
+| `make test-all` | Exhaustive Java, Protos and foreign-provider validation |
+| `make check-all` | Existing check controls followed by exhaustive validation |
+
+Individual owners include hierarchical names such as `math/integer`,
+`math/linear-algebra`, `crypto/sha256`, `crypto/hmac_sha256`, `text/base64url`
+and `network/ip-addresses`. Explicit `math`, `crypto`, `network` and `auth`
+family selections select their registered modules. Unrecognized or ambiguous
+shorthand is rejected. A requested library with no registered sources is rejected.
+
+The common `prepare-protos-tests` preparation and `test-protos-suite` runner
+remain available; the runner does no build and defaults to complete coverage.
+Repository automation sets its internal `PROTOS_REPOSITORY_TEST_SCOPE` to `all`,
+`core`, `libraries` or `library:<owner>`. This is internal automation input, not
+a supported public Test Tool option. An absent input preserves public behavior;
+empty or invalid input fails through the existing Tool Error lane.
+
+Ownership uses corpus identity and `Manifest.casePath`, including `library/`
+sources inside mixed conformance. Package Tool tests stay tooling-owned even
+when they use TOML or another library. Selection projects original authoritative
+source entries before logical discovery, then intersects file/directory selectors.
+Only selected source modules are evaluated for discovery. Exact CaseRef selection
+and global round-robin sharding follow discovery. Scope selection changes neither
+CaseRefs, execution authorities, isolation boundaries nor progress groups.
+
+For distributed selected validation, use the same scope on every worker:
+
+```sh
+make prepare-protos-tests
+make test-protos-suite PROTOS_REPOSITORY_TEST_SCOPE=library:toml \
+    PROTOS_TEST_SHARD_COUNT=4 PROTOS_TEST_SHARD_INDEX=2 PROTOS_TEST_JOBS=1
+```
+
+All four shards are required to validate that scope. CI obtains listings and
+executes shards with precisely the same scope. Its shared impact selector chooses
+core, core plus conservative affected library dependencies, or exhaustive coverage.
+Unknown impact selects exhaustive validation. Scope/revision-bound evidence is
+required at aggregation; libraries outside the selected scope are `NOT SELECTED`.
+Weekly exhaustive CI and the default exhaustive manual dispatch cover all libraries.
+Release-aware B5 requires exhaustive functional validation for its exact candidate
+and reuses its identity-verified portable archive for foreign-provider tests, so
+ordinary development packaging cannot overwrite the release candidate.
+Native and compilerability gates retain their independent responsibilities.
+
+To register a new library corpus, keep using the authoritative manifest or
+`RepositoryCorpusPlans.protos` and its existing suite/corpus authority. Register
+its canonical owner/convention in `RepositoryTestOwnership.protos`; mixed
+conformance sources use `library/<owner>/...`, dedicated sources use
+`<owner>/...` within `protos/corpus/library/<owner>`. Unknown or contradictory
+ownership fails the audit. Markdown follows these conventions automatically once
+registered. Keep host-side impact dependencies conservative in
+`scripts/validation_impact.py`; an unknown mapping requires exhaustive validation.
+Do not add parallel registrations or classify by test names or progress groups.
+
 ## Repository test registration integrity
 
 Registration in the repository corpus stays explicit. Adding a new suite-native

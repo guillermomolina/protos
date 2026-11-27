@@ -36,7 +36,6 @@ HERE = Path(__file__).resolve().parent
 HELPER_PATH = HERE / "publication_validation.py"
 SELECTOR_PATH = HERE / "validation_impact.py"
 STYLE_GUARD_PATH = HERE / "source_style_guard.py"
-STYLE_EXCEPTIONS_PATH = HERE / "source_style_exceptions.json"
 LEGACY_GUARD_PATH = HERE / "legacy_execution_guard.py"
 
 SPEC = importlib.util.spec_from_file_location(
@@ -90,7 +89,11 @@ class PublicationValidationTest(unittest.TestCase):
         scripts.mkdir()
         shutil.copyfile(str(SELECTOR_PATH), str(scripts / "validation_impact.py"))
         shutil.copyfile(str(STYLE_GUARD_PATH), str(scripts / "source_style_guard.py"))
-        shutil.copyfile(str(STYLE_EXCEPTIONS_PATH), str(scripts / "source_style_exceptions.json"))
+        # This synthetic repository contains no production tutorial sources, so
+        # it must not inherit exceptions referring to files outside its history.
+        # Keep the real guard enabled with its valid empty exception registry.
+        (scripts / "source_style_exceptions.json").write_text(
+            '{"version": 1, "exceptions": []}\n', encoding="utf-8")
         shutil.copyfile(
             str(LEGACY_GUARD_PATH),
             str(scripts / "legacy_execution_guard.py"),
@@ -207,7 +210,7 @@ class PublicationValidationTest(unittest.TestCase):
         calls = self.make_calls()
         self.assertEqual(1, len(calls))
         words = calls[0].split()
-        self.assertEqual("test", words[0])
+        self.assertEqual("test-all", words[0])
         self.assert_isolated_maven(words[1:], prefix="MVN_FLAGS=")
 
     def assert_isolated_maven(self, words, prefix=""):
@@ -237,14 +240,13 @@ class PublicationValidationTest(unittest.TestCase):
         self.assertTrue(calls[0].endswith(" test"))
         self.assert_isolated_maven(calls[0].split())
 
-    def test_test_tool_local_runs_complete_test_tool_affected_set(self):
+    def test_test_tool_change_requires_both_repository_partitions(self):
         candidate = self.commit_files({
             "protos/tools/test/Probe.protos": "self\n",
         })
         self.assertEqual(0, self.run_helper(candidate))
-        calls = self.maven_calls()
-        self.assertEqual(1, len(calls))
-        self.assertIn("-Dtest=ProtosTestTool*Test,ProtosCliTest", calls[0])
+        self.assertEqual([], self.maven_calls())
+        self.assert_full_make()
 
     def test_shared_path_runs_full(self):
         candidate = self.commit_files({
@@ -277,7 +279,7 @@ class PublicationValidationTest(unittest.TestCase):
         })
         self.assertEqual(0, self.run_helper(candidate, top_level=True))
         self.assertEqual([], self.maven_calls())
-        self.assert_full_make()
+        self.assertEqual("test", self.make_calls()[0].split()[0])
 
     def test_top_level_closure_without_tool_change_runs_full(self):
         candidate = self.commit_files({
@@ -574,13 +576,31 @@ require(true)
             ["-Dmaven.repo.local=/p", "-Dmaven.repo.local.tail=/s"],
             env={"MVN_FLAGS": "-B -q"})
         self.assertEqual(
-            ["make", "test",
+            ["make", "test-all", "PROTOS_TEST_SHARD_COUNT=1", "PROTOS_TEST_SHARD_INDEX=1",
              "MVN_FLAGS=-B -q -Dmaven.repo.local=/p -Dmaven.repo.local.tail=/s"],
             command)
 
     def test_f1_whitespace_repository_path_fails_closed(self):
         with self.assertRaises(HELPER.PublicationValidationError):
             HELPER.maven_isolation_flags(Path("/a b"), Path("/s"))
+
+    def test_scope_profiles_select_exact_make_commands(self):
+        cases = (("CORE", "none", "test"), ("FULL", "all", "test-all"),
+                 ("SELECTIVE", ["http", "uri"], "test-selective"))
+        for profile, libraries, target in cases:
+            selection = HELPER._impact_contract.Selection(profile, "ALL", "test reason",
+                                                          profile != "FULL", libraries).to_dict()
+            parsed = HELPER.parse_selector_result(__import__("json").dumps(selection))
+            command = HELPER.validation_command(parsed, env={})
+            self.assertEqual(["make", target], command[:2])
+            if profile == "SELECTIVE":
+                self.assertIn("LIBRARIES=http uri", command)
+
+    def test_ordinary_and_selective_cannot_claim_exhaustive(self):
+        for profile, libraries in (("CORE", "all"), ("SELECTIVE", []), ("FULL", ["toml"])):
+            data = HELPER._impact_contract.Selection(profile, "ALL", "invalid scope", False, libraries).to_dict()
+            with self.assertRaises(HELPER.PublicationValidationError):
+                HELPER.parse_selector_result(__import__("json").dumps(data))
 
 
 class _Capture(object):

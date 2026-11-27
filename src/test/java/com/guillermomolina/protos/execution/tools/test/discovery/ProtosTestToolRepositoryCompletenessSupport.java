@@ -51,7 +51,7 @@ import java.util.stream.Stream;
  * to {@code RepositoryCorpusAudit}; no module under {@code protos/tests/} is imported and no Test
  * body runs.
  */
-final class ProtosTestToolRepositoryCompletenessSupport {
+public final class ProtosTestToolRepositoryCompletenessSupport {
     static final Path TESTS_ROOT = Path.of("protos", "tests");
     static final String COLORED_FORMATTER = "library/logging/colored-formatter.protos";
     static final String TCP_ABORT_FIXTURE = "library/network/tcp-abort.protos";
@@ -218,7 +218,8 @@ final class ProtosTestToolRepositoryCompletenessSupport {
             String report,
             int registrationCount,
             int registeredSourceCount,
-            List<List<String>> coloredFormatterIdentities) {}
+            List<List<String>> coloredFormatterIdentities,
+            List<String> libraryOwners) {}
 
     private ProtosTestToolRepositoryCompletenessSupport() {}
 
@@ -390,6 +391,18 @@ final class ProtosTestToolRepositoryCompletenessSupport {
         return cachedRepositoryEvidence;
     }
 
+    public static List<String> registeredLibraryOwners() throws Exception {
+        return repositoryEvidence().libraryOwners();
+    }
+
+    private static List<String> strings(ProtosArrayValue values) {
+        List<String> result = new ArrayList<>();
+        for (int index = 0; index < values.indexedSize(); index++) {
+            result.add(stringAt(values, index));
+        }
+        return List.copyOf(result);
+    }
+
     private static RepositoryEvidence loadRepositoryEvidence() throws Exception {
         Inventory inventory = classify(physicalSources());
         List<String> roots = List.copyOf(corpusRoots());
@@ -429,7 +442,8 @@ final class ProtosTestToolRepositoryCompletenessSupport {
                     stringAt(observed, 0),
                     integerAt(observed, 1),
                     integerAt(observed, 2),
-                    coloredIdentities);
+                    coloredIdentities,
+                    strings(assertInstanceOf(ProtosArrayValue.class, observed.indexedAt(4))));
         } finally {
             for (ProtosNioReadOnlyTreeFilesystemBackend backend : backends) {
                 backend.close();
@@ -470,11 +484,14 @@ final class ProtosTestToolRepositoryCompletenessSupport {
                 Audit: import("./RepositoryCorpusAudit.protos")
                 ArrayAccumulator: import("./ArrayAccumulator.protos")
                 Arrays: import("std:collections/array")
+                Ownership: import("./RepositoryTestOwnership.protos")
+                Assertions: import("std:test/assertions")
 
                 bindings: Array(
                 %s
                 )
                 accumulator: ArrayAccumulator.create()
+                ownershipPlans: ArrayAccumulator.create()
                 usedCorpora: Map()
                 SuiteGraph.flattenLeaves(RepositorySuite.root).each((leaf) => {
                     matches: Arrays.filter(bindings, (candidate) => candidate[0] == leaf.corpus)
@@ -502,6 +519,10 @@ final class ProtosTestToolRepositoryCompletenessSupport {
                     if(plan === null) {
                         fail()
                     }
+                    ArrayAccumulator.append(ownershipPlans, {
+                        leaf: leaf
+                        plan: plan
+                    })
                     Manifest.planCases(plan).each((spec) => {
                         descriptor: Manifest.caseAuthorityDescriptor(spec)
                         authority: null
@@ -515,7 +536,8 @@ final class ProtosTestToolRepositoryCompletenessSupport {
                                 leaf.id,
                                 corpus,
                                 Manifest.caseId(spec),
-                                authority
+                                authority,
+                                Manifest.casePath(spec)
                             )
                         )
                     })
@@ -523,9 +545,51 @@ final class ProtosTestToolRepositoryCompletenessSupport {
                 (usedCorpora.size() == bindings.size()).ifFalse(() => {
                     fail()
                 })
+                // Exhaustively verify every owner's projection over the real
+                // source plans, before any logical discovery or test import.
+                plannedSources: ArrayAccumulator.finish(ownershipPlans)
+                owners: Ownership.knownLibraries(plannedSources)
+                for(planned in plannedSources) {
+                    sources: Manifest.planCases(planned.plan)
+                    positions: IdentityMap()
+                    position: 0
+                    for(spec in sources) {
+                        positions[spec] = position
+                        position = position + 1
+                    }
+                    core: Manifest.planCases(Ownership.selectPlan("core", planned.leaf.corpus, planned.plan))
+                    libraries: Manifest.planCases(Ownership.selectPlan("libraries", planned.leaf.corpus, planned.plan))
+                    combined: IdentityMap()
+                    libraryEntries: IdentityMap()
+                    for(partition in Array(core, libraries)) {
+                        previous: -1
+                        for(spec in partition) {
+                            Assertions.require(positions.containsKey(spec))
+                            Assertions.require(positions[spec] > previous)
+                            previous = positions[spec]
+                            Assertions.require(combined.containsKey(spec) == false)
+                            combined[spec] = true
+                        }
+                    }
+                    Assertions.require(combined.size() == sources.size())
+                    for(spec in libraries) { libraryEntries[spec] = true }
+                    ownerUnion: IdentityMap()
+                    for(owner in owners) {
+                        selected: Ownership.selectPlan("library:" + owner, planned.leaf.corpus, planned.plan)
+                        previous: -1
+                        for(spec in Manifest.planCases(selected)) {
+                            Assertions.require(libraryEntries.containsKey(spec))
+                            Assertions.require(positions[spec] > previous)
+                            previous = positions[spec]
+                            Assertions.require(ownerUnion.containsKey(spec) == false)
+                            ownerUnion[spec] = true
+                        }
+                    }
+                    Assertions.require(ownerUnion.size() == libraries.size())
+                }
                 registrations: ArrayAccumulator.finish(accumulator)
                 %s\
-                result: Audit.audit(physicalSources, intendedSources, exclusions, registrations)
+                result: Audit.audit(physicalSources, intendedSources, exclusions, registrations, true)
                 colored: Arrays.filter(registrations, (record) => record.path == %s)
                 Array(
                     Audit.report(result),
@@ -535,7 +599,8 @@ final class ProtosTestToolRepositoryCompletenessSupport {
                         record.identity.suite,
                         record.identity.corpus,
                         record.identity.caseId
-                    ))
+                    )),
+                    owners
                 )
                 """
                 .formatted(bindings, inventoryBindings(inventory), text(COLORED_FORMATTER));

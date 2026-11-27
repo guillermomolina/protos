@@ -43,6 +43,42 @@ def aggregate(plan, results, dependencies, rev, protos_plan, protos_results, pro
     return dict(java, dependencies={n: dependencies[n]["result"] for n in LANES}, protos=protos)
 
 
+def scoped_aggregate(plan, results, dependencies, rev, requirements, protos_plans,
+                     protos_results, count):
+    """Accept exactly the scopes selected for this immutable candidate."""
+    check_dependencies(dependencies)
+    protos_shards.impact.validate_requirements(requirements)
+    require(requirements.get("revision") == rev, "validation requirements revision mismatch")
+    require(type(requirements.get("shardCount")) is int and requirements["shardCount"] == count,
+            "requirements shard count mismatch")
+    scopes = protos_shards.impact.required_scopes(requirements)
+    require(requirements.get("scopes") == scopes, "contradictory required scopes")
+    require(isinstance(protos_plans, list), "malformed scoped plans")
+    by_scope = {}
+    for item in protos_plans:
+        scope = protos_shards.repository_scope(item["scope"])
+        require(scope in scopes and scope not in by_scope, "unexpected or duplicate Protos scope")
+        by_scope[scope] = item
+    require(set(by_scope) == set(scopes), "missing required library or core plan")
+    for item in protos_results:
+        require(item.get("scope") in scopes, "unexpected Protos result scope")
+    assigned_refs = set()
+    for scope in scopes:
+        refs = set(by_scope[scope]["cases"])
+        require(not assigned_refs.intersection(refs), "overlapping CaseRefs across repository scopes")
+        assigned_refs.update(refs)
+    coverage = [protos_shards.check_results(by_scope[scope],
+                [r for r in protos_results if r["scope"] == scope], rev, count) for scope in scopes]
+    result = java_coverage(plan, results, rev)
+    result.update(schema="protos.ci.validation-result/v2",
+                  dependencies={n: dependencies[n]["result"] for n in LANES},
+                  validationProfile=requirements["validation_impact"], requiredScopes=scopes,
+                  exhaustive=requirements["validation_impact"] == "FULL",
+                  unselectedLibraries="NOT SELECTED" if requirements["library_validation"] != "all" else "none",
+                  protosScopes=coverage)
+    return result
+
+
 def java_coverage(plan, results, rev):
     check_plan(plan)
     require(plan["revision"] == rev, "revision mismatch")
@@ -114,6 +150,15 @@ def summary(result, dependencies):
                   (result["assignedCandidateCount"], result["observedCandidateCount"]),
                   "Java executed invocations: %s; skipped: %s; failures: %s; errors: %s." %
                   tuple(result[k] for k in ("testCount", "skippedCount", "failureCount", "errorCount"))]
+        if "protosScopes" in result:
+            lines += ["", "Validation profile: " + result["validationProfile"],
+                      "Exhaustive validation: " + ("PASS" if result["exhaustive"] else "NOT SELECTED"),
+                      "Libraries outside selected scope: " + result["unselectedLibraries"]]
+            for scope in result["protosScopes"]:
+                lines.append("Scope %s: %s planned; %s passed across %s shards." %
+                             (scope["scope"], scope["plannedCaseCount"], scope["passedCaseCount"], scope["shardCount"]))
+            lines.append("Evidence binds assigned CaseRefs and terminal completion quantities.")
+            return "\n".join(lines) + "\n"
         protos = result["protos"]
         lines += ["", "Protos Cases: %s planned across %s shards (%s workers each); %s passed; %s failed." %
                   (protos["plannedCaseCount"], protos["shardCount"], protos["jobs"],
@@ -139,11 +184,14 @@ def read_protos_evidence(plan_path, results_path, rev):
     """
     plan = read_json(plan_path)
     complete_text = (plan_path.parent / "listing.json").read_text(encoding="utf-8")
-    expected_plan = protos_shards.make_plan(complete_text, plan["shardCount"], plan["jobs"], rev)
+    expected_plan = protos_shards.make_plan(complete_text, plan["shardCount"], plan["jobs"], rev, plan["scope"])
     require(plan == expected_plan, "Protos plan disagrees with authoritative listing")
     results = []
     for path in sorted(results_path.rglob("protos-result.json")):
         result = read_json(path)
+        require(isinstance(result, dict), "malformed Protos result artifact")
+        if result.get("scope") != plan["scope"]:
+            continue
         logs = path.parent.parent / "ci-logs"
         status = (logs / "protos-suite.exit").read_text(encoding="utf-8").strip()
         require(bool(re.fullmatch(r"[0-9]+", status)), "invalid recorded exit status")
@@ -151,7 +199,7 @@ def read_protos_evidence(plan_path, results_path, rev):
             result["shardCount"], result["shardIndex"], result["jobs"],
             (path.parent / "complete-listing.json").read_text(encoding="utf-8"),
             (path.parent / "shard-listing.json").read_text(encoding="utf-8"),
-            (logs / "protos-suite.log").read_text(encoding="utf-8"), int(status), rev)
+            (logs / "protos-suite.log").read_text(encoding="utf-8"), int(status), rev, result["scope"])
         require(result == expected, "Protos result disagrees with authoritative output")
         results.append(result)
     return plan, results
@@ -166,6 +214,7 @@ def main():
     parser.add_argument("--protos-results", required=True, type=Path)
     parser.add_argument("--protos-shard-count", required=True, type=int)
     parser.add_argument("--revision")
+    parser.add_argument("--requirements", type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--summary", required=True, type=Path)
     args = parser.parse_args()
@@ -177,9 +226,25 @@ def main():
         files = sorted(args.results.rglob("result.json"))
         results = [read_json(file) for file in files]
         rev = revision(args.revision)
-        protos_plan, protos_results = read_protos_evidence(args.protos_plan, args.protos_results, rev)
-        result = aggregate(plan, results, dependencies, rev,
-                           protos_plan, protos_results, args.protos_shard_count)
+        if args.requirements:
+            requirements = read_json(args.requirements)
+            protos_plans, protos_results = [], []
+            for path in sorted(args.protos_plan.rglob("plan.json")):
+                scoped_plan, scoped_results = read_protos_evidence(path, args.protos_results, rev)
+                protos_plans.append(scoped_plan)
+                protos_results.extend(scoped_results)
+            # Reject extraneous results rather than silently ignoring them.
+            expected_scopes = protos_shards.impact.required_scopes(requirements)
+            for path in args.protos_results.rglob("protos-result.json"):
+                artifact = read_json(path)
+                require(isinstance(artifact, dict) and artifact.get("scope") in expected_scopes,
+                        "unexpected scope artifact")
+            result = scoped_aggregate(plan, results, dependencies, rev, requirements,
+                                      protos_plans, protos_results, args.protos_shard_count)
+        else:
+            protos_plan, protos_results = read_protos_evidence(args.protos_plan, args.protos_results, rev)
+            result = aggregate(plan, results, dependencies, rev,
+                               protos_plan, protos_results, args.protos_shard_count)
     except (ValueError, TypeError, KeyError, OSError) as error:
         result = dict(schema="protos.ci.validation-result/v1", status="fail", reason=str(error))
     write_json(args.output, result)

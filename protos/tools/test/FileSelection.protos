@@ -14,6 +14,7 @@
 // the specific language governing rights and limitations under the License.
 
 Manifest: import("./Manifest.protos")
+ArrayAccumulator: import("./ArrayAccumulator.protos")
 
 selectionError: () => {
     Error().signal()
@@ -154,25 +155,20 @@ selectPlanWithDirectories: (
     fileAssociations,
     directoryAssociations
 ) => {
-    selectedCases: []
+    projectPlan(plan, (spec) => {
+        caseMatches(corpusId, Manifest.casePath(spec), fileAssociations, directoryAssociations)
+    })
+}
 
+// Preserve original source entries and their execution authority by reference.
+projectPlan: (plan, retain) => {
+    accumulator: ArrayAccumulator.create()
     for(spec in Manifest.planCases(plan)) {
-        if(caseMatches(
-            corpusId,
-            Manifest.casePath(spec),
-            fileAssociations,
-            directoryAssociations
-        )) {
-            selectedCases = [
-                ...selectedCases,
-                spec
-            ]
-        }
+        if(retain(spec)) { ArrayAccumulator.append(accumulator, spec) }
     }
-
+    selectedCases: ArrayAccumulator.finish(accumulator)
     selectedCases.freeze()
-
-    selectedPlan: [selectedCases]
+    selectedPlan: Array(selectedCases)
     selectedPlan.freeze()
     selectedPlan
 }

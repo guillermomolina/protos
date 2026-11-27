@@ -1,3 +1,18 @@
+# THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+# ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+# DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+# DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+# OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+# THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+# OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+# THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+# FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+# https://github.com/guillermomolina/protos
+#
+# Software distributed under the License is distributed on an "AS IS" basis,
+# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+# the specific language governing rights and limitations under the License.
+
 # Repository-local developer entry points. Keep policy in Maven and repository scripts.
 .DEFAULT_GOAL := help
 
@@ -12,6 +27,13 @@ POSIX_PROCESS_LIBRARY := target/native-libs/libprotos_posix_process.so
 DIST_VALIDATE_FLAGS ?= --require-clean-source
 JAVA_TEST_JOBS ?= 6
 PROTOS_TEST_JOBS ?= 8
+PROTOS_REPOSITORY_TEST_SCOPE ?= all
+override export PROTOS_REPOSITORY_TEST_SCOPE := $(value PROTOS_REPOSITORY_TEST_SCOPE)
+export PROTOS_SELECTED_LIBRARY := $(value LIB)
+export PROTOS_SELECTED_LIBRARIES := $(value LIBRARIES)
+# Internal release admission may reuse its already identity-verified archive.
+PROTOS_FOREIGN_TEST_ARCHIVE ?=
+override export PROTOS_FOREIGN_TEST_ARCHIVE := $(value PROTOS_FOREIGN_TEST_ARCHIVE)
 PROTOS_TEST_SHARD_COUNT ?= 1
 PROTOS_TEST_SHARD_INDEX ?= 1
 # The Test Tool validates every explicit non-default pair, including empty values.
@@ -102,7 +124,7 @@ TRUFFLE_ROOT_SELECTOR ?=
 TRUFFLE_ROOT_EXPANSION ?= method
 TRUFFLE_ROOT_DUMP_LEVEL ?= 1
 
-.PHONY: prepare-java-test-shards prepare-protos-tests help toolchain compile build test test-java java-test-phase test-java-parallel test-java-serial test-java-confirm test-java-stress test-local-range-pe-guard check-local-range-index-pe check-local-range-operands-pe check-local-accessor-pe check-bytecode-api-pe check-generated-bytecode-bci-pe check-native-runtime-compilation check-truffle-compilation diagnose-truffle-compilation truffle-root-catalog diagnose-truffle-root test-protos test-protos-suite test-protos-foreign check verify clean artifacts artifacts-verify artifacts-publish-d064 dist dist-validate build-native test-native clean-native build-posix-process-library
+.PHONY: prepare-java-test-shards prepare-protos-tests help toolchain compile build test test-java java-test-phase test-java-parallel test-java-serial test-java-confirm test-java-stress test-local-range-pe-guard check-local-range-index-pe check-local-range-operands-pe check-local-accessor-pe check-bytecode-api-pe check-generated-bytecode-bci-pe check-native-runtime-compilation check-truffle-compilation diagnose-truffle-compilation truffle-root-catalog diagnose-truffle-root test-protos test-protos-libs test-protos-lib test-protos-integrated test-selective test-all check-all test-protos-suite test-protos-foreign check verify clean artifacts artifacts-verify artifacts-publish-d064 dist dist-validate build-native test-native clean-native build-posix-process-library
 
 help:
 	@printf '%s\n' \
@@ -119,7 +141,7 @@ help:
 		'  make build-native   Build the Native Image executable (explicit)' \
 		'  make test-native    Rebuild Native and run CLI regression + Native TLS JUnit' \
 		'  make clean-native   Remove Native-specific build and test artifacts' \
-		'  make test           Run Java tests, then Protos tests' \
+		'  make test           Run Java, core Protos and foreign-provider tests' \
 		'  make test-java      Run the ordinary Java/JUnit test suite' \
 		'  make test-java-stress  Run explicit Java stress validation' \
 		'  make check-local-range-index-pe  Static LocalRangeAccessor PE-index guard:' \
@@ -156,8 +178,11 @@ help:
 		'                      Dump=Truffle:TRUFFLE_ROOT_DUMP_LEVEL; stops at the fresh' \
 		'                      BGV capture under target/ (handoff for external analysis)' \
 		'  make test-local-range-pe-guard  Compatibility alias of check-local-range-index-pe' \
-		'  make test-protos    Build Protos and run the native Protos test suite' \
-		'                      (test-protos-suite + test-protos-foreign, one build)' \
+		'  make test-protos    Build once and run core/non-library Protos tests' \
+		'  make test-protos-libs    Build once and run all Standard Library tests' \
+		'  make test-protos-lib LIB=toml    Build once and run one library' \
+		'  make test-all       Exhaustive Java, Protos and foreign-provider tests' \
+		'  make check-all      Existing check controls plus test-all' \
 		'  make test-protos-suite    Run the native Protos test suite (no build)' \
 		'                      Sharding: PROTOS_TEST_SHARD_COUNT=1 PROTOS_TEST_SHARD_INDEX=1' \
 		'                      Independent of local PROTOS_TEST_JOBS admission capacity' \
@@ -225,7 +250,21 @@ clean-native:
 	rm -f $(NATIVE_INIT_ARGS)
 	rm -rf $(NATIVE_TLS_TESTS_BIN) $(NATIVE_TLS_TEST_REPORTS) $(NATIVE_TLS_TEST_IDS)
 
-test: test-java test-protos
+# Recursive phases serialize Java and shared artifact preparation even under -j.
+test test-all test-selective:
+	$(MAKE) --no-print-directory test-java
+	$(MAKE) --no-print-directory prepare-protos-tests
+	$(MAKE) --no-print-directory test-protos-integrated PROTOS_REPOSITORY_TEST_SCOPE=$(if $(filter test-all,$@),all,core)
+	@if [ '$@' = test-selective ]; then \
+	  test -n "$$PROTOS_SELECTED_LIBRARIES" && \
+	  { status=0; for library in $$PROTOS_SELECTED_LIBRARIES; do \
+	    $(MAKE) --no-print-directory test-protos-suite "PROTOS_REPOSITORY_TEST_SCOPE=library:$$library" || status=$$?; \
+	  done; [ $$status -eq 0 ]; }; \
+	fi
+
+check-all:
+	$(MAKE) --no-print-directory check
+	$(MAKE) --no-print-directory test-all
 
 # TEST008/PLAT047: slow-test controls and classification are telemetry only.
 # Their setup and verdict cannot fail `make test`. The two real Java test phases
@@ -444,7 +483,15 @@ test-local-range-pe-guard: check-local-range-index-pe
 prepare-protos-tests:
 	$(MVN) $(MVN_FLAGS) package -DskipTests
 
-test-protos: prepare-protos-tests
+test-protos test-protos-libs: prepare-protos-tests
+	$(MAKE) --no-print-directory test-protos-suite PROTOS_REPOSITORY_TEST_SCOPE=$(if $(filter test-protos-libs,$@),libraries,core)
+
+test-protos-lib:
+	@test -n "$$PROTOS_SELECTED_LIBRARY"
+	$(MAKE) --no-print-directory prepare-protos-tests
+	@$(MAKE) --no-print-directory test-protos-suite "PROTOS_REPOSITORY_TEST_SCOPE=library:$$PROTOS_SELECTED_LIBRARY"
+
+test-protos-integrated:
 	@foreign=0; suite=0; \
 	$(MAKE) --no-print-directory test-protos-foreign || foreign=$$?; \
 	$(MAKE) --no-print-directory test-protos-suite || suite=$$?; \
@@ -454,7 +501,7 @@ test-protos: prepare-protos-tests
 
 test-protos-suite:
 	@start=$$(date +%s); \
-	bin/protos test --jobs $(PROTOS_TEST_JOBS) $(PROTOS_TEST_SHARD_ARGS); \
+	PROTOS_REPOSITORY_TEST_SCOPE="$$PROTOS_REPOSITORY_TEST_SCOPE" bin/protos test --jobs $(PROTOS_TEST_JOBS) $(PROTOS_TEST_SHARD_ARGS); \
 	status=$$?; \
 	end=$$(date +%s); \
 	printf 'Protos tests total time: %s s\n' "$$((end - start))"; \
@@ -463,8 +510,12 @@ test-protos-suite:
 # I085-B: external foreign providers exercised from Protos programs on a
 # development portable distribution built from the already-packaged jar.
 test-protos-foreign:
-	$(PYTHON) dist/build_portable.py --skip-project-build --allow-dirty
-	$(PYTHON) dist/test_external_foreign_providers.py
+	@if [ -n "$$PROTOS_FOREIGN_TEST_ARCHIVE" ]; then \
+	  $(PYTHON) dist/test_external_foreign_providers.py --archive "$$PROTOS_FOREIGN_TEST_ARCHIVE"; \
+	else \
+	  $(PYTHON) dist/build_portable.py --skip-project-build --allow-dirty && \
+	  $(PYTHON) dist/test_external_foreign_providers.py; \
+	fi
 
 # TEST009: compilerability validation is independent from functional tests.
 # `make check` aggregates the static PE guards, the generated-dispatch BCI guard

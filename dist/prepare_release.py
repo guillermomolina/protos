@@ -212,6 +212,7 @@ def prepare(
         candidate,
     )
     step(
+        # Public B5 includes exhaustive functional validation for this candidate.
         "portable-jvm-complete-admission",
         [
             "sh",

@@ -30,6 +30,15 @@ final class ProtosTestToolRepositoryCorpusPlansTest {
     private static final Path TOOL_ROOT = Path.of("protos", "tools", "test");
 
     @Test
+    void repositoryOwnershipSuiteRunsThroughExistingToolHarness() throws Exception {
+        String source = java.nio.file.Files.readString(
+                Path.of("protos/tests/tooling/discovery/repository-test-ownership.protos"));
+        ProtosExecutionOutcome outcome = execute(source + "\ntests.each((test) => test())\ntrue\n");
+        assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
+        assertEquals(true, outcome.value());
+    }
+
+    @Test
     void ordinaryLibraryPlansHaveExactExplicitMembership() throws Exception {
         assertPlan("protos/corpus/library/ffi", 1, "ffi/declarations-and-denial.protos", "ffi/declarations-and-denial.protos");
         assertPlan("protos/corpus/library/uri", 3, "uri/parse.protos", "uri/resolve.protos");

@@ -182,6 +182,20 @@ abstract class ProtosTestToolCaseSelectionPublicIntegrationTestSupport {
         }
     }
 
+    private static R completeRepositoryListing;
+
+    // Both tests need the same immutable public output from this repository
+    // revision. Acquire it once; all scoped invocations remain independent.
+    static synchronized R unfilteredRepositoryListing() throws Exception {
+        if (completeRepositoryListing == null) {
+            R result = runInScope(null, "test", "--list-cases");
+            assertEquals(0, result.code(), result::err);
+            assertEquals("", result.err());
+            completeRepositoryListing = result;
+        }
+        return completeRepositoryListing;
+    }
+
     static R run(String... args) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         ByteArrayOutputStream err = new ByteArrayOutputStream();
@@ -198,6 +212,45 @@ abstract class ProtosTestToolCaseSelectionPublicIntegrationTestSupport {
                 code,
                 out.toString(StandardCharsets.UTF_8),
                 err.toString(StandardCharsets.UTF_8));
+    }
+
+    /** Fork only when the public CLI needs a different environment snapshot. */
+    static R runInScope(String scope, String... args) throws Exception {
+        if (java.util.Objects.equals(scope, System.getenv("PROTOS_REPOSITORY_TEST_SCOPE"))) {
+            return run(args);
+        }
+        java.util.List<String> command = new java.util.ArrayList<>();
+        command.add(Path.of(System.getProperty("java.home"), "bin", "java").toString());
+        // Match the launcher and Surefire's existing Truffle runtime admission.
+        command.add("--enable-native-access=ALL-UNNAMED");
+        command.add("--sun-misc-unsafe-memory-access=allow");
+        command.add("-Dpolyglot.engine.WarnInterpreterOnly=false");
+        command.add("-cp");
+        command.add(System.getProperty("surefire.test.class.path", System.getProperty("java.class.path")));
+        command.add(ProtosCli.class.getName());
+        command.addAll(java.util.List.of(args));
+        ProcessBuilder builder = new ProcessBuilder(command);
+        builder.environment().put("PROTOS_HOME", Path.of("").toAbsolutePath().toString());
+        builder.environment().remove("PROTOS_REPOSITORY_TEST_SCOPE");
+        if (scope != null) {
+            builder.environment().put("PROTOS_REPOSITORY_TEST_SCOPE", scope);
+        }
+        Path stdout = java.nio.file.Files.createTempFile("protos-scope-", ".out");
+        Path stderr = java.nio.file.Files.createTempFile("protos-scope-", ".err");
+        Process child = null;
+        try {
+            child = builder.redirectOutput(stdout.toFile()).redirectError(stderr.toFile()).start();
+            org.junit.jupiter.api.Assertions.assertTrue(
+                    child.waitFor(180, java.util.concurrent.TimeUnit.SECONDS), "public CLI timed out");
+            return new R(child.exitValue(), java.nio.file.Files.readString(stdout),
+                    java.nio.file.Files.readString(stderr));
+        } finally {
+            if (child != null && child.isAlive()) {
+                child.destroyForcibly().waitFor();
+            }
+            java.nio.file.Files.deleteIfExists(stdout);
+            java.nio.file.Files.deleteIfExists(stderr);
+        }
     }
 
     record R(int code, String out, String err) {}

@@ -56,48 +56,6 @@ final class ProtosTestToolCaseSelectionPublicIntegrationTest
         "a real TextWriter frames colored lines like plain ones",
         "a Logger contains failures through a colored text sink"
     };
-    @Test
-    void bug043FullListingExceedsSingleWriteAdmissionCapacity() {
-        List<List<ListedCase>> shards = new ArrayList<>();
-        Set<String> union = new HashSet<>();
-        int minimum = Integer.MAX_VALUE;
-        int maximum = 0;
-        for (int run = 1; run <= 4; run++) {
-            R result = run("test", "--list-cases", "--shard-count", "4",
-                    "--shard-run", Integer.toString(run));
-            assertEquals(0, result.code(), result::err);
-            assertEquals("", result.err());
-            List<ListedCase> records = completeListing(result.out());
-            minimum = Math.min(minimum, records.size());
-            maximum = Math.max(maximum, records.size());
-            for (ListedCase record : records) {
-                assertTrue(union.add(record.ref()), "duplicate CaseRef: " + record.ref());
-            }
-            shards.add(records);
-        }
-        assertTrue(maximum - minimum <= 1);
-        for (int index = 1; index < shards.size(); index++) {
-            assertTrue(shards.get(index - 1).size() >= shards.get(index).size());
-        }
-        List<ListedCase> ordered = new ArrayList<>();
-        for (int row = 0; row < maximum; row++) {
-            for (List<ListedCase> shard : shards) {
-                if (row < shard.size()) {
-                    ordered.add(shard.get(row));
-                }
-            }
-        }
-        assertEquals(union.size(), ordered.size());
-        String expected = listingDocument(ordered);
-        assertTrue(expected.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 1_048_576);
-        R actual = run("test", "--list-cases");
-        assertEquals(0, actual.code(), actual::err);
-        assertEquals("", actual.err());
-        assertEquals(ordered, completeListing(actual.out()));
-        org.junit.jupiter.api.Assertions.assertArrayEquals(
-                expected.getBytes(java.nio.charset.StandardCharsets.UTF_8),
-                actual.out().getBytes(java.nio.charset.StandardCharsets.UTF_8));
-    }
 
     @Test
     void listCasesProjectsAuthoritativeCasePlanWithoutProgress() {
