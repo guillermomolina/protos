@@ -1,0 +1,411 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Private Regex matcher implementation.
+
+// Prioritized Thompson NFA (Pike VM) over the postfix node table. A thread
+// state is a node phase: enter (3n), exit (3n + 1), or the loop decision of
+// a repeat (3n + 2). Counted repetition is never expanded: a repeat whose
+// count matters (anything but `?`, `*`, `{0}`, `{1}`) keeps its count
+// in a per-thread counter, capped at `min` once unbounded repetition has
+// met its minimum.
+//
+// Threads advance in lockstep over the input. At each position the epsilon
+// closure is an explicit depth-first stack explored in priority order:
+// ordered alternatives, greedy iterate-before-exit, lazy exit-before-
+// iterate. The first thread to reach a (state, marker, counters) key at a
+// position wins and the later, lower-priority ones are dropped: captures
+// never influence the future of a match because there are no
+// backreferences. A new start thread is seeded after every surviving thread,
+// so an earlier start always outranks a later one, and once a match is
+// selected every lower-priority thread and every later start is cut. This
+// keeps a single search within O(m * n) thread steps.
+//
+// An optional iteration that completes without consuming input is selected
+// under the ordinary priority, captures included, but then ends the
+// repetition: it is never followed by another iteration at the same
+// position, which guarantees termination of nullable bodies. `marker` names the outermost active repeat whose current
+// iteration began at the current position (nested iterations start no
+// earlier, so every inner active repeat is then also empty so far), or -1.
+// A mandatory empty iteration of a body that can never consume input jumps
+// straight to `min`: every remaining mandatory iteration would repeat the
+// same zero-width path with the same captures.
+//
+// All mutable state is local to one execution; the derived tables are
+// frozen and shared by every operation on the Pattern.
+
+create: (sized, frozenArray, contains, isLineTerminator, wordSet) => {
+    newMatcher: (program) => {
+        nodes: program.nodes
+        nodeCount: nodes.size()
+        root: program.root
+        groupSlots: 2 * (program.captureCount + 1)
+        parents: sized(nodeCount)
+        positions: sized(nodeCount)
+        depths: sized(nodeCount)
+        consumers: sized(nodeCount)
+        counterSlots: sized(nodeCount)
+        bounds: Map()
+        counterTotal: 0
+        index: 0
+        while(index < nodeCount) {
+            node: nodes[index]
+            op: node.op
+            consumes: op == "set"
+            if((op == "concat") || (op == "alternate")) {
+                position: 0
+                for(item in node.items) {
+                    parents[item] = index
+                    positions[item] = position
+                    position = position + 1
+                    consumes = consumes || consumers[item]
+                }
+            }
+            if((op == "capture") || (op == "repeat")) {
+                parents[node.item] = index
+                positions[node.item] = 0
+                consumes = consumers[node.item]
+            }
+            if(op == "repeat") {
+                maximum: node.max
+                consumes = consumes && ((maximum === null) || (maximum > 0))
+                simple: ((maximum !== null) && (maximum <= 1)) || ((maximum === null) && (node.min == 0))
+                simple.ifFalse(() => {
+                    counterSlots[index] = counterTotal
+                    bound: maximum
+                    if(maximum === null) {
+                        bound = node.min
+                    }
+                    bounds[counterTotal] = bound
+                    counterTotal = counterTotal + 1
+                })
+            }
+            consumers[index] = consumes
+            index = index + 1
+        }
+        // Repeat nesting depth; parents always have larger indexes.
+        index = nodeCount - 1
+        while(index >= 0) {
+            depth: 0
+            (parents[index] === null).ifFalse(() => {
+                depth = depths[parents[index]]
+            })
+            if(nodes[index].op == "repeat") {
+                depth = depth + 1
+            }
+            depths[index] = depth
+            index = index - 1
+        }
+        parents.freeze()
+        positions.freeze()
+        depths.freeze()
+        consumers.freeze()
+        counterSlots.freeze()
+        counterBounds: frozenArray(bounds, counterTotal)
+        initialCounters: null
+        if(counterTotal > 0) {
+            zeros: sized(counterTotal)
+            index = 0
+            while(index < counterTotal) {
+                zeros[index] = 0
+                index = index + 1
+            }
+            zeros.freeze()
+            initialCounters = zeros
+        }
+        initialCaptures: sized(groupSlots)
+        initialCaptures.freeze()
+        markerRange: nodeCount + 1
+        wordSet: program.wordSet
+
+        // Thread state, captures, and counters are immutable once shared;
+        // updates copy.
+        replaced: (values, slot, value) => {
+            copy: Array(...values)
+            copy[slot] = value
+            copy.freeze()
+            copy
+        }
+
+        // Mixed-radix identity of everything that can change the future of a
+        // thread at one position; every count lies within its bound.
+        keyOf: (state, marker, counters) => {
+            key: state * markerRange + marker + 1
+            (counters === null).ifFalse(() => {
+                slot: 0
+                while(slot < counterTotal) {
+                    key = key * (counterBounds[slot] + 1) + counters[slot]
+                    slot = slot + 1
+                }
+            })
+            key
+        }
+
+        (input, from, anchored, toEnd) => {
+            scalars: input.scalars
+            size: input.size
+            position: from
+            best: null
+            pending: Map()
+            pendingCount: 0
+            visited: null
+            waiting: null
+            waitingCount: 0
+            stack: Map()
+            depth: 0
+            cut: false
+
+            push: (state, marker, counters, captures) => {
+                stack[depth] = { state: state; marker: marker; counters: counters; captures: captures }
+                depth = depth + 1
+            }
+
+            isWord: (at) => {
+                (at >= 0) && (at < size) && contains(wordSet, scalars[at])
+            }
+
+            // A CR immediately followed by LF is one line-boundary sequence.
+            holds: (kind) => {
+                result: false
+                if((kind == "textStart") || ((kind == "lineStart") && (position == 0))) {
+                    result = position == 0
+                }
+                if((kind == "textEnd") || (kind == "end") || ((kind == "lineEnd") && (position == size))) {
+                    result = position == size
+                }
+                if((kind == "lineStart") && (position > 0)) {
+                    previous: scalars[position - 1]
+                    result = isLineTerminator(previous) &&
+                        !((previous == 13) && (position < size) && (scalars[position] == 10))
+                }
+                if((kind == "lineEnd") && (position < size)) {
+                    current: scalars[position]
+                    result = isLineTerminator(current) &&
+                        !((current == 10) && (position > 0) && (scalars[position - 1] == 13))
+                }
+                if((kind == "wordBoundary") || (kind == "notWordBoundary")) {
+                    result = (isWord(position - 1) != isWord(position)) == (kind == "wordBoundary")
+                }
+                result
+            }
+
+            // Starts an iteration of repeat `at`, marking it fresh unless an
+            // outer active repeat already is.
+            iterate: (at, marker, counters, captures) => {
+                fresh: marker
+                if(marker == -1) {
+                    fresh = at
+                }
+                push(3 * nodes[at].item, fresh, counters, captures)
+            }
+
+            // Pushes successors in reverse priority order, so the preferred
+            // one is explored first.
+            step: (entry) => {
+                state: entry.state
+                marker: entry.marker
+                counters: entry.counters
+                captures: entry.captures
+                at: state.div(3)
+                phase: state % 3
+                node: nodes[at]
+                op: node.op
+                if(phase == 0) {
+                    if(op == "set") {
+                        waiting[waitingCount] = entry
+                        waitingCount = waitingCount + 1
+                    }
+                    if(op == "empty") {
+                        push(state + 1, marker, counters, captures)
+                    }
+                    if(op == "assert") {
+                        if(holds(node.kind)) {
+                            push(state + 1, marker, counters, captures)
+                        }
+                    }
+                    if(op == "concat") {
+                        push(3 * node.items[0], marker, counters, captures)
+                    }
+                    if(op == "alternate") {
+                        item: node.items.size() - 1
+                        while(item >= 0) {
+                            push(3 * node.items[item], marker, counters, captures)
+                            item = item - 1
+                        }
+                    }
+                    if(op == "capture") {
+                        push(3 * node.item, marker, counters, replaced(captures, 2 * node.group, position))
+                    }
+                    if(op == "repeat") {
+                        // Counters are reset to 0 whenever a repeat exits.
+                        if((counterSlots[at] === null) && (node.max !== null) && (node.max == 0)) {
+                            push(state + 1, marker, counters, captures)
+                        } else {
+                            if((counterSlots[at] === null) && (node.min == 1)) {
+                                iterate(at, marker, counters, captures)
+                            } else {
+                                push(state + 2, marker, counters, captures)
+                            }
+                        }
+                    }
+                }
+                if((phase == 1) && (at == root)) {
+                    if((toEnd == false) || (position == size)) {
+                        best = replaced(captures, 1, position)
+                        cut = true
+                    }
+                }
+                if((phase == 1) && (at != root)) {
+                    parent: parents[at]
+                    owner: nodes[parent]
+                    kind: owner.op
+                    if(kind == "concat") {
+                        next: positions[at] + 1
+                        if(next < owner.items.size()) {
+                            push(3 * owner.items[next], marker, counters, captures)
+                        } else {
+                            push(3 * parent + 1, marker, counters, captures)
+                        }
+                    }
+                    if(kind == "alternate") {
+                        push(3 * parent + 1, marker, counters, captures)
+                    }
+                    if(kind == "capture") {
+                        push(3 * parent + 1, marker, counters, replaced(captures, 2 * owner.group + 1, position))
+                    }
+                    if(kind == "repeat") {
+                        // One iteration of `parent` is complete.
+                        empty: (marker != -1) && (depths[marker] <= depths[parent])
+                        rest: marker
+                        if(marker == parent) {
+                            rest = -1
+                        }
+                        slot: counterSlots[parent]
+                        if(slot === null) {
+                            // `?` and `{1}` always exit; `*` loops back
+                            // unless the optional iteration was empty.
+                            if(((owner.max !== null) && (owner.max == 1)) || empty) {
+                                push(3 * parent + 1, rest, counters, captures)
+                            } else {
+                                push(3 * parent + 2, rest, counters, captures)
+                            }
+                        } else {
+                            count: counters[slot]
+                            if(empty && (count >= owner.min)) {
+                                push(3 * parent + 1, rest, replaced(counters, slot, 0), captures)
+                            } else {
+                                next: count + 1
+                                if((consumers[owner.item] == false) && (next < owner.min)) {
+                                    next = owner.min
+                                }
+                                if((owner.max === null) && (next > owner.min)) {
+                                    next = owner.min
+                                }
+                                push(3 * parent + 2, rest, replaced(counters, slot, next), captures)
+                            }
+                        }
+                    }
+                }
+                if(phase == 2) {
+                    slot: counterSlots[at]
+                    canIterate: true
+                    canExit: true
+                    exitCounters: counters
+                    (slot === null).ifFalse(() => {
+                        count: counters[slot]
+                        canIterate = (node.max === null) || (count < node.max)
+                        canExit = count >= node.min
+                        exitCounters = replaced(counters, slot, 0)
+                    })
+                    if(node.greedy) {
+                        if(canExit) {
+                            push(state - 1, marker, exitCounters, captures)
+                        }
+                        if(canIterate) {
+                            iterate(at, marker, counters, captures)
+                        }
+                    } else {
+                        if(canIterate) {
+                            iterate(at, marker, counters, captures)
+                        }
+                        if(canExit) {
+                            push(state - 1, marker, exitCounters, captures)
+                        }
+                    }
+                }
+            }
+
+            close: () => {
+                while((depth > 0) && !cut) {
+                    depth = depth - 1
+                    entry: stack[depth]
+                    key: keyOf(entry.state, entry.marker, entry.counters)
+                    visited.containsKey(key).ifFalse(() => {
+                        visited[key] = true
+                        step(entry)
+                    })
+                }
+                depth = 0
+            }
+
+            running: true
+            while(running) {
+                visited = Map()
+                waiting = Map()
+                waitingCount = 0
+                cut = false
+                entryIndex: 0
+                while((entryIndex < pendingCount) && !cut) {
+                    entry: pending[entryIndex]
+                    push(entry.state, entry.marker, entry.counters, entry.captures)
+                    close()
+                    entryIndex = entryIndex + 1
+                }
+                if(!cut && (best === null) && (!anchored || (position == from))) {
+                    push(3 * root, -1, initialCounters, replaced(initialCaptures, 0, position))
+                    close()
+                }
+                pending = Map()
+                pendingCount = 0
+                if(position < size) {
+                    scalar: scalars[position]
+                    item: 0
+                    while(item < waitingCount) {
+                        entry: waiting[item]
+                        if(contains(nodes[entry.state.div(3)].ranges, scalar)) {
+                            // Consuming input ends the freshness of every
+                            // active iteration.
+                            pending[pendingCount] = {
+                                state: entry.state + 1
+                                marker: -1
+                                counters: entry.counters
+                                captures: entry.captures
+                            }
+                            pendingCount = pendingCount + 1
+                        }
+                        item = item + 1
+                    }
+                }
+                position = position + 1
+                running = (pendingCount > 0) || ((best === null) && !anchored && (position <= size))
+            }
+            best
+        }
+    }
+
+    {
+        newMatcher: newMatcher
+    }
+}

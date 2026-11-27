@@ -1,0 +1,131 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Private JSON characters implementation.
+
+create: (fail) => {
+    isWhitespace: (octet) => {
+        result: octet == 32
+        if(octet == 9) { result = true }
+        if(octet == 10) { result = true }
+        if(octet == 13) { result = true }
+        result
+    }
+
+    decimalDigit: (octet) => {
+        result: -1
+        if(octet >= 48) {
+            if(octet <= 57) {
+                result = octet - 48
+            }
+        }
+        result
+    }
+
+    hexDigit: (octet) => {
+        result: -1
+
+        if(octet >= 48) {
+            if(octet <= 57) {
+                result = octet - 48
+            }
+        }
+
+        if(result < 0) {
+            if(octet >= 65) {
+                if(octet <= 70) {
+                    result = octet - 55
+                }
+            }
+        }
+
+        if(result < 0) {
+            if(octet >= 97) {
+                if(octet <= 102) {
+                    result = octet - 87
+                }
+            }
+        }
+
+        result
+    }
+
+    isNumberCharacter: (octet) => {
+        result: decimalDigit(octet) >= 0
+        if(octet == 45) { result = true }
+        if(octet == 43) { result = true }
+        if(octet == 46) { result = true }
+        if(octet == 101) { result = true }
+        if(octet == 69) { result = true }
+        result
+    }
+
+    isNumberTerminator: (octet) => {
+        result: isWhitespace(octet)
+        if(octet == 44) { result = true }
+        if(octet == 93) { result = true }
+        if(octet == 125) { result = true }
+        result
+    }
+
+    appendScalarUtf8: (buffer, scalar) => {
+        handled: false
+
+        if(scalar <= 127) {
+            buffer.add(scalar)
+            handled = true
+        }
+
+        handled.ifFalse(() => {
+            if(scalar <= 2047) {
+                buffer.add(192 + scalar.div(64))
+                buffer.add(128 + scalar.mod(64))
+                handled = true
+            }
+        })
+
+        handled.ifFalse(() => {
+            if(scalar <= 65535) {
+                buffer.add(224 + scalar.div(4096))
+                buffer.add(128 + scalar.div(64).mod(64))
+                buffer.add(128 + scalar.mod(64))
+                handled = true
+            }
+        })
+
+        handled.ifFalse(() => {
+            if(scalar <= 1114111) {
+                buffer.add(240 + scalar.div(262144))
+                buffer.add(128 + scalar.div(4096).mod(64))
+                buffer.add(128 + scalar.div(64).mod(64))
+                buffer.add(128 + scalar.mod(64))
+                handled = true
+            }
+        })
+
+        handled.ifFalse(() => {
+            fail()
+        })
+    }
+
+    {
+        isWhitespace: isWhitespace
+        decimalDigit: decimalDigit
+        hexDigit: hexDigit
+        isNumberCharacter: isNumberCharacter
+        isNumberTerminator: isNumberTerminator
+        appendScalarUtf8: appendScalarUtf8
+    }
+}

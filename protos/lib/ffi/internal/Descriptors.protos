@@ -1,0 +1,185 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Private FFI descriptors operations. Dependencies remain initializer-owned.
+
+create: (descriptors, fail) => {
+    metadata: null
+    register: null
+    make: null
+    scalar: null
+    isRegistered: null
+    isStorageLayout: null
+    storage: null
+    isR1OrScalar: null
+    isTypedPointer: null
+    isPointerResult: null
+    isGroup: null
+    isReturnDeclaration: null
+    isParameterDeclaration: null
+    isOutTarget: null
+
+    methods: {
+        metadata: (descriptor) => {
+            descriptors.containsKey(descriptor).ifFalse(() => fail())
+            descriptors.at(descriptor)
+        }
+
+
+        // Every descriptor is a fresh frozen ordinary object associated by exact
+        // identity with one frozen metadata record. `layoutKind` is null for the R1
+        // library-bound declarations; `size` and `align` are null unless the
+        // descriptor is an ordinary storage layout. `parts` holds kind-specific
+        // frozen metadata.
+        register: (kind, layoutKind, size, align, library, native, target, parts) => {
+            descriptor: {}
+            descriptor.freeze()
+            record: {
+                kind: kind
+                layoutKind: layoutKind
+                size: size
+                align: align
+                library: library
+                native: native
+                target: target
+                parts: parts
+            }
+            record.freeze()
+            descriptors[descriptor] = record
+            descriptor
+        }
+
+        make: (kind, library, native, target) => {
+            register(kind, null, null, null, library, native, target, null)
+        }
+
+        scalar: (name, size, align) => register(name, "scalar", size, align, null, null, null, null)
+
+        isRegistered: (value) => descriptors.containsKey(value)
+
+
+        // A registered descriptor that occupies native storage with a fixed size.
+        // Binding positions. R1 declarations, scalars, typed pointers and struct or
+        // union layouts (by value) are bindable. Fixed arrays are storage only, never
+        // a direct parameter, return or out target; fields remain declarative.
+        // Exactly a registered struct or union layout: a by-value group.
+        isStorageLayout: (value) => {
+            result: false
+            if(isRegistered(value)) {
+                record: descriptors.at(value)
+                kind: record.layoutKind
+                if(kind !== null) {
+                    if(record.size !== null) {
+                        composite: (kind == "struct") || (kind == "union") || (kind == "array")
+                        pointer: (kind == "pointer") || (kind == "nullablePointer")
+                        result = (kind == "scalar") || composite || pointer
+                    }
+                }
+            }
+            result
+        }
+
+        storage: (value) => {
+            isStorageLayout(value).ifFalse(() => fail())
+            descriptors.at(value)
+        }
+
+        isR1OrScalar: (record) => (record.layoutKind === null) || (record.layoutKind == "scalar")
+
+        isTypedPointer: (record) => (record.layoutKind == "pointer") || (record.layoutKind == "nullablePointer")
+
+        isPointerResult: (record) => isTypedPointer(record) || (record.layoutKind == "borrowedPointer")
+
+        isGroup: (record) => (record.layoutKind == "struct") || (record.layoutKind == "union")
+
+        isReturnDeclaration: (record) => {
+            result: true
+            if((isPointerResult(record) || isGroup(record)) == false) {
+                result = false
+                if(isR1OrScalar(record)) {
+                    result = ((record.kind == "out") || (record.kind == "utf8z")) == false
+                }
+            }
+            result
+        }
+
+        isParameterDeclaration: (record) => {
+            result: true
+            if((isTypedPointer(record) || isGroup(record)) == false) {
+                result = false
+                if(isR1OrScalar(record)) {
+                    result = ((record.kind == "void") || (record.kind == "owned")) == false
+                }
+            }
+            result
+        }
+
+        isOutTarget: (record) => {
+            result: true
+            if((isPointerResult(record) || isGroup(record)) == false) {
+                result = false
+                if(isR1OrScalar(record)) {
+                    result = ((record.kind == "void") || (record.kind == "utf8z") || (record.kind == "out")) == false
+                }
+            }
+            result
+        }
+    }
+
+    // Bind private operations once; factory-created closures use normal completion.
+    metadata = methods.metadata
+    register = methods.register
+    make = methods.make
+    scalar = methods.scalar
+    isRegistered = methods.isRegistered
+    isStorageLayout = methods.isStorageLayout
+    storage = methods.storage
+    isR1OrScalar = methods.isR1OrScalar
+    isTypedPointer = methods.isTypedPointer
+    isPointerResult = methods.isPointerResult
+    isGroup = methods.isGroup
+    isReturnDeclaration = methods.isReturnDeclaration
+    isParameterDeclaration = methods.isParameterDeclaration
+    isOutTarget = methods.isOutTarget
+
+    {
+        metadata: metadata
+        register: register
+        make: make
+        scalar: scalar
+        isRegistered: isRegistered
+        isStorageLayout: isStorageLayout
+        storage: storage
+        isR1OrScalar: isR1OrScalar
+        isTypedPointer: isTypedPointer
+        isPointerResult: isPointerResult
+        isGroup: isGroup
+        isReturnDeclaration: isReturnDeclaration
+        isParameterDeclaration: isParameterDeclaration
+        isOutTarget: isOutTarget
+    }
+}
+
+// Exact LP64 spellings refer to the existing scalar descriptor singletons.
+aliases: (i32Descriptor, i64Descriptor, sizeTDescriptor, f64Descriptor) => {
+    cTypes: Map()
+    cTypes["int"] = i32Descriptor
+    cTypes["long"] = i64Descriptor
+    cTypes["long long"] = i64Descriptor
+    cTypes["size_t"] = sizeTDescriptor
+    cTypes["double"] = f64Descriptor
+    cTypes.freeze()
+    cTypes
+}

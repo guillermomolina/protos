@@ -1,0 +1,434 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Private TOML stringparser implementation.
+
+create: (source, length, peek, take, isSpace, isNewlineStart, consumeNewline, toml11, getIndex, setIndex) => {
+    hexDigit: (octet) => {
+        result: -1
+        if(octet >= 48) {
+            if(octet <= 57) {
+                result = octet - 48
+            }
+        }
+        if(result < 0) {
+            if(octet >= 65) {
+                if(octet <= 70) {
+                    result = octet - 55
+                }
+            }
+        }
+        if(result < 0) {
+            if(octet >= 97) {
+                if(octet <= 102) {
+                    result = octet - 87
+                }
+            }
+        }
+        result
+    }
+
+    appendScalarUtf8: (buffer, scalar) => {
+        invalid: scalar < 0
+        if(scalar > 1114111) {
+            invalid = true
+        }
+        if(scalar >= 55296) {
+            if(scalar <= 57343) {
+                invalid = true
+            }
+        }
+        if(invalid) {
+            fail()
+        }
+
+        handled: false
+        if(scalar <= 127) {
+            buffer.add(scalar)
+            handled = true
+        }
+        handled.ifFalse(() => {
+            if(scalar <= 2047) {
+                buffer.add(192 + scalar.div(64))
+                buffer.add(128 + scalar.mod(64))
+                handled = true
+            }
+        })
+        handled.ifFalse(() => {
+            if(scalar <= 65535) {
+                buffer.add(224 + scalar.div(4096))
+                buffer.add(128 + scalar.div(64).mod(64))
+                buffer.add(128 + scalar.mod(64))
+                handled = true
+            }
+        })
+        handled.ifFalse(() => {
+            buffer.add(240 + scalar.div(262144))
+            buffer.add(128 + scalar.div(4096).mod(64))
+            buffer.add(128 + scalar.div(64).mod(64))
+            buffer.add(128 + scalar.mod(64))
+        })
+    }
+
+    parseUnicodeEscape: (digits, buffer) => {
+        scalar: 0
+        remaining: digits
+
+        consume: null
+        consume = () => {
+            if(remaining > 0) {
+                digit: hexDigit(take())
+                if(digit < 0) {
+                    fail()
+                }
+                scalar = scalar * 16 + digit
+                remaining = remaining - 1
+                consume()
+            }
+        }
+
+        consume()
+        appendScalarUtf8(buffer, scalar)
+    }
+
+    parseBasicString: (multiline) => {
+        multiline.ifFalse(() => {
+            (take() == 34).ifFalse(() => {
+                fail()
+            })
+        })
+
+        if(multiline) {
+            (take() == 34).ifFalse(() => { fail() })
+            (take() == 34).ifFalse(() => { fail() })
+            (take() == 34).ifFalse(() => { fail() })
+            if(isNewlineStart(peek())) {
+                consumeNewline()
+            }
+        }
+
+        buffer: Encoding.UTF8.encode("")
+        done: false
+
+        countQuotes: (initial) => {
+            count: initial
+            while(peek() == 34) {
+                setIndex(getIndex() + 1)
+                count = count + 1
+            }
+            count
+        }
+
+        skipContinuationWhitespace: () => {
+            scanning: true
+            while(scanning && (getIndex() < length)) {
+                octet: source[getIndex()]
+                whitespace: isSpace(octet)
+                if(isNewlineStart(octet)) {
+                    whitespace = true
+                }
+
+                if(whitespace) {
+                    if(isNewlineStart(octet)) {
+                        consumeNewline()
+                    }
+                    isNewlineStart(octet).ifFalse(() => {
+                        setIndex(getIndex() + 1)
+                    })
+                }
+                whitespace.ifFalse(() => {
+                    scanning = false
+                })
+            }
+        }
+
+        while(done === false) {
+            octet: take()
+            ordinaryOctet: true
+
+                multiline.ifFalse(() => {
+                    if(octet == 34) {
+                        done = true
+                    }
+                })
+
+                if(multiline) {
+                    if(octet == 34) {
+                        ordinaryOctet = false
+                        quoteCount: countQuotes(1)
+
+                        if(quoteCount >= 3) {
+                            if(quoteCount > 5) {
+                                fail()
+                            }
+                            extra: quoteCount - 3
+                            if(extra > 0) {
+                                buffer.add(34)
+                            }
+                            if(extra > 1) {
+                                buffer.add(34)
+                            }
+                            done = true
+                        }
+
+                        if(quoteCount < 3) {
+                            buffer.add(34)
+                            if(quoteCount == 2) {
+                                buffer.add(34)
+                            }
+                        }
+                    }
+                }
+
+                done.ifFalse(() => {
+                    if(ordinaryOctet) {
+                        if(octet == 92) {
+                            continuation: false
+
+                            if(multiline) {
+                                look: getIndex()
+                                seeking: true
+                                sawNewline: false
+
+                                while(seeking && (look < length)) {
+                                    candidate: source[look]
+                                    candidateSpace: isSpace(candidate)
+                                    candidateNewline: isNewlineStart(candidate)
+
+                                    if(candidateSpace) {
+                                        look = look + 1
+                                    }
+                                    if(candidateNewline) {
+                                        sawNewline = true
+                                        seeking = false
+                                    }
+                                    (candidateSpace || candidateNewline).ifFalse(() => {
+                                        seeking = false
+                                    })
+                                }
+                                if(look >= length) {
+                                    seeking = false
+                                }
+                                if(sawNewline) {
+                                    continuation = true
+                                }
+                            }
+
+                            if(continuation) {
+                                while(isSpace(peek())) {
+                                    setIndex(getIndex() + 1)
+                                }
+                                isNewlineStart(peek()).ifFalse(() => {
+                                    fail()
+                                })
+                                consumeNewline()
+                                skipContinuationWhitespace()
+                            }
+
+                            continuation.ifFalse(() => {
+                                escape: take()
+                                handled: false
+
+                                if(escape == 98) {
+                                    buffer.add(8)
+                                    handled = true
+                                }
+                                if(escape == 116) {
+                                    buffer.add(9)
+                                    handled = true
+                                }
+                                if(escape == 110) {
+                                    buffer.add(10)
+                                    handled = true
+                                }
+                                if(escape == 102) {
+                                    buffer.add(12)
+                                    handled = true
+                                }
+                                if(escape == 114) {
+                                    buffer.add(13)
+                                    handled = true
+                                }
+                                if(toml11 && (escape == 101)) {
+                                    buffer.add(27)
+                                    handled = true
+                                }
+                                if(toml11 && (escape == 120)) {
+                                    parseUnicodeEscape(2, buffer)
+                                    handled = true
+                                }
+                                if(escape == 34) {
+                                    buffer.add(34)
+                                    handled = true
+                                }
+                                if(escape == 92) {
+                                    buffer.add(92)
+                                    handled = true
+                                }
+                                if(escape == 117) {
+                                    parseUnicodeEscape(4, buffer)
+                                    handled = true
+                                }
+                                if(escape == 85) {
+                                    parseUnicodeEscape(8, buffer)
+                                    handled = true
+                                }
+
+                                handled.ifFalse(() => {
+                                    fail()
+                                })
+                            })
+                        }
+
+                        (octet == 92).ifFalse(() => {
+                            newline: isNewlineStart(octet)
+
+                            if(newline) {
+                                multiline.ifFalse(() => {
+                                    fail()
+                                })
+                                setIndex(getIndex() - 1)
+                                consumeNewline()
+                                buffer.add(10)
+                            }
+
+                            newline.ifFalse(() => {
+                                invalidControl: octet < 32
+                                if(octet == 127) {
+                                    invalidControl = true
+                                }
+                                if(octet == 9) {
+                                    invalidControl = false
+                                }
+                                if(invalidControl) {
+                                    fail()
+                                }
+                                buffer.add(octet)
+                            })
+                        })
+                    }
+
+                })
+        }
+        Encoding.UTF8.decode(buffer)
+    }
+
+    parseLiteralString: (multiline) => {
+        multiline.ifFalse(() => {
+            (take() == 39).ifFalse(() => {
+                fail()
+            })
+        })
+
+        if(multiline) {
+            (take() == 39).ifFalse(() => { fail() })
+            (take() == 39).ifFalse(() => { fail() })
+            (take() == 39).ifFalse(() => { fail() })
+            if(isNewlineStart(peek())) {
+                consumeNewline()
+            }
+        }
+
+        buffer: Encoding.UTF8.encode("")
+        done: false
+
+        countQuotes: (initial) => {
+            count: initial
+            while(peek() == 39) {
+                setIndex(getIndex() + 1)
+                count = count + 1
+            }
+            count
+        }
+
+        while(done === false) {
+            octet: take()
+            ordinaryOctet: true
+
+                multiline.ifFalse(() => {
+                    if(octet == 39) {
+                        done = true
+                    }
+                })
+
+                if(multiline) {
+                    if(octet == 39) {
+                        ordinaryOctet = false
+                        quoteCount: countQuotes(1)
+
+                        if(quoteCount >= 3) {
+                            if(quoteCount > 5) {
+                                fail()
+                            }
+                            extra: quoteCount - 3
+                            if(extra > 0) {
+                                buffer.add(39)
+                            }
+                            if(extra > 1) {
+                                buffer.add(39)
+                            }
+                            done = true
+                        }
+
+                        if(quoteCount < 3) {
+                            buffer.add(39)
+                            if(quoteCount == 2) {
+                                buffer.add(39)
+                            }
+                        }
+                    }
+                }
+
+                done.ifFalse(() => {
+                    if(ordinaryOctet) {
+                        newline: isNewlineStart(octet)
+
+                        if(newline) {
+                            multiline.ifFalse(() => {
+                                fail()
+                            })
+                            setIndex(getIndex() - 1)
+                            consumeNewline()
+                            buffer.add(10)
+                        }
+
+                        newline.ifFalse(() => {
+                            invalidControl: octet < 32
+                            if(octet == 127) {
+                                invalidControl = true
+                            }
+                            if(octet == 9) {
+                                invalidControl = false
+                            }
+                            if(invalidControl) {
+                                fail()
+                            }
+                            buffer.add(octet)
+                        })
+                    }
+
+                })
+        }
+        Encoding.UTF8.decode(buffer)
+    }
+
+    {
+        hexDigit: hexDigit
+        appendScalarUtf8: appendScalarUtf8
+        parseUnicodeEscape: parseUnicodeEscape
+        parseBasicString: parseBasicString
+        parseLiteralString: parseLiteralString
+    }
+}

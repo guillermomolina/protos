@@ -1,0 +1,123 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Private Regex escape implementation.
+
+escape: (text) => {
+    String.recognizes(text).ifFalse(() => {
+        Error().signal()
+    })
+    output: Encoding.UTF8.encode("")
+    appendAscii: (spelling) => {
+        for(octet in Encoding.UTF8.encode(spelling)) {
+            output.add(octet)
+        }
+    }
+    appendHexEscape: (scalar) => {
+        digits: "0123456789ABCDEF"
+        hex: ""
+        remaining: scalar
+        while(remaining > 0) {
+            hex = digits[remaining % 16] + hex
+            remaining = remaining.div(16)
+        }
+        appendAscii("\\u{" + hex + "}")
+    }
+    // Multi-byte UTF-8 sequences are collected whole so the scalars that are
+    // Pattern_White_Space can be recognized.
+    pending: Encoding.UTF8.encode("")
+    expected: 0
+    scalar: 0
+    for(octet in Encoding.UTF8.encode(text)) {
+        if(expected == 0) {
+            if(octet < 128) {
+                handled: false
+                if(octet == 9) {
+                    appendAscii("\\t")
+                    handled = true
+                }
+                if(octet == 10) {
+                    appendAscii("\\n")
+                    handled = true
+                }
+                if(octet == 13) {
+                    appendAscii("\\r")
+                    handled = true
+                }
+                if(octet == 12) {
+                    appendAscii("\\f")
+                    handled = true
+                }
+                if(octet == 11) {
+                    appendHexEscape(11)
+                    handled = true
+                }
+                handled.ifFalse(() => {
+                    special: (octet == 32) || (octet == 35) || (octet == 36) || (octet == 38) ||
+                        (octet == 40) || (octet == 41) || (octet == 42) || (octet == 43) ||
+                        (octet == 45) || (octet == 46) || (octet == 63) || (octet == 91) ||
+                        (octet == 92) || (octet == 93) || (octet == 94) || (octet == 123) ||
+                        (octet == 124) || (octet == 125)
+                    if(special) {
+                        output.add(92)
+                    }
+                    output.add(octet)
+                })
+            } else {
+                pending.add(octet)
+                scalar = octet - 192
+                expected = 1
+                if(octet >= 224) {
+                    scalar = octet - 224
+                    expected = 2
+                }
+                if(octet >= 240) {
+                    scalar = octet - 240
+                    expected = 3
+                }
+            }
+        } else {
+            pending.add(octet)
+            scalar = scalar * 64 + (octet - 128)
+            expected = expected - 1
+            if(expected == 0) {
+                if((scalar == 133) || (scalar == 8206) || (scalar == 8207) || (scalar == 8232) ||
+                    (scalar == 8233)) {
+                    appendHexEscape(scalar)
+                } else {
+                    for(held in pending) {
+                        output.add(held)
+                    }
+                }
+                pending = Encoding.UTF8.encode("")
+            }
+        }
+    }
+    Encoding.UTF8.decode(output)
+}
+
+escapeReplacement: (text) => {
+    String.recognizes(text).ifFalse(() => {
+        Error().signal()
+    })
+    output: Encoding.UTF8.encode("")
+    for(octet in Encoding.UTF8.encode(text)) {
+        if(octet == 36) {
+            output.add(36)
+        }
+        output.add(octet)
+    }
+    Encoding.UTF8.decode(output)
+}

@@ -1,0 +1,122 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Private Array ordering algorithms.
+
+sort: (array, less: (left, right) => left < right) => {
+    snapshot: Array(...array)
+
+    merge: (left, right) => {
+        result: Array(...left, ...right)
+        leftSize: left.size()
+        rightSize: right.size()
+        leftIndex: 0
+        rightIndex: 0
+        mergeRange: (start, end) => {
+            length: end - start
+
+            if(length == 1) {
+                leftDone: leftIndex == leftSize
+                rightDone: rightIndex == rightSize
+
+                if(leftDone) {
+                    result[start] = right[rightIndex]
+                    rightIndex = rightIndex + 1
+                }
+
+                leftDone.ifFalse(() => {
+                    if(rightDone) {
+                        result[start] = left[leftIndex]
+                        leftIndex = leftIndex + 1
+                    }
+
+                    rightDone.ifFalse(() => {
+                        leftValue: left[leftIndex]
+                        rightValue: right[rightIndex]
+                        lr: less(leftValue, rightValue)
+
+                        (lr === true).ifFalse(() => {
+                            (lr === false).ifFalse(() => {
+                                InvalidComparatorResult().signal()
+                            })
+                        })
+
+                        rl: less(rightValue, leftValue)
+
+                        (rl === true).ifFalse(() => {
+                            (rl === false).ifFalse(() => {
+                                InvalidComparatorResult().signal()
+                            })
+                        })
+
+                        if(lr === true) {
+                            if(rl === true) {
+                                InvalidComparatorOrder().signal()
+                            }
+                            result[start] = leftValue
+                            leftIndex = leftIndex + 1
+                        }
+
+                        if(lr === false) {
+                            if(rl === true) {
+                                result[start] = rightValue
+                                rightIndex = rightIndex + 1
+                            }
+                            if(rl === false) {
+                                result[start] = leftValue
+                                leftIndex = leftIndex + 1
+                            }
+                        }
+                    })
+                })
+            }
+
+            if(length > 1) {
+                middle: start + length.div(2)
+                mergeRange(start, middle)
+                mergeRange(middle, end)
+            }
+
+            null
+        }
+
+        mergeRange(0, result.size())
+        result
+    }
+
+    sortRange: (start, end) => {
+        length: end - start
+        result: null
+
+        if(length == 0) {
+            result = Array()
+        }
+
+        if(length == 1) {
+            result = Array(snapshot[start])
+        }
+
+        if(length > 1) {
+            middle: start + length.div(2)
+            left: sortRange(start, middle)
+            right: sortRange(middle, end)
+            result = merge(left, right)
+        }
+
+        result
+    }
+
+    sortRange(0, snapshot.size())
+}

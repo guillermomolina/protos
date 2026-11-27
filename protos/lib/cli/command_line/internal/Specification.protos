@@ -1,0 +1,297 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Private command-line specification implementation.
+
+createOption: (normalizeOption) => {
+    // Private presence identity: D203 binds an omitted parameter without a
+    // default to null, so every required parameter defaults to this identity
+    // and is checked before any value is validated.
+    missing: {}
+
+    (
+        key: missing,
+        long: missing,
+        short: missing,
+        minValues: missing,
+        maxValues: missing,
+        minOccurrences: missing,
+        maxOccurrences: missing,
+        valueName: missing,
+        help: missing
+    ) => {
+        present: (value) => {
+            if(value === missing) {
+                fail()
+            }
+        }
+
+        present(key)
+        present(long)
+        present(short)
+        present(minValues)
+        present(maxValues)
+        present(minOccurrences)
+        present(maxOccurrences)
+        present(valueName)
+        present(help)
+
+        descriptor: {
+            key: key
+            long: long
+            short: short
+            minValues: minValues
+            maxValues: maxValues
+            minOccurrences: minOccurrences
+            maxOccurrences: maxOccurrences
+            valueName: valueName
+            help: help
+        }
+
+        normalizeOption(descriptor)
+    }
+}
+
+createPositional: (normalizePositional) => {
+    // Private presence identity: D203 binds an omitted parameter without a
+    // default to null, so every required parameter defaults to this identity
+    // and is checked before any value is validated.
+    missing: {}
+
+    (
+        key: missing,
+        minOccurrences: missing,
+        maxOccurrences: missing,
+        valueName: missing,
+        help: missing
+    ) => {
+        present: (value) => {
+            if(value === missing) {
+                fail()
+            }
+        }
+
+        present(key)
+        present(minOccurrences)
+        present(maxOccurrences)
+        present(valueName)
+        present(help)
+
+        descriptor: {
+            key: key
+            minOccurrences: minOccurrences
+            maxOccurrences: maxOccurrences
+            valueName: valueName
+            help: help
+        }
+
+        normalizePositional(descriptor)
+    }
+}
+
+createCommand: (normalizeOption, normalizePositional) => {
+    (descriptor) => {
+        validateString: (value) => {
+            String.recognizes(value).ifFalse(() => {
+                fail()
+            })
+            value
+        }
+
+        validateOptionalString: (value) => {
+            (value === null).ifFalse(() => {
+                validateString(value)
+            })
+            value
+        }
+
+        isAlpha: (octet) => {
+            ((octet >= 65) && (octet <= 90)) ||
+                ((octet >= 97) && (octet <= 122))
+        }
+
+        isDigit: (octet) => {
+            (octet >= 48) && (octet <= 57)
+        }
+
+        validateCommandName: (value) => {
+            validateString(value)
+            source: Encoding.UTF8.encode(value)
+            if(source.size() == 0) {
+                fail()
+            }
+            isAlpha(source[0]).ifFalse(() => {
+                fail()
+            })
+            index: 1
+            while(index < source.size()) {
+                octet: source[index]
+                allowed: isAlpha(octet) || isDigit(octet) || (octet == 45)
+                allowed.ifFalse(() => {
+                    fail()
+                })
+                index = index + 1
+            }
+            value
+        }
+
+        validateArray: (value) => {
+            Array.recognizes(value).ifFalse(() => {
+                fail()
+            })
+            value
+        }
+
+        // Active-path identities only: a descriptor leaves `visiting` when its own
+        // canonicalization completes, so completed shared descriptors are reused.
+        visiting: IdentityMap()
+
+        // Validates one command descriptor and canonicalizes its options and
+        // positionals, returning an explicit heap frame suspended before its children.
+        enterCommand: (candidate, parentFrame) => {
+            if(visiting.containsKey(candidate)) {
+                fail()
+            }
+            visiting[candidate] = true
+
+            required: (name) => {
+                candidate.hasSlot(name).ifFalse(() => {
+                    fail()
+                })
+                candidate.slotValue(name)
+            }
+
+            nameValue: validateCommandName(required("name"))
+            helpValue: validateOptionalString(required("help"))
+            optionDescriptors: validateArray(required("options"))
+            positionalDescriptors: validateArray(required("positionals"))
+            subcommandDescriptors: validateArray(required("subcommands"))
+
+            canonicalOptions: Array(...optionDescriptors)
+            optionKeys: Map()
+            longNames: Map()
+            shortNames: Map()
+
+            optionIndex: 0
+            for(entry in optionDescriptors) {
+                spec: normalizeOption(entry)
+
+                if(optionKeys.containsKey(spec.key)) {
+                    fail()
+                }
+                optionKeys[spec.key] = true
+
+                (spec.long === null).ifFalse(() => {
+                    if(longNames.containsKey(spec.long)) {
+                        fail()
+                    }
+                    longNames[spec.long] = true
+                })
+
+                (spec.short === null).ifFalse(() => {
+                    if(shortNames.containsKey(spec.short)) {
+                        fail()
+                    }
+                    shortNames[spec.short] = true
+                })
+
+                canonicalOptions[optionIndex] = spec
+                optionIndex = optionIndex + 1
+            }
+            canonicalOptions.freeze()
+
+            canonicalPositionals: Array(...positionalDescriptors)
+            positionalKeys: Map()
+            positionalIndex: 0
+            for(entry in positionalDescriptors) {
+                spec: normalizePositional(entry)
+
+                if(positionalKeys.containsKey(spec.key)) {
+                    fail()
+                }
+                positionalKeys[spec.key] = true
+
+                if(spec.maxOccurrences === null) {
+                    ((positionalIndex + 1) == positionalDescriptors.size()).ifFalse(() => {
+                        fail()
+                    })
+                }
+
+                canonicalPositionals[positionalIndex] = spec
+                positionalIndex = positionalIndex + 1
+            }
+            canonicalPositionals.freeze()
+
+            suspended: {
+                parent: parentFrame
+                candidate: candidate
+                name: nameValue
+                help: helpValue
+                options: canonicalOptions
+                positionals: canonicalPositionals
+                subcommandDescriptors: subcommandDescriptors
+                subcommands: Array(...subcommandDescriptors)
+                subcommandNames: Map()
+                childIndex: 0
+            }
+            suspended
+        }
+
+        // Completes a frame whose children are all canonicalized.
+        exitCommand: (frame) => {
+            frame.subcommands.freeze()
+
+            visiting.remove(frame.candidate)
+
+            canonical: {
+                kind: "command"
+                name: frame.name
+                help: frame.help
+                options: frame.options
+                positionals: frame.positionals
+                subcommands: frame.subcommands
+            }
+
+            canonical.freeze()
+        }
+
+        // Depth-first traversal over explicit linked frames keeps execution-stack
+        // depth independent of command depth. Each child is canonicalized completely
+        // before its parent's duplicate-name check, registration and storage.
+        frame: enterCommand(descriptor, null)
+        result: null
+        while(result === null) {
+            if(frame.childIndex < frame.subcommandDescriptors.size()) {
+                frame = enterCommand(frame.subcommandDescriptors[frame.childIndex], frame)
+            } else {
+                spec: exitCommand(frame)
+                parentFrame: frame.parent
+                if(parentFrame === null) {
+                    result = spec
+                } else {
+                    if(parentFrame.subcommandNames.containsKey(spec.name)) {
+                        fail()
+                    }
+                    parentFrame.subcommandNames[spec.name] = true
+
+                    parentFrame.subcommands[parentFrame.childIndex] = spec
+                    parentFrame.childIndex = parentFrame.childIndex + 1
+                    frame = parentFrame
+                }
+            }
+        }
+        result
+    }
+}

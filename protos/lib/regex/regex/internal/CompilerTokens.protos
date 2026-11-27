@@ -1,0 +1,287 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Private Regex compilertokens implementation.
+
+create: (scalarAt, getPosition, setPosition, getFrame, nodes, addNode, maxScalar, isAsciiLetter, isAsciiDigit, hexValue, propertySet, caseFold, digitSet, spaceSet, wordSet, complement, extended, isPatternWhiteSpace, length, scalars, isLineTerminator) => {
+    propertyCache: Map()
+
+    parseCaptureName: () => {
+        bytes: Encoding.UTF8.encode("")
+        (isAsciiLetter(scalarAt(getPosition())) || (scalarAt(getPosition()) == 95)).ifFalse(() => {
+            Error().signal()
+        })
+        while(isAsciiLetter(scalarAt(getPosition())) || isAsciiDigit(scalarAt(getPosition())) ||
+            (scalarAt(getPosition()) == 95)) {
+            bytes.add(scalarAt(getPosition()))
+            setPosition(getPosition() + 1)
+        }
+        (scalarAt(getPosition()) == 62).ifFalse(() => {
+            Error().signal()
+        })
+        setPosition(getPosition() + 1)
+        Encoding.UTF8.decode(bytes)
+    }
+
+    parseDecimal: () => {
+        isAsciiDigit(scalarAt(getPosition())).ifFalse(() => {
+            Error().signal()
+        })
+        value: 0
+        while(isAsciiDigit(scalarAt(getPosition()))) {
+            value = value * 10 + (scalarAt(getPosition()) - 48)
+            setPosition(getPosition() + 1)
+        }
+        value
+    }
+
+    parseQuantifier: () => {
+        (getFrame().last == "atom").ifFalse(() => {
+            Error().signal()
+        })
+        first: scalarAt(getPosition())
+        minimum: 0
+        maximum: null
+        setPosition(getPosition() + 1)
+        if(first == 43) {
+            minimum = 1
+        }
+        if(first == 63) {
+            maximum = 1
+        }
+        if(first == 123) {
+            minimum = parseDecimal()
+            if(scalarAt(getPosition()) == 125) {
+                maximum = minimum
+            } else {
+                (scalarAt(getPosition()) == 44).ifFalse(() => {
+                    Error().signal()
+                })
+                setPosition(getPosition() + 1)
+                (scalarAt(getPosition()) == 125).ifFalse(() => {
+                    maximum = parseDecimal()
+                    if(maximum < minimum) {
+                        Error().signal()
+                    }
+                })
+                (scalarAt(getPosition()) == 125).ifFalse(() => {
+                    Error().signal()
+                })
+            }
+            setPosition(getPosition() + 1)
+        }
+        greedy: true
+        if(scalarAt(getPosition()) == 63) {
+            greedy = false
+            setPosition(getPosition() + 1)
+        }
+        // Possessive quantifiers are excluded.
+        if(scalarAt(getPosition()) == 43) {
+            Error().signal()
+        }
+        index: getFrame().itemCount - 1
+        item: getFrame().items[index]
+        copies: maximum
+        if(maximum === null) {
+            copies = minimum + 1
+        }
+        weight: (nodes[item].weight + 1) * copies + 1
+        getFrame().items[index] = addNode({
+            op: "repeat"
+            item: item
+            min: minimum
+            max: maximum
+            greedy: greedy
+            weight: weight
+        })
+        getFrame().last = "quantified"
+    }
+
+    parseScalarEscape: () => {
+        (scalarAt(getPosition()) == 123).ifFalse(() => {
+            Error().signal()
+        })
+        setPosition(getPosition() + 1)
+        value: 0
+        digits: 0
+        while((digits <= 6) && (hexValue(scalarAt(getPosition())) >= 0)) {
+            value = value * 16 + hexValue(scalarAt(getPosition()))
+            digits = digits + 1
+            setPosition(getPosition() + 1)
+        }
+        if((digits < 1) || (digits > 6) || (scalarAt(getPosition()) != 125)) {
+            Error().signal()
+        }
+        setPosition(getPosition() + 1)
+        if((value > maxScalar) || ((value >= 55296) && (value <= 57343))) {
+            Error().signal()
+        }
+        value
+    }
+
+    parseProperty: () => {
+        (scalarAt(getPosition()) == 123).ifFalse(() => {
+            Error().signal()
+        })
+        setPosition(getPosition() + 1)
+        nameBytes: Encoding.UTF8.encode("")
+        valueBytes: null
+        while(scalarAt(getPosition()) != 125) {
+            current: scalarAt(getPosition())
+            // Every Unicode property and value alias is ASCII.
+            if((current < 0) || (current > 127)) {
+                Error().signal()
+            }
+            if(current == 61) {
+                (valueBytes === null).ifFalse(() => {
+                    Error().signal()
+                })
+                valueBytes = Encoding.UTF8.encode("")
+            } else {
+                target: nameBytes
+                (valueBytes === null).ifFalse(() => {
+                    target = valueBytes
+                })
+                target.add(current)
+            }
+            setPosition(getPosition() + 1)
+        }
+        setPosition(getPosition() + 1)
+        if(nameBytes.size() == 0) {
+            Error().signal()
+        }
+        name: Encoding.UTF8.decode(nameBytes)
+        value: null
+        key: "=" + name
+        (valueBytes === null).ifFalse(() => {
+            if(valueBytes.size() == 0) {
+                Error().signal()
+            }
+            value = Encoding.UTF8.decode(valueBytes)
+            key = name + "=" + value
+        })
+        propertyCache.containsKey(key).ifFalse(() => {
+            propertyCache[key] = propertySet(name, value)
+        })
+        propertyCache[key]
+    }
+
+    parseEscape: (inClass) => {
+        setPosition(getPosition() + 1)
+        escaped: scalarAt(getPosition())
+        if(escaped < 0) {
+            Error().signal()
+        }
+        setPosition(getPosition() + 1)
+        result: null
+        answerScalar: (value) => {
+            result = { kind: "scalar"; value: value }
+        }
+        answerSet: (ranges) => {
+            result = { kind: "set"; ranges: ranges }
+        }
+        answerAssertion: (name) => {
+            if(inClass) {
+                Error().signal()
+            }
+            result = { kind: "assert"; name: name }
+        }
+        if(escaped == 116) {
+            answerScalar(9)
+        }
+        if(escaped == 110) {
+            answerScalar(10)
+        }
+        if(escaped == 114) {
+            answerScalar(13)
+        }
+        if(escaped == 102) {
+            answerScalar(12)
+        }
+        if(escaped == 117) {
+            answerScalar(parseScalarEscape())
+        }
+        if(escaped == 100) {
+            answerSet(caseFold(digitSet))
+        }
+        if(escaped == 68) {
+            answerSet(complement(caseFold(digitSet)))
+        }
+        if(escaped == 115) {
+            answerSet(caseFold(spaceSet))
+        }
+        if(escaped == 83) {
+            answerSet(complement(caseFold(spaceSet)))
+        }
+        if(escaped == 119) {
+            answerSet(caseFold(wordSet))
+        }
+        if(escaped == 87) {
+            answerSet(complement(caseFold(wordSet)))
+        }
+        if(escaped == 112) {
+            answerSet(caseFold(parseProperty()))
+        }
+        if(escaped == 80) {
+            answerSet(complement(caseFold(parseProperty())))
+        }
+        if(escaped == 65) {
+            answerAssertion("textStart")
+        }
+        if(escaped == 122) {
+            answerAssertion("textEnd")
+        }
+        if(escaped == 98) {
+            answerAssertion("wordBoundary")
+        }
+        if(escaped == 66) {
+            answerAssertion("notWordBoundary")
+        }
+        if(result === null) {
+            // Any other printable ASCII scalar that is neither a letter nor
+            // a digit escapes itself; every other escape is rejected.
+            ((escaped >= 32) && (escaped <= 126) && !isAsciiLetter(escaped) &&
+                !isAsciiDigit(escaped)).ifFalse(() => {
+                Error().signal()
+            })
+            answerScalar(escaped)
+        }
+        result
+    }
+
+    skipIgnorable: () => {
+        if(extended) {
+            while(isPatternWhiteSpace(scalarAt(getPosition())) || (scalarAt(getPosition()) == 35)) {
+                if(scalarAt(getPosition()) == 35) {
+                    while((getPosition() < length) && !isLineTerminator(scalars[getPosition()])) {
+                        setPosition(getPosition() + 1)
+                    }
+                } else {
+                    setPosition(getPosition() + 1)
+                }
+            }
+        }
+    }
+
+    {
+        parseCaptureName: parseCaptureName
+        parseDecimal: parseDecimal
+        parseQuantifier: parseQuantifier
+        parseScalarEscape: parseScalarEscape
+        parseProperty: parseProperty
+        parseEscape: parseEscape
+        skipIgnorable: skipIgnorable
+    }
+}

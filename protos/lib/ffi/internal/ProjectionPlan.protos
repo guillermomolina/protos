@@ -1,0 +1,226 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Private FFI projectionplan operations. Dependencies remain initializer-owned.
+
+create: (Arrays, descriptors, fail, isGroup, isRegistered, layouts, operation, providerContext, register, requireArity, requireNonnegative, requireString, storage) => {
+    mapMatcher: %{}
+    unionArm: null
+    requireMap: null
+    samePath: null
+    admitArms: null
+    selectArm: null
+    slots: null
+    selectedPosition: null
+    plan: null
+    projectionPlan: null
+    projectionLayout: null
+
+    methods: {
+        unionArm: (path: fail(), memberName: fail(), ...extra) => {
+            requireArity(extra)
+            Array.recognizes(path).ifFalse(() => fail())
+            components: Array(...path)
+            for(component in components) {
+                if(String.recognizes(component) == false) {
+                    requireNonnegative(component)
+                }
+            }
+            requireString(memberName)
+            components.freeze()
+            parts: {
+                path: components
+                member: memberName
+            }
+            parts.freeze()
+            // A kind no storage, binding or out position admits.
+            register("unionArm", "unionArm", null, null, null, null, null, parts)
+        }
+
+        // An empty matcher Map recognizes exactly standard Maps without invoking any
+        // behavior of the candidate.
+        requireMap: (value) => {
+            (mapMatcher.match(value) === true).ifFalse(() => fail())
+        }
+
+        // Path components are Strings or Integers; equal only within the same kind,
+        // so "0" and 0, or "a.b" and ("a", "b"), stay distinct.
+        samePath: (left, right) => {
+            same: left.size() == right.size()
+            index: 0
+            while(same && (index < left.size())) {
+                if((String.recognizes(left[index]) == String.recognizes(right[index])) == false) {
+                    same = false
+                }
+                if(same) {
+                    same = left[index] == right[index]
+                }
+                index = index + 1
+            }
+            same
+        }
+
+        // Snapshot an ordinary Array of unionArm declarations, admitted by exact
+        // identity, with pairwise distinct paths. Answers a selection state: the
+        // frozen selection metadata and a fresh consumption flag per selection.
+        admitArms: (arms) => {
+            Array.recognizes(arms).ifFalse(() => fail())
+            snapshot: Array(...arms)
+            selections: Array(...snapshot)
+            consumed: Array(...snapshot)
+            index: 0
+            for(arm in snapshot) {
+                isRegistered(arm).ifFalse(() => fail())
+                record: descriptors.at(arm)
+                (record.layoutKind == "unionArm").ifFalse(() => fail())
+                for(earlier in Arrays.take(selections, index)) {
+                    samePath(earlier.path, record.parts.path).ifTrue(() => fail())
+                }
+                selections[index] = record.parts
+                consumed[index] = false
+                index = index + 1
+            }
+            state: {
+                selections: selections
+                consumed: consumed
+            }
+            state
+        }
+
+        // The member selected for the union reached at `path`, consuming exactly
+        // one selection; a missing selection or an unknown member is an Error.
+        selectArm: (state, record, path) => {
+            index: 0
+            selected: null
+            while((selected === null) && (index < state.selections.size())) {
+                selection: state.selections[index]
+                if(samePath(selection.path, path)) {
+                    record.parts.byName.containsKey(selection.member).ifFalse(() => fail())
+                    state.consumed[index] = true
+                    selected = record.parts.byName.at(selection.member)
+                }
+                index = index + 1
+            }
+            if(selected === null) { fail() }
+            selected
+        }
+
+        // A fresh open Array of exactly `count` (positive) placeholder elements,
+        // built by doubling so that its cost stays linear in `count`.
+        slots: (count) => {
+            filled: Array(null)
+            while(filled.size() < count) {
+                filled = Arrays.concat(filled, filled)
+            }
+            Arrays.take(filled, count)
+        }
+
+        // One selected position: its existing descriptor, its member name or array
+        // index, and its selected children (null for a scalar or pointer leaf).
+        selectedPosition: (layout, key, children) => {
+            node: {
+                layout: layout
+                key: key
+                children: children
+            }
+            node.freeze()
+            node
+        }
+
+        // The selected positions under `layout` reached at `path`: every struct
+        // member in declaration order, exactly the selected member of a union, and
+        // every array element; null for a leaf. Purely Protos metadata: no region
+        // is read or written while the plan is built.
+        plan: (layout, path, state) => {
+            record: storage(layout)
+            kind: record.layoutKind
+            result: null
+            if(kind == "struct") {
+                nodes: slots(record.parts.members.size())
+                index: 0
+                for(entry in record.parts.members) {
+                    nodes[index] = selectedPosition(entry.layout, entry.name,
+                        plan(entry.layout, Arrays.append(path, entry.name), state))
+                    index = index + 1
+                }
+                result = nodes
+            }
+            if(kind == "union") {
+                entry: selectArm(state, record, path)
+                result = Array(selectedPosition(entry.layout, entry.name,
+                    plan(entry.layout, Arrays.append(path, entry.name), state)))
+            }
+            if(kind == "array") {
+                element: record.parts.element
+                nodes: slots(record.parts.count)
+                index: 0
+                while(index < record.parts.count) {
+                    nodes[index] = selectedPosition(element, index,
+                        plan(element, Arrays.append(path, index), state))
+                    index = index + 1
+                }
+                result = nodes
+            }
+            result
+        }
+
+        // The complete selection plan of a group layout: every reached union has
+        // exactly one selection and every selection is consumed.
+        projectionPlan: (layout, arms) => {
+            state: admitArms(arms)
+            nodes: plan(layout, Array(), state)
+            for(used in state.consumed) {
+                (used === true).ifFalse(() => fail())
+            }
+            nodes
+        }
+
+        // The exact layout of a live struct or union region of this session (writable
+        // when required), recovered from the storage the region retains.
+        projectionLayout: (region, writable) => {
+            native: providerContext()
+            retained: operation(native, "regionStorage", region, writable)
+            layouts.containsKey(retained).ifFalse(() => fail())
+            layout: layouts.at(retained)
+            isGroup(storage(layout)).ifFalse(() => fail())
+            layout
+        }
+    }
+
+    // Bind private operations once; factory-created closures use normal completion.
+    unionArm = methods.unionArm
+    requireMap = methods.requireMap
+    samePath = methods.samePath
+    admitArms = methods.admitArms
+    selectArm = methods.selectArm
+    slots = methods.slots
+    selectedPosition = methods.selectedPosition
+    plan = methods.plan
+    projectionPlan = methods.projectionPlan
+    projectionLayout = methods.projectionLayout
+
+    {
+        unionArm: unionArm
+        requireMap: requireMap
+        samePath: samePath
+        admitArms: admitArms
+        selectArm: selectArm
+        slots: slots
+        selectedPosition: selectedPosition
+        plan: plan
+        projectionPlan: projectionPlan
+        projectionLayout: projectionLayout
+    }
+}

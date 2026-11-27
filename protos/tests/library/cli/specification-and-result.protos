@@ -17,6 +17,14 @@ Assertions: import("std:test/assertions")
 Test: import("std:test/test")
 
 tests: [
+    Test("source composition keeps initializer facilities private", () => {
+        CommandLine: import("std:cli/command_line")
+        for(name in Array("_commandLineNormalizers", "_commandLineArrayBuilderFactory",
+                "Normalizers", "Specification", "Parser", "Help")) {
+            Assertions.require(CommandLine.hasSlot(name) === false)
+        }
+        null
+    }),
     Test("specification invalid", () => {
         tool009LegacyCase: () => {
             CommandLine: import("std:cli/command_line")

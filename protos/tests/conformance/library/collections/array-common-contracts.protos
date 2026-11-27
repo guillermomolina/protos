@@ -8,6 +8,33 @@ Assertions: import("std:test/assertions")
 Test: import("std:test/test")
 
 tests: Array(
+    Test("raw traversal callables establish independent return homes", () => {
+        Arrays: import("std:collections/array")
+        findIndex: Arrays.slotValue("findIndex")
+        find: Arrays.slotValue("find")
+        any: Arrays.slotValue("any")
+        all: Arrays.slotValue("all")
+        Assertions.require(findIndex(Array(1, 2), (value) => value == 2) == 1)
+        Assertions.require(find(Array(1, 2), (value) => value == 2) == 2)
+        Assertions.require(any(Array(1), (value) => true))
+        Assertions.require(all(Array(1), (value) => false) === false)
+    }),
+    Test("extracted prefix edits select current public slice", () => {
+        Arrays: import("std:collections/array")
+        expectedReceiver: this
+        original: Arrays.slotValue("slice")
+        calls: 0
+        (() => {
+            Arrays.slice = (array, start, end) => {
+                Assertions.require(this === expectedReceiver)
+                calls = calls + 1
+                original(array, start, end)
+            }
+            Assertions.require(Arrays.take(Array(1, 2), 1)[0] == 1)
+            Assertions.require(Arrays.drop(Array(1, 2), 1)[0] == 2)
+            Assertions.require(calls == 2)
+        }).ensure(() => { Arrays.slice = original })
+    }),
     Test("array empty callbacks not inspected", () => {
         tool009LegacyCase: () => {
             Arrays: import("std:collections/array")

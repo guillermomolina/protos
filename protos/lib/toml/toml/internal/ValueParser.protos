@@ -1,0 +1,727 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Private TOML valueparser implementation.
+
+StringParser: import("./StringParser.protos")
+NumericParser: import("./NumericParser.protos")
+TemporalParser: import("./TemporalParser.protos")
+
+create: (toml11, syntaxNode, publicLocalDate, publicLocalTime, publicLocalDateTime, publicOffsetDateTime) => {
+    syntaxValue: (text) => {
+        String.recognizes(text).ifFalse(() => {
+            Error().signal()
+        })
+        source: Encoding.UTF8.encode(text)
+        index: 0
+        length: source.size()
+
+        peek: () => {
+            result: -1
+            if(index < length) {
+                result = source[index]
+            }
+            result
+        }
+
+        take: () => {
+            if(index >= length) {
+                fail()
+            }
+            result: source[index]
+            index = index + 1
+            result
+        }
+
+        isSpace: (octet) => {
+            result: octet == 32
+            if(octet == 9) {
+                result = true
+            }
+            result
+        }
+
+        isNewlineStart: (octet) => {
+            result: octet == 10
+            if(octet == 13) {
+                result = true
+            }
+            result
+        }
+
+        consumeNewline: () => {
+            octet: take()
+            valid: octet == 10
+            if(octet == 13) {
+                valid = true
+                (peek() == 10).ifFalse(() => {
+                    fail()
+                })
+                take()
+            }
+            valid.ifFalse(() => {
+                fail()
+            })
+        }
+
+        skipSpaces: () => {
+            scanning: true
+            while(scanning && (index < length)) {
+                whitespace: isSpace(source[index])
+                if(whitespace) {
+                    index = index + 1
+                }
+                whitespace.ifFalse(() => {
+                    scanning = false
+                })
+            }
+        }
+
+        skipComment: () => {
+            scanning: true
+            while(scanning && (index < length)) {
+                octet: source[index]
+                newline: isNewlineStart(octet)
+                if(newline) {
+                    scanning = false
+                }
+                newline.ifFalse(() => {
+                    invalidControl: octet < 32
+                    if(octet == 127) {
+                        invalidControl = true
+                    }
+                    if(octet == 9) {
+                        invalidControl = false
+                    }
+                    if(invalidControl) {
+                        fail()
+                    }
+                    index = index + 1
+                })
+            }
+        }
+
+        skipArrayTrivia: () => {
+            progressed: true
+            while(progressed) {
+                progressed = false
+                if(index < length) {
+                    octet: source[index]
+                    if(isSpace(octet)) {
+                        index = index + 1
+                        progressed = true
+                    }
+                    if(isNewlineStart(octet)) {
+                        consumeNewline()
+                        progressed = true
+                    }
+                    if(octet == 35) {
+                        index = index + 1
+                        skipComment()
+                        progressed = true
+                    }
+                }
+            }
+        }
+
+        strings: StringParser.create(
+            source, length, peek, take, isSpace, isNewlineStart, consumeNewline, toml11,
+            () => index, (value) => { index = value }
+        )
+        hexDigit: strings.slotValue("hexDigit")
+        appendScalarUtf8: strings.slotValue("appendScalarUtf8")
+        parseUnicodeEscape: strings.slotValue("parseUnicodeEscape")
+        parseBasicString: strings.slotValue("parseBasicString")
+        parseLiteralString: strings.slotValue("parseLiteralString")
+        numbers: NumericParser.create(hexDigit)
+        decimalDigit: numbers.slotValue("decimalDigit")
+        radixDigit: numbers.slotValue("radixDigit")
+        integerFromToken: numbers.slotValue("integerFromToken")
+        powerOfTen: numbers.slotValue("powerOfTen")
+        floatFromToken: numbers.slotValue("floatFromToken")
+        temporal: TemporalParser.create(decimalDigit, toml11, publicLocalDate, publicLocalTime, publicLocalDateTime, publicOffsetDateTime)
+        twoDigitsAt: temporal.slotValue("twoDigitsAt")
+        fourDigitsAt: temporal.slotValue("fourDigitsAt")
+        timeAt: temporal.slotValue("timeAt")
+        temporalFromToken: temporal.slotValue("temporalFromToken")
+
+        // TOML 1.0 inline tables are single-line, so only spaces and tabs may
+        // separate their tokens; TOML 1.1 also admits newlines and comments.
+        skipInlineTableTrivia: () => {
+            if(toml11) {
+                skipArrayTrivia()
+            }
+            toml11.ifFalse(() => {
+                skipSpaces()
+            })
+        }
+
+        isBareKeyOctet: (octet) => {
+            result: false
+            if(octet >= 48) {
+                if(octet <= 57) { result = true }
+            }
+            if(octet >= 65) {
+                if(octet <= 90) { result = true }
+            }
+            if(octet >= 97) {
+                if(octet <= 122) { result = true }
+            }
+            if(octet == 95) { result = true }
+            if(octet == 45) { result = true }
+            result
+        }
+
+        parseKeyPart: () => {
+            skipSpaces()
+            first: peek()
+            result: null
+
+            if(first == 34) {
+                result = parseBasicString(false)
+            }
+            if(first == 39) {
+                result = parseLiteralString(false)
+            }
+
+            (first == 34).ifFalse(() => {
+                (first == 39).ifFalse(() => {
+                    buffer: Encoding.UTF8.encode("")
+
+                    gathering: true
+                    while(gathering && (index < length)) {
+                        octet: source[index]
+                        bare: isBareKeyOctet(octet)
+                        if(bare) {
+                            buffer.add(octet)
+                            index = index + 1
+                        }
+                        bare.ifFalse(() => {
+                            gathering = false
+                        })
+                    }
+                    if(buffer.size() == 0) {
+                        fail()
+                    }
+                    result = Encoding.UTF8.decode(buffer)
+                })
+            })
+
+            result
+        }
+
+        parseKeyPath: () => {
+            chunks: Map()
+            maxLevel: -1
+
+            appendPart: (part) => {
+                chunk: Array(part)
+                level: 0
+                carrying: true
+
+                while(carrying) {
+                    present: chunks.containsKey(level)
+                    if(present) {
+                        left: chunks[level]
+                        chunks.remove(level)
+                        chunk = Array(...left, ...chunk)
+                        level = level + 1
+                    }
+                    present.ifFalse(() => {
+                        chunks[level] = chunk
+                        if(level > maxLevel) {
+                            maxLevel = level
+                        }
+                        carrying = false
+                    })
+                }
+            }
+
+            appendPart(parseKeyPart())
+            more: true
+
+            while(more) {
+                skipSpaces()
+                hasDot: peek() == 46
+                if(hasDot) {
+                    index = index + 1
+                    appendPart(parseKeyPart())
+                }
+                hasDot.ifFalse(() => {
+                    more = false
+                })
+            }
+
+            parts: Array()
+            level: maxLevel
+            while(level >= 0) {
+                if(chunks.containsKey(level)) {
+                    parts = Array(...parts, ...chunks[level])
+                }
+                level = level - 1
+            }
+            parts
+        }
+
+        // Only a table created by an earlier dotted key of the same inline
+        // table may be extended; an inline-table value is already complete.
+        putPath: (map, parts, dottedTables, valueNode) => {
+            current: map
+            position: 0
+
+            while(position < parts.size()) {
+                name: parts[position]
+                last: position == parts.size() - 1
+
+                if(last) {
+                    if(current.containsKey(name)) {
+                        fail()
+                    }
+                    current[name] = valueNode
+                    position = parts.size()
+                }
+
+                last.ifFalse(() => {
+                    child: null
+                    if(current.containsKey(name)) {
+                        child = current[name]
+                        (child.kind == "table").ifFalse(() => {
+                            fail()
+                        })
+                        dottedTables.containsKey(child).ifFalse(() => {
+                            fail()
+                        })
+                    }
+                    current.containsKey(name).ifFalse(() => {
+                        child = syntaxNode("table", Map())
+                        current[name] = child
+                        dottedTables[child] = true
+                    })
+                    current = child.value
+                    position = position + 1
+                })
+            }
+        }
+
+        carryFrameChunk: (frame, initialChunk, initialLevel) => {
+            chunk: initialChunk
+            level: initialLevel
+            carrying: true
+            while(carrying) {
+                present: frame.chunks.containsKey(level)
+                if(present) {
+                    left: frame.chunks[level]
+                    frame.chunks.remove(level)
+                    chunk = Array(...left, ...chunk)
+                    level = level + 1
+                }
+                present.ifFalse(() => {
+                    frame.chunks[level] = chunk
+                    if(level > frame.maxLevel) {
+                        frame.maxLevel = level
+                    }
+                    carrying = false
+                })
+            }
+        }
+
+        collectFrameChunks: (frame, initialLevel, initialResult) => {
+            level: initialLevel
+            result: initialResult
+            while(level >= 0) {
+                if(frame.chunks.containsKey(level)) {
+                    result = Array(...result, ...frame.chunks[level])
+                }
+                level = level - 1
+            }
+            result
+        }
+
+        isBareTerminator: (octet) => {
+            result: octet < 0
+            if(isSpace(octet)) { result = true }
+            if(isNewlineStart(octet)) { result = true }
+            if(octet == 35) { result = true }
+            if(octet == 44) { result = true }
+            if(octet == 93) { result = true }
+            if(octet == 125) { result = true }
+            result
+        }
+
+        parseBareValue: () => {
+            token: Encoding.UTF8.encode("")
+
+            gathering: true
+            while(gathering) {
+                octet: peek()
+                terminator: octet < 0
+                if(isNewlineStart(octet)) { terminator = true }
+                if(octet == 35) { terminator = true }
+                if(octet == 44) { terminator = true }
+                if(octet == 93) { terminator = true }
+                if(octet == 125) { terminator = true }
+
+                if(terminator) {
+                    gathering = false
+                }
+                terminator.ifFalse(() => {
+                    invalidControl: octet < 32
+                    if(octet == 9) {
+                        invalidControl = false
+                    }
+                    if(octet == 127) {
+                        invalidControl = true
+                    }
+                    if(invalidControl) {
+                        fail()
+                    }
+                    token.add(take())
+                })
+            }
+            if(token.size() == 0) {
+                fail()
+            }
+
+            right: token.size()
+            trimming: true
+            while(trimming && (right > 0)) {
+                whitespace: isSpace(token[right - 1])
+                if(whitespace) {
+                    right = right - 1
+                }
+                whitespace.ifFalse(() => {
+                    trimming = false
+                })
+            }
+
+            trimmed: Encoding.UTF8.encode("")
+            copyIndex: 0
+            while(copyIndex < right) {
+                trimmed.add(token[copyIndex])
+                copyIndex = copyIndex + 1
+            }
+
+            if(trimmed.size() == 0) {
+                fail()
+            }
+
+            decoded: Encoding.UTF8.decode(trimmed)
+            result: null
+
+            if(decoded == "true") {
+                result = syntaxNode("boolean", true)
+            }
+            if(decoded == "false") {
+                result = syntaxNode("boolean", false)
+            }
+
+            if(result === null) {
+                integer: integerFromToken(trimmed)
+                if(integer.valid) {
+                    result = syntaxNode("integer", integer.value)
+                }
+            }
+
+            if(result === null) {
+                temporal: temporalFromToken(trimmed)
+                if(temporal.valid) {
+                    result = temporal.value
+                }
+            }
+
+            if(result === null) {
+                floating: floatFromToken(trimmed)
+                if(floating.valid) {
+                    result = syntaxNode("float", floating.value)
+                }
+            }
+
+            if(result === null) {
+                fail()
+            }
+
+            result
+        }
+
+        topFrame: null
+        depth: 0
+        rootValue: null
+        rootDone: false
+
+        pushArrayFrame: () => {
+            frame: {
+                parent: topFrame
+                kind: "array"
+                phase: "valueOrEnd"
+                chunks: Map()
+                maxLevel: -1
+            }
+            topFrame = frame
+            depth = depth + 1
+        }
+
+        pushInlineTableFrame: () => {
+            frame: {
+                parent: topFrame
+                kind: "inlineTable"
+                phase: "keyOrEnd"
+                entries: Map()
+                dottedTables: IdentityMap()
+                pendingPath: null
+            }
+            topFrame = frame
+            depth = depth + 1
+        }
+
+        appendArrayValue: (frame, valueNode) => {
+            carryFrameChunk(frame, Array(valueNode), 0)
+            frame.phase = "commaOrEnd"
+        }
+
+        acceptValue: (valueNode) => {
+            if(depth == 0) {
+                if(rootDone) { fail() }
+                rootValue = valueNode
+                rootDone = true
+            }
+
+            if(depth > 0) {
+                frame: topFrame
+
+                if(frame.kind == "array") {
+                    (frame.phase == "awaitValue").ifFalse(() => { fail() })
+                    appendArrayValue(frame, valueNode)
+                }
+
+                if(frame.kind == "inlineTable") {
+                    (frame.phase == "awaitValue").ifFalse(() => { fail() })
+                    putPath(
+                        frame.entries,
+                        frame.pendingPath,
+                        frame.dottedTables,
+                        valueNode
+                    )
+                    frame.pendingPath = null
+                    frame.phase = "commaOrEnd"
+                }
+            }
+        }
+
+        closeArrayFrame: () => {
+            frame: topFrame
+            (frame.kind == "array").ifFalse(() => { fail() })
+            validPhase: frame.phase == "valueOrEnd"
+            if(frame.phase == "commaOrEnd") { validPhase = true }
+            validPhase.ifFalse(() => { fail() })
+
+            materialized: collectFrameChunks(frame, frame.maxLevel, Array())
+            valueNode: syntaxNode("array", materialized)
+            topFrame = frame.parent
+            depth = depth - 1
+            acceptValue(valueNode)
+        }
+
+        closeInlineTableFrame: () => {
+            frame: topFrame
+            (frame.kind == "inlineTable").ifFalse(() => { fail() })
+            validPhase: frame.phase == "keyOrEnd"
+            if(frame.phase == "commaOrEnd") { validPhase = true }
+            validPhase.ifFalse(() => { fail() })
+
+            valueNode: syntaxNode("table", frame.entries)
+            topFrame = frame.parent
+            depth = depth - 1
+            acceptValue(valueNode)
+        }
+
+        startValue: () => {
+            skipSpaces()
+            first: peek()
+            if(first < 0) { fail() }
+            handled: false
+
+            if(first == 91) {
+                index = index + 1
+                pushArrayFrame()
+                handled = true
+            }
+            if(first == 123) {
+                index = index + 1
+                pushInlineTableFrame()
+                handled = true
+            }
+
+            handled.ifFalse(() => {
+                result: null
+                if(first == 34) {
+                    multiline: false
+                    if(index + 2 < length) {
+                        if((source[index + 1] == 34) &&
+                            (source[index + 2] == 34)) {
+                            multiline = true
+                        }
+                    }
+                    result = syntaxNode("string", parseBasicString(multiline))
+                }
+                if(first == 39) {
+                    multiline: false
+                    if(index + 2 < length) {
+                        if((source[index + 1] == 39) &&
+                            (source[index + 2] == 39)) {
+                            multiline = true
+                        }
+                    }
+                    result = syntaxNode("string", parseLiteralString(multiline))
+                }
+                if(result === null) {
+                    result = parseBareValue()
+                }
+                acceptValue(result)
+            })
+        }
+
+        running: true
+        while(running) {
+            wasTopLevel: depth == 0
+
+            if(wasTopLevel) {
+                if(rootDone) {
+                    running = false
+                }
+                rootDone.ifFalse(() => {
+                    startValue()
+                })
+            }
+
+            wasTopLevel.ifFalse(() => {
+                frame: topFrame
+                phase: frame.phase
+
+                if(frame.kind == "array") {
+                    skipArrayTrivia()
+
+                    if(phase == "valueOrEnd") {
+                        closing: peek() == 93
+                        if(closing) {
+                            index = index + 1
+                            closeArrayFrame()
+                        }
+                        closing.ifFalse(() => {
+                            frame.phase = "awaitValue"
+                            startValue()
+                        })
+                    }
+
+                    if(phase == "value") {
+                        frame.phase = "awaitValue"
+                        startValue()
+                    }
+
+                    if(phase == "commaOrEnd") {
+                        comma: peek() == 44
+                        closing: peek() == 93
+                        if(comma) {
+                            index = index + 1
+                            skipArrayTrivia()
+                            trailing: peek() == 93
+                            if(trailing) {
+                                index = index + 1
+                                closeArrayFrame()
+                            }
+                            trailing.ifFalse(() => {
+                                frame.phase = "value"
+                            })
+                        }
+                        comma.ifFalse(() => {
+                            if(closing) {
+                                index = index + 1
+                                closeArrayFrame()
+                            }
+                            closing.ifFalse(() => { fail() })
+                        })
+                    }
+                }
+
+                if(frame.kind == "inlineTable") {
+                    skipInlineTableTrivia()
+
+                    if(phase == "keyOrEnd") {
+                        closing: peek() == 125
+                        if(closing) {
+                            index = index + 1
+                            closeInlineTableFrame()
+                        }
+                        closing.ifFalse(() => {
+                            frame.pendingPath = parseKeyPath()
+                            skipSpaces()
+                            (take() == 61).ifFalse(() => { fail() })
+                            skipSpaces()
+                            frame.phase = "value"
+                        })
+                    }
+
+                    if(phase == "value") {
+                        frame.phase = "awaitValue"
+                        startValue()
+                    }
+
+                    if(phase == "commaOrEnd") {
+                        comma: peek() == 44
+                        closing: peek() == 125
+                        if(comma) {
+                            index = index + 1
+                            skipInlineTableTrivia()
+                            trailing: peek() == 125
+                            if(trailing) {
+                                // TOML 1.0 forbids a trailing comma in an inline table.
+                                toml11.ifFalse(() => { fail() })
+                                index = index + 1
+                                closeInlineTableFrame()
+                            }
+                            trailing.ifFalse(() => {
+                                frame.phase = "keyOrEnd"
+                            })
+                        }
+                        comma.ifFalse(() => {
+                            if(closing) {
+                                index = index + 1
+                                closeInlineTableFrame()
+                            }
+                            closing.ifFalse(() => { fail() })
+                        })
+                    }
+                }
+            })
+        }
+
+        result: rootValue
+        skipSpaces()
+        if(peek() == 35) {
+            index = index + 1
+            skipComment()
+        }
+        if(index < length) {
+            if(isNewlineStart(peek())) { consumeNewline() }
+        }
+        skipSpaces()
+        (index == length).ifFalse(() => { fail() })
+        result
+
+    }
+
+    {
+        syntaxValue: syntaxValue
+    }
+}

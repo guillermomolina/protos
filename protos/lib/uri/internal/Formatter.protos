@@ -1,0 +1,145 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Private URI formatter implementation.
+
+create: (parse) => {
+    format: (reference) => {
+        // These ordinary lookups intentionally define the structural input boundary:
+        // a caller may construct compatible data; no Uri prototype/class is required.
+        schemeValue: reference.scheme
+        userInfoValue: reference.userInfo
+        hostValue: reference.host
+        portValue: reference.port
+        pathValue: reference.path
+        queryValue: reference.query
+        fragmentValue: reference.fragment
+
+        output: Encoding.UTF8.encode("")
+
+        appendText: (value) => {
+            // Encoding.UTF8 has the strict semantic String argument domain required
+            // here and produces fresh Bytes without adding authority.
+            encoded: Encoding.UTF8.encode(value)
+            index: 0
+            while(index < encoded.size()) {
+                output.add(encoded[index])
+                index = index + 1
+            }
+        }
+
+        validateOptionalText: (value) => {
+            (value === null).ifFalse(() => {
+                String.recognizes(value).ifFalse(() => {
+                    Error().signal()
+                })
+            })
+        }
+
+        validateOptionalText(schemeValue)
+        validateOptionalText(userInfoValue)
+        validateOptionalText(hostValue)
+        validateOptionalText(portValue)
+        String.recognizes(pathValue).ifFalse(() => {
+            Error().signal()
+        })
+        validateOptionalText(queryValue)
+        validateOptionalText(fragmentValue)
+
+        // Authority presence is represented only by host presence. There is no
+        // second raw-authority source of truth.
+        if(hostValue === null) {
+            if(userInfoValue !== null) {
+                fail()
+            }
+            if(portValue !== null) {
+                fail()
+            }
+        }
+
+        if(schemeValue !== null) {
+            appendText(schemeValue)
+            output.add(58)
+        }
+
+        if(hostValue !== null) {
+            output.add(47)
+            output.add(47)
+
+            if(userInfoValue !== null) {
+                appendText(userInfoValue)
+                output.add(64)
+            }
+
+            appendText(hostValue)
+
+            if(portValue !== null) {
+                output.add(58)
+                appendText(portValue)
+            }
+        }
+
+        appendText(pathValue)
+
+        if(queryValue !== null) {
+            output.add(63)
+            appendText(queryValue)
+        }
+
+        if(fragmentValue !== null) {
+            output.add(35)
+            appendText(fragmentValue)
+        }
+
+        candidate: Encoding.UTF8.decode(output)
+
+        // Keep one RFC-3986 syntax authority: parse the exact serialized candidate
+        // and require lossless recovery of every supplied component. This catches
+        // malformed component spelling, delimiter ambiguity, raw non-ASCII input,
+        // invalid scheme/path relations, malformed percent escapes and invalid
+        // authority syntax without maintaining a second grammar inside format().
+        parsed: parse(candidate)
+
+        sameOptionalText: (actual, expected) => {
+            same: false
+
+            if(expected === null) {
+                same = actual === null
+            }
+
+            if(expected !== null) {
+                if(actual !== null) {
+                    same = actual == expected
+                }
+            }
+
+            same
+        }
+
+        sameOptionalText(parsed.scheme, schemeValue).ifFalse(() => { fail() })
+        sameOptionalText(parsed.userInfo, userInfoValue).ifFalse(() => { fail() })
+        sameOptionalText(parsed.host, hostValue).ifFalse(() => { fail() })
+        sameOptionalText(parsed.port, portValue).ifFalse(() => { fail() })
+        (parsed.path == pathValue).ifFalse(() => { fail() })
+        sameOptionalText(parsed.query, queryValue).ifFalse(() => { fail() })
+        sameOptionalText(parsed.fragment, fragmentValue).ifFalse(() => { fail() })
+
+        candidate
+    }
+
+    {
+        format: format
+    }
+}

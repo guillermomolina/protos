@@ -73,36 +73,24 @@ requireString: (value) => {
 operation: (library, name, ...arguments) => {
     Interop.invoke(Interop.readMember(library, name), ...arguments)
 }
-metadata: (descriptor) => {
-    descriptors.containsKey(descriptor).ifFalse(() => fail())
-    descriptors.at(descriptor)
-}
-// Every descriptor is a fresh frozen ordinary object associated by exact
-// identity with one frozen metadata record. `layoutKind` is null for the R1
-// library-bound declarations; `size` and `align` are null unless the
-// descriptor is an ordinary storage layout. `parts` holds kind-specific
-// frozen metadata.
-register: (kind, layoutKind, size, align, library, native, target, parts) => {
-    descriptor: {}
-    descriptor.freeze()
-    record: {
-        kind: kind
-        layoutKind: layoutKind
-        size: size
-        align: align
-        library: library
-        native: native
-        target: target
-        parts: parts
-    }
-    record.freeze()
-    descriptors[descriptor] = record
-    descriptor
-}
-make: (kind, library, native, target) => {
-    register(kind, null, null, null, library, native, target, null)
-}
-scalar: (name, size, align) => register(name, "scalar", size, align, null, null, null, null)
+DescriptorsSource: import("./internal/Descriptors.protos")
+Descriptors: DescriptorsSource.create(descriptors, fail)
+
+metadata: Descriptors.slotValue("metadata")
+register: Descriptors.slotValue("register")
+make: Descriptors.slotValue("make")
+scalar: Descriptors.slotValue("scalar")
+isRegistered: Descriptors.slotValue("isRegistered")
+isStorageLayout: Descriptors.slotValue("isStorageLayout")
+storage: Descriptors.slotValue("storage")
+isR1OrScalar: Descriptors.slotValue("isR1OrScalar")
+isTypedPointer: Descriptors.slotValue("isTypedPointer")
+isPointerResult: Descriptors.slotValue("isPointerResult")
+isGroup: Descriptors.slotValue("isGroup")
+isReturnDeclaration: Descriptors.slotValue("isReturnDeclaration")
+isParameterDeclaration: Descriptors.slotValue("isParameterDeclaration")
+isOutTarget: Descriptors.slotValue("isOutTarget")
+
 voidDescriptor: scalar("void", null, null)
 /// Immutable void return descriptor; calls without outputs answer null.
 this.void: voidDescriptor
@@ -140,237 +128,53 @@ this.utf8z: scalar("utf8z", null, null)
 maxLayoutSize: 9223372036854775807
 pointerSize: 8
 
-requireArity: (extra) => {
-    (extra.size() == 0).ifFalse(() => fail())
-}
-requirePositive: (value) => {
-    (Integer.recognizes(value) && (value > 0)).ifFalse(() => fail())
-}
-requireNonnegative: (value) => {
-    (Integer.recognizes(value) && (value >= 0)).ifFalse(() => fail())
-}
-// The signed-addressable bound: checked before a value becomes metadata.
-checkedSize: (value) => {
-    requireNonnegative(value)
-    (value <= maxLayoutSize).ifFalse(() => fail())
-    value
-}
-checkedAdd: (left, right) => checkedSize(left + right)
-checkedMultiply: (left, right) => checkedSize(left * right)
-alignUp: (offset, alignment) => {
-    requirePositive(alignment)
-    padding: (alignment - (offset % alignment)) % alignment
-    checkedAdd(offset, padding)
-}
-isRegistered: (value) => descriptors.containsKey(value)
-// A registered descriptor that occupies native storage with a fixed size.
-isStorageLayout: (value) => {
-    if(isRegistered(value) == false) { ^false }
-    record: descriptors.at(value)
-    kind: record.layoutKind
-    if(kind === null) { ^false }
-    if(record.size === null) { ^false }
-    composite: (kind == "struct") || (kind == "union") || (kind == "array")
-    pointer: (kind == "pointer") || (kind == "nullablePointer")
-    (kind == "scalar") || composite || pointer
-}
-storage: (value) => {
-    isStorageLayout(value).ifFalse(() => fail())
-    descriptors.at(value)
-}
-// Binding positions. R1 declarations, scalars, typed pointers and struct or
-// union layouts (by value) are bindable. Fixed arrays are storage only, never
-// a direct parameter, return or out target; fields remain declarative.
-isR1OrScalar: (record) => (record.layoutKind === null) || (record.layoutKind == "scalar")
-isTypedPointer: (record) => (record.layoutKind == "pointer") || (record.layoutKind == "nullablePointer")
-isPointerResult: (record) => isTypedPointer(record) || (record.layoutKind == "borrowedPointer")
-// Exactly a registered struct or union layout: a by-value group.
-isGroup: (record) => (record.layoutKind == "struct") || (record.layoutKind == "union")
-isReturnDeclaration: (record) => {
-    if(isPointerResult(record) || isGroup(record)) { ^true }
-    if(isR1OrScalar(record) == false) { ^false }
-    ((record.kind == "out") || (record.kind == "utf8z")) == false
-}
-isParameterDeclaration: (record) => {
-    if(isTypedPointer(record) || isGroup(record)) { ^true }
-    if(isR1OrScalar(record) == false) { ^false }
-    ((record.kind == "void") || (record.kind == "owned")) == false
-}
-isOutTarget: (record) => {
-    if(isPointerResult(record) || isGroup(record)) { ^true }
-    if(isR1OrScalar(record) == false) { ^false }
-    ((record.kind == "void") || (record.kind == "utf8z") || (record.kind == "out")) == false
-}
+LayoutsSource: import("./internal/Layouts.protos")
+Layouts: LayoutsSource.create(descriptors, fail, isRegistered, isStorageLayout, maxLayoutSize, metadata, pointerSize, register, requireString, storage, voidDescriptor)
+
+requireArity: Layouts.slotValue("requireArity")
+requirePositive: Layouts.slotValue("requirePositive")
+requireNonnegative: Layouts.slotValue("requireNonnegative")
+checkedSize: Layouts.slotValue("checkedSize")
+checkedAdd: Layouts.slotValue("checkedAdd")
+checkedMultiply: Layouts.slotValue("checkedMultiply")
+alignUp: Layouts.slotValue("alignUp")
 
 /// Declare a named member of a struct or union. Any String is a field name.
-this.field: (name: fail(), layout: fail(), ...extra) => {
-    requireArity(extra)
-    requireString(name)
-    storage(layout)
-    parts: {
-        name: name
-        layout: layout
-    }
-    parts.freeze()
-    register("field", "field", null, null, null, null, null, parts)
-}
+this.field: Layouts.slotValue("field")
 
-// Snapshot and admit an ordinary Array of at least one field declaration
-// with pairwise distinct names (semantic String equality).
-admitFields: (fields) => {
-    Array.recognizes(fields).ifFalse(() => fail())
-    snapshot: Array(...fields)
-    (snapshot.size() > 0).ifFalse(() => fail())
-    names: Map()
-    for(declaration in snapshot) {
-        isRegistered(declaration).ifFalse(() => fail())
-        record: descriptors.at(declaration)
-        (record.layoutKind == "field").ifFalse(() => fail())
-        names.containsKey(record.parts.name).ifTrue(() => fail())
-        names[record.parts.name] = true
-    }
-    snapshot
-}
+admitFields: Layouts.slotValue("admitFields")
 
-member: (name, layout, offset) => {
-    entry: {
-        name: name
-        layout: layout
-        offset: offset
-    }
-    entry.freeze()
-    entry
-}
+member: Layouts.slotValue("member")
 
-aggregate: (kind, members, size, align) => {
-    byName: Map()
-    for(entry in members) {
-        byName[entry.name] = entry
-    }
-    members.freeze()
-    byName.freeze()
-    parts: {
-        members: members
-        byName: byName
-    }
-    parts.freeze()
-    register(kind, kind, size, align, null, null, null, parts)
-}
+aggregate: Layouts.slotValue("aggregate")
 
 /// Declare a C struct: source-ordered members with internal and tail padding.
-this.struct: (fields: fail(), ...extra) => {
-    requireArity(extra)
-    declarations: admitFields(fields)
-    members: Array(...declarations)
-    index: 0
-    size: 0
-    align: 1
-    for(declaration in declarations) {
-        parts: descriptors.at(declaration).parts
-        layout: descriptors.at(parts.layout)
-        offset: alignUp(size, layout.align)
-        members[index] = member(parts.name, parts.layout, offset)
-        index = index + 1
-        size = checkedAdd(offset, layout.size)
-        if(layout.align > align) { align = layout.align }
-    }
-    aggregate("struct", members, alignUp(size, align), align)
-}
+this.struct: Layouts.slotValue("struct")
 
 /// Declare a C union: every member at offset zero, no active-member tag.
-this.union: (fields: fail(), ...extra) => {
-    requireArity(extra)
-    declarations: admitFields(fields)
-    members: Array(...declarations)
-    index: 0
-    size: 0
-    align: 1
-    for(declaration in declarations) {
-        parts: descriptors.at(declaration).parts
-        layout: descriptors.at(parts.layout)
-        members[index] = member(parts.name, parts.layout, 0)
-        index = index + 1
-        if(layout.size > size) { size = layout.size }
-        if(layout.align > align) { align = layout.align }
-    }
-    aggregate("union", members, alignUp(size, align), align)
-}
+this.union: Layouts.slotValue("union")
 
 /// Declare a fixed C array of a positive exact count; storage is not allocated.
-this.array: (element: fail(), count: fail(), ...extra) => {
-    requireArity(extra)
-    layout: storage(element)
-    requirePositive(count)
-    // A storage layout size is a multiple of its alignment, so it is the stride.
-    size: checkedMultiply(layout.size, count)
-    parts: {
-        element: element
-        count: count
-        stride: layout.size
-    }
-    parts.freeze()
-    register("array", "array", size, layout.align, null, null, null, parts)
-}
+this.array: Layouts.slotValue("array")
 
 /// Declare a typed C data pointer to a storage layout or to FFI.void.
 /// The declaration is descriptive only: it carries no address.
-this.pointer: (pointee: fail(), ...extra) => {
-    requireArity(extra)
-    (isStorageLayout(pointee) || (pointee === voidDescriptor)).ifFalse(() => fail())
-    parts: { pointee: pointee }
-    parts.freeze()
-    register("pointer", "pointer", pointerSize, pointerSize, null, null, null, parts)
-}
+this.pointer: Layouts.slotValue("pointer")
 
 /// Declare a borrowed result of a plain typed pointer: admitted only as a
 /// return or out target. Each result is valid until the next call not
 /// declared preserving, a release, or the end of the native session.
-this.borrowedPointer: (pointer: fail(), ...extra) => {
-    requireArity(extra)
-    record: metadata(pointer)
-    (record.layoutKind == "pointer").ifFalse(() => fail())
-    register("borrowedPointer", "borrowedPointer",
-        null, null, null, null, pointer, record.parts)
-}
+this.borrowedPointer: Layouts.slotValue("borrowedPointer")
 
 /// Exact native byte size of a storage layout.
-this.sizeOf: (layout: fail(), ...extra) => {
-    requireArity(extra)
-    storage(layout).size
-}
+this.sizeOf: Layouts.slotValue("sizeOf")
 
 /// Exact native alignment of a storage layout.
-this.alignOf: (layout: fail(), ...extra) => {
-    requireArity(extra)
-    storage(layout).align
-}
+this.alignOf: Layouts.slotValue("alignOf")
 
 /// Byte offset reached by an Array path of field names and array indices.
 /// Pointers are never dereferenced; an empty path answers zero.
-this.offsetOf: (layout: fail(), path: fail(), ...extra) => {
-    requireArity(extra)
-    current: storage(layout)
-    Array.recognizes(path).ifFalse(() => fail())
-    selectors: Array(...path)
-    offset: 0
-    for(selector in selectors) {
-        kind: current.layoutKind
-        if((kind == "struct") || (kind == "union")) {
-            requireString(selector)
-            current.parts.byName.containsKey(selector).ifFalse(() => fail())
-            entry: current.parts.byName.at(selector)
-            offset = checkedAdd(offset, entry.offset)
-            current = descriptors.at(entry.layout)
-        } else {
-            (kind == "array").ifFalse(() => fail())
-            requireNonnegative(selector)
-            (selector < current.parts.count).ifFalse(() => fail())
-            offset = checkedAdd(offset, checkedMultiply(selector, current.parts.stride))
-            current = descriptors.at(current.parts.element)
-        }
-    }
-    offset
-}
+this.offsetOf: Layouts.slotValue("offsetOf")
 
 // The session context, acquired on the first operation that needs the
 // provider. It verifies the platform but opens no library.
@@ -385,214 +189,46 @@ providerContext: () => {
 // first use through an authorized library or the session context and reused
 // by every library of this session and by native regions. Distinct pointee
 // layouts never share a descriptor.
-pointerType: (library, pointee) => {
-    if(pointerTypes.containsKey(pointee)) { ^pointerTypes.at(pointee) }
-    native: operation(library, "pointerType", pointee === voidDescriptor)
-    pointerTypes[pointee] = native
-    native
-}
+NativeTypesSource: import("./internal/NativeTypes.protos")
+NativeTypes: NativeTypesSource.create(Interop, fail, isGroup, layouts, metadata, operation, pointerTypes, providerContext, storage, storages, voidDescriptor)
 
-// Provider physical metadata of one storage layout, composed incrementally
-// from the sizes, alignments, member names, offsets, counts and strides this
-// module computed. The provider validates it; it never computes a layout.
-physical: (layout) => {
-    if(storages.containsKey(layout)) { ^storages.at(layout) }
-    record: storage(layout)
-    native: providerContext()
-    identity: pointerType(native, layout)
-    kind: record.layoutKind
-    composed: null
-    if(kind == "scalar") {
-        composed = operation(native, "scalarStorage", Interop.readMember(native, record.kind),
-            record.size, record.align, identity)
-    }
-    if(kind == "pointer") {
-        composed = operation(native, "pointerStorage",
-            pointerType(native, record.parts.pointee), identity)
-    }
-    if(kind == "nullablePointer") {
-        composed = operation(native, "pointerStorage",
-            operation(native, "nullablePointerType", pointerType(native, record.parts.pointee)),
-            identity)
-    }
-    if((kind == "struct") || (kind == "union")) {
-        composed = operation(native, "aggregateStorage", kind, record.size, record.align,
-            identity)
-        for(entry in record.parts.members) {
-            composed = operation(native, "memberStorage", composed, entry.name, entry.offset,
-                physical(entry.layout))
-        }
-    }
-    if(kind == "array") {
-        composed = operation(native, "arrayStorage", physical(record.parts.element),
-            record.parts.count, record.parts.stride, identity)
-    }
-    storages[layout] = composed
-    layouts[composed] = layout
-    composed
-}
+pointerType: NativeTypes.slotValue("pointerType")
 
-nativeType: (library, descriptor) => {
-    record: metadata(descriptor)
-    if(record.library !== null) {
-        (record.library === library).ifFalse(() => fail())
-        ^record.native
-    }
-    if(record.kind == "out") {
-        ^operation(library, "out", nativeType(library, record.target))
-    }
-    if(record.kind == "pointer") {
-        ^pointerType(library, record.parts.pointee)
-    }
-    if(record.kind == "nullablePointer") {
-        ^operation(library, "nullablePointerType", nativeType(library, record.target))
-    }
-    if(record.kind == "borrowedPointer") {
-        ^operation(library, "borrowedPointerType", nativeType(library, record.target))
-    }
-    // A by-value group is its session's physical storage metadata, so an out of
-    // a group composes through the out case above.
-    if(isGroup(record)) {
-        ^physical(descriptor)
-    }
-    Interop.readMember(library, record.kind)
-}
+physical: NativeTypes.slotValue("physical")
+
+nativeType: NativeTypes.slotValue("nativeType")
+
+BindingsSource: import("./internal/Bindings.protos")
+Bindings: BindingsSource.create(Arrays, Interop, fail, isGroup, isOutTarget, isParameterDeclaration, isReturnDeclaration, make, metadata, nativeType, operation, owners, pointerType, providerContext, register, requireArity, requireString, voidDescriptor, () => nativeContext)
 
 /// Declare a logical opaque reference type in the supplied authorized library.
-this.opaque: (library, nativeTypeName, ...extra) => {
-    (extra.size() == 0).ifFalse(() => fail())
-    requireString(nativeTypeName)
-    native: operation(library, "opaque", nativeTypeName)
-    make("opaque", library, native, null)
-}
+this.opaque: Bindings.slotValue("opaque")
+
+AssociationsSource: import("./internal/Associations.protos")
+Associations: AssociationsSource.create(associations, fail, isOrdinaryObject, requireArity, storage)
 
 /// Associate an exact ordinary prototype with an exact storage layout and
 /// answer the prototype. Repeating the same association is idempotent; a
 /// different layout for an already associated prototype is an Error. The
 /// prototype is neither mutated nor invoked.
-this.prototype: (layout: fail(), ordinaryPrototype: fail(), ...extra) => {
-    requireArity(extra)
-    storage(layout)
-    (isOrdinaryObject(ordinaryPrototype) === true).ifFalse(() => fail())
-    if(associations.containsKey(ordinaryPrototype)) {
-        (associations.at(ordinaryPrototype) === layout).ifFalse(() => fail())
-        ^ordinaryPrototype
-    }
-    associations[ordinaryPrototype] = layout
-    ordinaryPrototype
-}
+this.prototype: Associations.slotValue("prototype")
 
 /// The exact layout associated with this exact prototype; no delegation lookup.
-this.layoutOf: (prototype: fail(), ...extra) => {
-    requireArity(extra)
-    associations.containsKey(prototype).ifFalse(() => fail())
-    associations.at(prototype)
-}
+this.layoutOf: Associations.slotValue("layoutOf")
 
 /// Admit null in addition to a plain opaque descriptor or typed pointer.
-this.nullable: (opaqueDescriptor, ...extra) => {
-    (extra.size() == 0).ifFalse(() => fail())
-    record: metadata(opaqueDescriptor)
-    if(record.layoutKind == "pointer") {
-        // Nullability restricts later value admission; storage is unchanged.
-        ^register("nullablePointer", "nullablePointer", record.size, record.align, null, null,
-            opaqueDescriptor, record.parts)
-    }
-    (record.kind == "opaque").ifFalse(() => fail())
-    native: operation(record.library, "nullable", record.native)
-    make("nullable", record.library, native, opaqueDescriptor)
-}
+this.nullable: Bindings.slotValue("nullable")
 
 /// Declare result custody with a destructor returning void or i32.
 /// This declaration resolves the destructor; it does not acquire a resource.
-this.owned: (opaqueDescriptor, releaseSymbol, releaseReturnDescriptor, ...extra) => {
-    (extra.size() == 0).ifFalse(() => fail())
-    record: metadata(opaqueDescriptor)
-    returns: metadata(releaseReturnDescriptor)
-    (record.kind == "opaque").ifFalse(() => fail())
-    ((returns.kind == "void") || (returns.kind == "i32")).ifFalse(() => fail())
-    requireString(releaseSymbol)
-    native: operation(record.library, "owned", record.native, releaseSymbol,
-        nativeType(record.library, releaseReturnDescriptor))
-    make("owned", record.library, native, opaqueDescriptor)
-}
+this.owned: Bindings.slotValue("owned")
 
 /// Declare a zero-initialized output position, consuming no call argument.
-this.out: (descriptor, ...extra) => {
-    (extra.size() == 0).ifFalse(() => fail())
-    record: metadata(descriptor)
-    isOutTarget(record).ifFalse(() => fail())
-    make("out", null, null, descriptor)
-}
+this.out: Bindings.slotValue("out")
 
-// Dispatch metadata only. Provider custody predates publication, including
-// results never published because a later native-result conversion fails.
-// An owned C handle is released through its library's destructor; a group
-// result is an allocation root released by the session context, exactly as
-// one answered by FFI.allocate, and never by a C destructor.
-publish: (library, descriptor, value) => {
-    record: metadata(descriptor)
-    if((record.kind == "owned") && (value !== null)) {
-        owners[value] = library
-    }
-    if(isGroup(record)) {
-        owners[value] = nativeContext
-    }
-    value
-}
+publish: Bindings.slotValue("publish")
 
-// Shared by bind and bindPreserving: one declaration path, one Closure shape.
-declareBinding: (library, symbol, returnDescriptor, argumentDescriptors, preserving) => {
-    requireString(symbol)
-    Array.recognizes(argumentDescriptors).ifFalse(() => fail())
-    parameters: Array(...argumentDescriptors)
-    isReturnDeclaration(metadata(returnDescriptor)).ifFalse(() => fail())
-    // Validate the entire public declaration before composing provider values.
-    // The result positions are the native return followed by every out.
-    positions: 1
-    for(parameter in parameters) {
-        record: metadata(parameter)
-        isParameterDeclaration(record).ifFalse(() => fail())
-        if(record.kind == "out") { positions = positions + 1 }
-    }
-    signature: operation(library, "signature", nativeType(library, returnDescriptor))
-    // Filled in place, then cut to the exact length: linear in the parameters.
-    staged: Array(returnDescriptor, ...parameters)
-    position: 1
-    for(parameter in parameters) {
-        signature = operation(library, "param", signature, nativeType(library, parameter))
-        record: metadata(parameter)
-        if(record.kind == "out") {
-            staged[position] = record.target
-            position = position + 1
-        }
-    }
-    outputs: Arrays.take(staged, positions)
-    if(preserving) {
-        signature = operation(library, "preserving", signature)
-    }
-    parameters.freeze()
-    outputs.freeze()
-    binding: operation(library, "bind", symbol, signature)
-    (...arguments) => {
-        // Forward the exact vector; I085 admission owns arity, scalar ranges,
-        // resource type/session/generation/liveness and UTF-8 checks.
-        result: Interop.invoke(binding, ...arguments)
-        answer: null
-        if(positions == 1) {
-            answer = publish(library, returnDescriptor, result)
-        }
-        if(positions > 1) {
-            answer = Array(...outputs)
-            index: 0
-            for(descriptor in outputs) {
-                answer[index] = publish(library, descriptor, result[index])
-                index = index + 1
-            }
-        }
-        answer
-    }
-}
+declareBinding: Bindings.slotValue("declareBinding")
 
 /// Bind a trusted ABI declaration and answer a fresh ordinary Closure.
 /// Parameters are snapshotted. Results with outs are fresh ordinary Arrays
@@ -600,34 +236,18 @@ declareBinding: (library, symbol, returnDescriptor, argumentDescriptors, preserv
 /// A struct or union parameter takes a live region of that exact layout,
 /// copied for the call; a struct or union return or out answers a fresh
 /// independently owned region, released with FFI.release.
-this.bind: (library, symbol, returnDescriptor, argumentDescriptors, ...extra) => {
-    requireArity(extra)
-    declareBinding(library, symbol, returnDescriptor, argumentDescriptors, false)
-}
+this.bind: Bindings.slotValue("bind")
 
 /// Like bind, with the trusted declaration that the C function leaves earlier
 /// borrowed native regions valid; such calls do not revoke them.
-this.bindPreserving: (library: fail(), symbol: fail(), returnDescriptor: fail(),
-        argumentDescriptors: fail(), ...extra) => {
-    requireArity(extra)
-    declareBinding(library, symbol, returnDescriptor, argumentDescriptors, true)
-}
+this.bindPreserving: Bindings.slotValue("bindPreserving")
 
-// Shared by release and the temporary roots of writeFields: one custody path.
-releaseOwned: (ownedHandle) => {
-    owners.containsKey(ownedHandle).ifFalse(() => fail())
-    library: owners.at(ownedHandle)
-    owners.remove(ownedHandle)
-    operation(library, "release", ownedHandle)
-}
+releaseOwned: Bindings.slotValue("releaseOwned")
 /// Retire an owned handle before attempting its destructor, without retries.
 /// Answers the exact native destructor result, including an error status.
 /// An allocated native region root is retired, revoking every view, slice
 /// and pointer derived from it, and its storage freed; that answers null.
-this.release: (ownedHandle, ...extra) => {
-    (extra.size() == 0).ifFalse(() => fail())
-    releaseOwned(ownedHandle)
-}
+this.release: Bindings.slotValue("release")
 
 /// Answer a pointer capability without an Integer address. For a live owned
 /// C handle of this module: a pass-only void pointer that retains the handle
@@ -635,78 +255,37 @@ this.release: (ownedHandle, ...extra) => {
 /// region or view: a pointer to its exact layout (void for a byte slice)
 /// with its known extent, its permission and its provenance, and no
 /// destructor authority.
-this.addressOf: (value: fail(), ...extra) => {
-    requireArity(extra)
-    if(owners.containsKey(value)) {
-        owner: owners.at(value)
-        if((owner === nativeContext) == false) {
-            ^operation(owner, "addressOf", value, pointerType(owner, voidDescriptor))
-        }
-    }
-    native: providerContext()
-    operation(native, "regionAddress", value, pointerType(native, voidDescriptor))
-}
+this.addressOf: Bindings.slotValue("addressOf")
 
 // ---- native memory (RootActor provider session; no C library is acquired)
 
 // Exact C spellings of the LP64 profile -> the existing descriptor singletons.
-cTypes: Map()
-cTypes["int"] = i32Descriptor
-cTypes["long"] = i64Descriptor
-cTypes["long long"] = i64Descriptor
-cTypes["size_t"] = sizeTDescriptor
-cTypes["double"] = f64Descriptor
-cTypes.freeze()
+cTypes: DescriptorsSource.aliases(i32Descriptor, i64Descriptor, sizeTDescriptor, f64Descriptor)
+
+MemorySource: import("./internal/Memory.protos")
+Memory: MemorySource.create(cTypes, checkedAdd, checkedSize, fail, nativeContextFacility, operation, owners, physical, providerContext, requireArity, requirePositive, requireString, storage)
 
 /// The exact existing descriptor of a supported C type spelling: "int",
 /// "long", "long long", "size_t" or "double". Any other String is an Error.
 /// The native platform is verified; no library is acquired or called.
-this.cType: (name: fail(), ...extra) => {
-    requireArity(extra)
-    requireString(name)
-    cTypes.containsKey(name).ifFalse(() => fail())
-    // Context acquisition verifies the native platform once per session.
-    providerContext()
-    cTypes.at(name)
-}
+this.cType: Memory.slotValue("cType")
 
-// One allocation root of the session's existing custody, released by FFI.release.
-allocateRoot: (layout) => {
-    storage(layout)
-    native: providerContext()
-    region: operation(native, "allocate", physical(layout))
-    owners[region] = native
-    region
-}
+allocateRoot: Memory.slotValue("allocateRoot")
 
 /// Allocate zero-initialized native storage of exactly a storage layout's
 /// size and alignment, independently owned until FFI.release. Answers a
 /// typed native region indexed by field name or element position.
-this.allocate: (layout: fail(), ...extra) => {
-    requireArity(extra)
-    allocateRoot(layout)
-}
+this.allocate: Memory.slotValue("allocate")
 
 /// A non-owning byte view (indexed as u8) of byteLength bytes starting at
 /// byteOffset of a live region; nothing is copied and nothing is extended.
 /// An empty view (byteLength 0) is admitted and has no valid index.
-this.slice: (region: fail(), byteOffset: fail(), byteLength: fail(), ...extra) => {
-    requireArity(extra)
-    checkedSize(byteOffset)
-    checkedSize(byteLength)
-    checkedAdd(byteOffset, byteLength)
-    operation(providerContext(), "slice", region, byteOffset, byteLength)
-}
+this.slice: Memory.slotValue("slice")
 
 /// A borrowed typed region of a storage layout over a live pointer whose
 /// known extent covers it, natively aligned, whose pointee is that exact
 /// layout or void. A pointer of unknown extent is never viewed.
-this.view: (pointer: fail(), layout: fail(), ...extra) => {
-    requireArity(extra)
-    storage(layout)
-    native: providerContext()
-    operation(native, "view", pointer, physical(layout))
-}
+this.view: Memory.slotValue("view")
 
 /// A bounded pointer for byteLength bytes at pointer, with access "read" or
 /// "readWrite", anchored by: a live allocation root containing the whole
@@ -714,298 +293,56 @@ this.view: (pointer: fail(), layout: fail(), ...extra) => {
 /// is borrowed, or an authorized library facade for its static storage.
 /// Assertions over C storage are trusted, not proven; none widens a known
 /// extent, upgrades a read-only pointer or revives an expired one.
-this.assumeExtent: (pointer: fail(), byteLength: fail(), anchor: fail(), access: fail(),
-        ...extra) => {
-    requireArity(extra)
-    requirePositive(byteLength)
-    checkedSize(byteLength)
-    requireString(access)
-    ((access == "read") || (access == "readWrite")).ifFalse(() => fail())
-    if((anchor === pointer) || owners.containsKey(anchor)) {
-        native: providerContext()
-        (anchor === native).ifTrue(() => fail())
-        ^operation(native, "assumeExtent", pointer, byteLength, anchor, access)
-    }
-    // Library-static storage: only an attached native library facade of the
-    // pointer's own session is recognized, before any foreign member is read.
-    (nativeContextFacility.isLibraryAnchor(pointer, anchor) === true).ifFalse(() => fail())
-    operation(anchor, "assumeStaticExtent", pointer, byteLength, access)
-}
+this.assumeExtent: Memory.slotValue("assumeExtent")
 
 // ---- explicit aggregate projection to and from ordinary Maps and Arrays
+
+ProjectionPlanSource: import("./internal/ProjectionPlan.protos")
+ProjectionPlan: ProjectionPlanSource.create(Arrays, descriptors, fail, isGroup, isRegistered, layouts, operation, providerContext, register, requireArity, requireNonnegative, requireString, storage)
 
 /// Declare the explicit member selection of the union reached by an Array
 /// path of member names (Strings) and array indices (non-negative Integers);
 /// the empty path names a root union. The path is copied and frozen. The
 /// declaration is checked against a concrete layout only when it is used; it
 /// is never an ABI descriptor and acquires no provider.
-this.unionArm: (path: fail(), memberName: fail(), ...extra) => {
-    requireArity(extra)
-    Array.recognizes(path).ifFalse(() => fail())
-    components: Array(...path)
-    for(component in components) {
-        if(String.recognizes(component) == false) {
-            requireNonnegative(component)
-        }
-    }
-    requireString(memberName)
-    components.freeze()
-    parts: {
-        path: components
-        member: memberName
-    }
-    parts.freeze()
-    // A kind no storage, binding or out position admits.
-    register("unionArm", "unionArm", null, null, null, null, null, parts)
-}
+this.unionArm: ProjectionPlan.slotValue("unionArm")
 
-// An empty matcher Map recognizes exactly standard Maps without invoking any
-// behavior of the candidate.
-mapMatcher: %{}
-requireMap: (value) => {
-    (mapMatcher.match(value) === true).ifFalse(() => fail())
-}
+requireMap: ProjectionPlan.slotValue("requireMap")
 
-// Path components are Strings or Integers; equal only within the same kind,
-// so "0" and 0, or "a.b" and ("a", "b"), stay distinct.
-samePath: (left, right) => {
-    if((left.size() == right.size()) == false) { ^false }
-    index: 0
-    while(index < left.size()) {
-        if((String.recognizes(left[index]) == String.recognizes(right[index])) == false) {
-            ^false
-        }
-        if((left[index] == right[index]) == false) { ^false }
-        index = index + 1
-    }
-    true
-}
+samePath: ProjectionPlan.slotValue("samePath")
 
-// Snapshot an ordinary Array of unionArm declarations, admitted by exact
-// identity, with pairwise distinct paths. Answers a selection state: the
-// frozen selection metadata and a fresh consumption flag per selection.
-admitArms: (arms) => {
-    Array.recognizes(arms).ifFalse(() => fail())
-    snapshot: Array(...arms)
-    selections: Array(...snapshot)
-    consumed: Array(...snapshot)
-    index: 0
-    for(arm in snapshot) {
-        isRegistered(arm).ifFalse(() => fail())
-        record: descriptors.at(arm)
-        (record.layoutKind == "unionArm").ifFalse(() => fail())
-        for(earlier in Arrays.take(selections, index)) {
-            samePath(earlier.path, record.parts.path).ifTrue(() => fail())
-        }
-        selections[index] = record.parts
-        consumed[index] = false
-        index = index + 1
-    }
-    state: {
-        selections: selections
-        consumed: consumed
-    }
-    state
-}
+admitArms: ProjectionPlan.slotValue("admitArms")
 
-// The member selected for the union reached at `path`, consuming exactly
-// one selection; a missing selection or an unknown member is an Error.
-selectArm: (state, record, path) => {
-    index: 0
-    for(selection in state.selections) {
-        if(samePath(selection.path, path)) {
-            record.parts.byName.containsKey(selection.member).ifFalse(() => fail())
-            state.consumed[index] = true
-            ^record.parts.byName.at(selection.member)
-        }
-        index = index + 1
-    }
-    fail()
-}
+selectArm: ProjectionPlan.slotValue("selectArm")
 
-// A fresh open Array of exactly `count` (positive) placeholder elements,
-// built by doubling so that its cost stays linear in `count`.
-slots: (count) => {
-    filled: Array(null)
-    while(filled.size() < count) {
-        filled = Arrays.concat(filled, filled)
-    }
-    Arrays.take(filled, count)
-}
+slots: ProjectionPlan.slotValue("slots")
 
-// One selected position: its existing descriptor, its member name or array
-// index, and its selected children (null for a scalar or pointer leaf).
-selectedPosition: (layout, key, children) => {
-    node: {
-        layout: layout
-        key: key
-        children: children
-    }
-    node.freeze()
-    node
-}
+selectedPosition: ProjectionPlan.slotValue("selectedPosition")
 
-// The selected positions under `layout` reached at `path`: every struct
-// member in declaration order, exactly the selected member of a union, and
-// every array element; null for a leaf. Purely Protos metadata: no region
-// is read or written while the plan is built.
-plan: (layout, path, state) => {
-    record: storage(layout)
-    kind: record.layoutKind
-    if(kind == "struct") {
-        nodes: slots(record.parts.members.size())
-        index: 0
-        for(entry in record.parts.members) {
-            nodes[index] = selectedPosition(entry.layout, entry.name,
-                plan(entry.layout, Arrays.append(path, entry.name), state))
-            index = index + 1
-        }
-        ^nodes
-    }
-    if(kind == "union") {
-        entry: selectArm(state, record, path)
-        ^Array(selectedPosition(entry.layout, entry.name,
-            plan(entry.layout, Arrays.append(path, entry.name), state)))
-    }
-    if(kind == "array") {
-        element: record.parts.element
-        nodes: slots(record.parts.count)
-        index: 0
-        while(index < record.parts.count) {
-            nodes[index] = selectedPosition(element, index,
-                plan(element, Arrays.append(path, index), state))
-            index = index + 1
-        }
-        ^nodes
-    }
-    null
-}
+plan: ProjectionPlan.slotValue("plan")
 
-// The complete selection plan of a group layout: every reached union has
-// exactly one selection and every selection is consumed.
-projectionPlan: (layout, arms) => {
-    state: admitArms(arms)
-    nodes: plan(layout, Array(), state)
-    for(used in state.consumed) {
-        (used === true).ifFalse(() => fail())
-    }
-    nodes
-}
+projectionPlan: ProjectionPlan.slotValue("projectionPlan")
 
-// The exact layout of a live struct or union region of this session (writable
-// when required), recovered from the storage the region retains.
-projectionLayout: (region, writable) => {
-    native: providerContext()
-    retained: operation(native, "regionStorage", region, writable)
-    layouts.containsKey(retained).ifFalse(() => fail())
-    layout: layouts.at(retained)
-    isGroup(storage(layout)).ifFalse(() => fail())
-    layout
-}
+projectionLayout: ProjectionPlan.slotValue("projectionLayout")
 
 // A leaf is the existing indexed read of the original region; a nested group
 // is read through the existing non-owning nested view of that region.
-readGroup: (region, layout, nodes) => {
-    values: slots(nodes.size())
-    index: 0
-    for(node in nodes) {
-        value: region[node.key]
-        if((node.children === null) == false) {
-            value = readGroup(value, node.layout, node.children)
-        }
-        values[index] = value
-        index = index + 1
-    }
-    if(storage(layout).layoutKind == "array") { ^values }
-    fields: Map()
-    index = 0
-    for(node in nodes) {
-        fields[node.key] = values[index]
-        index = index + 1
-    }
-    fields
-}
+ProjectionSource: import("./internal/Projection.protos")
+Projection: ProjectionSource.create(allocateRoot, fail, operation, projectionLayout, projectionPlan, providerContext, releaseOwned, requireArity, requireMap, requireString, slots, storage)
+
+readGroup: Projection.slotValue("readGroup")
 
 /// Read a live struct or union region into fresh ordinary containers: a Map
 /// per struct, a Map holding only the selected member per union, an Array per
 /// fixed array. Scalars are copied by value; pointer members stay pointer
 /// capabilities and are not dereferenced. `arms` selects every reached union.
-this.readFields: (region: fail(), arms: fail(), ...extra) => {
-    requireArity(extra)
-    layout: projectionLayout(region, false)
-    readGroup(region, layout, projectionPlan(layout, arms))
-}
+this.readFields: Projection.slotValue("readFields")
 
-// Phase 1: the complete structural admission of `input` against the plan,
-// capturing every value into fresh private Arrays aligned with the plan. Map
-// keys are checked through the ordinary enumeration of the actual entries.
-captureGroup: (layout, nodes, input) => {
-    ordered: null
-    if(storage(layout).layoutKind == "array") {
-        Array.recognizes(input).ifFalse(() => fail())
-        ordered = Array(...input)
-        (ordered.size() == nodes.size()).ifFalse(() => fail())
-    } else {
-        requireMap(input)
-        entries: Map()
-        input.each((key, value) => {
-            requireString(key)
-            entries[key] = value
-        })
-        (entries.size() == nodes.size()).ifFalse(() => fail())
-        ordered = slots(nodes.size())
-        index: 0
-        for(node in nodes) {
-            entries.containsKey(node.key).ifFalse(() => fail())
-            ordered[index] = entries.at(node.key)
-            index = index + 1
-        }
-    }
-    captured: slots(nodes.size())
-    position: 0
-    for(node in nodes) {
-        value: ordered[position]
-        if((node.children === null) == false) {
-            value = captureGroup(node.layout, node.children, value)
-        }
-        captured[position] = value
-        position = position + 1
-    }
-    captured
-}
+captureGroup: Projection.slotValue("captureGroup")
 
-// Phase 3: the existing indexed writes, applied only to the temporary root
-// and its nested views; they own every ABI admission.
-writeGroup: (target, nodes, captured) => {
-    index: 0
-    for(node in nodes) {
-        if(node.children === null) {
-            target[node.key] = captured[index]
-        } else {
-            writeGroup(target[node.key], node.children, captured[index])
-        }
-        index = index + 1
-    }
-}
+writeGroup: Projection.slotValue("writeGroup")
 
-// Phases 2 to 4, shared by writeFields and writeFrom: values already captured
-// are admitted by the indexed writes on a temporary root holding the
-// destination's bytes, then committed by one physical copy. The temporary
-// root is always released; the destination changes only on success.
-commitPrepared: (region, layout, nodes, captured) => {
-    temporary: allocateRoot(layout)
-    (() => {
-        native: providerContext()
-        // Phase 2: the destination's current bytes, uninterpreted.
-        operation(native, "copyRegion", temporary, region)
-        writeGroup(temporary, nodes, captured)
-        // Phase 4: one physical commit of the whole prepared region.
-        operation(native, "copyRegion", region, temporary)
-    }).ensure(() => {
-        releaseOwned(temporary)
-    })
-    region
-}
+commitPrepared: Projection.slotValue("commitPrepared")
 
 /// Write fresh ordinary containers into a live writable struct or union
 /// region and answer the region. `fields` must match the selected shape
@@ -1013,12 +350,7 @@ commitPrepared: (region, layout, nodes, captured) => {
 /// changed: a rejected write leaves every destination byte unchanged. Bytes
 /// outside the written members, padding included, keep their contents. The
 /// write is not atomic with respect to concurrently running C code.
-this.writeFields: (region: fail(), fields: fail(), arms: fail(), ...extra) => {
-    requireArity(extra)
-    layout: projectionLayout(region, true)
-    nodes: projectionPlan(layout, arms)
-    commitPrepared(region, layout, nodes, captureGroup(layout, nodes, fields))
-}
+this.writeFields: Projection.slotValue("writeFields")
 
 // ---- ordinary object snapshots of an exactly associated prototype
 
@@ -1027,30 +359,11 @@ this.writeFields: (region: fail(), fields: fail(), arms: fail(), ...extra) => {
 // (no call, construct or init), and a fresh Array per fixed array. The bound
 // `createSlot` is extracted once, before any field is inserted, so a field
 // named `createSlot` shadows it only for later senders.
-snapshotGroup: (parentPrototype, layout, nodes, values) => {
-    if(storage(layout).layoutKind == "array") {
-        elements: slots(nodes.size())
-        index: 0
-        for(node in nodes) {
-            elements[index] = snapshotValue(node, values[index])
-            index = index + 1
-        }
-        ^elements
-    }
-    requireCanonicalMethod(parentPrototype, "createSlot")
-    answer: parentPrototype {}
-    create: answer.createSlot
-    for(node in nodes) {
-        create(node.key, snapshotValue(node, values.at(node.key)))
-    }
-    answer
-}
-// A nested struct or union is an ordinary object of Object; leaves keep the
-// value of the existing typed read.
-snapshotValue: (node, value) => {
-    if(node.children === null) { ^value }
-    snapshotGroup(Object, node.layout, node.children, value)
-}
+ObjectProjectionSource: import("./internal/ObjectProjection.protos")
+ObjectProjection: ObjectProjectionSource.create(associations, captureGroup, commitPrepared, fail, isOrdinaryObject, projectionLayout, projectionPlan, readGroup, requireArity, requireCanonicalMethod, slots, storage)
+
+snapshotGroup: ObjectProjection.slotValue("snapshotGroup")
+snapshotValue: ObjectProjection.slotValue("snapshotValue")
 
 /// Read a live struct or union region into a fresh open ordinary object whose
 /// immediate parent is `prototype`, exactly associated with the region's
@@ -1058,48 +371,10 @@ snapshotValue: (node, value) => {
 /// structs and unions are ordinary objects of Object and fixed arrays are
 /// Arrays. `arms` selects every reached union. The object owns no native
 /// memory; prototype's call, construct and init are never invoked.
-this.readAs: (prototype: fail(), region: fail(), arms: fail(), ...extra) => {
-    requireArity(extra)
-    (isOrdinaryObject(prototype) === true).ifFalse(() => fail())
-    associations.containsKey(prototype).ifFalse(() => fail())
-    layout: projectionLayout(region, false)
-    (associations.at(prototype) === layout).ifFalse(() => fail())
-    requireCanonicalMethod(prototype, "createSlot")
-    nodes: projectionPlan(layout, arms)
-    snapshotGroup(prototype, layout, nodes, readGroup(region, layout, nodes))
-}
+this.readAs: ObjectProjection.slotValue("readAs")
 
-// The local slots an ordinary object holds for the planned members, captured
-// through its canonical bound `slotValue` into a private Map (an Array per
-// fixed array) of exactly the shape captureGroup admits. A missing local slot
-// is the ordinary Error; delegated slots are never consulted and slots
-// outside the plan are never read.
-captureSlots: (layout, nodes, input) => {
-    if(storage(layout).layoutKind == "array") {
-        Array.recognizes(input).ifFalse(() => fail())
-        ordered: Array(...input)
-        (ordered.size() == nodes.size()).ifFalse(() => fail())
-        elements: slots(nodes.size())
-        index: 0
-        for(node in nodes) {
-            elements[index] = captureSlotValue(node, ordered[index])
-            index = index + 1
-        }
-        ^elements
-    }
-    (isOrdinaryObject(input) === true).ifFalse(() => fail())
-    requireCanonicalMethod(input, "slotValue")
-    read: input.slotValue
-    fields: Map()
-    for(node in nodes) {
-        fields[node.key] = captureSlotValue(node, read(node.key))
-    }
-    fields
-}
-captureSlotValue: (node, value) => {
-    if(node.children === null) { ^value }
-    captureSlots(node.layout, node.children, value)
-}
+captureSlots: ObjectProjection.slotValue("captureSlots")
+captureSlotValue: ObjectProjection.slotValue("captureSlotValue")
 
 /// Write the local slots of an ordinary object into a live writable struct or
 /// union region and answer the region. The object's immediate parent, observed
@@ -1107,16 +382,4 @@ captureSlotValue: (node, value) => {
 /// region's layout; members are read through the canonical `slotValue` as
 /// local slots only. Every value is admitted before the destination changes,
 /// exactly as writeFields admits it.
-this.writeFrom: (region: fail(), value: fail(), arms: fail(), ...extra) => {
-    requireArity(extra)
-    layout: projectionLayout(region, true)
-    (isOrdinaryObject(value) === true).ifFalse(() => fail())
-    requireCanonicalMethod(value, "parent")
-    prototype: value.parent()
-    associations.containsKey(prototype).ifFalse(() => fail())
-    (associations.at(prototype) === layout).ifFalse(() => fail())
-    requireCanonicalMethod(value, "slotValue")
-    nodes: projectionPlan(layout, arms)
-    fields: captureSlots(layout, nodes, value)
-    commitPrepared(region, layout, nodes, captureGroup(layout, nodes, fields))
-}
+this.writeFrom: ObjectProjection.slotValue("writeFrom")

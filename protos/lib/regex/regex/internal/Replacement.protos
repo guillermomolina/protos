@@ -1,0 +1,144 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Private Regex replacement implementation.
+
+create: (requireText, decodeScalars, appendScalar, groupTotal, program, frozenArray, newInput, traverse, matchIn) => {
+    parseReplacement: (replacement) => {
+        requireText(replacement)
+        scalars: decodeScalars(replacement)
+        size: scalars.size()
+        parts: Map()
+        count: 0
+        literal: Encoding.UTF8.encode("")
+        flushLiteral: () => {
+            if(literal.size() > 0) {
+                parts[count] = Encoding.UTF8.decode(literal)
+                count = count + 1
+                literal = Encoding.UTF8.encode("")
+            }
+        }
+        index: 0
+        while(index < size) {
+            scalar: scalars[index]
+            if(scalar == 36) {
+                marker: -1
+                if((index + 1) < size) {
+                    marker = scalars[index + 1]
+                }
+                if(marker == 36) {
+                    literal.add(36)
+                    index = index + 2
+                } else {
+                    (marker == 123).ifFalse(() => {
+                        Error().signal()
+                    })
+                    first: index + 2
+                    close: first
+                    while((close < size) && (scalars[close] != 125)) {
+                        close = close + 1
+                    }
+                    ((close < size) && (close > first)).ifFalse(() => {
+                        Error().signal()
+                    })
+                    group: null
+                    if((scalars[first] >= 48) && (scalars[first] <= 57)) {
+                        if((scalars[first] == 48) && (close > (first + 1))) {
+                            Error().signal()
+                        }
+                        number: 0
+                        digit: first
+                        while(digit < close) {
+                            ((scalars[digit] >= 48) && (scalars[digit] <= 57)).ifFalse(() => {
+                                Error().signal()
+                            })
+                            number = number * 10 + (scalars[digit] - 48)
+                            digit = digit + 1
+                        }
+                        (number < groupTotal).ifFalse(() => {
+                            Error().signal()
+                        })
+                        group = number
+                    } else {
+                        nameBytes: Encoding.UTF8.encode("")
+                        digit: first
+                        while(digit < close) {
+                            appendScalar(nameBytes, scalars[digit])
+                            digit = digit + 1
+                        }
+                        name: Encoding.UTF8.decode(nameBytes)
+                        program.captureNames.containsKey(name).ifFalse(() => {
+                            Error().signal()
+                        })
+                        group = program.captureNames[name]
+                    }
+                    flushLiteral()
+                    parts[count] = group
+                    count = count + 1
+                    index = close + 1
+                }
+            } else {
+                appendScalar(literal, scalar)
+                index = index + 1
+            }
+        }
+        flushLiteral()
+        frozenArray(parts, count)
+    }
+
+    appendText: (output, text) => {
+        for(octet in Encoding.UTF8.encode(text)) {
+            output.add(octet)
+        }
+    }
+
+    replace: (text, replacement, every) => {
+        requireText(text)
+        template: parseReplacement(replacement)
+        input: newInput(text)
+        output: Encoding.UTF8.encode("")
+        copyFrom: 0
+        replaceMatch: (found) => {
+            input.appendSpan(output, copyFrom, found.start(0))
+            for(part in template) {
+                if(String.recognizes(part)) {
+                    appendText(output, part)
+                } else {
+                    captured: found.group(part)
+                    (captured === null).ifFalse(() => {
+                        appendText(output, captured)
+                    })
+                }
+            }
+            copyFrom = found.end(0)
+        }
+        if(every) {
+            traverse(input, replaceMatch)
+        } else {
+            found: matchIn(input, 0, false, false)
+            (found === null).ifFalse(() => {
+                replaceMatch(found)
+            })
+        }
+        input.appendSpan(output, copyFrom, input.size)
+        Encoding.UTF8.decode(output)
+    }
+
+    {
+        parseReplacement: parseReplacement
+        appendText: appendText
+        replace: replace
+    }
+}

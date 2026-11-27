@@ -1,0 +1,371 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Private JSON eventparser implementation.
+
+Characters: import("./Characters.protos")
+Numbers: import("./Numbers.protos")
+EventParserTokens: import("./EventParserTokens.protos")
+
+eventParser: (emit) => {
+    failed: false
+    finished: false
+    parser: null
+
+    fail: () => {
+        failed = true
+        Error().signal()
+    }
+
+    characters: Characters.create(fail)
+    isWhitespace: characters.slotValue("isWhitespace")
+    decimalDigit: characters.slotValue("decimalDigit")
+    hexDigit: characters.slotValue("hexDigit")
+    isNumberCharacter: characters.slotValue("isNumberCharacter")
+    isNumberTerminator: characters.slotValue("isNumberTerminator")
+    appendScalarUtf8: characters.slotValue("appendScalarUtf8")
+    numbers: Numbers.create(fail, decimalDigit)
+    admitNumber: numbers.slotValue("admit")
+
+    publish: (kind, value) => {
+        event: {
+            kind: kind
+            value: value
+        }
+
+        // Keep callbacks non-reentrant and make a consumer failure terminal.
+        failed = true
+        emit(event)
+        failed = false
+    }
+
+    topFrame: null
+    depth: 0
+    rootDone: false
+
+    completeValue: () => {
+        if(depth == 0) {
+            if(rootDone) {
+                fail()
+            }
+            rootDone = true
+        }
+
+        (depth == 0).ifFalse(() => {
+            frame: topFrame
+            handled: false
+
+            if(frame.kind == "array") {
+                validPhase: frame.phase == "valueOrEnd"
+                if(frame.phase == "value") {
+                    validPhase = true
+                }
+                validPhase.ifFalse(() => {
+                    fail()
+                })
+                frame.phase = "commaOrEnd"
+                handled = true
+            }
+
+            if(frame.kind == "object") {
+                (frame.phase == "value").ifFalse(() => {
+                    fail()
+                })
+                frame.phase = "commaOrEnd"
+                handled = true
+            }
+
+            handled.ifFalse(() => {
+                fail()
+            })
+        })
+    }
+
+    pushArrayFrame: () => {
+        frame: {
+            parent: topFrame
+            kind: "array"
+            phase: "valueOrEnd"
+        }
+        topFrame = frame
+        depth = depth + 1
+        publish("arrayStart", null)
+    }
+
+    pushObjectFrame: () => {
+        frame: {
+            parent: topFrame
+            kind: "object"
+            phase: "nameOrEnd"
+            names: Map()
+        }
+        topFrame = frame
+        depth = depth + 1
+        publish("objectStart", null)
+    }
+
+    closeArray: () => {
+        frame: topFrame
+        (frame.kind == "array").ifFalse(() => {
+            fail()
+        })
+
+        validPhase: frame.phase == "valueOrEnd"
+        if(frame.phase == "commaOrEnd") {
+            validPhase = true
+        }
+        validPhase.ifFalse(() => {
+            fail()
+        })
+
+        topFrame = frame.parent
+        depth = depth - 1
+        publish("arrayEnd", null)
+        completeValue()
+    }
+
+    closeObject: () => {
+        frame: topFrame
+        (frame.kind == "object").ifFalse(() => {
+            fail()
+        })
+
+        validPhase: frame.phase == "nameOrEnd"
+        if(frame.phase == "commaOrEnd") {
+            validPhase = true
+        }
+        validPhase.ifFalse(() => {
+            fail()
+        })
+
+        topFrame = frame.parent
+        depth = depth - 1
+        publish("objectEnd", null)
+        completeValue()
+    }
+
+    beginString: null
+    beginNumber: null
+    beginLiteral: null
+
+    startValue: (octet) => {
+        handled: false
+
+        if(octet == 34) {
+            beginString("value")
+            handled = true
+        }
+
+        if(octet == 123) {
+            pushObjectFrame()
+            handled = true
+        }
+
+        if(octet == 91) {
+            pushArrayFrame()
+            handled = true
+        }
+
+        if(octet == 116) {
+            beginLiteral("true")
+            handled = true
+        }
+
+        if(octet == 102) {
+            beginLiteral("false")
+            handled = true
+        }
+
+        if(octet == 110) {
+            beginLiteral("null")
+            handled = true
+        }
+
+        if(octet == 45) {
+            beginNumber(octet)
+            handled = true
+        }
+
+        if(decimalDigit(octet) >= 0) {
+            beginNumber(octet)
+            handled = true
+        }
+
+        handled.ifFalse(() => {
+            fail()
+        })
+    }
+
+    processNormal: null
+    processNormal = (octet) => {
+        whitespace: isWhitespace(octet)
+
+        whitespace.ifFalse(() => {
+            wasTopLevel: depth == 0
+
+            if(wasTopLevel) {
+                if(rootDone) {
+                    fail()
+                }
+                rootDone.ifFalse(() => {
+                    startValue(octet)
+                })
+            }
+
+            wasTopLevel.ifFalse(() => {
+                frame: topFrame
+
+                if(frame.kind == "array") {
+                    phase: frame.phase
+
+                    if(phase == "valueOrEnd") {
+                        if(octet == 93) {
+                            closeArray()
+                        }
+                        (octet == 93).ifFalse(() => {
+                            startValue(octet)
+                        })
+                    }
+
+                    if(phase == "value") {
+                        startValue(octet)
+                    }
+
+                    if(phase == "commaOrEnd") {
+                        handled: false
+                        if(octet == 44) {
+                            frame.phase = "value"
+                            handled = true
+                        }
+                        if(octet == 93) {
+                            closeArray()
+                            handled = true
+                        }
+                        handled.ifFalse(() => {
+                            fail()
+                        })
+                    }
+                }
+
+                if(frame.kind == "object") {
+                    phase: frame.phase
+
+                    if(phase == "nameOrEnd") {
+                        handled: false
+                        if(octet == 125) {
+                            closeObject()
+                            handled = true
+                        }
+                        if(octet == 34) {
+                            beginString("name")
+                            handled = true
+                        }
+                        handled.ifFalse(() => {
+                            fail()
+                        })
+                    }
+
+                    if(phase == "name") {
+                        (octet == 34).ifFalse(() => {
+                            fail()
+                        })
+                        beginString("name")
+                    }
+
+                    if(phase == "colon") {
+                        (octet == 58).ifFalse(() => {
+                            fail()
+                        })
+                        frame.phase = "value"
+                    }
+
+                    if(phase == "value") {
+                        startValue(octet)
+                    }
+
+                    if(phase == "commaOrEnd") {
+                        handled: false
+                        if(octet == 44) {
+                            frame.phase = "name"
+                            handled = true
+                        }
+                        if(octet == 125) {
+                            closeObject()
+                            handled = true
+                        }
+                        handled.ifFalse(() => {
+                            fail()
+                        })
+                    }
+                }
+            })
+        })
+    }
+
+    tokens: EventParserTokens.create(fail, hexDigit, isNumberCharacter, isNumberTerminator, appendScalarUtf8, admitNumber, () => topFrame, publish, completeValue, processNormal)
+    beginString = tokens.slotValue("beginString")
+    beginNumber = tokens.slotValue("beginNumber")
+    beginLiteral = tokens.slotValue("beginLiteral")
+    finalizeNumber: tokens.slotValue("finalizeNumber")
+    consumeOctet: tokens.slotValue("consumeOctet")
+    currentMode: tokens.slotValue("currentMode")
+
+    parser = {
+        feed: (text) => {
+            if(failed) {
+                Error().signal()
+            }
+            if(finished) {
+                fail()
+            }
+
+            String.recognizes(text).ifFalse(() => {
+                Error().signal()
+            })
+            for(octet in Encoding.UTF8.encode(text)) {
+                consumeOctet(octet)
+            }
+            parser
+        }
+
+        finish: () => {
+            if(failed) {
+                Error().signal()
+            }
+            if(finished) {
+                fail()
+            }
+
+            if(currentMode() == "number") {
+                finalizeNumber()
+            }
+
+            (currentMode() == "normal").ifFalse(() => {
+                fail()
+            })
+            (depth == 0).ifFalse(() => {
+                fail()
+            })
+            rootDone.ifFalse(() => {
+                fail()
+            })
+
+            finished = true
+            parser
+        }
+    }
+
+    parser
+}

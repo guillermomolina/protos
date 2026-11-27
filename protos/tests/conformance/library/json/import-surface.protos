@@ -19,6 +19,83 @@ Assertions: import("std:test/assertions")
 Test: import("std:test/test")
 
 tests: [
+    Test("extracted parser selects current public constructors", () => {
+        JSON: import("std:json/json")
+        expectedReceiver: this
+        original: JSON.slotValue("boolean")
+        calls: 0
+        (() => {
+            JSON.boolean = (value) => {
+                Assertions.require(this === expectedReceiver)
+                calls = calls + 1
+                original(value)
+            }
+            parsed: JSON.parse("[true,false]")
+            Assertions.require(calls == 2)
+            Assertions.require(parsed.value[0].value === true)
+            Assertions.require(parsed.value[1].value === false)
+        }).ensure(() => { JSON.boolean = original })
+    }),
+    Test("event writer selects encoder before scalar constructor effects", () => {
+        JSON: import("std:json/json")
+        expectedReceiver: this
+        originalEncode: JSON.slotValue("encode")
+        originalString: JSON.slotValue("string")
+        output: ""
+        calls: ""
+        writer: JSON.eventWriter((chunk) => { output = output + chunk })
+        (() => {
+            JSON.encode = (node) => {
+                Assertions.require(this === expectedReceiver)
+                calls = calls + "first"
+                originalEncode(node)
+            }
+            JSON.string = (value) => {
+                Assertions.require(this === expectedReceiver)
+                JSON.encode = (node) => {
+                    calls = calls + "second"
+                    originalEncode(node)
+                }
+                originalString(value)
+            }
+            writer.feed({ kind: "string"; value: "x" })
+            writer.finish()
+            Assertions.require(output == "\"x\"")
+            Assertions.require(calls == "first")
+        }).ensure(() => {
+            JSON.encode = originalEncode
+            JSON.string = originalString
+        })
+    }),
+    Test("text adapters select current public event factories", () => {
+        JSON: import("std:json/json")
+        expectedReceiver: this
+        originalParser: JSON.slotValue("eventParser")
+        originalWriter: JSON.slotValue("eventWriter")
+        readerCalls: 0
+        writerCalls: 0
+        (() => {
+            JSON.eventParser = (emit) => {
+                Assertions.require(this === expectedReceiver)
+                readerCalls = readerCalls + 1
+                originalParser(emit)
+            }
+            JSON.eventWriter = (emit) => {
+                Assertions.require(this === expectedReceiver)
+                writerCalls = writerCalls + 1
+                originalWriter(emit)
+            }
+            reader: JSON.readEvents({}, (event) => { null })
+            writer: JSON.writeEvents({})
+            Assertions.require(readerCalls == 1)
+            Assertions.require(writerCalls == 1)
+            Assertions.require(reader.hasSlot("read"))
+            Assertions.require(writer.hasSlot("feed"))
+        }).ensure(() => {
+            JSON.eventParser = originalParser
+            JSON.eventWriter = originalWriter
+        })
+    }),
     Test("import cache", () => {
         tool009LegacyCase: () => {
             first: import("std:json/json")

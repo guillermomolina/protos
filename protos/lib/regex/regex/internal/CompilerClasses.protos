@@ -1,0 +1,183 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Private Regex compilerclasses implementation.
+
+create: (scalarAt, getPosition, setPosition, caseFold, singleton, fromPairs, union, intersect, subtract, complement, extended, isPatternWhiteSpace, parseEscape) => {
+    literalSet: (scalar) => {
+        caseFold(singleton(scalar))
+    }
+
+    newClassFrame: (inverted) => {
+        created: {
+            inverted: inverted
+            left: null
+            operator: null
+            pairs: Map()
+            pairCount: 0
+            nested: Map()
+            nestedCount: 0
+        }
+        created
+    }
+
+    addNested: (classFrame, ranges) => {
+        classFrame.nested[classFrame.nestedCount] = ranges
+        classFrame.nestedCount = classFrame.nestedCount + 1
+    }
+
+    finishOperand: (classFrame) => {
+        if((classFrame.pairCount + classFrame.nestedCount) == 0) {
+            Error().signal()
+        }
+        operand: caseFold(fromPairs(classFrame.pairs, classFrame.pairCount))
+        index: 0
+        while(index < classFrame.nestedCount) {
+            operand = union(operand, classFrame.nested[index])
+            index = index + 1
+        }
+        classFrame.pairs = Map()
+        classFrame.pairCount = 0
+        classFrame.nested = Map()
+        classFrame.nestedCount = 0
+        if(classFrame.operator === null) {
+            classFrame.left = operand
+        }
+        if(classFrame.operator == "and") {
+            classFrame.left = intersect(classFrame.left, operand)
+        }
+        if(classFrame.operator == "minus") {
+            classFrame.left = subtract(classFrame.left, operand)
+        }
+    }
+
+    parseClassAtom: (classFrame) => {
+        current: scalarAt(getPosition())
+        if((current < 0) || (current == 91) || (current == 93) || (current == 45) ||
+            (current == 38)) {
+            Error().signal()
+        }
+        if(extended && (isPatternWhiteSpace(current) || (current == 35))) {
+            Error().signal()
+        }
+        result: -1
+        if(current == 92) {
+            token: parseEscape(true)
+            if(token.kind == "scalar") {
+                result = token.value
+            }
+            if(token.kind == "set") {
+                addNested(classFrame, token.ranges)
+            }
+        } else {
+            result = current
+            setPosition(getPosition() + 1)
+        }
+        result
+    }
+
+    parseClass: () => {
+        classFrames: Map()
+        classDepth: 0
+        result: null
+        openClass: () => {
+            setPosition(getPosition() + 1)
+            // POSIX bracket expressions are excluded: `[:` and `[=` never
+            // open a class, and inside a class neither does `[.`. An
+            // outermost class may start with a literal `.`.
+            if((scalarAt(getPosition()) == 58) || (scalarAt(getPosition()) == 61) ||
+                ((classDepth > 0) && (scalarAt(getPosition()) == 46))) {
+                Error().signal()
+            }
+            inverted: scalarAt(getPosition()) == 94
+            if(inverted) {
+                setPosition(getPosition() + 1)
+            }
+            classFrames[classDepth] = newClassFrame(inverted)
+            classDepth = classDepth + 1
+        }
+        openClass()
+        while(result === null) {
+            current: classFrames[classDepth - 1]
+            first: scalarAt(getPosition())
+            second: scalarAt(getPosition() + 1)
+            kind: "atom"
+            if(first == 93) {
+                kind = "close"
+            }
+            if(first == 91) {
+                kind = "open"
+            }
+            if((first == 38) && (second == 38)) {
+                kind = "and"
+            }
+            if((first == 45) && (second == 45)) {
+                kind = "minus"
+            }
+            // `~~` is symmetric difference in other dialects; it is excluded.
+            if((first == 126) && (second == 126)) {
+                Error().signal()
+            }
+
+            if(kind == "close") {
+                finishOperand(current)
+                finished: current.left
+                if(current.inverted) {
+                    finished = complement(finished)
+                }
+                setPosition(getPosition() + 1)
+                classDepth = classDepth - 1
+                if(classDepth == 0) {
+                    result = finished
+                } else {
+                    addNested(classFrames[classDepth - 1], finished)
+                }
+            }
+            if(kind == "open") {
+                openClass()
+            }
+            if((kind == "and") || (kind == "minus")) {
+                finishOperand(current)
+                current.operator = kind
+                setPosition(getPosition() + 2)
+            }
+            if(kind == "atom") {
+                low: parseClassAtom(current)
+                if(low >= 0) {
+                    high: low
+                    if((scalarAt(getPosition()) == 45) && (scalarAt(getPosition() + 1) != 45)) {
+                        setPosition(getPosition() + 1)
+                        high = parseClassAtom(current)
+                        if((high < 0) || (high < low)) {
+                            Error().signal()
+                        }
+                    }
+                    current.pairs[current.pairCount] = [low, high]
+                    current.pairCount = current.pairCount + 1
+                }
+            }
+        }
+        result
+    }
+
+    {
+        literalSet: literalSet
+        newClassFrame: newClassFrame
+        addNested: addNested
+        finishOperand: finishOperand
+        parseClassAtom: parseClassAtom
+        parseClass: parseClass
+    }
+}

@@ -1,0 +1,183 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Private JSON numbers implementation.
+
+create: (fail, decimalDigit) => {
+    admit: (numberBuffer, complete) => {
+        state: "start"
+        negative: false
+        coefficient: 0
+        fractionDigits: 0
+        exponentNegative: false
+        exponentValue: 0
+
+        for(octet in numberBuffer) {
+            previous: state
+            digit: decimalDigit(octet)
+            handled: false
+
+            if(previous == "start") {
+                if(octet == 45) {
+                    negative = true
+                    state = "integerStart"
+                    handled = true
+                }
+                if(digit >= 0) {
+                    coefficient = digit
+                    if(digit == 0) {
+                        state = "afterZero"
+                    }
+                    (digit == 0).ifFalse(() => {
+                        state = "integer"
+                    })
+                    handled = true
+                }
+            }
+
+            if(previous == "integerStart") {
+                if(digit >= 0) {
+                    coefficient = digit
+                    if(digit == 0) {
+                        state = "afterZero"
+                    }
+                    (digit == 0).ifFalse(() => {
+                        state = "integer"
+                    })
+                    handled = true
+                }
+            }
+
+            if(previous == "afterZero") {
+                if(octet == 46) {
+                    state = "fractionStart"
+                    handled = true
+                }
+                if(octet == 101) {
+                    state = "exponentStart"
+                    handled = true
+                }
+                if(octet == 69) {
+                    state = "exponentStart"
+                    handled = true
+                }
+            }
+
+            if(previous == "integer") {
+                if(digit >= 0) {
+                    coefficient = coefficient * 10 + digit
+                    handled = true
+                }
+                if(octet == 46) {
+                    state = "fractionStart"
+                    handled = true
+                }
+                if(octet == 101) {
+                    state = "exponentStart"
+                    handled = true
+                }
+                if(octet == 69) {
+                    state = "exponentStart"
+                    handled = true
+                }
+            }
+
+            if(previous == "fractionStart") {
+                if(digit >= 0) {
+                    coefficient = coefficient * 10 + digit
+                    fractionDigits = 1
+                    state = "fraction"
+                    handled = true
+                }
+            }
+
+            if(previous == "fraction") {
+                if(digit >= 0) {
+                    coefficient = coefficient * 10 + digit
+                    fractionDigits = fractionDigits + 1
+                    handled = true
+                }
+                if(octet == 101) {
+                    state = "exponentStart"
+                    handled = true
+                }
+                if(octet == 69) {
+                    state = "exponentStart"
+                    handled = true
+                }
+            }
+
+            if(previous == "exponentStart") {
+                if(octet == 43) {
+                    state = "exponentDigitsStart"
+                    handled = true
+                }
+                if(octet == 45) {
+                    exponentNegative = true
+                    state = "exponentDigitsStart"
+                    handled = true
+                }
+                if(digit >= 0) {
+                    exponentValue = digit
+                    state = "exponent"
+                    handled = true
+                }
+            }
+
+            if(previous == "exponentDigitsStart") {
+                if(digit >= 0) {
+                    exponentValue = digit
+                    state = "exponent"
+                    handled = true
+                }
+            }
+
+            if(previous == "exponent") {
+                if(digit >= 0) {
+                    exponentValue = exponentValue * 10 + digit
+                    handled = true
+                }
+            }
+
+            handled.ifFalse(() => {
+                fail()
+            })
+        }
+
+        validEnd: state == "afterZero"
+        if(state == "integer") { validEnd = true }
+        if(state == "fraction") { validEnd = true }
+        if(state == "exponent") { validEnd = true }
+        validEnd.ifFalse(() => {
+            fail()
+        })
+
+        if(negative) {
+            coefficient = 0 - coefficient
+        }
+
+        exponent: exponentValue
+        if(exponentNegative) {
+            exponent = 0 - exponentValue
+        }
+        exponent = exponent - fractionDigits
+
+        complete(coefficient, exponent)
+    }
+
+    {
+        admit: admit
+    }
+}

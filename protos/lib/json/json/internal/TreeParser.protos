@@ -1,0 +1,379 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Private JSON treeparser implementation.
+
+Characters: import("./Characters.protos")
+Numbers: import("./Numbers.protos")
+TreeParserTokens: import("./TreeParserTokens.protos")
+
+create: (selectNullValue, selectBoolean, selectString, selectNumber, selectArray, selectObject) => {
+    parse: (text) => {
+        String.recognizes(text).ifFalse(() => {
+            Error().signal()
+        })
+        source: Encoding.UTF8.encode(text)
+
+        characters: Characters.create(fail)
+        isWhitespace: characters.slotValue("isWhitespace")
+        decimalDigit: characters.slotValue("decimalDigit")
+        hexDigit: characters.slotValue("hexDigit")
+        isNumberCharacter: characters.slotValue("isNumberCharacter")
+        isNumberTerminator: characters.slotValue("isNumberTerminator")
+        appendScalarUtf8: characters.slotValue("appendScalarUtf8")
+        numbers: Numbers.create(fail, decimalDigit)
+        admitNumber: numbers.slotValue("admit")
+
+        topFrame: null
+        depth: 0
+        root: null
+        rootDone: false
+
+        pushArrayFrame: () => {
+            frame: {
+                parent: topFrame
+                kind: "array"
+                phase: "valueOrEnd"
+                chunks: Map()
+                maxLevel: -1
+            }
+            topFrame = frame
+            depth = depth + 1
+        }
+
+        pushObjectFrame: () => {
+            frame: {
+                parent: topFrame
+                kind: "object"
+                phase: "nameOrEnd"
+                entries: Map()
+                pendingName: null
+            }
+            topFrame = frame
+            depth = depth + 1
+        }
+
+        carryArrayChunk: null
+        carryArrayChunk = (frame, chunk, level) => {
+            present: frame.chunks.containsKey(level)
+
+            if(present) {
+                left: frame.chunks[level]
+                frame.chunks.remove(level)
+                merged: Array(...left, ...chunk)
+                carryArrayChunk(frame, merged, level + 1)
+            }
+
+            present.ifFalse(() => {
+                frame.chunks[level] = chunk
+                if(level > frame.maxLevel) {
+                    frame.maxLevel = level
+                }
+            })
+        }
+
+        appendArrayValue: (frame, node) => {
+            carryArrayChunk(frame, Array(node), 0)
+            frame.phase = "commaOrEnd"
+        }
+
+        collectArrayChunks: null
+        collectArrayChunks = (frame, level, result) => {
+            finalResult: result
+
+            if(level >= 0) {
+                nextResult: result
+                if(frame.chunks.containsKey(level)) {
+                    nextResult = Array(...result, ...frame.chunks[level])
+                }
+                finalResult = collectArrayChunks(frame, level - 1, nextResult)
+            }
+
+            finalResult
+        }
+
+        acceptValue: (node) => {
+            if(depth == 0) {
+                if(rootDone) {
+                    fail()
+                }
+                root = node
+                rootDone = true
+            }
+
+            (depth == 0).ifFalse(() => {
+                frame: topFrame
+
+                if(frame.kind == "array") {
+                    validPhase: frame.phase == "valueOrEnd"
+                    if(frame.phase == "value") {
+                        validPhase = true
+                    }
+                    validPhase.ifFalse(() => {
+                        fail()
+                    })
+                    appendArrayValue(frame, node)
+                }
+
+                if(frame.kind == "object") {
+                    (frame.phase == "value").ifFalse(() => {
+                        fail()
+                    })
+                    frame.entries[frame.pendingName] = node
+                    frame.pendingName = null
+                    frame.phase = "commaOrEnd"
+                }
+            })
+        }
+
+        closeArray: () => {
+            frame: topFrame
+            (frame.kind == "array").ifFalse(() => {
+                fail()
+            })
+
+            validPhase: frame.phase == "valueOrEnd"
+            if(frame.phase == "commaOrEnd") {
+                validPhase = true
+            }
+            validPhase.ifFalse(() => {
+                fail()
+            })
+
+            materialized: collectArrayChunks(frame, frame.maxLevel, Array())
+            node: (selectArray())(...materialized)
+
+            topFrame = frame.parent
+            depth = depth - 1
+            acceptValue(node)
+        }
+
+        closeObject: () => {
+            frame: topFrame
+            (frame.kind == "object").ifFalse(() => {
+                fail()
+            })
+
+            validPhase: frame.phase == "nameOrEnd"
+            if(frame.phase == "commaOrEnd") {
+                validPhase = true
+            }
+            validPhase.ifFalse(() => {
+                fail()
+            })
+
+            node: {
+                kind: "object"
+                value: frame.entries
+            }
+
+            topFrame = frame.parent
+            depth = depth - 1
+            acceptValue(node)
+        }
+
+        beginString: null
+        beginNumber: null
+        beginLiteral: null
+
+        startValue: (octet) => {
+            handled: false
+
+            if(octet == 34) {
+                beginString("value")
+                handled = true
+            }
+
+            if(octet == 123) {
+                pushObjectFrame()
+                handled = true
+            }
+
+            if(octet == 91) {
+                pushArrayFrame()
+                handled = true
+            }
+
+            if(octet == 116) {
+                beginLiteral("true")
+                handled = true
+            }
+
+            if(octet == 102) {
+                beginLiteral("false")
+                handled = true
+            }
+
+            if(octet == 110) {
+                beginLiteral("null")
+                handled = true
+            }
+
+            if(octet == 45) {
+                beginNumber(octet)
+                handled = true
+            }
+
+            if(decimalDigit(octet) >= 0) {
+                beginNumber(octet)
+                handled = true
+            }
+
+            handled.ifFalse(() => {
+                fail()
+            })
+        }
+
+        processNormal: null
+        processNormal = (octet) => {
+            whitespace: isWhitespace(octet)
+
+            whitespace.ifFalse(() => {
+                wasTopLevel: depth == 0
+
+                if(wasTopLevel) {
+                    if(rootDone) {
+                        fail()
+                    }
+                    rootDone.ifFalse(() => {
+                        startValue(octet)
+                    })
+                }
+
+                wasTopLevel.ifFalse(() => {
+                    frame: topFrame
+
+                    if(frame.kind == "array") {
+                        phase: frame.phase
+
+                        if(phase == "valueOrEnd") {
+                            if(octet == 93) {
+                                closeArray()
+                            }
+                            (octet == 93).ifFalse(() => {
+                                startValue(octet)
+                            })
+                        }
+
+                        if(phase == "value") {
+                            startValue(octet)
+                        }
+
+                        if(phase == "commaOrEnd") {
+                            handled: false
+                            if(octet == 44) {
+                                frame.phase = "value"
+                                handled = true
+                            }
+                            if(octet == 93) {
+                                closeArray()
+                                handled = true
+                            }
+                            handled.ifFalse(() => {
+                                fail()
+                            })
+                        }
+                    }
+
+                    if(frame.kind == "object") {
+                        phase: frame.phase
+
+                        if(phase == "nameOrEnd") {
+                            handled: false
+                            if(octet == 125) {
+                                closeObject()
+                                handled = true
+                            }
+                            if(octet == 34) {
+                                beginString("name")
+                                handled = true
+                            }
+                            handled.ifFalse(() => {
+                                fail()
+                            })
+                        }
+
+                        if(phase == "name") {
+                            (octet == 34).ifFalse(() => {
+                                fail()
+                            })
+                            beginString("name")
+                        }
+
+                        if(phase == "colon") {
+                            (octet == 58).ifFalse(() => {
+                                fail()
+                            })
+                            frame.phase = "value"
+                        }
+
+                        if(phase == "value") {
+                            startValue(octet)
+                        }
+
+                        if(phase == "commaOrEnd") {
+                            handled: false
+                            if(octet == 44) {
+                                frame.phase = "name"
+                                handled = true
+                            }
+                            if(octet == 125) {
+                                closeObject()
+                                handled = true
+                            }
+                            handled.ifFalse(() => {
+                                fail()
+                            })
+                        }
+                    }
+                })
+            })
+        }
+
+        tokens: TreeParserTokens.create(fail, hexDigit, isNumberCharacter, isNumberTerminator, appendScalarUtf8, admitNumber, () => topFrame, acceptValue, selectString, selectNumber, selectBoolean, selectNullValue, processNormal)
+        beginString = tokens.slotValue("beginString")
+        beginNumber = tokens.slotValue("beginNumber")
+        beginLiteral = tokens.slotValue("beginLiteral")
+        finalizeNumber: tokens.slotValue("finalizeNumber")
+        consumeOctet: tokens.slotValue("consumeOctet")
+        currentMode: tokens.slotValue("currentMode")
+
+        for(octet in source) {
+            consumeOctet(octet)
+        }
+
+        if(currentMode() == "number") {
+            finalizeNumber()
+        }
+
+        (currentMode() == "normal").ifFalse(() => {
+            fail()
+        })
+
+        (depth == 0).ifFalse(() => {
+            fail()
+        })
+
+        rootDone.ifFalse(() => {
+            fail()
+        })
+
+        root
+    }
+
+    {
+        parse: parse
+    }
+}

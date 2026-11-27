@@ -19,6 +19,21 @@ FFI: import("std:ffi")
 Arrays: import("std:collections/array")
 
 tests: [
+    Test("extracted declaration helpers keep return homes and private state", () => {
+        pointer: FFI.pointer(FFI.i32)
+        nullable: FFI.nullable(pointer)
+        Assertions.require(FFI.sizeOf(nullable) == FFI.sizeOf(pointer))
+        prototype: {}
+        Assertions.require(FFI.prototype(FFI.i32, prototype) === prototype)
+        Assertions.require(FFI.prototype(FFI.i32, prototype) === prototype)
+        Assertions.require(FFI.layoutOf(prototype) === FFI.i32)
+        for(name in Array("descriptors", "owners", "associations", "pointerTypes",
+                "storages", "layouts", "nativeContext", "providerContext",
+                "_ffiObjectRecognitionFacility", "_ffiNativeContextFacility")) {
+            Assertions.require(FFI.hasSlot(name) === false)
+        }
+        Assertions.signals(Error, () => FFI.sizeOf({}))
+    }),
     Test("import is authority free and cached", () => {
         Assertions.require(FFI === import("std:ffi"))
         Assertions.signals(Error, () => import("ffi:sqlite3"))

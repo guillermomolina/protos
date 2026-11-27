@@ -1,0 +1,159 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Private Regex pattern implementation.
+
+Replacement: import("./Replacement.protos")
+
+// Private Pattern construction. The compiled `program` is reachable only
+// from the Closures created here, never from a slot, and every operation
+// keeps its execution state local.
+
+create: (sized, freshArray, frozenArray, decodeScalars, appendScalar, newInput, newMatch, newMatcher, transfer) => {
+    newPattern: (patternSource, patternFlags, program) => {
+        execute: newMatcher(program)
+        groupTotal: program.captureCount + 1
+
+        requireText: (text) => {
+            String.recognizes(text).ifFalse(() => {
+                Error().signal()
+            })
+        }
+
+        // Answers the selected Match starting at or after `from`, or null.
+        matchIn: (input, from, anchored, toEnd) => {
+            spans: execute(input, from, anchored, toEnd)
+            result: null
+            (spans === null).ifFalse(() => {
+                texts: sized(groupTotal)
+                group: 0
+                while(group < groupTotal) {
+                    (spans[2 * group] === null).ifFalse(() => {
+                        texts[group] = input.slice(spans[2 * group], spans[2 * group + 1])
+                    })
+                    group = group + 1
+                }
+                result = newMatch(program.captureNames, program.groupNames, spans, texts)
+            })
+            result
+        }
+
+        // Visits successive non-overlapping matches of a decoded subject. After
+        // an empty match at k the next search starts at k + 1, so each position
+        // yields at most one empty match and an empty match at the end is the
+        // last one. This is the only search progression: eachMatch, findAll,
+        // replaceAll, and split all consume it. Skipping a scalar only advances
+        // the search; callers that copy input keep their own copy boundary.
+        traverse: (input, visit) => {
+            from: 0
+            while(from <= input.size) {
+                found: matchIn(input, from, false, false)
+                if(found === null) {
+                    from = input.size + 1
+                } else {
+                    visit(found)
+                    from = found.end(0)
+                    if(found.start(0) == from) {
+                        from = from + 1
+                    }
+                }
+            }
+        }
+
+        // Parses `replacement` into a frozen Array of parts, each a literal
+        // String or a group number, before any output is produced: `$$` is a
+        // literal `$`, and `${N}` (decimal, no leading zero) or `${name}` must
+        // denote a group of this Pattern. Any other `$` signals an Error, even
+        // when the subject has no match. Names resolve to numbers here.
+
+        // Replaces the first selected match, or every match `traverse` visits,
+        // reading captures from each selected Match. `copyFrom` is the first
+        // subject scalar not yet copied; after an empty match at k it stays k,
+        // so the scalar the search skips is still copied.
+
+        replacement: Replacement.create(requireText, decodeScalars, appendScalar, groupTotal, program, frozenArray, newInput, traverse, matchIn)
+        parseReplacement: replacement.slotValue("parseReplacement")
+        appendText: replacement.slotValue("appendText")
+        replace: replacement.slotValue("replace")
+
+        searchFrom: (text, offset) => {
+            requireText(text)
+            (Integer.recognizes(offset) && (offset >= 0) && (offset <= text.size())).ifFalse(() => {
+                Error().signal()
+            })
+            matchIn(newInput(text), offset, false, false)
+        }
+
+        pattern: {
+            source: patternSource
+            flags: patternFlags
+            captureCount: program.captureCount
+            captureNames: program.captureNames
+            fullMatch: (text) => {
+                requireText(text)
+                matchIn(newInput(text), 0, true, true)
+            }
+            search: (text) => {
+                searchFrom(text, 0)
+            }
+            searchFrom: searchFrom
+            eachMatch: (text, block) => {
+                requireText(text)
+                traverse(newInput(text), (found) => {
+                    block(found)
+                })
+                null
+            }
+            findAll: (text) => {
+                requireText(text)
+                found: Map()
+                count: 0
+                traverse(newInput(text), (match) => {
+                    found[count] = match
+                    count = count + 1
+                })
+                freshArray(found, count)
+            }
+            replaceFirst: (text, replacement) => {
+                replace(text, replacement, false)
+            }
+            replaceAll: (text, replacement) => {
+                replace(text, replacement, true)
+            }
+            // Each match delimits a field; `fieldStart` is independent of the
+            // search progression, so a skipped scalar stays in its field.
+            split: (text) => {
+                requireText(text)
+                input: newInput(text)
+                fields: Map()
+                count: 0
+                fieldStart: 0
+                traverse(input, (found) => {
+                    fields[count] = input.slice(fieldStart, found.start(0))
+                    count = count + 1
+                    fieldStart = found.end(0)
+                })
+                fields[count] = input.slice(fieldStart, input.size)
+                freshArray(fields, count + 1)
+            }
+        }
+        // Minted as a frozen Regex transfer-family value with these slots.
+        transfer.mintPattern(pattern)
+    }
+
+    {
+        newPattern: newPattern
+    }
+}

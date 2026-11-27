@@ -1,0 +1,269 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Private FFI layouts operations. Dependencies remain initializer-owned.
+
+create: (descriptors, fail, isRegistered, isStorageLayout, maxLayoutSize, metadata, pointerSize, register, requireString, storage, voidDescriptor) => {
+    requireArity: null
+    requirePositive: null
+    requireNonnegative: null
+    checkedSize: null
+    checkedAdd: null
+    checkedMultiply: null
+    alignUp: null
+    field: null
+    admitFields: null
+    member: null
+    aggregate: null
+    struct: null
+    union: null
+    array: null
+    pointer: null
+    borrowedPointer: null
+    sizeOf: null
+    alignOf: null
+    offsetOf: null
+
+    methods: {
+        requireArity: (extra) => {
+            (extra.size() == 0).ifFalse(() => fail())
+        }
+
+        requirePositive: (value) => {
+            (Integer.recognizes(value) && (value > 0)).ifFalse(() => fail())
+        }
+
+        requireNonnegative: (value) => {
+            (Integer.recognizes(value) && (value >= 0)).ifFalse(() => fail())
+        }
+
+        // The signed-addressable bound: checked before a value becomes metadata.
+        checkedSize: (value) => {
+            requireNonnegative(value)
+            (value <= maxLayoutSize).ifFalse(() => fail())
+            value
+        }
+
+        checkedAdd: (left, right) => checkedSize(left + right)
+
+        checkedMultiply: (left, right) => checkedSize(left * right)
+
+        alignUp: (offset, alignment) => {
+            requirePositive(alignment)
+            padding: (alignment - (offset % alignment)) % alignment
+            checkedAdd(offset, padding)
+        }
+
+        field: (name: fail(), layout: fail(), ...extra) => {
+            requireArity(extra)
+            requireString(name)
+            storage(layout)
+            parts: {
+                name: name
+                layout: layout
+            }
+            parts.freeze()
+            register("field", "field", null, null, null, null, null, parts)
+        }
+
+        // Snapshot and admit an ordinary Array of at least one field declaration
+        // with pairwise distinct names (semantic String equality).
+        admitFields: (fields) => {
+            Array.recognizes(fields).ifFalse(() => fail())
+            snapshot: Array(...fields)
+            (snapshot.size() > 0).ifFalse(() => fail())
+            names: Map()
+            for(declaration in snapshot) {
+                isRegistered(declaration).ifFalse(() => fail())
+                record: descriptors.at(declaration)
+                (record.layoutKind == "field").ifFalse(() => fail())
+                names.containsKey(record.parts.name).ifTrue(() => fail())
+                names[record.parts.name] = true
+            }
+            snapshot
+        }
+
+        member: (name, layout, offset) => {
+            entry: {
+                name: name
+                layout: layout
+                offset: offset
+            }
+            entry.freeze()
+            entry
+        }
+
+        aggregate: (kind, members, size, align) => {
+            byName: Map()
+            for(entry in members) {
+                byName[entry.name] = entry
+            }
+            members.freeze()
+            byName.freeze()
+            parts: {
+                members: members
+                byName: byName
+            }
+            parts.freeze()
+            register(kind, kind, size, align, null, null, null, parts)
+        }
+
+        struct: (fields: fail(), ...extra) => {
+            requireArity(extra)
+            declarations: admitFields(fields)
+            members: Array(...declarations)
+            index: 0
+            size: 0
+            align: 1
+            for(declaration in declarations) {
+                parts: descriptors.at(declaration).parts
+                layout: descriptors.at(parts.layout)
+                offset: alignUp(size, layout.align)
+                members[index] = member(parts.name, parts.layout, offset)
+                index = index + 1
+                size = checkedAdd(offset, layout.size)
+                if(layout.align > align) { align = layout.align }
+            }
+            aggregate("struct", members, alignUp(size, align), align)
+        }
+
+        union: (fields: fail(), ...extra) => {
+            requireArity(extra)
+            declarations: admitFields(fields)
+            members: Array(...declarations)
+            index: 0
+            size: 0
+            align: 1
+            for(declaration in declarations) {
+                parts: descriptors.at(declaration).parts
+                layout: descriptors.at(parts.layout)
+                members[index] = member(parts.name, parts.layout, 0)
+                index = index + 1
+                if(layout.size > size) { size = layout.size }
+                if(layout.align > align) { align = layout.align }
+            }
+            aggregate("union", members, alignUp(size, align), align)
+        }
+
+        array: (element: fail(), count: fail(), ...extra) => {
+            requireArity(extra)
+            layout: storage(element)
+            requirePositive(count)
+            // A storage layout size is a multiple of its alignment, so it is the stride.
+            size: checkedMultiply(layout.size, count)
+            parts: {
+                element: element
+                count: count
+                stride: layout.size
+            }
+            parts.freeze()
+            register("array", "array", size, layout.align, null, null, null, parts)
+        }
+
+        pointer: (pointee: fail(), ...extra) => {
+            requireArity(extra)
+            (isStorageLayout(pointee) || (pointee === voidDescriptor)).ifFalse(() => fail())
+            parts: { pointee: pointee }
+            parts.freeze()
+            register("pointer", "pointer", pointerSize, pointerSize, null, null, null, parts)
+        }
+
+        borrowedPointer: (pointer: fail(), ...extra) => {
+            requireArity(extra)
+            record: metadata(pointer)
+            (record.layoutKind == "pointer").ifFalse(() => fail())
+            register("borrowedPointer", "borrowedPointer",
+                null, null, null, null, pointer, record.parts)
+        }
+
+        sizeOf: (layout: fail(), ...extra) => {
+            requireArity(extra)
+            storage(layout).size
+        }
+
+        alignOf: (layout: fail(), ...extra) => {
+            requireArity(extra)
+            storage(layout).align
+        }
+
+        offsetOf: (layout: fail(), path: fail(), ...extra) => {
+            requireArity(extra)
+            current: storage(layout)
+            Array.recognizes(path).ifFalse(() => fail())
+            selectors: Array(...path)
+            offset: 0
+            for(selector in selectors) {
+                kind: current.layoutKind
+                if((kind == "struct") || (kind == "union")) {
+                    requireString(selector)
+                    current.parts.byName.containsKey(selector).ifFalse(() => fail())
+                    entry: current.parts.byName.at(selector)
+                    offset = checkedAdd(offset, entry.offset)
+                    current = descriptors.at(entry.layout)
+                } else {
+                    (kind == "array").ifFalse(() => fail())
+                    requireNonnegative(selector)
+                    (selector < current.parts.count).ifFalse(() => fail())
+                    offset = checkedAdd(offset, checkedMultiply(selector, current.parts.stride))
+                    current = descriptors.at(current.parts.element)
+                }
+            }
+            offset
+        }
+    }
+
+    // Bind private operations once; factory-created closures use normal completion.
+    requireArity = methods.requireArity
+    requirePositive = methods.requirePositive
+    requireNonnegative = methods.requireNonnegative
+    checkedSize = methods.checkedSize
+    checkedAdd = methods.checkedAdd
+    checkedMultiply = methods.checkedMultiply
+    alignUp = methods.alignUp
+    field = methods.field
+    admitFields = methods.admitFields
+    member = methods.member
+    aggregate = methods.aggregate
+    struct = methods.struct
+    union = methods.union
+    array = methods.array
+    pointer = methods.pointer
+    borrowedPointer = methods.borrowedPointer
+    sizeOf = methods.sizeOf
+    alignOf = methods.alignOf
+    offsetOf = methods.offsetOf
+
+    {
+        requireArity: requireArity
+        requirePositive: requirePositive
+        requireNonnegative: requireNonnegative
+        checkedSize: checkedSize
+        checkedAdd: checkedAdd
+        checkedMultiply: checkedMultiply
+        alignUp: alignUp
+        field: field
+        admitFields: admitFields
+        member: member
+        aggregate: aggregate
+        struct: struct
+        union: union
+        array: array
+        pointer: pointer
+        borrowedPointer: borrowedPointer
+        sizeOf: sizeOf
+        alignOf: alignOf
+        offsetOf: offsetOf
+    }
+}

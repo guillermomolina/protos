@@ -1,0 +1,431 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Private Regex compiler implementation.
+
+CompilerTokens: import("./CompilerTokens.protos")
+CompilerClasses: import("./CompilerClasses.protos")
+
+create: (sized, frozenArray, singleton, union, intersect, complement, subtract, fromPairs, maxScalar, scalarSet, propertySet, isLineTerminator, digitSet, spaceSet, wordSet, dotSet, lineTerminatorSet, caseFolder, isAsciiLetter, isAsciiDigit, hexValue, isPatternWhiteSpace, decodeScalars, newPattern) => {
+    compileSource: (source, flags) => {
+        String.recognizes(source).ifFalse(() => {
+            Error().signal()
+        })
+        String.recognizes(flags).ifFalse(() => {
+            Error().signal()
+        })
+
+        caseInsensitive: false
+        multiline: false
+        dotAll: false
+        extended: false
+        for(octet in Encoding.UTF8.encode(flags)) {
+            known: false
+            if(octet == 105) {
+                if(caseInsensitive) {
+                    Error().signal()
+                }
+                caseInsensitive = true
+                known = true
+            }
+            if(octet == 109) {
+                if(multiline) {
+                    Error().signal()
+                }
+                multiline = true
+                known = true
+            }
+            if(octet == 115) {
+                if(dotAll) {
+                    Error().signal()
+                }
+                dotAll = true
+                known = true
+            }
+            if(octet == 120) {
+                if(extended) {
+                    Error().signal()
+                }
+                extended = true
+                known = true
+            }
+            known.ifFalse(() => {
+                Error().signal()
+            })
+        }
+        canonicalFlags: ""
+        if(caseInsensitive) {
+            canonicalFlags = canonicalFlags + "i"
+        }
+        if(multiline) {
+            canonicalFlags = canonicalFlags + "m"
+        }
+        if(dotAll) {
+            canonicalFlags = canonicalFlags + "s"
+        }
+        if(extended) {
+            canonicalFlags = canonicalFlags + "x"
+        }
+
+        // Under `i`, every literal and class leaf is closed under simple case
+        // folding before set operations and negation.
+
+        scalars: decodeScalars(source)
+        length: scalars.size()
+        position: 0
+
+        // Answers the scalar at `index`, or -1 past the end of the source.
+        scalarAt: (index) => {
+            result: -1
+            if(index < length) {
+                result = scalars[index]
+            }
+            result
+        }
+
+        // The compiled program is a postfix node table: every node is a frozen
+        // record and refers to its children by smaller node indexes, so later
+        // stages can traverse it iteratively without reinterpreting the source.
+        // Node `op`s: "set" (ranges), "empty", "assert" (kind), "concat" (items),
+        // "alternate" (items in priority order), "capture" (group, name, item),
+        // and "repeat" (item, min, max or null when unbounded, greedy). Counted
+        // repetition is never expanded. `weight` estimates the expanded
+        // automaton size of a node as an unbounded Integer.
+        nodes: Map()
+        nodeCount: 0
+        addNode: (node) => {
+            node.freeze()
+            nodes[nodeCount] = node
+            nodeCount = nodeCount + 1
+            nodeCount - 1
+        }
+
+        setNode: (ranges) => {
+            addNode({ op: "set"; ranges: ranges; weight: 1 })
+        }
+
+        weightOf: (indexes) => {
+            total: 0
+            for(index in indexes) {
+                total = total + nodes[index].weight
+            }
+            total
+        }
+
+        captureCount: 0
+        captureNames: Map()
+        usesWordBoundary: false
+
+        // Group frames form an explicit stack, so nesting depth never consumes
+        // host stack. `last` is "none", "atom", "assert", or "quantified" and
+        // decides whether a quantifier may follow.
+        newFrame: (group, name) => {
+            created: {
+                group: group
+                name: name
+                alternatives: Map()
+                alternativeCount: 0
+                items: Map()
+                itemCount: 0
+                last: "none"
+            }
+            created
+        }
+        frames: Map()
+        depth: 0
+        frame: newFrame(null, null)
+
+        pushItem: (node, kind) => {
+            frame.items[frame.itemCount] = node
+            frame.itemCount = frame.itemCount + 1
+            frame.last = kind
+        }
+
+        pushAssertion: (kind) => {
+            if((kind == "wordBoundary") || (kind == "notWordBoundary")) {
+                usesWordBoundary = true
+            }
+            pushItem(addNode({ op: "assert"; kind: kind; weight: 1 }), "assert")
+        }
+
+        finishSequence: (current) => {
+            count: current.itemCount
+            result: null
+            if(count == 0) {
+                result = addNode({ op: "empty"; weight: 1 })
+            }
+            if(count == 1) {
+                result = current.items[0]
+            }
+            if(count > 1) {
+                items: frozenArray(current.items, count)
+                result = addNode({ op: "concat"; items: items; weight: weightOf(items) })
+            }
+            current.items = Map()
+            current.itemCount = 0
+            current.last = "none"
+            result
+        }
+
+        finishAlternation: (current) => {
+            current.alternatives[current.alternativeCount] = finishSequence(current)
+            current.alternativeCount = current.alternativeCount + 1
+            count: current.alternativeCount
+            result: current.alternatives[0]
+            if(count > 1) {
+                items: frozenArray(current.alternatives, count)
+                result = addNode({ op: "alternate"; items: items; weight: weightOf(items) + count - 1 })
+            }
+            result
+        }
+
+        // Capturing groups are numbered when their opening parenthesis is read.
+        openGroup: () => {
+            position = position + 1
+            group: null
+            name: null
+            if(scalarAt(position) == 63) {
+                position = position + 1
+                marker: scalarAt(position)
+                handled: false
+                if(marker == 58) {
+                    position = position + 1
+                    handled = true
+                }
+                if(marker == 60) {
+                    position = position + 1
+                    name = parseCaptureName()
+                    captureCount = captureCount + 1
+                    group = captureCount
+                    handled = true
+                }
+                // Look-around, atomic, inline-flag, conditional, recursive,
+                // branch-reset, comment, and callout groups are excluded.
+                handled.ifFalse(() => {
+                    Error().signal()
+                })
+            } else {
+                captureCount = captureCount + 1
+                group = captureCount
+            }
+            (name === null).ifFalse(() => {
+                if(captureNames.containsKey(name)) {
+                    Error().signal()
+                }
+                captureNames[name] = group
+            })
+            frames[depth] = frame
+            depth = depth + 1
+            frame = newFrame(group, name)
+        }
+
+        closeGroup: () => {
+            if(depth == 0) {
+                Error().signal()
+            }
+            inner: finishAlternation(frame)
+            closed: frame
+            depth = depth - 1
+            frame = frames[depth]
+            node: inner
+            (closed.group === null).ifFalse(() => {
+                node = addNode({
+                    op: "capture"
+                    group: closed.group
+                    name: closed.name
+                    item: inner
+                    weight: nodes[inner].weight + 2
+                })
+            })
+            pushItem(node, "atom")
+            position = position + 1
+        }
+
+        // Reads one escape at `position` (a backslash) and answers a record of
+        // kind "scalar" (value), "set" (ranges, already case-folded and
+        // negated), or "assert" (name). Assertions are invalid inside classes.
+
+        // Class frames also form an explicit stack. Within one class, juxtaposed
+        // items form a union operand; `&&` and `--` combine operands left to
+        // right; negation applies last.
+
+        // Reads one class item and answers its scalar, or -1 when the item was a
+        // set escape, which is added to `classFrame` directly.
+
+        caseFold: caseFolder(caseInsensitive)
+        tokens: CompilerTokens.create(scalarAt, () => position, (value) => { position = value }, () => frame, nodes, addNode, maxScalar, isAsciiLetter, isAsciiDigit, hexValue, propertySet, caseFold, digitSet, spaceSet, wordSet, complement, extended, isPatternWhiteSpace, length, scalars, isLineTerminator)
+        parseCaptureName: tokens.slotValue("parseCaptureName")
+        parseDecimal: tokens.slotValue("parseDecimal")
+        parseQuantifier: tokens.slotValue("parseQuantifier")
+        parseScalarEscape: tokens.slotValue("parseScalarEscape")
+        parseProperty: tokens.slotValue("parseProperty")
+        parseEscape: tokens.slotValue("parseEscape")
+        skipIgnorable: tokens.slotValue("skipIgnorable")
+        classes: CompilerClasses.create(scalarAt, () => position, (value) => { position = value }, caseFold, singleton, fromPairs, union, intersect, subtract, complement, extended, isPatternWhiteSpace, parseEscape)
+        literalSet: classes.slotValue("literalSet")
+        newClassFrame: classes.slotValue("newClassFrame")
+        addNested: classes.slotValue("addNested")
+        finishOperand: classes.slotValue("finishOperand")
+        parseClassAtom: classes.slotValue("parseClassAtom")
+        parseClass: classes.slotValue("parseClass")
+
+        while(position < length) {
+            skipIgnorable()
+            if(position < length) {
+                current: scalars[position]
+                kind: "literal"
+                if(current == 40) {
+                    kind = "open"
+                }
+                if(current == 41) {
+                    kind = "close"
+                }
+                if(current == 124) {
+                    kind = "alternate"
+                }
+                if((current == 42) || (current == 43) || (current == 63) || (current == 123)) {
+                    kind = "quantifier"
+                }
+                if(current == 91) {
+                    kind = "class"
+                }
+                if(current == 92) {
+                    kind = "escape"
+                }
+                if(current == 46) {
+                    kind = "dot"
+                }
+                if(current == 94) {
+                    kind = "caret"
+                }
+                if(current == 36) {
+                    kind = "dollar"
+                }
+                // A literal `]` or `}` must be escaped.
+                if((current == 93) || (current == 125)) {
+                    Error().signal()
+                }
+
+                if(kind == "open") {
+                    openGroup()
+                }
+                if(kind == "close") {
+                    closeGroup()
+                }
+                if(kind == "alternate") {
+                    frame.alternatives[frame.alternativeCount] = finishSequence(frame)
+                    frame.alternativeCount = frame.alternativeCount + 1
+                    position = position + 1
+                }
+                if(kind == "quantifier") {
+                    parseQuantifier()
+                }
+                if(kind == "class") {
+                    pushItem(setNode(parseClass()), "atom")
+                }
+                if(kind == "escape") {
+                    token: parseEscape(false)
+                    if(token.kind == "scalar") {
+                        pushItem(setNode(literalSet(token.value)), "atom")
+                    }
+                    if(token.kind == "set") {
+                        pushItem(setNode(token.ranges), "atom")
+                    }
+                    if(token.kind == "assert") {
+                        pushAssertion(token.name)
+                    }
+                }
+                if(kind == "dot") {
+                    if(dotAll) {
+                        pushItem(setNode(scalarSet), "atom")
+                    } else {
+                        pushItem(setNode(dotSet), "atom")
+                    }
+                    position = position + 1
+                }
+                if(kind == "caret") {
+                    if(multiline) {
+                        pushAssertion("lineStart")
+                    } else {
+                        pushAssertion("textStart")
+                    }
+                    position = position + 1
+                }
+                // Outside multiline mode `$` is kept distinct from `\z` as kind
+                // "end", so the matcher applies its end-of-input rule without
+                // reparsing.
+                if(kind == "dollar") {
+                    if(multiline) {
+                        pushAssertion("lineEnd")
+                    } else {
+                        pushAssertion("end")
+                    }
+                    position = position + 1
+                }
+                if(kind == "literal") {
+                    pushItem(setNode(literalSet(current)), "atom")
+                    position = position + 1
+                }
+            }
+        }
+
+        (depth == 0).ifFalse(() => {
+            Error().signal()
+        })
+        root: finishAlternation(frame)
+        captureNames.freeze()
+        groupNames: sized(captureCount + 1)
+        frames = Map()
+        frame = null
+        nameIndex: 0
+        while(nameIndex < nodeCount) {
+            node: nodes[nameIndex]
+            if((node.op == "capture") && (node.name !== null)) {
+                groupNames[node.group] = node.name
+            }
+            nameIndex = nameIndex + 1
+        }
+        groupNames.freeze()
+        boundaryWords: null
+        if(usesWordBoundary) {
+            boundaryWords = wordSet
+        }
+        nodeTable: frozenArray(nodes, nodeCount)
+        rootWeight: nodes[root].weight
+
+        // Private compiled program consumed by the matcher.
+        program: {
+            nodes: nodeTable
+            root: root
+            captureCount: captureCount
+            captureNames: captureNames
+            groupNames: groupNames
+            caseInsensitive: caseInsensitive
+            multiline: multiline
+            dotAll: dotAll
+            wordSet: boundaryWords
+            lineTerminators: lineTerminatorSet
+            weight: rootWeight
+        }
+        program.freeze()
+        nodes = null
+        scalars = null
+        newPattern(source, canonicalFlags, program)
+    }
+
+    {
+        compileSource: compileSource
+    }
+}

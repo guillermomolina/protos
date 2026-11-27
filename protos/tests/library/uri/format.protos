@@ -17,6 +17,22 @@ Assertions: import("std:test/assertions")
 Test: import("std:test/test")
 
 tests: [
+    Test("extracted formatter selects current public parser", () => {
+        Uri: import("std:uri")
+        expectedReceiver: this
+        original: Uri.slotValue("parse")
+        reference: Uri.parse("a/b?c")
+        calls: 0
+        (() => {
+            Uri.parse = (text) => {
+                Assertions.require(this === expectedReceiver)
+                calls = calls + 1
+                original(text)
+            }
+            Assertions.require(Uri.format(reference) == "a/b?c")
+            Assertions.require(calls == 1)
+        }).ensure(() => { Uri.parse = original })
+    }),
     Test("format constructed", () => {
         tool009LegacyCase: () => {
             Uri: import("std:uri")

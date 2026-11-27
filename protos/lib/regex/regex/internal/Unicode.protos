@@ -1,0 +1,152 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Private Regex unicode implementation.
+
+// LF, CR, NEL, LINE SEPARATOR, and PARAGRAPH SEPARATOR; CRLF is a pair of them.
+
+// Unicode property policy. The facility only resolves Unicode 17.0.0 data;
+// which properties are accepted and in which order bare names are tried is
+// decided here.
+
+create: (unicode, scalarSet, asciiSet, union, subtract, complement) => {
+    lineTerminatorSet: [10, 10, 13, 13, 133, 133, 8232, 8233]
+    lineTerminatorSet.freeze()
+
+    enumeratedProperties: ["General_Category", "Script", "Script_Extensions"]
+    binaryProperties: [
+        "Alphabetic",
+        "Uppercase",
+        "Lowercase",
+        "White_Space",
+        "Noncharacter_Code_Point",
+        "Default_Ignorable_Code_Point"
+    ]
+
+
+
+
+
+    digitSet: unicode.ranges("General_Category", "Decimal_Number")
+    spaceSet: unicode.ranges("White_Space", "Yes")
+    wordSet: union(
+        union(
+            union(
+                unicode.ranges("Alphabetic", "Yes"),
+                unicode.ranges("General_Category", "Mark")
+            ),
+            union(
+                digitSet,
+                unicode.ranges("General_Category", "Connector_Punctuation")
+            )
+        ),
+        unicode.ranges("Join_Control", "Yes")
+    )
+    dotSet: subtract(scalarSet, lineTerminatorSet)
+
+    includes: (names, candidate) => {
+        found: false
+        if(candidate !== null) {
+            for(name in names) {
+                if(name == candidate) {
+                    found = true
+                }
+            }
+        }
+        found
+    }
+
+    // ASCII lowercase without spaces, hyphens, or underscores, for the names
+    // that are not Unicode property aliases.
+    looseName: (text) => {
+        output: Encoding.UTF8.encode("")
+        for(octet in Encoding.UTF8.encode(text)) {
+            ((octet == 32) || (octet == 45) || (octet == 95)).ifFalse(() => {
+                if((octet >= 65) && (octet <= 90)) {
+                    output.add(octet + 32)
+                } else {
+                    output.add(octet)
+                }
+            })
+        }
+        Encoding.UTF8.decode(output)
+    }
+
+    // Answers the set named by `\p{name}` (`value` null) or `\p{name=value}`.
+    propertySet: (name, value) => {
+        result: null
+        if(value === null) {
+            result = unicode.ranges("General_Category", name)
+            if(result === null) {
+                canonical: unicode.propertyName(name)
+                if(includes(binaryProperties, canonical)) {
+                    result = unicode.ranges(canonical, "Yes")
+                }
+            }
+            if(result === null) {
+                loose: looseName(name)
+                if(loose == "any") {
+                    result = scalarSet
+                }
+                if(loose == "ascii") {
+                    result = asciiSet
+                }
+                if(loose == "assigned") {
+                    result = complement(unicode.ranges("General_Category", "Unassigned"))
+                }
+            }
+            if(result === null) {
+                result = unicode.ranges("Script", name)
+            }
+        } else {
+            canonical: unicode.propertyName(name)
+            if(includes(enumeratedProperties, canonical)) {
+                result = unicode.ranges(canonical, value)
+            }
+        }
+        if(result === null) {
+            Error().signal()
+        }
+        result
+    }
+
+    isLineTerminator: (scalar) => {
+        (scalar == 10) || (scalar == 13) || (scalar == 133) || (scalar == 8232) || (scalar == 8233)
+    }
+
+    caseFolder: (caseInsensitive) => {
+        caseFold: (set) => {
+            result: set
+            if(caseInsensitive) {
+                result = unicode.caseClosure(set)
+            }
+            result
+        }
+        caseFold
+    }
+
+    {
+        includes: includes
+        looseName: looseName
+        propertySet: propertySet
+        isLineTerminator: isLineTerminator
+        digitSet: digitSet
+        spaceSet: spaceSet
+        wordSet: wordSet
+        dotSet: dotSet
+        lineTerminatorSet: lineTerminatorSet
+        caseFolder: caseFolder
+    }
+}

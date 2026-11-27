@@ -23,6 +23,38 @@ Test: import("std:test/test")
 // through TOML 1.0 (`parseDialect(..., "1.0")`).
 
 tests: [
+    Test("temporal constructors retain parser and encoder selection boundaries", () => {
+        TOML: import("std:toml/toml")
+        original: TOML.slotValue("localDate")
+        firstCalls: 0
+        secondCalls: 0
+        (() => {
+            TOML.localDate = (year, month, day) => {
+                firstCalls = firstCalls + 1
+                TOML.localDate = (year, month, day) => {
+                    secondCalls = secondCalls + 1
+                    original(year, month, day)
+                }
+                original(year, month, day)
+            }
+            tree: TOML.parse("a = 2024-02-29\nb = 2025-01-01\n")
+            Assertions.require(firstCalls == 2)
+            Assertions.require(secondCalls == 0)
+            firstCalls = 0
+            TOML.localDate = (year, month, day) => {
+                firstCalls = firstCalls + 1
+                TOML.localDate = (year, month, day) => {
+                    secondCalls = secondCalls + 1
+                    original(year, month, day)
+                }
+                original(year, month, day)
+            }
+            encoded: TOML.encode(tree)
+            Assertions.require(String.recognizes(encoded))
+            Assertions.require(firstCalls == 1)
+            Assertions.require(secondCalls == 1)
+        }).ensure(() => { TOML.localDate = original })
+    }),
     Test("TOML 1.1 accepts and TOML 1.0 rejects the \\e escape", () => {
         TOML: import("std:toml/toml")
 

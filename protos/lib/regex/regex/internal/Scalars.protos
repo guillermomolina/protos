@@ -1,0 +1,127 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Private Regex scalars implementation.
+
+// Decodes the UTF-8 encoding of a String into a Map from scalar index to
+// Unicode scalar value. Core String indexing is not constant time, so the
+// parser reads this Map instead.
+
+// Per-operation subject: the scalars are decoded once so the matcher reads
+// each one in constant time. `appendSpan` appends the UTF-8 encoding of a
+// half-open scalar span to a byte buffer, and `slice` rebuilds the exact
+// String of such a span, both without normalization.
+
+isAsciiLetter: (scalar) => {
+    ((scalar >= 65) && (scalar <= 90)) || ((scalar >= 97) && (scalar <= 122))
+}
+
+isAsciiDigit: (scalar) => {
+    (scalar >= 48) && (scalar <= 57)
+}
+
+hexValue: (scalar) => {
+    result: -1
+    if(isAsciiDigit(scalar)) {
+        result = scalar - 48
+    }
+    if((scalar >= 65) && (scalar <= 70)) {
+        result = scalar - 55
+    }
+    if((scalar >= 97) && (scalar <= 102)) {
+        result = scalar - 87
+    }
+    result
+}
+
+isPatternWhiteSpace: (scalar) => {
+    ((scalar >= 9) && (scalar <= 13)) || (scalar == 32) || (scalar == 133) ||
+        (scalar == 8206) || (scalar == 8207) || (scalar == 8232) || (scalar == 8233)
+}
+
+decodeScalars: (text) => {
+    scalars: Map()
+    count: 0
+    pending: 0
+    value: 0
+    for(octet in Encoding.UTF8.encode(text)) {
+        if(pending > 0) {
+            value = value * 64 + (octet - 128)
+            pending = pending - 1
+        } else {
+            value = octet
+            if((octet >= 192) && (octet < 224)) {
+                value = octet - 192
+                pending = 1
+            }
+            if((octet >= 224) && (octet < 240)) {
+                value = octet - 224
+                pending = 2
+            }
+            if(octet >= 240) {
+                value = octet - 240
+                pending = 3
+            }
+        }
+        if(pending == 0) {
+            scalars[count] = value
+            count = count + 1
+        }
+    }
+    scalars
+}
+
+appendScalar: (bytes, scalar) => {
+    if(scalar < 128) {
+        bytes.add(scalar)
+    }
+    if((scalar >= 128) && (scalar < 2048)) {
+        bytes.add(192 + scalar.div(64))
+        bytes.add(128 + (scalar % 64))
+    }
+    if((scalar >= 2048) && (scalar < 65536)) {
+        bytes.add(224 + scalar.div(4096))
+        bytes.add(128 + (scalar.div(64) % 64))
+        bytes.add(128 + (scalar % 64))
+    }
+    if(scalar >= 65536) {
+        bytes.add(240 + scalar.div(262144))
+        bytes.add(128 + (scalar.div(4096) % 64))
+        bytes.add(128 + (scalar.div(64) % 64))
+        bytes.add(128 + (scalar % 64))
+    }
+}
+
+newInput: (text) => {
+    scalars: decodeScalars(text)
+    appendSpan: (bytes, first, last) => {
+        index: first
+        while(index < last) {
+            appendScalar(bytes, scalars[index])
+            index = index + 1
+        }
+    }
+    input: {
+        scalars: scalars
+        size: scalars.size()
+        appendSpan: appendSpan
+        slice: (first, last) => {
+            bytes: Encoding.UTF8.encode("")
+            appendSpan(bytes, first, last)
+            Encoding.UTF8.decode(bytes)
+        }
+    }
+    input
+}

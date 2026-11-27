@@ -1,0 +1,301 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Private TOML temporalparser implementation.
+
+create: (decimalDigit, toml11, publicLocalDate, publicLocalTime, publicLocalDateTime, publicOffsetDateTime) => {
+    twoDigitsAt: (token, position) => {
+        valid: position + 1 < token.size()
+        value: 0
+
+        if(valid) {
+            first: decimalDigit(token[position])
+            second: decimalDigit(token[position + 1])
+            if((first < 0) || (second < 0)) {
+                valid = false
+            }
+            if(valid) {
+                value = first * 10 + second
+            }
+        }
+
+        {
+            valid: valid
+            value: value
+        }
+    }
+
+    fourDigitsAt: (token, position) => {
+        valid: position + 3 < token.size()
+        value: 0
+        offset: 0
+
+        scan: null
+        scan = () => {
+            if(offset < 4) {
+                if(valid) {
+                    digit: decimalDigit(token[position + offset])
+                    if(digit < 0) {
+                        valid = false
+                    }
+                    if(digit >= 0) {
+                        value = value * 10 + digit
+                    }
+                }
+                offset = offset + 1
+                scan()
+            }
+        }
+
+        if(valid) {
+            scan()
+        }
+
+        {
+            valid: valid
+            value: value
+        }
+    }
+
+    timeAt: (token, start) => {
+        tokenLength: token.size()
+        valid: start + 4 < tokenLength
+
+        hour: 0
+        minute: 0
+        second: 0
+        fractionCoefficient: 0
+        fractionDigits: 0
+        position: start
+
+        if(valid) {
+            hourPart: twoDigitsAt(token, start)
+            minutePart: twoDigitsAt(token, start + 3)
+
+            (token[start + 2] == 58).ifFalse(() => {
+                valid = false
+            })
+            (hourPart.valid && minutePart.valid).ifFalse(() => {
+                valid = false
+            })
+
+            if(valid) {
+                hour = hourPart.value
+                minute = minutePart.value
+                position = start + 5
+            }
+        }
+
+        // TOML 1.0 requires the seconds field; TOML 1.1 lets it be omitted.
+        if(valid) {
+            toml11.ifFalse(() => {
+                secondsPresent: false
+                if(position < tokenLength) {
+                    secondsPresent = token[position] == 58
+                }
+                secondsPresent.ifFalse(() => {
+                    valid = false
+                })
+            })
+        }
+
+        if(valid) {
+            if(position < tokenLength) {
+                if(token[position] == 58) {
+                    secondPart: twoDigitsAt(token, position + 1)
+                    secondPart.valid.ifFalse(() => {
+                        valid = false
+                    })
+                    if(secondPart.valid) {
+                        second = secondPart.value
+                        position = position + 3
+
+                        if(position < tokenLength) {
+                            if(token[position] == 46) {
+                                position = position + 1
+                                fractionStart: position
+
+                                scanningFraction: true
+                                while(scanningFraction && (position < tokenLength)) {
+                                    digit: decimalDigit(token[position])
+                                    if(digit >= 0) {
+                                        fractionCoefficient =
+                                            fractionCoefficient * 10 + digit
+                                        fractionDigits = fractionDigits + 1
+                                        position = position + 1
+                                    }
+                                    if(digit < 0) {
+                                        scanningFraction = false
+                                    }
+                                }
+                                if(position == fractionStart) {
+                                    valid = false
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        {
+            valid: valid
+            hour: hour
+            minute: minute
+            second: second
+            fractionCoefficient: fractionCoefficient
+            fractionDigits: fractionDigits
+            position: position
+        }
+    }
+
+    temporalFromToken: (token) => {
+        tokenLength: token.size()
+        result: {
+            valid: false
+            value: null
+        }
+
+        dateShape: tokenLength >= 10
+        if(dateShape) {
+            ((token[4] == 45) && (token[7] == 45)).ifFalse(() => {
+                dateShape = false
+            })
+        }
+
+        if(dateShape) {
+            yearPart: fourDigitsAt(token, 0)
+            monthPart: twoDigitsAt(token, 5)
+            dayPart: twoDigitsAt(token, 8)
+            (yearPart.valid && monthPart.valid && dayPart.valid).ifFalse(() => {
+                dateShape = false
+            })
+
+            if(dateShape) {
+                if(tokenLength == 10) {
+                    result.value =
+                        publicLocalDate(yearPart.value, monthPart.value, dayPart.value)
+                    result.valid = true
+                }
+
+                if(tokenLength > 10) {
+                    delimiter: token[10]
+                    validDelimiter: delimiter == 84
+                    if(delimiter == 116) { validDelimiter = true }
+                    if(delimiter == 32) { validDelimiter = true }
+
+                    if(validDelimiter) {
+                        parsedTime: timeAt(token, 11)
+                        if(parsedTime.valid) {
+                            position: parsedTime.position
+
+                            if(position == tokenLength) {
+                                result.value =
+                                    publicLocalDateTime(
+                                        yearPart.value,
+                                        monthPart.value,
+                                        dayPart.value,
+                                        parsedTime.hour,
+                                        parsedTime.minute,
+                                        parsedTime.second,
+                                        parsedTime.fractionCoefficient,
+                                        parsedTime.fractionDigits
+                                    )
+                                result.valid = true
+                            }
+
+                            if(position < tokenLength) {
+                                offsetMinutes: 0
+                                offsetValid: false
+                                offsetEnd: position
+
+                                if((token[position] == 90) ||
+                                    (token[position] == 122)) {
+                                    offsetValid = true
+                                    offsetEnd = position + 1
+                                }
+
+                                if((token[position] == 43) ||
+                                    (token[position] == 45)) {
+                                    if(position + 5 < tokenLength) {
+                                        if(token[position + 3] == 58) {
+                                            offsetHour: twoDigitsAt(token, position + 1)
+                                            offsetMinute: twoDigitsAt(token, position + 4)
+
+                                            if(offsetHour.valid && offsetMinute.valid) {
+                                                if((offsetHour.value <= 23) &&
+                                                    (offsetMinute.value <= 59)) {
+                                                    offsetMinutes =
+                                                        offsetHour.value * 60 +
+                                                        offsetMinute.value
+                                                    if(token[position] == 45) {
+                                                        offsetMinutes =
+                                                            0 - offsetMinutes
+                                                    }
+                                                    offsetEnd = position + 6
+                                                    offsetValid = true
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if(offsetValid && (offsetEnd == tokenLength)) {
+                                    result.value =
+                                        publicOffsetDateTime(
+                                            yearPart.value,
+                                            monthPart.value,
+                                            dayPart.value,
+                                            parsedTime.hour,
+                                            parsedTime.minute,
+                                            parsedTime.second,
+                                            parsedTime.fractionCoefficient,
+                                            parsedTime.fractionDigits,
+                                            offsetMinutes
+                                        )
+                                    result.valid = true
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        dateShape.ifFalse(() => {
+            parsedTime: timeAt(token, 0)
+            if(parsedTime.valid && (parsedTime.position == tokenLength)) {
+                result.value =
+                    publicLocalTime(
+                        parsedTime.hour,
+                        parsedTime.minute,
+                        parsedTime.second,
+                        parsedTime.fractionCoefficient,
+                        parsedTime.fractionDigits
+                    )
+                result.valid = true
+            }
+        })
+
+        result
+    }
+
+    {
+        twoDigitsAt: twoDigitsAt
+        fourDigitsAt: fourDigitsAt
+        timeAt: timeAt
+        temporalFromToken: temporalFromToken
+    }
+}

@@ -1,0 +1,260 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Private URI resolution implementation.
+
+create: (format) => {
+    resolve: (base, reference) => {
+        // Reuse the already-published structural/syntax authority. resolve accepts
+        // component data, not String arguments, and does not create a second grammar.
+        ignoredBaseValidation: format(base)
+        ignoredReferenceValidation: format(reference)
+
+        if(base.scheme === null) {
+            fail()
+        }
+        if(base.fragment !== null) {
+            fail()
+        }
+
+        removeLastSegment: (output) => {
+            while((output.size() > 0) && (output[output.size() - 1] != 47)) {
+                output.removeAt(output.size() - 1)
+            }
+            if(output.size() > 0) {
+                output.removeAt(output.size() - 1)
+            }
+        }
+
+        // RFC 3986 section 5.2.4. Only literal dot-segment syntax is removed;
+        // percent-encoded dots remain ordinary segment data.
+        removeDotSegments: (path) => {
+            source: Encoding.UTF8.encode(path)
+            output: Encoding.UTF8.encode("")
+            size: source.size()
+            index: 0
+
+            while(index < size) {
+                handled: false
+
+                // A. "../" or "./"
+                if(((index + 2) < size) &&
+                    (source[index] == 46) &&
+                    (source[index + 1] == 46) &&
+                    (source[index + 2] == 47)) {
+                    index = index + 3
+                    handled = true
+                }
+
+                if((!handled) &&
+                    ((index + 1) < size) &&
+                    (source[index] == 46) &&
+                    (source[index + 1] == 47)) {
+                    index = index + 2
+                    handled = true
+                }
+
+                // B. "/./" -> "/" and terminal "/." -> "/".
+                if((!handled) &&
+                    ((index + 2) < size) &&
+                    (source[index] == 47) &&
+                    (source[index + 1] == 46) &&
+                    (source[index + 2] == 47)) {
+                    index = index + 2
+                    handled = true
+                }
+
+                if((!handled) &&
+                    ((index + 2) == size) &&
+                    (source[index] == 47) &&
+                    (source[index + 1] == 46)) {
+                    output.add(47)
+                    index = size
+                    handled = true
+                }
+
+                // C. "/../" -> "/" and terminal "/.." -> "/", removing the
+                // previous output segment in both cases.
+                if((!handled) &&
+                    ((index + 3) < size) &&
+                    (source[index] == 47) &&
+                    (source[index + 1] == 46) &&
+                    (source[index + 2] == 46) &&
+                    (source[index + 3] == 47)) {
+                    removeLastSegment(output)
+                    index = index + 3
+                    handled = true
+                }
+
+                if((!handled) &&
+                    ((index + 3) == size) &&
+                    (source[index] == 47) &&
+                    (source[index + 1] == 46) &&
+                    (source[index + 2] == 46)) {
+                    removeLastSegment(output)
+                    output.add(47)
+                    index = size
+                    handled = true
+                }
+
+                // D. Entire remaining input is "." or "..".
+                if((!handled) &&
+                    ((index + 1) == size) &&
+                    (source[index] == 46)) {
+                    index = size
+                    handled = true
+                }
+
+                if((!handled) &&
+                    ((index + 2) == size) &&
+                    (source[index] == 46) &&
+                    (source[index + 1] == 46)) {
+                    index = size
+                    handled = true
+                }
+
+                // E. Move the next path segment, including a leading slash when
+                // present, from input to output.
+                handled.ifFalse(() => {
+                    if(source[index] == 47) {
+                        output.add(47)
+                        index = index + 1
+                    }
+
+                    while((index < size) && (source[index] != 47)) {
+                        output.add(source[index])
+                        index = index + 1
+                    }
+                })
+            }
+
+            Encoding.UTF8.decode(output)
+        }
+
+        // RFC 3986 section 5.2.3.
+        mergePaths: (basePath, referencePath, baseHasAuthority) => {
+            baseBytes: Encoding.UTF8.encode(basePath)
+            referenceBytes: Encoding.UTF8.encode(referencePath)
+            merged: Encoding.UTF8.encode("")
+
+            if((baseHasAuthority) && (baseBytes.size() == 0)) {
+                merged.add(47)
+            }
+
+            ((baseHasAuthority) && (baseBytes.size() == 0)).ifFalse(() => {
+                lastSlash: -1
+                scan: 0
+                while(scan < baseBytes.size()) {
+                    if(baseBytes[scan] == 47) {
+                        lastSlash = scan
+                    }
+                    scan = scan + 1
+                }
+
+                copy: 0
+                while(copy <= lastSlash) {
+                    merged.add(baseBytes[copy])
+                    copy = copy + 1
+                }
+            })
+
+            copy: 0
+            while(copy < referenceBytes.size()) {
+                merged.add(referenceBytes[copy])
+                copy = copy + 1
+            }
+
+            Encoding.UTF8.decode(merged)
+        }
+
+        targetScheme: null
+        targetUserInfo: null
+        targetHost: null
+        targetPort: null
+        targetPath: ""
+        targetQuery: null
+        targetFragment: reference.fragment
+
+        if(reference.scheme !== null) {
+            targetScheme = reference.scheme
+            targetUserInfo = reference.userInfo
+            targetHost = reference.host
+            targetPort = reference.port
+            targetPath = removeDotSegments(reference.path)
+            targetQuery = reference.query
+        }
+
+        if(reference.scheme === null) {
+            targetScheme = base.scheme
+
+            if(reference.host !== null) {
+                targetUserInfo = reference.userInfo
+                targetHost = reference.host
+                targetPort = reference.port
+                targetPath = removeDotSegments(reference.path)
+                targetQuery = reference.query
+            }
+
+            if(reference.host === null) {
+                targetUserInfo = base.userInfo
+                targetHost = base.host
+                targetPort = base.port
+
+                if(reference.path == "") {
+                    targetPath = base.path
+                    targetQuery = base.query
+                    if(reference.query !== null) {
+                        targetQuery = reference.query
+                    }
+                }
+
+                (reference.path == "").ifFalse(() => {
+                    referenceBytes: Encoding.UTF8.encode(reference.path)
+                    isAbsolutePath: (referenceBytes.size() > 0) && (referenceBytes[0] == 47)
+
+                    if(isAbsolutePath) {
+                        targetPath = removeDotSegments(reference.path)
+                    }
+
+                    isAbsolutePath.ifFalse(() => {
+                        mergedPath: mergePaths(base.path, reference.path, base.host !== null)
+                        targetPath = removeDotSegments(mergedPath)
+                    })
+
+                    targetQuery = reference.query
+                })
+            }
+        }
+
+        target: {
+            scheme: targetScheme
+            userInfo: targetUserInfo
+            host: targetHost
+            port: targetPort
+            path: targetPath
+            query: targetQuery
+            fragment: targetFragment
+        }
+
+        // Validate the exact result through the same syntax authority before
+        // publication, then return fresh frozen ordinary data.
+        ignoredTargetValidation: format(target)
+        target.freeze()
+    }
+
+    {
+        resolve: resolve
+    }
+}

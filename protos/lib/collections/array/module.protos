@@ -15,130 +15,35 @@
 
 //! Sequential and isolated-parallel algorithms over ordinary Arrays.
 
+// Dependencies retain ordinary public-member selection in the initializer context.
+ArrayTraversal: import("../internal/ArrayTraversal.protos")
+
+ArrayOrdering: import("../internal/ArrayOrdering.protos")
+
+ArrayEdits: import("../internal/ArrayEdits.protos")
+
+ArrayParallel: import("../internal/ArrayParallel.protos")
+
 /// Answers a fresh Array whose element `i` is `transform(array[i])`, applied to a
 /// snapshot of `array` in ascending index order.
-this.map: (array, transform) => {
-    snapshot: Array(...array)
-    result: Array(...snapshot)
-    index: 0
-    for(element in snapshot) {
-        result[index] = transform(element)
-        index = index + 1
-    }
-    result
-}
+this.map: ArrayTraversal.slotValue("map")
 
 /// Answers a fresh Array of the elements of a snapshot of `array` for which
 /// `predicate(element)` answers `true`, keeping source order. A result other
 /// than canonical `true` or `false` signals `InvalidPredicateResult`.
-this.filter: (array, predicate) => {
-    snapshot: Array(...array)
-
-    filterRange: (start, end) => {
-        length: end - start
-        result: null
-
-        if(length == 0) {
-            result = Array()
-        }
-
-        if(length == 1) {
-            element: snapshot[start]
-            decision: predicate(element)
-
-            if(decision === true) {
-                result = Array(element)
-            }
-            (decision === true).ifFalse(() => {
-                if(decision === false) {
-                    result = Array()
-                }
-                (decision === false).ifFalse(() => {
-                    InvalidPredicateResult().signal()
-                })
-            })
-        }
-
-        if(length > 1) {
-            middle: start + length.div(2)
-            left: filterRange(start, middle)
-            right: filterRange(middle, end)
-            result = Array(...left, ...right)
-        }
-
-        result
-    }
-
-    filterRange(0, snapshot.size())
-}
+this.filter: ArrayTraversal.slotValue("filter")
 
 /// Answers the lowest index of a snapshot of `array` whose element satisfies
 /// `predicate(element)`, or `null` when none does. Elements are tested in
 /// ascending order; a result other than canonical `true` or `false` signals
 /// `InvalidPredicateResult`.
-this.findIndex: (array, predicate) => {
-    snapshot: Array(...array)
-    index: 0
-
-    for(element in snapshot) {
-        decision: predicate(element)
-
-        if(decision === true) {
-            ^index
-        }
-        (decision === false).ifFalse(() => {
-            InvalidPredicateResult().signal()
-        })
-
-        index = index + 1
-    }
-
-    null
-}
+this.findIndex: ArrayTraversal.slotValue("findIndex")
 
 /// Folds a snapshot of `array` left to right with `reducer(accumulator, element)`.
 /// An optional single `initial` value seeds the fold; without one, the first
 /// element does, and an empty Array answers `null`. More than one initial
 /// value signals an Error.
-this.reduce: (array, reducer, ...initial) => {
-    snapshot: Array(...array)
-    initialSize: initial.size()
-
-    if(initialSize > 1) {
-        Error().signal()
-    }
-
-    snapshotSize: snapshot.size()
-    accumulator: null
-
-    if(initialSize == 1) {
-        accumulator = initial[0]
-    }
-
-    if(initialSize == 0) {
-        if(snapshotSize == 0) {
-            ^null
-        }
-        accumulator = snapshot[0]
-    }
-
-    foldRange: (start, end) => {
-        length: end - start
-
-        if(length == 1) {
-            accumulator = reducer(accumulator, snapshot[start])
-        }
-
-        if(length > 1) {
-            middle: start + length.div(2)
-            foldRange(start, middle)
-            foldRange(middle, end)
-        }
-    }
-
-    foldRange(1 - initialSize, snapshotSize)
-    accumulator
-}
+this.reduce: ArrayTraversal.slotValue("reduce")
 
 /// Answers a fresh Array with the elements of a snapshot of `array` stably sorted
 /// by `less(left, right)`. A comparator result other than canonical `true` or
@@ -149,137 +54,20 @@ this.reduce: (array, reducer, ...initial) => {
 /// over arbitrary values, so elements whose `<` fails or answers a non-Boolean
 /// signal exactly as with an explicit comparator. An explicit `null` is an
 /// ordinary comparator argument and does not select the default.
-this.sort: (array, less: (left, right) => left < right) => {
-    snapshot: Array(...array)
-
-    merge: (left, right) => {
-        result: Array(...left, ...right)
-        leftSize: left.size()
-        rightSize: right.size()
-        leftIndex: 0
-        rightIndex: 0
-        mergeRange: (start, end) => {
-            length: end - start
-
-            if(length == 1) {
-                leftDone: leftIndex == leftSize
-                rightDone: rightIndex == rightSize
-
-                if(leftDone) {
-                    result[start] = right[rightIndex]
-                    rightIndex = rightIndex + 1
-                }
-
-                leftDone.ifFalse(() => {
-                    if(rightDone) {
-                        result[start] = left[leftIndex]
-                        leftIndex = leftIndex + 1
-                    }
-
-                    rightDone.ifFalse(() => {
-                        leftValue: left[leftIndex]
-                        rightValue: right[rightIndex]
-                        lr: less(leftValue, rightValue)
-
-                        (lr === true).ifFalse(() => {
-                            (lr === false).ifFalse(() => {
-                                InvalidComparatorResult().signal()
-                            })
-                        })
-
-                        rl: less(rightValue, leftValue)
-
-                        (rl === true).ifFalse(() => {
-                            (rl === false).ifFalse(() => {
-                                InvalidComparatorResult().signal()
-                            })
-                        })
-
-                        if(lr === true) {
-                            if(rl === true) {
-                                InvalidComparatorOrder().signal()
-                            }
-                            result[start] = leftValue
-                            leftIndex = leftIndex + 1
-                        }
-
-                        if(lr === false) {
-                            if(rl === true) {
-                                result[start] = rightValue
-                                rightIndex = rightIndex + 1
-                            }
-                            if(rl === false) {
-                                result[start] = leftValue
-                                leftIndex = leftIndex + 1
-                            }
-                        }
-                    })
-                })
-            }
-
-            if(length > 1) {
-                middle: start + length.div(2)
-                mergeRange(start, middle)
-                mergeRange(middle, end)
-            }
-
-            null
-        }
-
-        mergeRange(0, result.size())
-        result
-    }
-
-    sortRange: (start, end) => {
-        length: end - start
-        result: null
-
-        if(length == 0) {
-            result = Array()
-        }
-
-        if(length == 1) {
-            result = Array(snapshot[start])
-        }
-
-        if(length > 1) {
-            middle: start + length.div(2)
-            left: sortRange(start, middle)
-            right: sortRange(middle, end)
-            result = merge(left, right)
-        }
-
-        result
-    }
-
-    sortRange(0, snapshot.size())
-}
+this.sort: ArrayOrdering.slotValue("sort")
 
 /// Answers a fresh open Array holding the elements of `array` followed by
 /// `value` as one single element, even when `value` is itself an Array. The
 /// copy is shallow and `array` is not mutated. A non-Array `array` (one that
 /// `Array.recognizes` rejects) signals an Error.
-this.append: (array, value) => {
-    Array.recognizes(array).ifFalse(() => {
-        Error().signal()
-    })
-    Array(...array, value)
-}
+this.append: ArrayEdits.slotValue("append")
 
 /// Answers a fresh open Array holding the elements of `left` followed by the
 /// elements of `right`, flattened exactly one level. The copy is shallow,
 /// neither operand is mutated, and the result never shares indexed storage
 /// with either operand, even when both are the same Array or both are empty.
 /// An operand that `Array.recognizes` rejects signals an Error.
-this.concat: (left, right) => {
-    Array.recognizes(left).ifFalse(() => {
-        Error().signal()
-    })
-    Array.recognizes(right).ifFalse(() => {
-        Error().signal()
-    })
-    Array(...left, ...right)
-}
+this.concat: ArrayEdits.slotValue("concat")
 
 /// Answers a fresh open Array holding the elements of a shallow snapshot of
 /// `array` at the half-open index range `[start, end)`. `start` and `end` must
@@ -287,77 +75,14 @@ this.concat: (left, right) => {
 /// Float, a negative bound, or an arbitrarily large Integer, signals an Error
 /// without numeric conversion. The result is never a view or an alias of
 /// `array`, even for the full or an empty range.
-this.slice: (array, start, end) => {
-    Array.recognizes(array).ifFalse(() => {
-        Error().signal()
-    })
-    Integer.recognizes(start).ifFalse(() => {
-        Error().signal()
-    })
-    Integer.recognizes(end).ifFalse(() => {
-        Error().signal()
-    })
-
-    snapshot: Array(...array)
-    size: snapshot.size()
-
-    (((0 <= start) && (start <= end)) && (end <= size)).ifFalse(() => {
-        Error().signal()
-    })
-
-    // Answers a fresh Array of `count` null placeholders in O(count).
-    sized: null
-    sized = (count) => {
-        result: Array()
-        if(count > 0) {
-            half: sized(count.div(2))
-            result = Array(...half, ...half)
-            if((count % 2) == 1) {
-                result = Array(...result, null)
-            }
-        }
-        result
-    }
-
-    count: end - start
-    result: sized(count)
-    index: 0
-    while(index < count) {
-        result[index] = snapshot[start + index]
-        index = index + 1
-    }
-    result
-}
+this.slice: ArrayEdits.slotValue("slice")
 
 /// Answers a fresh open Array holding the elements of `array` with `value`
 /// inserted as one single element at `index`, shifting later elements one
 /// position up. `index` must be an Integer with `0 <= index <= size`; `size`
 /// itself appends. Anything else signals an Error before any element is moved.
 /// The copy is shallow and `array` is not mutated.
-this.insertAt: (array, index, value) => {
-    Array.recognizes(array).ifFalse(() => {
-        Error().signal()
-    })
-    Integer.recognizes(index).ifFalse(() => {
-        Error().signal()
-    })
-
-    result: Array(...array, value)
-    n: result.size() - 1
-
-    ((0 <= index) && (index <= n)).ifFalse(() => {
-        Error().signal()
-    })
-
-    // Shift the suffix from the end so no pending element is overwritten.
-    position: n
-    while(position > index) {
-        result[position] = result[position - 1]
-        position = position - 1
-    }
-    result[index] = value
-    result
-}
+this.insertAt: ArrayEdits.slotValue("insertAt")
 
 /// Answers a fresh open Array holding the elements of a shallow snapshot of
 /// `array` without the element at `index`, keeping the order and identity of
@@ -365,190 +90,41 @@ this.insertAt: (array, index, value) => {
 /// `0 <= index < size`; anything else, including any index of an empty Array,
 /// signals an Error. `array` is not mutated. Unlike `Bytes.removeAt`, this
 /// answers a new Array rather than editing a receiver.
-this.removeAt: (array, index) => {
-    Array.recognizes(array).ifFalse(() => {
-        Error().signal()
-    })
-    Integer.recognizes(index).ifFalse(() => {
-        Error().signal()
-    })
-
-    snapshot: Array(...array)
-    n: snapshot.size()
-
-    ((0 <= index) && (index < n)).ifFalse(() => {
-        Error().signal()
-    })
-
-    // Answers a fresh Array of `count` null placeholders in O(count).
-    sized: null
-    sized = (count) => {
-        result: Array()
-        if(count > 0) {
-            half: sized(count.div(2))
-            result = Array(...half, ...half)
-            if((count % 2) == 1) {
-                result = Array(...result, null)
-            }
-        }
-        result
-    }
-
-    result: sized(n - 1)
-    target: 0
-    while(target < (n - 1)) {
-        source: target
-        if(target >= index) {
-            source = target + 1
-        }
-        result[target] = snapshot[source]
-        target = target + 1
-    }
-    result
-}
+this.removeAt: ArrayEdits.slotValue("removeAt")
 
 /// Answers a fresh open Array holding the elements of `array` in reverse
 /// order. The copy is shallow, `array` is not mutated, and no comparator or
 /// other callback is invoked.
-this.reverse: (array) => {
-    Array.recognizes(array).ifFalse(() => {
-        Error().signal()
-    })
-
-    result: Array(...array)
-    left: 0
-    right: result.size() - 1
-    while(left < right) {
-        swap: result[left]
-        result[left] = result[right]
-        result[right] = swap
-        left = left + 1
-        right = right - 1
-    }
-    result
-}
+this.reverse: ArrayEdits.slotValue("reverse")
 
 /// Answers the first element of a shallow snapshot whose predicate answers
 /// canonical true, or null when none matches. A matched null is ambiguous;
 /// use findIndex when the distinction matters.
-this.find: (array, predicate) => {
-    Array.recognizes(array).ifFalse(() => {
-        Error().signal()
-    })
-    snapshot: Array(...array)
-
-    for(element in snapshot) {
-        decision: predicate(element)
-        if(decision === true) {
-            ^element
-        }
-        (decision === false).ifFalse(() => {
-            InvalidPredicateResult().signal()
-        })
-    }
-    null
-}
+this.find: ArrayTraversal.slotValue("find")
 
 /// Answers whether a snapshot contains value, using element == value in
 /// ascending order. Equality is ordinary dispatch, not hashing or identity.
-this.contains: (array, value) => {
-    Array.recognizes(array).ifFalse(() => {
-        Error().signal()
-    })
-    snapshot: Array(...array)
-
-    for(element in snapshot) {
-        if(element == value) {
-            ^true
-        }
-    }
-    false
-}
+this.contains: ArrayTraversal.slotValue("contains")
 
 /// Answers true at the first canonical true predicate result, otherwise false.
 /// Invalid predicate results signal InvalidPredicateResult.
-this.any: (array, predicate) => {
-    Array.recognizes(array).ifFalse(() => {
-        Error().signal()
-    })
-    snapshot: Array(...array)
-
-    for(element in snapshot) {
-        decision: predicate(element)
-        if(decision === true) {
-            ^true
-        }
-        (decision === false).ifFalse(() => {
-            InvalidPredicateResult().signal()
-        })
-    }
-    false
-}
+this.any: ArrayTraversal.slotValue("any")
 
 /// Answers false at the first canonical false predicate result, otherwise true.
 /// Invalid predicate results signal InvalidPredicateResult.
-this.all: (array, predicate) => {
-    Array.recognizes(array).ifFalse(() => {
-        Error().signal()
-    })
-    snapshot: Array(...array)
-
-    for(element in snapshot) {
-        decision: predicate(element)
-        if(decision === false) {
-            ^false
-        }
-        (decision === true).ifFalse(() => {
-            InvalidPredicateResult().signal()
-        })
-    }
-    true
-}
+this.all: ArrayTraversal.slotValue("all")
 
 /// Answers a fresh open Array with the first min(count, size) elements.
 /// Count must be a nonnegative Integer; an oversized count saturates.
-this.take: (array, count) => {
-    Array.recognizes(array).ifFalse(() => {
-        Error().signal()
-    })
-    Integer.recognizes(count).ifFalse(() => {
-        Error().signal()
-    })
-    (count >= 0).ifFalse(() => {
-        Error().signal()
-    })
-
-    snapshot: Array(...array)
-    n: snapshot.size()
-    if(count >= n) {
-        ^snapshot
-    }
-    slice(snapshot, 0, count)
-}
+this.take: (array, count) => ArrayEdits.take(
+    (array, start, end) => slice(array, start, end), array, count
+)
 
 /// Answers a fresh open Array after skipping min(count, size) elements.
 /// Count must be a nonnegative Integer; an oversized count saturates.
-this.drop: (array, count) => {
-    Array.recognizes(array).ifFalse(() => {
-        Error().signal()
-    })
-    Integer.recognizes(count).ifFalse(() => {
-        Error().signal()
-    })
-    (count >= 0).ifFalse(() => {
-        Error().signal()
-    })
-
-    snapshot: Array(...array)
-    n: snapshot.size()
-    if(count == 0) {
-        ^snapshot
-    }
-    if(count >= n) {
-        ^Array()
-    }
-    slice(snapshot, count, n)
-}
+this.drop: (array, count) => ArrayEdits.drop(
+    (array, start, end) => slice(array, start, end), array, count
+)
 
 // D242: resolve the private SOURCE during MODULE initialization.
 // This lexical binding is not a public MODULE export.
@@ -582,38 +158,10 @@ this.distinct: (array) => ArrayBulk.distinct(array)
 /// Answers a Future of a fresh Array whose element `i` is
 /// `worker(array[i], arguments...)`, evaluated in isolated parallel execution.
 /// Results keep source order; the lowest failing index supplies the failure.
-this.parallelMap: (array, worker, ...arguments) => {
-    snapshot: Array(...array)
-
-    if(snapshot.size() == 0) {
-        ^(() => { Array() }).future()
-    }
-
-    input: ((bundle) => {
-        bundle
-    }).parallel(Array(snapshot, worker, arguments))
-
-    apply: (element, callback, extra) => {
-        callback(element, ...extra)
-    }
-
-    (() => {
-        children: Array()
-
-        (() => {
-            parts: input.value()
-            children = map(parts[0], (element) => {
-                apply.parallel(element, parts[1], parts[2])
-            })
-            Future.all(...children).value()
-        }).ensure(() => {
-            input.cancel()
-            for(child in children) {
-                child.cancel()
-            }
-        })
-    }).future()
-}
+this.parallelMap: (array, worker, ...arguments) => ArrayParallel.parallelMap(
+    (array, transform) => map(array, transform),
+    array, worker, ...arguments
+)
 
 /// Answers a Future of a fresh Array of the elements for which
 /// `predicate(element, arguments...)`, evaluated in isolated parallel
@@ -621,43 +169,11 @@ this.parallelMap: (array, worker, ...arguments) => {
 /// examined in ascending index order, so the lowest index whose predicate
 /// fails or answers something other than canonical `true` or `false`
 /// (`InvalidPredicateResult`) supplies the failure.
-this.parallelFilter: (array, predicate, ...arguments) => {
-    snapshot: Array(...array)
-
-    if(snapshot.size() == 0) {
-        ^(() => { Array() }).future()
-    }
-
-    input: ((bundle) => {
-        bundle
-    }).parallel(Array(snapshot, predicate, arguments))
-
-    apply: (element, callback, extra) => {
-        callback(element, ...extra)
-    }
-
-    (() => {
-        children: Array()
-
-        (() => {
-            parts: input.value()
-            children = map(parts[0], (element) => {
-                apply.parallel(element, parts[1], parts[2])
-            })
-            index: 0
-            filter(parts[0], (element) => {
-                decision: children[index].value()
-                index = index + 1
-                decision
-            })
-        }).ensure(() => {
-            input.cancel()
-            for(child in children) {
-                child.cancel()
-            }
-        })
-    }).future()
-}
+this.parallelFilter: (array, predicate, ...arguments) => ArrayParallel.parallelFilter(
+    (array, transform) => map(array, transform),
+    (array, predicate) => filter(array, predicate),
+    array, predicate, ...arguments
+)
 
 /// Answers a Future of the lowest index whose element satisfies
 /// `predicate(element, arguments...)`, evaluated in isolated parallel
@@ -665,40 +181,11 @@ this.parallelFilter: (array, predicate, ...arguments) => {
 /// logical order: a failure or non-Boolean result (`InvalidPredicateResult`)
 /// at a lower index defeats a later match, and work at higher indexes is
 /// cancelled once the outcome is decided.
-this.parallelFindIndex: (array, predicate, ...arguments) => {
-    snapshot: Array(...array)
-
-    if(snapshot.size() == 0) {
-        ^(() => { null }).future()
-    }
-
-    input: ((bundle) => {
-        bundle
-    }).parallel(Array(snapshot, predicate, arguments))
-
-    apply: (element, callback, extra) => {
-        callback(element, ...extra)
-    }
-
-    (() => {
-        children: Array()
-
-        (() => {
-            parts: input.value()
-            children = map(parts[0], (element) => {
-                apply.parallel(element, parts[1], parts[2])
-            })
-            findIndex(children, (child) => {
-                child.value()
-            })
-        }).ensure(() => {
-            input.cancel()
-            for(child in children) {
-                child.cancel()
-            }
-        })
-    }).future()
-}
+this.parallelFindIndex: (array, predicate, ...arguments) => ArrayParallel.parallelFindIndex(
+    (array, transform) => map(array, transform),
+    (array, predicate) => findIndex(array, predicate),
+    array, predicate, ...arguments
+)
 
 /// Answers a Future of the reduction of the elements with
 /// `reducer(left, right, arguments...)`, or `null` for an empty Array. Each
@@ -707,68 +194,10 @@ this.parallelFindIndex: (array, predicate, ...arguments) => {
 /// parenthesization is fixed and a non-associative reducer stays
 /// deterministic. Within a round the leftmost failing pair supplies the
 /// failure, and no later round starts after a failure.
-this.parallelReduce: (array, reducer, ...arguments) => {
-    snapshot: Array(...array)
-
-    if(snapshot.size() == 0) {
-        ^(() => { null }).future()
-    }
-
-    // Groups one round's values into adjacent pairs, ending with a singleton
-    // when the round has an odd final value.
-    pairs: (values) => {
-        size: values.size()
-
-        pairRange: (start, end) => {
-            length: end - start
-            result: null
-
-            if(length == 1) {
-                position: start * 2
-                result = Array(Array(values[position]))
-                if(position + 1 < size) {
-                    result = Array(Array(values[position], values[position + 1]))
-                }
-            }
-
-            if(length > 1) {
-                middle: start + length.div(2)
-                result = Array(...pairRange(start, middle), ...pairRange(middle, end))
-            }
-
-            result
-        }
-
-        pairRange(0, size.div(2) + size.mod(2))
-    }
-
-    combine: (pair, callback, ...extra) => {
-        result: pair[0]
-
-        if(pair.size() == 2) {
-            result = callback(pair[0], pair[1], ...extra)
-        }
-
-        result
-    }
-
-    round: parallelMap(pairs(snapshot), combine, reducer, ...arguments)
-
-    (() => {
-        (() => {
-            values: round.value()
-
-            while(values.size() > 1) {
-                round = parallelMap(pairs(values), combine, reducer, ...arguments)
-                values = round.value()
-            }
-
-            values[0]
-        }).ensure(() => {
-            round.cancel()
-        })
-    }).future()
-}
+this.parallelReduce: (array, reducer, ...arguments) => ArrayParallel.parallelReduce(
+    (array, worker, ...arguments) => parallelMap(array, worker, ...arguments),
+    array, reducer, ...arguments
+)
 
 /// Answers a Future of a fresh Array with the elements stably sorted by
 /// `less(left, right, arguments...)`. The result, comparator invocation order,
@@ -776,25 +205,7 @@ this.parallelReduce: (array, reducer, ...arguments) => {
 /// `(left, right) => less(left, right, arguments...)`, except that every
 /// comparator invocation runs in its own isolated parallel execution. The
 /// source Array is not mutated.
-this.parallelSort: (array, less, ...arguments) => {
-    snapshot: Array(...array)
-
-    if(snapshot.size() == 0) {
-        ^(() => { Array() }).future()
-    }
-
-    input: ((bundle) => {
-        bundle
-    }).parallel(Array(snapshot, less, arguments))
-
-    compare: (left, right, comparator, extra) => {
-        comparator(left, right, ...extra)
-    }
-
-    (() => {
-        parts: input.value()
-        sort(parts[0], (left, right) => {
-            compare.parallel(left, right, parts[1], parts[2]).value()
-        })
-    }).future()
-}
+this.parallelSort: (array, less, ...arguments) => ArrayParallel.parallelSort(
+    (array, less) => sort(array, less),
+    array, less, ...arguments
+)

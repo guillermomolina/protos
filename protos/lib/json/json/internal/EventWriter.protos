@@ -1,0 +1,337 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Private JSON eventwriter implementation.
+
+create: (selectBoolean, selectString, selectNumber, selectEncode) => {
+    eventWriter: (emit) => {
+        failed: false
+        finished: false
+        writer: null
+        topFrame: null
+        depth: 0
+        rootDone: false
+        chunk: ""
+
+        fail: () => {
+            failed = true
+            Error().signal()
+        }
+
+        append: (text) => {
+            chunk = chunk + text
+        }
+
+        publishChunk: () => {
+            // Keep callbacks non-reentrant and make a consumer failure terminal.
+            failed = true
+            emit(chunk)
+            failed = false
+        }
+
+        prepareValue: () => {
+            if(depth == 0) {
+                if(rootDone) {
+                    fail()
+                }
+            }
+
+            (depth == 0).ifFalse(() => {
+                frame: topFrame
+                handled: false
+
+                if(frame.kind == "array") {
+                    (frame.phase == "valueOrEnd").ifFalse(() => {
+                        fail()
+                    })
+                    frame.first.ifFalse(() => {
+                        append(",")
+                    })
+                    frame.first = false
+                    frame.phase = "inValue"
+                    handled = true
+                }
+
+                if(frame.kind == "object") {
+                    (frame.phase == "value").ifFalse(() => {
+                        fail()
+                    })
+                    frame.phase = "inValue"
+                    handled = true
+                }
+
+                handled.ifFalse(() => {
+                    fail()
+                })
+            })
+        }
+
+        completeValue: () => {
+            if(depth == 0) {
+                if(rootDone) {
+                    fail()
+                }
+                rootDone = true
+            }
+
+            (depth == 0).ifFalse(() => {
+                frame: topFrame
+                handled: false
+
+                if(frame.kind == "array") {
+                    (frame.phase == "inValue").ifFalse(() => {
+                        fail()
+                    })
+                    frame.phase = "valueOrEnd"
+                    handled = true
+                }
+
+                if(frame.kind == "object") {
+                    (frame.phase == "inValue").ifFalse(() => {
+                        fail()
+                    })
+                    frame.phase = "nameOrEnd"
+                    handled = true
+                }
+
+                handled.ifFalse(() => {
+                    fail()
+                })
+            })
+        }
+
+        beginArray: () => {
+            prepareValue()
+            append("[")
+            frame: {
+                parent: topFrame
+                kind: "array"
+                phase: "valueOrEnd"
+                first: true
+            }
+            topFrame = frame
+            depth = depth + 1
+        }
+
+        endArray: () => {
+            (depth > 0).ifFalse(() => {
+                fail()
+            })
+            frame: topFrame
+            (frame.kind == "array").ifFalse(() => {
+                fail()
+            })
+            (frame.phase == "valueOrEnd").ifFalse(() => {
+                fail()
+            })
+
+            topFrame = frame.parent
+            depth = depth - 1
+            append("]")
+            completeValue()
+        }
+
+        beginObject: () => {
+            prepareValue()
+            append("{")
+            frame: {
+                parent: topFrame
+                kind: "object"
+                phase: "nameOrEnd"
+                first: true
+                names: Map()
+            }
+            topFrame = frame
+            depth = depth + 1
+        }
+
+        endObject: () => {
+            (depth > 0).ifFalse(() => {
+                fail()
+            })
+            frame: topFrame
+            (frame.kind == "object").ifFalse(() => {
+                fail()
+            })
+            (frame.phase == "nameOrEnd").ifFalse(() => {
+                fail()
+            })
+
+            topFrame = frame.parent
+            depth = depth - 1
+            append("}")
+            completeValue()
+        }
+
+        emitName: (name) => {
+            (depth > 0).ifFalse(() => {
+                fail()
+            })
+            frame: topFrame
+            (frame.kind == "object").ifFalse(() => {
+                fail()
+            })
+            (frame.phase == "nameOrEnd").ifFalse(() => {
+                fail()
+            })
+
+            // Reuse the published encoder for String-domain validation and escaping.
+            encodedName: (selectEncode())((selectString())(name))
+            if(frame.names.containsKey(name)) {
+                fail()
+            }
+            frame.names[name] = true
+
+            frame.first.ifFalse(() => {
+                append(",")
+            })
+            frame.first = false
+            append(encodedName)
+            append(":")
+            frame.phase = "value"
+        }
+
+        emitScalar: (kind, value) => {
+            encoded: null
+            handled: false
+
+            // Validate/encode the complete scalar before changing structural state.
+            // Invalid scalar arguments therefore contribute no output and consume no
+            // event position, matching the ordinary synchronous argument boundary.
+            if(kind == "null") {
+                (value === null).ifFalse(() => {
+                    fail()
+                })
+                encoded = "null"
+                handled = true
+            }
+
+            if(kind == "boolean") {
+                encoded = (selectEncode())((selectBoolean())(value))
+                handled = true
+            }
+
+            if(kind == "string") {
+                encoded = (selectEncode())((selectString())(value))
+                handled = true
+            }
+
+            if(kind == "number") {
+                coefficient: value.coefficient
+                exponent: value.exponent
+                encoded = (selectEncode())((selectNumber())(coefficient, exponent))
+                handled = true
+            }
+
+            handled.ifFalse(() => {
+                fail()
+            })
+            prepareValue()
+            append(encoded)
+            completeValue()
+        }
+
+        writer = {
+            feed: (event) => {
+                if(failed) {
+                    Error().signal()
+                }
+                if(finished) {
+                    fail()
+                }
+
+                chunk = ""
+                kind: event.kind
+                value: event.value
+                String.recognizes(kind).ifFalse(() => {
+                    Error().signal()
+                })
+                handled: false
+
+                if(kind == "objectStart") {
+                    (value === null).ifFalse(() => { fail() })
+                    beginObject()
+                    handled = true
+                }
+                if(kind == "objectEnd") {
+                    (value === null).ifFalse(() => { fail() })
+                    endObject()
+                    handled = true
+                }
+                if(kind == "arrayStart") {
+                    (value === null).ifFalse(() => { fail() })
+                    beginArray()
+                    handled = true
+                }
+                if(kind == "arrayEnd") {
+                    (value === null).ifFalse(() => { fail() })
+                    endArray()
+                    handled = true
+                }
+                if(kind == "name") {
+                    emitName(value)
+                    handled = true
+                }
+                if(kind == "null") {
+                    emitScalar(kind, value)
+                    handled = true
+                }
+                if(kind == "boolean") {
+                    emitScalar(kind, value)
+                    handled = true
+                }
+                if(kind == "string") {
+                    emitScalar(kind, value)
+                    handled = true
+                }
+                if(kind == "number") {
+                    emitScalar(kind, value)
+                    handled = true
+                }
+
+                handled.ifFalse(() => {
+                    fail()
+                })
+
+                publishChunk()
+                writer
+            }
+
+            finish: () => {
+                if(failed) {
+                    Error().signal()
+                }
+                if(finished) {
+                    fail()
+                }
+                (depth == 0).ifFalse(() => {
+                    fail()
+                })
+                rootDone.ifFalse(() => {
+                    fail()
+                })
+
+                finished = true
+                writer
+            }
+        }
+
+        writer
+    }
+
+    {
+        eventWriter: eventWriter
+    }
+}

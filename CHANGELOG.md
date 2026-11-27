@@ -8,6 +8,12 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.253-SNAPSHOT
+
+- **I186.** Split TOML, JSON, Regex, CommandLine, FFI, URI and Array implementations into cohesive private Protos SOURCE components while retaining their canonical public module entry points and APIs.
+- Preserve ordinary public-member selection, invocation-local parser and encoder state, private Actor-local runtime facilities, lazy FFI provider acquisition and existing isolated-parallel Array execution.
+- Share JSON lexical and exact-number algorithms between the independent tree and event parsers; add regressions for public operation selection, temporal constructor selection, return behavior and private implementation boundaries.
+
 ## 0.4.252-SNAPSHOT
 
 - **DIST027.** Remove automatic product test execution from distribution preparation and release candidate verification, including Native execution admission, exhaustive functional validation and portable smoke tests.

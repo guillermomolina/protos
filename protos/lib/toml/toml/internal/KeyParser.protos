@@ -1,0 +1,360 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Private TOML keyparser implementation.
+
+create: (toml11) => {
+    syntaxKeyPath: (text) => {
+        String.recognizes(text).ifFalse(() => {
+            Error().signal()
+        })
+        source: Encoding.UTF8.encode(text)
+        index: 0
+        length: source.size()
+
+        peek: () => {
+            result: -1
+            if(index < length) {
+                result = source[index]
+            }
+            result
+        }
+
+        take: () => {
+            if(index >= length) {
+                fail()
+            }
+            result: source[index]
+            index = index + 1
+            result
+        }
+
+        skipSpaces: () => {
+            scanning: true
+            while(scanning && (index < length)) {
+                octet: source[index]
+                whitespace: octet == 32
+                if(octet == 9) {
+                    whitespace = true
+                }
+                if(whitespace) {
+                    index = index + 1
+                }
+                whitespace.ifFalse(() => {
+                    scanning = false
+                })
+            }
+        }
+
+        hexDigit: (octet) => {
+            result: -1
+            if(octet >= 48) {
+                if(octet <= 57) {
+                    result = octet - 48
+                }
+            }
+            if(result < 0) {
+                if(octet >= 65) {
+                    if(octet <= 70) {
+                        result = octet - 55
+                    }
+                }
+            }
+            if(result < 0) {
+                if(octet >= 97) {
+                    if(octet <= 102) {
+                        result = octet - 87
+                    }
+                }
+            }
+            result
+        }
+
+        appendScalarUtf8: (buffer, scalar) => {
+            invalid: scalar < 0
+            if(scalar > 1114111) {
+                invalid = true
+            }
+            if(scalar >= 55296) {
+                if(scalar <= 57343) {
+                    invalid = true
+                }
+            }
+            if(invalid) {
+                fail()
+            }
+
+            handled: false
+            if(scalar <= 127) {
+                buffer.add(scalar)
+                handled = true
+            }
+            handled.ifFalse(() => {
+                if(scalar <= 2047) {
+                    buffer.add(192 + scalar.div(64))
+                    buffer.add(128 + scalar.mod(64))
+                    handled = true
+                }
+            })
+            handled.ifFalse(() => {
+                if(scalar <= 65535) {
+                    buffer.add(224 + scalar.div(4096))
+                    buffer.add(128 + scalar.div(64).mod(64))
+                    buffer.add(128 + scalar.mod(64))
+                    handled = true
+                }
+            })
+            handled.ifFalse(() => {
+                buffer.add(240 + scalar.div(262144))
+                buffer.add(128 + scalar.div(4096).mod(64))
+                buffer.add(128 + scalar.div(64).mod(64))
+                buffer.add(128 + scalar.mod(64))
+            })
+        }
+
+        parseUnicodeEscape: (digits, buffer) => {
+            scalar: 0
+            remaining: digits
+
+            consume: null
+            consume = () => {
+                if(remaining > 0) {
+                    digit: hexDigit(take())
+                    if(digit < 0) {
+                        fail()
+                    }
+                    scalar = scalar * 16 + digit
+                    remaining = remaining - 1
+                    consume()
+                }
+            }
+
+            consume()
+            appendScalarUtf8(buffer, scalar)
+        }
+
+        parseBasicKey: () => {
+            (take() == 34).ifFalse(() => {
+                fail()
+            })
+            buffer: Encoding.UTF8.encode("")
+            done: false
+
+            while(done === false) {
+                octet: take()
+                    if(octet == 34) {
+                        done = true
+                    }
+
+                    done.ifFalse(() => {
+                        if(octet == 92) {
+                            escape: take()
+                            handled: false
+                            if(escape == 98) {
+                                buffer.add(8)
+                                handled = true
+                            }
+                            if(escape == 116) {
+                                buffer.add(9)
+                                handled = true
+                            }
+                            if(escape == 110) {
+                                buffer.add(10)
+                                handled = true
+                            }
+                            if(escape == 102) {
+                                buffer.add(12)
+                                handled = true
+                            }
+                            if(escape == 114) {
+                                buffer.add(13)
+                                handled = true
+                            }
+                            if(toml11 && (escape == 101)) {
+                                buffer.add(27)
+                                handled = true
+                            }
+                            if(toml11 && (escape == 120)) {
+                                parseUnicodeEscape(2, buffer)
+                                handled = true
+                            }
+                            if(escape == 34) {
+                                buffer.add(34)
+                                handled = true
+                            }
+                            if(escape == 92) {
+                                buffer.add(92)
+                                handled = true
+                            }
+                            if(escape == 117) {
+                                parseUnicodeEscape(4, buffer)
+                                handled = true
+                            }
+                            if(escape == 85) {
+                                parseUnicodeEscape(8, buffer)
+                                handled = true
+                            }
+                            handled.ifFalse(() => {
+                                fail()
+                            })
+                        }
+
+                        (octet == 92).ifFalse(() => {
+                            invalidControl: octet < 32
+                            if(octet == 127) {
+                                invalidControl = true
+                            }
+                            if(octet == 9) {
+                                invalidControl = false
+                            }
+                            if(invalidControl) {
+                                fail()
+                            }
+                            buffer.add(octet)
+                        })
+                    })
+            }
+            Encoding.UTF8.decode(buffer)
+        }
+
+        parseLiteralKey: () => {
+            (take() == 39).ifFalse(() => {
+                fail()
+            })
+            buffer: Encoding.UTF8.encode("")
+            done: false
+
+            while(done === false) {
+                octet: take()
+                    if(octet == 39) {
+                        done = true
+                    }
+                    done.ifFalse(() => {
+                        invalidControl: octet < 32
+                        if(octet == 127) {
+                            invalidControl = true
+                        }
+                        if(octet == 9) {
+                            invalidControl = false
+                        }
+                        if(invalidControl) {
+                            fail()
+                        }
+                        buffer.add(octet)
+                    })
+            }
+            Encoding.UTF8.decode(buffer)
+        }
+
+        isBareKeyOctet: (octet) => {
+            result: false
+            if(octet >= 48) {
+                if(octet <= 57) { result = true }
+            }
+            if(octet >= 65) {
+                if(octet <= 90) { result = true }
+            }
+            if(octet >= 97) {
+                if(octet <= 122) { result = true }
+            }
+            if(octet == 95) { result = true }
+            if(octet == 45) { result = true }
+            result
+        }
+
+        parseBareKey: () => {
+            buffer: Encoding.UTF8.encode("")
+            scanning: true
+
+            while(scanning && (index < length)) {
+                octet: source[index]
+                validBare: isBareKeyOctet(octet)
+                if(validBare) {
+                    buffer.add(octet)
+                    index = index + 1
+                }
+                validBare.ifFalse(() => {
+                    scanning = false
+                })
+            }
+
+            if(buffer.size() == 0) {
+                fail()
+            }
+            Encoding.UTF8.decode(buffer)
+        }
+
+        parsePart: () => {
+            skipSpaces()
+            first: peek()
+            result: null
+
+            if(first == 34) {
+                result = parseBasicKey()
+            }
+            if(first == 39) {
+                result = parseLiteralKey()
+            }
+            (first == 34).ifFalse(() => {
+                (first == 39).ifFalse(() => {
+                    result = parseBareKey()
+                })
+            })
+
+            result
+        }
+
+        pathEntries: Map()
+        pathCount: 0
+
+        appendPathPart: (part) => {
+            pathEntries[pathCount] = part
+            pathCount = pathCount + 1
+        }
+
+        appendPathPart(parsePart())
+        more: true
+
+        while(more) {
+            skipSpaces()
+
+            if(index < length) {
+                (source[index] == 46).ifFalse(() => {
+                    fail()
+                })
+                index = index + 1
+                appendPathPart(parsePart())
+            }
+
+            if(index >= length) {
+                more = false
+            }
+        }
+
+        skipSpaces()
+        (index == length).ifFalse(() => {
+            fail()
+        })
+
+        {
+            entries: pathEntries
+            count: pathCount
+        }
+    }
+
+    {
+        syntaxKeyPath: syntaxKeyPath
+    }
+}

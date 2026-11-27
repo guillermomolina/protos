@@ -1,0 +1,510 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Private TOML numericparser implementation.
+
+create: (hexDigit) => {
+    decimalDigit: (octet) => {
+        result: -1
+        if(octet >= 48) {
+            if(octet <= 57) {
+                result = octet - 48
+            }
+        }
+        result
+    }
+
+    radixDigit: (octet, base) => {
+        result: -1
+        if(base == 16) {
+            result = hexDigit(octet)
+        }
+        if(base == 10) {
+            result = decimalDigit(octet)
+        }
+        if(base == 8) {
+            digit: decimalDigit(octet)
+            if(digit >= 0) {
+                if(digit <= 7) {
+                    result = digit
+                }
+            }
+        }
+        if(base == 2) {
+            if(octet == 48) { result = 0 }
+            if(octet == 49) { result = 1 }
+        }
+        result
+    }
+
+    integerFromToken: (token) => {
+        tokenLength: token.size()
+        position: 0
+        negative: false
+        signed: false
+        valid: true
+        base: 10
+
+        if(position < tokenLength) {
+            first: token[position]
+            if(first == 43) {
+                signed = true
+                position = position + 1
+            }
+            if(first == 45) {
+                signed = true
+                negative = true
+                position = position + 1
+            }
+        }
+
+        if(position >= tokenLength) {
+            valid = false
+        }
+
+        if(valid) {
+            if(position + 1 < tokenLength) {
+                if(token[position] == 48) {
+                    prefix: token[position + 1]
+                    if(prefix == 120) {
+                        base = 16
+                        position = position + 2
+                    }
+                    if(prefix == 111) {
+                        base = 8
+                        position = position + 2
+                    }
+                    if(prefix == 98) {
+                        base = 2
+                        position = position + 2
+                    }
+                }
+            }
+        }
+
+        if(base != 10) {
+            if(signed) {
+                valid = false
+            }
+        }
+
+        if(position >= tokenLength) {
+            valid = false
+        }
+
+        resultValue: 0
+        digits: 0
+        previousUnderscore: false
+        leadingZero: false
+
+        if(valid) {
+            while(position < tokenLength) {
+                octet: token[position]
+
+                if(octet == 95) {
+                    invalidUnderscore: digits == 0
+                    if(previousUnderscore) {
+                        invalidUnderscore = true
+                    }
+                    if(invalidUnderscore) {
+                        valid = false
+                    }
+                    previousUnderscore = true
+                }
+
+                (octet == 95).ifFalse(() => {
+                    digit: radixDigit(octet, base)
+                    if(digit < 0) {
+                        valid = false
+                    }
+                    if(digit >= 0) {
+                        if(digits == 0) {
+                            if(digit == 0) {
+                                leadingZero = true
+                            }
+                        }
+                        if(base == 10) {
+                            if(leadingZero) {
+                                if(digits > 0) {
+                                    valid = false
+                                }
+                            }
+                        }
+                        resultValue = resultValue * base + digit
+                        digits = digits + 1
+                        previousUnderscore = false
+                    }
+                })
+
+                position = position + 1
+            }
+        }
+
+        if(digits == 0) {
+            valid = false
+        }
+        if(previousUnderscore) {
+            valid = false
+        }
+
+        if(negative) {
+            resultValue = 0 - resultValue
+        }
+
+        result: {
+            valid: valid
+            value: resultValue
+        }
+        result
+    }
+
+    powerOfTen: (power) => {
+        ignoredPowerValidation: 0 + power
+        if(power < 0) {
+            fail()
+        }
+
+        resultValue: 1
+        factor: 10
+        remaining: power
+
+        while(remaining > 0) {
+            if(remaining.mod(2) == 1) {
+                resultValue = resultValue * factor
+            }
+            remaining = remaining.div(2)
+            if(remaining > 0) {
+                factor = factor * factor
+            }
+        }
+
+        resultValue
+    }
+
+    floatFromToken: (token) => {
+        decoded: Encoding.UTF8.decode(token)
+        special: null
+
+        if((decoded == "inf") || (decoded == "+inf")) {
+            special = 1.0 / 0.0
+        }
+        if(decoded == "-inf") {
+            special = -1.0 / 0.0
+        }
+        if((decoded == "nan") || (decoded == "+nan") || (decoded == "-nan")) {
+            special = 0.0 / 0.0
+        }
+
+        result: {
+            valid: special !== null
+            value: special
+        }
+
+        if(special === null) {
+            tokenLength: token.size()
+            position: 0
+            negative: false
+            valid: true
+
+            if(position < tokenLength) {
+                first: token[position]
+                if(first == 43) {
+                    position = position + 1
+                }
+                if(first == 45) {
+                    negative = true
+                    position = position + 1
+                }
+            }
+            if(position >= tokenLength) {
+                valid = false
+            }
+
+            coefficient: 0
+            integerDigits: 0
+            fractionDigits: 0
+            totalDigits: 0
+            leadingZeros: 0
+            significant: false
+            firstIntegerZero: false
+            previousDigit: false
+
+            if(valid) {
+                scanningInteger: true
+                while(scanningInteger && (position < tokenLength)) {
+                    octet: token[position]
+                    digit: decimalDigit(octet)
+
+                    if(digit >= 0) {
+                        if(integerDigits == 0) {
+                            if(digit == 0) {
+                                firstIntegerZero = true
+                            }
+                        }
+                        if((integerDigits > 0) && firstIntegerZero) {
+                            valid = false
+                        }
+                        coefficient = coefficient * 10 + digit
+                        integerDigits = integerDigits + 1
+                        totalDigits = totalDigits + 1
+                        significant.ifFalse(() => {
+                            if(digit == 0) {
+                                leadingZeros = leadingZeros + 1
+                            }
+                            if(digit != 0) {
+                                significant = true
+                            }
+                        })
+                        previousDigit = true
+                        position = position + 1
+                    }
+
+                    if(digit < 0) {
+                        underscore: octet == 95
+                        if(underscore) {
+                            nextValid: false
+                            if(position + 1 < tokenLength) {
+                                if(decimalDigit(token[position + 1]) >= 0) {
+                                    nextValid = true
+                                }
+                            }
+                            (previousDigit && nextValid).ifFalse(() => {
+                                valid = false
+                            })
+                            previousDigit = false
+                            position = position + 1
+                        }
+                        underscore.ifFalse(() => {
+                            scanningInteger = false
+                        })
+                    }
+                }
+            }
+            if(integerDigits == 0) {
+                valid = false
+            }
+            previousDigit.ifFalse(() => {
+                valid = false
+            })
+
+            hasFraction: false
+            if(valid) {
+                if(position < tokenLength) {
+                    if(token[position] == 46) {
+                        hasFraction = true
+                        position = position + 1
+                        previousDigit = false
+
+                        scanningFraction: true
+                        while(scanningFraction && (position < tokenLength)) {
+                            octet: token[position]
+                            digit: decimalDigit(octet)
+
+                            if(digit >= 0) {
+                                coefficient = coefficient * 10 + digit
+                                fractionDigits = fractionDigits + 1
+                                totalDigits = totalDigits + 1
+                                significant.ifFalse(() => {
+                                    if(digit == 0) {
+                                        leadingZeros = leadingZeros + 1
+                                    }
+                                    if(digit != 0) {
+                                        significant = true
+                                    }
+                                })
+                                previousDigit = true
+                                position = position + 1
+                            }
+
+                            if(digit < 0) {
+                                underscore: octet == 95
+                                if(underscore) {
+                                    nextValid: false
+                                    if(position + 1 < tokenLength) {
+                                        if(decimalDigit(token[position + 1]) >= 0) {
+                                            nextValid = true
+                                        }
+                                    }
+                                    (previousDigit && nextValid).ifFalse(() => {
+                                        valid = false
+                                    })
+                                    previousDigit = false
+                                    position = position + 1
+                                }
+                                underscore.ifFalse(() => {
+                                    scanningFraction = false
+                                })
+                            }
+                        }
+                        if(fractionDigits == 0) {
+                            valid = false
+                        }
+                        previousDigit.ifFalse(() => {
+                            valid = false
+                        })
+                    }
+                }
+            }
+
+            exponentValue: 0
+            exponentNegative: false
+            exponentDigits: 0
+            hasExponent: false
+
+            if(valid) {
+                if(position < tokenLength) {
+                    exponentMarker: token[position] == 101
+                    if(token[position] == 69) {
+                        exponentMarker = true
+                    }
+
+                    if(exponentMarker) {
+                        hasExponent = true
+                        position = position + 1
+
+                        if(position < tokenLength) {
+                            if(token[position] == 43) {
+                                position = position + 1
+                            }
+                            if(position < tokenLength) {
+                                if(token[position] == 45) {
+                                    exponentNegative = true
+                                    position = position + 1
+                                }
+                            }
+                        }
+
+                        previousDigit = false
+                        scanningExponent: true
+                        while(scanningExponent && (position < tokenLength)) {
+                            octet: token[position]
+                            digit: decimalDigit(octet)
+
+                            if(digit >= 0) {
+                                exponentValue = exponentValue * 10 + digit
+                                exponentDigits = exponentDigits + 1
+                                previousDigit = true
+                                position = position + 1
+                            }
+
+                            if(digit < 0) {
+                                underscore: octet == 95
+                                if(underscore) {
+                                    nextValid: false
+                                    if(position + 1 < tokenLength) {
+                                        if(decimalDigit(token[position + 1]) >= 0) {
+                                            nextValid = true
+                                        }
+                                    }
+                                    (previousDigit && nextValid).ifFalse(() => {
+                                        valid = false
+                                    })
+                                    previousDigit = false
+                                    position = position + 1
+                                }
+                                underscore.ifFalse(() => {
+                                    scanningExponent = false
+                                })
+                            }
+                        }
+                        if(exponentDigits == 0) {
+                            valid = false
+                        }
+                        previousDigit.ifFalse(() => {
+                            valid = false
+                        })
+                    }
+                }
+            }
+
+            if((hasFraction || hasExponent) === false) {
+                valid = false
+            }
+            if(position != tokenLength) {
+                valid = false
+            }
+
+            if(valid) {
+                decimalExponent: exponentValue
+                if(exponentNegative) {
+                    decimalExponent = 0 - exponentValue
+                }
+                decimalExponent = decimalExponent - fractionDigits
+
+                if(negative) {
+                    coefficient = 0 - coefficient
+                }
+
+                floating: null
+
+                if(coefficient == 0) {
+                    if(negative) {
+                        floating = -0.0
+                    }
+                    negative.ifFalse(() => {
+                        floating = 0.0
+                    })
+                }
+
+                if(coefficient != 0) {
+                    significantDigits: totalDigits - leadingZeros
+                    adjustedExponent: decimalExponent + significantDigits - 1
+
+                    if(adjustedExponent > 400) {
+                        if(negative) {
+                            floating = -1.0 / 0.0
+                        }
+                        negative.ifFalse(() => {
+                            floating = 1.0 / 0.0
+                        })
+                    }
+
+                    if(adjustedExponent < -400) {
+                        if(negative) {
+                            floating = -0.0
+                        }
+                        negative.ifFalse(() => {
+                            floating = 0.0
+                        })
+                    }
+
+                    if(floating === null) {
+                        if(decimalExponent >= 0) {
+                            numerator: coefficient * powerOfTen(decimalExponent)
+                            floating = Float(numerator)
+                        }
+                        if(decimalExponent < 0) {
+                            denominator: powerOfTen(0 - decimalExponent)
+                            floating = Float(coefficient / denominator)
+                        }
+                    }
+                }
+
+                result.valid = true
+                result.value = floating
+            }
+        }
+
+        result
+    }
+
+    {
+        decimalDigit: decimalDigit
+        radixDigit: radixDigit
+        integerFromToken: integerFromToken
+        powerOfTen: powerOfTen
+        floatFromToken: floatFromToken
+    }
+}

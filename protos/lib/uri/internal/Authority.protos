@@ -1,0 +1,337 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Private URI authority implementation.
+
+Characters: import("./Characters.protos")
+
+create: (source, validatePercentTriplet, sliceText, setUserInfoValue, setHostValue, setPortValue) => {
+    isDigit: Characters.slotValue("isDigit")
+    isHexDigit: Characters.slotValue("isHexDigit")
+    isUnreserved: Characters.slotValue("isUnreserved")
+    isSubDelimiter: Characters.slotValue("isSubDelimiter")
+
+    validateUserInfo: (start, end) => {
+        index: start
+        while(index < end) {
+            octet: source[index]
+            isPercent: octet == 37
+
+            if(isPercent) {
+                validatePercentTriplet(index, end)
+                index = index + 3
+            }
+
+            isPercent.ifFalse(() => {
+                allowed: isUnreserved(octet) || isSubDelimiter(octet) || (octet == 58)
+                allowed.ifFalse(() => {
+                    fail()
+                })
+                index = index + 1
+            })
+        }
+    }
+
+    validateRegName: (start, end) => {
+        index: start
+        while(index < end) {
+            octet: source[index]
+            isPercent: octet == 37
+
+            if(isPercent) {
+                validatePercentTriplet(index, end)
+                index = index + 3
+            }
+
+            isPercent.ifFalse(() => {
+                allowed: isUnreserved(octet) || isSubDelimiter(octet)
+                allowed.ifFalse(() => {
+                    fail()
+                })
+                index = index + 1
+            })
+        }
+    }
+
+    validateIpv4: (start, end) => {
+        index: start
+        partCount: 0
+
+        while(index < end) {
+            tokenStart: index
+
+            while((index < end) && isDigit(source[index])) {
+                index = index + 1
+            }
+
+            tokenSize: index - tokenStart
+            if((tokenSize < 1) || (tokenSize > 3)) {
+                fail()
+            }
+            if((tokenSize > 1) && (source[tokenStart] == 48)) {
+                fail()
+            }
+
+            value: 0
+            digitIndex: tokenStart
+            while(digitIndex < index) {
+                value = value * 10 + (source[digitIndex] - 48)
+                digitIndex = digitIndex + 1
+            }
+            if(value > 255) {
+                fail()
+            }
+
+            partCount = partCount + 1
+
+            if(index < end) {
+                (source[index] == 46).ifFalse(() => {
+                    fail()
+                })
+                index = index + 1
+                if(index == end) {
+                    fail()
+                }
+            }
+        }
+
+        (partCount == 4).ifFalse(() => {
+            fail()
+        })
+    }
+
+    parseIpv6Side: (start, end, allowIpv4Tail) => {
+        index: start
+        groupCount: 0
+
+        while(index < end) {
+            tokenStart: index
+            while((index < end) && (source[index] != 58)) {
+                index = index + 1
+            }
+            tokenEnd: index
+
+            if(tokenEnd == tokenStart) {
+                fail()
+            }
+
+            containsDot: false
+            scan: tokenStart
+            while(scan < tokenEnd) {
+                if(source[scan] == 46) {
+                    containsDot = true
+                }
+                scan = scan + 1
+            }
+
+            if(containsDot) {
+                allowIpv4Tail.ifFalse(() => {
+                    fail()
+                })
+                (tokenEnd == end).ifFalse(() => {
+                    fail()
+                })
+                validateIpv4(tokenStart, tokenEnd)
+                groupCount = groupCount + 2
+            }
+
+            containsDot.ifFalse(() => {
+                if((tokenEnd - tokenStart) > 4) {
+                    fail()
+                }
+                scan = tokenStart
+                while(scan < tokenEnd) {
+                    isHexDigit(source[scan]).ifFalse(() => {
+                        fail()
+                    })
+                    scan = scan + 1
+                }
+                groupCount = groupCount + 1
+            })
+
+            if(index < end) {
+                index = index + 1
+                if(index == end) {
+                    fail()
+                }
+            }
+        }
+
+        groupCount
+    }
+
+    validateIpv6: (start, end) => {
+        doubleColonIndex: -1
+        index: start
+
+        while((index + 1) < end) {
+            if((source[index] == 58) && (source[index + 1] == 58)) {
+                if(doubleColonIndex >= 0) {
+                    fail()
+                }
+                doubleColonIndex = index
+            }
+            index = index + 1
+        }
+
+        if(doubleColonIndex < 0) {
+            groupCount: parseIpv6Side(start, end, true)
+            (groupCount == 8).ifFalse(() => {
+                fail()
+            })
+        }
+
+        if(doubleColonIndex >= 0) {
+            leftCount: parseIpv6Side(start, doubleColonIndex, false)
+            rightCount: parseIpv6Side(doubleColonIndex + 2, end, true)
+            if((leftCount + rightCount) >= 8) {
+                fail()
+            }
+        }
+    }
+
+    validateIpLiteral: (start, end) => {
+        if(start >= end) {
+            fail()
+        }
+
+        first: source[start]
+        isIpvFuture: (first == 118) || (first == 86)
+
+        if(isIpvFuture) {
+            index: start + 1
+            hexStart: index
+
+            while((index < end) && isHexDigit(source[index])) {
+                index = index + 1
+            }
+
+            if((index == hexStart) || (index >= end) || (source[index] != 46)) {
+                fail()
+            }
+            index = index + 1
+            if(index >= end) {
+                fail()
+            }
+
+            while(index < end) {
+                octet: source[index]
+                allowed: isUnreserved(octet) || isSubDelimiter(octet) || (octet == 58)
+                allowed.ifFalse(() => {
+                    fail()
+                })
+                index = index + 1
+            }
+        }
+
+        isIpvFuture.ifFalse(() => {
+            validateIpv6(start, end)
+        })
+    }
+
+    validateAuthority: (start, end) => {
+        atIndex: -1
+        index: start
+
+        while(index < end) {
+            if(source[index] == 64) {
+                if(atIndex >= 0) {
+                    fail()
+                }
+                atIndex = index
+            }
+            index = index + 1
+        }
+
+        hostPortStart: start
+        if(atIndex >= 0) {
+            validateUserInfo(start, atIndex)
+            setUserInfoValue(sliceText(start, atIndex))
+            hostPortStart = atIndex + 1
+        }
+
+        bracketed: (hostPortStart < end) && (source[hostPortStart] == 91)
+
+        if(bracketed) {
+            closeIndex: -1
+            index = hostPortStart + 1
+
+            while((index < end) && (closeIndex < 0)) {
+                if(source[index] == 93) {
+                    closeIndex = index
+                }
+                index = index + 1
+            }
+
+            if(closeIndex < 0) {
+                fail()
+            }
+            validateIpLiteral(hostPortStart + 1, closeIndex)
+            setHostValue(sliceText(hostPortStart, closeIndex + 1))
+
+            if((closeIndex + 1) < end) {
+                (source[closeIndex + 1] == 58).ifFalse(() => {
+                    fail()
+                })
+
+                portIndex: closeIndex + 2
+                while(portIndex < end) {
+                    isDigit(source[portIndex]).ifFalse(() => {
+                        fail()
+                    })
+                    portIndex = portIndex + 1
+                }
+                setPortValue(sliceText(closeIndex + 2, end))
+            }
+        }
+
+        bracketed.ifFalse(() => {
+            colonIndex: -1
+            index = hostPortStart
+
+            while(index < end) {
+                if(source[index] == 58) {
+                    if(colonIndex >= 0) {
+                        fail()
+                    }
+                    colonIndex = index
+                }
+                index = index + 1
+            }
+
+            hostEnd: end
+            if(colonIndex >= 0) {
+                hostEnd = colonIndex
+            }
+            validateRegName(hostPortStart, hostEnd)
+            setHostValue(sliceText(hostPortStart, hostEnd))
+
+            if(colonIndex >= 0) {
+                portIndex: colonIndex + 1
+                while(portIndex < end) {
+                    isDigit(source[portIndex]).ifFalse(() => {
+                        fail()
+                    })
+                    portIndex = portIndex + 1
+                }
+                setPortValue(sliceText(colonIndex + 1, end))
+            }
+        })
+    }
+
+    {
+        validateAuthority: validateAuthority
+    }
+}

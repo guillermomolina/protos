@@ -41,6 +41,14 @@ summary: (matches) => {
 }
 
 tests: [
+    Test("source composition publishes no implementation facilities", () => {
+        for(name in Array("unicode", "transfer", "compileSource", "newMatcher",
+                "newPattern", "newMatch", "RangesSource", "CompilerSource",
+                "_regexUnicodeFacility", "_regexTransferFacility")) {
+            Assertions.require(Regex.hasSlot(name) === false)
+        }
+        Assertions.require(Regex.compile("a").fullMatch("a").group(0) == "a")
+    }),
     Test("one Pattern serves concurrent Tasks without sharing execution state", () => {
         pattern: Regex.compile("(?<word>\\p{L}+)\\d*|\\s+")
         texts: Array("abc123 de4", "  é9 ü", "😀xyz 77", "no digits here", "", "a1b2c3d4e5", "Ωμέγα 2026")

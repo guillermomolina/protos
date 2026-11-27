@@ -1,0 +1,81 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Private JSON writeradapter implementation.
+
+create: (selectEventWriter) => {
+    writeEvents: (textWriter) => {
+        busy: false
+        finished: false
+        adapter: null
+        chunk: null
+
+        jsonWriter: (selectEventWriter())((text) => {
+            chunk = text
+        })
+
+        ensureReady: () => {
+            if(busy) {
+                Error().signal()
+            }
+            if(finished) {
+                Error().signal()
+            }
+        }
+
+        adapter = {
+            feed: (event) => {
+                ensureReady()
+
+                chunk = null
+                jsonWriter.feed(event)
+                if(chunk === null) {
+                    Error().signal()
+                }
+
+                busy = true
+                writeFuture: textWriter.writeText(chunk)
+                completion: writeFuture.then((ignored) => {
+                    busy = false
+                    adapter
+                })
+                completion
+            }
+
+            finish: () => {
+                ensureReady()
+                jsonWriter.finish()
+
+                // Empty TextWriter writes are ordered zero-output operations.  Using
+                // one here makes finish Future-shaped without inventing a second
+                // flush/finalization contract or contributing bytes of its own.
+                busy = true
+                barrier: textWriter.writeText("")
+                completion: barrier.then((ignored) => {
+                    finished = true
+                    busy = false
+                    adapter
+                })
+                completion
+            }
+        }
+
+        adapter
+    }
+
+    {
+        writeEvents: writeEvents
+    }
+}

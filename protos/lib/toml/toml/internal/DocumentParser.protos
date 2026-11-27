@@ -1,0 +1,507 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Private TOML documentparser implementation.
+
+create: (documentStatements, syntaxKeyPath, syntaxValue) => {
+    documentTable: (text) => {
+        items: documentStatements(text)
+
+        node: (kind, value) => {
+            result: {
+                kind: kind
+                value: value
+            }
+            result
+        }
+
+        root: node("table", Map())
+        states: IdentityMap()
+        states[root] = "root"
+        current: root
+
+        arrayTableBuilders: IdentityMap()
+        arrayTableBuilderEntries: Map()
+        arrayTableBuilderCount: 0
+
+        appendArrayTableElement: (arrayNode, element) => {
+            builder: null
+            if(arrayTableBuilders.containsKey(arrayNode)) {
+                builder = arrayTableBuilders[arrayNode]
+            }
+            arrayTableBuilders.containsKey(arrayNode).ifFalse(() => {
+                builder = {
+                    arrayNode: arrayNode
+                    chunks: Map()
+                    maxLevel: -1
+                    last: null
+                }
+                arrayTableBuilders[arrayNode] = builder
+                arrayTableBuilderEntries[arrayTableBuilderCount] = builder
+                arrayTableBuilderCount = arrayTableBuilderCount + 1
+            })
+
+            chunk: Array(element)
+            level: 0
+            carrying: true
+            while(carrying) {
+                present: builder.chunks.containsKey(level)
+                if(present) {
+                    left: builder.chunks[level]
+                    builder.chunks.remove(level)
+                    chunk = Array(...left, ...chunk)
+                    level = level + 1
+                }
+                present.ifFalse(() => {
+                    builder.chunks[level] = chunk
+                    if(level > builder.maxLevel) {
+                        builder.maxLevel = level
+                    }
+                    carrying = false
+                })
+            }
+            builder.last = element
+        }
+
+        materializeArrayTableBuilder: (builder) => {
+            result: Array()
+            level: builder.maxLevel
+            while(level >= 0) {
+                if(builder.chunks.containsKey(level)) {
+                    result = Array(...result, ...builder.chunks[level])
+                }
+                level = level - 1
+            }
+            result
+        }
+
+        isSpace: (octet) => {
+            result: octet == 32
+            if(octet == 9) {
+                result = true
+            }
+            result
+        }
+
+        decodeRange: (source, start, end) => {
+            buffer: Encoding.UTF8.encode("")
+            position: start
+            while(position < end) {
+                buffer.add(source[position])
+                position = position + 1
+            }
+            Encoding.UTF8.decode(buffer)
+        }
+
+        trimBounds: (source) => {
+            left: 0
+            right: source.size()
+
+            trimmingLeft: true
+            while(trimmingLeft && (left < right)) {
+                whitespace: isSpace(source[left])
+                if(whitespace) {
+                    left = left + 1
+                }
+                whitespace.ifFalse(() => {
+                    trimmingLeft = false
+                })
+            }
+
+            trimmingRight: true
+            while(trimmingRight && (right > left)) {
+                whitespace: isSpace(source[right - 1])
+                if(whitespace) {
+                    right = right - 1
+                }
+                whitespace.ifFalse(() => {
+                    trimmingRight = false
+                })
+            }
+
+            {
+                left: left
+                right: right
+            }
+        }
+
+        markInlineTable: (valueNode) => {
+            if(valueNode.kind == "table") {
+                states[valueNode] = "inline"
+            }
+        }
+
+        putDotted: (tableNode, parts, ignoredPosition, valueNode) => {
+            selected: tableNode
+            position: 0
+
+            while(position < parts.count) {
+                name: parts.entries[position]
+                last: position == parts.count - 1
+                entries: selected.value
+
+                if(last) {
+                    if(entries.containsKey(name)) {
+                        fail()
+                    }
+                    entries[name] = valueNode
+                    markInlineTable(valueNode)
+                    position = parts.count
+                }
+
+                last.ifFalse(() => {
+                    child: null
+                    if(entries.containsKey(name)) {
+                        child = entries[name]
+                        (child.kind == "table").ifFalse(() => {
+                            fail()
+                        })
+                        states.containsKey(child).ifFalse(() => {
+                            fail()
+                        })
+                        state: states[child]
+                        if(state == "header") {
+                            fail()
+                        }
+                        if(state == "inline") {
+                            fail()
+                        }
+                        if(state == "implicit") {
+                            states[child] = "dotted"
+                        }
+                    }
+
+                    entries.containsKey(name).ifFalse(() => {
+                        child = node("table", Map())
+                        entries[name] = child
+                        states[child] = "dotted"
+                    })
+
+                    selected = child
+                    position = position + 1
+                })
+            }
+        }
+
+        latestArrayTable: (arrayNode) => {
+            (arrayNode.kind == "array").ifFalse(() => {
+                fail()
+            })
+            states.containsKey(arrayNode).ifFalse(() => {
+                fail()
+            })
+            (states[arrayNode] == "array-table").ifFalse(() => {
+                fail()
+            })
+            arrayTableBuilders.containsKey(arrayNode).ifFalse(() => {
+                fail()
+            })
+            builder: arrayTableBuilders[arrayNode]
+            selected: builder.last
+            if(selected === null) {
+                fail()
+            }
+            (selected.kind == "table").ifFalse(() => {
+                fail()
+            })
+            selected
+        }
+
+        existingParent: (child) => {
+            selected: null
+
+            if(child.kind == "table") {
+                states.containsKey(child).ifFalse(() => {
+                    fail()
+                })
+                if(states[child] == "inline") {
+                    fail()
+                }
+                selected = child
+            }
+
+            if(child.kind == "array") {
+                selected = latestArrayTable(child)
+            }
+
+            if(selected === null) {
+                fail()
+            }
+            selected
+        }
+
+        selectHeader: (parts) => {
+            selected: root
+            position: 0
+
+            while(position < parts.count) {
+                name: parts.entries[position]
+                last: position == parts.count - 1
+                entries: selected.value
+                child: null
+
+                if(entries.containsKey(name)) {
+                    child = entries[name]
+
+                    if(last) {
+                        (child.kind == "table").ifFalse(() => {
+                            fail()
+                        })
+                        states.containsKey(child).ifFalse(() => {
+                            fail()
+                        })
+                        state: states[child]
+                        if(state == "implicit") {
+                            states[child] = "header"
+                        }
+                        (state == "implicit").ifFalse(() => {
+                            fail()
+                        })
+                        selected = child
+                    }
+
+                    last.ifFalse(() => {
+                        selected = existingParent(child)
+                    })
+                }
+
+                entries.containsKey(name).ifFalse(() => {
+                    child = node("table", Map())
+                    entries[name] = child
+                    if(last) {
+                        states[child] = "header"
+                    }
+                    last.ifFalse(() => {
+                        states[child] = "implicit"
+                    })
+                    selected = child
+                })
+
+                position = position + 1
+            }
+
+            selected
+        }
+
+        selectArrayHeader: (parts) => {
+            selected: root
+            position: 0
+            created: null
+
+            while(position < parts.count) {
+                name: parts.entries[position]
+                last: position == parts.count - 1
+                entries: selected.value
+                child: null
+
+                if(last) {
+                    element: node("table", Map())
+                    states[element] = "array-element"
+
+                    if(entries.containsKey(name)) {
+                        child = entries[name]
+                        (child.kind == "array").ifFalse(() => {
+                            fail()
+                        })
+                        states.containsKey(child).ifFalse(() => {
+                            fail()
+                        })
+                        (states[child] == "array-table").ifFalse(() => {
+                            fail()
+                        })
+                    }
+
+                    entries.containsKey(name).ifFalse(() => {
+                        child = node("array", Array())
+                        entries[name] = child
+                        states[child] = "array-table"
+                    })
+
+                    appendArrayTableElement(child, element)
+                    created = element
+                }
+
+                last.ifFalse(() => {
+                    if(entries.containsKey(name)) {
+                        child = entries[name]
+                        selected = existingParent(child)
+                    }
+
+                    entries.containsKey(name).ifFalse(() => {
+                        child = node("table", Map())
+                        entries[name] = child
+                        states[child] = "implicit"
+                        selected = child
+                    })
+                })
+
+                position = position + 1
+            }
+
+            created
+        }
+
+        parseHeader: (statement) => {
+            source: Encoding.UTF8.encode(statement)
+            bounds: trimBounds(source)
+            if(bounds.left >= bounds.right) {
+                fail()
+            }
+            (source[bounds.left] == 91).ifFalse(() => {
+                fail()
+            })
+            (source[bounds.right - 1] == 93).ifFalse(() => {
+                fail()
+            })
+
+            arrayHeader: false
+            keyStart: bounds.left + 1
+            keyEnd: bounds.right - 1
+
+            if(keyStart < keyEnd) {
+                if(source[keyStart] == 91) {
+                    arrayHeader = true
+                    if(keyStart + 1 >= keyEnd) {
+                        fail()
+                    }
+                    (source[keyEnd - 1] == 93).ifFalse(() => {
+                        fail()
+                    })
+                    keyStart = keyStart + 1
+                    keyEnd = keyEnd - 1
+                }
+            }
+
+            keyText: decodeRange(source, keyStart, keyEnd)
+            {
+                array: arrayHeader
+                path: syntaxKeyPath(keyText)
+            }
+        }
+
+        parseAssignment: (statement) => {
+            source: Encoding.UTF8.encode(statement)
+            length: source.size()
+            position: 0
+            quote: -1
+            separator: -1
+
+            while((position < length) && (separator < 0)) {
+                        octet: source[position]
+                        inQuote: quote >= 0
+
+                        if(inQuote) {
+                            escaped: quote == 34
+                            (octet == 92).ifFalse(() => {
+                                escaped = false
+                            })
+
+                            if(escaped) {
+                                position = position + 1
+                                if(position >= length) {
+                                    fail()
+                                }
+                                position = position + 1
+                            }
+
+                            escaped.ifFalse(() => {
+                                if(octet == quote) {
+                                    quote = -1
+                                }
+                                position = position + 1
+                            })
+                        }
+
+                        inQuote.ifFalse(() => {
+                            isQuote: octet == 34
+                            if(octet == 39) {
+                                isQuote = true
+                            }
+
+                            if(isQuote) {
+                                quote = octet
+                                position = position + 1
+                            }
+
+                            isQuote.ifFalse(() => {
+                                isNewline: octet == 10
+                                if(octet == 13) {
+                                    isNewline = true
+                                }
+                                if(isNewline) {
+                                    fail()
+                                }
+
+                                if(octet == 61) {
+                                    separator = position
+                                }
+                                position = position + 1
+                            })
+                        })
+
+            }
+            if(quote >= 0) {
+                fail()
+            }
+            if(separator < 0) {
+                fail()
+            }
+
+            keyText: decodeRange(source, 0, separator)
+            valueText: decodeRange(source, separator + 1, length)
+            {
+                path: syntaxKeyPath(keyText)
+                value: syntaxValue(valueText)
+            }
+        }
+
+        for(statement in items) {
+            source: Encoding.UTF8.encode(statement)
+            bounds: trimBounds(source)
+            if(bounds.left >= bounds.right) {
+                fail()
+            }
+
+            header: source[bounds.left] == 91
+            if(header) {
+                parsedHeader: parseHeader(statement)
+                if(parsedHeader.array) {
+                    current = selectArrayHeader(parsedHeader.path)
+                }
+                parsedHeader.array.ifFalse(() => {
+                    current = selectHeader(parsedHeader.path)
+                })
+            }
+
+            header.ifFalse(() => {
+                assignment: parseAssignment(statement)
+                putDotted(current, assignment.path, 0, assignment.value)
+            })
+        }
+
+        builderIndex: 0
+        while(builderIndex < arrayTableBuilderCount) {
+            builder: arrayTableBuilderEntries[builderIndex]
+            builder.arrayNode.value = materializeArrayTableBuilder(builder)
+            builderIndex = builderIndex + 1
+        }
+
+        root
+    }
+
+    {
+        documentTable: documentTable
+    }
+}
