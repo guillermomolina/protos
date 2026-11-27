@@ -8,6 +8,11 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.247-SNAPSHOT
+
+- **PERF044.** Fuse literal matching subject comparison and last-use local cleanup.
+- Replay source commit `6b7bbda9300c8ba1b1f93cf94ccafabb3d83fc3d` with implementation-version metadata; preserve its source, tests and baseline content.
+
 ## 0.4.246-SNAPSHOT
 
 - **PERF044.** Eliminate lexical storage shape guards and specialize captured environment selection by Closure identity.
