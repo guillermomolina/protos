@@ -20,6 +20,7 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.execution.ProtosFrameLocalBindings.ResolvedLexicalWriteTarget;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.LexicalFrameLayout;
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosLexicalEnvironment;
 import com.guillermomolina.protos.runtime.ProtosModuleBindingLocation;
@@ -30,6 +31,7 @@ import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.GenerateInline;
 import com.oracle.truffle.api.dsl.GenerateUncached;
@@ -42,7 +44,7 @@ import com.oracle.truffle.api.object.Shape;
 import java.util.Optional;
 
 /**
- * I115-S1c-L: the single runtime implementation of live lexical name
+ * The single runtime implementation of live lexical name
  * selection, for every bare read or assignment whose actual nearest binding
  * is not already proven by its physical binding identity (a {@code Dynamic}
  * name, a {@code Candidate} or removable binding found ABSENT, a site behind
@@ -71,9 +73,13 @@ import java.util.Optional;
  * through it without selecting again.
  *
  * <p>Selection is specialized:
- * {@link #readCachedAbsentScope} replaces a single nearer materialized
- * map-backed scope's membership query with its actual storage identity and
- * missing-property Shape guards; its owner read is still {@link #readCachedOwner}.
+ * {@link #readCachedCompactStableAbsentScope} derives the captured
+ * environment from an admitted compact Closure identity.
+ * {@link #readCachedStableAbsentScope} proves continued absence in a known
+ * nearer store using installation, Shape validity and property assumptions.
+ * {@link #readCachedAbsentScope} retains the missing-property Shape guard
+ * when stable property speculation is unavailable.
+ * Both use the same owner read in {@link #readCachedOwner}.
  * {@link #readCachedOwner} and {@link #selectWriteCachedOwner} cache the
  * captured lexical chain's identity and the exact owning scope node found when
  * they specialized (with its module {@link ProtosModuleBindingLocation} when
@@ -106,6 +112,89 @@ abstract class ProtosLexicalSelectionNode extends Node {
     /** The layout is the executing root's existing layout, never another owner's. */
     abstract Object execute(
             Object activation, String name, boolean write, LexicalFrameLayout currentLayout);
+
+    /*
+     * A compact invocation's Closure owns a final captured environment.
+     * Cache that environment when the Closure identity is admitted.
+     * Publication is observed through the live invocation header.
+     */
+    @Specialization(
+            guards = {
+                "!write",
+                "name == cachedName",
+                "closure != null",
+                "closure == cachedClosure",
+                "cachedDepth == 1",
+                "absence != null",
+                "missingShape != null",
+                "hasNoCurrentScopeStorage(activation, name, currentLayout)"
+            },
+            assumptions = {"installationStable", "shapeValid", "propertyStable"},
+            excludeForUncached = true,
+            limit = "3")
+    static Object readCachedCompactStableAbsentScope(
+            Object activation,
+            String name,
+            boolean write,
+            LexicalFrameLayout currentLayout,
+            @Bind("compactClosure(activation)") ProtosClosureValue closure,
+            @Cached("name") String cachedName,
+            @Cached("closure") ProtosClosureValue cachedClosure,
+            @Cached("cachedClosure.capturedLexicalEnvironmentForRuntime()")
+                    ProtosLexicalEnvironment cachedEnvironment,
+            @Cached("ownerDepth(cachedEnvironment, cachedName)") int cachedDepth,
+            @Cached("absentScopeLocationOrNull(cachedEnvironment, cachedDepth, cachedName)")
+                    ProtosModuleBindingLocation absence,
+            @Cached("missingShapeOrNull(absence)") Shape missingShape,
+            @Cached("storageInstallationAssumption(absence)") Assumption installationStable,
+            @Cached("shapeValidityAssumption(missingShape)") Assumption shapeValid,
+            @Cached("missingPropertyAssumption(absence, missingShape)") Assumption propertyStable,
+            @Cached("ownerOrNull(cachedEnvironment, cachedDepth)") ProtosLexicalEnvironment cachedOwner,
+            @Cached("frozenOwnerValueOrNull(cachedOwner, cachedName)") Object cachedFrozenValue,
+            @Cached("moduleLocationOrNull(cachedOwner, cachedName)") ProtosModuleBindingLocation location,
+            @Cached DynamicObject.GetNode getNode) {
+        return readCachedOwner(activation, name, write, currentLayout, cachedName,
+                cachedEnvironment, cachedDepth, cachedOwner, cachedFrozenValue, location, getNode);
+    }
+
+    /*
+     * A known nearer store can prove continued absence through native
+     * assumptions without repeatedly reading its current Shape.
+     */
+    @Specialization(
+            guards = {
+                "!write",
+                "name == cachedName",
+                "capturedEnvironment(activation) == cachedEnvironment",
+                "cachedDepth == 1",
+                "absence != null",
+                "missingShape != null",
+                "hasNoCurrentScopeStorage(activation, name, currentLayout)"
+            },
+            assumptions = {"installationStable", "shapeValid", "propertyStable"},
+            excludeForUncached = true,
+            limit = "3")
+    static Object readCachedStableAbsentScope(
+            Object activation,
+            String name,
+            boolean write,
+            LexicalFrameLayout currentLayout,
+            @Cached("name") String cachedName,
+            @Cached("capturedEnvironment(activation)") ProtosLexicalEnvironment cachedEnvironment,
+            @Cached("ownerDepth(cachedEnvironment, cachedName)") int cachedDepth,
+            @Cached("absentScopeLocationOrNull(cachedEnvironment, cachedDepth, cachedName)")
+                    ProtosModuleBindingLocation absence,
+            @Cached("missingShapeOrNull(absence)") Shape missingShape,
+            @Cached("storageInstallationAssumption(absence)") Assumption installationStable,
+            @Cached("shapeValidityAssumption(missingShape)") Assumption shapeValid,
+            @Cached("missingPropertyAssumption(absence, missingShape)") Assumption propertyStable,
+            @Cached("ownerOrNull(cachedEnvironment, cachedDepth)") ProtosLexicalEnvironment cachedOwner,
+            @Cached("frozenOwnerValueOrNull(cachedOwner, cachedName)") Object cachedFrozenValue,
+            @Cached("moduleLocationOrNull(cachedOwner, cachedName)") ProtosModuleBindingLocation location,
+            @Cached DynamicObject.GetNode getNode) {
+        return readCachedOwner(activation, name, write, currentLayout, cachedName,
+                cachedEnvironment, cachedDepth, cachedOwner, cachedFrozenValue, location, getNode);
+    }
 
     /*
      * Caches a missing property's physical storage Shape and the
@@ -213,7 +302,8 @@ abstract class ProtosLexicalSelectionNode extends Node {
         return readReceiverOrThrow(activation, name);
     }
 
-    @Specialization(guards = "!write", replaces = {"readCachedAbsentScope", "readCachedOwner", "readCachedReceiver"})
+    @Specialization(guards = "!write", replaces = {"readCachedCompactStableAbsentScope", "readCachedStableAbsentScope",
+                    "readCachedAbsentScope", "readCachedOwner", "readCachedReceiver"})
     static Object read(
             Object activation, String name, boolean write, LexicalFrameLayout currentLayout) {
         ProtosActivation published = publishedActivationOrNull(activation);
@@ -277,6 +367,21 @@ abstract class ProtosLexicalSelectionNode extends Node {
                 : location.storageInstallationAssumption();
     }
 
+    static Assumption shapeValidityAssumption(Shape shape) {
+        CompilerAsserts.neverPartOfCompilation();
+        return shape == null
+                ? Assumption.NEVER_VALID
+                : shape.getValidAssumption();
+    }
+
+    static Assumption missingPropertyAssumption(
+            ProtosModuleBindingLocation location, Shape shape) {
+        CompilerAsserts.neverPartOfCompilation();
+        return location == null
+                ? Assumption.NEVER_VALID
+                : location.storageMissingPropertyAssumption(shape);
+    }
+
     static Shape missingShapeOrNull(ProtosModuleBindingLocation location) {
         CompilerAsserts.neverPartOfCompilation();
         return location == null ? null : location.storageShapeIfMissing();
@@ -306,6 +411,13 @@ abstract class ProtosLexicalSelectionNode extends Node {
         Object[] arguments = (Object[]) state;
         return ProtosFrameArguments.hasPublishedActivation(arguments)
                 ? ProtosFrameArguments.publishedActivation(arguments)
+                : null;
+    }
+
+    @NonIdempotent
+    static ProtosClosureValue compactClosure(Object state) {
+        return state instanceof Object[] arguments
+                ? ProtosFrameArguments.capturedClosureForSelectionOrNull(arguments)
                 : null;
     }
 

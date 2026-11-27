@@ -860,6 +860,311 @@ class ProtosLexicalSelectionNodeTest {
     }
 
     @Test
+    void compactStableAbsenceKeepsClosureEnvironmentsAndPublicationIndependent() {
+        String name = "compactStableAbsenceBindingProbe";
+        ProtosObjectValue root = ProtosObjectValue.rootObject();
+
+        ProtosExecutionContextValue firstNearer =
+                new ProtosExecutionContextValue(root);
+        ProtosExecutionContextValue secondNearer =
+                new ProtosExecutionContextValue(root);
+
+        ProtosObjectValue firstOuter = new ProtosObjectValue(root);
+        ProtosObjectValue secondOuter = new ProtosObjectValue(root);
+
+        Object firstValue = new ProtosStringValue("first");
+        Object secondValue = new ProtosStringValue("second");
+
+        firstOuter.createLocalSlot(name, firstValue);
+        secondOuter.createLocalSlot(name, secondValue);
+        firstOuter.freeze();
+        secondOuter.freeze();
+
+        ProtosActivation firstReader = deferredSelectionActivation(
+                List.of(firstNearer, firstOuter), root);
+        ProtosActivation secondReader = deferredSelectionActivation(
+                List.of(secondNearer, secondOuter), root);
+
+        var firstEnvironment =
+                firstReader.capturedLexicalEnvironmentForRuntime();
+        var secondEnvironment =
+                secondReader.capturedLexicalEnvironmentForRuntime();
+
+        ProtosClosureValue firstClosure = new ProtosClosureValue(
+                null, firstEnvironment, root, null, null,
+                firstReader.prelude().orElseThrow(), null);
+
+        ProtosClosureValue sameEnvironmentClosure = new ProtosClosureValue(
+                null, firstEnvironment, root, null, null,
+                firstReader.prelude().orElseThrow(), null);
+
+        ProtosClosureValue secondClosure = new ProtosClosureValue(
+                null, secondEnvironment, root, null, null,
+                secondReader.prelude().orElseThrow(), null);
+
+        assertNotSame(firstClosure, sameEnvironmentClosure);
+        assertNotSame(firstEnvironment, secondEnvironment);
+
+        assertSame(firstEnvironment,
+                sameEnvironmentClosure.capturedLexicalEnvironmentForRuntime());
+
+        Object[] firstArguments =
+                ProtosFrameArguments.compactDirectClosureCall(
+                        firstClosure, firstReader, null, new Object[0]);
+
+        Object[] sameEnvironmentArguments =
+                ProtosFrameArguments.compactDirectClosureCall(
+                        sameEnvironmentClosure, firstReader, null, new Object[0]);
+
+        Object[] secondArguments =
+                ProtosFrameArguments.compactDirectClosureCall(
+                        secondClosure, secondReader, null, new Object[0]);
+
+        var layout = ProtosBytecodeRootNode.EMPTY_LEXICAL_FRAME_LAYOUT;
+
+        var firstLocation =
+                ProtosModuleBindingLocation.storageLocationOrNull(firstNearer, name);
+
+        var property = firstLocation.storageMissingPropertyAssumption(
+                firstLocation.storageShapeIfMissing());
+
+        assertTrue(property.isValid());
+
+        ProtosLexicalSelectionNode selection =
+                ProtosLexicalSelectionNodeGen.create();
+
+        for (int repeat = 0; repeat < 8; repeat++) {
+            assertSame(firstValue,
+                    selection.execute(firstArguments, name, false, layout));
+            assertSame(firstValue,
+                    selection.execute(sameEnvironmentArguments, name, false, layout));
+            assertSame(secondValue,
+                    selection.execute(secondArguments, name, false, layout));
+        }
+
+        assertSame(firstClosure, firstArguments[0]);
+        assertSame(sameEnvironmentClosure, sameEnvironmentArguments[0]);
+        assertSame(secondClosure, secondArguments[0]);
+
+        // Use another site to check publication while absence is still stable.
+        ProtosLexicalSelectionNode publicationSelection =
+                ProtosLexicalSelectionNodeGen.create();
+
+        for (int repeat = 0; repeat < 8; repeat++) {
+            assertSame(firstValue,
+                    publicationSelection.execute(
+                            firstArguments, name, false, layout));
+        }
+
+        ProtosActivation published =
+                ProtosFrameArguments.activation(firstArguments);
+
+        assertNull(ProtosLexicalSelectionNode.compactClosure(firstArguments));
+
+        assertSame(firstValue,
+                publicationSelection.execute(firstArguments, name, false));
+
+        published.context().createLocalSlot(name, ProtosNullValue.INSTANCE);
+
+        assertSame(ProtosNullValue.INSTANCE,
+                publicationSelection.execute(firstArguments, name, false));
+
+        published.context().removeLocalSlot(name);
+
+        assertSame(firstValue,
+                publicationSelection.execute(firstArguments, name, false));
+
+        // Mutation of a captured scope must invalidate the stable selection.
+        secondNearer.createLocalSlot(name, ProtosNullValue.INSTANCE);
+
+        assertFalse(property.isValid());
+
+        assertSame(firstValue,
+                selection.execute(sameEnvironmentArguments, name, false, layout));
+
+        assertSame(ProtosNullValue.INSTANCE,
+                selection.execute(secondArguments, name, false, layout));
+
+        secondNearer.removeLocalSlot(name);
+
+        assertSame(secondValue,
+                selection.execute(secondArguments, name, false, layout));
+
+        firstNearer.createLocalSlot(name, secondValue);
+
+        assertSame(secondValue,
+                selection.execute(sameEnvironmentArguments, name, false, layout));
+
+        firstNearer.removeLocalSlot(name);
+
+        assertSame(firstValue,
+                selection.execute(sameEnvironmentArguments, name, false, layout));
+
+        assertSame(sameEnvironmentClosure, sameEnvironmentArguments[0]);
+        assertSame(secondClosure, secondArguments[0]);
+    }
+
+    @Test
+    void stableMissingPropertySelectionObservesCreationRemovalAndRecreation() {
+        String name = "stableMissingPropertyBindingProbe";
+        ProtosObjectValue root = ProtosObjectValue.rootObject();
+        ProtosExecutionContextValue nearer = new ProtosExecutionContextValue(root);
+        ProtosObjectValue outer = new ProtosObjectValue(root);
+        Object outside = new ProtosStringValue("outside");
+        Object inside = new ProtosStringValue("inside");
+
+        outer.createLocalSlot(name, outside);
+        outer.freeze();
+
+        ProtosActivation reader = deferredSelectionActivation(
+                List.of(nearer, outer), root);
+
+        ProtosModuleBindingLocation location =
+                ProtosModuleBindingLocation.storageLocationOrNull(nearer, name);
+
+        var missingShape = location.storageShapeIfMissing();
+        var installation = location.storageInstallationAssumption();
+        var property = location.storageMissingPropertyAssumption(missingShape);
+
+        assertTrue(installation.isValid());
+        assertTrue(missingShape.getValidAssumption().isValid());
+        assertTrue(property.isValid());
+
+        ProtosLexicalSelectionNode selection =
+                ProtosLexicalSelectionNodeGen.create();
+
+        for (int repeat = 0; repeat < 8; repeat++) {
+            assertSame(outside, selection.execute(reader, name, false));
+        }
+
+        // An unrelated Shape transition does not establish this binding.
+        nearer.createLocalSlot("stableMissingPropertyUnrelatedProbe", inside);
+
+        assertFalse(location.hasStorageShape(missingShape));
+        assertTrue(property.isValid());
+        assertTrue(installation.isValid());
+        assertSame(outside, selection.execute(reader, name, false));
+
+        // A stale Shape must not grant a newly acquired proof.
+        assertFalse(
+                location.storageMissingPropertyAssumption(missingShape).isValid());
+
+        // A present guest null is a nearer binding, not absence.
+        nearer.createLocalSlot(name, ProtosNullValue.INSTANCE);
+
+        assertFalse(property.isValid());
+        assertTrue(installation.isValid());
+        assertNull(location.storageShapeIfMissing());
+        assertSame(ProtosNullValue.INSTANCE,
+                selection.execute(reader, name, false));
+        assertSame(ProtosNullValue.INSTANCE, read(reader, name));
+
+        nearer.assignLocalSlot(name, inside);
+
+        assertSame(inside, selection.execute(reader, name, false));
+        assertSame(inside, read(reader, name));
+
+        nearer.removeLocalSlot(name);
+
+        assertSame(outside, selection.execute(reader, name, false));
+        assertSame(outside, read(reader, name));
+        assertFalse(property.isValid());
+
+        nearer.createLocalSlot(name, inside);
+
+        assertSame(inside, selection.execute(reader, name, false));
+        assertSame(inside, read(reader, name));
+
+        nearer.removeLocalSlot(name);
+        nearer.removeLocalSlot("stableMissingPropertyUnrelatedProbe");
+
+        assertSame(outside, selection.execute(reader, name, false));
+        assertTrue(installation.isValid());
+        assertNull(reader.materializedContextOrNullForRuntime());
+    }
+
+    @Test
+    void sharedShapePropertyInvalidationPreservesIndependentStorageSelection() {
+        String name = "sharedShapeMissingPropertyBindingProbe";
+        ProtosObjectValue root = ProtosObjectValue.rootObject();
+
+        ProtosExecutionContextValue first =
+                new ProtosExecutionContextValue(root);
+        ProtosExecutionContextValue second =
+                new ProtosExecutionContextValue(root);
+
+        ProtosObjectValue outer = new ProtosObjectValue(root);
+        Object outside = new ProtosStringValue("outside");
+        outer.createLocalSlot(name, outside);
+        outer.freeze();
+
+        ProtosActivation firstReader = deferredSelectionActivation(
+                List.of(first, outer), root);
+        ProtosActivation secondReader = deferredSelectionActivation(
+                List.of(second, outer), root);
+
+        var firstLocation =
+                ProtosModuleBindingLocation.storageLocationOrNull(first, name);
+        var secondLocation =
+                ProtosModuleBindingLocation.storageLocationOrNull(second, name);
+
+        var firstShape = firstLocation.storageShapeIfMissing();
+        var secondShape = secondLocation.storageShapeIfMissing();
+
+        assertSame(firstShape, secondShape);
+
+        var firstInstallation = firstLocation.storageInstallationAssumption();
+        var secondInstallation = secondLocation.storageInstallationAssumption();
+
+        assertNotSame(firstInstallation, secondInstallation);
+
+        var firstProperty =
+                firstLocation.storageMissingPropertyAssumption(firstShape);
+        var secondProperty =
+                secondLocation.storageMissingPropertyAssumption(secondShape);
+
+        assertTrue(firstProperty.isValid());
+        assertTrue(secondProperty.isValid());
+
+        ProtosLexicalSelectionNode selection =
+                ProtosLexicalSelectionNodeGen.create();
+
+        for (int repeat = 0; repeat < 8; repeat++) {
+            assertSame(outside, selection.execute(firstReader, name, false));
+            assertSame(outside, selection.execute(secondReader, name, false));
+        }
+
+        second.createLocalSlot(name, ProtosNullValue.INSTANCE);
+
+        assertFalse(secondProperty.isValid());
+        assertTrue(firstLocation.hasStorageShape(firstShape));
+        assertTrue(firstInstallation.isValid());
+        assertTrue(secondInstallation.isValid());
+
+        assertSame(outside, selection.execute(firstReader, name, false));
+        assertSame(ProtosNullValue.INSTANCE,
+                selection.execute(secondReader, name, false));
+
+        second.removeLocalSlot(name);
+
+        assertSame(outside, selection.execute(firstReader, name, false));
+        assertSame(outside, selection.execute(secondReader, name, false));
+
+        first.createLocalSlot(name, ProtosNullValue.INSTANCE);
+
+        assertSame(ProtosNullValue.INSTANCE,
+                selection.execute(firstReader, name, false));
+        assertSame(outside, selection.execute(secondReader, name, false));
+
+        first.removeLocalSlot(name);
+
+        assertSame(outside, selection.execute(firstReader, name, false));
+        assertSame(outside, selection.execute(secondReader, name, false));
+        assertNull(firstReader.materializedContextOrNullForRuntime());
+        assertNull(secondReader.materializedContextOrNullForRuntime());
+    }
+
+    @Test
     void negativeArraySelectionTracksPhysicalStorageShapeAndFixedWriteDestination() {
         ProtosObjectValue root = ProtosObjectValue.rootObject();
         ProtosExecutionContextValue nearer = new ProtosExecutionContextValue(root);

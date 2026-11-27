@@ -53,6 +53,7 @@ final class ProtosMapBackedLexicalBindingAuthority
     private static final Shape STORE_INITIAL_SHAPE =
             Shape.newBuilder()
                     .layout(Store.class, MethodHandles.lookup())
+                    .propertyAssumptions(true)
                     .build();
 
     /** Independent storage of a durable authority not backed by an object. */

@@ -26,8 +26,7 @@ import com.oracle.truffle.api.object.Shape;
 import java.util.Objects;
 
 /**
- * I115 (ReadGlobal/WriteGlobal over the module binding storage): the
- * physical location of one NAME binding in a map-backed execution context,
+ * The physical location of one NAME binding in a map-backed execution context,
  * resolved once when a read or write site specializes. A lexical read can
  * also use the location's storage Shape to prove a nearer name absent.
  *
@@ -76,8 +75,8 @@ public final class ProtosModuleBindingLocation {
     /**
      * An address in the existing map-backed store, even when the name is absent.
      * Specialization time only; frame-backed authorities are never admitted.
-     * This address alone proves no absence: callers must cache a missing-property
-     * Shape and validate both that Shape and {@link #hasCurrentStorage()}.
+     * This address alone proves no absence: callers must establish both
+     * continued storage installation and continued absence of the binding.
      */
     public static ProtosModuleBindingLocation storageLocationOrNull(ProtosObjectValue context, String name) {
         CompilerAsserts.neverPartOfCompilation();
@@ -97,6 +96,22 @@ public final class ProtosModuleBindingLocation {
         CompilerAsserts.neverPartOfCompilation();
         Shape shape = store.getShape();
         return shape.hasProperty(key) ? null : shape;
+    }
+
+    /**
+     * Speculates on the continued absence of this binding in the known
+     * physical store. The caller must independently prove the installation
+     * of the store and the validity of the supplied Shape.
+     */
+    @TruffleBoundary
+    public Assumption storageMissingPropertyAssumption(Shape shape) {
+        if (shape == null
+                || !hasStorageShape(shape)
+                || shape.hasProperty(key)) {
+            return Assumption.NEVER_VALID;
+        }
+        Assumption stable = shape.getPropertyAssumption(key);
+        return hasStorageShape(shape) ? stable : Assumption.NEVER_VALID;
     }
 
     /** Live Shape identity check on this address's physical store. */
