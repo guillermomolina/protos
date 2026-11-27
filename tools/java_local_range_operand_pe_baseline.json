@@ -13,6 +13,18 @@
       "receiver_class": "CONSTANT_OPERAND_RECEIVER",
       "bytecode_node_class": "BOUND_BYTECODE_NODE",
       "pe_reachability": "PE_REACHABLE"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosBytecodeRootNode.java",
+      "class": "ProtosBytecodeRootNode.ResetInlineCallbackLocals",
+      "method": "perform(LocalRangeAccessor,VirtualFrame,BytecodeNode)",
+      "operation": "clear",
+      "receiver": "locals",
+      "bytecode_node": "bytecodeNode",
+      "occurrence": 0,
+      "receiver_class": "CONSTANT_OPERAND_RECEIVER",
+      "bytecode_node_class": "BOUND_BYTECODE_NODE",
+      "pe_reachability": "PE_REACHABLE"
     }
   ]
 }

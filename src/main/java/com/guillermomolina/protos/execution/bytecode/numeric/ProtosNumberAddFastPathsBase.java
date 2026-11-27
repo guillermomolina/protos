@@ -54,10 +54,13 @@ abstract class ProtosNumberAddFastPathsBase extends Node {
             long left, long right,
             @Shared("selection") @Cached ProtosNumericSelectionNode selection,
             @Bind("bytecodeOf($node)") BytecodeNode bytecode) {
-        (commitToCell ? outcome : commitDestination).setLong(bytecode, frame, Math.addExact(left, right));
+        long result = Math.addExact(left, right);
         if (commitToCell) {
+            outcome.setLong(bytecode, frame, result);
             ProtosBytecodeRootNode.StoreAndTestContinuation.commitCompletedCell(
                     commitDestination, outcome, assignmentSection, frame, bytecode);
+        } else {
+            commitDestination.setLong(bytecode, frame, result);
         }
         return false;
     }
@@ -69,10 +72,13 @@ abstract class ProtosNumberAddFastPathsBase extends Node {
             double left, double right,
             @Shared("selection") @Cached ProtosNumericSelectionNode selection,
             @Bind("bytecodeOf($node)") BytecodeNode bytecode) {
-        (commitToCell ? outcome : commitDestination).setDouble(bytecode, frame, left + right);
+        double result = left + right;
         if (commitToCell) {
+            outcome.setDouble(bytecode, frame, result);
             ProtosBytecodeRootNode.StoreAndTestContinuation.commitCompletedCell(
                     commitDestination, outcome, assignmentSection, frame, bytecode);
+        } else {
+            commitDestination.setDouble(bytecode, frame, result);
         }
         return false;
     }
@@ -84,10 +90,13 @@ abstract class ProtosNumberAddFastPathsBase extends Node {
             double left, long right,
             @Shared("selection") @Cached ProtosNumericSelectionNode selection,
             @Bind("bytecodeOf($node)") BytecodeNode bytecode) {
-        (commitToCell ? outcome : commitDestination).setDouble(bytecode, frame, left + right);
+        double result = left + right;
         if (commitToCell) {
+            outcome.setDouble(bytecode, frame, result);
             ProtosBytecodeRootNode.StoreAndTestContinuation.commitCompletedCell(
                     commitDestination, outcome, assignmentSection, frame, bytecode);
+        } else {
+            commitDestination.setDouble(bytecode, frame, result);
         }
         return false;
     }
@@ -99,10 +108,13 @@ abstract class ProtosNumberAddFastPathsBase extends Node {
             long left, double right,
             @Shared("selection") @Cached ProtosNumericSelectionNode selection,
             @Bind("bytecodeOf($node)") BytecodeNode bytecode) {
-        (commitToCell ? outcome : commitDestination).setDouble(bytecode, frame, left + right);
+        double result = left + right;
         if (commitToCell) {
+            outcome.setDouble(bytecode, frame, result);
             ProtosBytecodeRootNode.StoreAndTestContinuation.commitCompletedCell(
                     commitDestination, outcome, assignmentSection, frame, bytecode);
+        } else {
+            commitDestination.setDouble(bytecode, frame, result);
         }
         return false;
     }

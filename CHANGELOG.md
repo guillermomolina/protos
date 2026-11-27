@@ -8,6 +8,11 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.249-SNAPSHOT
+
+- **PERF044.** Preserve constant local accessors in arithmetic stores, update bytecode assertions and refresh PE baselines.
+- Replay source commit `c0b9f7a86bae9fc5caa7c0d00fe9836bcc326f84` with implementation-version metadata; preserve its source, tests and baseline content.
+
 ## 0.4.248-SNAPSHOT
 
 - **PERF044.** Revert literal matching subject comparison and last-use local cleanup fusion.

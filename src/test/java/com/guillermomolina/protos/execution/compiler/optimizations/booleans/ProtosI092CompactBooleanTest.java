@@ -767,7 +767,11 @@ final class ProtosI092CompactBooleanTest {
         var names = root.getBytecodeNode().getInstructionsAsList()
                 .stream().map(ProtosInstructionNames::of).toList();
         assertTrue(position(names, "Lookup") >= 0, names.toString());
-        assertTrue(position(names, "CurrentActivation") >= 0, names.toString());
+        var rawNames = root.getBytecodeNode().getInstructionsAsList()
+                .stream().map(instruction -> instruction.getName()).toList();
+        assertTrue(position(rawNames, "AccessNamedLexicalCurrent") >= 0,
+                rawNames.toString());
+        assertTrue(position(names, "CurrentActivation") < 0, names.toString());
         var first = assertThrows(com.guillermomolina.protos.runtime.ProtosSignalException.class,
                 () -> ProtosTestExecutionSupport.evaluate("unresolved-callback-first.protos", "run()", module));
         var second = assertThrows(com.guillermomolina.protos.runtime.ProtosSignalException.class,
