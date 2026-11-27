@@ -438,6 +438,12 @@ final class ProtosI115Long5GeneralArithmeticTest {
      * by a read. Its last reference is a release, or the load feeding the
      * root's return, so the result does not stay live past its last use.
      */
+    private static boolean releasesResultLocal(String name) {
+        return name.startsWith("clear.local")
+                || name.startsWith("c.LoadAndClearTempLocal")
+                || name.startsWith("c.RequireCanonicalBooleanResultFromLocal");
+    }
+
     private static void assertNoRedundantResultClear(
             String function, List<Instruction> instructions, List<String> names, int producer) {
         Integer local = resultLocal(instructions, names, producer);
@@ -457,8 +463,7 @@ final class ProtosI115Long5GeneralArithmeticTest {
                     // The released slot is reused by another local.
                     break;
                 }
-            } else if (name.startsWith("clear.local")
-                    || name.startsWith("c.LoadAndClearTempLocal")) {
+            } else if (releasesResultLocal(name)) {
                 assertTrue(!cleared, function + " releases the result local " + local + " of "
                         + names.get(producer) + " twice without a new write: " + names);
                 cleared = true;
@@ -511,12 +516,14 @@ final class ProtosI115Long5GeneralArithmeticTest {
                 // A new write: later uses of the slot belong to another value.
                 return;
             }
-            if (name.startsWith("load.local") || name.startsWith("c.LoadAndClearTempLocal")) {
+            if (name.startsWith("load.local")
+                    || name.startsWith("c.LoadAndClearTempLocal")
+                    || name.startsWith("c.RequireCanonicalBooleanResultFromLocal")) {
                 assertTrue(i + 1 >= names.size() || !isTransport(names.get(i + 1)),
                         function + " transports the result of " + result
                                 + " read from its local: " + names);
             }
-            if (name.startsWith("c.LoadAndClearTempLocal") || name.startsWith("clear.local")) {
+            if (releasesResultLocal(name)) {
                 return;
             }
         }
@@ -563,7 +570,7 @@ final class ProtosI115Long5GeneralArithmeticTest {
         boolean released = false;
         for (int j = add + 2; j < tail && !released; j++) {
             String name = names.get(j);
-            released = (name.startsWith("clear.local") || name.startsWith("c.LoadAndClearTempLocal"))
+            released = releasesResultLocal(name)
                     && localOffsets(instructions.get(j)).contains(local);
         }
         assertTrue(released, "discarded result kept live in local " + local + ": " + names);

@@ -11,6 +11,16 @@
       "classification": "LOOP_INDEX",
       "occurrence": 0,
       "rationale": "I115 known risk: @ExplodeLoop over the constant-operand LocalRangeAccessor length; PE-constant only if the bound folds and the loop is unrolled (not structurally proven by this guard)."
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosBytecodeRootNode.java",
+      "class": "ProtosBytecodeRootNode.ResetInlineCallbackLocals",
+      "method": "perform(LocalRangeAccessor,VirtualFrame,BytecodeNode)",
+      "operation": "clear",
+      "index": "index",
+      "classification": "LOOP_INDEX",
+      "occurrence": 0,
+      "rationale": "@ExplodeLoop over the constant-operand LocalRangeAccessor length, following the existing range-access pattern. PE-constant only if the bound folds and the loop is unrolled (not structurally proven by this guard)."
     }
   ]
 }

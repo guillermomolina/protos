@@ -1952,10 +1952,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Bind VirtualFrame frame,
                 @Shared("selection") @Cached ProtosNumericSelectionNode selection,
                 @Bind BytecodeNode bytecode) {
-            (commitToCell ? outcome : commitDestination).setLong(bytecode, frame, left / right);
+            long result = left / right;
             if (commitToCell) {
+                outcome.setLong(bytecode, frame, result);
                 StoreAndTestContinuation.commitCompletedCell(
                         commitDestination, outcome, assignmentSection, frame, bytecode);
+            } else {
+                commitDestination.setLong(bytecode, frame, result);
             }
             return false;
         }
@@ -2005,10 +2008,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Bind VirtualFrame frame,
                 @Shared("selection") @Cached ProtosNumericSelectionNode selection,
                 @Bind BytecodeNode bytecode) {
-            (commitToCell ? outcome : commitDestination).setLong(bytecode, frame, left % right);
+            long result = left % right;
             if (commitToCell) {
+                outcome.setLong(bytecode, frame, result);
                 StoreAndTestContinuation.commitCompletedCell(
                         commitDestination, outcome, assignmentSection, frame, bytecode);
+            } else {
+                commitDestination.setLong(bytecode, frame, result);
             }
             return false;
         }
@@ -8194,11 +8200,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 VirtualFrame frame,
                 BytecodeNode bytecode) {
             if (!commitToCell) {
-                LocalAccessor destination =
-                        ProtosTailCallContinuation.isSuspended(value)
-                                ? outcome
-                                : commitDestination;
-                return storeResult(destination, value, frame, bytecode);
+                if (ProtosTailCallContinuation.isSuspended(value)) {
+                    return storeResult(outcome, value, frame, bytecode);
+                }
+                return storeResult(commitDestination, value, frame, bytecode);
             }
             boolean pending = storeResult(outcome, value, frame, bytecode);
             if (!pending) {
