@@ -11383,8 +11383,8 @@ final class CanonicalToBytecodeLowerer {
             builder.emitClearLocal(any);
             builder.emitClearLocal(anyEvaluated);
         }
-        builder.emitClearLocal(subject);
         builder.emitLabel(end);
+        builder.emitClearLocal(subject);
         builder.endBlock();
         builder.endTag(StandardTags.CallTag.class);
     }
@@ -11445,15 +11445,10 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal childResult,
             BytecodeLocal resumeValue,
             boolean primitiveCarrierResult) {
-        if (keys.length == 0) {
-            builder.emitClearLocal(subject);
-        }
-
         for (int position = 0; position < keys.length; position++) {
             builder.beginIfThen();
 
-            builder.emitLiteralCaseLongEquals(
-                    keys[position], subject, position == keys.length - 1);
+            builder.emitLiteralCaseLongEquals(keys[position], subject);
 
             builder.beginBlock();
             emitInlineControlClosureBody(builder,

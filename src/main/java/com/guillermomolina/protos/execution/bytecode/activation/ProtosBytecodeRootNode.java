@@ -5983,26 +5983,20 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
-    /** Compare a literal key and release the subject at its last use. */
+    /** Compare an admitted literal key with the evaluated subject. */
     @Operation(storeBytecodeIndex = false)
     @ConstantOperand(type = long.class, name = "key")
     @ConstantOperand(type = LocalAccessor.class, name = "subject")
-    @ConstantOperand(type = boolean.class, name = "lastKey")
     public static final class LiteralCaseLongEquals {
         @Specialization
         public static boolean compare(
                 long key,
                 LocalAccessor subject,
-                boolean lastKey,
                 @Bind VirtualFrame frame,
                 @Bind BytecodeNode bytecode) {
             try {
-                boolean equal = CaseLongEquals.compare(
+                return CaseLongEquals.compare(
                         key, subject.getLong(bytecode, frame));
-                if (equal || lastKey) {
-                    subject.clear(bytecode, frame);
-                }
-                return equal;
             } catch (UnexpectedResultException notLong) {
                 throw CompilerDirectives.shouldNotReachHere(notLong);
             }
