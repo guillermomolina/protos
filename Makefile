@@ -200,7 +200,7 @@ help:
 		'  make artifacts-publish-d064  Publish its D064 to GHCR as rev-<sha> (explicit;' \
 		'                      needs GHCR_USERNAME/GHCR_TOKEN; never builds or releases)' \
 		'  make dist           Build only the portable JVM distribution' \
-		'  make dist-validate  Build and validate the portable distribution' \
+		'  make dist-validate  Build and verify portable archive integrity (no tests)' \
 		'' \
 		'Overrides: MVN=... BASH=... PYTHON=... SH=... MVN_FLAGS=... JAVA_TEST_JOBS=... PROTOS_TEST_JOBS=... DIST_VALIDATE_FLAGS=...' \
 		'           TRUFFLE_COMPILATION_TEST_ARGS=... TRUFFLE_COMPILATION_TIMEOUT=...' \

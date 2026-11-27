@@ -227,16 +227,15 @@ class PrepareReleaseTest(unittest.TestCase):
             [
                 "native-image-build",
                 "native-archive-build",
-                "native-complete-admission",
                 "portable-jvm-build",
-                "portable-jvm-complete-admission",
+                "portable-jvm-archive-verification",
                 "multi-asset-envelope-prepare",
                 "multi-asset-envelope-verify",
             ],
         )
 
         prepare_command = (
-            step.call_args_list[5].args[1]
+            step.call_args_list[4].args[1]
         )
 
         self.assertIn(

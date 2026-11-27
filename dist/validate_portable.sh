@@ -106,40 +106,11 @@ case "$artifact_mode" in
         ;;
 esac
 
-# Release acceptance includes exhaustive functional coverage at this existing
-# revision-bound B5 gate. Preparation callers already reuse this admission.
-if [ "$artifact_mode" = public-prerelease ]; then
-    candidate_revision=$(git -C "$ROOT" rev-parse HEAD)
-    # Reuse the verified candidate for foreign-provider validation: the ordinary
-    # development packaging target would overwrite this exact archive pathname.
-    PROTOS_FOREIGN_TEST_ARCHIVE="$archive" python3 "$ROOT/scripts/publication_validation.py" \
-        --repo "$ROOT" --base "$release_baseline" --head "$candidate_revision" \
-        --top-level-closure --exhaustive
-fi
-
-# B3 and B4A deliberately use their existing host-sensitive fallback isolation
-# on a non-selected development JDK. Each smoke extracts its own disposable copy;
-# the archive itself must remain byte-for-byte unchanged.
-sh "$ROOT/dist/smoke/smoke_cwd_package.sh" "$archive"
-sh "$ROOT/dist/smoke/smoke_test_tool.sh" "$archive"
-sh "$ROOT/dist/smoke/smoke_polyglot_embedding.sh" "$archive"
-
-# B4B remains the exact optimizing-runtime gate, now against the already
-# provisioned DIST002 primary runtime. The smoke defaults to JAVA_HOME; the
-# historical PROTOS_DIST001_B4B_JAVA_HOME override remains optional only for
-# explicit compatibility invocation. No fallback or unsupported override is
-# accepted here.
-sh "$ROOT/dist/smoke/smoke_optimizing_runtime.sh" "$archive"
-
 archive_sha_after=$(sha256sum "$archive" | awk '{print $1}')
 [ "$archive_sha_before" = "$archive_sha_after" ] ||
-    fail "cross-slice validation modified the distribution archive"
+    fail "archive verification modified the distribution archive"
 
 echo "DIST_B5_SINGLE_ARCHIVE_CHECK: PASS sha256=$archive_sha_after"
 echo "DIST_B5_ARTIFACT_MODE_CHECK: PASS mode=$artifact_mode"
 echo "DIST_B5_ARCHIVE_IDENTITY_CHECK: PASS"
-echo "DIST_B5_CWD_PACKAGE_CHECK: PASS"
-echo "DIST_B5_TEST_TOOL_CHECK: PASS"
-echo "DIST_B5_POLYGLOT_EMBEDDING_CHECK: PASS"
-echo "DIST_B5_OPTIMIZING_RUNTIME_CHECK: PASS"
-echo "DIST001_B5_CROSS_SLICE: PASS"
+echo "DIST001_B5_ARCHIVE_VERIFICATION: PASS"

@@ -34,14 +34,17 @@ contract. Do not advertise generic Java compatibility merely because the shaded
 JAR can start on a particular JDK; Truffle/Graal optimizing-runtime support and
 fallback execution must not be conflated without evidence.
 
-Release candidates require exhaustive functional validation (`FULL`, using
-`make test-all`) bound to the exact candidate revision. Ordinary `make test` and
-selective library validation cannot discharge this obligation. The existing
-release-aware portable B5 admission invokes the shared publication selector with
-`--exhaustive`; release preparation and candidate validation retain that admission.
-Native Image and compilerability obligations remain independent. Do not repeat
-exhaustive execution when an existing accepted revision-bound gate already supplies
-that evidence.
+Distribution preparation, candidate verification and release publication MUST NOT
+execute test suites, smoke tests, guest execution probes, or compilerability test
+harnesses. This includes Java, Protos, Standard Library, foreign-provider, Native
+Image and guest-JIT tests. These workflows build the selected revision and verify
+archive contents, identity, runtime metadata, licenses/notices and checksums without
+running product tests. Native Image compilation itself remains a build operation.
+Repository test and CI entry points remain unchanged; this policy does not move,
+add or schedule tests elsewhere. Existing applicable repository validation evidence
+may support release claims, but distribution preparation is not a second test run.
+This operational rule supersedes contrary historical distribution-test admission
+requirements in the DIST001 record.
 
 Release automation MUST preserve exact source-revision identity, required
 validation, license/notices, runtime requirements, release metadata, and artifact

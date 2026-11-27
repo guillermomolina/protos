@@ -101,7 +101,7 @@ publication command. It makes no implicit changes to the current shell's
 | Canonical exact-revision artifact set (Native + portable JVM + D064) | `make artifacts` |
 | Publish that set's D064 to GHCR for its exact revision (explicit only) | `make artifacts-publish-d064` |
 | Portable JVM distribution only | `make dist` |
-| Validate the extracted portable distribution | `make dist-validate` |
+| Build and verify portable archive identity and integrity (no tests) | `make dist-validate` |
 | Public release preparation/publication (explicit decision only) | `dist/prepare_release.py`, `dist/publish_release.py` |
 
 Building artifacts and publishing a release are separate operations. No build
@@ -191,9 +191,9 @@ a bind mount when the host permits creating one
 (`NATIVE_I156_BIND_MOUNT_STATUS=ADMISSION_HOST_REFUSES_BIND_MOUNT` otherwise),
 and the absence of any private native library. On a host that refuses the grant
 it reports `REJECTED_UNSUPPORTED_PLATFORM`, which verifies only the fail-closed
-refusal. `dist/validate_native.py` repeats write, read-after-restart,
-outside-root refusal and denial cases against the relocated installed archive
-(`NATIVE_DIST_FILESYSTEM_GRANT=PASS`, or `REJECTED_UNSUPPORTED_HOST`).
+refusal. The standalone `dist/validate_native.py` diagnostic retains its existing
+write, read-after-restart, outside-root refusal and denial checks against a
+relocated archive. It is not invoked by distribution preparation.
 
 ### TLS under Native Image
 
@@ -482,6 +482,10 @@ This slice deliberately does not extract or execute Protos.
 
 ## Outside-checkout CWD smoke
 
+The existing smoke and Native diagnostic commands are standalone checks, not
+steps of distribution preparation or archive verification. They are retained
+without changing their execution or moving them into another workflow.
+
 `DIST001-B3` validates relocation and caller-working-directory behavior:
 
 ```sh
@@ -585,28 +589,27 @@ override fails without fallback). It uses fallback Truffle because it validates
 Core packaging, not the optimizing runtime.
 
 
-## Complete extracted-distribution gate
+## Portable archive verification
 
-`DIST001-B5` composes the previously independent evidence against one exact ZIP:
+`dist/validate_portable.sh` verifies the archive's identity, structure and internal
+checksums using `dist/verify_portable.py`, and checks that the ZIP remains unchanged.
+It does not execute the product or any test suite.
 
 ```sh
 python3 dist/build_portable.py
-PROTOS_DIST001_B4B_JAVA_HOME=/path/to/graalvm-community-jdk-22.0.0 \
-    sh dist/validate_portable.sh --require-clean-source
+sh dist/validate_portable.sh --require-clean-source
 ```
 
-The gate verifies B2 archive/source/checksum identity, B3 outside-checkout
-caller-CWD and Package Tool behavior, B4A bundled Test Tool execution, and B4B
-exact supported optimizing-runtime selection. Every sub-gate receives the same
-archive path. The outer ZIP SHA-256 is checked before and after the full run so
-disposable fallback isolation cannot mutate the validated artifact.
+Release preparation builds both distributions and relies on the builders' archive
+verification, the portable identity/integrity check and independent envelope
+verification. It does not invoke `dist/validate_native.py`, the portable smoke
+scripts, or `scripts/publication_validation.py`. The existing test and CI entry
+points are unchanged. Archive verification does not create a tag or Release.
 
-This is the reusable complete distribution-conformance entry point for
-development artifacts. `DIST001-D` may call this gate from CI, but a green run
-does not create a tag or GitHub Release.
+## CI development snapshots (historical DIST001-D evidence)
 
-
-## CI development snapshots
+The following records the original snapshot workflow and its historical
+validation; it does not prescribe tests in current distribution preparation.
 
 `DIST001-D1` defines `.github/workflows/distribution.yml`. On every push to
 `main`, and on explicit `workflow_dispatch`, the job:
@@ -752,43 +755,33 @@ identity, runtime identity, archive SHA-256, checksum SHA-256, and notes SHA-256
 E3C owns end-to-end validation of this envelope against the candidate archive.
 
 
-## Release-aware complete distribution gate
+## Release-aware archive verification
 
-`DIST001-E3C1` extends the existing B2/B5 validation machinery without changing
-its development-snapshot default.
+`dist/validate_portable.sh` retains the release-aware B2 identity and checksum
+verification without invoking any functional admission or smoke tests.
 
-Development validation remains:
-
-```sh
-PROTOS_DIST001_B4B_JAVA_HOME=/path/to/graalvm-community-jdk-22.0.0 \
-    sh dist/validate_portable.sh --require-clean-source
-```
-
-A future E4 candidate checkout whose project version is public `V` uses:
+Development archive verification:
 
 ```sh
-PROTOS_DIST001_B4B_JAVA_HOME=/path/to/graalvm-community-jdk-22.0.0 \
-    sh dist/validate_portable.sh \
-        --archive /path/to/protos-V-posix-jvm.zip \
-        --public-prerelease \
-        --release-baseline <exact-V-SNAPSHOT-baseline-sha> \
-        --require-clean-source
+sh dist/validate_portable.sh --require-clean-source
 ```
 
-The release-aware B2 identity step requires the candidate ZIP to identify the
+A selected public candidate checkout whose project version is public `V` uses:
+
+```sh
+sh dist/validate_portable.sh \
+    --archive /path/to/protos-V-posix-jvm.zip \
+    --public-prerelease \
+    --release-baseline <exact-V-SNAPSHOT-baseline-sha> \
+    --require-clean-source
+```
+
+The release-aware identity step requires the candidate ZIP to identify the
 current candidate `HEAD`, clean source, `artifact_kind=public-prerelease`,
 `public_release=true`, public version `V`, tag `vV`, and the exact selected
 baseline whose committed `pom.xml` is `V-SNAPSHOT` and which is an ancestor of
-the candidate commit.
-
-After that identity check, B3 caller-CWD/Package Tool, B4A Test Tool, and B4B
-exact optimizing-runtime validation run against the same immutable ZIP exactly
-as they do for development snapshots.
-
-E3C1 does not select or build a real candidate. It only makes the already-proven
-B5 machinery capable of validating one once E4 supplies an explicitly approved
-candidate.
-
+the candidate commit. The ZIP is not mutated. Successful archive verification
+is reported as `DIST001_B5_ARCHIVE_VERIFICATION: PASS`.
 
 ## Independent release-envelope verification
 
@@ -829,8 +822,7 @@ candidate. That candidate-specific blocker/claim audit belongs to E3C3/E4.
 one candidate gate:
 
 ```sh
-PROTOS_DIST001_B4B_JAVA_HOME=/path/to/graalvm-community-jdk-22.0.0 \
-    python3 dist/validate_release_candidate.py \
+python3 dist/validate_release_candidate.py \
         --archive /path/to/protos-V-posix-jvm.zip \
         --envelope-dir /path/to/release-envelope \
         --candidate-audit /path/to/RELEASE_CANDIDATE_AUDIT.txt
@@ -866,7 +858,7 @@ The composed gate fails closed unless:
 - candidate selection records an explicit user decision while release publication
   remains explicitly unauthorized;
 - `vV` is absent both locally and on `origin`; and
-- the same ZIP passes the E3C1 release-aware complete B5 gate.
+- the same ZIP passes release-aware archive identity and integrity verification.
 
 The tag checks are availability guards only. The script contains no tag creation,
 GitHub Release creation, asset upload, or push operation.
@@ -1138,7 +1130,6 @@ DIST001-A proves that the distribution can be constructed and that its archive
 contains the required relocatable toolchain assets and exact source/runtime
 metadata.
 
-DIST001-B separately executes the extracted archive outside the repository
-checkout and proves CWD-sensitive behavior plus required bundled facilities.
-Until DIST001-B closes, this archive must not be described as a validated public
-release.
+DIST001-B historically established extracted execution evidence for the bundled
+facilities. Those historical results remain distinct from the current archive
+verification workflow, which does not execute product tests.

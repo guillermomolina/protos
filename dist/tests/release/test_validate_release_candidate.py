@@ -369,45 +369,80 @@ echo "FIXTURE_RELEASE_B5: PASS"
         )
 
 
-class ExhaustiveFunctionalAdmissionTest(unittest.TestCase):
-    def test_public_b5_requires_exact_revision_exhaustive_selector(self):
+class DistributionVerificationTest(unittest.TestCase):
+    def test_public_b5_verifies_archive_without_running_tests(self):
         source_root = Path(__file__).resolve().parents[3]
-        with tempfile.TemporaryDirectory(prefix="protos-release-functional-") as temporary:
+        with tempfile.TemporaryDirectory(
+            prefix="protos-release-archive-"
+        ) as temporary:
             root = Path(temporary)
-            (root / "dist/smoke").mkdir(parents=True)
-            (root / "scripts").mkdir()
-            shutil.copyfile(source_root / "dist/validate_portable.sh", root / "dist/validate_portable.sh")
-            (root / "dist/verify_portable.py").write_text("# fixture verification succeeds\n")
-            for name in ("cwd_package", "test_tool", "polyglot_embedding", "optimizing_runtime"):
-                (root / ("dist/smoke/smoke_" + name + ".sh")).write_text(":\n")
-            (root / "scripts/publication_validation.py").write_text(
-                "import json, os, pathlib, sys\n"
-                "assert os.environ['PROTOS_FOREIGN_TEST_ARCHIVE'] == str(pathlib.Path('candidate.zip').resolve())\n"
-                "pathlib.Path('functional-args.json').write_text(json.dumps(sys.argv[1:]))\n"
-                "raise SystemExit(0 if '--exhaustive' in sys.argv else 9)\n")
+            (root / "dist").mkdir()
+            shutil.copyfile(
+                source_root / "dist/validate_portable.sh",
+                root / "dist/validate_portable.sh",
+            )
+
+            verifier = root / "dist/verify_portable.py"
+            verifier.write_text(
+                "import json, pathlib, sys\n"
+                "pathlib.Path('verify-args.json').write_text("
+                "json.dumps(sys.argv[1:]))\n"
+            )
+
             archive = root / "candidate.zip"
             archive.write_bytes(b"immutable fixture")
+
             git(root, "init", "-q")
-            git(root, "config", "user.email", "fixture@example.invalid")
+            git(root, "config", "user.email",
+                "fixture@example.invalid")
             git(root, "config", "user.name", "Fixture")
             git(root, "add", "candidate.zip")
             git(root, "commit", "-qm", "candidate")
+
             revision = git(root, "rev-parse", "HEAD")
-            result = run(["sh", "dist/validate_portable.sh", "--archive", str(archive),
-                          "--public-prerelease", "--release-baseline", revision,
-                          "--require-clean-source"], cwd=root)
-            args = __import__("json").loads((root / "functional-args.json").read_text())
-            self.assertIn("--exhaustive", args)
-            self.assertEqual(revision, args[args.index("--head") + 1])
-            self.assertIn("DIST001_B5_CROSS_SLICE: PASS", result.stdout)
-            self.assertEqual(b"immutable fixture", archive.read_bytes())
-            # A failed functional admission must prevent release B5 acceptance.
-            (root / "scripts/publication_validation.py").write_text("raise SystemExit(9)\n")
-            failed = run(["sh", "dist/validate_portable.sh", "--archive", str(archive),
-                          "--public-prerelease", "--release-baseline", revision,
-                          "--require-clean-source"], cwd=root, check=False)
+
+            command = [
+                "sh", "dist/validate_portable.sh",
+                "--archive", str(archive),
+                "--public-prerelease",
+                "--release-baseline", revision,
+                "--require-clean-source",
+            ]
+
+            result = run(command, cwd=root)
+
+            args = __import__("json").loads(
+                (root / "verify-args.json").read_text()
+            )
+
+            self.assertIn("--public-prerelease", args)
+            self.assertIn("--require-clean-source", args)
+            self.assertEqual(
+                revision,
+                args[args.index("--release-baseline") + 1]
+            )
+            self.assertIn(
+                "DIST001_B5_ARCHIVE_VERIFICATION: PASS",
+                result.stdout
+            )
+            self.assertEqual(
+                b"immutable fixture",
+                archive.read_bytes()
+            )
+
+            verifier.write_text(
+                "raise RuntimeError('invalid archive')\n"
+            )
+
+            failed = run(
+                command, cwd=root, check=False
+            )
+
             self.assertNotEqual(0, failed.returncode)
-            self.assertNotIn("DIST001_B5_CROSS_SLICE: PASS", failed.stdout)
+            self.assertNotIn(
+                "DIST001_B5_ARCHIVE_VERIFICATION: PASS",
+                failed.stdout
+            )
 
     def test_ordinary_or_selective_requirements_cannot_satisfy_full(self):
         import importlib.util

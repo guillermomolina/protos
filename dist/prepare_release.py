@@ -190,17 +190,6 @@ def prepare(
         candidate,
     )
     step(
-        "native-complete-admission",
-        [
-            sys.executable,
-            "dist/validate_native.py",
-            "--archive",
-            str(native),
-        ],
-        candidate,
-    )
-
-    step(
         "portable-jvm-build",
         [
             sys.executable,
@@ -212,8 +201,7 @@ def prepare(
         candidate,
     )
     step(
-        # Public B5 includes exhaustive functional validation for this candidate.
-        "portable-jvm-complete-admission",
+        "portable-jvm-archive-verification",
         [
             "sh",
             "dist/validate_portable.sh",

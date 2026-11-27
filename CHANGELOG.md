@@ -8,6 +8,11 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.252-SNAPSHOT
+
+- **DIST027.** Remove automatic product test execution from distribution preparation and release candidate verification, including Native execution admission, exhaustive functional validation and portable smoke tests.
+- Retain archive construction, identity and checksum verification, independent release-envelope verification and explicit publication authorization. Leave existing test entry points and CI unchanged.
+
 ## 0.4.251-SNAPSHOT
 
 - **TOOL015.** Separate ordinary language and tooling validation from Standard Library test execution with `make test-protos-libs`, individual `make test-protos-lib LIB=...` selection, exhaustive `make test-all` and combined `make check-all` gates.

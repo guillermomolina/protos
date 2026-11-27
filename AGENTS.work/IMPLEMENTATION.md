@@ -289,8 +289,9 @@ convenient regression;
 Java and foreign-provider coverage, with complete affected library coverage when
 conservative dependencies identify it;
 - Test Tool selection/discovery, shared test infrastructure, ambiguous cross-boundary
-impact, unknown executable-impact paths, explicit exhaustive requests and release
-candidates require `FULL`;
+impact, unknown executable-impact paths and explicit exhaustive requests require
+`FULL`; distribution preparation and publication do not invoke functional validation
+(see AGENTS.work/RELEASE.md);
 - bounded Package Tool intermediate deltas may retain their justified Tool-local
 profile; top-level closure requires complete affected coverage;
 - `FULL` always means exhaustive functional coverage. Top-level closure alone does

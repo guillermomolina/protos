@@ -216,7 +216,7 @@ def require_tag_available(root: Path, tag: str) -> None:
     # Candidate preparation and validation require only local Git state.
 
 
-# Release-aware B5 owns the single exhaustive functional admission for this revision.
+# Release-aware B5 verifies archive identity and integrity without product tests.
 def run_release_b5(
     root: Path,
     *,
