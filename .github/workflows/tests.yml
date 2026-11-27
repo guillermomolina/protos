@@ -143,6 +143,9 @@ jobs:
             target/java-test-shards/*.includes
       # Explicit, non-blocking save with the key computed before validation;
       # no post-job step recomputes the key over a populated workspace.
+      - name: Prepare Maven package dependencies
+        run: make prepare-protos-tests
+
       - name: Save Maven dependency cache
         if: success() && steps.maven-cache.outputs.cache-hit != 'true'
         continue-on-error: true

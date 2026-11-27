@@ -163,7 +163,7 @@ jobs:
         uses: actions/cache/save@v6
         with:
           path: /root/.m2/repository
-          key: ${{ steps.maven-cache.outputs.cache-key }}
+          key: diagnostic-${{ steps.maven-cache.outputs.cache-key }}
       # A save conclusion does not prove storage: round-trip a small marker
       # under a separate diagnostic namespace that never matches Maven keys.
       - name: Create cache round-trip marker

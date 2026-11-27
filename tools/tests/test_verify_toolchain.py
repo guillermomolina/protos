@@ -194,7 +194,7 @@ def ci_job(name, image, command, cache_action="actions/cache/save@v6", workers="
 
 def ci_workflow(test_image, test_command, cache_action="actions/cache/save@v6", workers="2"):
     commands = {
-        "prepare": "make prepare-java-test-shards",
+        "prepare": "make prepare-java-test-shards\nmake prepare-protos-tests",
         "compilerability": "make check",
         "java-parallel": test_command,
         "java-serial": "make test-java-serial",
@@ -844,6 +844,9 @@ Java version: 25.0.5.0.3, vendor: GraalVM Community, runtime: /opt/graalvm-commu
                     "cache lifecycle drift accepted: " + label)
         for label, text in (
                 ("combined cache action", combined),
+            ("missing package preparation", good_ci.replace(
+                "      - name: Execute target\n"
+                "        run: make prepare-protos-tests\n", "", 1)),
                 ("hashFiles expression", good_ci.replace(SAVE_KEY, hashed_key, 1)),
                 ("tolerant validation step",
                  good_ci.replace("run: make check", "continue-on-error: true\n        run: make check", 1)),
@@ -980,8 +983,12 @@ Java version: 25.0.5.0.3, vendor: GraalVM Community, runtime: /opt/graalvm-commu
             ("no obsolete cancellation",
              good_diag.replace("  cancel-in-progress: true\n", "  cancel-in-progress: false\n", 1), {"concurrency"}),
             ("hashFiles expression",
-             good_diag.replace("key: ${{ steps.maven-cache.outputs.cache-key }}",
+             good_diag.replace("key: diagnostic-${{ steps.maven-cache.outputs.cache-key }}",
                                "key: ${{ hashFiles('**/pom.xml') }}", 1), {"cache_lifecycle"}),
+            ("diagnostic cache aliases primary cache",
+             good_diag.replace("key: diagnostic-${{ steps.maven-cache.outputs.cache-key }}",
+                               "key: ${{ steps.maven-cache.outputs.cache-key }}", 1),
+             {"cache_lifecycle"}),
             ("bypassed shared restore",
              good_diag.replace("uses: ./.github/actions/maven-cache-restore", "uses: actions/cache/restore@v6", 1),
              {"cache_lifecycle"}),

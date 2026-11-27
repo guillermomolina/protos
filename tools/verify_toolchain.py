@@ -492,7 +492,7 @@ def workflow_job_container_image(path, job_id):
 CI_MAVEN_JOBS = ("prepare", "compilerability", "java-parallel", "java-serial",
                  "protos-plan", "protos-suite", "protos-foreign", "native-image")
 CI_COMMANDS = {
-    "prepare": ["prepare-java-test-shards"],
+    "prepare": ["prepare-java-test-shards", "prepare-protos-tests"],
     "compilerability": ["check"],
     "java-parallel": ["test-java-parallel"],
     "java-serial": ["test-java-serial"],
@@ -1075,7 +1075,7 @@ def diagnostics_workflow_contract(root, expected_image):
     lifecycle = restore is not None and step_field(steps[restore], "id") == ["maven-cache"]
     lifecycle = lifecycle and all(restore < i for i in builds)
     lifecycle = lifecycle and maven_save is not None
-    lifecycle = lifecycle and step_field(steps[maven_save], "key") == [MAVEN_CACHE_KEY_REF]
+    lifecycle = lifecycle and step_field(steps[maven_save], "key") == ["diagnostic-" + MAVEN_CACHE_KEY_REF]
     lifecycle = lifecycle and "hashFiles(" not in text and not re.search(r"actions/cache@", text)
     lifecycle = lifecycle and all(step_field(s, "path") in (["/root/.m2/repository"], [DIAGNOSTIC_ROUNDTRIP_PATH])
                                   for s in steps if re.search(r"actions/cache/(?:save|restore)@", s))

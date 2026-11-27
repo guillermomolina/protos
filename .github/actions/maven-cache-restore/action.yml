@@ -74,7 +74,7 @@ runs:
                 content = hashlib.sha256(handle.read()).hexdigest()
             digest.update(("%s\0%s\n" % (path, content)).encode("utf-8"))
             sys.stderr.write("MAVEN_CACHE_POM=%s sha256=%s\n" % (path, content))
-        key = "%s-maven-%s" % (runner_os, digest.hexdigest())
+        key = "%s-maven-v2-%s" % (runner_os, digest.hexdigest())
         sys.stderr.write("MAVEN_CACHE_KEY=%s\n" % key)
         print("key=%s" % key)
         PY
