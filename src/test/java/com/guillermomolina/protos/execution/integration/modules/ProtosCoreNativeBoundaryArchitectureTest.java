@@ -107,7 +107,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/foreign/api/ProtosForeignInteropFacility.java", 6),
                     // I082-D2 adds the projected pull each to call/at/atPut.
                     Map.entry("execution/foreign/api/ProtosForeignProjectedOperations.java", 4),
-                    Map.entry("execution/facilities/ProtosLoggingFacility.java", 3),
+                    Map.entry("execution/facilities/ProtosLoggingFacility.java", 2),
                     // I090-C std:math/math private sqrt facility.
                     Map.entry("execution/facilities/ProtosMathFacility.java", 1),
                     // LIB022-A std:runtime private runtime-metadata facility.

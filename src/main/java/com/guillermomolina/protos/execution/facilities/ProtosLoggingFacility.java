@@ -29,51 +29,24 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
-import java.math.BigDecimal;
-import java.math.MathContext;
-import java.math.RoundingMode;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 /**
- * Private runtime facilities for {@code std:logging} (LIB015-B1, LIB015-C1, LIB015-D1).
- *
- * <p>Following the D101/D187 pattern, every logging policy stays in Protos; these facilities own
- * only what Protos source cannot observe without running candidate behavior or re-deriving
- * binary64 arithmetic. Each frozen, stateless facility is provisioned as a standard initial
- * member of one exact module, which captures it lexically and removes the bootstrap slot during
- * initialization, so it never belongs to the published module surface.
- *
- * <ul>
- *   <li>{@code std:logging/log_event} receives {@code recognizes(candidate, prototype,
- *       instantPrototype)} and {@code isAttachableError(value)}. Both inspect host
- *       representation only: delegation parents, mutation state, local slot tables, and
- *       indexed/keyed state are read directly, so no slot, method, equality, hash, or other
- *       behavior of the candidate is ever invoked.
-  *   <li>{@code std:logging/text_formatter} and {@code std:logging/json_formatter} each receive a
- *       numeric facility with {@code shortestDecimal(float)}, the digits of the shortest
- *       round-tripping decimal of a finite non-zero Float magnitude, so both formatters share one
- *       Float decimal policy.
- * </ul>
+ * Private non-dispatch event-recognition boundary for {@code std:logging/log_event}.
+ * Candidate delegation, mutation state, slots and collection storage are inspected directly
+ * without invoking candidate behavior. Event construction and logging policy live in Protos.
  */
 public final class ProtosLoggingFacility {
     public static final ProtosModuleKey EVENT_MODULE_KEY =
             ProtosModuleKey.module("std:logging/log_event");
     public static final String EVENT_BOOTSTRAP_SLOT = "_logEventFacility";
-    public static final ProtosModuleKey TEXT_MODULE_KEY =
-            ProtosModuleKey.module("std:logging/text_formatter");
-    public static final String TEXT_BOOTSTRAP_SLOT = "_logTextFacility";
-    public static final ProtosModuleKey JSON_MODULE_KEY =
-            ProtosModuleKey.module("std:logging/json_formatter");
-    public static final String JSON_BOOTSTRAP_SLOT = "_logJsonFacility";
-
     private static final Set<String> EVENT_SLOTS =
             Set.of("level", "message", "fields", "error", "timestamp");
     private static final Set<String> INSTANT_SLOTS = Set.of("nanoseconds", "equals", "==", "hash");
     private static final Set<String> LEVELS = Set.of("TRACE", "DEBUG", "INFO", "WARN", "ERROR");
-    private static final int MAX_DOUBLE_DIGITS = 17;
 
     private ProtosLoggingFacility() {}
 
@@ -88,19 +61,6 @@ public final class ProtosLoggingFacility {
                 "isAttachableError",
                 ProtosClosureValue.nativeClosure(
                         (activation, supplied) -> isAttachableError(activation, supplied)));
-        return facility.freeze();
-    }
-
-    /**
-     * Creates a frozen, stateless numeric facility for {@code std:logging/text_formatter} or {@code
-     * std:logging/json_formatter}.
-     */
-    public static ProtosObjectValue createTextFacility() {
-        ProtosObjectValue facility = new ProtosObjectValue(ProtosObjectValue.rootObject());
-        facility.createLocalSlot(
-                "shortestDecimal",
-                ProtosClosureValue.nativeClosure(
-                        (activation, supplied) -> shortestDecimal(activation, supplied)));
         return facility.freeze();
     }
 
@@ -241,59 +201,6 @@ public final class ProtosLoggingFacility {
         return container.isFrozen()
                 && container.parent().orElse(null) == prototype
                 && container.localSlotsSnapshot().isEmpty();
-    }
-
-    /**
-     * Answers the frozen Array {@code [coefficient, exponent]} of Integers such that
-     * {@code coefficient * 10^exponent} is the decimal with the fewest significant digits that
-     * rounds to the magnitude of the supplied finite non-zero Float under IEEE 754
-     * round-to-nearest-even; among such decimals the one closest to the exact magnitude is chosen,
-     * and an exact tie chooses the even coefficient. {@code coefficient} has no trailing zero.
-     */
-    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
-    private static Object shortestDecimal(ProtosActivation activation, List<?> supplied) {
-        if (supplied.size() != 1
-                || !ProtosNumericValueSupport.isCurrentFloat(supplied.get(0))) {
-            throw invalid(activation);
-        }
-        double value = ProtosNumericValueSupport.currentFloatValue(supplied.get(0));
-        if (!Double.isFinite(value) || value == 0.0) {
-            throw invalid(activation);
-        }
-        BigDecimal decimal = shortestDecimal(Math.abs(value)).stripTrailingZeros();
-        ProtosPrelude prelude = activation.prelude().orElseThrow(() -> invalid(activation));
-        // At most MAX_DOUBLE_DIGITS significant digits, so the coefficient is a signed-64 value.
-        return prelude.newFrozenArray(
-                List.of(
-                        ProtosNumericValueSupport.integer(decimal.unscaledValue().longValueExact()),
-                        ProtosNumericValueSupport.integer(-(long) decimal.scale())));
-    }
-
-    static BigDecimal shortestDecimal(double magnitude) {
-        BigDecimal exact = new BigDecimal(magnitude);
-        for (int digits = 1; digits <= MAX_DOUBLE_DIGITS; digits++) {
-            BigDecimal below = exact.round(new MathContext(digits, RoundingMode.FLOOR));
-            BigDecimal above = exact.round(new MathContext(digits, RoundingMode.CEILING));
-            boolean belowRoundTrips = below.doubleValue() == magnitude;
-            boolean aboveRoundTrips = above.doubleValue() == magnitude;
-            if (belowRoundTrips && aboveRoundTrips) {
-                int order = exact.subtract(below).compareTo(above.subtract(exact));
-                if (order < 0) {
-                    return below;
-                }
-                if (order > 0) {
-                    return above;
-                }
-                return below.unscaledValue().testBit(0) ? above : below;
-            }
-            if (belowRoundTrips) {
-                return below;
-            }
-            if (aboveRoundTrips) {
-                return above;
-            }
-        }
-        throw new IllegalStateException("binary64 value has no 17-digit round-trip decimal");
     }
 
     private static ProtosSignalException invalid(ProtosActivation activation) {

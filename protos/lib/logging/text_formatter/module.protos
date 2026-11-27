@@ -63,7 +63,8 @@
 /// `std:logging/log_event`; any other argument, or a timestamp that
 /// `std:datetime/ISO8601.formatInstant` cannot write, signals an Error.
 /// Rendering invokes no behavior stored in the event.
-this.format: ((numeric) => (event) => {
+this.format: (event) => {
+    Decimal: import("../internal/Decimal.protos")
     LogEvent: import("std:logging/log_event")
     ISO8601: import("std:datetime/iso8601")
     Arrays: import("std:collections/array")
@@ -152,7 +153,7 @@ this.format: ((numeric) => (event) => {
             if(value < 0.0) {
                 output.add(45)
             }
-            decimal: numeric.shortestDecimal(value)
+            decimal: Decimal.shortestDecimal(value)
             digits: Encoding.UTF8.encode("")
             reversed: Encoding.UTF8.encode("")
             remaining: decimal[0]
@@ -376,8 +377,4 @@ this.format: ((numeric) => (event) => {
         appendAscii(" error=true")
     })
     Encoding.UTF8.decode(output)
-})(_logTextFacility)
-
-// The runtime-provisioned numeric facility is captured privately above; it is
-// not module surface.
-context.removeSlot("_logTextFacility")
+}

@@ -919,16 +919,6 @@ public final class ProtosCoreBootstrap {
                                 ProtosLoggingFacility.EVENT_BOOTSTRAP_SLOT,
                                 ProtosLoggingFacility.createEventFacility())),
                 Map.entry(
-                        ProtosLoggingFacility.TEXT_MODULE_KEY,
-                        Map.of(
-                                ProtosLoggingFacility.TEXT_BOOTSTRAP_SLOT,
-                                ProtosLoggingFacility.createTextFacility())),
-                Map.entry(
-                        ProtosLoggingFacility.JSON_MODULE_KEY,
-                        Map.of(
-                                ProtosLoggingFacility.JSON_BOOTSTRAP_SLOT,
-                                ProtosLoggingFacility.createTextFacility())),
-                Map.entry(
                         ProtosForeignInteropFacility.MODULE_KEY,
                         Map.of(
                                 ProtosForeignInteropFacility.BOOTSTRAP_SLOT,

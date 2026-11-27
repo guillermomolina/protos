@@ -65,6 +65,34 @@ singleLine: (text) => {
 }
 
 tests: [
+    Test("finite Float boundaries preserve decimal selection and carry", () => {
+        Assertions.require(renderValue(9.999999999999998) == "9.999999999999998")
+        Assertions.require(renderValue(-9.999999999999998) == "-9.999999999999998")
+        Assertions.require(renderValue(10.0) == "10.0")
+        Assertions.require(renderValue(-10.0) == "-10.0")
+        Assertions.require(renderValue(10.000000000000002) == "10.000000000000002")
+        Assertions.require(renderValue(-10.000000000000002) == "-10.000000000000002")
+        Assertions.require(renderValue(0.9999999999999999) == "0.9999999999999999")
+        Assertions.require(renderValue(-0.9999999999999999) == "-0.9999999999999999")
+        Assertions.require(renderValue(1.0000000000000002) == "1.0000000000000002")
+        Assertions.require(renderValue(-1.0000000000000002) == "-1.0000000000000002")
+        Assertions.require(renderValue(1.9999999999999998) == "1.9999999999999998")
+        Assertions.require(renderValue(-1.9999999999999998) == "-1.9999999999999998")
+        Assertions.require(renderValue(2.0000000000000004) == "2.0000000000000004")
+        Assertions.require(renderValue(-2.0000000000000004) == "-2.0000000000000004")
+        Assertions.require(renderValue(1e-323) == "1e-323")
+        Assertions.require(renderValue(-1e-323) == "-1e-323")
+        Assertions.require(renderValue(2.225073858507201e-308) == "2.225073858507201e-308")
+        Assertions.require(renderValue(-2.225073858507201e-308) == "-2.225073858507201e-308")
+        Assertions.require(renderValue(2.2250738585072014e-308) == "2.2250738585072014e-308")
+        Assertions.require(renderValue(-2.2250738585072014e-308) == "-2.2250738585072014e-308")
+        Assertions.require(renderValue(2.225073858507202e-308) == "2.225073858507202e-308")
+        Assertions.require(renderValue(-2.225073858507202e-308) == "-2.225073858507202e-308")
+        Assertions.require(renderValue(1.7976931348623157e308) == "1.7976931348623157e+308")
+        Assertions.require(renderValue(-1.7976931348623157e308) == "-1.7976931348623157e+308")
+        Assertions.require(renderValue(1e23) == "1e+23")
+        Assertions.require(renderValue(-1e23) == "-1e+23")
+    }),
     Test("a plain logger call renders level and quoted message", () => {
         sink: MemorySink()
         Logger(Level.INFO, sink).info("hello")

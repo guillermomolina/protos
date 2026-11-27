@@ -56,6 +56,43 @@ probe: () => {
 }
 
 tests: [
+    Test("nested collections and genuine timestamp behavior are never dispatched", () => {
+        counter: probe()
+        hostile: () => {
+            counter.calls = counter.calls + 1
+            Error().signal()
+        }
+        visit: (visitor) => { hostile() }
+        nested: [7]
+        nested.each: visit
+        nested.parent: () => { hostile() }
+        nested.slotNames: () => { hostile() }
+        nested.freeze()
+        fields: frozen(%{ "nested": frozen([nested]) })
+        candidate: withFields(fields)
+        Assertions.require(LogEvent.recognizes(candidate) == false)
+        Assertions.require(candidate.fields === fields)
+        Assertions.require(fields["nested"][0] === nested)
+        Assertions.require(nested[0] == 7)
+        Assertions.require(nested.slotValue("each") === visit)
+
+        equality: { equals: (other) => { hostile() } }
+        hash: () => { hostile() }
+        timestamp: (Instant) {
+            nanoseconds: 123
+            ...equality.alias("equals", "==")
+            hash: hash
+        }
+        timestamp.freeze()
+        stamped: withTimestamp(timestamp)
+        Assertions.require(LogEvent.recognizes(stamped))
+        Assertions.require(stamped.timestamp === timestamp)
+        Assertions.require(timestamp.nanoseconds == 123)
+        Assertions.require(timestamp.slotValue("equals") === equality.slotValue("equals"))
+        Assertions.require(timestamp.slotValue("hash") === hash)
+        Assertions.require(counter.calls == 0)
+    }),
+
     Test("genuine events are recognized and delegate to LogEvent", () => {
         plain: LogEvent(Level.INFO, "hello", null, null)
         rich: LogEvent(

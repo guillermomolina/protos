@@ -78,6 +78,34 @@ byteTarget: () => {
 }
 
 tests: [
+    Test("finite Float boundaries preserve decimal selection and carry", () => {
+        Assertions.require(renderValue(9.999999999999998) == withField("9999999999999998e-15"))
+        Assertions.require(renderValue(-9.999999999999998) == withField("-9999999999999998e-15"))
+        Assertions.require(renderValue(10.0) == withField("1e1"))
+        Assertions.require(renderValue(-10.0) == withField("-1e1"))
+        Assertions.require(renderValue(10.000000000000002) == withField("10000000000000002e-15"))
+        Assertions.require(renderValue(-10.000000000000002) == withField("-10000000000000002e-15"))
+        Assertions.require(renderValue(0.9999999999999999) == withField("9999999999999999e-16"))
+        Assertions.require(renderValue(-0.9999999999999999) == withField("-9999999999999999e-16"))
+        Assertions.require(renderValue(1.0000000000000002) == withField("10000000000000002e-16"))
+        Assertions.require(renderValue(-1.0000000000000002) == withField("-10000000000000002e-16"))
+        Assertions.require(renderValue(1.9999999999999998) == withField("19999999999999998e-16"))
+        Assertions.require(renderValue(-1.9999999999999998) == withField("-19999999999999998e-16"))
+        Assertions.require(renderValue(2.0000000000000004) == withField("20000000000000004e-16"))
+        Assertions.require(renderValue(-2.0000000000000004) == withField("-20000000000000004e-16"))
+        Assertions.require(renderValue(1e-323) == withField("1e-323"))
+        Assertions.require(renderValue(-1e-323) == withField("-1e-323"))
+        Assertions.require(renderValue(2.225073858507201e-308) == withField("2225073858507201e-323"))
+        Assertions.require(renderValue(-2.225073858507201e-308) == withField("-2225073858507201e-323"))
+        Assertions.require(renderValue(2.2250738585072014e-308) == withField("22250738585072014e-324"))
+        Assertions.require(renderValue(-2.2250738585072014e-308) == withField("-22250738585072014e-324"))
+        Assertions.require(renderValue(2.225073858507202e-308) == withField("2225073858507202e-323"))
+        Assertions.require(renderValue(-2.225073858507202e-308) == withField("-2225073858507202e-323"))
+        Assertions.require(renderValue(1.7976931348623157e308) == withField("17976931348623157e292"))
+        Assertions.require(renderValue(-1.7976931348623157e308) == withField("-17976931348623157e292"))
+        Assertions.require(renderValue(1e23) == withField("1e23"))
+        Assertions.require(renderValue(-1e23) == withField("-1e23"))
+    }),
     Test("a basic event renders level, message, and empty fields", () => {
         Assertions.require(
             render(Level.INFO, "hello", null, null) ==

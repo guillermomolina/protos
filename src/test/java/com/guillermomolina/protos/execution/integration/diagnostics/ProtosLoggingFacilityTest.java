@@ -20,7 +20,6 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -38,12 +37,41 @@ import java.math.MathContext;
 import java.math.RoundingMode;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.SplittableRandom;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
-/** LIB015-B1 and LIB015-C1 evidence for the private runtime facilities of std:logging. */
+/** Non-dispatch event boundary and independent evidence for the source-owned decimal algorithm. */
 final class ProtosLoggingFacilityTest {
+    // Independent host-decimal oracle; production source never calls this implementation.
+    private static BigDecimal shortestDecimal(double magnitude) {
+        BigDecimal exact = new BigDecimal(magnitude);
+        for (int digits = 1; digits <= 17; digits++) {
+            BigDecimal below = exact.round(new MathContext(digits, RoundingMode.FLOOR));
+            BigDecimal above = exact.round(new MathContext(digits, RoundingMode.CEILING));
+            boolean belowRoundTrips = below.doubleValue() == magnitude;
+            boolean aboveRoundTrips = above.doubleValue() == magnitude;
+            if (belowRoundTrips && aboveRoundTrips) {
+                int order = exact.subtract(below).compareTo(above.subtract(exact));
+                if (order < 0) {
+                    return below;
+                }
+                if (order > 0) {
+                    return above;
+                }
+                return below.unscaledValue().testBit(0) ? above : below;
+            }
+            if (belowRoundTrips) {
+                return below;
+            }
+            if (aboveRoundTrips) {
+                return above;
+            }
+        }
+        throw new IllegalStateException("binary64 value has no 17-digit round-trip decimal");
+    }
+
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
 
@@ -51,112 +79,114 @@ final class ProtosLoggingFacilityTest {
     void facilitiesAreFrozenStatelessMembersOfTheirExactModulesOnly() throws Exception {
         ProtosPrelude prelude = core();
         ProtosObjectValue events = eventFacility(prelude);
-        ProtosObjectValue text = textFacility(prelude);
-        ProtosObjectValue json = jsonFacility(prelude);
-
         assertTrue(events.isFrozen());
-        assertTrue(text.isFrozen());
-        assertTrue(json.isFrozen());
-        assertNotSame(events, text);
-        assertNotSame(text, json);
         assertEquals(Set.of("recognizes", "isAttachableError"), events.localSlotsSnapshot().keySet());
-        assertEquals(Set.of("shortestDecimal"), text.localSlotsSnapshot().keySet());
-        assertEquals(Set.of("shortestDecimal"), json.localSlotsSnapshot().keySet());
         assertTrue(prelude.isStandardModuleMemberForRuntime(events));
-        assertTrue(prelude.isStandardModuleMemberForRuntime(text));
-        assertTrue(prelude.isStandardModuleMemberForRuntime(json));
 
-        ProtosObjectValue otherContext = prelude.newExecutionContext();
-        prelude.installStandardModuleMembersForRuntime(
-                ProtosModuleKey.module("std:logging/logger"), otherContext);
-        assertFalse(otherContext.hasLocalSlot(ProtosLoggingFacility.EVENT_BOOTSTRAP_SLOT));
-        assertFalse(otherContext.hasLocalSlot(ProtosLoggingFacility.TEXT_BOOTSTRAP_SLOT));
-        assertFalse(otherContext.hasLocalSlot(ProtosLoggingFacility.JSON_BOOTSTRAP_SLOT));
-    }
-
-    @Test
-    void jsonFormatterFacilityAnswersTheSameShortestDecimal() throws Exception {
-        ProtosPrelude prelude = core();
-        ProtosActivation activation = prelude.newModuleActivation();
-        ProtosObjectValue json = jsonFacility(prelude);
-
-        assertDecimal(json, activation, 1.0, "1", 0);
-        assertDecimal(json, activation, 1.23, "123", -2);
-        assertDecimal(json, activation, -1.5, "15", -1);
-        assertDecimal(json, activation, Double.MIN_VALUE, "5", -324);
-        assertThrows(
-                ProtosSignalException.class,
-                () -> ProtosInvocation.invokeMessage(
-                        json,
-                        "shortestDecimal",
-                        List.of(new ProtosFloatValue(Double.NaN)),
-                        activation));
+        for (String module : List.of(
+                "std:logging/log_event", "std:logging/text_formatter",
+                "std:logging/json_formatter", "std:logging/logger", "std:regex/regex",
+                "std:collections/array")) {
+            ProtosObjectValue context = prelude.newExecutionContext();
+            prelude.installStandardModuleMembersForRuntime(ProtosModuleKey.module(module), context);
+            assertEquals(module.equals("std:logging/log_event"),
+                    context.hasLocalSlot(ProtosLoggingFacility.EVENT_BOOTSTRAP_SLOT));
+            assertFalse(context.hasLocalSlot("_logTextFacility"));
+            assertFalse(context.hasLocalSlot("_logJsonFacility"));
+        }
     }
 
     @Test
     void shortestDecimalAnswersCoefficientAndExponentWithoutTrailingZeros() throws Exception {
-        ProtosPrelude prelude = core();
-        ProtosActivation activation = prelude.newModuleActivation();
-        ProtosObjectValue text = textFacility(prelude);
+        try (ProtosHostedExecutionTestFixture hosted = decimalSource()) {
+            ProtosActivation activation = hosted.activation();
+            ProtosObjectValue text = decimalModule(hosted);
 
-        assertDecimal(text, activation, 1.0, "1", 0);
-        assertDecimal(text, activation, -1.5, "15", -1);
-        assertDecimal(text, activation, 100.0, "1", 2);
-        assertDecimal(text, activation, 0.1, "1", -1);
-        assertDecimal(text, activation, 0.1 + 0.2, "30000000000000004", -17);
-        assertDecimal(text, activation, 1e21, "1", 21);
-        assertDecimal(text, activation, Double.MIN_VALUE, "5", -324);
-        assertDecimal(text, activation, Double.MAX_VALUE, "17976931348623157", 292);
-        assertDecimal(text, activation, Double.MIN_NORMAL, "22250738585072014", -324);
+            assertDecimal(hosted, text, activation, 1.0, "1", 0);
+            assertDecimal(hosted, text, activation, 1.23, "123", -2);
+            // Both adjacent shortest decimals round-trip; the exact midpoint chooses even.
+            assertDecimal(hosted, text, activation, 562949953421312.25, "5629499534213122", -1);
+            assertDecimal(hosted, text, activation, 562949953421312.75, "5629499534213128", -1);
+            assertDecimal(hosted, text, activation, -1.5, "15", -1);
+            assertDecimal(hosted, text, activation, 100.0, "1", 2);
+            assertDecimal(hosted, text, activation, 0.1, "1", -1);
+            assertDecimal(hosted, text, activation, 0.1 + 0.2, "30000000000000004", -17);
+            assertDecimal(hosted, text, activation, 1e21, "1", 21);
+            assertDecimal(hosted, text, activation, Double.MIN_VALUE, "5", -324);
+            assertDecimal(hosted, text, activation, Double.MAX_VALUE, "17976931348623157", 292);
+            assertDecimal(hosted, text, activation, Double.MIN_NORMAL, "22250738585072014", -324);
+        }
     }
 
     @Test
     void shortestDecimalRejectsZeroNonFiniteAndNonFloatArguments() throws Exception {
-        ProtosPrelude prelude = core();
-        ProtosActivation activation = prelude.newModuleActivation();
-        ProtosObjectValue text = textFacility(prelude);
+        try (ProtosHostedExecutionTestFixture hosted = decimalSource()) {
+            ProtosActivation activation = hosted.activation();
+            ProtosObjectValue text = decimalModule(hosted);
 
-        for (Object invalid :
-                List.of(
-                        new ProtosFloatValue(0.0),
-                        new ProtosFloatValue(-0.0),
-                        new ProtosFloatValue(Double.NaN),
-                        new ProtosFloatValue(Double.POSITIVE_INFINITY),
-                        new ProtosFloatValue(Double.NEGATIVE_INFINITY),
-                        Long.valueOf(1),
-                        new ProtosStringValue("1.0"))) {
-            assertThrows(
-                    ProtosSignalException.class,
-                    () -> ProtosInvocation.invokeMessage(
-                            text, "shortestDecimal", List.of(invalid), activation));
+            for (Object invalid :
+                    List.of(
+                            new ProtosFloatValue(0.0),
+                            new ProtosFloatValue(-0.0),
+                            new ProtosFloatValue(Double.NaN),
+                            new ProtosFloatValue(Double.POSITIVE_INFINITY),
+                            new ProtosFloatValue(Double.NEGATIVE_INFINITY),
+                            Long.valueOf(1),
+                            new ProtosStringValue("1.0"))) {
+                assertThrows(
+                        ProtosSignalException.class,
+                        () -> hosted.callEntered(() -> ProtosInvocation.invokeMessage(
+                                text, "shortestDecimal", List.of(invalid), activation)));
+            }
         }
     }
 
     @Test
-    void shortestDecimalRoundTripsWithMinimalDigitsAndNearestChoice() {
-        SplittableRandom random = new SplittableRandom(0x1B015L);
-        for (int index = 0; index < 20_000; index++) {
-            double value = Double.longBitsToDouble(random.nextLong() & Long.MAX_VALUE);
-            if (!Double.isFinite(value) || value == 0.0) {
-                continue;
+    void shortestDecimalRoundTripsWithMinimalDigitsAndNearestChoice() throws Exception {
+        try (ProtosHostedExecutionTestFixture hosted = decimalSource()) {
+            ProtosObjectValue text = decimalModule(hosted);
+            SplittableRandom random = new SplittableRandom(0x1B015L);
+            for (int index = 0; index < 20_000; index++) {
+                double value = Double.longBitsToDouble(random.nextLong() & Long.MAX_VALUE);
+                if (!Double.isFinite(value) || value == 0.0) {
+                    continue;
+                }
+                assertShortest(hosted, text, value);
             }
-            assertShortest(value);
-        }
-        for (double value :
-                new double[] {
-                    Double.MIN_VALUE, Double.MIN_NORMAL, Double.MAX_VALUE, 1.0, 2.0, 0.5,
-                    9007199254740993.0, 2e23, 1e-7, 1e21, 1e22, 123456.789, 5e-324, 4.9e-324
-                }) {
-            assertShortest(value);
+            for (double value :
+                    new double[] {
+                        Double.MIN_VALUE, Double.MIN_NORMAL, Double.MAX_VALUE, 1.0, 2.0, 0.5,
+                        9007199254740993.0, 2e23, 1e-7, 1e21, 1e22, 123456.789, 5e-324, 4.9e-324
+                    }) {
+                assertShortest(hosted, text, value);
+            }
         }
     }
 
-    private static void assertShortest(double value) {
-        BigDecimal decimal = ProtosLoggingFacility.shortestDecimal(value);
+    private static void assertShortest(
+            ProtosHostedExecutionTestFixture hosted, ProtosObjectValue text, double value) {
+        BigDecimal expected = shortestDecimal(value).stripTrailingZeros();
+        ProtosArrayValue actual = assertDecimal(
+                hosted, text, hosted.activation(), value,
+                expected.unscaledValue().toString(), -expected.scale());
+        BigDecimal decimal = new BigDecimal(
+                ProtosNumericValueSupport.integerDecimalText(actual.indexedAt(0)))
+                .scaleByPowerOfTen(ProtosNumericValueSupport.exactInt(actual.indexedAt(1)));
+        assertTrue(decimal.unscaledValue().mod(java.math.BigInteger.TEN).signum() != 0);
+        BigDecimal exact = new BigDecimal(value);
+        MathContext floor = new MathContext(decimal.precision(), RoundingMode.FLOOR);
+        MathContext ceiling = new MathContext(decimal.precision(), RoundingMode.CEILING);
+        BigDecimal below = exact.round(floor);
+        BigDecimal above = exact.round(ceiling);
+        if (below.doubleValue() == value && above.doubleValue() == value) {
+            int distance = exact.subtract(below).compareTo(above.subtract(exact));
+            BigDecimal nearest = distance < 0 ? below : distance > 0 ? above
+                    : below.unscaledValue().testBit(0) ? above : below;
+            assertEquals(0, decimal.compareTo(nearest), () -> "nearest/even choice of " + value);
+        }
         assertEquals(value, decimal.doubleValue(), () -> "round trip of " + value);
         int digits = decimal.stripTrailingZeros().precision();
         if (digits > 1) {
-            BigDecimal exact = new BigDecimal(value);
             MathContext shorter = new MathContext(digits - 1, RoundingMode.FLOOR);
             MathContext shorterUp = new MathContext(digits - 1, RoundingMode.CEILING);
             assertFalse(exact.round(shorter).doubleValue() == value, () -> "shorter below " + value);
@@ -166,28 +196,31 @@ final class ProtosLoggingFacilityTest {
         assertTrue(digits <= toStringDigits.precision(), () -> "not shorter than JDK for " + value);
     }
 
-    private static void assertDecimal(
+    private static ProtosArrayValue assertDecimal(
+            ProtosHostedExecutionTestFixture hosted,
             ProtosObjectValue text,
             ProtosActivation activation,
             double value,
             String coefficient,
-            int exponent)
-            throws Exception {
+            int exponent) {
         ProtosArrayValue result =
                 assertInstanceOf(
                         ProtosArrayValue.class,
-                        ProtosInvocation.invokeMessage(
+                        hosted.callEntered(() -> ProtosInvocation.invokeMessage(
                                 text,
                                 "shortestDecimal",
                                 List.of(new ProtosFloatValue(value)),
-                                activation));
+                                activation)));
         assertTrue(result.isFrozen());
         assertEquals(2, result.indexedSize());
-        assertEquals(String.valueOf(coefficient), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(result.indexedAt(0)));
+        assertTrue(ProtosNumericValueSupport.isCurrentInteger(result.indexedAt(0)));
+        assertTrue(ProtosNumericValueSupport.isCurrentInteger(result.indexedAt(1)));
+        assertEquals(coefficient, ProtosNumericValueSupport.integerDecimalText(result.indexedAt(0)));
         assertEquals(
                 exponent,
                 ProtosNumericValueSupport.exactInt(
                         assertInstanceOf(Long.class, result.indexedAt(1))));
+        return result;
     }
 
     private static ProtosObjectValue eventFacility(ProtosPrelude prelude) {
@@ -197,18 +230,18 @@ final class ProtosLoggingFacilityTest {
                 ProtosLoggingFacility.EVENT_BOOTSTRAP_SLOT);
     }
 
-    private static ProtosObjectValue textFacility(ProtosPrelude prelude) {
-        return ProtosStandardModuleMemberTestSupport.member(
-                prelude,
-                ProtosLoggingFacility.TEXT_MODULE_KEY.canonicalId(),
-                ProtosLoggingFacility.TEXT_BOOTSTRAP_SLOT);
+    private static ProtosHostedExecutionTestFixture decimalSource() throws Exception {
+        ProtosExactModuleOverlayResolver resolver = new ProtosExactModuleOverlayResolver(
+                Map.of("logging-decimal-test", new ProtosExactModuleOverlayResolver.ExactModule(
+                        ProtosModuleKey.source("logging-test:Decimal.protos"),
+                        STANDARD_LIBRARY.resolve("logging/internal/Decimal.protos"))),
+                new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY));
+        return ProtosHostedExecutionTestFixture.open(new ProtosCoreBootstrap().bootstrap(CORE, resolver));
     }
 
-    private static ProtosObjectValue jsonFacility(ProtosPrelude prelude) {
-        return ProtosStandardModuleMemberTestSupport.member(
-                prelude,
-                ProtosLoggingFacility.JSON_MODULE_KEY.canonicalId(),
-                ProtosLoggingFacility.JSON_BOOTSTRAP_SLOT);
+    private static ProtosObjectValue decimalModule(ProtosHostedExecutionTestFixture hosted) {
+        return assertInstanceOf(ProtosObjectValue.class,
+                hosted.evaluatePersistent("<logging-decimal>", "import(\"logging-decimal-test\")"));
     }
 
     private static ProtosPrelude core() throws Exception {

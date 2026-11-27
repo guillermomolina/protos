@@ -1,0 +1,128 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Private exact decimal selection shared by the Logging formatters.
+
+// Integer powers never pass through Float, including subnormal denominators.
+power: (base, exponent) => {
+    result: 1
+    factor: base
+    remaining: exponent
+    while(remaining > 0) {
+        if(remaining.mod(2) == 1) {
+            result = result * factor
+        }
+        remaining = remaining.div(2)
+        if(remaining > 0) {
+            factor = factor * factor
+        }
+    }
+    result
+}
+
+ratio: (magnitude) => {
+    mantissa: magnitude
+    binaryExponent: 0
+    while(mantissa < 1.0) {
+        mantissa = mantissa * 2.0
+        binaryExponent = binaryExponent - 1
+    }
+    while(mantissa >= 2.0) {
+        mantissa = mantissa / 2.0
+        binaryExponent = binaryExponent + 1
+    }
+    // Every normalization step and the significand multiplication are exact.
+    significand: Integer(mantissa * 4503599627370496.0)
+    numerator: significand
+    denominator: 1
+    shift: binaryExponent - 52
+    if(shift >= 0) {
+        numerator = numerator * power(2, shift)
+    } else {
+        denominator = power(2, 0 - shift)
+    }
+    [numerator, denominator]
+}
+
+candidate: (coefficient, exponent) => {
+    exact: coefficient
+    if(exponent >= 0) {
+        exact = coefficient * power(10, exponent)
+    } else {
+        exact = coefficient / power(10, 0 - exponent)
+    }
+    // The canonical conversion rounds the whole exact quotient once.
+    Float(exact)
+}
+
+// Finite nonzero semantic Floats only. The frozen pair describes the magnitude,
+// using the fewest significant digits, then nearest distance, then even parity.
+shortestDecimal: (value) => {
+    Float.recognizes(value).ifFalse(() => { Error().signal() })
+    infinity: 1.0 / 0.0
+    if((value != value) || (value == 0.0) ||
+        (value == infinity) || (value == (0.0 - infinity))) {
+        Error().signal()
+    }
+    magnitude: value
+    if(magnitude < 0.0) {
+        magnitude = 0.0 - magnitude
+    }
+    exact: ratio(magnitude)
+    u: exact[0]
+    v: exact[1]
+    order: 0
+    // u/v stays exact; after normalization it is in [1, 10).
+    while(u < v) {
+        u = u * 10
+        order = order - 1
+    }
+    while(u >= (v * 10)) {
+        v = v * 10
+        order = order + 1
+    }
+    digits: 1
+    coefficient: 0
+    exponent: order
+    found: false
+    while((digits <= 17) && (found == false)) {
+        exponent = order - digits + 1
+        lower: u.div(v)
+        remainder: u.mod(v)
+        upper: lower
+        if(remainder > 0) {
+            upper = lower + 1
+        }
+        below: candidate(lower, exponent) == magnitude
+        above: candidate(upper, exponent) == magnitude
+        if(below || above) {
+            coefficient = lower
+            if((below == false) || (above && ((remainder * 2 > v) ||
+                ((remainder * 2 == v) && (lower.mod(2) == 1))))) {
+                coefficient = upper
+            }
+            found = true
+        }
+        u = u * 10
+        digits = digits + 1
+    }
+    found.ifFalse(() => { Error().signal() })
+    // A carry may select 10^p; canonicalize it along with all trailing zeros.
+    while(coefficient.mod(10) == 0) {
+        coefficient = coefficient.div(10)
+        exponent = exponent + 1
+    }
+    [coefficient, exponent].freeze()
+}

@@ -8,6 +8,12 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.254-SNAPSHOT
+
+- **I188.** Move Logging's exact binary64 shortest-decimal calculation into one private Protos source component shared by the text and JSON formatters, preserving their public behavior.
+- Remove the Java decimal implementation and formatter bootstrap facilities; retain non-dispatch event recognition and the existing Regex Unicode and semantic-transfer boundaries.
+- Compare the source implementation with an independent test-only decimal oracle and deterministic binary64 corpus; extend formatter boundary and hostile event-recognition coverage.
+
 ## 0.4.253-SNAPSHOT
 
 - **I186.** Split TOML, JSON, Regex, CommandLine, FFI, URI and Array implementations into cohesive private Protos SOURCE components while retaining their canonical public module entry points and APIs.

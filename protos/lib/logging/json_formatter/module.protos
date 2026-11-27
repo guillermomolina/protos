@@ -48,7 +48,8 @@
 /// `std:logging/log_event`. Any other argument, or a field holding `NaN`,
 /// `Infinity`, or `-Infinity`, signals an Error before any text is produced.
 /// Rendering invokes no behavior stored in the event.
-this.format: ((numeric) => (event) => {
+this.format: (event) => {
+    Decimal: import("../internal/Decimal.protos")
     LogEvent: import("std:logging/log_event")
     JSON: import("std:json/json")
     Arrays: import("std:collections/array")
@@ -72,7 +73,7 @@ this.format: ((numeric) => (event) => {
         }
         node: JSON.number(0, 0)
         (value == 0.0).ifFalse(() => {
-            decimal: numeric.shortestDecimal(value)
+            decimal: Decimal.shortestDecimal(value)
             coefficient: decimal[0]
             if(value < 0.0) {
                 coefficient = 0 - coefficient
@@ -165,8 +166,4 @@ this.format: ((numeric) => (event) => {
         topMembers = Array(...topMembers, "error", JSON.boolean(true))
     })
     JSON.encode(JSON.object(...topMembers))
-})(_logJsonFacility)
-
-// The runtime-provisioned numeric facility is captured privately above; it is
-// not module surface.
-context.removeSlot("_logJsonFacility")
+}
