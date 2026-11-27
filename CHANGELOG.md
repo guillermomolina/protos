@@ -8,6 +8,11 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.246-SNAPSHOT
+
+- **PERF044.** Eliminate lexical storage shape guards and specialize captured environment selection by Closure identity.
+- Replay source commit `5a6f24d345a95dcad91201eea17401464cf2fe05` with implementation-version metadata; preserve its source, tests and baseline content.
+
 ## 0.4.245-SNAPSHOT
 
 - **PERF044.** Optimize primitive matching, eliminate redundant bytecode operations and reduce lexical selection guards.
