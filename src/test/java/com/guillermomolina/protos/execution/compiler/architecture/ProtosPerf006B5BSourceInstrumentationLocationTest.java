@@ -282,7 +282,9 @@ final class ProtosPerf006B5BSourceInstrumentationLocationTest {
             // The released loads stay inside the statements they belong to.
             for (com.oracle.truffle.api.bytecode.Instruction instruction : instructions) {
                 SourceSection released = instruction.getSourceSection();
-                if (!ProtosInstructionNames.of(instruction).startsWith("c.LoadAndClearTempLocal")
+                if ((!ProtosInstructionNames.of(instruction).startsWith("c.LoadAndClearTempLocal")
+                        && !ProtosInstructionNames.of(instruction).startsWith(
+                                "c.RequireCanonicalBooleanResultFromLocal"))
                         || released == null) {
                     continue;
                 }

@@ -2332,6 +2332,16 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
                         instructions, names.get(i).substring(2).split("\\$")[0]);
             }
             String outcome = outcomes.get(0).toString();
+            boolean directLocal = outcomes.size() == 2
+                    && !directCommit
+                    && !outcome.equals(outcomes.get(1).toString());
+
+            if (where.endsWith(" nonterminal")
+                    && names.get(i).startsWith("c.Number")) {
+                assertTrue(directLocal,
+                        () -> where + " must have a direct completed destination: " + names);
+            }
+
             int offset = Integer.parseInt(outcome.replaceAll(".*localOffset=(-?\\d+).*", "$1"));
             String next = names.get(i + 1);
             if (next.startsWith("pop")) {
@@ -2358,11 +2368,21 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
             long releases = 0;
             for (int j = check; j < names.size(); j++) {
                 if ((names.get(j).startsWith("c.LoadAndClearTempLocal")
+                                || names.get(j).startsWith("c.RequireCanonicalBooleanResultFromLocal")
                                 || directCommit && names.get(j).startsWith("c.StoreCellFromLocal"))
                         && instructions.get(j).getArguments().stream().anyMatch(argument ->
                                 argument.getKind() == Instruction.Argument.Kind.CONSTANT
                                         && outcome.equals(String.valueOf(argument.asConstant())))) {
                     releases++;
+                    if (directLocal) {
+                        int completedTarget = instructions.get(i + 1).getArguments().stream()
+                                .filter(argument -> argument.getKind()
+                                        == Instruction.Argument.Kind.BYTECODE_INDEX)
+                                .findFirst().orElseThrow().asBytecodeIndex();
+
+                        assertTrue(instructions.get(j).getBytecodeIndex() < completedTarget,
+                                () -> where + " reload must be confined to suspension composition");
+                    }
                 }
             }
             assertEquals(1L, releases, () -> where + " completed result released once: " + names);
@@ -2482,6 +2502,12 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
             sites.put("nonterminal", closure(
                     "(next) => {\n    (() => {\n        sum: next() + next()\n"
                             + "        sum\n    }).future().value()\n}", module));
+            sites.put("localAssignment", closure(
+                    "(next) => {\n    (() => {\n"
+                            + "        total: 5\n"
+                            + "        total = next() + next()\n"
+                            + "        total\n"
+                            + "    }).future().value()\n}", module));
             sites.put("handled", closure(
                     "(next) => {\n    (() => {\n"
                             + "        Error.handle(() => { next() + next() }, (caught) => { 7 })\n"
@@ -2502,6 +2528,7 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
             Map<String, long[]> expected = Map.of(
                     "terminal", new long[] {3L, 42L},
                     "nonterminal", new long[] {3L, 42L},
+                    "localAssignment", new long[] {3L, 42L},
                     "handled", new long[] {3L, 7L},
                     "captured", new long[] {503L, 542L},
                     "capturedError", new long[] {3L, 5L});

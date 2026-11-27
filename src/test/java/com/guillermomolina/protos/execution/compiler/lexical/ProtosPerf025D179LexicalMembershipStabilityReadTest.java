@@ -470,9 +470,8 @@ final class ProtosPerf025D179LexicalMembershipStabilityReadTest {
                             builder.endYield();
 
                             builder.beginReturn();
-                            builder.beginAccessNamedLexical(ProtosNamedLexicalAccess.LOOKUP);
+                            builder.beginAccessNamedLexical(ProtosNamedLexicalAccess.LOOKUP, name);
                             builder.emitLoadArgument(0);
-                            builder.emitLoadConstant(name);
                             builder.endAccessNamedLexical();
                             builder.endReturn();
 

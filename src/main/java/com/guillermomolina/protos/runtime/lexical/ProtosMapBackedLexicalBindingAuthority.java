@@ -17,6 +17,9 @@
 
 package com.guillermomolina.protos.runtime;
 
+import com.oracle.truffle.api.Assumption;
+import com.oracle.truffle.api.Truffle;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.object.DynamicObject;
 import com.oracle.truffle.api.object.Shape;
 import java.lang.invoke.MethodHandles;
@@ -54,8 +57,30 @@ final class ProtosMapBackedLexicalBindingAuthority
 
     /** Independent storage of a durable authority not backed by an object. */
     static final class Store extends DynamicObject {
+        private Assumption installationStable;
+
         Store() {
             super(STORE_INITIAL_SHAPE);
+        }
+
+        /** The proof is requested only when a cached location needs it. */
+        @TruffleBoundary
+        synchronized Assumption installationAssumption() {
+            if (installationStable == null) {
+                installationStable = Truffle.getRuntime().createAssumption(
+                        "lexical storage installation");
+            }
+            return installationStable;
+        }
+
+        /** A retired independent store can never become authoritative again. */
+        @TruffleBoundary
+        synchronized void retireInstallation() {
+            Assumption previous = installationStable;
+            installationStable = Assumption.NEVER_VALID;
+            if (previous != null && previous != Assumption.NEVER_VALID) {
+                previous.invalidate("lexical storage installation retired");
+            }
         }
     }
 
@@ -69,6 +94,13 @@ final class ProtosMapBackedLexicalBindingAuthority
     /** An independent durable authority with its own private storage. */
     ProtosMapBackedLexicalBindingAuthority() {
         this.storage = new Store();
+    }
+
+    @Override
+    public void retireInstallation() {
+        if (storage instanceof Store store) {
+            store.retireInstallation();
+        }
     }
 
     /** The single physical storage of this authority's bindings. */

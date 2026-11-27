@@ -40,6 +40,7 @@ public final class ProtosPrelude {
     private final ProtosClosureValue runtimeObjectMatchMethod;
     private final ProtosClosureValue runtimeObjectEqualsMethod;
     private final ProtosClosureValue runtimeIntegerNegatedMethod;
+    private final ProtosClosureValue runtimeIntegerPercentMethod;
     private final ProtosObjectValue runtimeBytesPrototype;
     private final ProtosObjectValue runtimeActorRefPrototype;
     private final ProtosObjectValue runtimeTcpConnectionPrototype;
@@ -442,12 +443,50 @@ public final class ProtosPrelude {
             ProtosClosureValue runtimeObjectMatchMethod,
             ProtosClosureValue runtimeObjectEqualsMethod,
             ProtosClosureValue runtimeIntegerNegatedMethod) {
+        this(bindings, contextPrototype, runtimeBytesPrototype,
+                runtimeActorRefPrototype, runtimeTcpConnectionPrototype,
+                runtimeTcpListenerPrototype, runtimeIpAddressPrototype,
+                runtimeIpEndpointPrototype, standardModuleMembers,
+                semanticTransferFamilies, lazyStandardModuleMembers,
+                runtimeTcpAcceptorPrototype, runtimeFilesystemOpenMethod,
+                runtimeEntropyPrototype, runtimeClockPrototype,
+                runtimeExecutionProtocols, runtimeAnyPrototype,
+                runtimeAnyMatchMethod, runtimeObjectMatchMethod,
+                runtimeObjectEqualsMethod, runtimeIntegerNegatedMethod, null);
+    }
+
+    public ProtosPrelude(
+            ProtosObjectValue bindings,
+            ProtosObjectValue contextPrototype,
+            ProtosObjectValue runtimeBytesPrototype,
+            ProtosObjectValue runtimeActorRefPrototype,
+            ProtosObjectValue runtimeTcpConnectionPrototype,
+            ProtosObjectValue runtimeTcpListenerPrototype,
+            ProtosObjectValue runtimeIpAddressPrototype,
+            ProtosObjectValue runtimeIpEndpointPrototype,
+            Map<ProtosModuleKey, Map<String, ProtosObjectValue>>
+                    standardModuleMembers,
+            List<ProtosSemanticTransferFamily> semanticTransferFamilies,
+            Map<ProtosModuleKey, Map<String, Supplier<ProtosObjectValue>>>
+                    lazyStandardModuleMembers,
+            ProtosObjectValue runtimeTcpAcceptorPrototype,
+            ProtosClosureValue runtimeFilesystemOpenMethod,
+            ProtosObjectValue runtimeEntropyPrototype,
+            ProtosObjectValue runtimeClockPrototype,
+            ExecutionProtocols runtimeExecutionProtocols,
+            ProtosObjectValue runtimeAnyPrototype,
+            ProtosClosureValue runtimeAnyMatchMethod,
+            ProtosClosureValue runtimeObjectMatchMethod,
+            ProtosClosureValue runtimeObjectEqualsMethod,
+            ProtosClosureValue runtimeIntegerNegatedMethod,
+            ProtosClosureValue runtimeIntegerPercentMethod) {
         requireFrozenDirectChildOfObject(runtimeAnyPrototype, "Any");
         for (ProtosClosureValue method : new ProtosClosureValue[] {
                 runtimeAnyMatchMethod, runtimeObjectMatchMethod,
-                runtimeObjectEqualsMethod, runtimeIntegerNegatedMethod}) {
+                runtimeObjectEqualsMethod, runtimeIntegerNegatedMethod,
+                runtimeIntegerPercentMethod}) {
             if (method != null && (method.definition() == null || method.nativeBody().isPresent())) {
-                throw new IllegalArgumentException("runtime matching methods must be source-backed Closures");
+                throw new IllegalArgumentException("runtime certified methods must be source-backed Closures");
             }
         }
         this.runtimeAnyPrototype = runtimeAnyPrototype;
@@ -455,6 +494,7 @@ public final class ProtosPrelude {
         this.runtimeObjectMatchMethod = runtimeObjectMatchMethod;
         this.runtimeObjectEqualsMethod = runtimeObjectEqualsMethod;
         this.runtimeIntegerNegatedMethod = runtimeIntegerNegatedMethod;
+        this.runtimeIntegerPercentMethod = runtimeIntegerPercentMethod;
         if (runtimeFilesystemOpenMethod != null
                 && (runtimeFilesystemOpenMethod.definition() == null
                         || runtimeFilesystemOpenMethod.nativeBody().isPresent())) {
@@ -882,6 +922,11 @@ public final class ProtosPrelude {
 
     public boolean isStandardIntegerNegatedForRuntime(Object candidate) {
         return runtimeIntegerNegatedMethod != null && candidate == runtimeIntegerNegatedMethod;
+    }
+
+    public boolean isStandardIntegerPercentForRuntime(Object candidate) {
+        return runtimeIntegerPercentMethod != null
+                && candidate == runtimeIntegerPercentMethod;
     }
 
     public boolean isStandardObjectEqualsForRuntime(Object candidate) {

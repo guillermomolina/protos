@@ -525,6 +525,8 @@ class ProtosLexicalSelectionNodeTest {
         assertInstanceOf(ProtosModuleBindingLocation.class,
                 ProtosLexicalSelectionNode.moduleLocationOrNull(scope, name));
         assertTrue(location.hasCurrentStorage());
+        var installation = location.storageInstallationAssumption();
+        assertTrue(installation.isValid());
         var get = com.oracle.truffle.api.object.DynamicObject.GetNode.getUncached();
         ProtosLexicalSelectionNode selection = ProtosLexicalSelectionNodeGen.create();
         for (Object value : new Object[] {initial, replacement, ProtosNullValue.INSTANCE}) {
@@ -534,6 +536,8 @@ class ProtosLexicalSelectionNodeTest {
                 assertSame(value, location.readOrNull(get));
                 assertTrue(location.isPresent(get));
                 assertTrue(location.hasCurrentStorage());
+                assertTrue(installation.isValid());
+                assertSame(installation, location.storageInstallationAssumption());
             }
         }
         assertSame(ProtosNullValue.INSTANCE, context.removeLocalSlot(name));
@@ -542,12 +546,16 @@ class ProtosLexicalSelectionNodeTest {
         assertNull(location.readOrNull(get));
         assertSame(fallback, selection.execute(activation, name, false));
         assertTrue(location.hasCurrentStorage());
+        assertTrue(installation.isValid());
+        assertSame(installation, location.storageInstallationAssumption());
         context.createLocalSlot(name, recreated);
         for (int repeat = 0; repeat < 8; repeat++) {
             assertSame(recreated, selection.execute(activation, name, false));
             assertSame(recreated, location.readOrNull(get));
             assertTrue(location.isPresent(get));
             assertTrue(location.hasCurrentStorage());
+            assertTrue(installation.isValid());
+            assertSame(installation, location.storageInstallationAssumption());
         }
         assertSame(context, scope.context());
         assertSame(context, module.context());
@@ -917,6 +925,17 @@ class ProtosLexicalSelectionNodeTest {
         ProtosLexicalSelectionNode selection = ProtosLexicalSelectionNodeGen.create();
         ProtosModuleBindingLocation firstLocation = ProtosModuleBindingLocation.storageLocationOrNull(first, "Array");
         var firstShape = firstLocation.storageShapeIfMissing();
+
+        var secondLocation = ProtosModuleBindingLocation.storageLocationOrNull(
+                second, "Array");
+
+        var firstInstallation = firstLocation.storageInstallationAssumption();
+        var secondInstallation = secondLocation.storageInstallationAssumption();
+
+        assertNotSame(firstInstallation, secondInstallation);
+        assertTrue(firstInstallation.isValid());
+        assertTrue(secondInstallation.isValid());
+
         for (int round = 0; round < 8; round++) {
             assertSame(outside, selection.execute(firstReader, "Array", false));
             assertSame(outside, selection.execute(secondReader, "Array", false));
@@ -925,6 +944,8 @@ class ProtosLexicalSelectionNodeTest {
             assertSame(outside, selection.execute(firstReader, "Array", false));
             assertSame(ProtosNullValue.INSTANCE, selection.execute(secondReader, "Array", false));
             second.removeLocalSlot("Array");
+            assertTrue(firstInstallation.isValid());
+            assertTrue(secondInstallation.isValid());
         }
         var closure = new ProtosClosureValue(null,
                 firstReader.capturedLexicalEnvironmentForRuntime(), root, null, null,
@@ -966,11 +987,22 @@ class ProtosLexicalSelectionNodeTest {
                 ProtosLexicalSelectionNode selection = ProtosLexicalSelectionNodeGen.create();
                 ProtosModuleBindingLocation absence = ProtosModuleBindingLocation.storageLocationOrNull(nearer, "Array");
                 var missingShape = absence.storageShapeIfMissing();
+                var installation = absence.storageInstallationAssumption();
+                assertTrue(installation.isValid());
+
                 Object arrayFactory = selection.execute(reader, "Array", false);
+                for (int repeat = 0; repeat < 8; repeat++) {
+                    assertSame(arrayFactory, selection.execute(reader, "Array", false));
+                }
                 assertSame(prelude.bindings().readLocalSlot("Array").orElseThrow(), arrayFactory);
                 assertSame(nearer, ownerClosure.executionPlan().orElseThrow().executeBytecodeActivationForTesting(owner));
                 assertFalse(absence.hasCurrentStorage());
-                // The retired store retains its Shape; authority identity must still reject it.
+                assertFalse(installation.isValid(),
+                        "Retiring the authority invalidates installed lookup proofs");
+                assertFalse(absence.storageInstallationAssumption().isValid(),
+                        "A retired storage location must never renew its proof");
+
+                // The retired store retains its Shape; its installation is invalid.
                 assertTrue(absence.hasStorageShape(missingShape));
                 assertNull(ProtosModuleBindingLocation.storageLocationOrNull(nearer, "Array"));
                 assertSame(arrayFactory, selection.execute(reader, "Array", false));

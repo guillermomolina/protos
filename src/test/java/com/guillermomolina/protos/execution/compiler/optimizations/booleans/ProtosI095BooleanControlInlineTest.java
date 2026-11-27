@@ -198,6 +198,127 @@ final class ProtosI095BooleanControlInlineTest {
         System.out.println("I095_C_DYNAMIC_ALTERNATION_AND_MISS=PASS");
     }
 
+    @Test
+    void mixedLoopBindingsWithMatchingRemainInTheCallerRoot() throws Exception {
+        String contextual = """
+                run: () => {
+                    p: probe
+                    i: 0
+                    sink: 0
+                    p()
+                    while(i < 8) {
+                        value: i % 4
+                        result: match(value) {
+                            0: 11
+                            1: 23
+                            2: 37
+                            Any: 53
+                        }
+                        sink = sink + result
+                        i = i + 1
+                        p()
+                    }
+                    sink
+                }
+                run()
+                """;
+
+        String explicit = """
+                run: () => {
+                    p: probe
+                    i: 0
+                    sink: 0
+                    p()
+                    while(i < 8) {
+                        value: i % 4
+                        result: value.caseOf(%{
+                            0: () => 11
+                            1: () => 23
+                            2: () => 37
+                            Any: () => 53
+                        })
+                        sink = sink + result
+                        i = i + 1
+                        p()
+                    }
+                    sink
+                }
+                run()
+                """;
+
+        assertTrue(!contextual.equals(explicit));
+
+        for (String program : List.of(contextual, explicit)) {
+            Execution normal = execute(false, program);
+            assertInteger(248, normal.value());
+            assertEquals(9, normal.probe().calls.get());
+            assertEquals(List.of(INLINE_DEPTH), normal.probe().depths(),
+                    normal.probe()::toString);
+
+            ProtosBytecodeRootNode root = normal.rootOfFirstProbe();
+
+            root.getRootNodes().ensureComplete();
+
+            List<Instruction> instructions =
+                    root.getBytecodeNode().getInstructionsAsList().stream()
+                            .filter(instruction ->
+                                    !instruction.getName().startsWith("trace."))
+                            .toList();
+
+            List<String> operations = instructions.stream()
+                    .map(ProtosInstructionNames::of)
+                    .toList();
+
+            int table = position(operations, "AdmitsDirectLongCaseOf");
+            int any = position(operations, "AdmitsStandardCaseAny");
+
+            assertTrue(table >= 0 && any > table, operations::toString);
+
+            int factoryRead = -1;
+            int anyRead = -1;
+
+            for (int index = 2; index < any; index++) {
+                if (!operations.get(index).startsWith("c.Lookup")) {
+                    continue;
+                }
+
+                Instruction lookup = instructions.get(index);
+
+                for (Instruction.Argument argument : lookup.getArguments()) {
+                    if (argument.getKind() != Instruction.Argument.Kind.CONSTANT) {
+                        continue;
+                    }
+
+                    if (index < table && "Map".equals(argument.asConstant())) {
+                        factoryRead = index;
+                    }
+
+                    if (index > table && "Any".equals(argument.asConstant())) {
+                        anyRead = index;
+                    }
+                }
+            }
+
+            assertTrue(factoryRead >= 2, "Missing Map lexical read");
+            assertTrue(anyRead >= 2, "Missing Any lexical read");
+
+            for (int read : List.of(factoryRead, anyRead)) {
+                Instruction selection = instructions.get(read);
+
+                assertTrue(selection.getName().startsWith(
+                                "c.AccessNamedLexicalCurrent"),
+                        "Expected direct current-frame lexical selection: " + selection);
+            }
+
+            for (List<RootNode> stack : normal.probe().stacks) {
+                assertTrue(stack.get(1) == root,
+                        "Every iteration must execute in the enclosing physical root");
+            }
+
+            assertParity(program, 248);
+        }
+    }
+
     /** An admitted callback runs in run's root with its own semantic RootTag. */
     @Test
     void admittedCallbackRunsInTheCallerRootWithItsOwnRootTag() throws Exception {

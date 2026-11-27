@@ -27,6 +27,7 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
+import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.dsl.Cached;
@@ -107,8 +108,9 @@ abstract class ProtosLexicalSelectionNode extends Node {
             Object activation, String name, boolean write, LexicalFrameLayout currentLayout);
 
     /*
-     * Caches a missing property's physical storage Shape, then guards storage
-     * identity and Shape before continuing the existing outer-owner read.
+     * Caches a missing property's physical storage Shape and the
+     * installation assumption of that store before continuing the existing
+     * outer-owner read.
      * Only one materialized, map-backed nearer scope is admitted.
      */
     @Specialization(
@@ -120,9 +122,9 @@ abstract class ProtosLexicalSelectionNode extends Node {
                 "absence != null",
                 "missingShape != null",
                 "hasNoCurrentScopeStorage(activation, name, currentLayout)",
-                "absence.hasCurrentStorage()",
                 "absence.hasStorageShape(missingShape)"
             },
+            assumptions = "installationStable",
             excludeForUncached = true,
             limit = "3")
     static Object readCachedAbsentScope(
@@ -136,6 +138,7 @@ abstract class ProtosLexicalSelectionNode extends Node {
             @Cached("absentScopeLocationOrNull(cachedEnvironment, cachedDepth, cachedName)")
                     ProtosModuleBindingLocation absence,
             @Cached("missingShapeOrNull(absence)") Shape missingShape,
+            @Cached("storageInstallationAssumption(absence)") Assumption installationStable,
             @Cached("ownerOrNull(cachedEnvironment, cachedDepth)") ProtosLexicalEnvironment cachedOwner,
             @Cached("frozenOwnerValueOrNull(cachedOwner, cachedName)") Object cachedFrozenValue,
             @Cached("moduleLocationOrNull(cachedOwner, cachedName)") ProtosModuleBindingLocation location,
@@ -264,6 +267,14 @@ abstract class ProtosLexicalSelectionNode extends Node {
         }
         ProtosObjectValue context = environment.materializedContextOrNullForRuntime();
         return context == null ? null : ProtosModuleBindingLocation.storageLocationOrNull(context, name);
+    }
+
+    static Assumption storageInstallationAssumption(
+            ProtosModuleBindingLocation location) {
+        CompilerAsserts.neverPartOfCompilation();
+        return location == null
+                ? Assumption.NEVER_VALID
+                : location.storageInstallationAssumption();
     }
 
     static Shape missingShapeOrNull(ProtosModuleBindingLocation location) {

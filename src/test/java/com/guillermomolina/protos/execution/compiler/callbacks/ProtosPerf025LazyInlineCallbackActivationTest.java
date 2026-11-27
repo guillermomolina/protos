@@ -40,6 +40,7 @@ import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.bytecode.ContinuationRootNode;
 import com.oracle.truffle.api.bytecode.Instruction;
 import com.oracle.truffle.api.bytecode.LocalAccessor;
+import com.oracle.truffle.api.bytecode.LocalRangeAccessor;
 import com.oracle.truffle.api.bytecode.TagTreeNode;
 import com.oracle.truffle.api.debug.Breakpoint;
 import com.oracle.truffle.api.debug.DebugScope;
@@ -208,14 +209,49 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
         assertEquals(2, iteration.size(), () -> "element and cursor: " + names);
         List<Object> parameter = iteration.subList(0, 1);
         Object cursor = iteration.get(1);
-        List<Object> creations = constantLocals(instructions, "ResetInlineCallbackLocal");
+        List<Instruction> resets = instructions.stream()
+                .filter(instruction -> ProtosInstructionNames.of(instruction)
+                        .contains("ResetInlineCallbackLocal"))
+                .toList();
+
+        assertEquals(1, resets.size(),
+                () -> "all fresh bindings must share one reset: " + names);
+
+        Instruction resetInstruction = resets.getFirst();
+        LocalRangeAccessor creations = resetInstruction.getArguments().stream()
+                .filter(argument -> argument.getKind() == Instruction.Argument.Kind.CONSTANT)
+                .map(Instruction.Argument::asConstant)
+                .filter(LocalRangeAccessor.class::isInstance)
+                .map(LocalRangeAccessor.class::cast)
+                .findFirst().orElseThrow();
+
+        assertEquals(3, creations.getLength(),
+                "copy, first and second must all start absent");
+
+        BytecodeNode bytecode = resetInstruction.getBytecodeNode();
+        java.util.Set<Object> creationNames = new java.util.HashSet<>();
+
+        for (int index = 0; index < creations.getLength(); index++) {
+            creationNames.add(creations.getLocalName(bytecode, index));
+        }
+
+        assertEquals(java.util.Set.of(
+                        "inlineCallbackScalar:copy",
+                        "inlineCallbackScalar:first",
+                        "inlineCallbackScalar:second"),
+                creationNames);
+
         assertEquals(1, parameter.size(), () -> "one formal: " + names);
-        assertFalse(parameter.contains(cursor) || creations.contains(cursor),
-                () -> "the cursor is not a callback binding: " + names);
-        assertEquals(3, creations.size(), () -> "copy, first and second: " + names);
-        assertEquals(4L,
-                java.util.stream.Stream.concat(parameter.stream(), creations.stream()).distinct().count(),
-                "each callback binding owns a distinct constant local accessor");
+        assertFalse(parameter.contains(cursor),
+                "the iteration cursor must not be a callback parameter");
+
+        LocalAccessor formalAccessor = (LocalAccessor) parameter.getFirst();
+        LocalAccessor cursorAccessor = (LocalAccessor) cursor;
+
+        assertFalse(creationNames.contains(formalAccessor.getLocalName(bytecode)),
+                "the pre-established formal must not be reset");
+        assertFalse(creationNames.contains(cursorAccessor.getLocalName(bytecode)),
+                "the iteration cursor must not be reset");
         int reset = firstIndexOf(names, "ResetInlineCallbackLocal");
         int observation = firstIndexOf(names, "ObserveMultipleCreatePrefix");
         int firstTarget = firstIndexOf(names, "ObservedMultipleCreateValue");
