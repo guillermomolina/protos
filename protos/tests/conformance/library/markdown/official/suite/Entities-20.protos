@@ -1,0 +1,507 @@
+// Generated WHATWG entity conformance data; retained WHATWG license applies.
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+Markdown: import("std:markdown")
+tests: [
+    Test("entities/20/uogon", () => {
+        node: Markdown.parse("&uogon;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{173}")
+    }),
+    Test("entities/20/uopf", () => {
+        node: Markdown.parse("&uopf;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{1d566}")
+    }),
+    Test("entities/20/uparrow", () => {
+        node: Markdown.parse("&uparrow;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{2191}")
+    }),
+    Test("entities/20/updownarrow", () => {
+        node: Markdown.parse("&updownarrow;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{2195}")
+    }),
+    Test("entities/20/upharpoonleft", () => {
+        node: Markdown.parse("&upharpoonleft;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{21bf}")
+    }),
+    Test("entities/20/upharpoonright", () => {
+        node: Markdown.parse("&upharpoonright;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{21be}")
+    }),
+    Test("entities/20/uplus", () => {
+        node: Markdown.parse("&uplus;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{228e}")
+    }),
+    Test("entities/20/upsi", () => {
+        node: Markdown.parse("&upsi;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{3c5}")
+    }),
+    Test("entities/20/upsih", () => {
+        node: Markdown.parse("&upsih;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{3d2}")
+    }),
+    Test("entities/20/upsilon", () => {
+        node: Markdown.parse("&upsilon;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{3c5}")
+    }),
+    Test("entities/20/upuparrows", () => {
+        node: Markdown.parse("&upuparrows;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{21c8}")
+    }),
+    Test("entities/20/urcorn", () => {
+        node: Markdown.parse("&urcorn;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{231d}")
+    }),
+    Test("entities/20/urcorner", () => {
+        node: Markdown.parse("&urcorner;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{231d}")
+    }),
+    Test("entities/20/urcrop", () => {
+        node: Markdown.parse("&urcrop;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{230e}")
+    }),
+    Test("entities/20/uring", () => {
+        node: Markdown.parse("&uring;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{16f}")
+    }),
+    Test("entities/20/urtri", () => {
+        node: Markdown.parse("&urtri;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{25f9}")
+    }),
+    Test("entities/20/uscr", () => {
+        node: Markdown.parse("&uscr;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{1d4ca}")
+    }),
+    Test("entities/20/utdot", () => {
+        node: Markdown.parse("&utdot;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{22f0}")
+    }),
+    Test("entities/20/utilde", () => {
+        node: Markdown.parse("&utilde;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{169}")
+    }),
+    Test("entities/20/utri", () => {
+        node: Markdown.parse("&utri;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{25b5}")
+    }),
+    Test("entities/20/utrif", () => {
+        node: Markdown.parse("&utrif;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{25b4}")
+    }),
+    Test("entities/20/uuarr", () => {
+        node: Markdown.parse("&uuarr;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{21c8}")
+    }),
+    Test("entities/20/uuml", () => {
+        node: Markdown.parse("&uuml;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{fc}")
+    }),
+    Test("entities/20/uwangle", () => {
+        node: Markdown.parse("&uwangle;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{29a7}")
+    }),
+    Test("entities/20/vArr", () => {
+        node: Markdown.parse("&vArr;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{21d5}")
+    }),
+    Test("entities/20/vBar", () => {
+        node: Markdown.parse("&vBar;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{2ae8}")
+    }),
+    Test("entities/20/vBarv", () => {
+        node: Markdown.parse("&vBarv;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{2ae9}")
+    }),
+    Test("entities/20/vDash", () => {
+        node: Markdown.parse("&vDash;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{22a8}")
+    }),
+    Test("entities/20/vangrt", () => {
+        node: Markdown.parse("&vangrt;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{299c}")
+    }),
+    Test("entities/20/varepsilon", () => {
+        node: Markdown.parse("&varepsilon;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{3f5}")
+    }),
+    Test("entities/20/varkappa", () => {
+        node: Markdown.parse("&varkappa;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{3f0}")
+    }),
+    Test("entities/20/varnothing", () => {
+        node: Markdown.parse("&varnothing;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{2205}")
+    }),
+    Test("entities/20/varphi", () => {
+        node: Markdown.parse("&varphi;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{3d5}")
+    }),
+    Test("entities/20/varpi", () => {
+        node: Markdown.parse("&varpi;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{3d6}")
+    }),
+    Test("entities/20/varpropto", () => {
+        node: Markdown.parse("&varpropto;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{221d}")
+    }),
+    Test("entities/20/varr", () => {
+        node: Markdown.parse("&varr;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{2195}")
+    }),
+    Test("entities/20/varrho", () => {
+        node: Markdown.parse("&varrho;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{3f1}")
+    }),
+    Test("entities/20/varsigma", () => {
+        node: Markdown.parse("&varsigma;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{3c2}")
+    }),
+    Test("entities/20/varsubsetneq", () => {
+        node: Markdown.parse("&varsubsetneq;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{228a}\u{fe00}")
+    }),
+    Test("entities/20/varsubsetneqq", () => {
+        node: Markdown.parse("&varsubsetneqq;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{2acb}\u{fe00}")
+    }),
+    Test("entities/20/varsupsetneq", () => {
+        node: Markdown.parse("&varsupsetneq;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{228b}\u{fe00}")
+    }),
+    Test("entities/20/varsupsetneqq", () => {
+        node: Markdown.parse("&varsupsetneqq;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{2acc}\u{fe00}")
+    }),
+    Test("entities/20/vartheta", () => {
+        node: Markdown.parse("&vartheta;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{3d1}")
+    }),
+    Test("entities/20/vartriangleleft", () => {
+        node: Markdown.parse("&vartriangleleft;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{22b2}")
+    }),
+    Test("entities/20/vartriangleright", () => {
+        node: Markdown.parse("&vartriangleright;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{22b3}")
+    }),
+    Test("entities/20/vcy", () => {
+        node: Markdown.parse("&vcy;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{432}")
+    }),
+    Test("entities/20/vdash", () => {
+        node: Markdown.parse("&vdash;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{22a2}")
+    }),
+    Test("entities/20/vee", () => {
+        node: Markdown.parse("&vee;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{2228}")
+    }),
+    Test("entities/20/veebar", () => {
+        node: Markdown.parse("&veebar;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{22bb}")
+    }),
+    Test("entities/20/veeeq", () => {
+        node: Markdown.parse("&veeeq;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{225a}")
+    }),
+    Test("entities/20/vellip", () => {
+        node: Markdown.parse("&vellip;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{22ee}")
+    }),
+    Test("entities/20/verbar", () => {
+        node: Markdown.parse("&verbar;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "|")
+    }),
+    Test("entities/20/vert", () => {
+        node: Markdown.parse("&vert;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "|")
+    }),
+    Test("entities/20/vfr", () => {
+        node: Markdown.parse("&vfr;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{1d533}")
+    }),
+    Test("entities/20/vltri", () => {
+        node: Markdown.parse("&vltri;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{22b2}")
+    }),
+    Test("entities/20/vnsub", () => {
+        node: Markdown.parse("&vnsub;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{2282}\u{20d2}")
+    }),
+    Test("entities/20/vnsup", () => {
+        node: Markdown.parse("&vnsup;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{2283}\u{20d2}")
+    }),
+    Test("entities/20/vopf", () => {
+        node: Markdown.parse("&vopf;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{1d567}")
+    }),
+    Test("entities/20/vprop", () => {
+        node: Markdown.parse("&vprop;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{221d}")
+    }),
+    Test("entities/20/vrtri", () => {
+        node: Markdown.parse("&vrtri;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{22b3}")
+    }),
+    Test("entities/20/vscr", () => {
+        node: Markdown.parse("&vscr;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{1d4cb}")
+    }),
+    Test("entities/20/vsubnE", () => {
+        node: Markdown.parse("&vsubnE;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{2acb}\u{fe00}")
+    }),
+    Test("entities/20/vsubne", () => {
+        node: Markdown.parse("&vsubne;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{228a}\u{fe00}")
+    }),
+    Test("entities/20/vsupnE", () => {
+        node: Markdown.parse("&vsupnE;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{2acc}\u{fe00}")
+    }),
+    Test("entities/20/vsupne", () => {
+        node: Markdown.parse("&vsupne;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{228b}\u{fe00}")
+    }),
+    Test("entities/20/vzigzag", () => {
+        node: Markdown.parse("&vzigzag;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{299a}")
+    }),
+    Test("entities/20/wcirc", () => {
+        node: Markdown.parse("&wcirc;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{175}")
+    }),
+    Test("entities/20/wedbar", () => {
+        node: Markdown.parse("&wedbar;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{2a5f}")
+    }),
+    Test("entities/20/wedge", () => {
+        node: Markdown.parse("&wedge;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{2227}")
+    }),
+    Test("entities/20/wedgeq", () => {
+        node: Markdown.parse("&wedgeq;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{2259}")
+    }),
+    Test("entities/20/weierp", () => {
+        node: Markdown.parse("&weierp;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{2118}")
+    }),
+    Test("entities/20/wfr", () => {
+        node: Markdown.parse("&wfr;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{1d534}")
+    }),
+    Test("entities/20/wopf", () => {
+        node: Markdown.parse("&wopf;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{1d568}")
+    }),
+    Test("entities/20/wp", () => {
+        node: Markdown.parse("&wp;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{2118}")
+    }),
+    Test("entities/20/wr", () => {
+        node: Markdown.parse("&wr;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{2240}")
+    }),
+    Test("entities/20/wreath", () => {
+        node: Markdown.parse("&wreath;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{2240}")
+    }),
+    Test("entities/20/wscr", () => {
+        node: Markdown.parse("&wscr;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{1d4cc}")
+    }),
+    Test("entities/20/xcap", () => {
+        node: Markdown.parse("&xcap;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{22c2}")
+    }),
+    Test("entities/20/xcirc", () => {
+        node: Markdown.parse("&xcirc;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{25ef}")
+    }),
+    Test("entities/20/xcup", () => {
+        node: Markdown.parse("&xcup;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{22c3}")
+    }),
+    Test("entities/20/xdtri", () => {
+        node: Markdown.parse("&xdtri;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{25bd}")
+    }),
+    Test("entities/20/xfr", () => {
+        node: Markdown.parse("&xfr;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{1d535}")
+    }),
+    Test("entities/20/xhArr", () => {
+        node: Markdown.parse("&xhArr;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{27fa}")
+    }),
+    Test("entities/20/xharr", () => {
+        node: Markdown.parse("&xharr;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{27f7}")
+    }),
+    Test("entities/20/xi", () => {
+        node: Markdown.parse("&xi;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{3be}")
+    }),
+    Test("entities/20/xlArr", () => {
+        node: Markdown.parse("&xlArr;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{27f8}")
+    }),
+    Test("entities/20/xlarr", () => {
+        node: Markdown.parse("&xlarr;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{27f5}")
+    }),
+    Test("entities/20/xmap", () => {
+        node: Markdown.parse("&xmap;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{27fc}")
+    }),
+    Test("entities/20/xnis", () => {
+        node: Markdown.parse("&xnis;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{22fb}")
+    }),
+    Test("entities/20/xodot", () => {
+        node: Markdown.parse("&xodot;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{2a00}")
+    }),
+    Test("entities/20/xopf", () => {
+        node: Markdown.parse("&xopf;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{1d569}")
+    }),
+    Test("entities/20/xoplus", () => {
+        node: Markdown.parse("&xoplus;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{2a01}")
+    }),
+    Test("entities/20/xotime", () => {
+        node: Markdown.parse("&xotime;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{2a02}")
+    }),
+    Test("entities/20/xrArr", () => {
+        node: Markdown.parse("&xrArr;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{27f9}")
+    }),
+    Test("entities/20/xrarr", () => {
+        node: Markdown.parse("&xrarr;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{27f6}")
+    }),
+    Test("entities/20/xscr", () => {
+        node: Markdown.parse("&xscr;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{1d4cd}")
+    }),
+    Test("entities/20/xsqcup", () => {
+        node: Markdown.parse("&xsqcup;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{2a06}")
+    }),
+    Test("entities/20/xuplus", () => {
+        node: Markdown.parse("&xuplus;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{2a04}")
+    }),
+    Test("entities/20/xutri", () => {
+        node: Markdown.parse("&xutri;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{25b3}")
+    }),
+    Test("entities/20/xvee", () => {
+        node: Markdown.parse("&xvee;").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "\u{22c1}")
+    })
+]
+tests.freeze()

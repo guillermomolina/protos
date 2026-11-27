@@ -1,0 +1,164 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Linked delimiter resolution with lower search boundaries per closer class.
+Characters: import("./Characters.protos")
+Positions: import("./Positions.protos")
+
+flanking: (before, after, mark) => {
+    beforeSpace: (before == -1) || Characters.whitespace(before)
+    afterSpace: (after == -1) || Characters.whitespace(after)
+    beforePunctuation: Characters.punctuation(before)
+    afterPunctuation: Characters.punctuation(after)
+    left: (afterSpace === false) && ((afterPunctuation === false) || beforeSpace || beforePunctuation)
+    right: (beforeSpace === false) && ((beforePunctuation === false) || afterSpace || afterPunctuation)
+    opening: left
+    closing: right
+    if(mark == 95) {
+        opening = left && ((right === false) || beforePunctuation)
+        closing = right && ((left === false) || afterPunctuation)
+    }
+    { opening: opening; closing: closing }
+}
+
+// Token lists are bounded by sentinels, including lists owned by resolved nodes.
+token: (kind, extent) => {
+    { kind: kind; extent: extent; value: null; children: null; destination: null
+      title: null; textSize: 0; first: -1; last: -1; raw: false; previous: null; next: null; repeat: 0; scalar: -1 }
+}
+
+sequence: () => {
+    head: token("sentinel", null)
+    tail: token("sentinel", null)
+    head.next = tail
+    tail.previous = head
+    { head: head; tail: tail }
+}
+
+append: (sequence, entry) => {
+    entry.previous = sequence.tail.previous
+    entry.next = sequence.tail
+    entry.previous.next = entry
+    sequence.tail.previous = entry
+    entry
+}
+
+wrap: (opener, closer, kind, extent) => {
+    children: sequence()
+    if(opener.next !== closer) {
+        children.head.next = opener.next
+        children.tail.previous = closer.previous
+        children.head.next.previous = children.head
+        children.tail.previous.next = children.tail
+    }
+    node: token(kind, extent)
+    node.children = children
+    opener.next = node
+    node.previous = opener
+    node.next = closer
+    closer.previous = node
+    node
+}
+
+resolve: (state, bottom) => {
+    lower: Map()
+    closer: state.searchLast
+
+    if((closer !== null) && (closer.id <= bottom)) {
+        closer = null
+    }
+
+    while(
+        (closer !== null) &&
+        (closer.searchPrevious !== null) &&
+        (closer.searchPrevious.id > bottom)
+    ) {
+        closer = closer.searchPrevious
+    }
+
+    while(closer !== null) {
+        next: closer.searchNext
+        if((closer.id > bottom) && closer.active && closer.closing && (closer.remaining > 0)) {
+            key: closer.mark * 6 + closer.original % 3
+            if(closer.opening) { key = key + 3 }
+            floor: bottom
+            if(lower.containsKey(key)) { floor = lower[key] }
+            opener: closer.searchPrevious
+            found: null
+            while((opener !== null) && (opener.id > floor) && (found === null)) {
+                valid: opener.active && opener.opening && (opener.mark == closer.mark) && (opener.remaining > 0)
+                if(valid && (closer.mark == 126)) { valid = opener.remaining == closer.remaining }
+                if(valid && (closer.mark != 126) && (opener.closing || closer.opening)) {
+                    if(((opener.original + closer.original) % 3 == 0) && ((opener.original % 3 != 0) || (closer.original % 3 != 0))) { valid = false }
+                }
+                if(valid) { found = opener }
+                valid.ifFalse(() => { opener = opener.searchPrevious })
+            }
+            if(found === null) {
+                lower[key] = closer.id - 1
+
+                if(closer.opening === false) {
+                    remove(state, closer)
+                }
+            }
+            if(found !== null) {
+                use: 1
+                if((opener.remaining >= 2) && (closer.remaining >= 2)) { use = 2 }
+                kind: "emphasis"
+                if(use == 2) { kind = "strong" }
+                if(closer.mark == 126) { kind = "strikethrough"; use = closer.remaining }
+                extent: { start: opener.token.extent.end - use; end: closer.token.extent.start + use }
+                wrap(opener.token, closer.token, kind, extent)
+                opener.remaining = opener.remaining - use
+                closer.remaining = closer.remaining - use
+                opener.token.repeat = opener.remaining
+                closer.token.repeat = closer.remaining
+                opener.token.extent.end = opener.token.extent.end - use
+                closer.token.extent.start = closer.token.extent.start + use
+                opener.token.last = opener.token.last - use
+                closer.token.first = closer.token.first + use
+                if(opener.remaining == 0) { opener.token.raw = false }
+                if(closer.remaining == 0) { closer.token.raw = false }
+                between: opener.searchNext
+                while(between !== closer) {
+                    following: between.searchNext
+                    remove(state, between)
+                    between = following
+                }
+                if(opener.remaining == 0) { remove(state, opener) }
+                if(closer.remaining > 0) { next = closer }
+                if(closer.remaining == 0) { remove(state, closer) }
+            }
+        }
+        closer = next
+    }
+
+    // Delimiters within this completed inline scope
+    // must not participate in an outer resolution.
+    while(
+        (state.searchLast !== null) &&
+        (state.searchLast.id > bottom)
+    ) {
+        remove(state, state.searchLast)
+    }
+}
+
+remove: (state, record) => {
+    if(record.active === false) { ^null }
+    record.active = false
+    if(record.searchPrevious !== null) { record.searchPrevious.searchNext = record.searchNext }
+    if(record.searchNext !== null) { record.searchNext.searchPrevious = record.searchPrevious }
+    if(state.searchLast === record) { state.searchLast = record.searchPrevious }
+}

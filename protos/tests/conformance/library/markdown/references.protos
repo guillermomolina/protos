@@ -1,0 +1,75 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+Markdown: import("std:markdown")
+
+tests: [
+    Test("forward full collapsed and shortcut references resolve first definition", () => {
+        nodes: Markdown.parse("[x][r] [r][] [r]\n\n[r]: /first \"t\"\n[r]: /second").children[0].children
+        for(i in [0, 2, 4]) {
+            Assertions.require(nodes[i].kind == "link")
+            Assertions.require(nodes[i].destination == "/first")
+            Assertions.require(nodes[i].title == "t")
+        }
+        null
+    }),
+    Test("reference-only paragraphs disappear", () => {
+        root: Markdown.parse("[r]: /u")
+        Assertions.require(root.children.size() == 0)
+    }),
+    Test("expanding full Unicode fold matches sharp S", () => {
+        node: Markdown.parse("[STRASSE]\n\n[Straße]: /u").children[0].children[0]
+        Assertions.require(node.kind == "link")
+        Assertions.require(node.destination == "/u")
+    }),
+    Test("reference normalization does not add NFC", () => {
+        node: Markdown.parse("[é]\n\n[e\u{301}]: /u").children[0].children[0]
+        Assertions.require(node.kind == "text")
+    }),
+    Test("label whitespace collapses without entity decoding", () => {
+        node: Markdown.parse("[A B]\n\n[a\t b]: /u").children[0].children[0]
+        Assertions.require(node.kind == "link")
+        literal: Markdown.parse("[&amp;]\n\n[&]: /u").children[0].children[0]
+        Assertions.require(literal.kind == "text")
+    }),
+    Test("links cannot nest but images remain eligible", () => {
+        root: Markdown.parse("[outer [inner](i)](o)")
+        Assertions.require(root.children[0].children[1].kind == "link")
+        image: Markdown.parse("[![alt](i)](o)").children[0].children[0]
+        Assertions.require(image.kind == "link")
+        Assertions.require(image.children[0].kind == "image")
+    }),
+    Test("definition inside blockquote is available outside", () => {
+        root: Markdown.parse("[r]\n\n> [r]: /u")
+        Assertions.require(root.children[0].children[0].kind == "link")
+    }),
+    Test("reference labels collapse ASCII vertical whitespace", () => {
+        for(separator in ["\u{b}", "\u{c}"]) {
+            source: "[a b]\n\n[a".concat(separator, "b]: /u")
+            node: Markdown.parse(source).children[0].children[0]
+            Assertions.require(node.kind == "link")
+            Assertions.require(node.destination == "/u")
+        }
+        null
+    }),
+    Test("reference labels do not collapse nonbreaking spaces", () => {
+        node: Markdown.parse("[a b]\n\n[a\u{a0}b]: /u").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "[a b]")
+    })
+]
+tests.freeze()

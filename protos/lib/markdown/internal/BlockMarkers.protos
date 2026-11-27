@@ -1,0 +1,159 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Direct block-prefix scanning; marker spelling remains private.
+Source: import("./Source.protos")
+Characters: import("./Characters.protos")
+Html: import("./HtmlSyntax.protos")
+
+indent: (s) => {
+    i: 0
+    column: 0
+    while((Source.at(s, i) == 32) || (Source.at(s, i) == 9)) {
+        if(Source.at(s, i) == 32) { column = column + 1 }
+        if(Source.at(s, i) == 9) { column = column + Source.tabWidth(Source.entry(s, i)) }
+        i = i + 1
+    }
+    { index: i; columns: column }
+}
+blank: (s) => { indent(s).index == Source.size(s) }
+
+quote: (s) => {
+    prefix: indent(s)
+    if((prefix.columns > 3) || (Source.at(s, prefix.index) != 62)) { ^null }
+    i: prefix.index + 1
+    rest: Source.slice(s, i, Source.size(s))
+    if((Source.at(rest, 0) == 32) || (Source.at(rest, 0) == 9)) { rest = Source.indent(rest, 1).subject }
+    rest
+}
+
+thematic: (s) => {
+    prefix: indent(s)
+    if(prefix.columns > 3) { ^false }
+    mark: Source.at(s, prefix.index)
+    if((mark != 42) && (mark != 45) && (mark != 95)) { ^false }
+    count: 0
+    i: prefix.index
+    while(i < Source.size(s)) {
+        c: Source.at(s, i)
+        if(c == mark) { count = count + 1 }
+        if((c != mark) && (c != 32) && (c != 9)) { ^false }
+        i = i + 1
+    }
+    count >= 3
+}
+
+setext: (s) => {
+    prefix: indent(s)
+    if(prefix.columns > 3) { ^null }
+    mark: Source.at(s, prefix.index)
+    if((mark != 61) && (mark != 45)) { ^null }
+    i: prefix.index
+    while(Source.at(s, i) == mark) { i = i + 1 }
+    while((Source.at(s, i) == 32) || (Source.at(s, i) == 9)) { i = i + 1 }
+    if(i != Source.size(s)) { ^null }
+    level: 1
+    if(mark == 45) { level = 2 }
+    level
+}
+
+heading: (s) => {
+    prefix: indent(s)
+    if(prefix.columns > 3) { ^null }
+    i: prefix.index
+    while(Source.at(s, i) == 35) { i = i + 1 }
+    level: i - prefix.index
+    if((level < 1) || (level > 6)) { ^null }
+    c: Source.at(s, i)
+    if((c != -1) && (c != 32) && (c != 9)) { ^null }
+    begin: i
+    while((Source.at(s, begin) == 32) || (Source.at(s, begin) == 9)) { begin = begin + 1 }
+    end: Source.size(s)
+    while((Source.at(s, end - 1) == 32) || (Source.at(s, end - 1) == 9)) { end = end - 1 }
+    if(end < begin) { end = begin }
+    hashes: end
+    while(Source.at(s, hashes - 1) == 35) { hashes = hashes - 1 }
+    if((hashes < end) && ((Source.at(s, hashes - 1) == 32) || (Source.at(s, hashes - 1) == 9) || (hashes == begin))) { end = hashes }
+    { level: level; subject: Source.trim(Source.slice(s, begin, end)) }
+}
+
+fence: (s) => {
+    prefix: indent(s)
+    if(prefix.columns > 3) { ^null }
+    mark: Source.at(s, prefix.index)
+    if((mark != 96) && (mark != 126)) { ^null }
+    i: prefix.index
+    while(Source.at(s, i) == mark) { i = i + 1 }
+    width: i - prefix.index
+    if(width < 3) { ^null }
+    info: Source.trim(Source.slice(s, i, Source.size(s)))
+    if(mark == 96) { j: 0; while(j < Source.size(info)) { if(Source.at(info, j) == 96) { ^null }; j = j + 1 } }
+    { mark: mark; width: width; indent: prefix.columns; info: info }
+}
+
+closeFence: (s, opener) => {
+    prefix: indent(s)
+    if(prefix.columns > 3) { ^false }
+    i: prefix.index
+    while(Source.at(s, i) == opener.mark) { i = i + 1 }
+    if(i - prefix.index < opener.width) { ^false }
+    blank(Source.slice(s, i, Source.size(s)))
+}
+
+list: (s, paragraph) => {
+    prefix: indent(s)
+    if(prefix.columns > 3) { ^null }
+    i: prefix.index
+    start: null
+    ordered: false
+    mark: Source.at(s, i)
+    if(Characters.digit(mark)) {
+        ordered = true
+        start = 0
+        digits: 0
+        while(Characters.digit(Source.at(s, i))) {
+            start = start * 10 + Source.at(s, i) - 48
+            digits = digits + 1
+            i = i + 1
+            if(digits > 9) { ^null }
+        }
+        mark = Source.at(s, i)
+        if((mark != 46) && (mark != 41)) { ^null }
+        if(paragraph && (start != 1)) { ^null }
+    }
+    ordered.ifFalse(() => { if((mark != 45) && (mark != 43) && (mark != 42)) { ^null } })
+    i = i + 1
+    c: Source.at(s, i)
+    if((c != -1) && (c != 32) && (c != 9)) { ^null }
+    markerWidth: i - prefix.index
+    after: Source.slice(s, i, Source.size(s))
+    padding: indent(after).columns
+    empty: blank(after)
+    if(paragraph && empty) { ^null }
+    if(empty || (padding < 1) || (padding > 4)) { padding = 1 }
+    content: Source.indent(after, padding).subject
+    { ordered: ordered; start: start; mark: mark; indent: prefix.columns + markerWidth + padding; subject: content }
+}
+
+interrupts: (s) => {
+    if(quote(s) !== null) { ^true }
+    if(heading(s) !== null) { ^true }
+    if(thematic(s)) { ^true }
+    if(fence(s) !== null) { ^true }
+    if(list(s, true) !== null) { ^true }
+    prefix: indent(s)
+    if(prefix.columns <= 3) { if(Html.block(s, prefix.index, true) !== null) { ^true } }
+    false
+}

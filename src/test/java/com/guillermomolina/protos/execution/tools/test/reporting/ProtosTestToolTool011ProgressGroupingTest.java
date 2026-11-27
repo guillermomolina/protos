@@ -74,6 +74,7 @@ final class ProtosTestToolTool011ProgressGroupingTest {
                     "conformance/control-concurrency",
                     "conformance/io",
                     "conformance/standard-library/toml",
+                    "conformance/standard-library/markdown",
                     "conformance/standard-library/collections",
                     "conformance/standard-library/data-text-test",
                     "conformance/language-surface",
@@ -155,7 +156,7 @@ final class ProtosTestToolTool011ProgressGroupingTest {
 
         assertEquals(expected, actual);
         // LIB025: the subdivided HTTP leaf presents no group without retained Cases.
-        assertEquals(40, actual.values().stream().mapToInt(List::size).sum());
+        assertEquals(41, actual.values().stream().mapToInt(List::size).sum());
     }
 
     @Test
@@ -207,6 +208,8 @@ final class ProtosTestToolTool011ProgressGroupingTest {
         paths.add("library/toml/tool011.protos");
         paths.add("library/toml/official/tool011.protos");
         paths.add("library/toml/official/suite/tool011.protos");
+        paths.add("library/markdown/tool011.protos");
+        paths.add("library/markdown/official/suite/tool011.protos");
         int synthetic = paths.size();
 
         for (String line : Files.readAllLines(CONFORMANCE_MANIFEST, StandardCharsets.UTF_8)) {
@@ -249,6 +252,8 @@ final class ProtosTestToolTool011ProgressGroupingTest {
         }
         Set<String> expectedGroups = new LinkedHashSet<>(CONFORMANCE_GROUPS);
         expectedGroups.add(TOML_OFFICIAL + "/invalid/tool011");
+        expectedGroups.add(
+                "conformance/standard-library/markdown-official/invalid/tool011");
         assertEquals(expectedGroups, observedGroups);
     }
 
@@ -264,6 +269,8 @@ final class ProtosTestToolTool011ProgressGroupingTest {
         assertFailed(conformanceGroupName("library/a.protos"));
         assertFailed(conformanceGroupName("library/unknown/a.protos"));
         assertFailed(conformanceGroupName("library/toml/other/a.protos"));
+        assertFailed(conformanceGroupName("library/markdown/other/a.protos"));
+        assertFailed(conformanceGroupName("library/markdown/official/upstream/a.protos"));
     }
 
     private static String conformanceGroupName(String path) {
@@ -398,6 +405,13 @@ final class ProtosTestToolTool011ProgressGroupingTest {
         if (directory.equals("library/toml/official")
                 || directory.startsWith("library/toml/official/")) {
             return TOML_OFFICIAL + "/invalid/tool011";
+        }
+        if (directory.equals("library/markdown/official/suite")
+                || directory.startsWith("library/markdown/official/suite/")) {
+            return "conformance/standard-library/markdown-official/invalid/tool011";
+        }
+        if (directory.equals("library/markdown")) {
+            return "conformance/standard-library/markdown";
         }
         if (directory.equals("library/toml")) {
             return "conformance/standard-library/toml";

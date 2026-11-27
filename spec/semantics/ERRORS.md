@@ -456,6 +456,7 @@ standard prototype listed above.
 | `ClientError` | `Error` | `std:http/client` / `../io/HTTP.md` §16 |
 | `TlsError` | `Error` | `std:tls/client` / `../io/TLS.md` §9 |
 | `JwtError` | `Error` | `std:auth/jwt` / `../auth/JWT.md` |
+| `MarkdownLimitError` | `Error` | `std:markdown` / `MARKDOWN.md` |
 | `ResolutionError` | `Error` | `std:network/resolvers` / `../io/NETWORK.md` §14.7 |
 
 Every `ResolutionError` occurrence is fresh and carries an own `kind` slot whose

@@ -1,0 +1,187 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Distinct CommonMark angle and published GFM extended autolink grammars.
+Source: import("./Source.protos")
+Characters: import("./Characters.protos")
+
+angleLocal: (c) => {
+    Characters.alpha(c) || Characters.digit(c) ||
+    ((c >= 33) && (c <= 39) && (c != 34)) ||
+    (c == 42) || (c == 43) || (c == 45) || (c == 46) || (c == 47) || (c == 61) ||
+    (c == 63) || (c == 94) || (c == 95) || (c == 96) || ((c >= 123) && (c <= 126))
+}
+mailLocal: (c) => { Characters.alpha(c) || Characters.digit(c) || (c == 46) || (c == 45) || (c == 95) || (c == 43) }
+domainCharacter: (c) => { Characters.alpha(c) || Characters.digit(c) || (c == 45) || (c == 95) || (c == 46) }
+fresh: (s, i) => {
+    if((i < 0) || (i >= Source.size(s))) { ^false }
+    origin: Source.entry(s, i)
+    if(origin.hasSlot("fresh")) { ^origin.fresh }
+    true
+}
+rawPrefix: (s, start, spelling) => {
+    if(Source.matches(s, start, spelling) === false) { ^false }
+    i: 0
+    while(i < spelling.size()) { if(fresh(s, start + i) === false) { ^false }; i = i + 1 }
+    true
+}
+
+angleEmailEnd: (s, start) => {
+    i: start
+    while(angleLocal(Source.at(s, i))) { i = i + 1 }
+    if((i == start) || (Source.at(s, i) != 64)) { ^null }
+    i = i + 1
+    while(true) {
+        begin: i
+        if((Characters.alpha(Source.at(s, i)) === false) && (Characters.digit(Source.at(s, i)) === false)) { ^null }
+        i = i + 1
+        while(Characters.alpha(Source.at(s, i)) || Characters.digit(Source.at(s, i)) || (Source.at(s, i) == 45)) { i = i + 1 }
+        if((i - begin > 63) || (Source.at(s, i - 1) == 45)) { ^null }
+        if(Source.at(s, i) != 46) { ^i }
+        i = i + 1
+    }
+}
+
+angle: (s, start) => {
+    if(Source.at(s, start) != 60) { ^null }
+    begin: start + 1
+    i: begin
+    if(Characters.alpha(Source.at(s, i))) {
+        i = i + 1
+        while(Characters.alpha(Source.at(s, i)) || Characters.digit(Source.at(s, i)) || (Source.at(s, i) == 43) || (Source.at(s, i) == 45) || (Source.at(s, i) == 46)) { i = i + 1 }
+        if((i - begin >= 2) && (i - begin <= 32) && (Source.at(s, i) == 58)) {
+            i = i + 1
+            while((i < Source.size(s)) && (Source.at(s, i) != 62)) {
+                c: Source.at(s, i)
+                if((c <= 32) || (c == 127) || (c == 60)) { ^null }
+                i = i + 1
+            }
+            if(Source.at(s, i) == 62) { ^{ end: i + 1; displayStart: begin; displayEnd: i; destination: Source.value(s, begin, i) } }
+        }
+    }
+    emailEnd: angleEmailEnd(s, begin)
+    if(emailEnd === null) { ^null }
+    if(Source.at(s, emailEnd) != 62) { ^null }
+    { end: emailEnd + 1; displayStart: begin; displayEnd: emailEnd; destination: "mailto:" + Source.value(s, begin, emailEnd) }
+}
+
+mailEnd: (s, start) => {
+    i: start
+    while(mailLocal(Source.at(s, i))) { i = i + 1 }
+    if((i == start) || (Source.at(s, i) != 64) || (fresh(s, i) === false)) { ^null }
+    begin: i + 1
+    i = begin
+    while(domainCharacter(Source.at(s, i))) { i = i + 1 }
+    if(Source.at(s, i) == 43) { ^null }
+    end: i
+    while(Source.at(s, end - 1) == 46) { end = end - 1 }
+    if((end <= begin) || (Source.at(s, end - 1) == 45) || (Source.at(s, end - 1) == 95)) { ^null }
+    dots: 0
+    segment: 0
+    j: begin
+    while(j < end) {
+        if(Source.at(s, j) == 46) { if(segment == 0) { ^null }; dots = dots + 1; segment = 0 }
+        (Source.at(s, j) == 46).ifFalse(() => { segment = segment + 1 })
+        j = j + 1
+    }
+    if(dots == 0) { ^null }
+    end
+}
+
+urlDomainEnd: (s, start) => {
+    i: start
+    while(domainCharacter(Source.at(s, i))) { i = i + 1 }
+    end: i
+    while(Source.at(s, end - 1) == 46) { end = end - 1 }
+    dots: 0
+    length: 0
+    previousUnderscore: false
+    underscore: false
+    j: start
+    while(j < end) {
+        c: Source.at(s, j)
+        if(c == 46) {
+            if(length == 0) { ^null }
+            dots = dots + 1
+            previousUnderscore = underscore
+            underscore = false
+            length = 0
+        }
+        (c == 46).ifFalse(() => { length = length + 1; if(c == 95) { underscore = true } })
+        j = j + 1
+    }
+    if((dots == 0) || (length == 0) || underscore || previousUnderscore) { ^null }
+    end
+}
+
+extended: (s, start) => {
+    if(fresh(s, start) === false) { ^null }
+    before: Source.at(s, start - 1)
+    boundary: (start == 0) || Characters.whitespace(before) || (before == 42) || (before == 95) || (before == 126) || (before == 40)
+    www: boundary && rawPrefix(s, start, "www.")
+    http: boundary && rawPrefix(s, start, "http://")
+    https: boundary && rawPrefix(s, start, "https://")
+    mail: rawPrefix(s, start, "mailto:")
+    xmpp: rawPrefix(s, start, "xmpp:")
+    if(mail || xmpp) {
+        if(mailLocal(before)) { ^null }
+        begin: start + 7
+        if(xmpp) { begin = start + 5 }
+        end: mailEnd(s, begin)
+        if(end === null) { ^null }
+        if(xmpp && (Source.at(s, end) == 47)) {
+            resource: end + 1
+            i: resource
+            while(Characters.alpha(Source.at(s, i)) || Characters.digit(Source.at(s, i)) || (Source.at(s, i) == 64) || (Source.at(s, i) == 46)) { i = i + 1 }
+            while(Source.at(s, i - 1) == 46) { i = i - 1 }
+            if(i > resource) { end = i }
+        }
+        ^{ end: end; prefix: "" }
+    }
+    if(www || http || https) {
+        begin: start + 4
+        if(http) { begin = start + 7 }
+        if(https) { begin = start + 8 }
+        domain: urlDomainEnd(s, begin)
+        if(domain === null) { ^null }
+        end: domain
+        balance: 0
+        while((end < Source.size(s)) && (Characters.whitespace(Source.at(s, end)) === false) && (Source.at(s, end) != 60)) {
+            if(Source.at(s, end) == 40) { balance = balance + 1 }
+            if(Source.at(s, end) == 41) { balance = balance - 1 }
+            end = end + 1
+        }
+        trimming: true
+        while((end > domain) && trimming) {
+            c: Source.at(s, end - 1)
+            trim: (c == 63) || (c == 33) || (c == 46) || (c == 44) || (c == 58) || (c == 42) || (c == 95) || (c == 126)
+            if((c == 41) && (balance < 0)) { trim = true; balance = balance + 1 }
+            if(c == 59) {
+                j: end - 2
+                while(Characters.alpha(Source.at(s, j)) || Characters.digit(Source.at(s, j))) { j = j - 1 }
+                if((j < end - 2) && (Source.at(s, j) == 38)) { end = j; trim = false; trimming = false }
+            }
+            if(trim) { end = end - 1 }
+            trim.ifFalse(() => { trimming = false })
+        }
+        prefix: ""
+        if(www) { prefix = "http://" }
+        ^{ end: end; prefix: prefix }
+    }
+    if(mailLocal(before) || (before == 64)) { ^null }
+    end: mailEnd(s, start)
+    if(end === null) { ^null }
+    { end: end; prefix: "mailto:" }
+}

@@ -1,0 +1,391 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Line-oriented open-container state. Inline subjects survive until all
+//! definitions have been collected; no public node is used as working state.
+Source: import("./Source.protos")
+Builders: import("./Builders.protos")
+Markers: import("./BlockMarkers.protos")
+Html: import("./HtmlSyntax.protos")
+Entities: import("./Entities.protos")
+References: import("./References.protos")
+Tables: import("./Tables.protos")
+Limits: import("./Limits.protos")
+
+frame: (kind, parent, start, end) => {
+    {
+        kind: kind; parent: parent; open: null; depth: 0
+        children: Builders.array(); lines: Builders.array()
+        start: start; end: end; lastLineBlank: false; separated: false; charged: false
+        level: null; marker: null; ordered: false; number: null
+        tight: true; task: null; alignments: null
+        value: null; info: null; result: null
+    }
+}
+
+// A nested list ends with a blank line when its
+// last structural descendant ends with one.
+endsWithBlankLine: (node) => {
+    cursor: node
+    while(
+        ((cursor.kind == "list") || (cursor.kind == "listItem")) &&
+        (cursor.children.size > 0)
+    ) {
+        cursor = cursor.children.last
+    }
+    cursor.lastLineBlank
+}
+
+parse: (lines, extension, budget) => {
+    Limits.charge(budget, 1, 0)
+    root: frame("document", null, 0, 0)
+    top: root
+    definitions: Builders.array()
+
+    open: (kind, line) => {
+        child: frame(kind, top, line.start, line.end)
+        child.depth = top.depth + 1
+        // These containers survive even when all their reference definitions
+        // disappear. Their excessive depth is already a final-result excess.
+        stable: (kind == "blockquote") || (kind == "list") || (kind == "listItem")
+        if(stable) {
+            Limits.charge(budget, 1, child.depth)
+            child.charged = true
+        }
+        Builders.push(top.children, child)
+        top.open = child
+        top = child
+        child
+    }
+
+    close: () => {
+        current: top
+        if(current.kind == "paragraph") {
+            subject: Source.joinLines(Builders.finish(current.lines))
+            remaining: References.leading(subject, definitions)
+            current.value = Source.leftTrim(remaining)
+            if((Source.size(remaining) > 0) && (Source.size(remaining) < Source.size(subject))) { current.start = Source.entry(remaining, 0).lineStart }
+        }
+        if((current.kind == "codeBlock") || (current.kind == "htmlBlock")) {
+            content: Builders.finish(current.lines)
+            if((current.kind == "codeBlock") && (current.marker === null)) {
+                last: content.size()
+                while((last > 0) && Markers.blank(content[last - 1].subject)) { last = last - 1 }
+                content = import("std:collections/array").slice(content, 0, last)
+            }
+            cost: 0
+            for(line in content) { cost = cost + Source.size(line.subject); if((current.kind == "codeBlock") || (line.terminator !== null)) { cost = cost + 1 } }
+            if(current.info !== null) { cost = cost + current.info.size() }
+            Limits.charge(budget, 1, current.depth, cost)
+            current.charged = true
+            if((content.size() > 0) && (current.marker === null)) { current.end = content[content.size() - 1].end }
+            output: Builders.text()
+            for(line in content) {
+                Builders.append(output, Source.value(line.subject, 0, Source.size(line.subject)))
+                if((current.kind == "codeBlock") || (line.terminator !== null)) { Builders.scalar(output, 10) }
+            }
+            current.value = Builders.string(output)
+        }
+        if(current.kind == "list") {
+            items: Builders.finish(current.children)
+            index: 0
+            for(item in items) {
+                if(item.separated || (item.lastLineBlank && (index + 1 < items.size()))) { current.tight = false }
+                children: Builders.finish(item.children)
+                j: 0
+                for(child in children) {
+                    if(
+                        ((index + 1 < items.size()) || (j + 1 < children.size())) &&
+                        endsWithBlankLine(child)
+                    ) {
+                        current.tight = false
+                    }
+                    j = j + 1
+                }
+                index = index + 1
+            }
+        }
+        surviving: (current.kind != "paragraph") || (Source.size(current.value) > 0)
+        if(surviving && (current.charged === false)) { Limits.charge(budget, 1, current.depth); current.charged = true }
+        if(current.parent !== null) {
+            top = current.parent
+            top.open = null
+            if(current.end > top.end) { top.end = current.end }
+        }
+    }
+
+    appendLine: (subject, physical) => {
+        Builders.push(top.lines, { subject: subject; start: physical.start; end: physical.end; terminator: physical.terminator })
+        top.end = physical.end
+
+        if(top.kind == "codeBlock") {
+            top.lastLineBlank = (top.marker === null) && Markers.blank(subject)
+        }
+    }
+
+    for(line in lines) {
+        subject: line.subject
+        matched: root
+        cursor: root.open
+        failed: false
+        while((cursor !== null) && (failed === false)) {
+            kind: cursor.kind
+            if(kind == "blockquote") {
+                rest: Markers.quote(subject)
+                if(rest === null) { failed = true }
+                if(rest !== null) { subject = rest }
+            }
+            if(kind == "listItem") {
+                if(Markers.blank(subject) && (cursor.children.size == 0)) { failed = true }
+                if(Markers.blank(subject) === false) {
+                    prefix: Markers.indent(subject)
+                    if(prefix.columns < cursor.marker.indent) { failed = true }
+                    if(prefix.columns >= cursor.marker.indent) { subject = Source.indent(subject, cursor.marker.indent).subject }
+                }
+            }
+            if(failed === false) { matched = cursor; cursor = cursor.open }
+        }
+        sibling: false
+        if(failed && (matched.kind == "list")) {
+            marker: Markers.list(subject, false)
+            // A new marker ends lazy continuation even when its type or
+            // delimiter requires a separate list rather than another item.
+            sibling = marker !== null
+        }
+        lazy: failed && (sibling === false) && (top.kind == "paragraph") && (Markers.blank(subject) === false) && (Markers.interrupts(subject) === false)
+        if(lazy === false) { while(top !== matched) { close() } }
+        if(lazy) { appendLine(subject, line) }
+        lazy.ifFalse(() => {
+            handled: false
+            if(top.kind == "codeBlock") {
+                if(top.marker !== null) {
+                    if(Markers.closeFence(subject, top.marker)) { top.end = line.end; close(); handled = true }
+                    handled.ifFalse(() => {
+                        appendLine(Source.indent(subject, top.marker.indent).subject, line)
+                        handled = true
+                    })
+                }
+                (top.kind == "codeBlock").ifTrue(() => {
+                    if(top.marker === null) {
+                        if(Markers.blank(subject) || (Markers.indent(subject).columns >= 4)) {
+                            appendLine(Source.indent(subject, 4).subject, line)
+                            handled = true
+                        }
+                        handled.ifFalse(() => { close() })
+                    }
+                })
+            }
+            if((handled === false) && (top.kind == "htmlBlock")) {
+                if((top.marker.close === null) && Markers.blank(subject)) { close() }
+                (top.kind == "htmlBlock").ifTrue(() => {
+                    appendLine(subject, line)
+                    if(Html.terminated(subject, top.marker)) { close() }
+                    handled = true
+                })
+            }
+            if((handled === false) && (top.kind == "table")) {
+                if(Markers.blank(subject) || Markers.interrupts(subject)) { close() }
+                (top.kind == "table").ifTrue(() => {
+                    Limits.room(budget, top.alignments.size() + 1, 0)
+                    row: open("tableRow", line)
+                    parsed: Tables.cells(subject, top.parent.alignments.size())
+                    column: 0
+                    while(column < top.parent.alignments.size()) {
+                        cell: frame("tableCell", row, line.start, line.end)
+                        if(column < parsed.size()) {
+                            cell.value = parsed[column].subject
+                            cell.start = parsed[column].extent.start
+                            cell.end = parsed[column].extent.end
+                        }
+                        (column < parsed.size()).ifFalse(() => { cell.value = Source.empty(); cell.start = null; cell.end = null })
+                        cell.depth = row.depth + 1
+                        Limits.charge(budget, 1, cell.depth)
+                        cell.charged = true
+                        Builders.push(row.children, cell)
+                        column = column + 1
+                    }
+                    close()
+                    handled = true
+                })
+            }
+            if((handled === false) && (top.kind == "paragraph")) {
+                underline: Markers.setext(subject)
+                if(underline !== null) {
+                    remaining: References.leading(Source.joinLines(Builders.finish(top.lines)), definitions)
+                    if(Source.size(remaining) > 0) {
+                        top.kind = "heading"
+                        top.start = Source.entry(remaining, 0).lineStart
+                        top.level = underline
+                        top.value = Source.trim(remaining)
+                        top.end = line.end
+                        close()
+                        handled = true
+                    }
+                    if(Source.size(remaining) == 0) { top.lines = Builders.array(); close() }
+                }
+                if((handled === false) && extension && (top.kind == "paragraph")) {
+                    alignment: Tables.alignments(subject)
+                    if(alignment !== null) {
+                        headerLine: top.lines.last
+                        if(
+                            (headerLine !== null) &&
+                            (Tables.hasPipe(headerLine.subject) || Tables.hasPipe(subject))
+                        ) {
+                            header: Tables.cells(headerLine.subject)
+                            if(header.size() == alignment.size()) {
+                                if(top.lines.size > 1) {
+                                    content: Builders.finish(top.lines)
+                                    preceding: Builders.array()
+                                    index: 0
+
+                                    while(index + 1 < content.size()) {
+                                        Builders.push(preceding, content[index])
+                                        index = index + 1
+                                    }
+
+                                    top.lines = preceding
+                                    top.end = preceding.last.end
+                                    close()
+                                    open("table", headerLine)
+                                }
+
+                                top.kind = "table"
+                                top.start = headerLine.start
+                                Limits.charge(budget, 1, top.depth)
+                                top.charged = true
+                                top.alignments = alignment
+                                top.end = line.end
+                                Limits.room(budget, alignment.size() + 1, 0)
+                                row: frame("tableRow", top, headerLine.start, headerLine.end)
+                                row.depth = top.depth + 1
+                                Limits.charge(budget, 1, row.depth)
+                                row.charged = true
+                                for(entry in header) {
+                                    cell: frame("tableCell", row, entry.extent.start, entry.extent.end)
+                                    cell.value = entry.subject
+                                    cell.depth = row.depth + 1
+                                    Limits.charge(budget, 1, cell.depth)
+                                    cell.charged = true
+                                    Builders.push(row.children, cell)
+                                }
+                                Builders.push(top.children, row)
+                                handled = true
+                            }
+                        }
+                    }
+                }
+                if(handled === false) {
+                    if(Markers.blank(subject) || Markers.interrupts(subject)) { close() }
+                    if(top.kind == "paragraph") { appendLine(subject, line); handled = true }
+                }
+            }
+            if((handled === false) && Markers.blank(subject)) {
+                top.lastLineBlank = top.kind != "blockquote"
+
+                if(top.children.size > 0) {
+                    top.children.last.lastLineBlank = true
+                }
+
+                ancestor: top.parent
+                while(ancestor !== null) {
+                    ancestor.lastLineBlank = false
+                    ancestor = ancestor.parent
+                }
+                handled = true
+            }
+            if(handled === false) {
+                searching: true
+                while(searching) {
+                    searching = false
+
+                    if(top.kind == "list") {
+                        marker: Markers.list(subject, false)
+                        compatible: marker !== null
+                        if(compatible) {
+                            compatible = (marker.mark == top.marker.mark) &&
+                                (marker.ordered === top.ordered)
+                        }
+                        if(Markers.thematic(subject) || (compatible === false)) {
+                            close()
+                        }
+                    }
+
+                    if((top.kind == "listItem") && top.lastLineBlank && (top.children.size > 0)) { top.separated = true }
+                    top.lastLineBlank = false
+                    rest: Markers.quote(subject)
+                    if(rest !== null) { open("blockquote", line); subject = rest; searching = true }
+                    if((searching === false) && (Markers.thematic(subject) === false)) {
+                        marker: Markers.list(subject, false)
+                        if(marker !== null) {
+                            if(top.kind != "list") {
+                                list: open("list", line)
+                                list.marker = marker
+                                list.ordered = marker.ordered
+                                list.number = marker.start
+                            }
+                            item: open("listItem", line)
+                            item.marker = marker
+                            subject = marker.subject
+                            searching = true
+                        }
+                    }
+                }
+                if(top.kind == "list") { close() }
+                prefix: Markers.indent(subject)
+                heading: Markers.heading(subject)
+                fence: Markers.fence(subject)
+                html: null
+                if(prefix.columns <= 3) { html = Html.block(subject, prefix.index, false) }
+                if(Markers.blank(subject)) { handled = true }
+                if((handled === false) && Markers.thematic(subject)) { open("thematicBreak", line); close(); handled = true }
+                if((handled === false) && (heading !== null)) {
+                    child: open("heading", line)
+                    child.level = heading.level
+                    child.value = heading.subject
+                    close()
+                    handled = true
+                }
+                if((handled === false) && (fence !== null)) {
+                    child: open("codeBlock", line)
+                    child.marker = fence
+                    child.info = Entities.decode(fence.info)
+                    handled = true
+                }
+                if((handled === false) && (html !== null)) {
+                    child: open("htmlBlock", line)
+                    child.marker = html
+                    appendLine(subject, line)
+                    if(Html.terminated(subject, html)) { close() }
+                    handled = true
+                }
+                if((handled === false) && (prefix.columns >= 4)) {
+                    open("codeBlock", line)
+                    appendLine(Source.indent(subject, 4).subject, line)
+                    handled = true
+                }
+                if(handled === false) { open("paragraph", line); appendLine(subject, line) }
+            }
+        })
+        if(Markers.blank(line.subject) === false) {
+            live: top
+            while(live !== null) {
+                if((live.kind == "blockquote") || (live.kind == "list") || (live.kind == "listItem") || (live.kind == "document")) { live.end = line.end }
+                live = live.parent
+            }
+        }
+    }
+    while(top !== root) { close() }
+    { root: root; definitions: References.finalize(definitions) }
+}

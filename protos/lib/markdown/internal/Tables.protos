@@ -1,0 +1,104 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Table-specific pipe scanning precedes inline escaping. Physical cell
+//! intervals are retained independently from trimmed and unescaped fragments.
+Source: import("./Source.protos")
+Builders: import("./Builders.protos")
+Positions: import("./Positions.protos")
+
+hasPipe: (s) => {
+    i: 0
+    while(i < Source.size(s)) {
+        if(Source.at(s, i) == 124) { ^true }
+        if((Source.at(s, i) == 92) && (Source.at(s, i + 1) == 124)) { i = i + 1 }
+        i = i + 1
+    }
+    false
+}
+
+cells: (s, maximum: null) => {
+    begin: 0
+    end: Source.size(s)
+    while((Source.at(s, begin) == 32) || (Source.at(s, begin) == 9)) { begin = begin + 1 }
+    while((Source.at(s, end - 1) == 32) || (Source.at(s, end - 1) == 9)) { end = end - 1 }
+    first: 0
+    last: Source.size(s)
+    if(Source.at(s, begin) == 124) { first = begin + 1 }
+    if((end > first) && (Source.at(s, end - 1) == 124) && (Source.at(s, end - 2) != 92)) { last = end - 1 }
+    result: Builders.array()
+    parts: Builders.array()
+    start: first
+    fragment: first
+    i: first
+    emit: (finish) => {
+        Builders.push(parts, Source.slice(s, fragment, finish))
+        point: 0
+        if(start < Source.size(s)) { point = Source.entry(s, start).start }
+        if((start == Source.size(s)) && (start > 0)) { point = Source.entry(s, start - 1).end }
+        extent: { start: point; end: point }
+        if(start < finish) { extent = Positions.span(s, start, finish) }
+        Builders.push(result, { subject: Source.trim(Source.combine(Builders.finish(parts))); extent: extent })
+        parts = Builders.array()
+    }
+    while(i < last) {
+        escaped: (Source.at(s, i) == 92) && (Source.at(s, i + 1) == 124)
+        if(escaped) {
+            Builders.push(parts, Source.slice(s, fragment, i))
+            origin: Source.entry(s, i + 1)
+            replacement: { scalar: 124; start: Source.entry(s, i).start; end: origin.end; column: origin.column; lineStart: origin.lineStart }
+            Builders.push(parts, Source.fromEntries([replacement]))
+            i = i + 2
+            fragment = i
+        }
+        escaped.ifFalse(() => {
+            if(Source.at(s, i) == 124) {
+                emit(i)
+
+                if((maximum !== null) && (result.size >= maximum)) {
+                    ^Builders.finish(result)
+                }
+
+                start = i + 1
+                fragment = start
+            }
+            i = i + 1
+        })
+    }
+    emit(last)
+    Builders.finish(result)
+}
+
+alignments: (s) => {
+    output: Builders.array()
+    for(cell in cells(s)) {
+        subject: cell.subject
+        start: 0
+        end: Source.size(subject)
+        left: Source.at(subject, 0) == 58
+        right: Source.at(subject, end - 1) == 58
+        if(left) { start = start + 1 }
+        if(right) { end = end - 1 }
+        if(start >= end) { ^null }
+        i: start
+        while(i < end) { if(Source.at(subject, i) != 45) { ^null }; i = i + 1 }
+        alignment: null
+        if(left) { alignment = "left" }
+        if(right) { alignment = "right" }
+        if(left && right) { alignment = "center" }
+        Builders.push(output, alignment)
+    }
+    Builders.finish(output)
+}

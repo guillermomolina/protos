@@ -1,0 +1,104 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+Markdown: import("std:markdown")
+
+tests: [
+    Test("original supplementary scalar and CRLF positions are half-open", () => {
+        root: Markdown.parse("😀a\r\nb", positions: true)
+        Assertions.require(root.span.start == 0)
+        Assertions.require(root.span.end == 5)
+        nodes: root.children[0].children
+        Assertions.require(nodes[0].span.start == 0)
+        Assertions.require(nodes[0].span.end == 2)
+        Assertions.require(nodes[1].span.start == 2)
+        Assertions.require(nodes[1].span.end == 4)
+        Assertions.require(nodes[2].span.start == 4)
+        Assertions.require(nodes[2].span.end == 5)
+    }),
+    Test("inline spans cover delimiters and reference use site", () => {
+        root: Markdown.parse("*a* [r]\n\n[r]: /u", positions: true)
+        nodes: root.children[0].children
+        Assertions.require(nodes[0].span.start == 0)
+        Assertions.require(nodes[0].span.end == 3)
+        Assertions.require(nodes[2].span.start == 4)
+        Assertions.require(nodes[2].span.end == 7)
+    }),
+    Test("coalesced decoded text covers all source syntax", () => {
+        node: Markdown.parse("a&amp;b", positions: true).children[0].children[0]
+        Assertions.require(node.span.start == 0)
+        Assertions.require(node.span.end == 7)
+    }),
+    Test("nested blocks retain outer prefixes", () => {
+        root: Markdown.parse("> - x", positions: true)
+        Assertions.require(root.children[0].span.start == 0)
+        Assertions.require(root.children[0].children[0].span.end == 5)
+    }),
+    Test("explicit empty cells have extents synthesized cells have null", () => {
+        table: Markdown.parse("|a|b|\n|-|-|\n||", profile: "commonmark-0.31.2-gfm-extensions", positions: true).children[0]
+        Assertions.require(table.children[1].children[0].span !== null)
+        Assertions.require(table.children[1].children[1].span === null)
+    }),
+    Test("disabled positions omit spans from every node", () => {
+        root: Markdown.parse("> *x*\n\n- y")
+        stack: { node: root; next: null }
+        while(stack !== null) {
+            node: stack.node
+            stack = stack.next
+            Assertions.require(node.hasSlot("span") === false)
+            if(node.hasSlot("children")) { for(child in node.children) { stack = { node: child; next: stack } } }
+        }
+    }),
+    Test("hard-break spans include spaces and the complete CRLF", () => {
+        node: Markdown.parse("a  \r\nb", positions: true).children[0].children[1]
+        Assertions.require(node.kind == "hardBreak")
+        Assertions.require(node.span.start == 1)
+        Assertions.require(node.span.end == 5)
+    }),
+    Test("explicit cell spans include untrimmed physical whitespace", () => {
+        table: Markdown.parse("a | b\n- | -\n x | y ", profile: "commonmark-0.31.2-gfm-extensions", positions: true).children[0]
+        cell: table.children[1].children[0]
+        Assertions.require(cell.span.start == 12)
+        Assertions.require(cell.span.end == 15)
+    }),
+    Test("supplementary heading positions use original scalar offsets", () => {
+        root: Markdown.parse("# 😀", positions: true)
+        heading: root.children[0]
+        text: heading.children[0]
+        Assertions.require(root.span.start == 0)
+        Assertions.require(root.span.end == 3)
+        Assertions.require(heading.span.start == 0)
+        Assertions.require(heading.span.end == 3)
+        Assertions.require(text.span.start == 2)
+        Assertions.require(text.span.end == 3)
+    }),
+    Test("soft break covers both original CRLF scalars", () => {
+        node: Markdown.parse("a\r\nb", positions: true).children[0].children[1]
+        Assertions.require(node.kind == "softBreak")
+        Assertions.require(node.span.start == 1)
+        Assertions.require(node.span.end == 3)
+    }),
+    Test("fenced block span includes the closing fence", () => {
+        root: Markdown.parse("```\r\nx\r\n```", positions: true)
+        node: root.children[0]
+        Assertions.require(node.kind == "codeBlock")
+        Assertions.require(node.value == "x\n")
+        Assertions.require(node.span.start == 0)
+        Assertions.require(node.span.end == 11)
+    })
+]
+tests.freeze()

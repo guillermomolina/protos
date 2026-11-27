@@ -1,0 +1,139 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+Markdown: import("std:markdown")
+
+tests: [
+    Test("fences retain full decoded info and EOF content terminator", () => {
+        block: Markdown.parse("~~~ lang &amp; more\nx").children[0]
+        Assertions.require(block.value == "x\n")
+        Assertions.require(block.info == "lang & more")
+    }),
+    Test("indented code has null info and strips structural indentation", () => {
+        block: Markdown.parse("    a\n\n    b\n").children[0]
+        Assertions.require(block.info === null)
+        Assertions.require(block.value == "a\n\nb\n")
+    }),
+    Test("ATX closing hashes and Setext heading levels", () => {
+        root: Markdown.parse("## x ###\n\na\n===\n\nb\n---")
+        Assertions.require(root.children[0].level == 2)
+        Assertions.require(root.children[0].children[0].value == "x")
+        Assertions.require(root.children[1].level == 1)
+        Assertions.require(root.children[2].level == 2)
+    }),
+    Test("ordered marker five cannot interrupt a paragraph", () => {
+        root: Markdown.parse("a\n5. b")
+        Assertions.require(root.children.size() == 1)
+        Assertions.require(root.children[0].kind == "paragraph")
+    }),
+    Test("different bullet spellings separate lists", () => {
+        root: Markdown.parse("- a\n+ b")
+        Assertions.require(root.children.size() == 2)
+        Assertions.require(root.children[0].kind == "list")
+        Assertions.require(root.children[1].kind == "list")
+    }),
+    Test("blank lines between items make a list loose", () => {
+        list: Markdown.parse("- a\n\n- b").children[0]
+        Assertions.require(list.tight === false)
+        Assertions.require(list.children.size() == 2)
+    }),
+    Test("blockquote lazy continuation stays in its paragraph", () => {
+        quote: Markdown.parse("> a\nb").children[0]
+        Assertions.require(quote.kind == "blockquote")
+        Assertions.require(quote.children[0].children[2].value == "b")
+    }),
+    Test("raw HTML block preserves line endings without synthetic EOF", () => {
+        block: Markdown.parse("<div>\r\nx\r</div>").children[0]
+        Assertions.require(block.kind == "htmlBlock")
+        Assertions.require(block.value == "<div>\nx\n</div>")
+    }),
+    Test("invalid less-than candidate remains Markdown", () => {
+        node: Markdown.parse("<not a tag").children[0]
+        Assertions.require(node.kind == "paragraph")
+        Assertions.require(node.children[0].value == "<not a tag")
+    }),
+    Test("definitions are removed before Setext conversion", () => {
+        root: Markdown.parse("[r]: /u\ntext\n===\n\n[r]")
+        Assertions.require(root.children[0].kind == "heading")
+        Assertions.require(root.children[0].children[0].value == "text")
+        Assertions.require(root.children[1].children[0].destination == "/u")
+    }),
+    Test("HTML recognition distinguishes all seven block categories", () => {
+        for(source in ["<script>\nx\n</script>", "<!--x-->", "<?x?>", "<!X>", "<![CDATA[x]]>", "<div>\nx", "<custom />\nx"]) {
+            Assertions.require(Markdown.parse(source).children[0].kind == "htmlBlock")
+        }
+        Assertions.require(Markdown.parse("a\n<custom />").children[0].kind == "paragraph")
+    }),
+    Test("empty ATX headings with trailing whitespace remain headings", () => {
+        for(source in ["#", "#    ", "#\t", "###     "]) {
+            root: Markdown.parse(source)
+            Assertions.require(root.children.size() == 1)
+            heading: root.children[0]
+            Assertions.require(heading.kind == "heading")
+            Assertions.require(heading.children.size() == 0)
+        }
+        null
+    }),
+    Test("blockquote outside a list is a sibling of the list", () => {
+        root: Markdown.parse("- a\n> b")
+        Assertions.require(root.children.size() == 2)
+        list: root.children[0]
+        Assertions.require(list.kind == "list")
+        Assertions.require(list.children.size() == 1)
+        Assertions.require(list.children[0].kind == "listItem")
+        Assertions.require(root.children[1].kind == "blockquote")
+    }),
+    Test("thematic break outside a list remains a sibling block", () => {
+        root: Markdown.parse("- a\n- - -")
+        Assertions.require(root.children.size() == 2)
+        Assertions.require(root.children[0].kind == "list")
+        Assertions.require(root.children[1].kind == "thematicBreak")
+    }),
+    Test("HTML type one recognizes every specified closing tag", () => {
+        root: Markdown.parse("<script>\n</style>\nnext")
+        Assertions.require(root.children.size() == 2)
+        Assertions.require(root.children[0].kind == "htmlBlock")
+        Assertions.require(root.children[0].value == "<script>\n</style>\n")
+        Assertions.require(root.children[1].kind == "paragraph")
+    }),
+    Test("lowercase HTML declaration interrupts a paragraph", () => {
+        root: Markdown.parse("a\n<!doctype html>\nb")
+        Assertions.require(root.children.size() == 3)
+        Assertions.require(root.children[0].kind == "paragraph")
+        Assertions.require(root.children[1].kind == "htmlBlock")
+        Assertions.require(root.children[2].kind == "paragraph")
+    }),
+    Test("a trailing nested blank separates outer list items", () => {
+        list: Markdown.parse("- a\n  - b\n  - c\n\n- d\n  - e\n  - f").children[0]
+        Assertions.require(list.kind == "list")
+        Assertions.require(list.tight === false)
+        Assertions.require(list.children.size() == 2)
+        Assertions.require(list.children[0].children[1].kind == "list")
+        Assertions.require(list.children[0].children[1].tight === true)
+        Assertions.require(list.children[1].children[1].tight === true)
+    }),
+    Test("an internal nested blank does not loosen its outer list", () => {
+        list: Markdown.parse("- foo\n  - bar\n    - baz\n\n\n      bim").children[0]
+        middle: list.children[0].children[1]
+        inner: middle.children[0].children[1]
+        Assertions.require(list.tight === true)
+        Assertions.require(middle.tight === true)
+        Assertions.require(inner.tight === false)
+        Assertions.require(inner.children[0].children.size() == 2)
+    })
+]
+tests.freeze()

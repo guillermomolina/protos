@@ -14,6 +14,9 @@ The ordinary Standard Library `std:sqlite` is normatively owned by
 [`semantics/SQLITE.md`](semantics/SQLITE.md); it introduces neither a new Core
 type nor a global storage capability.
 
+The independently importable Standard Library `std:markdown` is normatively owned by
+[`semantics/MARKDOWN.md`](semantics/MARKDOWN.md); it adds no Core or Prelude binding.
+
 Normative concurrency-domain semantics are defined by the modular specifications
 under `concurrency/`. Non-normative unresolved concurrency design notes live in
 `../docs/design/CONCURRENCY_DESIGN.md` and are not a source of observable behavior.

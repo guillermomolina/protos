@@ -1,0 +1,75 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Physical maximal backtick runs indexed by length and source position.
+Source: import("./Source.protos")
+Builders: import("./Builders.protos")
+
+index: (s) => {
+    grouped: Map()
+    rawEnd: Map()
+    i: 0
+    while(i < Source.size(s)) {
+        if(Source.at(s, i) == 96) {
+            start: i
+            while(Source.at(s, i) == 96) { i = i + 1 }
+            width: i - start
+            if(grouped.containsKey(width) === false) { grouped[width] = Builders.array() }
+            Builders.push(grouped[width], start)
+            j: start
+            while(j < i) { rawEnd[j] = i; j = j + 1 }
+        }
+        (Source.at(s, i) == 96).ifFalse(() => { i = i + 1 })
+    }
+    positions: Map()
+    grouped.each((width, builder) => { positions[width] = Builders.finish(builder) })
+    { positions: positions; rawEnd: rawEnd }
+}
+
+recognize: (s, start, runs) => {
+    if(runs.rawEnd.containsKey(start) === false) { ^null }
+    begin: runs.rawEnd[start]
+    width: begin - start
+    if(runs.positions.containsKey(width) === false) { ^null }
+    candidates: runs.positions[width]
+    low: 0
+    high: candidates.size()
+    while(low < high) {
+        mid: (low + high).div(2)
+        if(candidates[mid] < begin) { low = mid + 1 }
+        (candidates[mid] < begin).ifFalse(() => { high = mid })
+    }
+    if(low == candidates.size()) { ^null }
+    end: candidates[low]
+    allSpaces: true
+    i: begin
+    while(i < end) {
+        c: Source.at(s, i)
+        if((c != 32) && (c != 10) && (c != 13)) { allSpaces = false }
+        i = i + 1
+    }
+    space: (c) => { (c == 32) || (c == 10) || (c == 13) }
+    finish: end
+    if((allSpaces === false) && space(Source.at(s, begin)) && space(Source.at(s, end - 1))) { begin = begin + 1; finish = finish - 1 }
+    output: Builders.text()
+    i = begin
+    while(i < finish) {
+        c: Source.at(s, i)
+        if((c == 10) || (c == 13)) { c = 32 }
+        Builders.scalar(output, c)
+        i = i + 1
+    }
+    { value: Builders.string(output); end: end + width }
+}

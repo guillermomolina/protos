@@ -1,0 +1,144 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Source-order definitions, stable lexicographic sorting and binary lookup.
+Source: import("./Source.protos")
+Characters: import("./Characters.protos")
+Builders: import("./Builders.protos")
+LinkSyntax: import("./LinkSyntax.protos")
+Arrays: import("std:collections/array")
+Entities: import("./Entities.protos")
+
+key: (subject) => {
+    output: Builders.text()
+    pending: false
+    written: false
+    index: 0
+    while(index < Source.size(subject)) {
+        entry: Source.entry(subject, index)
+        index = index + 1
+        if(Characters.labelSpace(entry.scalar)) { if(written) { pending = true } }
+        Characters.labelSpace(entry.scalar).ifFalse(() => {
+            if(pending) { Builders.scalar(output, 32); pending = false }
+            Builders.append(output, Characters.fold(entry.scalar))
+            written = true
+        })
+    }
+    Source.scan(Builders.string(output))
+}
+
+compare: (left, right) => {
+    i: 0
+    while((i < Source.size(left)) && (i < Source.size(right))) {
+        if(Source.entry(left, i).scalar < Source.entry(right, i).scalar) { ^(-1) }
+        if(Source.entry(left, i).scalar > Source.entry(right, i).scalar) { ^1 }
+        i = i + 1
+    }
+    if(Source.size(left) < Source.size(right)) { ^(-1) }
+    if(Source.size(left) > Source.size(right)) { ^1 }
+    0
+}
+
+finalize: (definitions) => {
+    sorted: Arrays.sort(Builders.finish(definitions), (a, b) => { compare(a.key, b.key) < 0 })
+    output: Builders.array()
+    previous: null
+    for(definition in sorted) {
+        if((previous === null) || (compare(previous, definition.key) != 0)) {
+            committed: LinkSyntax.commit({ destinationRange: definition.destinationRange; titleRange: definition.titleRange; end: 0 })
+            committed.key: definition.key
+            Builders.push(output, committed)
+            previous = definition.key
+        }
+    }
+    Builders.finish(output)
+}
+
+lookup: (definitions, label) => {
+    normalized: key(label)
+    low: 0
+    high: definitions.size()
+    while(low < high) {
+        mid: (low + high).div(2)
+        order: compare(normalized, definitions[mid].key)
+        if(order == 0) { ^definitions[mid] }
+        if(order < 0) { high = mid }
+        (order < 0).ifFalse(() => { low = mid + 1 })
+    }
+    null
+}
+
+// Recognize one definition at a paragraph cursor, including a next-line title.
+// Failure never moves the caller's cursor.
+prefix: (s, start, scan) => {
+    i: start
+    while((i - start < 4) && (Source.at(s, i) == 32)) { i = i + 1 }
+    if(i - start > 3) { ^null }
+    label: LinkSyntax.label(s, i)
+    if(label === null) { ^null }
+    if(Source.at(s, label.end) != 58) { ^null }
+    i = label.end + 1
+    breaks: 0
+    while(
+        (Source.at(s, i) == 32) ||
+        (Source.at(s, i) == 9) ||
+        (Source.at(s, i) == 10)
+    ) {
+        if(Source.at(s, i) == 10) { breaks = breaks + 1 }
+        if(breaks > 1) { ^null }
+        i = i + 1
+    }
+    destination: LinkSyntax.destination(s, i, scan)
+    if((destination === null) || (destination.end == i)) { ^null }
+    after: destination.end
+    while((Source.at(s, after) == 32) || (Source.at(s, after) == 9)) { after = after + 1 }
+    lineEnd: after
+    if(Source.at(s, lineEnd) == 10) { lineEnd = lineEnd + 1 }
+    canEnd: (after == Source.size(s)) || (Source.at(s, after) == 10)
+    titleStart: after
+    if(Source.at(s, titleStart) == 10) {
+        titleStart = titleStart + 1
+        while((Source.at(s, titleStart) == 32) || (Source.at(s, titleStart) == 9)) { titleStart = titleStart + 1 }
+    }
+    caption: null
+    end: lineEnd
+    if(titleStart > destination.end) {
+        candidate: LinkSyntax.title(s, titleStart, scan)
+        if(candidate !== null) {
+            trailing: candidate.end
+            while((Source.at(s, trailing) == 32) || (Source.at(s, trailing) == 9)) { trailing = trailing + 1 }
+            if((trailing == Source.size(s)) || (Source.at(s, trailing) == 10)) {
+                caption = candidate.subject
+                end = trailing
+                if(Source.at(s, end) == 10) { end = end + 1 }
+                canEnd = true
+            }
+        }
+    }
+    if(canEnd === false) { ^null }
+    { definition: { key: key(label.subject); destinationRange: destination.subject; titleRange: caption }; end: end }
+}
+
+leading: (subject, definitions) => {
+    start: 0
+    scan: LinkSyntax.state()
+    scanning: true
+    while(scanning && (start < Source.size(subject))) {
+        found: prefix(subject, start, scan)
+        if(found === null) { scanning = false }
+        if(found !== null) { Builders.push(definitions, found.definition); start = found.end }
+    }
+    Source.slice(subject, start, Source.size(subject))
+}

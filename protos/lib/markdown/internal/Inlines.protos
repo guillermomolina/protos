@@ -1,0 +1,409 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Forward inline tokenization, bracket commitment and delimiter resolution.
+Source: import("./Source.protos")
+Builders: import("./Builders.protos")
+Characters: import("./Characters.protos")
+Entities: import("./Entities.protos")
+Positions: import("./Positions.protos")
+Nodes: import("./Nodes.protos")
+Links: import("./LinkSyntax.protos")
+References: import("./References.protos")
+Code: import("./CodeSpans.protos")
+Html: import("./HtmlSyntax.protos")
+Autolinks: import("./Autolinks.protos")
+Delimiters: import("./Delimiters.protos")
+Limits: import("./Limits.protos")
+
+materialize: (sequence, positions, budget, depth) => {
+    stack: { sequence: sequence; token: sequence.head.next; output: Builders.array(); text: Builders.text(); extent: null; owner: null; parent: null; depth: depth; textScalars: 0 }
+    flush: (frame) => {
+        if(frame.textScalars > 0) {
+            Limits.charge(budget, 1, frame.depth + 1)
+            text: Builders.string(frame.text)
+            Builders.push(frame.output, Nodes.value("text", text, positions, frame.extent))
+        }
+        frame.textScalars = 0
+        frame.text = Builders.text()
+        frame.extent = null
+    }
+    while(stack !== null) {
+        frame: stack
+        entry: frame.token
+        if(entry === frame.sequence.tail) {
+            flush(frame)
+            result: Builders.finish(frame.output)
+            if(frame.parent === null) { ^result }
+            stack = frame.parent
+            node: null
+            if((frame.owner.kind == "link") || (frame.owner.kind == "image")) {
+                node = Nodes.link(frame.owner.kind, frame.owner.destination, frame.owner.title, result, positions, frame.owner.extent)
+            }
+            ((frame.owner.kind == "link") || (frame.owner.kind == "image")).ifFalse(() => {
+                node = Nodes.container(frame.owner.kind, result, positions, frame.owner.extent)
+            })
+            Builders.push(stack.output, node)
+        }
+        (entry === frame.sequence.tail).ifFalse(() => {
+            frame.token = entry.next
+            if(entry.kind == "text") {
+                if(entry.repeat > 0) {
+                    Limits.text(budget, entry.repeat)
+                    frame.textScalars = frame.textScalars + entry.repeat
+                    j: 0
+                    while(j < entry.repeat) { Builders.scalar(frame.text, entry.scalar); j = j + 1 }
+                }
+                if(entry.value !== null) {
+                    count: entry.value.size()
+                    Limits.text(budget, count)
+                    frame.textScalars = frame.textScalars + count
+                    Builders.append(frame.text, entry.value)
+                }
+                if((entry.repeat > 0) || ((entry.value !== null) && (entry.value.size() > 0))) {
+                    frame.extent = Positions.union(frame.extent, entry.extent)
+                }
+            }
+            (entry.kind == "text").ifFalse(() => {
+                flush(frame)
+                if(entry.children !== null) {
+                    Limits.charge(budget, 1, frame.depth + 1, entry.textSize)
+                    stack = { sequence: entry.children; token: entry.children.head.next; output: Builders.array(); text: Builders.text(); extent: null; owner: entry; parent: frame; depth: frame.depth + 1; textScalars: 0 }
+                }
+                (entry.children !== null).ifFalse(() => {
+                    cost: 0
+                    if(entry.value !== null) { cost = entry.value.size() }
+                    Limits.charge(budget, 1, frame.depth + 1, cost)
+                    node: null
+                    if(entry.value !== null) { node = Nodes.value(entry.kind, entry.value, positions, entry.extent) }
+                    if(entry.value === null) { node = Nodes.leaf(entry.kind, positions, entry.extent) }
+                    Builders.push(frame.output, node)
+                })
+            })
+        })
+    }
+    []
+}
+
+parse: (s, definitions, extension, positions, budget, depth) => {
+    linkScan: Links.state()
+    htmlFailures: Html.state()
+    sequence: Delimiters.sequence()
+    delimiters: { searchLast: null; serial: 0 }
+    brackets: null
+    runs: Code.index(s)
+    i: 0
+    emit: (kind, value, start, end) => {
+        token: Delimiters.token(kind, Positions.span(s, start, end))
+        token.value = value
+        token.first = start
+        token.last = end
+        Delimiters.append(sequence, token)
+    }
+    while(i < Source.size(s)) {
+        start: i
+        c: Source.at(s, i)
+        handled: false
+        if(c == 92) {
+            after: Source.at(s, i + 1)
+            if(Characters.escapable(after)) { emit("text", Characters.string(after), i, i + 2); i = i + 2; handled = true }
+            if(after == 10) { emit("hardBreak", null, i, i + 2); i = i + 2; handled = true }
+        }
+        if((handled === false) && (c == 38)) {
+            entity: Entities.recognize(s, i)
+            if(entity !== null) { emit("text", entity.value, i, entity.end); i = entity.end; handled = true }
+        }
+        if((handled === false) && (c == 96)) {
+            code: Code.recognize(s, i, runs)
+            if(code !== null) { emit("codeSpan", code.value, i, code.end); i = code.end; handled = true }
+            if(code === null) {
+                end: i + 1
+                while(Source.at(s, end) == 96) { end = end + 1 }
+                literal: emit("text", Source.value(s, i, end), i, end)
+                literal.raw = true
+                i = end
+                handled = true
+            }
+        }
+        if((handled === false) && (c == 60)) {
+            autolink: Autolinks.angle(s, i)
+            if(autolink !== null) {
+                token: emit("link", null, i, autolink.end)
+                token.destination = autolink.destination
+                token.textSize = autolink.destination.size()
+                token.children = Delimiters.sequence()
+                text: Delimiters.token("text", Positions.span(s, autolink.displayStart, autolink.displayEnd))
+                text.value = Source.value(s, autolink.displayStart, autolink.displayEnd)
+                Delimiters.append(token.children, text)
+                older: brackets
+                scanning: true
+                while((older !== null) && scanning) {
+                    if(older.image === false) {
+                        if(older.active === false) { scanning = false }
+                        older.active = false
+                    }
+                    older = older.previous
+                }
+                i = autolink.end
+                handled = true
+            }
+            if(handled === false) {
+                end: Html.recognize(s, i, htmlFailures)
+                if(end !== null) { emit("htmlInline", Source.value(s, i, end), i, end); i = end; handled = true }
+            }
+        }
+        if((handled === false) && ((c == 91) || ((c == 33) && (Source.at(s, i + 1) == 91)))) {
+            image: c == 33
+            end: i + 1
+            if(image) { end = end + 1 }
+            token: emit("text", Source.value(s, i, end), i, end)
+            token.raw = true
+            if(brackets !== null) { brackets.intervening = true }
+            brackets = { intervening: false; previous: brackets; token: token; start: i; content: end; image: image; active: true; bottom: delimiters.serial }
+            i = end
+            handled = true
+        }
+        if((handled === false) && (c == 93) && (brackets !== null)) {
+            bracket: brackets
+            brackets = bracket.previous
+            recognized: null
+            if(bracket.active) {
+                candidate: Links.inline(s, i + 1, linkScan)
+                if(candidate !== null) { recognized = Links.commit(candidate) }
+                if(recognized === null) {
+                    explicit: Links.label(s, i + 1)
+                    collapsed: Source.matches(s, i + 1, "[]")
+                    label: null
+                    end: i + 1
+                    if(explicit !== null) { label = explicit.subject; end = explicit.end }
+                    if((explicit === null) && (bracket.intervening === false)) {
+                        own: Links.label(s, bracket.content - 1)
+                        if((own !== null) && (own.end == i + 1)) {
+                            label = own.subject
+                            if(collapsed) { end = i + 3 }
+                        }
+                    }
+                    if(label !== null) {
+                        reference: References.lookup(definitions, label)
+                        if(reference !== null) { recognized = { destination: reference.destination; title: reference.title; textSize: reference.textSize; end: end } }
+                    }
+                }
+            }
+            if(recognized !== null) {
+                closer: emit("text", "", i, i + 1)
+                Delimiters.resolve(delimiters, bracket.bottom)
+                kind: "link"
+                if(bracket.image) { kind = "image" }
+                token: Delimiters.wrap(bracket.token, closer, kind, Positions.span(s, bracket.start, recognized.end))
+                token.destination = recognized.destination
+                token.title = recognized.title
+                token.textSize = recognized.textSize
+                bracket.token.value = ""
+                bracket.token.raw = false
+                if(bracket.image === false) {
+                    older: brackets
+                    scanning: true
+                    while((older !== null) && scanning) {
+                        if(older.image === false) {
+                            if(older.active === false) { scanning = false }
+                            older.active = false
+                        }
+                        older = older.previous
+                    }
+                }
+                i = recognized.end
+                handled = true
+            }
+        }
+        if((handled === false) && ((c == 42) || (c == 95) || (extension && (c == 126)))) {
+            end: i + 1
+            while(Source.at(s, end) == c) { end = end + 1 }
+            width: end - i
+            if((c == 126) && (width > 2)) {
+                literal: emit("text", null, i, end)
+                literal.raw = true
+                literal.scalar = c
+                literal.repeat = width
+                i = end
+                handled = true
+            }
+
+            if((c != 126) || (width <= 2)) {
+                token: emit("text", null, i, end)
+                token.raw = true
+                token.scalar = c
+                token.repeat = width
+                flank: Delimiters.flanking(Source.at(s, i - 1), Source.at(s, end), c)
+                delimiters.serial = delimiters.serial + 1
+                record: {
+                    id: delimiters.serial
+                    mark: c
+                    original: width
+                    remaining: width
+                    opening: flank.opening
+                    closing: flank.closing
+                    token: token
+                    searchPrevious: delimiters.searchLast
+                    searchNext: null
+                    active: true
+                }
+
+                if(delimiters.searchLast !== null) {
+                    delimiters.searchLast.searchNext = record
+                }
+                delimiters.searchLast = record
+                i = end
+                handled = true
+            }
+        }
+        if((handled === false) && ((c == 32) || (c == 9) || (c == 10))) {
+            if((c == 32) || (c == 9)) {
+                end: i
+                while((Source.at(s, end) == 32) || (Source.at(s, end) == 9)) { end = end + 1 }
+                if(Source.at(s, end) == 10) {
+                    spaces: 0
+                    j: end - 1
+                    while(Source.at(s, j) == 32) { spaces = spaces + 1; j = j - 1 }
+                    kind: "softBreak"
+                    begin: end
+                    if(spaces >= 2) { kind = "hardBreak"; begin = end - spaces }
+                    if(end + 1 < Source.size(s)) { emit(kind, null, begin, end + 1) }
+                    i = end + 1
+                    handled = true
+                }
+                if((handled === false) && (end == Source.size(s))) {
+                    i = end
+                    handled = true
+                }
+
+                if(handled === false) {
+                    literal: emit("text", Source.value(s, i, end), i, end)
+                    literal.raw = true
+                    i = end
+                    handled = true
+                }
+            }
+            if((handled === false) && (c == 10)) {
+                if(i + 1 < Source.size(s)) { emit("softBreak", null, i, i + 1) }
+                i = i + 1
+                handled = true
+            }
+        }
+        handled.ifFalse(() => {
+            end: i + 1
+            ordinary: true
+            while((end < Source.size(s)) && ordinary) {
+                next: Source.at(s, end)
+                ordinary = (next != 92) && (next != 38) && (next != 96) && (next != 60) && (next != 91) && (next != 93) && (next != 33) && (next != 42) && (next != 95) && (next != 126) && (next != 32) && (next != 9) && (next != 10)
+                if(ordinary) { end = end + 1 }
+            }
+            literal: emit("text", Source.value(s, i, end), i, end)
+            literal.raw = true
+            i = end
+        })
+        if((i > start) && (Source.at(s, i - 1) == 10)) {
+            while((Source.at(s, i) == 32) || (Source.at(s, i) == 9)) { i = i + 1 }
+        }
+    }
+    Delimiters.resolve(delimiters, 0)
+    if(extension) { extend(sequence, s) }
+    materialize(sequence, positions, budget, depth)
+}
+
+// A semantic text projection retains transformed values and source origins.
+// Only raw characters can initiate recognition; entities/escapes are never
+// decoded a second time or promoted into fresh Markdown delimiters.
+projectText: (first, last, source) => {
+    parts: Builders.array()
+    if(first.first > 0) { Builders.push(parts, Source.slice(source, first.first - 1, first.first)) }
+    token: first
+    while(true) {
+        if(token.raw) { Builders.push(parts, Source.slice(source, token.first, token.last)) }
+        token.raw.ifFalse(() => {
+            replacement: Source.scan(token.value)
+            mapped: Builders.array()
+            i: 0
+            while(i < Source.size(replacement)) {
+                origin: Source.entry(replacement, i)
+                Builders.push(mapped, { scalar: origin.scalar; start: token.extent.start; end: token.extent.end; column: origin.column; lineStart: origin.lineStart; fresh: false })
+                i = i + 1
+            }
+            Builders.push(parts, Source.fromEntries(Builders.finish(mapped)))
+        })
+        if(token === last) { ^Source.combine(Builders.finish(parts)) }
+        token = token.next
+    }
+}
+
+extend: (root, source) => {
+    stack: { sequence: root; next: null }
+    while(stack !== null) {
+        sequence: stack.sequence
+        stack = stack.next
+        entry: sequence.head.next
+        while(entry !== sequence.tail) {
+            if((entry.children !== null) && (entry.kind != "link")) { stack = { sequence: entry.children; next: stack } }
+            if(textToken(entry) === false) { entry = entry.next }
+            if((entry !== sequence.tail) && textToken(entry)) {
+                first: entry
+                last: entry
+                while((last.next !== sequence.tail) && textToken(last.next) && (last.last == last.next.first)) { last = last.next }
+                subject: projectText(first, last, source)
+                replacement: Delimiters.sequence()
+                begin: 0
+                if(first.first > 0) { begin = 1 }
+                i: begin
+                emitText: (start, end) => {
+                    if(start < end) {
+                        token: Delimiters.token("text", Positions.span(subject, start, end))
+                        token.value = Source.value(subject, start, end)
+                        Delimiters.append(replacement, token)
+                    }
+                }
+                while(i < Source.size(subject)) {
+                    link: Autolinks.extended(subject, i)
+                    if(link === null) { i = i + 1 }
+                    if(link !== null) {
+                        emitText(begin, i)
+                        text: Delimiters.token("text", Positions.span(subject, i, link.end))
+                        text.value = Source.value(subject, i, link.end)
+                        token: Delimiters.token("link", text.extent)
+                        token.destination = link.prefix.concat(text.value)
+                        token.textSize = token.destination.size()
+                        token.children = Delimiters.sequence()
+                        Delimiters.append(token.children, text)
+                        Delimiters.append(replacement, token)
+                        i = link.end
+                        begin = i
+                    }
+                }
+                emitText(begin, i)
+                before: first.previous
+                after: last.next
+                before.next = replacement.head.next
+                before.next.previous = before
+                replacement.tail.previous.next = after
+                after.previous = replacement.tail.previous
+                entry = after
+            }
+        }
+    }
+}
+
+textToken: (token) => {
+    if((token.kind != "text") || (token.first < 0) || (token.first >= token.last)) { ^false }
+    (token.repeat > 0) || ((token.value !== null) && (token.value.size() > 0))
+}
+literalToken: (token) => { token.raw && textToken(token) }

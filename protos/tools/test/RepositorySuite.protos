@@ -292,6 +292,15 @@ conformanceProgressGroups: Array(
         Array(),
         Array("library/toml")
     ),
+    subdividedConformanceProgressGroup(
+        "conformance/standard-library/markdown-official",
+        Array("library/markdown/official/suite")
+    ),
+    conformanceProgressGroup(
+        "conformance/standard-library/markdown",
+        Array(),
+        Array("library/markdown")
+    ),
     conformanceProgressGroup(
         "conformance/standard-library/collections",
         Array("library/collections"),

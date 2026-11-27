@@ -79,3 +79,23 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
+
+## Markdown upstream data and conformance sources
+
+The Markdown implementation's generated Unicode and named-entity data and its
+conformance fixtures are projected only from the exact retained local inputs
+described in
+[`protos/tests/conformance/library/markdown/official/upstream/README.md`](protos/tests/conformance/library/markdown/official/upstream/README.md).
+The original inputs and applicable notices are retained alongside
+`PROVENANCE.json` and `SHA256SUMS` in that directory. The generated
+sources retain the corresponding upstream attribution.
+
+CommonMark 0.31.2 and published GFM 0.29 specification examples retain CC BY-SA
+4.0 attribution. Unicode 17.0.0 category and full-folding data retain Unicode
+License V3 (the notice above applies). The retained WHATWG notice identifies
+CC BY 4.0 publication terms and BSD 3-Clause terms for portions incorporated
+into source code. The cmark 0.31.2 entity table at commit
+`eec0eeba6d31189fd828314576494566d539b1e3` is an independent comparison input
+whose actual upstream notices must accompany it. The generator requires local
+original licenses before emitting data, provenance or fixture sources. These
+materials must not be relabeled as original Protos APL material.

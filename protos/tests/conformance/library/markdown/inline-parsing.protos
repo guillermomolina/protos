@@ -1,0 +1,100 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+Markdown: import("std:markdown")
+
+tests: [
+    Test("nested emphasis and strong retain semantic nesting", () => {
+        node: Markdown.parse("***x***").children[0].children[0]
+        Assertions.require(node.kind == "emphasis")
+        Assertions.require(node.children[0].kind == "strong")
+        Assertions.require(node.children[0].children[0].value == "x")
+    }),
+    Test("intraword underscores remain literal", () => {
+        node: Markdown.parse("a_b_c").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "a_b_c")
+    }),
+    Test("code-span normalization preserves literal entity and escape data", () => {
+        node: Markdown.parse("` &amp; \\\\ `").children[0].children[0]
+        Assertions.require(node.kind == "codeSpan")
+        Assertions.require(node.value == "&amp; \\\\")
+    }),
+    Test("code spans match exact maximal backtick runs", () => {
+        node: Markdown.parse("`` a ` b ``").children[0].children[0]
+        Assertions.require(node.value == "a ` b")
+    }),
+    Test("destinations remain untrusted data and titles distinguish absence", () => {
+        root: Markdown.parse("[a](javascript:alert(1))")
+        a: root.children[0].children[0]
+        Assertions.require(a.destination == "javascript:alert(1)")
+        Assertions.require(a.title === null)
+        b: Markdown.parse("[b](u \"\")").children[0].children[0]
+        Assertions.require(b.title == "")
+    }),
+    Test("angle URI and email autolinks preserve display spelling", () => {
+        root: Markdown.parse("<https://example.org> <a@example.org>")
+        Assertions.require(root.children[0].children[0].destination == "https://example.org")
+        Assertions.require(root.children[0].children[2].destination == "mailto:a@example.org")
+    }),
+    Test("backslash and two-space hard breaks differ from soft breaks", () => {
+        nodes: Markdown.parse("a  \nb\\\nc\nd").children[0].children
+        Assertions.require(nodes[1].kind == "hardBreak")
+        Assertions.require(nodes[3].kind == "hardBreak")
+        Assertions.require(nodes[5].kind == "softBreak")
+    }),
+    Test("escaped initial backtick leaves an eligible code opener", () => {
+        nodes: Markdown.parse("\\``x`").children[0].children
+        Assertions.require(nodes.size() == 2)
+        Assertions.require(nodes[0].kind == "text")
+        Assertions.require(nodes[0].value == "`")
+        Assertions.require(nodes[1].kind == "codeSpan")
+        Assertions.require(nodes[1].value == "x")
+    }),
+    Test("backslash does not escape a closing code span delimiter", () => {
+        node: Markdown.parse("`x\\`").children[0].children[0]
+        Assertions.require(node.kind == "codeSpan")
+        Assertions.require(node.value == "x\\")
+    }),
+    Test("angle email rejects an unquoted double quote", () => {
+        node: Markdown.parse("<a\"b@example.org>").children[0].children[0]
+        Assertions.require(node.kind == "text")
+        Assertions.require(node.value == "<a\"b@example.org>")
+    }),
+    Test("outer emphasis survives inner link delimiter resolution", () => {
+        node: Markdown.parse("*a [**b**](u) c*").children[0].children[0]
+        Assertions.require(node.kind == "emphasis")
+        Assertions.require(node.children.size() == 3)
+        Assertions.require(node.children[0].value == "a ")
+        link: node.children[1]
+        Assertions.require(link.kind == "link")
+        Assertions.require(link.children[0].kind == "strong")
+        Assertions.require(link.children[0].children[0].value == "b")
+        Assertions.require(node.children[2].value == " c")
+    }),
+    Test("completed link scope cannot match external delimiters", () => {
+        nodes: Markdown.parse("*[a*](u) *b*").children[0].children
+        Assertions.require(nodes.size() == 4)
+        Assertions.require(nodes[0].value == "*")
+        Assertions.require(nodes[1].kind == "link")
+        Assertions.require(nodes[1].children[0].value == "a*")
+        Assertions.require(nodes[2].value == " ")
+        Assertions.require(nodes[3].kind == "emphasis")
+        Assertions.require(nodes[3].children[0].value == "b")
+    })
+]
+tests.freeze()

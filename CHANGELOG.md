@@ -8,6 +8,12 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.250-SNAPSHOT
+
+- **I183 / D266-D1.** Add the ordinary Protos `std:markdown` module with CommonMark 0.31.2 and the selected GFM extensions, fresh semantic trees, optional original scalar source spans and deterministic resource limits.
+- Include pinned Unicode 17.0.0 and HTML5 entity data, reproducible offline data projection, retained upstream licenses, official conformance cases and focused AST, isolation, Unicode and resource-boundary tests.
+- Add Markdown library documentation, a semantic-tree example and benchmark workloads; integrate official progress grouping and auxiliary test-source ownership.
+
 ## 0.4.249-SNAPSHOT
 
 - **PERF044.** Preserve constant local accessors in arithmetic stores, update bytecode assertions and refresh PE baselines.

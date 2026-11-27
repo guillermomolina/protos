@@ -1,0 +1,114 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+Markdown: import("std:markdown")
+
+tests: [
+    Test("profiles differ on tables and strikethrough", () => {
+        source: "|a|b|\n|:-|--:|\n|x|\n|y|z|extra|"
+        Assertions.require(Markdown.parse(source).children[0].kind == "paragraph")
+        table: Markdown.parse(source, profile: "commonmark-0.31.2-gfm-extensions").children[0]
+        Assertions.require(table.kind == "table")
+        Assertions.require(table.alignments[0] == "left")
+        Assertions.require(table.alignments[1] == "right")
+        Assertions.require(table.children[1].children[1].children.size() == 0)
+        Assertions.require(table.children[2].children.size() == 2)
+    }),
+    Test("table pipe escapes apply inside code spans", () => {
+        table: Markdown.parse("|a|\n|-|\n|`x\\|y`|", profile: "commonmark-0.31.2-gfm-extensions").children[0]
+        Assertions.require(table.children[1].children[0].children[0].value == "x|y")
+    }),
+    Test("task items distinguish ordinary incomplete complete and isolated markers", () => {
+        list: Markdown.parse("- [ ] todo\n- [x] done\n- [X] done\n- [ ]", profile: "commonmark-0.31.2-gfm-extensions").children[0]
+        Assertions.require(list.children[0].task === false)
+        Assertions.require(list.children[1].task === true)
+        Assertions.require(list.children[2].task === true)
+        Assertions.require(list.children[3].task === null)
+        Assertions.require(Markdown.parse("- [x] done").children[0].children[0].task === null)
+    }),
+    Test("single and double tildes strike but triple runs stay literal", () => {
+        for(source in ["~x~", "~~x~~"]) {
+            Assertions.require(Markdown.parse(source, profile: "commonmark-0.31.2-gfm-extensions").children[0].children[0].kind == "strikethrough")
+        }
+        nodes: Markdown.parse("a ~~~x~~~", profile: "commonmark-0.31.2-gfm-extensions").children[0].children
+        Assertions.require(nodes.size() == 1)
+        Assertions.require(nodes[0].kind == "text")
+        Assertions.require(nodes[0].value == "a ~~~x~~~")
+    }),
+    Test("extended protocols are profile selected and destinations remain data", () => {
+        for(source in ["www.example.org", "https://example.org", "http://example.org", "a@example.org", "mailto:a@example.org", "xmpp:a@example.org/resource"]) {
+            node: Markdown.parse(source, profile: "commonmark-0.31.2-gfm-extensions").children[0].children[0]
+            Assertions.require(node.kind == "link")
+            Assertions.require(Markdown.parse(source).children[0].children[0].kind == "text")
+        }
+        null
+    }),
+    Test("extended autolinks strip suffix punctuation and excess parentheses", () => {
+        nodes: Markdown.parse("https://example.org/a(b)).", profile: "commonmark-0.31.2-gfm-extensions").children[0].children
+        Assertions.require(nodes[0].destination == "https://example.org/a(b)")
+        Assertions.require(nodes[1].value == ").")
+    }),
+    Test("code spans and existing links acquire no nested extended links", () => {
+        root: Markdown.parse("`www.example.org` [www.example.org](u)", profile: "commonmark-0.31.2-gfm-extensions")
+        Assertions.require(root.children[0].children[0].kind == "codeSpan")
+        Assertions.require(root.children[0].children[2].children[0].kind == "text")
+    }),
+    Test("long tilde runs cannot expose shorter delimiter suffixes", () => {
+        for(source in ["a ~~~b~~", "a ~~b~~~", "a ~~~~b~~~~"]) {
+            nodes: Markdown.parse(source, profile: "commonmark-0.31.2-gfm-extensions").children[0].children
+            Assertions.require(nodes.size() == 1)
+            Assertions.require(nodes[0].kind == "text")
+            Assertions.require(nodes[0].value == source)
+        }
+        null
+    }),
+    Test("table header may follow preceding paragraph lines", () => {
+        root: Markdown.parse(
+            "before\n|a|b|\n|-|-|",
+            profile: "commonmark-0.31.2-gfm-extensions",
+            positions: true
+        )
+        Assertions.require(root.children.size() == 2)
+        Assertions.require(root.children[0].kind == "paragraph")
+        Assertions.require(root.children[0].children[0].value == "before")
+        Assertions.require(root.children[0].span.end == 6)
+        Assertions.require(root.children[1].kind == "table")
+        Assertions.require(root.children[1].span.start == 7)
+        Assertions.require(root.children[1].children[0].span.start == 7)
+        Assertions.require(root.children[1].children[0].span.end == 12)
+    }),
+    Test("excess body cells do not enter the semantic tree", () => {
+        table: Markdown.parse(
+            "|a|b|\n|-|-|\n|x|y|z|w|",
+            profile: "commonmark-0.31.2-gfm-extensions"
+        ).children[0]
+        row: table.children[1]
+        Assertions.require(row.children.size() == 2)
+        Assertions.require(row.children[0].children[0].value == "x")
+        Assertions.require(row.children[1].children[0].value == "y")
+    }),
+    Test("task markers distinguish ASCII from Unicode whitespace", () => {
+        list: Markdown.parse(
+            "- [\u{a0}] a\n- [x]\u{a0}b\n- [x] c",
+            profile: "commonmark-0.31.2-gfm-extensions"
+        ).children[0]
+        Assertions.require(list.children[0].task === null)
+        Assertions.require(list.children[1].task === null)
+        Assertions.require(list.children[2].task === true)
+    })
+]
+tests.freeze()

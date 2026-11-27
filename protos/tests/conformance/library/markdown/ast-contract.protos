@@ -1,0 +1,461 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/assertions")
+JSON: import("std:json/json")
+Test: import("std:test/test")
+Markdown: import("std:markdown")
+
+tests: [
+    Test("exact own slots for document", () => {
+        root: Markdown.parse("", profile: "commonmark-0.31.2-gfm-extensions")
+        stack: { node: root; next: null }
+        found: null
+        while(stack !== null) {
+            node: stack.node
+            stack = stack.next
+            if(node.kind == "document") { found = node }
+            if(node.hasSlot("children")) {
+                for(child in node.children) { stack = { node: child; next: stack } }
+            }
+        }
+        Assertions.require(found !== null)
+        Assertions.require(found.slotNames().size() == 2)
+        for(name in ["kind", "children"]) { Assertions.require(found.hasSlot(name)) }
+        Assertions.require(found.parent() === Object)
+        Assertions.require(found.hasSlot("span") === false)
+        Assertions.require(found.hasSlot("parent") === false)
+    }),
+    Test("exact own slots for paragraph", () => {
+        root: Markdown.parse("x", profile: "commonmark-0.31.2-gfm-extensions")
+        stack: { node: root; next: null }
+        found: null
+        while(stack !== null) {
+            node: stack.node
+            stack = stack.next
+            if(node.kind == "paragraph") { found = node }
+            if(node.hasSlot("children")) {
+                for(child in node.children) { stack = { node: child; next: stack } }
+            }
+        }
+        Assertions.require(found !== null)
+        Assertions.require(found.slotNames().size() == 2)
+        for(name in ["kind", "children"]) { Assertions.require(found.hasSlot(name)) }
+        Assertions.require(found.parent() === Object)
+        Assertions.require(found.hasSlot("span") === false)
+        Assertions.require(found.hasSlot("parent") === false)
+    }),
+    Test("exact own slots for heading", () => {
+        root: Markdown.parse("# x", profile: "commonmark-0.31.2-gfm-extensions")
+        stack: { node: root; next: null }
+        found: null
+        while(stack !== null) {
+            node: stack.node
+            stack = stack.next
+            if(node.kind == "heading") { found = node }
+            if(node.hasSlot("children")) {
+                for(child in node.children) { stack = { node: child; next: stack } }
+            }
+        }
+        Assertions.require(found !== null)
+        Assertions.require(found.slotNames().size() == 3)
+        for(name in ["kind", "level", "children"]) { Assertions.require(found.hasSlot(name)) }
+        Assertions.require(found.parent() === Object)
+        Assertions.require(found.hasSlot("span") === false)
+        Assertions.require(found.hasSlot("parent") === false)
+    }),
+    Test("exact own slots for thematicBreak", () => {
+        root: Markdown.parse("***", profile: "commonmark-0.31.2-gfm-extensions")
+        stack: { node: root; next: null }
+        found: null
+        while(stack !== null) {
+            node: stack.node
+            stack = stack.next
+            if(node.kind == "thematicBreak") { found = node }
+            if(node.hasSlot("children")) {
+                for(child in node.children) { stack = { node: child; next: stack } }
+            }
+        }
+        Assertions.require(found !== null)
+        Assertions.require(found.slotNames().size() == 1)
+        for(name in ["kind"]) { Assertions.require(found.hasSlot(name)) }
+        Assertions.require(found.parent() === Object)
+        Assertions.require(found.hasSlot("span") === false)
+        Assertions.require(found.hasSlot("parent") === false)
+    }),
+    Test("exact own slots for blockquote", () => {
+        root: Markdown.parse("> x", profile: "commonmark-0.31.2-gfm-extensions")
+        stack: { node: root; next: null }
+        found: null
+        while(stack !== null) {
+            node: stack.node
+            stack = stack.next
+            if(node.kind == "blockquote") { found = node }
+            if(node.hasSlot("children")) {
+                for(child in node.children) { stack = { node: child; next: stack } }
+            }
+        }
+        Assertions.require(found !== null)
+        Assertions.require(found.slotNames().size() == 2)
+        for(name in ["kind", "children"]) { Assertions.require(found.hasSlot(name)) }
+        Assertions.require(found.parent() === Object)
+        Assertions.require(found.hasSlot("span") === false)
+        Assertions.require(found.hasSlot("parent") === false)
+    }),
+    Test("exact own slots for list", () => {
+        root: Markdown.parse("- x", profile: "commonmark-0.31.2-gfm-extensions")
+        stack: { node: root; next: null }
+        found: null
+        while(stack !== null) {
+            node: stack.node
+            stack = stack.next
+            if(node.kind == "list") { found = node }
+            if(node.hasSlot("children")) {
+                for(child in node.children) { stack = { node: child; next: stack } }
+            }
+        }
+        Assertions.require(found !== null)
+        Assertions.require(found.slotNames().size() == 5)
+        for(name in ["kind", "ordered", "start", "tight", "children"]) { Assertions.require(found.hasSlot(name)) }
+        Assertions.require(found.parent() === Object)
+        Assertions.require(found.hasSlot("span") === false)
+        Assertions.require(found.hasSlot("parent") === false)
+    }),
+    Test("exact own slots for listItem", () => {
+        root: Markdown.parse("- x", profile: "commonmark-0.31.2-gfm-extensions")
+        stack: { node: root; next: null }
+        found: null
+        while(stack !== null) {
+            node: stack.node
+            stack = stack.next
+            if(node.kind == "listItem") { found = node }
+            if(node.hasSlot("children")) {
+                for(child in node.children) { stack = { node: child; next: stack } }
+            }
+        }
+        Assertions.require(found !== null)
+        Assertions.require(found.slotNames().size() == 3)
+        for(name in ["kind", "task", "children"]) { Assertions.require(found.hasSlot(name)) }
+        Assertions.require(found.parent() === Object)
+        Assertions.require(found.hasSlot("span") === false)
+        Assertions.require(found.hasSlot("parent") === false)
+    }),
+    Test("exact own slots for codeBlock", () => {
+        root: Markdown.parse("```\nx\n```", profile: "commonmark-0.31.2-gfm-extensions")
+        stack: { node: root; next: null }
+        found: null
+        while(stack !== null) {
+            node: stack.node
+            stack = stack.next
+            if(node.kind == "codeBlock") { found = node }
+            if(node.hasSlot("children")) {
+                for(child in node.children) { stack = { node: child; next: stack } }
+            }
+        }
+        Assertions.require(found !== null)
+        Assertions.require(found.slotNames().size() == 3)
+        for(name in ["kind", "value", "info"]) { Assertions.require(found.hasSlot(name)) }
+        Assertions.require(found.parent() === Object)
+        Assertions.require(found.hasSlot("span") === false)
+        Assertions.require(found.hasSlot("parent") === false)
+    }),
+    Test("exact own slots for htmlBlock", () => {
+        root: Markdown.parse("<div>\nx\n</div>", profile: "commonmark-0.31.2-gfm-extensions")
+        stack: { node: root; next: null }
+        found: null
+        while(stack !== null) {
+            node: stack.node
+            stack = stack.next
+            if(node.kind == "htmlBlock") { found = node }
+            if(node.hasSlot("children")) {
+                for(child in node.children) { stack = { node: child; next: stack } }
+            }
+        }
+        Assertions.require(found !== null)
+        Assertions.require(found.slotNames().size() == 2)
+        for(name in ["kind", "value"]) { Assertions.require(found.hasSlot(name)) }
+        Assertions.require(found.parent() === Object)
+        Assertions.require(found.hasSlot("span") === false)
+        Assertions.require(found.hasSlot("parent") === false)
+    }),
+    Test("exact own slots for text", () => {
+        root: Markdown.parse("x", profile: "commonmark-0.31.2-gfm-extensions")
+        stack: { node: root; next: null }
+        found: null
+        while(stack !== null) {
+            node: stack.node
+            stack = stack.next
+            if(node.kind == "text") { found = node }
+            if(node.hasSlot("children")) {
+                for(child in node.children) { stack = { node: child; next: stack } }
+            }
+        }
+        Assertions.require(found !== null)
+        Assertions.require(found.slotNames().size() == 2)
+        for(name in ["kind", "value"]) { Assertions.require(found.hasSlot(name)) }
+        Assertions.require(found.parent() === Object)
+        Assertions.require(found.hasSlot("span") === false)
+        Assertions.require(found.hasSlot("parent") === false)
+    }),
+    Test("exact own slots for emphasis", () => {
+        root: Markdown.parse("*x*", profile: "commonmark-0.31.2-gfm-extensions")
+        stack: { node: root; next: null }
+        found: null
+        while(stack !== null) {
+            node: stack.node
+            stack = stack.next
+            if(node.kind == "emphasis") { found = node }
+            if(node.hasSlot("children")) {
+                for(child in node.children) { stack = { node: child; next: stack } }
+            }
+        }
+        Assertions.require(found !== null)
+        Assertions.require(found.slotNames().size() == 2)
+        for(name in ["kind", "children"]) { Assertions.require(found.hasSlot(name)) }
+        Assertions.require(found.parent() === Object)
+        Assertions.require(found.hasSlot("span") === false)
+        Assertions.require(found.hasSlot("parent") === false)
+    }),
+    Test("exact own slots for strong", () => {
+        root: Markdown.parse("**x**", profile: "commonmark-0.31.2-gfm-extensions")
+        stack: { node: root; next: null }
+        found: null
+        while(stack !== null) {
+            node: stack.node
+            stack = stack.next
+            if(node.kind == "strong") { found = node }
+            if(node.hasSlot("children")) {
+                for(child in node.children) { stack = { node: child; next: stack } }
+            }
+        }
+        Assertions.require(found !== null)
+        Assertions.require(found.slotNames().size() == 2)
+        for(name in ["kind", "children"]) { Assertions.require(found.hasSlot(name)) }
+        Assertions.require(found.parent() === Object)
+        Assertions.require(found.hasSlot("span") === false)
+        Assertions.require(found.hasSlot("parent") === false)
+    }),
+    Test("exact own slots for codeSpan", () => {
+        root: Markdown.parse("`x`", profile: "commonmark-0.31.2-gfm-extensions")
+        stack: { node: root; next: null }
+        found: null
+        while(stack !== null) {
+            node: stack.node
+            stack = stack.next
+            if(node.kind == "codeSpan") { found = node }
+            if(node.hasSlot("children")) {
+                for(child in node.children) { stack = { node: child; next: stack } }
+            }
+        }
+        Assertions.require(found !== null)
+        Assertions.require(found.slotNames().size() == 2)
+        for(name in ["kind", "value"]) { Assertions.require(found.hasSlot(name)) }
+        Assertions.require(found.parent() === Object)
+        Assertions.require(found.hasSlot("span") === false)
+        Assertions.require(found.hasSlot("parent") === false)
+    }),
+    Test("exact own slots for link", () => {
+        root: Markdown.parse("[x](u)", profile: "commonmark-0.31.2-gfm-extensions")
+        stack: { node: root; next: null }
+        found: null
+        while(stack !== null) {
+            node: stack.node
+            stack = stack.next
+            if(node.kind == "link") { found = node }
+            if(node.hasSlot("children")) {
+                for(child in node.children) { stack = { node: child; next: stack } }
+            }
+        }
+        Assertions.require(found !== null)
+        Assertions.require(found.slotNames().size() == 4)
+        for(name in ["kind", "destination", "title", "children"]) { Assertions.require(found.hasSlot(name)) }
+        Assertions.require(found.parent() === Object)
+        Assertions.require(found.hasSlot("span") === false)
+        Assertions.require(found.hasSlot("parent") === false)
+    }),
+    Test("exact own slots for image", () => {
+        root: Markdown.parse("![x](u)", profile: "commonmark-0.31.2-gfm-extensions")
+        stack: { node: root; next: null }
+        found: null
+        while(stack !== null) {
+            node: stack.node
+            stack = stack.next
+            if(node.kind == "image") { found = node }
+            if(node.hasSlot("children")) {
+                for(child in node.children) { stack = { node: child; next: stack } }
+            }
+        }
+        Assertions.require(found !== null)
+        Assertions.require(found.slotNames().size() == 4)
+        for(name in ["kind", "destination", "title", "children"]) { Assertions.require(found.hasSlot(name)) }
+        Assertions.require(found.parent() === Object)
+        Assertions.require(found.hasSlot("span") === false)
+        Assertions.require(found.hasSlot("parent") === false)
+    }),
+    Test("exact own slots for softBreak", () => {
+        root: Markdown.parse("a\nb", profile: "commonmark-0.31.2-gfm-extensions")
+        stack: { node: root; next: null }
+        found: null
+        while(stack !== null) {
+            node: stack.node
+            stack = stack.next
+            if(node.kind == "softBreak") { found = node }
+            if(node.hasSlot("children")) {
+                for(child in node.children) { stack = { node: child; next: stack } }
+            }
+        }
+        Assertions.require(found !== null)
+        Assertions.require(found.slotNames().size() == 1)
+        for(name in ["kind"]) { Assertions.require(found.hasSlot(name)) }
+        Assertions.require(found.parent() === Object)
+        Assertions.require(found.hasSlot("span") === false)
+        Assertions.require(found.hasSlot("parent") === false)
+    }),
+    Test("exact own slots for hardBreak", () => {
+        root: Markdown.parse("a  \nb", profile: "commonmark-0.31.2-gfm-extensions")
+        stack: { node: root; next: null }
+        found: null
+        while(stack !== null) {
+            node: stack.node
+            stack = stack.next
+            if(node.kind == "hardBreak") { found = node }
+            if(node.hasSlot("children")) {
+                for(child in node.children) { stack = { node: child; next: stack } }
+            }
+        }
+        Assertions.require(found !== null)
+        Assertions.require(found.slotNames().size() == 1)
+        for(name in ["kind"]) { Assertions.require(found.hasSlot(name)) }
+        Assertions.require(found.parent() === Object)
+        Assertions.require(found.hasSlot("span") === false)
+        Assertions.require(found.hasSlot("parent") === false)
+    }),
+    Test("exact own slots for htmlInline", () => {
+        root: Markdown.parse("a <b>", profile: "commonmark-0.31.2-gfm-extensions")
+        stack: { node: root; next: null }
+        found: null
+        while(stack !== null) {
+            node: stack.node
+            stack = stack.next
+            if(node.kind == "htmlInline") { found = node }
+            if(node.hasSlot("children")) {
+                for(child in node.children) { stack = { node: child; next: stack } }
+            }
+        }
+        Assertions.require(found !== null)
+        Assertions.require(found.slotNames().size() == 2)
+        for(name in ["kind", "value"]) { Assertions.require(found.hasSlot(name)) }
+        Assertions.require(found.parent() === Object)
+        Assertions.require(found.hasSlot("span") === false)
+        Assertions.require(found.hasSlot("parent") === false)
+    }),
+    Test("exact own slots for strikethrough", () => {
+        root: Markdown.parse("~~x~~", profile: "commonmark-0.31.2-gfm-extensions")
+        stack: { node: root; next: null }
+        found: null
+        while(stack !== null) {
+            node: stack.node
+            stack = stack.next
+            if(node.kind == "strikethrough") { found = node }
+            if(node.hasSlot("children")) {
+                for(child in node.children) { stack = { node: child; next: stack } }
+            }
+        }
+        Assertions.require(found !== null)
+        Assertions.require(found.slotNames().size() == 2)
+        for(name in ["kind", "children"]) { Assertions.require(found.hasSlot(name)) }
+        Assertions.require(found.parent() === Object)
+        Assertions.require(found.hasSlot("span") === false)
+        Assertions.require(found.hasSlot("parent") === false)
+    }),
+    Test("exact own slots for table", () => {
+        root: Markdown.parse("|x|\n|-|", profile: "commonmark-0.31.2-gfm-extensions")
+        stack: { node: root; next: null }
+        found: null
+        while(stack !== null) {
+            node: stack.node
+            stack = stack.next
+            if(node.kind == "table") { found = node }
+            if(node.hasSlot("children")) {
+                for(child in node.children) { stack = { node: child; next: stack } }
+            }
+        }
+        Assertions.require(found !== null)
+        Assertions.require(found.slotNames().size() == 3)
+        for(name in ["kind", "alignments", "children"]) { Assertions.require(found.hasSlot(name)) }
+        Assertions.require(found.parent() === Object)
+        Assertions.require(found.hasSlot("span") === false)
+        Assertions.require(found.hasSlot("parent") === false)
+    }),
+    Test("exact own slots for tableRow", () => {
+        root: Markdown.parse("|x|\n|-|", profile: "commonmark-0.31.2-gfm-extensions")
+        stack: { node: root; next: null }
+        found: null
+        while(stack !== null) {
+            node: stack.node
+            stack = stack.next
+            if(node.kind == "tableRow") { found = node }
+            if(node.hasSlot("children")) {
+                for(child in node.children) { stack = { node: child; next: stack } }
+            }
+        }
+        Assertions.require(found !== null)
+        Assertions.require(found.slotNames().size() == 2)
+        for(name in ["kind", "children"]) { Assertions.require(found.hasSlot(name)) }
+        Assertions.require(found.parent() === Object)
+        Assertions.require(found.hasSlot("span") === false)
+        Assertions.require(found.hasSlot("parent") === false)
+    }),
+    Test("exact own slots for tableCell", () => {
+        root: Markdown.parse("|x|\n|-|", profile: "commonmark-0.31.2-gfm-extensions")
+        stack: { node: root; next: null }
+        found: null
+        while(stack !== null) {
+            node: stack.node
+            stack = stack.next
+            if(node.kind == "tableCell") { found = node }
+            if(node.hasSlot("children")) {
+                for(child in node.children) { stack = { node: child; next: stack } }
+            }
+        }
+        Assertions.require(found !== null)
+        Assertions.require(found.slotNames().size() == 2)
+        for(name in ["kind", "children"]) { Assertions.require(found.hasSlot(name)) }
+        Assertions.require(found.parent() === Object)
+        Assertions.require(found.hasSlot("span") === false)
+        Assertions.require(found.hasSlot("parent") === false)
+    }),
+    Test("unordered lists have canonical null start and ordinary task state", () => {
+        list: Markdown.parse("- x").children[0]
+        Assertions.require(list.ordered === false)
+        Assertions.require(list.start === null)
+        Assertions.require(list.tight === true)
+        Assertions.require(list.children[0].task === null)
+    }),
+    Test("ordered lists retain five and zero starts", () => {
+        for(start in [0, 5]) {
+            list: Markdown.parse(JSON.encode(JSON.number(start, 0)) + ". x").children[0]
+            Assertions.require(list.ordered === true)
+            Assertions.require(list.start == start)
+        }
+        null
+    }),
+    Test("text coalesces across entity and escape boundaries", () => {
+        children: Markdown.parse("a&amp;\\*b").children[0].children
+        Assertions.require(children.size() == 1)
+        Assertions.require(children[0].value == "a&*b")
+    })
+]
+tests.freeze()

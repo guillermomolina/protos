@@ -1,0 +1,75 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+Markdown: import("std:markdown")
+
+tests: [
+    Test("literal BOM supplementary and combining scalars survive", () => {
+        value: Markdown.parse("\u{feff}😀e\u{301}").children[0].children[0].value
+        Assertions.require(value == "\u{feff}😀e\u{301}")
+    }),
+    Test("literal zero and invalid numeric scalar references become replacement", () => {
+        value: Markdown.parse("\u{0} &#0; &#xD800; &#1114112;").children[0].children[0].value
+        Assertions.require(value == "� � � �")
+    }),
+    Test("numeric controls do not receive Windows-1252 recovery", () => {
+        value: Markdown.parse("&#128; &#xFFFF;").children[0].children[0].value
+        Assertions.require(value == "\u{80} \u{ffff}")
+    }),
+    Test("entities decode once including two-scalar names", () => {
+        value: Markdown.parse("&amp;copy; &NotEqualTilde;").children[0].children[0].value
+        Assertions.require(value == "&copy; ≂\u{338}")
+    }),
+    Test("malformed and oversized numeric references stay literal", () => {
+        source: "&unknown; &amp &#00000000; &#x0000000;"
+        Assertions.require(Markdown.parse(source).children[0].children[0].value == source)
+    }),
+    Test("entities inside code and raw HTML stay literal", () => {
+        nodes: Markdown.parse("`&amp;` <i a='&amp;'>").children[0].children
+        Assertions.require(nodes[0].value == "&amp;")
+        Assertions.require(nodes[2].value == "<i a='&amp;'>")
+    }),
+    Test("CR LF and CRLF normalize only logical Markdown line endings", () => {
+        for(source in ["a\rb", "a\nb", "a\r\nb"]) {
+            nodes: Markdown.parse(source).children[0].children
+            Assertions.require(nodes[1].kind == "softBreak")
+        }
+        null
+    }),
+    Test("structural tab indentation and a partially consumed tab retain text", () => {
+        block: Markdown.parse("\tx").children[0]
+        Assertions.require(block.kind == "codeBlock")
+        Assertions.require(block.value == "x\n")
+        quote: Markdown.parse(">\tx").children[0]
+        Assertions.require(quote.kind == "blockquote")
+    }),
+    Test("Unicode symbols flank delimiters and non-ASCII escapes stay literal", () => {
+        nodes: Markdown.parse("∑*x*∑").children[0].children
+        Assertions.require(nodes[1].kind == "emphasis")
+        value: Markdown.parse("\\∑").children[0].children[0].value
+        Assertions.require(value == "\\∑")
+        spaced: Markdown.parse("a\u{a0}*b*\u{a0}c").children[0].children
+        Assertions.require(spaced[1].kind == "emphasis")
+    }),
+    Test("full default folding preserves dotted I and excludes Turkic mapping", () => {
+        node: Markdown.parse("[i\u{307}]\n\n[İ]: /u").children[0].children[0]
+        Assertions.require(node.kind == "link")
+        other: Markdown.parse("[ı]\n\n[I]: /u").children[0].children[0]
+        Assertions.require(other.kind == "text")
+    })
+]
+tests.freeze()

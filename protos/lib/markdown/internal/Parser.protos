@@ -1,0 +1,75 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Iterative composition and public-tree materialization.
+Source: import("./Source.protos")
+Builders: import("./Builders.protos")
+Blocks: import("./Blocks.protos")
+Inlines: import("./Inlines.protos")
+Nodes: import("./Nodes.protos")
+Limits: import("./Limits.protos")
+Tasks: import("./TaskLists.protos")
+
+parse: (source, profile, positions, prototype) => {
+    extension: profile == "commonmark-0.31.2-gfm-extensions"
+    prepared: Source.scan(source)
+    budget: Limits.create(prototype)
+    blocks: Blocks.parse(Source.lines(prepared), extension, budget)
+    root: blocks.root
+    root.end = source.size()
+    stack: { frame: root; visited: false; next: null }
+    while(stack !== null) {
+        entry: stack
+        stack = entry.next
+        frame: entry.frame
+        if(entry.visited === false) {
+            children: Builders.finish(frame.children)
+            if(extension && (frame.kind == "listItem")) {
+                index: 0
+                while((index < children.size()) && (children[index].kind == "paragraph") && (Source.size(children[index].value) == 0)) { index = index + 1 }
+                if((index < children.size()) && (children[index].kind == "paragraph")) {
+                    task: Tasks.recognize(children[index].value)
+                    if(task !== null) { frame.task = task.task; children[index].value = task.subject }
+                }
+            }
+            stack = { frame: frame; visited: true; next: stack }
+            i: children.size() - 1
+            while(i >= 0) { stack = { frame: children[i]; visited: false; next: stack }; i = i - 1 }
+        }
+        if(entry.visited) {
+            children: Builders.array()
+            for(child in Builders.finish(frame.children)) { if(child.result !== null) { Builders.push(children, child.result) } }
+            finalized: Builders.finish(children)
+            extent: null
+            if(frame.start !== null) { extent = { start: frame.start; end: frame.end } }
+            kind: frame.kind
+            if((kind == "paragraph") || (kind == "heading") || (kind == "tableCell")) {
+                finalized = Inlines.parse(frame.value, blocks.definitions, extension, positions, budget, frame.depth)
+                if(kind == "heading") { frame.result = Nodes.heading(frame.level, finalized, positions, extent) }
+                (kind == "heading").ifFalse(() => {
+                    if((kind != "paragraph") || (Source.size(frame.value) > 0)) { frame.result = Nodes.container(kind, finalized, positions, extent) }
+                })
+            }
+            if((kind == "document") || (kind == "blockquote") || (kind == "tableRow")) { frame.result = Nodes.container(kind, finalized, positions, extent) }
+            if(kind == "list") { frame.result = Nodes.list(frame.ordered, frame.number, frame.tight, finalized, positions, extent) }
+            if(kind == "listItem") { frame.result = Nodes.item(frame.task, finalized, positions, extent) }
+            if(kind == "codeBlock") { frame.result = Nodes.code(frame.value, frame.info, positions, extent) }
+            if(kind == "htmlBlock") { frame.result = Nodes.value(kind, frame.value, positions, extent) }
+            if(kind == "thematicBreak") { frame.result = Nodes.leaf(kind, positions, extent) }
+            if(kind == "table") { frame.result = Nodes.table(frame.alignments, finalized, positions, extent) }
+        }
+    }
+    Limits.verify(root.result, prototype)
+}

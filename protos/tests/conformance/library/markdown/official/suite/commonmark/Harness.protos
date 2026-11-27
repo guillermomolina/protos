@@ -1,0 +1,203 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Test-only semantic AST projection. Never use this as a safe HTML renderer.
+//! No original Markdown is accepted or reparsed here.
+
+JSON: import("std:json/json")
+
+buffer: () => { Encoding.UTF8.encode("\u{feff}") }
+append: (output, text) => { for(octet in Encoding.UTF8.encode(text)) { output.add(octet) } }
+
+escape: (text, attribute: false) => {
+    output: buffer()
+    for(c in text) {
+        replacement: c
+        if(c == "&") { replacement = "&amp;" }
+        if(c == "<") { replacement = "&lt;" }
+        if(c == ">") { replacement = "&gt;" }
+        if(c == "\"") { replacement = "&quot;" }
+        append(output, replacement)
+    }
+    Encoding.UTF8.decode(output)
+}
+
+url: (text) => {
+    output: buffer()
+    hex: "0123456789ABCDEF"
+    safe: "-._~:/?#@!$&()*+,;=%"
+    for(octet in Encoding.UTF8.encode(text)) {
+        allowed: ((octet >= 65) && (octet <= 90)) || ((octet >= 97) && (octet <= 122)) || ((octet >= 48) && (octet <= 57))
+        for(c in safe) { if(Encoding.UTF8.encode(c)[0] == octet) { allowed = true } }
+        if(octet == 39) { append(output, "&#x27;") }
+        if(octet != 39) {
+            if(allowed) {
+                if(octet == 38) { append(output, "&amp;") }
+                (octet == 38).ifFalse(() => { output.add(octet) })
+            }
+            allowed.ifFalse(() => { append(output, "%" + hex[octet.div(16)] + hex[octet % 16]) })
+        }
+    }
+    Encoding.UTF8.decode(output)
+}
+
+plain: (root) => {
+    output: buffer()
+    stack: { node: root; next: null }
+    while(stack !== null) {
+        node: stack.node
+        stack = stack.next
+        if(node.hasSlot("value")) { append(output, node.value) }
+        if((node.kind == "softBreak") || (node.kind == "hardBreak")) { append(output, " ") }
+        if(node.hasSlot("children")) {
+            i: node.children.size() - 1
+            while(i >= 0) { stack = { node: node.children[i]; next: stack }; i = i - 1 }
+        }
+    }
+    Encoding.UTF8.decode(output)
+}
+
+render: (root) => {
+    output: buffer()
+    stack: null
+    pushText: (text) => { stack = { text: text; node: null; tight: false; table: null; row: -1; next: stack } }
+    pushNode: (node, tight, table, row) => { stack = { text: null; node: node; tight: tight; table: table; row: row; next: stack } }
+    children: (node, tight, table, row) => {
+        i: node.children.size() - 1
+        while(i >= 0) { pushNode(node.children[i], tight, table, row); i = i - 1 }
+    }
+    pushNode(root, false, null, -1)
+    while(stack !== null) {
+        entry: stack
+        stack = stack.next
+        if(entry.text !== null) { append(output, entry.text) }
+        if(entry.node !== null) {
+            node: entry.node
+            kind: node.kind
+            if(kind == "document") { children(node, false, null, -1) }
+            if(kind == "text") { append(output, escape(node.value)) }
+            if((kind == "htmlBlock") || (kind == "htmlInline")) {
+                append(output, node.value)
+                if((kind == "htmlBlock") && (node.value.size() > 0) && (node.value[node.value.size() - 1] != "\n")) { append(output, "\n") }
+            }
+            if(kind == "paragraph") {
+                if(entry.tight === false) { append(output, "<p>"); pushText("</p>\n") }
+                children(node, false, null, -1)
+            }
+            if(kind == "heading") {
+                tag: JSON.encode(JSON.number(node.level, 0))
+                append(output, "<h" + tag + ">")
+                pushText("</h" + tag + ">\n")
+                children(node, false, null, -1)
+            }
+            if(kind == "thematicBreak") { append(output, "<hr />\n") }
+            if(kind == "blockquote") { append(output, "<blockquote>\n"); pushText("</blockquote>\n"); children(node, false, null, -1) }
+            if(kind == "list") {
+                tag: "ul"
+                if(node.ordered) { tag = "ol" }
+                append(output, "<" + tag)
+                if(node.ordered && (node.start != 1)) { append(output, " start=\"" + JSON.encode(JSON.number(node.start, 0)) + "\"") }
+                append(output, ">\n")
+                pushText("</" + tag + ">\n")
+                children(node, node.tight, null, -1)
+            }
+            if(kind == "listItem") {
+                append(output, "<li>")
+                leadingParagraph: (node.children.size() > 0) && (node.children[0].kind == "paragraph")
+                if((node.children.size() > 0) && ((entry.tight === false) || (leadingParagraph === false))) { append(output, "\n") }
+                pushText("</li>\n")
+                i: node.children.size() - 1
+                while(i >= 0) {
+                    if(entry.tight && (i == 0) && (node.children.size() > 1) && leadingParagraph) { pushText("\n") }
+                    pushNode(node.children[i], entry.tight, null, -1)
+                    if((i == 0) && (node.task !== null)) {
+                        checkbox: "<input disabled=\"\" type=\"checkbox\"> "
+                        if(node.task) { checkbox = "<input checked=\"\" disabled=\"\" type=\"checkbox\"> " }
+                        if(entry.tight) { pushText(checkbox) }
+                        entry.tight.ifFalse(() => {
+                            // The checkbox belongs inside the first paragraph.
+                            stack = stack.next
+                            pushText("</p>\n")
+                            children(node.children[0], false, null, -1)
+                            pushText(checkbox)
+                            pushText("<p>")
+                        })
+                    }
+                    i = i - 1
+                }
+            }
+            if(kind == "codeBlock") {
+                append(output, "<pre><code")
+                if((node.info !== null) && (node.info.size() > 0)) {
+                    language: buffer()
+                    done: false
+                    for(c in node.info) {
+                        if((c == " ") || (c == "\t") || (c == "\n")) { done = true }
+                        done.ifFalse(() => { append(language, c) })
+                    }
+                    append(output, " class=\"language-" + escape(Encoding.UTF8.decode(language), true) + "\"")
+                }
+                append(output, ">" + escape(node.value) + "</code></pre>\n")
+            }
+            if(kind == "codeSpan") { append(output, "<code>" + escape(node.value) + "</code>") }
+            if(kind == "softBreak") { append(output, "\n") }
+            if(kind == "hardBreak") { append(output, "<br />\n") }
+            if((kind == "emphasis") || (kind == "strong") || (kind == "strikethrough")) {
+                tag: "em"
+                if(kind == "strong") { tag = "strong" }
+                if(kind == "strikethrough") { tag = "del" }
+                append(output, "<" + tag + ">")
+                pushText("</" + tag + ">")
+                children(node, false, null, -1)
+            }
+            if((kind == "link") || (kind == "image")) {
+                if(kind == "link") { append(output, "<a href=\"" + url(node.destination) + "\"") }
+                if(kind == "image") { append(output, "<img src=\"" + url(node.destination) + "\" alt=\"" + escape(plain(node), true) + "\"") }
+                if(node.title !== null) { append(output, " title=\"" + escape(node.title, true) + "\"") }
+                if(kind == "image") { append(output, " />") }
+                if(kind == "link") { append(output, ">"); pushText("</a>"); children(node, false, null, -1) }
+            }
+            if(kind == "table") {
+                append(output, "<table>\n<thead>\n")
+                pushText("</table>\n")
+                if(node.children.size() > 1) {
+                    pushText("</tbody>\n")
+                    i: node.children.size() - 1
+                    while(i >= 1) { pushNode(node.children[i], false, node, i); i = i - 1 }
+                    pushText("<tbody>\n")
+                }
+                pushText("</thead>\n")
+                pushNode(node.children[0], false, node, 0)
+            }
+            if(kind == "tableRow") {
+                append(output, "<tr>\n")
+                pushText("</tr>\n")
+                i: node.children.size() - 1
+                while(i >= 0) {
+                    tag: "td"
+                    if(entry.row == 0) { tag = "th" }
+                    pushText("</" + tag + ">\n")
+                    children(node.children[i], false, null, -1)
+                    opening: "<" + tag
+                    alignment: entry.table.alignments[i]
+                    if(alignment !== null) { opening = opening + " align=\"" + alignment + "\"" }
+                    pushText(opening + ">")
+                    i = i - 1
+                }
+            }
+        }
+    }
+    Encoding.UTF8.decode(output)
+}

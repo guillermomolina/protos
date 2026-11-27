@@ -1,0 +1,65 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Deterministic size-doubling inputs. No self-timing or ambient acquisition.
+Builders: import("../../lib/markdown/internal/Builders.protos")
+
+Fixtures: import("../../tests/conformance/library/markdown/Fixtures.protos")
+JSON: import("std:json/json")
+
+make: (family, size) => {
+    if(family == "unmatched-delimiters") { ^Fixtures.repeat("*a_ ", size) }
+    if(family == "unmatched-backticks") {
+        output: Builders.text()
+        width: 1
+        remaining: size
+        while(width + 2 <= remaining) {
+            Builders.append(output, Fixtures.repeat("`", width)); Builders.append(output, "a ")
+            remaining = remaining - width - 2
+            width = width + 1
+        }
+        Builders.append(output, Fixtures.repeat("a", remaining))
+        ^Builders.string(output)
+    }
+    if(family == "deep-brackets") { ^Fixtures.repeat("[", size).concat("x", Fixtures.repeat("]", size)) }
+    if(family == "nested-containers") { ^Fixtures.repeat("> ", size).concat("x") }
+    if(family == "balanced-destinations") { ^"[x](u".concat(Fixtures.repeat("(", size), "x", Fixtures.repeat(")", size), ")") }
+    if(family == "reference-definitions") {
+        parts: Builders.text()
+        i: 0
+        while(i < size) { Builders.append(parts, "[r".concat(JSON.encode(JSON.number(i, 0)), "]: /u\n")); i = i + 1 }
+        ^"[r0]\n\n".concat(Builders.string(parts))
+    }
+    if(family == "reference-fanout") { ^"[r]: ".concat(Fixtures.repeat("u", size), "\n\n", Fixtures.repeat("[r] ", size)) }
+    if(family == "wide-tables") { ^Fixtures.repeat("|x", size).concat("|\n", Fixtures.repeat("|-", size), "|\n", Fixtures.repeat("|\n", size)) }
+    if(family == "unicode") { ^Fixtures.repeat("😀e\u{301}∑ ", size) }
+    if(family == "malformed-html") { ^"a ".concat(Fixtures.repeat("<!-- <? <![CDATA[ <x a=\" ", size)) }
+    if(family == "failed-destinations") { ^Fixtures.repeat("[x](a(", size) }
+    if(family == "plain-text") { ^Fixtures.repeat("a", size) }
+    if(family == "structural-prefixes") { ^Fixtures.repeat("> ", size).concat("x") }
+    if(family == "failed-delimiter-searches") { ^Fixtures.repeat("a_*b** ", size) }
+    if(family == "padded-tables") { ^Fixtures.repeat("|a", size).concat("|\n", Fixtures.repeat("|-", size), "|\n", Fixtures.repeat("| x |\n", size)) }
+    Error().signal()
+}
+
+series: (family, first, levels, consume) => {
+    size: first
+    level: 0
+    while(level < levels) {
+        consume({ family: family; size: size; source: make(family, size) })
+        size = size * 2
+        level = level + 1
+    }
+}

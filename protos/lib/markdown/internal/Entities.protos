@@ -1,0 +1,101 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! One-pass entity recognition; returned replacements are never tokenized again.
+Source: import("./Source.protos")
+Characters: import("./Characters.protos")
+Builders: import("./Builders.protos")
+Named: import("./generated/NamedEntities.protos")
+
+compare: (left, right) => {
+    a: Encoding.UTF8.encode(left)
+    b: Encoding.UTF8.encode(right)
+    i: 0
+    while((i < a.size()) && (i < b.size())) {
+        if(a[i] < b[i]) { ^(-1) }
+        if(a[i] > b[i]) { ^1 }
+        i = i + 1
+    }
+    if(a.size() < b.size()) { ^(-1) }
+    if(a.size() > b.size()) { ^1 }
+    0
+}
+
+named: (name) => {
+    low: 0
+    high: Named.entries.size()
+    while(low < high) {
+        mid: (low + high).div(2)
+        entry: Named.entries[mid]
+        order: compare(name, entry[0])
+        if(order == 0) { ^entry[1] }
+        if(order < 0) { high = mid }
+        (order < 0).ifFalse(() => { low = mid + 1 })
+    }
+    null
+}
+
+recognize: (s, start) => {
+    if(Source.at(s, start) != 38) { ^null }
+    i: start + 1
+    if(Source.at(s, i) == 35) {
+        i = i + 1
+        base: 10
+        maximum: 7
+        if((Source.at(s, i) == 120) || (Source.at(s, i) == 88)) { base = 16; maximum = 6; i = i + 1 }
+        digits: 0
+        value: 0
+        scanning: true
+        while(scanning) {
+            c: Source.at(s, i)
+            digit: -1
+            if(base == 16) { digit = Characters.hex(c) }
+            if((base == 10) && Characters.digit(c)) { digit = c - 48 }
+            if(digit < 0) { scanning = false }
+            if(digit >= 0) { value = value * base + digit; digits = digits + 1; i = i + 1 }
+            if(digits > maximum) { ^null }
+        }
+        if((digits == 0) || (Source.at(s, i) != 59)) { ^null }
+        if((value == 0) || ((value >= 55296) && (value <= 57343)) || (value > 1114111)) { value = 65533 }
+        ^{ end: i + 1; value: Characters.string(value) }
+    }
+    while(Characters.alpha(Source.at(s, i)) || Characters.digit(Source.at(s, i))) {
+        i = i + 1
+        // HTML5's longest semicolon-terminated name has 31 characters.
+        if(i - start > 32) { ^null }
+    }
+    if(Source.at(s, i) != 59) { ^null }
+    result: named(Source.value(s, start + 1, i))
+    if(result === null) { ^null }
+    { end: i + 1; value: result }
+}
+
+decode: (s) => {
+    output: Builders.text()
+    i: 0
+    while(i < Source.size(s)) {
+        c: Source.entry(s, i).scalar
+        handled: false
+        if((c == 92) && Characters.escapable(Source.at(s, i + 1))) {
+            Builders.scalar(output, Source.entry(s, i + 1).scalar); i = i + 2; handled = true
+        }
+        if((c == 38) && (handled === false)) {
+            entity: recognize(s, i)
+            if(entity !== null) { Builders.append(output, entity.value); i = entity.end; handled = true }
+        }
+        handled.ifFalse(() => { Builders.scalar(output, c); i = i + 1 })
+    }
+    Builders.string(output)
+}

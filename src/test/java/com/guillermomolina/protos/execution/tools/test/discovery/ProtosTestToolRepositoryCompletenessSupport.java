@@ -139,6 +139,12 @@ final class ProtosTestToolRepositoryCompletenessSupport {
                             "conformance/library/toml/official/suite/Harness.protos",
                             "auxiliary harness of the toml-official suite sources"),
                     Map.entry(
+                            "conformance/library/markdown/Fixtures.protos",
+                            "auxiliary fixture construction for the markdown suite sources"),
+                    Map.entry(
+                            "conformance/library/markdown/official/suite/commonmark/Harness.protos",
+                            "auxiliary harness of the markdown-official suite sources"),
+                    Map.entry(
                             "conformance/modules/fixtures/cycle/a.protos",
                             "D242 conformance module import fixture"),
                     Map.entry(

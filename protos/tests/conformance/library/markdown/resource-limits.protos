@@ -1,0 +1,178 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+Markdown: import("std:markdown")
+Fixtures: import("./Fixtures.protos")
+
+tests: [
+    Test("inclusive input resource boundary 1048575", () => {
+        target: 1048575
+        source: Fixtures.repeat("x", target)
+        root: Markdown.parse(source)
+        Assertions.require(root.kind == "document")
+        measured: Fixtures.measure(root, source)
+        Assertions.require(measured.input == target)
+        Assertions.require(measured.input <= 1048576)
+        Assertions.require(measured.nodes <= 262144)
+        Assertions.require(measured.depth <= 128)
+        Assertions.require(measured.text <= 8388608)
+    }),
+    Test("inclusive input resource boundary 1048576", () => {
+        target: 1048576
+        source: Fixtures.repeat("x", target)
+        root: Markdown.parse(source)
+        Assertions.require(root.kind == "document")
+        measured: Fixtures.measure(root, source)
+        Assertions.require(measured.input == target)
+        Assertions.require(measured.input <= 1048576)
+        Assertions.require(measured.nodes <= 262144)
+        Assertions.require(measured.depth <= 128)
+        Assertions.require(measured.text <= 8388608)
+    }),
+    Test("inclusive input resource boundary 1048577", () => {
+        target: 1048577
+        source: Fixtures.repeat("x", target)
+        expected: { input: target; nodes: 3; depth: 2; text: target }
+        Assertions.require(source.size() == expected.input)
+        Assertions.require(expected.nodes <= 262144)
+        Assertions.require(expected.depth <= 128)
+        Assertions.require(expected.text <= 8388608)
+        Assertions.signals(Markdown.MarkdownLimitError, () => { Markdown.parse(source) })
+    }),
+    Test("inclusive nodes resource boundary 262143", () => {
+        target: 262143
+        source: Fixtures.nodeBoundary(target)
+        root: Markdown.parse(source, profile: "commonmark-0.31.2-gfm-extensions")
+        Assertions.require(root.kind == "document")
+        measured: Fixtures.measure(root, source)
+        Assertions.require(measured.nodes == target)
+        Assertions.require(measured.input <= 1048576)
+        Assertions.require(measured.nodes <= 262144)
+        Assertions.require(measured.depth <= 128)
+        Assertions.require(measured.text <= 8388608)
+    }),
+    Test("inclusive nodes resource boundary 262144", () => {
+        target: 262144
+        source: Fixtures.nodeBoundary(target)
+        root: Markdown.parse(source, profile: "commonmark-0.31.2-gfm-extensions")
+        Assertions.require(root.kind == "document")
+        measured: Fixtures.measure(root, source)
+        Assertions.require(measured.nodes == target)
+        Assertions.require(measured.input <= 1048576)
+        Assertions.require(measured.nodes <= 262144)
+        Assertions.require(measured.depth <= 128)
+        Assertions.require(measured.text <= 8388608)
+    }),
+    Test("inclusive nodes resource boundary 262145", () => {
+        target: 262145
+        source: Fixtures.nodeBoundary(target)
+        expected: Fixtures.nodeDimensions(target)
+        Assertions.require(source.size() == expected.input)
+        Assertions.require(expected.input <= 1048576)
+        Assertions.require(expected.depth <= 128)
+        Assertions.require(expected.text <= 8388608)
+        Assertions.signals(Markdown.MarkdownLimitError, () => { Markdown.parse(source, profile: "commonmark-0.31.2-gfm-extensions") })
+    }),
+    Test("inclusive depth resource boundary 127", () => {
+        target: 127
+        source: Fixtures.depthBoundary(target)
+        root: Markdown.parse(source)
+        Assertions.require(root.kind == "document")
+        measured: Fixtures.measure(root, source)
+        Assertions.require(measured.depth == target)
+        Assertions.require(measured.input <= 1048576)
+        Assertions.require(measured.nodes <= 262144)
+        Assertions.require(measured.depth <= 128)
+        Assertions.require(measured.text <= 8388608)
+    }),
+    Test("inclusive depth resource boundary 128", () => {
+        target: 128
+        source: Fixtures.depthBoundary(target)
+        root: Markdown.parse(source)
+        Assertions.require(root.kind == "document")
+        measured: Fixtures.measure(root, source)
+        Assertions.require(measured.depth == target)
+        Assertions.require(measured.input <= 1048576)
+        Assertions.require(measured.nodes <= 262144)
+        Assertions.require(measured.depth <= 128)
+        Assertions.require(measured.text <= 8388608)
+    }),
+    Test("inclusive depth resource boundary 129", () => {
+        target: 129
+        source: Fixtures.depthBoundary(target)
+        expected: { input: 2 * (target - 2) + 1; nodes: target + 1; depth: target; text: 1 }
+        Assertions.require(source.size() == expected.input)
+        Assertions.require(expected.input <= 1048576)
+        Assertions.require(expected.nodes <= 262144)
+        Assertions.require(expected.text <= 8388608)
+        Assertions.signals(Markdown.MarkdownLimitError, () => { Markdown.parse(source) })
+    }),
+    Test("inclusive text resource boundary 8388607", () => {
+        target: 8388607
+        source: Fixtures.textBoundary(target)
+        root: Markdown.parse(source)
+        Assertions.require(root.kind == "document")
+        measured: Fixtures.measure(root, source)
+        Assertions.require(measured.text == target)
+        Assertions.require(measured.input <= 1048576)
+        Assertions.require(measured.nodes <= 262144)
+        Assertions.require(measured.depth <= 128)
+        Assertions.require(measured.text <= 8388608)
+    }),
+    Test("inclusive text resource boundary 8388608", () => {
+        target: 8388608
+        source: Fixtures.textBoundary(target)
+        root: Markdown.parse(source)
+        Assertions.require(root.kind == "document")
+        measured: Fixtures.measure(root, source)
+        Assertions.require(measured.text == target)
+        Assertions.require(measured.input <= 1048576)
+        Assertions.require(measured.nodes <= 262144)
+        Assertions.require(measured.depth <= 128)
+        Assertions.require(measured.text <= 8388608)
+    }),
+    Test("inclusive text resource boundary 8388609", () => {
+        target: 8388609
+        source: Fixtures.textBoundary(target)
+        expected: Fixtures.textDimensions(target)
+        Assertions.require(source.size() == expected.input)
+        Assertions.require(expected.input <= 1048576)
+        Assertions.require(expected.nodes <= 262144)
+        Assertions.require(expected.depth <= 128)
+        Assertions.signals(Markdown.MarkdownLimitError, () => { Markdown.parse(source) })
+    }),
+    Test("resource failures are fresh Error occurrences", () => {
+        source: Fixtures.repeat("x", 1048577)
+        a: Assertions.signals(Markdown.MarkdownLimitError, () => { Markdown.parse(source) })
+        b: Assertions.signals(Markdown.MarkdownLimitError, () => { Markdown.parse(source) })
+        Assertions.require(a !== b)
+    }),
+    Test("discarded bracket syntax does not count as final depth", () => {
+        source: Fixtures.repeat("[", 2000).concat("x", Fixtures.repeat("]", 2000))
+        root: Markdown.parse(source)
+        Assertions.require(root.children[0].children.size() == 1)
+    }),
+    Test("synthesized table cells contribute to final node amplification", () => {
+        source: "|a|b|c|\n|-|-|-|\n| x |"
+        root: Markdown.parse(source, profile: "commonmark-0.31.2-gfm-extensions")
+        measured: Fixtures.measure(root, source)
+        Assertions.require(measured.nodes == 14)
+        Assertions.require(root.children[0].children[1].children.size() == 3)
+        Assertions.require(root.children[0].children[1].children[2].children.size() == 0)
+    })
+]
+tests.freeze()

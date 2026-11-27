@@ -23,6 +23,14 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.519] - 2026-11-27
+
+### D266-D1 / I183 — Reusable semantic Markdown parser
+
+- Add primary owner `semantics/MARKDOWN.md` for the ordinary `std:markdown` module: exact CommonMark 0.31.2 and selected GFM profiles, argument validation, public node contracts, reference resolution, pinned Unicode and entity handling, optional original scalar spans, deterministic resource limits and authority boundaries.
+- Add the normative owner reference in `PROTOS_LANGUAGE_SPEC.md` without introducing a Core or Prelude binding.
+- Register module-local `MarkdownLimitError` directly under `Error` in `semantics/ERRORS.md`.
+
 ## [0.1.518] - 2026-11-27
 
 ### D270-D / D270-D1-B / I184 — Explicit TCP transport abort and custody

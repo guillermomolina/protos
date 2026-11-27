@@ -1,0 +1,220 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Private ranges over scalar storage. Slices share storage and never delegate
+//! indexing to wrapper objects; entry() indexes ordinary backing Arrays.
+Builders: import("./Builders.protos")
+
+fromEntries: (data) => { { store: { data: data; fragments: null; ends: null }; begin: 0; end: data.size() } }
+empty: () => { fromEntries([]) }
+size: (subject) => { subject.end - subject.begin }
+
+entry: (subject, index) => {
+    if((index < 0) || (index >= size(subject))) { Error().signal() }
+    position: subject.begin + index
+    store: subject.store
+    if(store.data !== null) { ^store.data[position] }
+    low: 0
+    high: store.ends.size()
+    while(low < high) {
+        mid: (low + high).div(2)
+        if(position < store.ends[mid]) { high = mid }
+        (position < store.ends[mid]).ifFalse(() => { low = mid + 1 })
+    }
+    before: 0
+    if(low > 0) { before = store.ends[low - 1] }
+    fragment: store.fragments[low]
+    fragment.data[fragment.begin + position - before]
+}
+
+slice: (subject, start, end) => {
+    if((start < 0) || (end < start) || (end > size(subject))) { Error().signal() }
+    { store: subject.store; begin: subject.begin + start; end: subject.begin + end }
+}
+
+// Flatten fragment descriptors, not their scalar contents. Every fragment
+// points directly to an Array; slicing never introduces another range layer.
+fragments: (subject, output) => {
+    if(size(subject) == 0) { ^null }
+    store: subject.store
+    if(store.data !== null) {
+        Builders.push(output, { data: store.data; begin: subject.begin; end: subject.end })
+        ^null
+    }
+    low: 0
+    high: store.ends.size()
+    while(low < high) {
+        mid: (low + high).div(2)
+        if(subject.begin < store.ends[mid]) { high = mid }
+        (subject.begin < store.ends[mid]).ifFalse(() => { low = mid + 1 })
+    }
+    before: 0
+    if(low > 0) { before = store.ends[low - 1] }
+    while((low < store.fragments.size()) && (before < subject.end)) {
+        fragment: store.fragments[low]
+        start: subject.begin
+        end: subject.end
+        if(start < before) { start = before }
+        if(end > store.ends[low]) { end = store.ends[low] }
+        Builders.push(output, { data: fragment.data; begin: fragment.begin + start - before; end: fragment.begin + end - before })
+        before = store.ends[low]
+        low = low + 1
+    }
+}
+
+combine: (parts) => {
+    selected: Builders.array()
+    for(part in parts) { fragments(part, selected) }
+    descriptors: Builders.finish(selected)
+    ends: Builders.array()
+    total: 0
+    for(fragment in descriptors) { total = total + fragment.end - fragment.begin; Builders.push(ends, total) }
+    { store: { data: null; fragments: descriptors; ends: Builders.finish(ends) }; begin: 0; end: total }
+}
+
+scan: (text) => {
+    bytes: Encoding.UTF8.encode(text)
+    result: Builders.array()
+    i: 0
+    offset: 0
+    column: 0
+    lineStart: 0
+    while(i < bytes.size()) {
+        head: bytes[i]
+        width: 1
+        value: head
+        if(head >= 192) { width = 2; value = head - 192 }
+        if(head >= 224) { width = 3; value = head - 224 }
+        if(head >= 240) { width = 4; value = head - 240 }
+        j: 1
+        while(j < width) {
+            value = value * 64 + bytes[i + j] - 128
+            j = j + 1
+        }
+        if(value == 0) { value = 65533 }
+        Builders.push(result, { scalar: value; start: offset; end: offset + 1; column: column; lineStart: lineStart })
+        if((value == 10) || (value == 13)) { column = 0; lineStart = offset + 1 }
+        ((value == 10) || (value == 13)).ifFalse(() => {
+            step: 1
+            if(value == 9) { step = 4 - column % 4 }
+            column = column + step
+        })
+        offset = offset + 1
+        i = i + width
+    }
+    fromEntries(Builders.finish(result))
+}
+
+value: (subject, start, end) => {
+    output: Builders.text()
+    i: start
+    while(i < end) { Builders.scalar(output, entry(subject, i).scalar); i = i + 1 }
+    Builders.string(output)
+}
+
+at: (subject, index) => {
+    if((index < 0) || (index >= size(subject))) { ^(-1) }
+    entry(subject, index).scalar
+}
+
+matches: (subject, index, text) => {
+    expected: Encoding.UTF8.encode(text)
+    if((index < 0) || (index + expected.size() > size(subject))) { ^false }
+    j: 0
+    while(j < expected.size()) {
+        if(entry(subject, index + j).scalar != expected[j]) { ^false }
+        j = j + 1
+    }
+    true
+}
+
+lines: (subject) => {
+    output: Builders.array()
+    i: 0
+    start: 0
+    while(i < size(subject)) {
+        c: at(subject, i)
+        ending: (c == 13) || (c == 10)
+        if(ending) {
+            next: i + 1
+            if((c == 13) && (at(subject, next) == 10)) { next = next + 1 }
+            origin: entry(subject, i)
+            lineRange: slice(subject, start, i)
+            // Compute original coordinates before the record's subject slot
+            // shadows the input range during object construction.
+            Builders.push(output, {
+                start: entry(subject, start).lineStart; end: origin.start; next: next
+                terminator: { scalar: 10; start: origin.start; end: entry(subject, next - 1).end; column: origin.column; lineStart: origin.lineStart }
+                subject: lineRange
+            })
+            i = next
+            start = i
+        }
+        ending.ifFalse(() => { i = i + 1 })
+    }
+    if(start < size(subject)) {
+        lineRange: slice(subject, start, size(subject))
+        Builders.push(output, { start: entry(subject, start).lineStart; end: entry(subject, size(subject) - 1).end; next: size(subject); terminator: null; subject: lineRange })
+    }
+    Builders.finish(output)
+}
+
+indent: (subject, columns) => {
+    i: 0
+    consumed: 0
+    residual: 0
+    while((i < size(subject)) && (consumed < columns)) {
+        c: at(subject, i)
+        if((c != 32) && (c != 9)) { ^{ subject: slice(subject, i, size(subject)); columns: consumed } }
+        step: 1
+        if(c == 9) { step = tabWidth(entry(subject, i)) }
+        consumed = consumed + step
+        i = i + 1
+        if(consumed > columns) { residual = consumed - columns }
+    }
+    remainder: slice(subject, i, size(subject))
+    if(residual == 0) { ^{ subject: remainder; columns: consumed } }
+    spaces: Builders.array()
+    origin: entry(subject, i - 1)
+    while(residual > 0) {
+        Builders.push(spaces, { scalar: 32; start: origin.start; end: origin.end; column: origin.column + tabWidth(origin) - residual; lineStart: origin.lineStart })
+        residual = residual - 1
+    }
+    { subject: combine([fromEntries(Builders.finish(spaces)), remainder]); columns: consumed }
+}
+
+trim: (subject) => {
+    start: 0
+    end: size(subject)
+    while((start < end) && ((at(subject, start) == 32) || (at(subject, start) == 9))) { start = start + 1 }
+    while((end > start) && ((at(subject, end - 1) == 32) || (at(subject, end - 1) == 9))) { end = end - 1 }
+    slice(subject, start, end)
+}
+leftTrim: (subject) => {
+    start: 0
+    while((at(subject, start) == 32) || (at(subject, start) == 9)) { start = start + 1 }
+    slice(subject, start, size(subject))
+}
+joinLines: (lines) => {
+    parts: Builders.array()
+    index: 0
+    for(line in lines) {
+        Builders.push(parts, line.subject)
+        if((line.terminator !== null) && (index + 1 < lines.size())) { Builders.push(parts, fromEntries([line.terminator])) }
+        index = index + 1
+    }
+    combine(Builders.finish(parts))
+}
+tabWidth: (origin) => { 4 - origin.column % 4 }

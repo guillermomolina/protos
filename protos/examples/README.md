@@ -65,6 +65,7 @@ instead.
 | Work with exact Fractions, Float mixing, Complex numbers and square roots | `numbers/exact-and-complex.protos` |
 | Set, clear, test and toggle Integer flags with an explicit 32-bit mask | `numbers/bit-flags-and-masks.protos` |
 | Apply and verify a linear transformation with Vectors and Matrices (`std:math/linear_algebra`) | `numbers/vector-matrix.protos` |
+| Parse Markdown into a mutable semantic tree | `markdown/semantic-tree.protos` |
 | Show portable runtime metadata (`std:runtime`) | `runtime-introspection/info.protos` |
 | Inspect the runtime (`std:inspect`, requires `--inspect`) | `runtime-introspection/inspect.protos` |
 | Summarize incident severities and distinct responsible teams with Array operations | `collections/array-incident-summary.protos` |
