@@ -79,6 +79,19 @@ PROTOS_HOME="${root}" \
     >"${smoke_log}" 2>&1
 smoke_status=$?
 
+# Real loopback acquisition and destructive TCP retirement in this executable.
+tcp_abort_log="${tmp_dir}/tcp-abort-loopback.log"
+PROTOS_HOME="${root}" \
+    timeout -k 3s 30s "${native_bin}" --allow-network \
+    "${root}/src/test/resources/i184/tcp-abort-loopback.protos" \
+    >"${tcp_abort_log}" 2>&1
+tcp_abort_status=$?
+tcp_abort_markers="$(grep -Fxc 'I184_TCP_ABORT_LOOPBACK=PASS' "${tcp_abort_log}" || true)"
+tcp_abort_ok=0
+if [[ "${tcp_abort_status}" -eq 0 ]] && [[ "${tcp_abort_markers}" -eq 1 ]]; then
+    tcp_abort_ok=1
+fi
+
 PROTOS_HOME="${root}" \
     "${native_bin}" \
     test --file "${root}/protos/tests/library/uri/parse.protos" \
@@ -1021,6 +1034,9 @@ builtin_root_tier2="$(
 echo "NATIVE_VERSION_STATUS=${version_status}"
 echo "NATIVE_HELP_STATUS=${help_status}"
 echo "NATIVE_GUEST_SMOKE_STATUS=${smoke_status}"
+echo "NATIVE_TCP_ABORT_LOOPBACK_STATUS=${tcp_abort_status}"
+echo "NATIVE_TCP_ABORT_LOOPBACK_MARKERS=${tcp_abort_markers}"
+echo "NATIVE_TCP_ABORT_LOOPBACK_OK=${tcp_abort_ok}"
 echo "NATIVE_TEST_TOOL_STATUS=${test_tool_status}"
 echo "NATIVE_NUMERIC_CONFORMANCE_STATUS=${native_numeric_status}"
 echo "NATIVE_NUMERIC_CONFORMANCE_FILES=${native_numeric_cases}"
@@ -1217,7 +1233,12 @@ elif [[ "${native_caller_recovery_failures}" -ne 0 ]]; then
 elif [[ "${ffm_failures}" -ne 0 ]]; then
     echo "NATIVE_I170_FFM=FAIL sqlite=${ffm_sqlite_status} fixtures=${ffm_fixture_status}" >&2
     false
+elif [[ "${tcp_abort_ok}" -ne 1 ]]; then
+    cat "${tcp_abort_log}" >&2
+    echo "NATIVE_TCP_ABORT_LOOPBACK=FAIL" >&2
+    false
 else
+    echo "NATIVE_TCP_ABORT_LOOPBACK=PASS"
     echo "NATIVE_I170_FFM=PASS cases=${ffm_cases}"
     echo "NATIVE_REGEX=PASS"
     echo "NATIVE_HMAC_SHA256=PASS"

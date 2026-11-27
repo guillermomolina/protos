@@ -1285,6 +1285,14 @@ The public API does not expose a mutable lifecycle-state slot.
 
 ### 15.8 Drain, abort and escalation (D216-8)
 
+Applications retaining authority over their TcpConnection may explicitly use
+the TCP retirement mechanism of `NETWORK.md` §9.1. This does not change Server,
+Client or Host operations, borrowed/owning custody, or the cooperative meaning
+of host shutdown below. Borrowed services gain no destructive authority; owning
+cleanup does not automatically abort. Retirement permits no second final
+response after commitment and no quota release before the required retirement
+has completed. No automatic deadline policy is introduced.
+
 `host.shutdown("drain")` and `host.shutdown("abort")` are the only public
 shutdown requests. Any other argument signals a fresh
 `InvalidIOArgument` and does not change lifecycle state.

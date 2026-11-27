@@ -97,6 +97,10 @@ public final class ProtosTcpConnectionValue extends ProtosObjectValue {
         return flow != null;
     }
 
+    public boolean hasProtocolFlowInDomainForRuntime(ProtosActivation activation) {
+        return flow != null && flow.ownsDomainForRuntime(activation);
+    }
+
     public ProtosFutureValue readForRuntime(ProtosActivation activation, Object maxBytes) {
         return requireFlow().read(activation, maxBytes);
     }
@@ -107,6 +111,10 @@ public final class ProtosTcpConnectionValue extends ProtosObjectValue {
 
     public ProtosFutureValue closeForRuntime(ProtosActivation activation) {
         return requireFlow().close(activation);
+    }
+
+    public ProtosFutureValue abortForRuntime(ProtosActivation activation) {
+        return requireFlow().abort(activation);
     }
 
     public ProtosFutureValue shutdownReadForRuntime(ProtosActivation activation) {

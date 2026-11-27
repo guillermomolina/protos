@@ -136,6 +136,32 @@ final class ProtosTcpConnectionIntegratedConformanceTest {
         assertTrue(future.resolvedValue().isEmpty());
     }
 
+    @Test
+    void sourceNativeTestsExerciseAbortWithoutExpandingAuthority() throws Exception {
+        var resolver=new ProtosStandardLibraryModuleResolver(Path.of("protos","lib"));
+        var prelude=new ProtosCoreBootstrap().bootstrap(CORE,resolver);
+        var activation=prelude.newModuleActivation();
+        var local=endpoint(prelude,activation,0x7f000001L,41000);
+        var remote=endpoint(prelude,activation,0x7f000001L,443);
+        var connection=new ProtosTcpConnectionValue(prelude,new Object(),activation,
+                new NoOpConnectionBackend(),local,remote);
+        activation.context().createLocalSlot("connection",connection);
+        activation.context().createLocalSlot("emptyBytes",new com.guillermomolina.protos.runtime.ProtosBytesValue(prelude.bytesPrototypeForRuntime()));
+        var tests=(com.guillermomolina.protos.runtime.ProtosArrayValue)ProtosTestExecutionSupport.evaluate(
+                java.nio.file.Files.readString(Path.of("protos/tests/library/network/tcp-abort.protos")),activation);
+        for(Object test:tests.indexedSnapshot())ProtosInvocation.invokeMessage(test,"call",List.of(),activation);
+        assertTrue(connection.isOpen());
+        assertNonTransferable(prelude,()->ProtosActorValueTransfer.snapshotValue(connection,activation));
+        assertNonParallel(pCopyMethod(),connection,activation);
+        var foreign=prelude.newModuleActivation();
+        assertThrows(ProtosSignalException.class,()->ProtosInvocation.invokeMessage(connection,"abort",List.of(),foreign));
+        connection.createLocalSlot("abort",ProtosTestExecutionSupport.evaluate("() => { 7 }",activation));
+        assertSame(connection.readLocalSlot("abort").orElseThrow(),connection.lookupSlot("abort").orElseThrow().value());
+        assertEquals(integer(7),ProtosInvocation.invokeMessage(connection,"abort",List.of(),activation));
+        var descendant=new ProtosObjectValue(prelude.tcpConnectionPrototypeForRuntime());
+        assertThrows(ProtosSignalException.class,()->ProtosInvocation.invokeMessage(descendant,"abort",List.of(),activation));
+    }
+
     private static Fixture fixture() throws Exception {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
         ProtosActivation activation = prelude.newModuleActivation();

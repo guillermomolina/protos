@@ -28,6 +28,8 @@ import java.util.Objects;
 
 /** D052/PLAT003 shared protocol bridge for live TcpConnection I/O and lifecycle behavior. */
 public final class ProtosStandardTcpConnectionProtocol {
+    public static final String ABORT_BRIDGE_SLOT = "_coreTcpAbortBridge";
+
     private ProtosStandardTcpConnectionProtocol() {}
 
     public static void install(ProtosObjectValue prototype) {
@@ -36,9 +38,16 @@ public final class ProtosStandardTcpConnectionProtocol {
             throw new IllegalArgumentException(
                     "standard TcpConnection protocol prototype must delegate directly to Object");
         }
-        if (!prototype.isOpen() || !prototype.localSlotsSnapshot().isEmpty()) {
+        var slots = prototype.localSlotsSnapshot();
+        if (!prototype.isOpen() || !slots.keySet().equals(java.util.Set.of("abort"))) {
             throw new IllegalStateException(
                     "standard TcpConnection protocol prototype must be fresh and open");
+        }
+        if (!(slots.get("abort") instanceof ProtosClosureValue abort)
+                || abort.definition() == null
+                || abort.executionPlan().isEmpty()
+                || abort.nativeBody().isPresent()) {
+            throw new IllegalStateException("standard TcpConnection.abort must be source-backed");
         }
 
         prototype.createLocalSlot(
@@ -91,6 +100,22 @@ public final class ProtosStandardTcpConnectionProtocol {
                                         requireEndpointConnection(activation, supplied, prototype),
                                         false,
                                         activation)));
+    }
+
+    /** Private lexical access to the connection's existing resource retirement machinery. */
+    public static ProtosObjectValue createAbortBridge() {
+        ProtosObjectValue bridge = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        bridge.createLocalSlot("abort", ProtosClosureValue.nativeClosure((activation, supplied) -> {
+            if (activation.receiver() != bridge || supplied.size() != 1
+                    || !(supplied.get(0) instanceof ProtosTcpConnectionValue connection)
+                    || connection.parent().orElse(null)
+                            != activation.prelude().orElseThrow().tcpConnectionPrototypeForRuntime()
+                    || !connection.hasProtocolFlowInDomainForRuntime(activation)) {
+                throw invalid(activation);
+            }
+            return connection.abortForRuntime(activation);
+        }));
+        return bridge.freeze();
     }
 
     private static ProtosTcpConnectionValue requireConnection(

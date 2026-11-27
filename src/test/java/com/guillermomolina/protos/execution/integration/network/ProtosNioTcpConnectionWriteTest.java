@@ -1,4 +1,19 @@
-/* APL-1.0 licensed work; see LICENSE.TXT. */
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -77,6 +92,122 @@ final class ProtosNioTcpConnectionWriteTest {
             assertEquals(ProtosFutureValue.State.RESOLVED,write.state());
             assertArrayEquals(outgoing,received);
         }
+    }
+
+    @Test void abortStopsACommittedPrefixWithoutAnotherWriteAttempt() throws Exception { controlledAbort(1,0,false); }
+    @Test void abortRejectsContinuationEvenForCommittedOutput() throws Exception { controlledAbort(1,1,false); }
+    @Test void abortDuringFirstAttemptWithZeroEffect() throws Exception { controlledAbort(0,0,false); }
+    @Test void abortDuringFirstAttemptWithPositiveIncompleteEffect() throws Exception { controlledAbort(0,1,false); }
+    @Test void finalAdmittedAttemptPreservesCompleteSuccessAfterAbort() throws Exception { controlledAbort(1,2,false); }
+    @Test void admittedAttemptIndependentFailureSurvivesAbort() throws Exception { controlledAbort(1,0,true); }
+    @Test void completeFirstAttemptAfterAbortIsNotDuplicated() throws Exception { controlledAbort(0,3,false); }
+
+    private static void controlledAbort(int prefix,int finalCount,boolean fail) throws Exception {
+        try(var x=new ControlledFixture(prefix,finalCount,fail)) {
+            var write=x.write();
+            if(prefix>0){x.barrier();x.poller.submit(()->x.backend.ready(x.key),e->{throw new AssertionError(e);});}
+            org.junit.jupiter.api.Assertions.assertTrue(x.channel.entered.await(5,java.util.concurrent.TimeUnit.SECONDS));
+            var abort=x.call("abort");
+            org.junit.jupiter.api.Assertions.assertTrue(abort.isPending());
+            x.channel.proceed.countDown();x.barrier();x.publish();
+            if(!fail&&prefix+finalCount==3)assertSame(x.connection,write.resolvedValue().orElseThrow());
+            else {
+                assertEquals(ProtosFutureValue.State.FAILED,write.state());
+                String category=prefix+finalCount==0&&!fail?"IOLifecycleError":"IOError";
+                assertSame(x.prelude.bindings().readLocalSlot(category).orElseThrow(),
+                        write.failedError().orElseThrow().parent().orElseThrow());
+            }
+            assertSame(x.connection,abort.resolvedValue().orElseThrow());
+            assertEquals(prefix>0?2:1,x.channel.writeCalls);
+            assertEquals(prefix+(fail?0:finalCount),x.channel.output.size());
+            assertEquals(1,x.channel.closeCalls);
+        }
+    }
+
+    static final class ControlledFixture implements AutoCloseable {
+        final ProtosNioHostIoPoller poller=new ProtosNioHostIoPoller("tcp-controlled-attempt");
+        final ControlledChannel channel;
+        final java.nio.channels.SelectionKey key;
+        final ProtosNioTcpConnectionBackend backend;
+        final ProtosPrelude prelude=new ProtosCoreBootstrap().bootstrap(CORE);
+        final ProtosActivation activation=prelude.newModuleActivation();
+        final ProtosTcpConnectionValue connection;
+        ControlledFixture(int prefix,int finalCount,boolean failure) throws Exception {
+            channel=new ControlledChannel(prefix,finalCount,failure);
+            key=new java.nio.channels.SelectionKey(){
+                boolean valid=true;int interests;
+                public java.nio.channels.SelectableChannel channel(){return channel;}
+                public java.nio.channels.Selector selector(){return null;}
+                public boolean isValid(){return valid;}
+                public void cancel(){valid=false;}
+                public int interestOps(){return interests;}
+                public java.nio.channels.SelectionKey interestOps(int ops){interests=ops;return this;}
+                public int readyOps(){return java.nio.channels.SelectionKey.OP_WRITE;}
+            };
+            backend=new ProtosNioTcpConnectionBackend(poller,channel);backend.attachKey(key);
+            connection=new ProtosTcpConnectionValue(prelude,new Object(),activation,backend);
+        }
+        ProtosFutureValue write(){
+            return (ProtosFutureValue)ProtosInvocation.invokeMessage(connection,"write",List.of(
+                    new ProtosBytesValue(prelude.bytesPrototypeForRuntime(),new byte[]{1,2,3})),activation);
+        }
+        ProtosFutureValue call(String selector){
+            return (ProtosFutureValue)ProtosInvocation.invokeMessage(connection,selector,List.of(),activation);
+        }
+        void barrier() throws Exception {
+            var done=new java.util.concurrent.CountDownLatch(1);
+            var failure=new java.util.concurrent.atomic.AtomicReference<RuntimeException>();
+            poller.submit(done::countDown,e->{failure.set(e);done.countDown();});
+            org.junit.jupiter.api.Assertions.assertTrue(done.await(5,java.util.concurrent.TimeUnit.SECONDS));
+            org.junit.jupiter.api.Assertions.assertNull(failure.get());
+        }
+        void publish(){while(activation.executionDomain().dispatchTargetedRuntimeCompletionWithoutHandoffForRuntime()) {}}
+        public void close() throws Exception {channel.proceed.countDown();channel.closeProceed.countDown();backend.releaseIfUntransferred();poller.close();channel.close();}
+    }
+
+    /** A controlled host boundary; latches choose admission/effect/release ordering, never sleeps. */
+    static final class ControlledChannel extends SocketChannel {
+        final int prefix;final int finalCount;final boolean failure;
+        final java.util.concurrent.CountDownLatch entered=new java.util.concurrent.CountDownLatch(1);
+        final java.util.concurrent.CountDownLatch proceed=new java.util.concurrent.CountDownLatch(1);
+        final java.util.concurrent.CountDownLatch closeEntered=new java.util.concurrent.CountDownLatch(1);
+        final java.util.concurrent.CountDownLatch closeProceed=new java.util.concurrent.CountDownLatch(1);
+        final java.io.ByteArrayOutputStream output=new java.io.ByteArrayOutputStream();
+        volatile boolean holdClose;volatile boolean failClose;volatile int writeCalls;volatile int closeCalls;
+        ControlledChannel(int prefix,int finalCount,boolean failure){super(java.nio.channels.spi.SelectorProvider.provider());this.prefix=prefix;this.finalCount=finalCount;this.failure=failure;}
+        public int write(ByteBuffer buffer)throws IOException {
+            writeCalls++;
+            if(prefix>0&&writeCalls==1)return consume(buffer,prefix);
+            entered.countDown();await(proceed);
+            if(failure)throw new IOException("controlled write failure");
+            return consume(buffer,finalCount);
+        }
+        private int consume(ByteBuffer b,int count){for(int i=0;i<count;i++)output.write(b.get());return count;}
+        private static void await(java.util.concurrent.CountDownLatch latch)throws IOException {
+            try{if(!latch.await(5,java.util.concurrent.TimeUnit.SECONDS))throw new IOException("control barrier timed out");}
+            catch(InterruptedException e){Thread.currentThread().interrupt();throw new IOException(e);}
+        }
+        protected void implCloseSelectableChannel()throws IOException {
+            closeCalls++;closeEntered.countDown();if(holdClose)await(closeProceed);
+            if(failClose)throw new IOException("controlled release failure");
+        }
+        protected void implConfigureBlocking(boolean block){}
+        public int read(ByteBuffer b){return 0;}
+        public long read(ByteBuffer[] b,int offset,int length){return 0;}
+        public long write(ByteBuffer[] b,int offset,int length)throws IOException{return write(b[offset]);}
+        public java.net.Socket socket(){throw new UnsupportedOperationException();}
+        public boolean isConnected(){return true;}
+        public boolean isConnectionPending(){return false;}
+        public boolean connect(java.net.SocketAddress remote){return true;}
+        public boolean finishConnect(){return true;}
+        public SocketChannel bind(java.net.SocketAddress local){return this;}
+        public SocketChannel shutdownInput(){return this;}
+        public SocketChannel shutdownOutput(){return this;}
+        public java.net.SocketAddress getRemoteAddress(){return null;}
+        public java.net.SocketAddress getLocalAddress(){return null;}
+        public <T> SocketChannel setOption(java.net.SocketOption<T> option,T value){return this;}
+        public <T> T getOption(java.net.SocketOption<T> option){return null;}
+        public java.util.Set<java.net.SocketOption<?>> supportedOptions(){return java.util.Set.of();}
     }
 
     private static Fixture connected(String name) throws Exception {

@@ -23,6 +23,15 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.518] - 2026-11-27
+
+### D270-D / D270-D1-B / I184 — Explicit TCP transport abort and custody
+
+- Primary owner `io/NETWORK.md`: define the ordinary `TcpConnection.abort()` operation, authentic receiver authority, irreversible cutover, escalation of pending close, fresh follower Futures and a single logical retirement outcome.
+- Update `io/IO_CORE.md` and `io/BYTE_IO.md` to reconcile committed operation aftermath, previously admitted final effect attempts, incomplete output prefixes, zero logical read consumption, directional shutdown and safe physical retirement.
+- Reconcile `io/PROCESS_IO.md` with existing Process and Actor custody boundaries without introducing implicit transport abort.
+- Update `io/TLS.md` and `io/HTTP.md` to preserve authenticated TLS closure, transport Error identity, borrowed and owning custody, mandatory retirement and cooperative HTTP Host shutdown.
+
 ## [0.1.517] - 2026-11-27
 
 ### D265-D / I180 — Explicit resolved module references and HTTP Host composition

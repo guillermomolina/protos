@@ -38,6 +38,7 @@ duplexOf: (chunks) => {
     reads: 0
     writes: 0
     closes: 0
+    aborts: 0
     shutdowns: 0
     requested: []
     closeCompleted: false
@@ -135,6 +136,14 @@ duplexOf: (chunks) => {
         }
         shutdownCount: () => {
             shutdowns
+        }
+        // Test observation only; HTTP must never invoke transport abort.
+        abort: () => {
+            aborts = aborts + 1
+            (() => { fixture }).future()
+        }
+        abortCount: () => {
+            aborts
         }
         closeDone: () => {
             closeCompleted
@@ -321,6 +330,50 @@ unconfigured: (duplex) => {
 }
 
 tests: [
+    Test("a borrowed exchange preserves a transport lifecycle Error without cleanup", () => {
+        dx: duplexOf([])
+        transport: IOLifecycleError {}
+        dx.failReadsWith(transport)
+        Assertions.require(failureOf(http.Client.exchangeOne(dx, get(), status, null)) === transport)
+        Assertions.require(dx.closeCount() == 0)
+        Assertions.require(dx.shutdownCount() == 0)
+        Assertions.require(dx.abortCount() == 0)
+    }),
+    Test("an owning exchange preserves a lifecycle Error and closes exactly once", () => {
+        transport: IOLifecycleError {}
+        outcome: exchangeOwning([], status, (dx) => { dx.failReadsWith(transport) })
+        Assertions.require(outcome.failure === transport)
+        Assertions.require(outcome.duplex.closeCount() == 1)
+        Assertions.require(outcome.duplex.closeDone())
+        Assertions.require(outcome.duplex.shutdownCount() == 0)
+        Assertions.require(outcome.duplex.abortCount() == 0)
+    }),
+    Test("HTTP owning cleanup retains its close failure precedence over lifecycle failure", () => {
+        transport: IOLifecycleError {}
+        closeError: IOError {}
+        outcome: exchangeOwning([], status, (dx) => {
+            dx.failReadsWith(transport)
+            dx.failCloseWith(closeError)
+        })
+        Assertions.require(outcome.failure === closeError)
+        Assertions.require(outcome.duplex.closeCount() == 1)
+        Assertions.require(outcome.duplex.abortCount() == 0)
+    }),
+    Test("a body read preserves the exact transport lifecycle Error", () => {
+        transport: IOLifecycleError {}
+        dx: duplexOf([ascii("HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\n"), ascii("hello")])
+        reached: null
+        service: http.Client.exchangeOne(dx, get(), (response) => {
+            dx.failReadsWith(transport)
+            reached = failureOf(response.body.read(5))
+            "handled"
+        }, null)
+        Assertions.require(service.value() == "handled")
+        Assertions.require(reached === transport)
+        Assertions.require(dx.closeCount() == 0)
+        Assertions.require(dx.shutdownCount() == 0)
+        Assertions.require(dx.abortCount() == 0)
+    }),
     Test("a borrowed duplex is never closed or half-closed", () => {
         for(outcome in [
             exchange([ascii(ok)], status),
@@ -329,6 +382,7 @@ tests: [
         ]) {
             Assertions.require(outcome.duplex.closeCount() == 0)
             Assertions.require(outcome.duplex.shutdownCount() == 0)
+            Assertions.require(outcome.duplex.abortCount() == 0)
         }
         null
     }),
@@ -339,6 +393,7 @@ tests: [
         Assertions.require(outcome.duplex.closeCount() == 1)
         Assertions.require(outcome.duplex.closeDone())
         Assertions.require(outcome.duplex.shutdownCount() == 0)
+        Assertions.require(outcome.duplex.abortCount() == 0)
     }),
     Test("an owned duplex is closed exactly once on every failure path", () => {
         readError: IOError {}
@@ -358,6 +413,7 @@ tests: [
             Assertions.require(outcome.duplex.closeCount() == 1)
             Assertions.require(outcome.duplex.closeDone())
             Assertions.require(outcome.duplex.shutdownCount() == 0)
+            Assertions.require(outcome.duplex.abortCount() == 0)
         }
         Assertions.require(outcomes[0].failure.parent() === http.ClientError)
         Assertions.require(outcomes[2].failure === readError)

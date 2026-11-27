@@ -1,4 +1,19 @@
-/* APL-1.0 licensed work; see LICENSE.TXT. */
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -90,6 +105,55 @@ final class ProtosNioTcpConnectionLifecycleTest {
             assertFailedAs(future(x,"read",List.of(integer(1))),x.prelude,"IOLifecycleError");
             assertFailedAs(write(x,new byte[]{1}),x.prelude,"IOLifecycleError");
             awaitPeerEof(x.peer);
+        }
+    }
+
+    @Test void physicalCloseInitiationAndRepeatedRequestsDoNotPublishEarlySuccess() throws Exception {
+        try(var x=new ProtosNioTcpConnectionWriteTest.ControlledFixture(0,0,false)) {
+            x.channel.holdClose=true;
+            var abort=x.call("abort");
+            org.junit.jupiter.api.Assertions.assertTrue(x.channel.closeEntered.await(5,java.util.concurrent.TimeUnit.SECONDS));
+            var close=x.call("close");var repeated=x.call("abort");
+            x.publish();org.junit.jupiter.api.Assertions.assertTrue(abort.isPending());
+            org.junit.jupiter.api.Assertions.assertTrue(close.isPending());org.junit.jupiter.api.Assertions.assertTrue(repeated.isPending());
+            x.channel.closeProceed.countDown();x.barrier();x.publish();
+            assertSame(x.connection,abort.resolvedValue().orElseThrow());assertSame(x.connection,close.resolvedValue().orElseThrow());
+            assertEquals(1,x.channel.closeCalls);
+        }
+    }
+
+    @Test void physicalReleaseFailureIsRetainedWithoutRetry() throws Exception {
+        try(var x=new ProtosNioTcpConnectionWriteTest.ControlledFixture(0,0,false)) {
+            x.channel.failClose=true;var abort=x.call("abort");x.barrier();x.publish();
+            assertFailedAs(abort,x.prelude,"IOError");
+            assertSame(abort.failedError().orElseThrow(),x.call("close").failedError().orElseThrow());
+            assertSame(abort.failedError().orElseThrow(),x.call("abort").failedError().orElseThrow());
+            assertEquals(1,x.channel.closeCalls);
+        }
+    }
+
+    @Test void abortRetiresPendingDirectionalShutdowns() throws Exception {
+        try(var x=new ProtosNioTcpConnectionWriteTest.ControlledFixture(1,0,false)) {
+            var write=x.write();x.barrier();
+            var shutdown=x.call("shutdownWrite");var abort=x.call("abort");x.barrier();x.publish();
+            assertFailedAs(write,x.prelude,"IOError");assertFailedAs(shutdown,x.prelude,"IOError");
+            assertSame(x.connection,abort.resolvedValue().orElseThrow());assertEquals(1,x.channel.closeCalls);
+        }
+    }
+
+    @Test void abortEscalationDoesNotNeedThePeerToResumeReading() throws Exception {
+        try(Fixture x=connected("protos-test-nio-abort-nonreading")) {
+            // The one-byte read proves commitment, then the peer stops consuming output.
+            var write=write(x,payload(1024*1024));
+            readExactly(x.peer,1);
+            var close=future(x,"close",List.of());
+            var abort=future(x,"abort",List.of());
+            awaitTerminal(abort);awaitTerminal(close);awaitTerminal(write);
+            assertSame(x.connection,abort.resolvedValue().orElseThrow());
+            assertSame(x.connection,close.resolvedValue().orElseThrow());
+            // Kernel capacity can permit full output before cutover; the controlled tests
+            // separately require incomplete committed output and forbid continuation.
+            org.junit.jupiter.api.Assertions.assertNotEquals(ProtosFutureValue.State.CANCELLED,write.state());
         }
     }
 

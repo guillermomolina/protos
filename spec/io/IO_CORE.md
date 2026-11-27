@@ -232,7 +232,7 @@ That request has exactly the same strength as an explicit `Future.cancel()` for
 the operation: cancellation wins only while the operation's own contract still
 permits a cancelled outcome.
 
-Actor termination is not implicit `close()`, `flush()`, `sync()`, or shutdown of
+Actor termination is not implicit TCP `abort()`, `close()`, `flush()`, `sync()`, or shutdown of
 the receiver. It does not revoke a Process-local stream merely because one Actor
 was using it, and it does not roll back output or other effects that had already
 committed. If producer/backend work must continue after the Actor has terminated
@@ -307,6 +307,18 @@ add a hidden lifecycle token.
 
 ---
 ## 8. Closable
+
+The sole destructive exception to the ordinary commitment/aftermath rules in
+this section is an explicit `TcpConnection.abort()` under `NETWORK.md` §9.1.
+It may escalate pending TCP close and initiate physical retirement before
+previously admitted operations finish. Initiation is distinct from safe
+completion: success still requires both safe release and reconciliation of
+required operation aftermath. Close and abort retain one logical retirement,
+fresh follower Futures and the exact recorded retirement Error. Ordinary close
+without explicit TCP abort retains every guarantee below; no general
+`Abortable` protocol is implied. Explicit abort in termination cleanup is
+subject to the same authorized dynamic extent and owner-domain/host-only
+custody boundaries of §4; it cannot resurrect a terminated Actor.
 
 The Trait is conceptually:
 

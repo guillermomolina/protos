@@ -68,6 +68,24 @@ final class ProtosTerminationCleanupCloseTest {
                         other = acceptor.accept().value()
                         true
                     }
+                    ordinaryAbort: () => {
+                        connection.close()
+                        Actor.current().stop()
+                        IOLifecycleError.handle(
+                            () => { connection.abort().value(); "aborted" },
+                            (error) => { "rejected" }
+                        )
+                    }
+                    abortFirst: () => {
+                        retirement: connection.abort()
+                        Actor.current().stop()
+                        null
+                    }
+                    cleanupAbort: () => {
+                        (() => { connection.read(1).value() }).ensure(() => {
+                            connection.abort().value()
+                        })
+                    }
                     // A: before any cutover an ordinary close keeps working.
                     closeFirst: () => {
                         connection.close().value()
@@ -341,6 +359,24 @@ final class ProtosTerminationCleanupCloseTest {
             } catch (SocketTimeoutException stillOpen) {
                 // Expected: the Actor does not implicitly close the connection either.
             }
+        }
+    }
+
+    @Test void abortCannotEscalateCloseOutsideAuthorizedTerminationCleanup() throws Exception {
+        try(Fixture x=new Fixture();Socket client=x.connectAndAccept()) {
+            assertEquals("rejected",x.run("ordinaryAbort").asString());assertTrue(x.terminated());
+        }
+    }
+
+    @Test void explicitAbortIsAdmittedInsideAuthorizedTerminationCleanup() throws Exception {
+        try(Fixture x=new Fixture();Socket client=x.connectAndAccept()) {
+            x.park("cleanupAbort");assertTrue(x.terminated());assertEquals("",readToEof(client));
+        }
+    }
+
+    @Test void abortCommittedBeforeTerminationRemainsInBackendCustody() throws Exception {
+        try(Fixture x=new Fixture();Socket client=x.connectAndAccept()) {
+            x.run("abortFirst");assertTrue(x.terminated());assertEquals("",readToEof(client));
         }
     }
 

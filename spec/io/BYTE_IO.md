@@ -46,6 +46,12 @@ No sparse `Bytes` representation is observable.
 ---
 ## 5. ByteReadable
 
+For the sole case of a TCP transport explicitly receiving `abort()`,
+`NETWORK.md` §9.1 specializes the read aftermath below: committed results survive,
+while physically obtained input without logical consumption may be discarded
+during permanent retirement. An abort-failed read never represents positive
+logical consumption. Other receivers retain the preservation rules below.
+
 The Trait is conceptually:
 
 ```text
@@ -201,6 +207,16 @@ A program that intentionally issues writes without waiting may therefore accumul
 
 
 ### 6.2 ByteWritable cancellation and failure
+
+For TCP explicitly receiving `abort()`, `NETWORK.md` §9.1 distinguishes
+commitment from permission to continue effects. A positive prefix authorizes
+no new attempt after destructive cutover. Every previously admitted attempt
+must be reconciled with its actual or uncertain effect: uncertainty must not
+be fabricated as zero contribution. An incomplete committed write fails with
+`IOError`; a previously admitted attempt that establishes complete successful
+output preserves success even if publication follows cutover. Independent
+failures retain their ordinary contract. This exception does not change File,
+buffered wrappers, standard streams or other backends.
 
 While a write is still pending and no irreversible output effect has occurred, it may be cancelled with the guarantee that zero bytes from that write contributed to the receiver's observable output sequence.
 
@@ -654,6 +670,12 @@ Remote EOF and local read shutdown are distinct events even though ordinary read
 Output capability and output lifecycle remain unaffected except where a stronger concrete protocol explicitly couples them.
 
 ### 19.3 Whole-resource close
+
+Explicit TCP abort follows `NETWORK.md` §9.1: it rejects new half-closes,
+preserves previously established directional outcomes and reconciles pending
+half-close frontiers before retirement can succeed. A pending half-close whose
+frontier cannot be established fails with `IOError`; it cannot manufacture
+clean end of output. These rules apply only to that aborted TCP transport.
 
 `close()` closes the whole resource according to its lifecycle contract. It is not normatively defined as the composition `shutdownRead()` plus `shutdownWrite()`.
 

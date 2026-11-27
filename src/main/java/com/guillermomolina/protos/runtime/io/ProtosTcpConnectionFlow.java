@@ -67,7 +67,7 @@ public final class ProtosTcpConnectionFlow {
         this.domain = activation.executionDomain();
         this.backend = Objects.requireNonNull(backend, "backend");
         this.lifecycle =
-                new ProtosIoLifecycle(
+                ProtosIoLifecycle.withOwnerDomainPublicationForRuntime(
                         receiver,
                         activation.prelude().orElseThrow().futurePrototype(),
                         domain,
@@ -116,6 +116,15 @@ public final class ProtosTcpConnectionFlow {
         return lifecycle.close(activation);
     }
 
+    public synchronized ProtosFutureValue abort(ProtosActivation activation) {
+        requireDomain(activation);
+        if (closeActivation == null) closeActivation = activation;
+        ProtosFutureValue follower = lifecycle.abortTcpForRuntime(activation);
+        readLane.retireAbortedTcpForRuntime(activation);
+        writeLane.retireAbortedTcpForRuntime(activation);
+        return follower;
+    }
+
     ProtosIoLifecycle.State lifecycleStateForTesting() {
         return lifecycle.state();
     }
@@ -135,11 +144,11 @@ public final class ProtosTcpConnectionFlow {
 
                         @Override
                         public void failed() {
-                            completion.failed(ioError(activation));
+                            completion.failedWithIoErrorForRuntime();
                         }
                     });
         } catch (RuntimeException ex) {
-            completion.failed(ioError(activation));
+            completion.failedWithIoErrorForRuntime();
         }
     }
 
@@ -150,9 +159,8 @@ public final class ProtosTcpConnectionFlow {
         }
     }
 
-    private static ProtosObjectValue ioError(ProtosActivation activation) {
-        return ProtosCoreErrors.newOccurrence(
-                activation, ProtosCoreErrors.StandardError.I_O_ERROR);
+    public boolean ownsDomainForRuntime(ProtosActivation activation) {
+        return activation.executionDomain() == domain;
     }
 
     private final class ReadLaneBackend implements ProtosByteIoFlow.ReadShutdownBackend {

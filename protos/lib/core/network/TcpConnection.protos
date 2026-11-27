@@ -13,4 +13,10 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-_coreTcpConnectionPrototype: {}
+_coreTcpConnectionPrototype: {
+    /// Permanently retires this TCP transport; resolves to this connection after safe release.
+    abort: (...args) => {
+        if(args.size() != 0) { Error().signal() }
+        _coreTcpAbortBridge.abort(this)
+    }
+}

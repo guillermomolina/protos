@@ -1826,6 +1826,27 @@ reply: connection.read(4096).value()    // Bytes, or null at EOF
 connection.close().value()
 ```
 
+`Future.cancel()` requests cancellation of one operation; it cannot undo a
+committed write. `close()` rejects new work and waits for committed aftermath.
+`shutdownRead()` ends input, while `shutdownWrite()` ends output after its
+preceding clean frontier. When the application instead needs permanent
+transport retirement without waiting for the peer to consume pending output,
+it can explicitly invoke:
+
+```protos
+retirement: connection.abort()
+retirement.value()    // The exact connection after required aftermath and safe release
+```
+
+Abort can escalate pending close and prevents further write attempts. Earlier
+partial effects remain; a previously admitted attempt completing the whole
+write successfully retains success. Repeated close/abort calls return distinct
+Futures observing one retirement. Abort preserves endpoint snapshots, ordinary
+object state and Actor/P restrictions; it grants no new authority. It provides no
+automatic timeout, TCP RST guarantee or real-time deadline. HTTP Host shutdown
+remains cooperative. The [networking guide](library/networking.md#ending-a-tcp-connection)
+compares all five operations and explains failure handling.
+
 A listener takes three required arguments, `ipVersion`, `address`, and `port`;
 `address: null` and `port: null` are supplied values, and `port: null` selects a
 free port. Omitting any of the three answers a failed `Future<InvalidIOArgument>`:

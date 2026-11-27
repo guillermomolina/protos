@@ -525,6 +525,11 @@ This ordering does not impose a global scheduler order between Actors and does n
 ---
 ## 28. Process-Control Boundary
 
+Process termination does not synthesize successful TCP `abort()` or its Future.
+Explicit TCP retirement (`NETWORK.md` §9.1) remains subject to the authority
+revocation and host-custody rules below, including when cleanup fails: no
+resource returns to program custody. This adds no termination policy.
+
 The Protos Process I/O and bootstrap model owned by this document does not itself define the creation or control of external operating-system children. Those operations belong exclusively to the separately granted external execution capability specified in `EXTERNAL_PROCESS.md` (Root external execution capability provisioning).
 
 An external OS child is not a Protos Process, and launching one creates no Protos execution domain. Process IDs, `kill`, POSIX signals, process groups and sessions remain outside portable Protos.

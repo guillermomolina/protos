@@ -83,6 +83,42 @@ bin/protos --allow-network --allow-resolver protos/examples/io/tls-client-over-t
 These examples are outside mandatory deterministic tests. Importing a module
 never grants either capability.
 
+## Ending a TCP connection
+
+Choose the operation for the boundary you need:
+
+| Operation | Effect |
+|---|---|
+| `pending.cancel()` | Requests cancellation of that operation; a committed write cannot become zero-effect cancellation |
+| `connection.close()` | Stops admission and waits for already committed operation aftermath before ordinary release |
+| `connection.shutdownRead()` | Permanently ends input; uncommitted earlier reads become local `null` |
+| `connection.shutdownWrite()` | Ends output after the preceding clean output frontier; input remains usable |
+| `connection.abort()` | Irreversibly stops new effects and starts transport retirement, including escalation of pending close |
+
+For example, an application holding its own connection may explicitly retire
+it when it decides pending output is no longer useful:
+
+```protos
+pending: connection.write(Encoding.UTF8.encode("request"))
+retirement: connection.abort()
+retirement.value()    // The exact connection, after safe release and required aftermath
+```
+
+The write may already have contributed a prefix. Abort does not undo it, and a
+previously admitted final attempt that completes the write successfully keeps
+that success. An incomplete committed write fails with `IOError`; uncommitted
+work terminated by abort fails with `IOLifecycleError`. Do not blindly retry
+failed output. Every close/abort call returns a fresh Future observing the same
+retirement; cancelling one cannot reverse retirement. Endpoint snapshots and
+ordinary object slots remain available.
+
+Abort promises neither TCP RST nor remote receipt or a real-time completion
+bound. It is an explicit application action, with no automatic timeout policy.
+It belongs only to authentic local TcpConnections. Borrowed HTTP/TLS services
+receive no destructive authority, owning cleanup does not automatically abort,
+and `host.shutdown("abort")` retains its cooperative service-cancellation
+contract. See [`NETWORK.md` §9.1](../../../spec/io/NETWORK.md#91-explicit-transport-abort-d270-d-d270-d1-b).
+
 ## Name restrictions and failures
 
 `lookupAddresses` accepts a String of ASCII NR-LDH labels or strict IDNA2008

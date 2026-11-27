@@ -211,6 +211,9 @@ public final class ProtosCoreBootstrap {
         sourceLoader
                 .load(coreDirectory.resolve("network/Network.protos"))
                 .call(bootstrapActivation);
+        bootstrapContext.createLocalSlot(
+                ProtosStandardTcpConnectionProtocol.ABORT_BRIDGE_SLOT,
+                ProtosStandardTcpConnectionProtocol.createAbortBridge());
         sourceLoader
                 .load(coreDirectory.resolve("network/TcpConnection.protos"))
                 .call(bootstrapActivation);

@@ -8,6 +8,15 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.232-SNAPSHOT
+
+- **I184 / D270-D / D270-D1-B.** Add explicit TCP transport retirement through the source-backed `TcpConnection.abort()` operation, including irreversible admission cutover and escalation of pending ordinary close.
+- Preserve committed read and write outcomes, including successful completion of an already admitted final write attempt; reject further effect attempts and reconcile incomplete committed writes without rollback.
+- Reuse the existing I/O lifecycle, directional flows, NIO poller and owner-domain completion infrastructure, preserving fresh follower Futures, recorded Error identity and safe physical release.
+- Reject post-abort writes before copying their payload or reserving retention capacity. Preserve ordinary capacity admission on open connections.
+- Extend deterministic lifecycle, concurrent retirement, poller termination, Actor custody, TLS and HTTP composition regressions.
+- Add real TCP loopback conformance to Native Image validation, preserving existing HTTP Host shutdown policy and authority boundaries.
+
 ## 0.4.231-SNAPSHOT
 
 - **I180-A / I180-B / D265-D.** Add source-backed `import.resolve(String)`, `import.isReference(value)` and `import(reference)` over authenticated, immutable resolved MODULE and SOURCE references; resolution does not initialize a module, and reference loading reuses the existing Actor-local cache and structured initialization path.

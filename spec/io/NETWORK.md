@@ -379,7 +379,7 @@ ordinary reflection observes its local standard selectors. The prototype itself 
 resource authority.
 
 The TcpConnection protocol prototype owns the standard local behavior selectors `read`, `write`,
-`close`, `shutdownRead`, `shutdownWrite`, `localEndpoint`, and `remoteEndpoint`. The TcpListener
+`close`, `abort`, `shutdownRead`, `shutdownWrite`, `localEndpoint`, and `remoteEndpoint`. The TcpListener
 protocol prototype owns `accept`, `acceptCapability`, `localPort`, and `close`. A freshly acquired concrete resource has
 no mandatory local Protos slots merely to duplicate those selectors or encode backend state.
 Application code may create/shadow ordinary local slots while the resource object's structural state
@@ -575,6 +575,84 @@ the backend does not expose as the logical flow.
 A successful byte write means only the contribution guarantee already defined by
 Core byte I/O; it does not imply remote-application receipt and adds no portable
 `flush()` delivery promise.
+
+### 9.1 Explicit transport abort (D270-D, D270-D1-B)
+
+```text
+connection.abort() -> Future<TcpConnection>
+```
+
+`abort` is an ordinary selector on the canonical TcpConnection behavior
+prototype. It accepts exactly zero arguments and requires an authentic acquired
+TcpConnection in its owning Actor domain. Invalid arity or receiver signals a
+fresh ordinary `Error`, as do the other TcpConnection selectors. Neither the
+authority-free prototype nor an ordinary descendant of it or of a connection
+acquires transport authority through delegation. No `Abortable` protocol,
+Prelude binding, constructor or public bootstrap bridge is introduced.
+TcpListener, TcpAcceptor, Network and Resolver do not acquire this operation.
+
+Invocation establishes an irreversible destructive cutover before returning
+its fresh ordinary Future. It rejects later operations requiring an open
+connection and initiates physical retirement without waiting for the peer to
+read outstanding output. No new output-effect attempt may be admitted after
+cutover, including continuation of an already committed write. An attempt
+admitted before cutover must be reconciled according to its actual outcome;
+neither admission nor uncertainty is proof of zero contribution. Effects
+already established are never rolled back or automatically retried.
+
+The pending-operation outcomes are:
+
+| Established situation | Required outcome |
+| --- | --- |
+| Valid cancellation before cutover | Preserve `cancelled` |
+| Uncommitted read | Fresh `IOLifecycleError`, zero logical consumption |
+| Committed read result | Preserve that result |
+| Write with no committed effect | Fresh `IOLifecycleError` |
+| Committed, incomplete write | Fresh `IOError`, preserving its permitted prefix |
+| Previously admitted attempt establishes the complete successful write | Preserve success, even with publication after cutover |
+| Independently established failure | Preserve the applicable failure |
+| Completed half-close | Preserve its outcome |
+| Pending half-close whose required frontier cannot be established | Fresh `IOError` |
+
+Physical input obtained without a committed read result may be discarded as
+part of permanent transport retirement; a failed read still consumes zero
+logical bytes. Earlier committed local EOF from read shutdown remains committed.
+Pending half-close aftermath participates in the retirement completion barrier.
+
+`close()` and `abort()` observe one logical retirement and one physical release.
+Abort during pending close irreversibly escalates it; close during abort observes
+the existing retirement. Abort after successful close succeeds without another
+release. Abort after failed close, or repeated abort after failed retirement,
+fails with exactly the recorded retirement Error within the same domain, without
+retry. Every invocation of either selector returns a distinct Future. Cancelling
+one of these Futures cannot cancel or reverse the committed retirement.
+Independent operation failures use fresh Errors; followers of the same failed
+retirement share its exact Error.
+
+Retirement success resolves to exactly the receiving connection and requires
+both safe physical release and complete reconciliation of required aftermath of
+previously admitted operations. Initiating release, or receiving an early physical
+completion while operations remain unreconciled, is insufficient. A preceding
+write's failure does not alone imply retirement failure. Failed retirement never
+reopens the receiver or returns release custody to the program.
+
+Abort does not change ordinary structural OPEN/CLOSED/FROZEN state, local slots,
+lookup, extraction or shadowing. Synchronous endpoint observations remain
+available under their existing contracts. Authority and Actor/P transfer rules
+remain unchanged. Abort guarantees neither TCP RST, remote receipt nor a
+real-time completion bound. Actor termination does not imply abort; committed
+retirement and explicitly authorized cleanup obey `IO_CORE.md` §4 and Process
+custody obeys `PROCESS_IO.md` §28.
+
+For example, after a 60-byte prefix of a 100-byte write, an admitted 25-byte
+attempt may establish 85 bytes after cutover. The remaining 15 bytes must not
+be attempted; the write fails with `IOError`. Starting that last attempt merely
+because the write was committed is nonconforming. If an admitted final attempt
+instead establishes all remaining 40 bytes successfully, the write succeeds;
+failing it merely because publication follows abort is nonconforming. Two abort
+followers and a close follower have distinct Future identities but observe the
+same retirement result; fabricating separate retirement Errors or reporting
+success before outstanding attempt/half-close aftermath is nonconforming.
 
 ## 10. Error portability
 

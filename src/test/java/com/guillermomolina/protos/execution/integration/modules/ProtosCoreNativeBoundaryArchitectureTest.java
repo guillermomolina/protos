@@ -62,7 +62,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/protocols/io/ProtosStandardIpEndpointProtocol.java", 1),
                     // D241-B: public connectTcp plus the private listen bridge; listenTcp is source.
                     Map.entry("execution/protocols/io/ProtosStandardNetworkProtocol.java", 2),
-                    Map.entry("execution/protocols/io/ProtosStandardTcpConnectionProtocol.java", 7),
+                    Map.entry("execution/protocols/io/ProtosStandardTcpConnectionProtocol.java", 8),
                     Map.entry("execution/protocols/io/ProtosStandardTcpAcceptorProtocol.java", 1),
                     Map.entry("execution/protocols/io/ProtosStandardTcpListenerProtocol.java", 4),
                     Map.entry("execution/protocols/values/ProtosStandardArrayProtocol.java", 7),
@@ -151,6 +151,14 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
     }
 
     @Test
+    void tcpAbortHasOnePrivateBridgeAndSourceBackedPublicBehavior() throws IOException {
+        ProtosPrelude prelude=new ProtosCoreBootstrap().bootstrap(CORE);
+        assertSourceBacked(prelude.tcpConnectionPrototypeForRuntime(),"abort");
+        assertFalse(prelude.bindings().hasLocalSlot("_coreTcpAbortBridge"));
+        assertFalse(prelude.tcpConnectionPrototypeForRuntime().hasLocalSlot("_coreTcpAbortBridge"));
+    }
+
+    @Test
     void javaNativeClosureProvidersMatchTheAuditedBoundaryExactly() throws IOException {
         Map<String, Integer> actualCore = new TreeMap<>();
         Map<String, Integer> actualNonCore = new TreeMap<>();
@@ -231,7 +239,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
 
         assertEquals(EXPECTED_NATIVE_PROVIDERS, actualCore);
         assertEquals(39, actualCore.size());
-        assertEquals(156, actualCore.values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(157, actualCore.values().stream().mapToInt(Integer::intValue).sum());
         assertEquals(EXPECTED_NON_CORE_NATIVE_PROVIDERS, actualNonCore);
 
     }

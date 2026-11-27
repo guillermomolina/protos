@@ -54,6 +54,7 @@ import java.util.stream.Stream;
 final class ProtosTestToolRepositoryCompletenessSupport {
     static final Path TESTS_ROOT = Path.of("protos", "tests");
     static final String COLORED_FORMATTER = "library/logging/colored-formatter.protos";
+    static final String TCP_ABORT_FIXTURE = "library/network/tcp-abort.protos";
 
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
@@ -249,7 +250,8 @@ final class ProtosTestToolRepositoryCompletenessSupport {
      * Classifies sources keyed by their path relative to {@code protos/tests/}. A source is
      * intended production when it declares the suite-native surface (an {@code std:test/test}
      * import and a top-level {@code tests} Array) inside a production tree and outside D133
-     * project data. Exclusions follow ownership boundaries only and are never derived from
+     * project data or the TCP abort fixture requiring JUnit-injected bindings.
+     * Exclusions follow ownership boundaries only and are never derived from
      * registrations.
      */
     static Inventory classify(Map<String, String> sources) throws IOException {
@@ -260,6 +262,7 @@ final class ProtosTestToolRepositoryCompletenessSupport {
             boolean declares = declaresSuiteNativeTests(source.getValue());
             if (declares
                     && PRODUCTION_TREES.stream().anyMatch(path::startsWith)
+                    && !path.equals(TCP_ABORT_FIXTURE)
                     && projectDataCorpus(path) == null) {
                 intended.add(path);
             }
@@ -302,6 +305,10 @@ final class ProtosTestToolRepositoryCompletenessSupport {
     }
 
     private static String exclusionReason(String path, boolean declares) throws IOException {
+        if (path.equals(TCP_ABORT_FIXTURE)) {
+            return "JUnit-owned by ProtosTcpConnectionIntegratedConformanceTest; requires"
+                    + " injected connection and emptyBytes bindings";
+        }
         String projectCorpus = projectDataCorpus(path);
         if (projectCorpus != null) {
             return "D133 project-tree data of " + projectCorpus;

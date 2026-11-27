@@ -52,8 +52,13 @@ public final class ProtosIoLifecycle {
     private ProtosObjectValue closeError;
     private ProtosActivation closeActivation;
     private boolean releaseStarted;
+    private boolean tcpAbort;
+    private boolean releaseReported;
+    private ProtosObjectValue releaseError;
+    private boolean releaseIoError;
+    private boolean closePublicationStarted;
     /**
-     * I125-B opt-in (TCP listener): every release outcome not reported synchronously inside the
+     * Every opted-in release outcome not reported synchronously inside the
      * owner-domain close's own release start is published in the owner domain.
      */
     private final boolean ownerDomainPublication;
@@ -84,6 +89,12 @@ public final class ProtosIoLifecycle {
 
     public synchronized State state() { return state; }
     synchronized boolean isOpenLocked() { return state == State.OPEN; }
+
+    synchronized boolean tcpAbortedLocked() { return tcpAbort; }
+
+    boolean tcpTransportForRuntime() {
+        return receiver instanceof com.guillermomolina.protos.runtime.io.ProtosTcpConnectionValue;
+    }
 
     /** Admits ordinary resource work, or returns a fresh lifecycle-failed Future if close already cut over. */
     public ProtosIoOperation beginOperation(ProtosActivation origin) {
@@ -150,14 +161,20 @@ public final class ProtosIoLifecycle {
     }
 
     /** Commits close at invocation, returns a fresh Future, and shares one permanent logical outcome. */
-    public ProtosFutureValue close(ProtosActivation activation) { return close(activation, false); }
+    public ProtosFutureValue close(ProtosActivation activation) { return close(activation, false, false); }
+
+    /** Escalates only the authentic TCP resource's existing retirement, never starts another one. */
+    public ProtosFutureValue abortTcpForRuntime(ProtosActivation activation) {
+        if (!tcpTransportForRuntime()) throw new IllegalStateException("destructive retirement requires TCP");
+        return close(activation, false, true);
+    }
 
     /** PLAT030 close entry for release that may require Actor-local guest execution. */
     public ProtosFutureValue closeWithGuestReleaseForRuntime(ProtosActivation activation) {
-        return close(activation, true);
+        return close(activation, true, false);
     }
 
-    private ProtosFutureValue close(ProtosActivation activation, boolean reserveGuestCleanup) {
+    private ProtosFutureValue close(ProtosActivation activation, boolean reserveGuestCleanup, boolean abort) {
         Objects.requireNonNull(activation,"activation");
         if (activation.executionDomain()!=domain) throw new IllegalArgumentException("close belongs to another Actor domain");
         ProtosFutureValue follower=new ProtosFutureValue(futurePrototype,domain);
@@ -174,13 +191,23 @@ public final class ProtosIoLifecycle {
                     follower.fail(closeError);
                     return follower;
                 }
-                case CLOSING -> { closeFollowers.add(follower); return follower; }
+                case CLOSING -> {
+                    if (abort && !tcpAbort && !authorizeFirstCloseLocked(activation, false)) {
+                        follower.fail(ProtosCoreErrors.newOccurrence(activation,ProtosCoreErrors.StandardError.I_O_LIFECYCLE_ERROR));
+                        return follower;
+                    }
+                    closeFollowers.add(follower);
+                    if (!abort || tcpAbort) return follower;
+                    tcpAbort=true;
+                    start=readyToReleaseLocked();
+                }
                 case OPEN -> {
                     if (!authorizeFirstCloseLocked(activation, reserveGuestCleanup)) {
                         follower.fail(ProtosCoreErrors.newOccurrence(activation,ProtosCoreErrors.StandardError.I_O_LIFECYCLE_ERROR));
                         return follower;
                     }
                     state=State.CLOSING;
+                    tcpAbort=abort;
                     closeActivation=activation;
                     closeFollowers.add(follower);
                     terminationCleanupReserved=reserveGuestCleanup;
@@ -258,6 +285,7 @@ public final class ProtosIoLifecycle {
         boolean start=retireOperationRegistration(operation);
         // A retirement may run in any Actor or on a host thread: never an owner-synchronous start.
         if (start) startRelease(false);
+        publishReconciledClose();
     }
 
     @TruffleBoundary
@@ -277,7 +305,7 @@ public final class ProtosIoLifecycle {
     }
 
     private boolean readyToReleaseLocked() {
-        if (state != State.CLOSING || releaseStarted || !operations.isEmpty()) return false;
+        if (state != State.CLOSING || releaseStarted || (!tcpAbort && !operations.isEmpty())) return false;
         releaseStarted=true;
         return true;
     }
@@ -308,6 +336,31 @@ public final class ProtosIoLifecycle {
      * the discarded outcome takes the host-only terminal path without guest execution.
      */
     private void completeClose(ProtosObjectValue error, boolean constructIoError) {
+        synchronized(this) {
+            if (state != State.CLOSING || releaseReported) return;
+            releaseReported=true;
+            releaseError=error;
+            releaseIoError=constructIoError;
+        }
+        publishReconciledClose();
+    }
+
+    /** A physical notification is insufficient until every admitted operation has retired. */
+    @TruffleBoundary
+    private void publishReconciledClose() {
+        ProtosObjectValue error;
+        boolean constructIoError;
+        synchronized(this) {
+            if (state != State.CLOSING || !releaseReported || !operations.isEmpty()
+                    || closePublicationStarted) return;
+            closePublicationStarted=true;
+            error=releaseError;
+            constructIoError=releaseIoError;
+        }
+        publishClose(error, constructIoError);
+    }
+
+    private void publishClose(ProtosObjectValue error, boolean constructIoError) {
         boolean deferred;
         ProtosFutureValue carrier=null;
         synchronized(this) {

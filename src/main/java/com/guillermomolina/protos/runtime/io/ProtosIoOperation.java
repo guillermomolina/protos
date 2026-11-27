@@ -335,6 +335,19 @@ public final class ProtosIoOperation {
         }
     }
 
+    /** TCP continuation admission shares the irreversible resource cutover monitor. */
+    public boolean beginTcpWriteAttemptForRuntime() {
+        synchronized(lifecycle) {
+            if (lifecycle.tcpAbortedLocked()) return false;
+            if (phase == Phase.COMMITTED) return true;
+            return beginFirstEffectAttempt();
+        }
+    }
+
+    boolean tcpAbortedForRuntime() {
+        synchronized(lifecycle) { return lifecycle.tcpAbortedLocked(); }
+    }
+
     /**
      * Settles the in-flight PLAT009 attempt.
      *
@@ -370,16 +383,37 @@ public final class ProtosIoOperation {
         }
 
         if (cancel) {
+            if (lifecycle.tcpTransportForRuntime()) {
+                settleTcpFirstEffectCutover(null);
+                return false;
+            }
             future.cancelTerminal();
             finishTerminal();
             return false;
         }
         if (closeError != null) {
+            if (lifecycle.tcpTransportForRuntime()) {
+                settleTcpFirstEffectCutover(closeError);
+                return false;
+            }
             future.fail(closeError);
             finishTerminal();
             return false;
         }
         return true;
+    }
+
+    private void settleTcpFirstEffectCutover(ProtosObjectValue error) {
+        try {
+            origin.executionDomain().enqueueTargetedFutureCompletionForRuntime(future, () -> {
+                if (error == null) future.cancelTerminal();
+                else future.fail(error);
+                finishTerminal();
+                return true;
+            }, this::finishTerminal);
+        } catch (IllegalStateException terminatingOwner) {
+            finishTerminal();
+        }
     }
 
     /**

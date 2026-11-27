@@ -50,10 +50,28 @@ final class ProtosTcpConnectionFoundationTest {
         assertSame(ProtosObjectValue.rootObject(), prototype.parent().orElseThrow());
         assertTrue(prototype.isFrozen());
         assertEquals(
-                java.util.Set.of("read", "write", "close", "shutdownRead", "shutdownWrite", "localEndpoint", "remoteEndpoint"),
+                java.util.Set.of("read", "write", "abort", "close", "shutdownRead", "shutdownWrite", "localEndpoint", "remoteEndpoint"),
                 prototype.localSlotsSnapshot().keySet());
         assertTrue(prelude.bindings().readLocalSlot("TcpConnection").isEmpty());
         assertTrue(prelude.bindings().readLocalSlot("_coreTcpConnectionPrototype").isEmpty());
+    }
+
+    @Test
+    void abortIsCanonicalSourceBehaviorWithoutPrototypeOrDescendantAuthority() throws Exception {
+        ProtosPrelude prelude=core();
+        var activation=prelude.newModuleActivation();
+        var prototype=prelude.tcpConnectionPrototypeForRuntime();
+        var abort=assertInstanceOf(com.guillermomolina.protos.runtime.ProtosClosureValue.class,
+                prototype.readLocalSlot("abort").orElseThrow());
+        assertNotNull(abort.definition());
+        assertTrue(abort.executionPlan().isPresent());
+        assertTrue(abort.nativeBody().isEmpty());
+        for(var receiver:java.util.List.of(prototype,new ProtosObjectValue(prototype),
+                new ProtosObjectValue(new ProtosTcpConnectionValue(prelude,new Object())))) {
+            assertThrows(ProtosSignalException.class,()->com.guillermomolina.protos.execution.ProtosInvocation.invokeMessage(
+                    receiver,"abort",java.util.List.of(),activation));
+        }
+        assertTrue(prelude.bindings().readLocalSlot("_coreTcpAbortBridge").isEmpty());
     }
 
     @Test

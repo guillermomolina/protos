@@ -66,8 +66,10 @@ ascii: (text) => {
 // settledCloses counts the close Futures that settled.
 connectionOf: (request) => {
     delivered: false
+    reads: 0
     output: ascii("")
     closes: 0
+    aborts: 0
     settledCloses: 0
     closeDeferred: false
     closeReleased: false
@@ -78,6 +80,7 @@ connectionOf: (request) => {
     fixture: null
     fixture = {
         read: (maxBytes) => {
+            reads = reads + 1
             failure: readFailure
             result: null
             answer: null
@@ -127,6 +130,15 @@ connectionOf: (request) => {
         }
         closeCount: () => {
             closes
+        }
+        readCount: () => { reads }
+        // Observation confined to this fixture, not a Host operation.
+        abort: () => {
+            aborts = aborts + 1
+            (() => { fixture }).future()
+        }
+        abortCount: () => {
+            aborts
         }
         settledCloseCount: () => {
             settledCloses
@@ -253,6 +265,10 @@ tests: [
         Assertions.require(failureOf(malformedCustody.service) === malformedClose)
         Assertions.require((failedFuture.closeCount() == 1) && (signalled.closeCount() == 1) && (both.closeCount() == 1))
         Assertions.require((throwing.closeCount() == 1) && (malformed.closeCount() == 1))
+        for(connection in [failedFuture, signalled, both, throwing, malformed]) {
+            Assertions.require(connection.abortCount() == 0)
+        }
+        null
     }),
     Test("a cancelled session still closes its connection and classifies the close", () => {
         held: connectionOf("GET / HTTP/1.1\r\nHost: a\r\n")
@@ -260,12 +276,14 @@ tests: [
         custody.service.cancel()
         Assertions.require(!custody.retire())
         Assertions.require(held.closeCount() == 1)
+        Assertions.require(held.abortCount() == 0)
         failing: connectionOf(get)
         failing.failClose()
         cancelled: HostConnection.admit(Server, failing, ok, null)
         cancelled.service.cancel()
         Assertions.require(cancelled.retire())
         Assertions.require(failing.closeCount() == 1)
+        Assertions.require(failing.abortCount() == 0)
 
         // The cancelled session keeps its close obligation: while the close
         // Future is pending the session Future is not terminal; it becomes
@@ -295,6 +313,7 @@ tests: [
             Assertions.require(suspended.closeCount() == 1)
             Assertions.require(suspended.settledCloseCount() == 0)
             Assertions.require(!serviceTerminal)
+            Assertions.require(suspended.abortCount() == 0)
         }).ensure(() => {
             suspended.releaseClose()
         })
@@ -303,6 +322,7 @@ tests: [
         Assertions.require((suspended.closeCount() == 1) && (suspended.settledCloseCount() == 1))
         Assertions.require(!obligated.retire())
         Assertions.require(suspended.closeCount() == 1)
+        Assertions.require(suspended.abortCount() == 0)
     }),
     Test("an unadmitted connection is released without a handler", () => {
         released: connectionOf(get)
@@ -314,6 +334,76 @@ tests: [
         signalled: connectionOf(get)
         signalled.signalOnClose()
         Assertions.require(HostConnection.release(signalled))
+        for(connection in [released, failedFuture, signalled]) {
+            Assertions.require(connection.abortCount() == 0)
+        }
+        null
+    }),
+    Test("deferred unadmitted release waits for close without transport abort", () => {
+        connection: connectionOf(get)
+        connection.deferClose()
+        terminal: false
+        release: (() => {
+            result: HostConnection.release(connection)
+            terminal = true
+            result
+        }).future()
+        (() => {
+            turns: 0
+            while((turns < 10000) && (connection.closeCount() == 0)) {
+                yieldTurn()
+                turns = turns + 1
+            }
+            Assertions.require(connection.closeCount() == 1)
+            Assertions.require(connection.settledCloseCount() == 0)
+            Assertions.require(!terminal)
+            Assertions.require(connection.abortCount() == 0)
+        }).ensure(() => { connection.releaseClose() })
+        Assertions.require(!release.value())
+        Assertions.require(connection.settledCloseCount() == 1)
+        Assertions.require(connection.abortCount() == 0)
+    }),
+    Test("Worker cooperative abort cancels a session and awaits its mandatory close", () => {
+        connection: connectionOf(get)
+        connection.block()
+        connection.deferClose()
+        calls: 0
+        worker: acceptanceOf({
+            accept: () => {
+                calls = calls + 1
+                (() => { connection }).future()
+            }
+        }, 1, 1)
+        terminal: false
+        service: (() => {
+            result: worker.serve()
+            terminal = true
+            result
+        }).future()
+        (() => {
+            turns: 0
+            while((turns < 10000) && (connection.readCount() == 0)) {
+                yieldTurn()
+                turns = turns + 1
+            }
+            Assertions.require(connection.readCount() == 1)
+            worker.abort()
+            turns = 0
+            while((turns < 10000) && (connection.closeCount() == 0)) {
+                yieldTurn()
+                turns = turns + 1
+            }
+            Assertions.require(connection.closeCount() == 1)
+            Assertions.require(connection.settledCloseCount() == 0)
+            Assertions.require(!terminal)
+            Assertions.require(connection.abortCount() == 0)
+        }).ensure(() => {
+            worker.abort()
+            connection.releaseClose()
+        })
+        Assertions.require(service.value() == "drained")
+        Assertions.require(connection.settledCloseCount() == 1)
+        Assertions.require(connection.abortCount() == 0)
     }),
     Test("O: a fatal accept failure aborts the Worker and reports listener", () => {
         calls: 0
@@ -377,15 +467,18 @@ tests: [
         Assertions.require(worker.serve() == "drained")
         Assertions.require((calls == 1) && (handled == 0))
         Assertions.require((late.closeCount() == 1) && (late.written() == ""))
+        Assertions.require(late.abortCount() == 0)
         // A failed release close is a cleanup failure of this Worker.
         calls = 1
         worker = acceptanceOf(acceptor, 1, 1)
         Assertions.require(worker.serve() == "cleanup")
         Assertions.require((handled == 0) && (failing.closeCount() == 1) && (failing.written() == ""))
+        Assertions.require(failing.abortCount() == 0)
     }),
     Test("an admitted session retires and frees its quota unit on failure", () => {
         calls: 0
         first: connectionOf("BAD\r\n\r\n")
+        first.deferClose()
         second: connectionOf(get)
         worker: null
         acceptor: {
@@ -407,8 +500,23 @@ tests: [
         }
         // One connection unit: the rejected request must release it.
         worker = acceptanceOf(acceptor, 1, 1)
-        Assertions.require(worker.serve() == "drained")
+        service: (() => { worker.serve() }).future()
+        (() => {
+            turns: 0
+            while((turns < 10000) && (first.closeCount() == 0)) {
+                yieldTurn()
+                turns = turns + 1
+            }
+            Assertions.require(first.closeCount() == 1)
+            Assertions.require(first.settledCloseCount() == 0)
+            Assertions.require(calls == 1)
+            Assertions.require(handled == 0)
+            Assertions.require(second.closeCount() == 0)
+            Assertions.require(first.abortCount() == 0)
+        }).ensure(() => { first.releaseClose() })
+        Assertions.require(service.value() == "drained")
         Assertions.require((handled == 1) && (first.closeCount() == 1) && (second.closeCount() == 1))
+        Assertions.require((first.abortCount() == 0) && (second.abortCount() == 0))
     }),
     Test("a failed mandatory close aborts the admitting Worker and reports cleanup", () => {
         calls: 0
@@ -438,6 +546,7 @@ tests: [
         Assertions.require(worker.serve() == "cleanup")
         Assertions.require(!acceptedAfterFailure)
         Assertions.require((handled == 1) && (failing.closeCount() == 1))
+        Assertions.require(failing.abortCount() == 0)
         if(pendingAccept !== null) {
             Assertions.require(failureOf(pendingAccept).parent() === Cancelled)
         }

@@ -1,4 +1,19 @@
-/* APL-1.0 licensed work; see LICENSE.TXT. */
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
 package com.guillermomolina.protos.runtime;
 
 import java.util.ArrayDeque;
@@ -105,6 +120,9 @@ public final class ProtosByteIoFlow {
     private ProtosObjectValue writeShutdownError;
     private final java.util.ArrayList<ProtosFutureValue> readShutdownFollowers=new java.util.ArrayList<>();
     private final java.util.ArrayList<ProtosFutureValue> writeShutdownFollowers=new java.util.ArrayList<>();
+    private ProtosIoOperation readShutdownOperation;
+    private ProtosIoOperation writeShutdownOperation;
+    private boolean writeShutdownStarted;
     private boolean precedingWriteFailed;
     private boolean precedingFlushFailed;
 
@@ -184,6 +202,7 @@ public final class ProtosByteIoFlow {
         synchronized(this){if(writeState!=DirectionState.OPEN)return lifecycleFailedFuture(activation);}
         if(!(value instanceof ProtosBytesValue bytes))
             return failedFuture(activation,ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
+        if(tcpAborted())return lifecycleFailedFuture(activation);
         byte[] snapshot=bytes.octetSnapshot();
         synchronized(this){
             if(snapshot.length>maxRetainedWriteBytes-retainedWriteBytes)
@@ -233,6 +252,10 @@ public final class ProtosByteIoFlow {
             if(readState==DirectionState.SUCCEEDED){follower.resolve(receiver,a);return follower;}
             if(readState==DirectionState.FAILED){follower.fail(readShutdownError);return follower;}
             if(readState==DirectionState.SHUTTING){readShutdownFollowers.add(follower);return follower;}
+            if(lifecycle.tcpTransportForRuntime()) {
+                readShutdownOperation=begin(a);
+                if(!readShutdownOperation.commit())return readShutdownOperation.future();
+            }
             readState=DirectionState.SHUTTING;readShutdownFollowers.add(follower);
             for(Request r:operations)if(r.kind==Kind.READ&&!r.op.committed()&&!r.op.terminal()){
                 r.shutdownDiscard=true;cutover.add(r);
@@ -244,8 +267,14 @@ public final class ProtosByteIoFlow {
             if(c!=null)c.cancel();
         }
         pump();
-        try{rb.shutdownRead(new ShutdownCompletion(){public void succeeded(){finishReadShutdown(a,null);}public void failed(){finishReadShutdown(a,ioError(a));}});}
-        catch(RuntimeException ex){finishReadShutdown(a,ioError(a));}
+        CompletionDelivery delivery=readShutdownOperation==null?null:new CompletionDelivery(readShutdownOperation,()->readShutdownOperation.abandonCommittedAcquisitionForRuntime(),true);
+        if(delivery!=null)delivery.synchronousCaller=Thread.currentThread();
+        try{rb.shutdownRead(new ShutdownCompletion(){
+            public void succeeded(){deliverCompletion(delivery,()->finishReadShutdown(a,null));}
+            public void failed(){deliverCompletion(delivery,()->finishReadShutdown(a,ioError(a)));}
+        });}
+        catch(RuntimeException ex){deliverCompletion(delivery,()->finishReadShutdown(a,ioError(a)));}
+        finally{if(delivery!=null)delivery.synchronousCaller=null;}
         return follower;
     }
 
@@ -259,6 +288,10 @@ public final class ProtosByteIoFlow {
             if(writeState==DirectionState.SUCCEEDED){follower.resolve(receiver,a);return follower;}
             if(writeState==DirectionState.FAILED){follower.fail(writeShutdownError);return follower;}
             if(writeState==DirectionState.SHUTTING){writeShutdownFollowers.add(follower);return follower;}
+            if(lifecycle.tcpTransportForRuntime()) {
+                writeShutdownOperation=begin(a);
+                if(!writeShutdownOperation.commit())return writeShutdownOperation.future();
+            }
             writeState=DirectionState.SHUTTING;writeShutdownFollowers.add(follower);
         }
         maybeStartWriteShutdown(a);
@@ -266,15 +299,42 @@ public final class ProtosByteIoFlow {
     }
 
     private void maybeStartWriteShutdown(ProtosActivation a){
+        boolean failed;
         synchronized(this){
-            if(writeState!=DirectionState.SHUTTING)return;
+            if(writeState!=DirectionState.SHUTTING||writeShutdownStarted)return;
             for(Request r:operations)if(r.kind==Kind.WRITE||r.kind==Kind.FLUSH)return;
-            if(precedingWriteFailed||precedingFlushFailed){finishWriteShutdown(a,ioError(a));return;}
+            writeShutdownStarted=true;
+            failed=precedingWriteFailed||precedingFlushFailed||tcpAborted();
         }
+        if(failed){finishWriteShutdown(a,ioError(a));return;}
+        CompletionDelivery delivery=writeShutdownOperation==null?null:new CompletionDelivery(writeShutdownOperation,()->writeShutdownOperation.abandonCommittedAcquisitionForRuntime(),true);
+        if(delivery!=null)delivery.synchronousCaller=Thread.currentThread();
         try{((WriteShutdownBackend)backend).shutdownWrite(new ShutdownCompletion(){
-            public void succeeded(){finishWriteShutdown(a,null);}
-            public void failed(){finishWriteShutdown(a,ioError(a));}
-        });}catch(RuntimeException ex){finishWriteShutdown(a,ioError(a));}
+            public void succeeded(){deliverCompletion(delivery,()->finishWriteShutdown(a,null));}
+            public void failed(){deliverCompletion(delivery,()->finishWriteShutdown(a,ioError(a)));}
+        });}catch(RuntimeException ex){deliverCompletion(delivery,()->finishWriteShutdown(a,ioError(a)));}
+        finally{if(delivery!=null)delivery.synchronousCaller=null;}
+    }
+
+    private void deliverCompletion(CompletionDelivery delivery,Runnable action){
+        if(delivery==null)action.run();else delivery.deliver(action);
+    }
+
+    private void deliverOutcome(CompletionDelivery delivery,Runnable beforePublication,Runnable action){
+        if(delivery==null){beforePublication.run();action.run();}
+        else delivery.deliver(beforePublication,action);
+    }
+
+    private boolean tcpAborted(){
+        if(!lifecycle.tcpTransportForRuntime())return false;
+        synchronized(lifecycle){return lifecycle.tcpAbortedLocked();}
+    }
+
+    /** Retires only permanently inaccessible TCP input and pending output-shutdown frontiers. */
+    void retireAbortedTcpForRuntime(ProtosActivation activation){
+        if(!tcpAborted())return;
+        synchronized(this){unread.clear();}
+        maybeStartWriteShutdown(activation);
     }
 
     private void finishReadShutdown(ProtosActivation a,ProtosObjectValue error){
@@ -286,6 +346,8 @@ public final class ProtosByteIoFlow {
             readShutdownFollowers.clear();
         }
         for(ProtosFutureValue f:fs)if(error==null)f.resolve(receiver,a);else f.fail(error);
+        ProtosIoOperation operation=readShutdownOperation;
+        if(operation!=null){if(error==null)operation.resolve(receiver);else operation.fail(error);}
     }
     private void finishWriteShutdown(ProtosActivation a,ProtosObjectValue error){
         ProtosFutureValue[] fs; synchronized(this){
@@ -296,6 +358,8 @@ public final class ProtosByteIoFlow {
             writeShutdownFollowers.clear();
         }
         for(ProtosFutureValue f:fs)if(error==null)f.resolve(receiver,a);else f.fail(error);
+        ProtosIoOperation operation=writeShutdownOperation;
+        if(operation!=null){if(error==null)operation.resolve(receiver);else operation.fail(error);}
     }
     private ProtosFutureValue lifecycleFollower(ProtosActivation a){
         ProtosFutureValue f=new ProtosFutureValue(a.prelude().orElseThrow().futurePrototype(),domain);f.attachCancellationProducer(()->{});return f;
@@ -329,7 +393,7 @@ public final class ProtosByteIoFlow {
 
     private void pump(){
         Request r;
-        synchronized(this){r=operations.peekFirst();if(r==null||r.started)return;r.started=true;}
+        synchronized(this){r=operations.peekFirst();if(r==null||r.started||tcpAborted())return;r.started=true;}
         switch(r.kind){
             case READ -> startRead(r);
             case WRITE -> startWrite(r);
@@ -354,13 +418,16 @@ public final class ProtosByteIoFlow {
             }
         }
         if(buffered!=null){completeReadData(r,buffered);return;}
-        ReadDelivery delivery=new ReadDelivery(r);
+        CompletionDelivery delivery=new CompletionDelivery(r);
         delivery.synchronousCaller=Thread.currentThread();
         try{
             setCancellation(r,backend.read(ProtosNumericValueSupport.exactInt(r.number),new ReadCompletion(){
                 public void data(byte[] b){byte[] copy=Objects.requireNonNull(b).clone();delivery.deliver(()->completeReadData(r,copy));}
                 public void eof(){delivery.deliver(()->{if(r.op.commit())r.op.resolve(ProtosNullValue.INSTANCE);finish(r);});}
-                public void failed(){delivery.deliver(()->{failIo(r);finish(r);});}
+                public void failed(){
+                    delivery.deliver(()->{if(lifecycle.tcpTransportForRuntime())r.op.commit();},
+                            ()->{failIo(r);finish(r);});
+                }
                 public void rejected(ProtosCoreErrors.StandardError kind){delivery.deliver(()->{failRejected(r,kind);finish(r);});}
             }));
         }catch(RuntimeException ex){if(delivery.claim()){failIo(r);finish(r);}}
@@ -368,27 +435,36 @@ public final class ProtosByteIoFlow {
     }
 
     /**
-     * I158: one read's single host completion. A callback that runs inside the still-active
-     * backend {@code read()} call on the caller's thread keeps its synchronous behavior. Any later
-     * callback, typically from a host poller thread, carries only inert host data (copied bytes,
-     * EOF or failure) into a targeted completion of the owning Actor domain, which alone builds the
-     * Protos result, commits and resolves the Future and advances the read queue. A duplicate
-     * callback is ignored; a completion refused or discarded by a terminating Actor produces no
-     * guest outcome.
+     * Single host-outcome publication, shared by reads and TCP write/directional aftermath.
+     * Only a callback inside the owner caller's still-active backend invocation is synchronous.
+     * Later callbacks carry inert outcome data to the owner domain, which constructs guest
+     * values/Errors and advances queues. Lifecycle aftermath may publish in authorized termination
+     * cleanup; discarded outcomes retire host obligations without guest execution. The optional
+     * pre-publication action only arbitrates commitment under the existing lifecycle monitor.
      */
-    private final class ReadDelivery{
-        private final Request request;
+    private final class CompletionDelivery{
+        private final ProtosIoOperation operation;
+        private final Runnable discarded;
+        private final boolean committedLifecycle;
         private final java.util.concurrent.atomic.AtomicBoolean claimed=new java.util.concurrent.atomic.AtomicBoolean();
         volatile Thread synchronousCaller;
-        ReadDelivery(Request request){this.request=request;}
+        CompletionDelivery(Request request){this(request.op,()->{});}
+        CompletionDelivery(ProtosIoOperation operation,Runnable discarded){this(operation,discarded,false);}
+        CompletionDelivery(ProtosIoOperation operation,Runnable discarded,boolean committedLifecycle){
+            this.operation=operation;this.discarded=discarded;this.committedLifecycle=committedLifecycle;
+        }
         boolean claim(){return claimed.compareAndSet(false,true);}
-        void deliver(Runnable action){
+        void deliver(Runnable action){deliver(()->{},action);}
+        void deliver(Runnable beforePublication,Runnable action){
             if(!claim())return;
+            beforePublication.run();
             if(synchronousCaller==Thread.currentThread()){action.run();return;}
             try{
-                domain.enqueueTargetedFutureCompletionForRuntime(request.op.future(),()->{action.run();return true;});
+                if(committedLifecycle)domain.enqueueCommittedLifecycleCloseCompletionForRuntime(operation.future(),()->{action.run();return true;},discarded);
+                else domain.enqueueTargetedFutureCompletionForRuntime(operation.future(),()->{action.run();return true;},discarded);
             }catch(IllegalStateException terminatingActor){
-                // The owning Actor is terminating: the read outcome is discarded without guest work.
+                // The owning Actor is terminating; retire host-only obligations without guest work.
+                discarded.run();
             }
         }
     }
@@ -397,7 +473,7 @@ public final class ProtosByteIoFlow {
         Objects.requireNonNull(bytes);
         if(bytes.length==0||bytes.length>ProtosNumericValueSupport.exactInt(r.number)){failIo(r);finish(r);return;}
         if(!r.op.commit()){
-            synchronized(this){if(!r.shutdownDiscard)for(int i=bytes.length-1;i>=0;i--)unread.addFirst(bytes[i]);}
+            synchronized(this){if(!r.shutdownDiscard&&!tcpAborted())for(int i=bytes.length-1;i>=0;i--)unread.addFirst(bytes[i]);}
             finish(r);return;
         }
         ProtosBytesValue result=new ProtosBytesValue(bytesPrototype,bytes);
@@ -406,40 +482,75 @@ public final class ProtosByteIoFlow {
 
     private void startWrite(Request r){
         if(r.bytes.length==0){if(r.op.commit())r.op.resolve(receiver);finish(r);return;}
+        CompletionDelivery delivery=lifecycle.tcpTransportForRuntime()?new CompletionDelivery(r.op,()->{
+            r.op.abandonCommittedAcquisitionForRuntime();
+            r.op.abandonFirstEffectAttemptAtOwnerTerminationForRuntime();
+            discardTcpRequest(r);
+        }):null;
+        if(delivery!=null)delivery.synchronousCaller=Thread.currentThread();
         try{
             setCancellation(r,backend.write(r.bytes.clone(),new FirstEffectWriteCompletion(){
                 public boolean beginFirstEffectAttempt(){
-                    boolean begun=r.op.beginFirstEffectAttempt();
-                    if(!begun&&r.op.terminal())finish(r);
+                    boolean begun=lifecycle.tcpTransportForRuntime()?r.op.beginTcpWriteAttemptForRuntime():r.op.beginFirstEffectAttempt();
+                    if(!begun&&r.op.terminal())finishAttemptCutover(r);
                     return begun;
                 }
                 public boolean finishFirstEffectAttempt(boolean contributed){
-                    boolean proceed=r.op.finishFirstEffectAttempt(contributed);
-                    if(!proceed&&r.op.terminal())finish(r);
+                    boolean proceed=(lifecycle.tcpTransportForRuntime()&&!r.op.firstEffectAttemptInFlight())||r.op.finishFirstEffectAttempt(contributed);
+                    if(!proceed&&r.op.terminal())finishAttemptCutover(r);
                     return proceed;
                 }
                 public void succeeded(){
-                    if(r.op.firstEffectAttemptInFlight()
-                            && !r.op.finishFirstEffectAttempt(true)){finish(r);return;}
-                    if(!r.op.committed()&&!r.op.commit()){finish(r);return;}
-                    r.op.resolve(receiver);finish(r);
+                    deliverCompletion(delivery,()->{
+                        if(r.op.firstEffectAttemptInFlight()
+                                && !r.op.finishFirstEffectAttempt(true)){finish(r);return;}
+                        if(!r.op.committed()&&!r.op.commit()){finish(r);return;}
+                        r.op.resolve(receiver);finish(r);
+                    });
                 }
                 public void failed(int k){
                     if(k<0||k>r.bytes.length)throw new IllegalArgumentException("invalid contributed prefix");
-                    if(r.op.firstEffectAttemptInFlight()
-                            && !r.op.finishFirstEffectAttempt(k>0)){finish(r);return;}
-                    if(k>0&&!r.op.committed())r.op.commit();
-                    synchronized(ProtosByteIoFlow.this){precedingWriteFailed=true;}
-                    failIo(r);finish(r);
+                    // Claim an independent failure before publication; no guest Error is built
+                    // here. An in-flight first effect instead retains its uncertainty frontier.
+                    deliverOutcome(delivery,()->{
+                        if(lifecycle.tcpTransportForRuntime()&&!r.op.firstEffectAttemptInFlight())r.op.commit();
+                    },()->{
+                        if(lifecycle.tcpTransportForRuntime()&&r.op.firstEffectAttemptInFlight()){
+                            r.op.failFirstEffectAttemptWithUnknownEffect(ioError(r.op.origin()));
+                        }else{
+                            if(r.op.firstEffectAttemptInFlight()
+                                    && !r.op.finishFirstEffectAttempt(k>0)){finish(r);return;}
+                            if(k>0&&!r.op.committed())r.op.commit();
+                            failIo(r);
+                        }
+                        synchronized(ProtosByteIoFlow.this){precedingWriteFailed=true;}
+                        finish(r);
+                    });
                 }
                 public void rejected(ProtosCoreErrors.StandardError kind){
-                    // A refusal before the first effect contributes nothing and leaves later
-                    // writes admissible; once an attempt is in flight it is an ordinary failure.
                     if(r.op.firstEffectAttemptInFlight()||r.op.committed()){failed(0);return;}
-                    failRejected(r,kind);finish(r);
+                    deliverCompletion(delivery,()->{failRejected(r,kind);finish(r);});
                 }
             }));
-        }catch(RuntimeException ex){failIo(r);finish(r);}
+        }catch(RuntimeException ex){deliverCompletion(delivery,()->{
+            if(r.op.firstEffectAttemptInFlight())r.op.failFirstEffectAttemptWithUnknownEffect(ioError(r.op.origin()));
+            else failIo(r);
+            finish(r);
+        });}
+        finally{if(delivery!=null)delivery.synchronousCaller=null;}
+    }
+
+    private void discardTcpRequest(Request r){
+        synchronized(this){if(operations.remove(r))retainedWriteBytes-=r.bytes.length;}
+        if(writeShutdownOperation!=null)writeShutdownOperation.abandonCommittedAcquisitionForRuntime();
+    }
+
+    private void finishAttemptCutover(Request r){
+        if(!lifecycle.tcpTransportForRuntime()){finish(r);return;}
+        Runnable discard=()->discardTcpRequest(r);
+        try{
+            domain.enqueueTargetedFutureCompletionForRuntime(r.op.future(),()->{finish(r);return true;},discard);
+        }catch(IllegalStateException terminatingOwner){discard.run();}
     }
 
     @FunctionalInterface private interface ReceiverStarter{Cancellation start(ReceiverCompletion c);}

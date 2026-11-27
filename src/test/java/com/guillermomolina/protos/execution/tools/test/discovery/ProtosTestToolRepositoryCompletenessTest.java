@@ -201,6 +201,26 @@ final class ProtosTestToolRepositoryCompletenessTest {
     }
 
     @Test
+    void tcpAbortFixtureRequiresItsJUnitInjectedBindings() throws Exception {
+        String fixture = ProtosTestToolRepositoryCompletenessSupport.TCP_ABORT_FIXTURE;
+        Inventory inventory =
+                ProtosTestToolRepositoryCompletenessSupport.classify(
+                        Map.of(fixture, SUITE_NATIVE_SOURCE));
+
+        assertTrue(inventory.intended().isEmpty());
+        assertEquals(List.of(fixture), inventory.physical());
+        assertEquals(1, inventory.exclusions().size());
+        assertEquals(fixture, inventory.exclusions().get(0).path());
+        assertTrue(
+                inventory.exclusions().get(0).reason()
+                        .contains("ProtosTcpConnectionIntegratedConformanceTest"));
+        AuditOutcome outcome = audit(inventory);
+        assertEquals("", outcome.report());
+        assertEquals(0, outcome.registeredSourceCount());
+        assertEquals(1, outcome.exclusionCount());
+    }
+
+    @Test
     void distinctProjectAuthoritiesMayReuseSource() throws Exception {
         String source = "package-tool/resolution-root/fixtures/workspace.protos";
         Map<String, String> sources = new LinkedHashMap<>();

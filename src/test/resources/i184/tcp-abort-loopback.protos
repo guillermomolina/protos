@@ -1,0 +1,107 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// Standalone real TCP check: the CLI explicitly grants network with --allow-network.
+Assertions: import("std:test/assertions")
+IpAddress: import("std:network/ip_addresses").IpAddress
+IpEndpoint: import("std:network/ip_endpoints").IpEndpoint
+
+loopback: IpAddress(4, 2130706433)
+listener: network.listenTcp(ipVersion: 4, address: loopback, port: null).value()
+(() => {
+    port: listener.localPort()
+    // Both endpoints are acquired and used in this Actor. Nested ensure blocks
+    // attempt every mandatory close even if a check or an earlier close fails.
+    withPair: (body) => {
+        accepting: listener.accept()
+        connection: network.connectTcp(IpEndpoint(loopback, port)).value()
+        (() => {
+            peer: accepting.value()
+            (() => { body(connection, peer) }).ensure(() => { peer.close().value() })
+        }).ensure(() => { connection.close().value() })
+    }
+    lifecycleFailure: (future) => {
+        error: Assertions.signals(IOLifecycleError, () => { future.value() })
+        Assertions.require(error.parent() === IOLifecycleError)
+        error
+    }
+    withPair((connection, peer) => {
+        local: connection.localEndpoint()
+        remote: connection.remoteEndpoint()
+        protocol: connection.parent()
+        endpoint: connection.localEndpoint
+        connection.createSlot("note", "before")
+        pendingRead: connection.read(16)
+        first: connection.abort()
+        second: connection.abort()
+        closing: connection.close()
+        Assertions.require(first !== second)
+        Assertions.require(first !== closing)
+        Assertions.require(second !== closing)
+        Assertions.require(first.value() === connection)
+        Assertions.require(second.value() === connection)
+        Assertions.require(closing.value() === connection)
+        readError: lifecycleFailure(pendingRead)
+        Assertions.require(lifecycleFailure(connection.read(1)) !== readError)
+        lifecycleFailure(connection.write(Encoding.Latin1.encode("after abort")))
+        lifecycleFailure(connection.shutdownRead())
+        lifecycleFailure(connection.shutdownWrite())
+        Assertions.require(connection.localEndpoint() == local)
+        Assertions.require(connection.remoteEndpoint() == remote)
+        Assertions.require(endpoint() == local)
+        Assertions.require(connection.parent() === protocol)
+        Assertions.require(connection.note == "before")
+        connection.note = "after"
+        connection.createSlot("afterRetirement", 17)
+        Assertions.require(connection.note == "after")
+        Assertions.require(connection.slotValue("afterRetirement") == 17)
+        connection.removeSlot("afterRetirement")
+        Assertions.require(!connection.hasSlot("afterRetirement"))
+
+        laterAbort: connection.abort()
+        laterClose: connection.close()
+        for(later in [laterAbort, laterClose]) {
+            Assertions.require(later !== first)
+            Assertions.require(later !== second)
+            Assertions.require(later !== closing)
+            Assertions.require(later.value() === connection)
+        }
+        Assertions.require(laterAbort !== laterClose)
+
+        // No assertion about EOF versus RST on the retired connection's peer.
+        withPair((independent, otherPeer) => {
+            payload: Encoding.Latin1.encode("independent")
+            receiving: independent.read(payload.size())
+            Assertions.require(otherPeer.write(payload).value() === otherPeer)
+            received: Encoding.Latin1.encode("")
+            chunk: receiving.value()
+            while(received.size() < payload.size()) {
+                Assertions.require(chunk !== null)
+                for(octet in chunk) { received.add(octet) }
+                if(received.size() < payload.size()) {
+                    chunk = independent.read(payload.size() - received.size()).value()
+                }
+            }
+            Assertions.require(Encoding.Latin1.decode(received) == "independent")
+            // Exercise the second connection's output direction too.
+            receiving = otherPeer.read(1)
+            Assertions.require(independent.write(Encoding.Latin1.encode("!")).value() === independent)
+            Assertions.require(Encoding.Latin1.decode(receiving.value()) == "!")
+            Assertions.require(independent.abort().value() === independent)
+        })
+    })
+}).ensure(() => { listener.close().value() })
+
+print("I184_TCP_ABORT_LOOPBACK=PASS")

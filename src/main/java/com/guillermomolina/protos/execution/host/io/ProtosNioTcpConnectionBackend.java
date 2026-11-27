@@ -3,11 +3,11 @@
  * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
  * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
  * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
- * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS.
- * "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY OF THE
- * LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING THE
- * CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS FILE, A
- * COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
  * https://github.com/guillermomolina/protos
  *
  * Software distributed under the License is distributed on an "AS IS" basis,
@@ -43,6 +43,8 @@ final class ProtosNioTcpConnectionBackend
     private final AtomicReference<ReadRequest> pendingRead = new AtomicReference<>();
     private final AtomicReference<WriteRequest> pendingWrite = new AtomicReference<>();
     private volatile SelectionKey key;
+    private boolean physicalReleaseReported;
+    private boolean physicalReleaseSucceeded;
 
     ProtosNioTcpConnectionBackend(
             ProtosNioHostIoPoller poller, SocketChannel channel) {
@@ -57,6 +59,10 @@ final class ProtosNioTcpConnectionBackend
             throw new IllegalStateException("TCP connection already has another key");
         }
         this.key = supplied;
+        if (physicalClosed.get() || !channel.isOpen()) {
+            supplied.attach(null);
+            supplied.cancel();
+        }
     }
 
     void releaseIfUntransferred() {
@@ -206,16 +212,12 @@ final class ProtosNioTcpConnectionBackend
 
     @Override
     public void failed(Exception failure) {
-        physicalClosed.set(true);
-        failPendingRead();
-        failPendingWrite();
+        closePhysical();
     }
 
     @Override
     public void closed() {
-        physicalClosed.set(true);
-        failPendingRead();
-        failPendingWrite();
+        closePhysical();
     }
 
     private void startReadOnPoller(ReadRequest request) {
@@ -234,13 +236,13 @@ final class ProtosNioTcpConnectionBackend
         serviceReadOnPoller();
     }
 
-    private void serviceReadOnPoller() {
+    private synchronized void serviceReadOnPoller() {
         ReadRequest request = pendingRead.get();
         if (request == null) {
             disableReadInterestBestEffort();
             return;
         }
-        if (request.cancelled.get()) {
+        if (request.cancelled.get() || physicalClosed.get()) {
             finishReadFailure(request);
             return;
         }
@@ -266,7 +268,7 @@ final class ProtosNioTcpConnectionBackend
             return;
         }
 
-        if (request.cancelled.get()) {
+        if (request.cancelled.get() || physicalClosed.get()) {
             finishReadFailure(request);
             return;
         }
@@ -299,7 +301,7 @@ final class ProtosNioTcpConnectionBackend
 
     private void enableReadInterest() {
         SelectionKey current = key;
-        if (current == null || !current.isValid()) {
+        if (physicalClosed.get() || current == null || !current.isValid()) {
             ReadRequest request = pendingRead.get();
             if (request != null) finishReadFailure(request);
             return;
@@ -392,25 +394,23 @@ final class ProtosNioTcpConnectionBackend
         serviceWriteOnPoller();
     }
 
-    private void serviceWriteOnPoller() {
+    private synchronized void serviceWriteOnPoller() {
         WriteRequest request = pendingWrite.get();
         if (request == null) { disableWriteInterestBestEffort(); return; }
-        if (request.cancelled.get() && request.contributedPrefix() == 0) {
+        if (physicalClosed.get() || (request.cancelled.get() && request.contributedPrefix() == 0)) {
             finishWriteFailure(request); return;
         }
 
         boolean firstAttempt = request.contributedPrefix() == 0;
-        if (firstAttempt && !request.completion.beginFirstEffectAttempt()) {
-            retireWrite(request); return;
+        if (!request.completion.beginFirstEffectAttempt()) {
+            finishWriteFailure(request); return;
         }
 
         final int count;
         try {
             count = channel.write(request.buffer);
         } catch (IOException writeFailure) {
-            if (firstAttempt && !request.completion.finishFirstEffectAttempt(false)) {
-                retireWrite(request); return;
-            }
+            // An exception is not evidence of zero effect. The flow reconciles uncertainty.
             finishWriteFailure(request); return;
         }
 
@@ -418,7 +418,7 @@ final class ProtosNioTcpConnectionBackend
             retireWrite(request); return;
         }
         if (!request.buffer.hasRemaining()) { finishWriteSuccess(request); return; }
-        if (request.cancelled.get() && request.contributedPrefix() == 0) {
+        if (physicalClosed.get() || (request.cancelled.get() && request.contributedPrefix() == 0)) {
             finishWriteFailure(request); return;
         }
         enableWriteInterest();
@@ -447,7 +447,7 @@ final class ProtosNioTcpConnectionBackend
 
     private void enableWriteInterest() {
         SelectionKey current=key;
-        if (current==null || !current.isValid()) {
+        if (physicalClosed.get() || current==null || !current.isValid()) {
             WriteRequest request=pendingWrite.get();
             if (request!=null) finishWriteFailure(request);
             return;
@@ -514,10 +514,8 @@ final class ProtosNioTcpConnectionBackend
     }
 
     private void requestPhysicalClose(ProtosByteIoFlow.ReceiverCompletion completion) {
-        if (physicalClosed.get()) {
-            if (completion != null) reportSucceeded(completion);
-            return;
-        }
+        // Invalidate admission now; the physical outcome is recorded separately below.
+        physicalClosed.set(true);
         try {
             poller.submit(
                     () -> finishClose(completion),
@@ -538,18 +536,21 @@ final class ProtosNioTcpConnectionBackend
         finishClose(completion);
     }
 
-    private boolean closePhysical() {
-        if (!physicalClosed.compareAndSet(false, true)) return true;
+    private synchronized boolean closePhysical() {
+        if (physicalReleaseReported) return physicalReleaseSucceeded;
+        physicalClosed.set(true);
         SelectionKey current = key;
         if (current != null) current.cancel();
         failPendingRead();
         failPendingWrite();
         try {
             channel.close();
-            return true;
-        } catch (IOException failure) {
-            return false;
+            physicalReleaseSucceeded=true;
+        } catch (IOException | RuntimeException failure) {
+            physicalReleaseSucceeded=false;
         }
+        physicalReleaseReported=true;
+        return physicalReleaseSucceeded;
     }
 
     private static void reportSucceeded(

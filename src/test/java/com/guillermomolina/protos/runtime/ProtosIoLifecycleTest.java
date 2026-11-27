@@ -1,4 +1,19 @@
-/* APL-1.0 licensed work; see LICENSE.TXT. */
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
 package com.guillermomolina.protos.runtime;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -10,14 +25,39 @@ import org.junit.jupiter.api.Test;
 
 class ProtosIoLifecycleTest {
     private static ProtosPrelude core() throws Exception { return new ProtosCoreBootstrap().bootstrap(Path.of("protos","lib","core")); }
-    private static Fixture fixture() throws Exception {
+    private static Fixture fixture() throws Exception {return fixture(false);}
+    private static Fixture fixture(boolean tcp) throws Exception {
         var p=core(); var d=new ProtosActorExecutionDomain();
         var a=p.newModuleActivation(new ProtosActorModuleState(),null,p.newExecutionContext(),d);
-        var receiver=new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosObjectValue receiver=tcp?new com.guillermomolina.protos.runtime.io.ProtosTcpConnectionValue(p,new Object()):new ProtosObjectValue(ProtosObjectValue.rootObject());
         var starts=new AtomicInteger(); var completion=new AtomicReference<ProtosIoLifecycle.ReleaseCompletion>();
         var lifecycle=new ProtosIoLifecycle(receiver,p.futurePrototype(),d,c->{starts.incrementAndGet();completion.set(c);});
         return new Fixture(p,d,a,receiver,lifecycle,starts,completion);
     }
+    @Test void tcpEscalationWaitsForBothConditionsAndPublishesExactlyOnce() throws Exception {
+        for(boolean physicalFirst:new boolean[]{true,false}) {
+            var x=fixture(true);var operation=x.lifecycle.beginOperation(x.activation);assertTrue(operation.commit());
+            var close=x.lifecycle.close(x.activation);assertEquals(0,x.releaseStarts.get());
+            var abort=x.lifecycle.abortTcpForRuntime(x.activation);assertNotSame(close,abort);assertEquals(1,x.releaseStarts.get());
+            assertFalse(operation.beginTcpWriteAttemptForRuntime());
+            if(physicalFirst)x.completion.get().succeeded();else operation.resolve(x.receiver);
+            assertTrue(abort.isPending());
+            if(physicalFirst)operation.resolve(x.receiver);else x.completion.get().succeeded();
+            assertSame(x.receiver,abort.resolvedValue().orElseThrow());assertSame(x.receiver,close.resolvedValue().orElseThrow());
+            x.completion.get().failedWithIoErrorForRuntime();
+            assertSame(x.receiver,abort.resolvedValue().orElseThrow());assertEquals(1,x.releaseStarts.get());
+        }
+    }
+
+    @Test void tcpAbortPreservesAnAlreadyCommittedReadWithDelayedPublication() throws Exception {
+        var x=fixture(true);var read=x.lifecycle.beginOperation(x.activation);
+        var result=new ProtosBytesValue(x.prelude.bytesPrototypeForRuntime(),new byte[]{7});
+        assertTrue(read.commit());var abort=x.lifecycle.abortTcpForRuntime(x.activation);
+        x.completion.get().succeeded();assertTrue(abort.isPending());
+        read.resolve(result);assertSame(result,read.future().resolvedValue().orElseThrow());
+        assertSame(x.receiver,abort.resolvedValue().orElseThrow());
+    }
+
     @Test void producerCancellationWinsOnlyBeforeCommitment() throws Exception {
         var x=fixture(); var pre=x.lifecycle.beginOperation(x.activation); var requests=new AtomicInteger(); pre.onCancellation(requests::incrementAndGet);
         assertTrue(pre.future().cancelRequest()); assertEquals(1,requests.get()); assertFalse(pre.future().cancelRequest()); assertEquals(1,requests.get()); assertEquals(ProtosFutureValue.State.CANCELLED,pre.future().state()); assertFalse(pre.committed());

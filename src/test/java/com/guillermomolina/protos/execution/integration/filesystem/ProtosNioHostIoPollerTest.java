@@ -3,11 +3,11 @@
  * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
  * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
  * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
- * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS.
- * "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY OF THE
- * LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING THE
- * CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS FILE, A
- * COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
  * https://github.com/guillermomolina/protos
  *
  * Software distributed under the License is distributed on an "AS IS" basis,
@@ -33,6 +33,128 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
 class ProtosNioHostIoPollerTest {
+    @Test void registeredTcpRetirementUsesTheConnectionsRecordedPhysicalOutcome() throws Exception {
+        var poller=new ProtosNioHostIoPoller("tcp-poller-retirement");
+        var channel=java.nio.channels.SocketChannel.open();
+        var backend=new ProtosNioTcpConnectionBackend(poller,channel);
+        var registered=new CountDownLatch(1);
+        try {
+            poller.submit(()->{
+                try{backend.attachKey(poller.register(channel,0,backend));}
+                catch(java.io.IOException e){throw new java.io.UncheckedIOException(e);}
+                finally{registered.countDown();}
+            },e->{registered.countDown();throw new AssertionError(e);});
+            assertTrue(registered.await(5,TimeUnit.SECONDS));
+            poller.close();assertFalse(channel.isOpen());
+            var successes=new AtomicInteger();var failures=new AtomicInteger();
+            backend.close(new com.guillermomolina.protos.runtime.ProtosByteIoFlow.ReceiverCompletion(){
+                public void succeeded(){successes.incrementAndGet();}
+                public void failed(){failures.incrementAndGet();}
+            });
+            assertEquals(1,successes.get());assertEquals(0,failures.get());
+        }finally{poller.close();channel.close();}
+    }
+
+    @Test void duplicatePhysicalRequestsCannotOvertakeAnInProgressFailedClose() throws Exception {
+        try(var x=new ProtosNioTcpConnectionWriteTest.ControlledFixture(0,0,false)) {
+            x.channel.holdClose=true;x.channel.failClose=true;
+            var successes=new AtomicInteger();var failures=new AtomicInteger();
+            var completion=new com.guillermomolina.protos.runtime.ProtosByteIoFlow.ReceiverCompletion(){
+                public void succeeded(){successes.incrementAndGet();}
+                public void failed(){failures.incrementAndGet();}
+            };
+            x.backend.close(completion);
+            assertTrue(x.channel.closeEntered.await(5,TimeUnit.SECONDS));
+            x.backend.close(completion);assertEquals(0,successes.get());assertEquals(0,failures.get());
+            x.channel.closeProceed.countDown();x.barrier();
+            assertEquals(0,successes.get());assertEquals(2,failures.get());assertEquals(1,x.channel.closeCalls);
+            x.backend.close(completion);x.barrier();
+            assertEquals(0,successes.get());assertEquals(3,failures.get());assertEquals(1,x.channel.closeCalls);
+            x.poller.close();x.backend.close(completion);
+            assertEquals(0,successes.get());assertEquals(4,failures.get());assertEquals(1,x.channel.closeCalls);
+        }
+    }
+
+    @Test void retirementFallsBackWhenPollerNoLongerAcceptsCommands() throws Exception {
+        try(var x=new ProtosNioTcpConnectionWriteTest.ControlledFixture(0,0,false)) {
+            x.poller.close();
+            var successes=new AtomicInteger();var failures=new AtomicInteger();
+            x.backend.close(new com.guillermomolina.protos.runtime.ProtosByteIoFlow.ReceiverCompletion(){
+                public void succeeded(){successes.incrementAndGet();}
+                public void failed(){failures.incrementAndGet();}
+            });
+            assertEquals(1,successes.get());assertEquals(0,failures.get());
+            assertEquals(1,x.channel.closeCalls);assertFalse(x.key.isValid());
+        }
+    }
+
+    @Test void pendingPhysicalRetirementAndFollowersSurvivePollerTermination() throws Exception {
+        try(var x=new ProtosNioTcpConnectionWriteTest.ControlledFixture(0,0,false)) {
+            x.channel.holdClose=true;
+            var successes=new AtomicInteger();var failures=new AtomicInteger();
+            var completion=new com.guillermomolina.protos.runtime.ProtosByteIoFlow.ReceiverCompletion(){
+                public void succeeded(){successes.incrementAndGet();}
+                public void failed(){failures.incrementAndGet();}
+            };
+            var commandFailure=new AtomicReference<RuntimeException>();
+            // Stop admission on the poller itself, then hold its physical release.
+            x.poller.submit(()->{x.poller.close();x.backend.close(completion);},commandFailure::set);
+            assertTrue(x.channel.closeEntered.await(5,TimeUnit.SECONDS));
+            assertThrows(IllegalStateException.class,()->x.poller.submit(()->{},ignored->{}));
+            ExecutorService followers=Executors.newFixedThreadPool(2);
+            var entered=new CountDownLatch(2);
+            try {
+                var first=followers.submit(()->{entered.countDown();x.backend.close(completion);});
+                var second=followers.submit(()->{entered.countDown();x.backend.close(completion);});
+                assertTrue(entered.await(5,TimeUnit.SECONDS));
+                assertEquals(0,successes.get());assertEquals(0,failures.get());
+                assertFalse(x.poller.isTerminatedForTesting());
+                x.channel.closeProceed.countDown();
+                first.get(5,TimeUnit.SECONDS);second.get(5,TimeUnit.SECONDS);
+                x.poller.close();
+                assertNull(commandFailure.get());assertTrue(x.poller.isTerminatedForTesting());
+                assertEquals(3,successes.get());assertEquals(0,failures.get());
+                assertEquals(1,x.channel.closeCalls);
+            } finally {
+                x.channel.closeProceed.countDown();followers.shutdown();
+                assertTrue(followers.awaitTermination(5,TimeUnit.SECONDS));
+            }
+        }
+    }
+
+    @Test void lateKeyAttachmentCannotRestoreInterestOnRetiredBackend() throws Exception {
+        try(var x=new ProtosNioTcpConnectionWriteTest.ControlledFixture(0,0,false)) {
+            // A key acquired before retirement can arrive at attachKey after release.
+            var late=new ProtosNioTcpConnectionBackend(x.poller,x.channel);
+            late.releaseIfUntransferred();x.barrier();
+            assertTrue(x.key.isValid());
+            x.key.interestOps(SelectionKey.OP_READ|SelectionKey.OP_WRITE);
+            x.key.attach(late);
+            late.attachKey(x.key);
+            assertFalse(x.key.isValid());assertNull(x.key.attachment());
+            var refusal=new AtomicReference<RuntimeException>();
+            x.poller.submit(()->x.poller.interestOps(x.key,SelectionKey.OP_READ|SelectionKey.OP_WRITE),refusal::set);
+            x.barrier();assertInstanceOf(java.nio.channels.CancelledKeyException.class,refusal.get());
+            assertEquals(0,x.channel.writeCalls);assertEquals(1,x.channel.closeCalls);
+        }
+    }
+
+    @Test void selectorFailureNotificationDoesNotInventAPhysicalCloseFailure() throws Exception {
+        try(var x=new ProtosNioTcpConnectionWriteTest.ControlledFixture(0,0,false)) {
+            var commandFailure=new AtomicReference<RuntimeException>();
+            x.poller.submit(()->x.backend.failed(new java.io.IOException("selector failure")),commandFailure::set);
+            x.barrier();assertNull(commandFailure.get());
+            var successes=new AtomicInteger();var failures=new AtomicInteger();
+            x.backend.close(new com.guillermomolina.protos.runtime.ProtosByteIoFlow.ReceiverCompletion(){
+                public void succeeded(){successes.incrementAndGet();}
+                public void failed(){failures.incrementAndGet();}
+            });
+            x.barrier();
+            assertEquals(1,successes.get());assertEquals(0,failures.get());
+            assertEquals(1,x.channel.closeCalls);
+        }
+    }
+
     @Test
     void controlRunsOnDedicatedPlatformThreadAndWakesBlockedSelector() throws Exception {
         Thread caller = Thread.currentThread();

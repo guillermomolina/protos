@@ -64,6 +64,7 @@ duplexOf: (chunks) => {
     writes: 0
     written: 0
     closes: 0
+    aborts: 0
     readFailure: null
     closeFailure: null
     fixture: null
@@ -108,6 +109,12 @@ duplexOf: (chunks) => {
         writeCount: () => { writes }
         writtenBytes: () => { written }
         closeCount: () => { closes }
+        // Test observation only; TLS acquires no automatic abort authority.
+        abort: () => {
+            aborts = aborts + 1
+            (() => { fixture }).future()
+        }
+        abortCount: () => { aborts }
     }
     fixture
 }
@@ -150,6 +157,37 @@ garbage: () => {
 }
 
 tests: [
+    Test("a borrowed handshake preserves the exact transport lifecycle Error", () => {
+        dx: duplexOf([])
+        transport: IOLifecycleError {}
+        dx.failReadsWith(transport)
+        Assertions.require(failureOf(tls.Client.handshake(dx, service, anchors())) === transport)
+        Assertions.require(dx.closeCount() == 0)
+        Assertions.require(dx.abortCount() == 0)
+    }),
+    Test("an owning handshake preserves the exact transport lifecycle Error", () => {
+        dx: duplexOf([])
+        transport: IOLifecycleError {}
+        dx.failReadsWith(transport)
+        Assertions.require(failureOf(tls.Client.handshake.owning(dx, service, anchors())) === transport)
+        Assertions.require(dx.closeCount() == 1)
+        Assertions.require(dx.abortCount() == 0)
+    }),
+    Test("owning cleanup cannot replace the primary transport lifecycle Error", () => {
+        dx: duplexOf([])
+        transport: IOLifecycleError {}
+        dx.failReadsWith(transport)
+        dx.failCloseWith(IOError {})
+        Assertions.require(failureOf(tls.Client.handshake.owning(dx, service, anchors())) === transport)
+        Assertions.require(dx.closeCount() == 1)
+        Assertions.require(dx.abortCount() == 0)
+    }),
+    Test("physical EOF without close_notify remains truncated with owning cleanup", () => {
+        dx: duplexOf([])
+        Assertions.require(kindOf(tls.Client.handshake.owning(dx, service, anchors())) == "truncated")
+        Assertions.require(dx.closeCount() == 1)
+        Assertions.require(dx.abortCount() == 0)
+    }),
     Test("Trust.system fails with trustUnavailable before any octet", () => {
         dx: duplexOf([])
         Assertions.require(kindOf(tls.Client.handshake(dx, service, tls.Trust.system())) == "trustUnavailable")
@@ -212,9 +250,11 @@ tests: [
         failing: duplexOf([garbage()])
         Assertions.require(kindOf(tls.Client.handshake.owning(failing, service, anchors())) == "handshakeFailure")
         Assertions.require(failing.closeCount() == 1)
+        Assertions.require(failing.abortCount() == 0)
         untrusted: duplexOf([])
         Assertions.require(kindOf(tls.Client.handshake.owning(untrusted, service, tls.Trust.system())) == "trustUnavailable")
         Assertions.require(untrusted.closeCount() == 1)
+        Assertions.require(untrusted.abortCount() == 0)
         Assertions.require(untrusted.writeCount() == 0)
     }),
     Test("a borrowed handshake never closes the duplex", () => {
@@ -222,6 +262,7 @@ tests: [
         failureOf(tls.Client.handshake(dx, service, anchors()))
         failureOf(tls.Client.handshake(duplexOf([]), service, tls.Trust.system()))
         Assertions.require(dx.closeCount() == 0)
+        Assertions.require(dx.abortCount() == 0)
     }),
     Test("cancelling an owning handshake before it starts closes the duplex once", () => {
         dx: duplexOf([])

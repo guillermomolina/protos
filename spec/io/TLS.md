@@ -300,6 +300,14 @@ rules of `IO_CORE.md`.
 
 ## 8. Closure and custody
 
+An application retaining authority over an underlying TcpConnection may invoke
+its explicit `abort()` under `NETWORK.md` §9.1. Transport retirement fabricates
+neither `close_notify` nor authenticated EOF. Physical EOF without authenticated
+closure remains subject to the truncation rule below; an underlying transport
+Error retains its exact identity and category under §9. Borrowing grants no
+destructive authority, and owning close responsibility introduces no automatic
+transport abort.
+
 A peer `close_notify` establishes authenticated clean read end of input.
 Physical end of transport input without authenticated TLS closure is a
 `TlsError` of kind `truncated`, never `null`.

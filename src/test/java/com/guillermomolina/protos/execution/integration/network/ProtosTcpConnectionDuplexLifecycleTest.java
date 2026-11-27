@@ -53,7 +53,7 @@ final class ProtosTcpConnectionDuplexLifecycleTest {
         ProtosObjectValue prototype = prelude.tcpConnectionPrototypeForRuntime();
 
         assertEquals(
-                java.util.Set.of("read", "write", "close", "shutdownRead", "shutdownWrite", "localEndpoint", "remoteEndpoint"),
+                java.util.Set.of("read", "write", "abort", "close", "shutdownRead", "shutdownWrite", "localEndpoint", "remoteEndpoint"),
                 prototype.localSlotsSnapshot().keySet());
         assertTrue(prototype.isFrozen());
         assertTrue(first.localSlotsSnapshot().isEmpty());
@@ -112,6 +112,7 @@ final class ProtosTcpConnectionDuplexLifecycleTest {
         assertArrayEquals(new byte[] {7, 8}, backend.writePayloads.get(0));
 
         backend.writeCompletions.removeFirst().succeeded();
+        drain(activation);
         assertSame(connection, write1.resolvedValue().orElseThrow());
         assertEquals(2, backend.writeStarts);
         assertArrayEquals(new byte[] {3}, backend.writePayloads.get(1));
@@ -129,6 +130,7 @@ final class ProtosTcpConnectionDuplexLifecycleTest {
         assertEquals(String.valueOf("2"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(result.indexedAt(1)));
 
         backend.writeCompletions.removeFirst().succeeded();
+        drain(activation);
         backend.readCompletions.removeFirst().eof();
         assertEquals(ProtosFutureValue.State.PENDING, read2.state());
         assertTrue(
@@ -164,6 +166,7 @@ final class ProtosTcpConnectionDuplexLifecycleTest {
         assertEquals(String.valueOf("5"), com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(replayed.indexedAt(1)));
 
         backend.writeCompletions.removeFirst().succeeded();
+        drain(activation);
         assertSame(connection, write.resolvedValue().orElseThrow());
     }
 
@@ -186,6 +189,7 @@ final class ProtosTcpConnectionDuplexLifecycleTest {
         assertEquals(ProtosFutureValue.State.PENDING, close.state());
 
         backend.closeCompletion.succeeded();
+        drain(activation);
         assertSame(connection, close.resolvedValue().orElseThrow());
         assertTrue(connection.isOpen(), "resource close must not perform structural Object.close()");
         connection.createLocalSlot("afterResourceClose", integer(17));
@@ -215,6 +219,7 @@ final class ProtosTcpConnectionDuplexLifecycleTest {
         assertEquals(1, readBackend.readCancels);
         assertEquals(1, readBackend.shutdownReadStarts);
         readBackend.shutdownReadCompletion.succeeded();
+        drain(readActivation);
         assertSame(readConnection, shutdownRead.resolvedValue().orElseThrow());
         ProtosFutureValue repeatedReadShutdown =
                 future(readConnection, "shutdownRead", List.of(), readActivation);
@@ -230,6 +235,7 @@ final class ProtosTcpConnectionDuplexLifecycleTest {
                 future(readConnection, "write", List.of(bytes(prelude, 2)), readActivation);
         assertEquals(1, readBackend.writeStarts);
         readBackend.writeCompletions.removeFirst().succeeded();
+        drain(readActivation);
         assertSame(readConnection, stillWritable.resolvedValue().orElseThrow());
 
         var writeActivation = prelude.newModuleActivation();
@@ -253,17 +259,20 @@ final class ProtosTcpConnectionDuplexLifecycleTest {
                 "IOLifecycleError");
 
         writeBackend.writeCompletions.removeFirst().succeeded();
+        drain(writeActivation);
         assertSame(writeConnection, first.resolvedValue().orElseThrow());
         assertEquals(2, writeBackend.writeStarts);
         assertEquals(0, writeBackend.shutdownWriteStarts);
         assertEquals(ProtosFutureValue.State.PENDING, shutdownWrite.state());
         assertEquals(ProtosFutureValue.State.PENDING, secondShutdownWrite.state());
         writeBackend.writeCompletions.removeFirst().succeeded();
+        drain(writeActivation);
         assertSame(writeConnection, second.resolvedValue().orElseThrow());
         assertEquals(1, writeBackend.shutdownWriteStarts);
         assertEquals(ProtosFutureValue.State.PENDING, shutdownWrite.state());
         assertEquals(ProtosFutureValue.State.PENDING, secondShutdownWrite.state());
         writeBackend.shutdownWriteCompletion.succeeded();
+        drain(writeActivation);
         assertSame(writeConnection, shutdownWrite.resolvedValue().orElseThrow());
         assertSame(writeConnection, secondShutdownWrite.resolvedValue().orElseThrow());
         assertEquals(1, writeBackend.shutdownWriteStarts);
@@ -283,6 +292,169 @@ final class ProtosTcpConnectionDuplexLifecycleTest {
                 writeActivation.executionDomain()
                         .dispatchTargetedRuntimeCompletionWithoutHandoffForRuntime());
         assertSame(ProtosNullValue.INSTANCE, stillReadable.resolvedValue().orElseThrow());
+    }
+
+    private record AbortFixture(ProtosPrelude prelude,
+            com.guillermomolina.protos.runtime.ProtosActivation activation,
+            RecordingBackend backend,ProtosTcpConnectionValue connection) {
+        ProtosFutureValue call(String selector){return future(connection,selector,List.of(),activation);}
+        ProtosFutureValue write(){return future(connection,"write",List.of(bytes(prelude,1,2)),activation);}
+        com.guillermomolina.protos.runtime.ProtosByteIoFlow.FirstEffectWriteCompletion attempt(){
+            return (com.guillermomolina.protos.runtime.ProtosByteIoFlow.FirstEffectWriteCompletion)backend.writeCompletions.getFirst();
+        }
+        void publish(){drain(activation);}
+        void release(){backend.closeCompletion.succeeded();publish();}
+    }
+
+    private static AbortFixture abortFixture() throws Exception {
+        var prelude=core();var activation=prelude.newModuleActivation();var backend=new RecordingBackend();
+        return new AbortFixture(prelude,activation,backend,connection(prelude,activation,backend));
+    }
+
+    private static void drain(com.guillermomolina.protos.runtime.ProtosActivation activation){
+        while(activation.executionDomain().dispatchTargetedRuntimeCompletionWithoutHandoffForRuntime()){}
+    }
+
+    @Test void abortWithoutPendingWork() throws Exception {
+        var x=abortFixture();var abort=x.call("abort");
+        assertEquals(1,x.backend.closeStarts);assertTrue(abort.isPending());
+        x.release();assertSame(x.connection,abort.resolvedValue().orElseThrow());
+    }
+    @Test void oversizedWritesAfterAbortFailBeforeCapacityAdmission() throws Exception {
+        var x=abortFixture();var abort=x.call("abort");
+        var payload=new ProtosBytesValue(x.prelude.bytesPrototypeForRuntime(),new byte[1024*1024+1]);
+        var pending=future(x.connection,"write",List.of(payload),x.activation);
+        assertFailedAs(pending,x.prelude,"IOLifecycleError");
+        assertTrue(abort.isPending());assertEquals(1,x.backend.closeStarts);
+        assertEquals(0,x.backend.writeStarts);
+        x.release();assertSame(x.connection,abort.resolvedValue().orElseThrow());
+        var retired=future(x.connection,"write",List.of(payload),x.activation);
+        assertFailedAs(retired,x.prelude,"IOLifecycleError");
+        assertNotSame(pending.failedError().orElseThrow(),retired.failedError().orElseThrow());
+        assertEquals(0,x.backend.writeStarts);
+        var openBackend=new RecordingBackend();
+        var open=connection(x.prelude,x.activation,openBackend);
+        assertFailedAs(future(open,"write",List.of(payload),x.activation),x.prelude,"IOCapacityExhausted");
+        assertEquals(0,openBackend.writeStarts);
+        var close=future(open,"close",List.of(),x.activation);
+        openBackend.closeCompletion.succeeded();x.publish();
+        assertSame(open,close.resolvedValue().orElseThrow());
+    }
+    @Test void oversizedWriteOnOpenConnectionKeepsCapacityFailure() throws Exception {
+        var x=abortFixture();
+        var payload=new ProtosBytesValue(x.prelude.bytesPrototypeForRuntime(),new byte[1024*1024+1]);
+        assertFailedAs(future(x.connection,"write",List.of(payload),x.activation),x.prelude,"IOCapacityExhausted");
+        assertEquals(0,x.backend.writeStarts);
+        var admitted=x.write();assertEquals(1,x.backend.writeStarts);
+        x.backend.writeCompletions.removeFirst().succeeded();x.publish();
+        assertSame(x.connection,admitted.resolvedValue().orElseThrow());
+        x.call("close");x.release();
+    }
+    @Test void writesDuringPhysicalRetirementFailImmediatelyWithoutWaitingForClose() throws Exception {
+        var x=abortFixture();var abort=x.call("abort");
+        var write=x.write();assertFailedAs(write,x.prelude,"IOLifecycleError");
+        assertFailedAs(future(x.connection,"write",List.of(integer(1)),x.activation),x.prelude,"InvalidIOArgument");
+        assertTrue(abort.isPending());assertEquals(1,x.backend.closeStarts);
+        assertEquals(0,x.backend.writeStarts);
+        x.release();assertSame(x.connection,abort.resolvedValue().orElseThrow());
+    }
+    @Test void abortFailsUncommittedReadWithoutConsumingLateInput() throws Exception {
+        var x=abortFixture();var read=future(x.connection,"read",List.of(integer(2)),x.activation);
+        x.call("abort");assertFailedAs(read,x.prelude,"IOLifecycleError");
+        x.backend.readCompletions.removeFirst().data(new byte[]{3});x.publish();x.release();
+        assertFailedAs(future(x.connection,"read",List.of(integer(1)),x.activation),x.prelude,"IOLifecycleError");
+    }
+    @Test void abortFailsUncommittedWrite() throws Exception {
+        var x=abortFixture();var write=x.write();x.call("abort");
+        assertFailedAs(write,x.prelude,"IOLifecycleError");x.release();
+    }
+    @Test void abortStopsFurtherAttemptsAfterCommittedPrefix() throws Exception {
+        var x=abortFixture();var write=x.write();var attempt=x.attempt();
+        assertTrue(attempt.beginFirstEffectAttempt());assertTrue(attempt.finishFirstEffectAttempt(true));
+        var abort=x.call("abort");assertTrue(!attempt.beginFirstEffectAttempt());
+        attempt.failed(1);x.publish();assertFailedAs(write,x.prelude,"IOError");
+        assertTrue(abort.isPending());x.release();assertSame(x.connection,abort.resolvedValue().orElseThrow());
+    }
+    @Test void abortEscalatesPendingClose() throws Exception {
+        var x=abortFixture();var write=x.write();var attempt=x.attempt();
+        assertTrue(attempt.beginFirstEffectAttempt());assertTrue(attempt.finishFirstEffectAttempt(true));
+        var close=x.call("close");assertEquals(0,x.backend.closeStarts);
+        var abort=x.call("abort");assertNotSame(close,abort);assertEquals(1,x.backend.closeStarts);
+        attempt.failed(1);x.publish();x.release();assertSame(x.connection,close.resolvedValue().orElseThrow());
+        assertFailedAs(write,x.prelude,"IOError");
+    }
+    @Test void closeDuringAbortObservesSameRetirement() throws Exception {
+        var x=abortFixture();var abort=x.call("abort");var close=x.call("close");
+        assertNotSame(abort,close);x.release();assertSame(abort.resolvedValue().orElseThrow(),close.resolvedValue().orElseThrow());
+        assertEquals(1,x.backend.closeStarts);
+    }
+    @Test void abortAfterSuccessfulCloseDoesNotReleaseAgain() throws Exception {
+        var x=abortFixture();x.call("close");x.release();
+        assertSame(x.connection,x.call("abort").resolvedValue().orElseThrow());assertEquals(1,x.backend.closeStarts);
+    }
+    @Test void abortAfterFailedClosePreservesRecordedError() throws Exception {
+        var x=abortFixture();var close=x.call("close");x.backend.closeCompletion.failed();x.publish();
+        assertSame(close.failedError().orElseThrow(),x.call("abort").failedError().orElseThrow());assertEquals(1,x.backend.closeStarts);
+    }
+    @Test void repeatedAbortReturnsFreshFollowers() throws Exception {
+        var x=abortFixture();var first=x.call("abort");var second=x.call("abort");
+        assertNotSame(first,second);x.release();assertSame(first.resolvedValue().orElseThrow(),second.resolvedValue().orElseThrow());
+    }
+    @Test void failedRetirementSharesExactErrorAcrossAllFollowers() throws Exception {
+        var x=abortFixture();var first=x.call("abort");var second=x.call("abort");var close=x.call("close");
+        x.backend.closeCompletion.failed();x.publish();var error=first.failedError().orElseThrow();
+        assertSame(error,second.failedError().orElseThrow());assertSame(error,close.failedError().orElseThrow());
+    }
+    @Test void cancellingRetirementFollowerCannotStopRelease() throws Exception {
+        var x=abortFixture();var abort=x.call("abort");abort.cancelRequest();x.release();
+        assertSame(x.connection,abort.resolvedValue().orElseThrow());assertEquals(1,x.backend.closeStarts);
+    }
+    @Test void validCancellationBeforeAbortKeepsCancelled() throws Exception {
+        var x=abortFixture();var write=x.write();write.cancelRequest();x.call("abort");x.release();
+        assertEquals(ProtosFutureValue.State.CANCELLED,write.state());
+    }
+    @Test void physicalSuccessCannotOvertakeAttemptAftermath() throws Exception {
+        var x=abortFixture();var write=x.write();var attempt=x.attempt();assertTrue(attempt.beginFirstEffectAttempt());
+        var abort=x.call("abort");x.release();assertTrue(abort.isPending());
+        assertTrue(attempt.finishFirstEffectAttempt(true));attempt.succeeded();x.publish();
+        assertSame(x.connection,write.resolvedValue().orElseThrow());assertSame(x.connection,abort.resolvedValue().orElseThrow());
+    }
+    @Test void reconciledAftermathStillWaitsForPhysicalRelease() throws Exception {
+        var x=abortFixture();var write=x.write();var attempt=x.attempt();assertTrue(attempt.beginFirstEffectAttempt());
+        var abort=x.call("abort");assertTrue(attempt.finishFirstEffectAttempt(true));attempt.failed(1);x.publish();
+        assertFailedAs(write,x.prelude,"IOError");assertTrue(abort.isPending());x.release();
+        assertSame(x.connection,abort.resolvedValue().orElseThrow());
+    }
+    @Test void committedReadResultSurvivesAbort() throws Exception {
+        var x=abortFixture();var read=future(x.connection,"read",List.of(integer(2)),x.activation);
+        x.backend.readCompletions.removeFirst().data(new byte[]{7});x.publish();
+        var result=read.resolvedValue().orElseThrow();x.call("abort");x.release();assertSame(result,read.resolvedValue().orElseThrow());
+    }
+    @Test void completedHalfCloseSurvivesAbort() throws Exception {
+        var x=abortFixture();var shutdown=x.call("shutdownRead");x.backend.shutdownReadCompletion.succeeded();x.publish();
+        x.call("abort");x.release();assertSame(x.connection,shutdown.resolvedValue().orElseThrow());
+    }
+    @Test void pendingHalfCloseFailureMustPrecedeRetirementSuccess() throws Exception {
+        var x=abortFixture();var shutdown=x.call("shutdownRead");var abort=x.call("abort");
+        x.release();assertTrue(abort.isPending());x.backend.shutdownReadCompletion.failed();x.publish();
+        assertFailedAs(shutdown,x.prelude,"IOError");assertSame(x.connection,abort.resolvedValue().orElseThrow());
+    }
+    @Test void repeatedPhysicalNotificationCannotRewriteRetirement() throws Exception {
+        var x=abortFixture();var abort=x.call("abort");x.release();x.backend.closeCompletion.failed();x.publish();
+        assertSame(x.connection,abort.resolvedValue().orElseThrow());assertEquals(1,x.backend.closeStarts);
+    }
+
+    @Test void cancellationDuringFirstAttemptKeepsCancelledWhenZeroEffectIsEstablished() throws Exception {
+        var x=abortFixture();var write=x.write();var attempt=x.attempt();assertTrue(attempt.beginFirstEffectAttempt());
+        write.cancelRequest();var abort=x.call("abort");x.release();assertTrue(abort.isPending());
+        assertTrue(!attempt.finishFirstEffectAttempt(false));x.publish();
+        assertEquals(ProtosFutureValue.State.CANCELLED,write.state());assertSame(x.connection,abort.resolvedValue().orElseThrow());
+    }
+
+    @Test void independentWriteFailureEstablishedBeforeAbortKeepsItsCategory() throws Exception {
+        var x=abortFixture();var write=x.write();x.attempt().failed(0);
+        var abort=x.call("abort");x.release();x.publish();
+        assertFailedAs(write,x.prelude,"IOError");assertSame(x.connection,abort.resolvedValue().orElseThrow());
     }
 
     private static ProtosPrelude core() throws Exception {
