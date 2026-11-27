@@ -918,6 +918,8 @@ final class ProtosI115LexicalStorageConvergenceTest {
             assertSame(authority, context.lexicalBindingAuthorityForRuntime());
             assertNotSame(oldAuthority, authority);
             assertFalse(oldLocation.hasCurrentStorage());
+            assertFalse(oldLocation.storageInstallationAssumption().isValid(),
+                    "A retired location cannot establish an installation proof");
             assertNull(ProtosModuleBindingLocation.ofOrNull(context, "liveName"));
             assertSame(before, reads.execute(readerState, "liveName", false));
             assertSame(before, singleReads.execute(singleReaderState, "liveName", false));

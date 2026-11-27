@@ -250,9 +250,8 @@ final class ProtosI075DLexicalAuthorityCurrentBytecodeNodeTest {
                         builder -> {
                             builder.beginRoot();
                             builder.beginReturn();
-                            builder.beginAccessNamedLexical(ProtosNamedLexicalAccess.LOOKUP);
+                            builder.beginAccessNamedLexical(ProtosNamedLexicalAccess.LOOKUP, name);
                             builder.emitLoadArgument(0);
-                            builder.emitLoadConstant(name);
                             builder.endAccessNamedLexical();
                             builder.endReturn();
                             builder.endRoot();

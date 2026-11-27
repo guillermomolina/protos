@@ -752,7 +752,7 @@ final class ProtosI115HStaticClosureCallTest {
                         || (load >= 0 && plain.get(load + 1).equals("c.StoreCell")),
                 plain::toString);
         int compare = plain.indexOf(comparison);
-        int condition = plain.indexOf("c.RequireCanonicalBooleanResult");
+        int condition = plain.indexOf("c.RequireCanonicalBooleanResultFromLocal");
         assertTrue(compare >= 0 && condition > compare,
                 () -> "comparison, then the canonical Boolean control: " + plain);
         assertTrue(plain.contains("c.NumberSubtract") && plain.contains("c.NumberAdd"),

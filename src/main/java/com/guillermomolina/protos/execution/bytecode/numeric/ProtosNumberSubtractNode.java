@@ -46,14 +46,15 @@ import com.oracle.truffle.api.source.SourceSection;
  * {@code terminal} constant states whether the site is the terminal
  * invocation of its root.
  *
- * <p>The operation stores its result in the {@code outcome} local and
- * answers whether that result must be composed as a continuation.
+ * <p>The operation writes a completed result to its constant destination.
+ * A pending result is retained in the private {@code outcome} local;
+ * the operation answers whether continuation composition is required.
  */
 @GenerateUncached
 @GenerateInline(false)
 @ConstantOperand(type = boolean.class, name = "terminal")
 @ConstantOperand(type = LocalAccessor.class, name = "outcome")
-@ConstantOperand(type = LocalAccessor.class, name = "commitCell")
+@ConstantOperand(type = LocalAccessor.class, name = "commitDestination")
 @ConstantOperand(type = boolean.class, name = "commitToCell")
 @ConstantOperand(type = SourceSection.class, name = "assignmentSection")
 @OperationProxy.Proxyable(allowUncached = true, storeBytecodeIndex = false)
@@ -62,13 +63,13 @@ abstract class ProtosNumberSubtractNode extends ProtosNumberSubtractFastPathsBas
     @Specialization(guards = "selection.execute(frame, SELECTOR, left)", replaces = "doLL")
     @StoreBytecodeIndex
     static boolean doLLOvf(VirtualFrame frame, boolean terminal, LocalAccessor outcome,
-            LocalAccessor commitCell, boolean commitToCell, SourceSection assignmentSection,
+            LocalAccessor commitDestination, boolean commitToCell, SourceSection assignmentSection,
             long left, long right,
             @Bind Node node,
             @Shared("selection") @Cached ProtosNumericSelectionNode selection,
             @Bind("bytecodeOf($node)") BytecodeNode bytecode) {
         return ProtosBytecodeRootNode.StoreAndTestContinuation.storeResultAndCommit(
-                outcome, commitCell, commitToCell, assignmentSection,
+                outcome, commitDestination, commitToCell, assignmentSection,
                 subtractOrPromote(frame, node, left, right), frame, bytecode);
     }
 
@@ -79,7 +80,7 @@ abstract class ProtosNumberSubtractNode extends ProtosNumberSubtractFastPathsBas
             VirtualFrame frame,
             boolean terminal,
             LocalAccessor outcome,
-            LocalAccessor commitCell, boolean commitToCell, SourceSection assignmentSection,
+            LocalAccessor commitDestination, boolean commitToCell, SourceSection assignmentSection,
             Object left,
             Object right,
             @Bind Node node,
@@ -89,11 +90,11 @@ abstract class ProtosNumberSubtractNode extends ProtosNumberSubtractFastPathsBas
             @Bind("bytecodeOf($node)") BytecodeNode bytecode) {
         if (selection.execute(frame, SELECTOR, left)) {
             return ProtosBytecodeRootNode.StoreAndTestContinuation.storeResultAndCommit(
-                    outcome, commitCell, commitToCell, assignmentSection,
+                    outcome, commitDestination, commitToCell, assignmentSection,
                     genericSubtract(root, frame, node, left, right), frame, bytecode);
         }
         return ProtosBytecodeRootNode.StoreAndTestContinuation.storeResultAndCommit(
-                outcome, commitCell, commitToCell, assignmentSection, overload.execute(frame, terminal, SELECTOR, left, right,
+                outcome, commitDestination, commitToCell, assignmentSection, overload.execute(frame, terminal, SELECTOR, left, right,
                 root, bytecode, bytecode.getBytecodeIndex(frame)), frame, bytecode);
     }
 }

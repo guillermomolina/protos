@@ -580,8 +580,45 @@ abstract class ProtosNumericSelectionNode extends Node {
      */
     static boolean frozenStandard(boolean frozen, String selector, Object receiver,
             ProtosValueLookup.StructuralSelection selection, ProtosPrelude prelude) {
-        return frozen && selection.isValid()
-                && standard(selector, receiver, selection.read(), selection.home(), prelude);
+        if (!frozen || !selection.isValid()) {
+            return false;
+        }
+        if ("%".equals(selector)) {
+            return receiver instanceof Long
+                    && frozenSourceBackedPercent(selection, prelude);
+        }
+        return standard(selector, receiver, selection.read(), selection.home(), prelude);
+    }
+
+    /*
+     * The source-backed Integer operation normalizes its receiver through
+     * canonical addition and then selects canonical remainder. The primitive
+     * specialization is valid only when those selections cannot change.
+     */
+    @TruffleBoundary
+    static boolean frozenSourceBackedPercent(
+            ProtosValueLookup.StructuralSelection selection,
+            ProtosPrelude prelude) {
+        if (prelude == null || selection == null
+                || !selection.isValid() || !selection.allOwnersFrozen()
+                || !(selection.read() instanceof ProtosClosureValue closure)
+                || !prelude.isStandardIntegerPercentForRuntime(closure)
+                || selection.home() != prelude.integerPrototype()
+                || !frozenStandardLongOperators(prelude, "+", "mod")) {
+            return false;
+        }
+
+        ProtosValueLookup.StructuralSelection call =
+                ProtosValueLookup.selectStructural(closure, "call");
+        if (call == null || !call.isValid() || !call.allOwnersFrozen()
+                || !ProtosStandardObjectProtocol.isCanonicalStandardCallSelection(
+                        call.read(), call.home())) {
+            return false;
+        }
+
+        ProtosPrelude captured = closure.preludeOrNullForRuntime();
+        return captured == null || captured == prelude
+                || frozenStandardLongOperators(captured, "+", "mod");
     }
 
     /* Whether a selected behavior and its owner are the standard operator. */

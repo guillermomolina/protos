@@ -1392,6 +1392,22 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
+    /** Reset a contiguous range of fresh callback bindings. */
+    @Operation(storeBytecodeIndex = false)
+    @ConstantOperand(type = LocalRangeAccessor.class, name = "locals")
+    public static final class ResetInlineCallbackLocals {
+        @Specialization
+        @ExplodeLoop
+        public static void perform(
+                LocalRangeAccessor locals,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecodeNode) {
+            for (int index = 0; index < locals.getLength(); index++) {
+                locals.clear(bytecodeNode, frame, index);
+            }
+        }
+    }
+
     /**
      * Presence-aware read of an owned LOCAL binding (checked fast
      * local load). Presence is the state of this activation's own local only:
@@ -1918,7 +1934,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation(storeBytecodeIndex = true)
     @ConstantOperand(type = boolean.class, name = "terminal")
     @ConstantOperand(type = LocalAccessor.class, name = "outcome")
-    @ConstantOperand(type = LocalAccessor.class, name = "commitCell")
+    @ConstantOperand(type = LocalAccessor.class, name = "commitDestination")
     @ConstantOperand(type = boolean.class, name = "commitToCell")
     @ConstantOperand(type = SourceSection.class, name = "assignmentSection")
     public static final class NumberQuotient {
@@ -1931,15 +1947,15 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         @Specialization(guards = {"fitsLong(left, right)",
                 "selection.execute(frame, SELECTOR, left)"})
         public static boolean small(boolean terminal, LocalAccessor outcome,
-                LocalAccessor commitCell, boolean commitToCell, SourceSection assignmentSection,
+                LocalAccessor commitDestination, boolean commitToCell, SourceSection assignmentSection,
                 long left, long right,
                 @Bind VirtualFrame frame,
                 @Shared("selection") @Cached ProtosNumericSelectionNode selection,
                 @Bind BytecodeNode bytecode) {
-            outcome.setLong(bytecode, frame, left / right);
+            (commitToCell ? outcome : commitDestination).setLong(bytecode, frame, left / right);
             if (commitToCell) {
                 StoreAndTestContinuation.commitCompletedCell(
-                        commitCell, outcome, assignmentSection, frame, bytecode);
+                        commitDestination, outcome, assignmentSection, frame, bytecode);
             }
             return false;
         }
@@ -1947,7 +1963,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         @Specialization
         @InliningCutoff
         public static boolean exact(boolean terminal, LocalAccessor outcome,
-                LocalAccessor commitCell, boolean commitToCell, SourceSection assignmentSection,
+                LocalAccessor commitDestination, boolean commitToCell, SourceSection assignmentSection,
                 Object left, Object right,
                 @Bind VirtualFrame frame,
                 @Bind ProtosBytecodeRootNode root,
@@ -1957,12 +1973,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached ProtosNumericOverloadNode overload) {
             if (selection.execute(frame, SELECTOR, left)) {
                 return StoreAndTestContinuation.storeResultAndCommit(
-                        outcome, commitCell, commitToCell, assignmentSection,
+                        outcome, commitDestination, commitToCell, assignmentSection,
                         ProtosNumericOperationSupport.arithmetic(root, frame, left, SELECTOR, right),
                         frame, bytecode);
             }
             return StoreAndTestContinuation.storeResultAndCommit(
-                    outcome, commitCell, commitToCell, assignmentSection,
+                    outcome, commitDestination, commitToCell, assignmentSection,
                     overload.execute(frame, terminal, SELECTOR, left, right,
                     root, bytecode, bytecodeIndex), frame, bytecode);
         }
@@ -1973,34 +1989,35 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * selection discipline as {@link NumberQuotient}.
      */
     @Operation(storeBytecodeIndex = true)
+    @ConstantOperand(type = String.class, name = "selector")
     @ConstantOperand(type = boolean.class, name = "terminal")
     @ConstantOperand(type = LocalAccessor.class, name = "outcome")
-    @ConstantOperand(type = LocalAccessor.class, name = "commitCell")
+    @ConstantOperand(type = LocalAccessor.class, name = "commitDestination")
     @ConstantOperand(type = boolean.class, name = "commitToCell")
     @ConstantOperand(type = SourceSection.class, name = "assignmentSection")
     public static final class NumberRemainder {
-        static final String SELECTOR = "mod";
-
         @Specialization(guards = {"right != 0",
-                "selection.execute(frame, SELECTOR, left)"})
-        public static boolean small(boolean terminal, LocalAccessor outcome,
-                LocalAccessor commitCell, boolean commitToCell, SourceSection assignmentSection,
+                "selection.execute(frame, selector, left)"})
+        public static boolean small(String selector, boolean terminal,
+                LocalAccessor outcome,
+                LocalAccessor commitDestination, boolean commitToCell, SourceSection assignmentSection,
                 long left, long right,
                 @Bind VirtualFrame frame,
                 @Shared("selection") @Cached ProtosNumericSelectionNode selection,
                 @Bind BytecodeNode bytecode) {
-            outcome.setLong(bytecode, frame, left % right);
+            (commitToCell ? outcome : commitDestination).setLong(bytecode, frame, left % right);
             if (commitToCell) {
                 StoreAndTestContinuation.commitCompletedCell(
-                        commitCell, outcome, assignmentSection, frame, bytecode);
+                        commitDestination, outcome, assignmentSection, frame, bytecode);
             }
             return false;
         }
 
         @Specialization
         @InliningCutoff
-        public static boolean exact(boolean terminal, LocalAccessor outcome,
-                LocalAccessor commitCell, boolean commitToCell, SourceSection assignmentSection,
+        public static boolean exact(String selector, boolean terminal,
+                LocalAccessor outcome,
+                LocalAccessor commitDestination, boolean commitToCell, SourceSection assignmentSection,
                 Object left, Object right,
                 @Bind VirtualFrame frame,
                 @Bind ProtosBytecodeRootNode root,
@@ -2008,15 +2025,16 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Bind("$bytecodeIndex") int bytecodeIndex,
                 @Shared("selection") @Cached ProtosNumericSelectionNode selection,
                 @Cached ProtosNumericOverloadNode overload) {
-            if (selection.execute(frame, SELECTOR, left)) {
+            if ("mod".equals(selector)
+                    && selection.execute(frame, selector, left)) {
                 return StoreAndTestContinuation.storeResultAndCommit(
-                        outcome, commitCell, commitToCell, assignmentSection,
-                        ProtosNumericOperationSupport.arithmetic(root, frame, left, SELECTOR, right),
+                        outcome, commitDestination, commitToCell, assignmentSection,
+                        ProtosNumericOperationSupport.arithmetic(root, frame, left, selector, right),
                         frame, bytecode);
             }
             return StoreAndTestContinuation.storeResultAndCommit(
-                    outcome, commitCell, commitToCell, assignmentSection,
-                    overload.execute(frame, terminal, SELECTOR, left, right,
+                    outcome, commitDestination, commitToCell, assignmentSection,
+                    overload.execute(frame, terminal, selector, left, right,
                     root, bytecode, bytecodeIndex), frame, bytecode);
         }
     }
@@ -4599,16 +4617,11 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      */
     @Operation(storeBytecodeIndex = true)
     @ConstantOperand(type = ProtosNamedLexicalAccess.class, name = "access")
-    public static final class AccessNamedLexical {
-        /*
-         * A true internal operand selects this physical root, without retaining a
-         * frame or publishing it. Inline bodies pass their exact owner instead.
-         * Only the selector proves a compact access safe; the operand is no proof.
-         */
-        @Specialization(guards = "currentFrame")
+    @ConstantOperand(type = String.class, name = "name")
+    public static final class AccessNamedLexicalCurrent {
+        @Specialization
         public static Object compact(
                 ProtosNamedLexicalAccess access,
-                boolean currentFrame,
                 String name,
                 @Bind VirtualFrame frame,
                 @Bind ProtosBytecodeRootNode root,
@@ -4627,12 +4640,18 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             root.ensureLexicalFrameView(frame, bytecode, bytecodeIndex, activation);
             return selection.execute(activation, name, access.write());
         }
+    }
 
+    /** Lexical selection from an explicitly evaluated activation. */
+    @Operation(storeBytecodeIndex = true)
+    @ConstantOperand(type = ProtosNamedLexicalAccess.class, name = "access")
+    @ConstantOperand(type = String.class, name = "name")
+    public static final class AccessNamedLexical {
         @Specialization
         public static Object perform(
                 ProtosNamedLexicalAccess access,
-                ProtosActivation activation,
                 String name,
+                ProtosActivation activation,
                 @Cached ProtosLexicalSelectionNode selection) {
             return selection.execute(activation, name, access.write());
         }
@@ -5964,6 +5983,26 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
+    /** Compare an admitted literal key with the evaluated subject. */
+    @Operation(storeBytecodeIndex = false)
+    @ConstantOperand(type = long.class, name = "key")
+    @ConstantOperand(type = LocalAccessor.class, name = "subject")
+    public static final class LiteralCaseLongEquals {
+        @Specialization
+        public static boolean compare(
+                long key,
+                LocalAccessor subject,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode) {
+            try {
+                return CaseLongEquals.compare(
+                        key, subject.getLong(bytecode, frame));
+            } catch (UnexpectedResultException notLong) {
+                throw CompilerDirectives.shouldNotReachHere(notLong);
+            }
+        }
+    }
+
     /** Pure selection proof shared by standalone and table-driven Integer matching. */
     @Operation(storeBytecodeIndex = false)
     public static final class AdmitsStandardLongMatch {
@@ -6040,38 +6079,63 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     /** Admission precedes the elision of construction, hashing and action materialization. */
     @Operation(storeBytecodeIndex = false)
     @ConstantOperand(type = boolean.class, name = "negatedKeys")
+    @ConstantOperand(type = LocalAccessor.class, name = "evaluatedFactory")
+    @ConstantOperand(type = LocalAccessor.class, name = "subject")
     public static final class AdmitsDirectLongCaseOf {
         @Specialization(
-                guards = {"closure != null", "closure == cachedClosure",
+                guards = {"isLongSubject(subject, frame, bytecode)",
+                        "closure != null", "closure == cachedClosure",
                         "cachedPrelude != null", "factory == cachedFactory", "standard"},
                 limit = "3", excludeForUncached = true)
         public static boolean doCaptured(
-                boolean negatedKeys, ProtosObjectValue factory, long subject,
+                boolean negatedKeys, LocalAccessor evaluatedFactory, LocalAccessor subject, ProtosObjectValue factory,
                 @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode,
                 @Bind("capturedClosure(frame)") ProtosClosureValue closure,
                 @Cached("closure") ProtosClosureValue cachedClosure,
                 @Cached("cachedClosure.preludeOrNullForRuntime()") ProtosPrelude cachedPrelude,
                 @Cached("factory") ProtosObjectValue cachedFactory,
                 @Cached("frozenTable(cachedFactory, cachedPrelude, negatedKeys)") boolean standard) {
+            evaluatedFactory.setObject(bytecode, frame, factory);
             return true;
         }
 
         @Specialization(
-                guards = {"prelude == cachedPrelude", "factory == cachedFactory", "standard"},
+                guards = {"isLongSubject(subject, frame, bytecode)",
+                        "prelude == cachedPrelude", "factory == cachedFactory", "standard"},
                 limit = "3", excludeForUncached = true)
         public static boolean doAdmitted(
-                boolean negatedKeys, ProtosObjectValue factory, long subject,
+                boolean negatedKeys, LocalAccessor evaluatedFactory, LocalAccessor subject, ProtosObjectValue factory,
                 @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode,
                 @Bind("admittedPrelude(frame)") ProtosPrelude prelude,
                 @Cached("prelude") ProtosPrelude cachedPrelude,
                 @Cached("factory") ProtosObjectValue cachedFactory,
                 @Cached("frozenTable(cachedFactory, cachedPrelude, negatedKeys)") boolean standard) {
+            evaluatedFactory.setObject(bytecode, frame, factory);
             return true;
         }
 
         @Specialization
-        public static boolean doOther(boolean negatedKeys, Object factory, Object subject) {
+        public static boolean doOther(
+                boolean negatedKeys, LocalAccessor evaluatedFactory, LocalAccessor subject, Object factory,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode) {
+            evaluatedFactory.setObject(bytecode, frame, factory);
             return false;
+        }
+
+        @NonIdempotent
+        static boolean isLongSubject(
+                LocalAccessor subject,
+                VirtualFrame frame,
+                BytecodeNode bytecode) {
+            try {
+                subject.getLong(bytecode, frame);
+                return true;
+            } catch (UnexpectedResultException notLong) {
+                return false;
+            }
         }
 
         @NonIdempotent
@@ -6119,19 +6183,24 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
     /** The evaluated lexical value, never the identifier spelling, certifies Any. */
     @Operation(storeBytecodeIndex = false)
+    @ConstantOperand(type = LocalAccessor.class, name = "rejectedValue")
+    @ConstantOperand(type = LocalAccessor.class, name = "evaluatedFactory")
     public static final class AdmitsStandardCaseAny {
         @Specialization(
                 guards = {"closure != null", "closure == cachedClosure",
                         "cachedPrelude != null", "value == cachedValue", "standard"},
                 limit = "3", excludeForUncached = true)
         public static boolean doCaptured(
+                LocalAccessor rejectedValue, LocalAccessor evaluatedFactory,
                 ProtosObjectValue value,
                 @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode,
                 @Bind("capturedClosure(frame)") ProtosClosureValue closure,
                 @Cached("closure") ProtosClosureValue cachedClosure,
                 @Cached("cachedClosure.preludeOrNullForRuntime()") ProtosPrelude cachedPrelude,
                 @Cached("value") ProtosObjectValue cachedValue,
                 @Cached("frozenAny(cachedValue, cachedPrelude)") boolean standard) {
+            evaluatedFactory.clear(bytecode, frame);
             return true;
         }
 
@@ -6139,17 +6208,25 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 guards = {"prelude == cachedPrelude", "value == cachedValue", "standard"},
                 limit = "3", excludeForUncached = true)
         public static boolean doAdmitted(
+                LocalAccessor rejectedValue, LocalAccessor evaluatedFactory,
                 ProtosObjectValue value,
                 @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode,
                 @Bind("admittedPrelude(frame)") ProtosPrelude prelude,
                 @Cached("prelude") ProtosPrelude cachedPrelude,
                 @Cached("value") ProtosObjectValue cachedValue,
                 @Cached("frozenAny(cachedValue, cachedPrelude)") boolean standard) {
+            evaluatedFactory.clear(bytecode, frame);
             return true;
         }
 
         @Specialization
-        public static boolean doOther(Object value) {
+        public static boolean doOther(
+                LocalAccessor rejectedValue, LocalAccessor evaluatedFactory,
+                Object value,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode) {
+            rejectedValue.setObject(bytecode, frame, value);
             return false;
         }
 
@@ -8028,6 +8105,38 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
 
+    /** Consume a completed comparison result and release its temporary. */
+    @Operation(storeBytecodeIndex = false)
+    @ConstantOperand(type = LocalAccessor.class, name = "outcome")
+    public static final class RequireCanonicalBooleanResultFromLocal {
+        @Specialization(guards = "isBoolean(value)")
+        public static boolean doBoolean(
+                LocalAccessor outcome,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode,
+                @Bind("outcome.getObject(bytecode, frame)") Object value) {
+            outcome.clear(bytecode, frame);
+            return RequireCanonicalBooleanResult.doBoolean((Boolean) value);
+        }
+
+        @Fallback
+        @StoreBytecodeIndex
+        public static Object doOther(
+                LocalAccessor outcome,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecode,
+                @Bind ProtosBytecodeRootNode root,
+                @Bind("outcome.getObject(bytecode, frame)") Object value) {
+            outcome.clear(bytecode, frame);
+            return RequireCanonicalBooleanResult.doOther(value, frame, root);
+        }
+
+        static boolean isBoolean(Object value) {
+            return value instanceof Boolean;
+        }
+    }
+
+
     // ---- PLAT044 B′ inline literal standard each (PERF026-D1/D2/D3) ------------------
     //
     // A selected standard Array.each or Bytes.each whose sole argument is
@@ -8078,15 +8187,22 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         static boolean storeResultAndCommit(
                 LocalAccessor outcome,
-                LocalAccessor commitCell,
+                LocalAccessor commitDestination,
                 boolean commitToCell,
                 SourceSection assignmentSection,
                 Object value,
                 VirtualFrame frame,
                 BytecodeNode bytecode) {
+            if (!commitToCell) {
+                LocalAccessor destination =
+                        ProtosTailCallContinuation.isSuspended(value)
+                                ? outcome
+                                : commitDestination;
+                return storeResult(destination, value, frame, bytecode);
+            }
             boolean pending = storeResult(outcome, value, frame, bytecode);
-            if (commitToCell && !pending) {
-                commitCompletedCell(commitCell, outcome, assignmentSection, frame, bytecode);
+            if (!pending) {
+                commitCompletedCell(commitDestination, outcome, assignmentSection, frame, bytecode);
             }
             return pending;
         }

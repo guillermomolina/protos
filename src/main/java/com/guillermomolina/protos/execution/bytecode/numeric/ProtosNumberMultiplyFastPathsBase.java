@@ -43,21 +43,21 @@ abstract class ProtosNumberMultiplyFastPathsBase extends Node {
     static final String SELECTOR = "*";
 
     abstract boolean execute(VirtualFrame frame, boolean terminal, LocalAccessor outcome,
-            LocalAccessor commitCell, boolean commitToCell, SourceSection assignmentSection,
+            LocalAccessor commitDestination, boolean commitToCell, SourceSection assignmentSection,
             Object left, Object right);
 
     @Specialization(guards = "selection.execute(frame, SELECTOR, left)",
             rewriteOn = ArithmeticException.class)
     @StoreBytecodeIndex
     static boolean doLL(VirtualFrame frame, boolean terminal, LocalAccessor outcome,
-            LocalAccessor commitCell, boolean commitToCell, SourceSection assignmentSection,
+            LocalAccessor commitDestination, boolean commitToCell, SourceSection assignmentSection,
             long left, long right,
             @Shared("selection") @Cached ProtosNumericSelectionNode selection,
             @Bind("bytecodeOf($node)") BytecodeNode bytecode) {
-        outcome.setLong(bytecode, frame, Math.multiplyExact(left, right));
+        (commitToCell ? outcome : commitDestination).setLong(bytecode, frame, Math.multiplyExact(left, right));
         if (commitToCell) {
             ProtosBytecodeRootNode.StoreAndTestContinuation.commitCompletedCell(
-                    commitCell, outcome, assignmentSection, frame, bytecode);
+                    commitDestination, outcome, assignmentSection, frame, bytecode);
         }
         return false;
     }
@@ -65,14 +65,14 @@ abstract class ProtosNumberMultiplyFastPathsBase extends Node {
     @Specialization(guards = "selection.execute(frame, SELECTOR, left)")
     @StoreBytecodeIndex
     static boolean doDD(VirtualFrame frame, boolean terminal, LocalAccessor outcome,
-            LocalAccessor commitCell, boolean commitToCell, SourceSection assignmentSection,
+            LocalAccessor commitDestination, boolean commitToCell, SourceSection assignmentSection,
             double left, double right,
             @Shared("selection") @Cached ProtosNumericSelectionNode selection,
             @Bind("bytecodeOf($node)") BytecodeNode bytecode) {
-        outcome.setDouble(bytecode, frame, left * right);
+        (commitToCell ? outcome : commitDestination).setDouble(bytecode, frame, left * right);
         if (commitToCell) {
             ProtosBytecodeRootNode.StoreAndTestContinuation.commitCompletedCell(
-                    commitCell, outcome, assignmentSection, frame, bytecode);
+                    commitDestination, outcome, assignmentSection, frame, bytecode);
         }
         return false;
     }
@@ -80,14 +80,14 @@ abstract class ProtosNumberMultiplyFastPathsBase extends Node {
     @Specialization(guards = "selection.execute(frame, SELECTOR, left)")
     @StoreBytecodeIndex
     static boolean doDL(VirtualFrame frame, boolean terminal, LocalAccessor outcome,
-            LocalAccessor commitCell, boolean commitToCell, SourceSection assignmentSection,
+            LocalAccessor commitDestination, boolean commitToCell, SourceSection assignmentSection,
             double left, long right,
             @Shared("selection") @Cached ProtosNumericSelectionNode selection,
             @Bind("bytecodeOf($node)") BytecodeNode bytecode) {
-        outcome.setDouble(bytecode, frame, left * right);
+        (commitToCell ? outcome : commitDestination).setDouble(bytecode, frame, left * right);
         if (commitToCell) {
             ProtosBytecodeRootNode.StoreAndTestContinuation.commitCompletedCell(
-                    commitCell, outcome, assignmentSection, frame, bytecode);
+                    commitDestination, outcome, assignmentSection, frame, bytecode);
         }
         return false;
     }
@@ -95,14 +95,14 @@ abstract class ProtosNumberMultiplyFastPathsBase extends Node {
     @Specialization(guards = "selection.execute(frame, SELECTOR, left)")
     @StoreBytecodeIndex
     static boolean doLD(VirtualFrame frame, boolean terminal, LocalAccessor outcome,
-            LocalAccessor commitCell, boolean commitToCell, SourceSection assignmentSection,
+            LocalAccessor commitDestination, boolean commitToCell, SourceSection assignmentSection,
             long left, double right,
             @Shared("selection") @Cached ProtosNumericSelectionNode selection,
             @Bind("bytecodeOf($node)") BytecodeNode bytecode) {
-        outcome.setDouble(bytecode, frame, left * right);
+        (commitToCell ? outcome : commitDestination).setDouble(bytecode, frame, left * right);
         if (commitToCell) {
             ProtosBytecodeRootNode.StoreAndTestContinuation.commitCompletedCell(
-                    commitCell, outcome, assignmentSection, frame, bytecode);
+                    commitDestination, outcome, assignmentSection, frame, bytecode);
         }
         return false;
     }

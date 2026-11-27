@@ -706,7 +706,8 @@ public final class ProtosCoreBootstrap {
                 anyMatchMethod,
                 objectMatchMethod,
                 objectEqualsMethod,
-                requireSourceBackedClosure(integerPrototype, "negated"));
+                requireSourceBackedClosure(integerPrototype, "negated"),
+                requireSourceBackedClosure(integerPrototype, "%"));
         // The source-backed facility hides its runtime behind guest code, so the Prelude keeps
         // that identity privately for runtimeForPrelude (semantic transfer and Actor consumers).
         prelude.bindModuleRuntimeForRuntime(moduleRuntime);

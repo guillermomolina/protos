@@ -456,6 +456,107 @@ final class ProtosPerf044MatchingInlineTest {
             List<Instruction> region = directRegion(lower(EXPLICIT));
             List<String> operations = region.stream().map(ProtosInstructionNames::of).toList();
             assertEquals(3, count(operations, "CaseLongEquals"));
+
+            List<Instruction> comparisons = region.stream()
+                    .filter(instruction -> instruction.getName()
+                            .startsWith("c.LiteralCaseLongEquals"))
+                    .toList();
+
+            assertEquals(3, comparisons.size(),
+                    "All admitted literal keys are instruction operands");
+
+            List<Object> literalKeys = comparisons.stream()
+                    .map(instruction -> instruction.getArguments().stream()
+                            .filter(argument -> argument.getName().equals("key"))
+                            .findFirst().orElseThrow().asConstant())
+                    .toList();
+
+            assertEquals(List.of(0L, 1L, 2L), literalKeys,
+                    "Literal alternatives preserve their exact written order");
+
+            List<Object> subjects = comparisons.stream()
+                    .map(instruction -> instruction.getArguments().stream()
+                            .filter(argument -> argument.getName().equals("subject"))
+                            .findFirst().orElseThrow().asConstant())
+                    .toList();
+
+            assertTrue(subjects.stream().allMatch(
+                    com.oracle.truffle.api.bytecode.LocalAccessor.class::isInstance));
+
+            assertEquals(1L, subjects.stream().distinct().count(),
+                    "Every alternative reads the same evaluated subject");
+
+            com.oracle.truffle.api.bytecode.LocalAccessor accessor =
+                    (com.oracle.truffle.api.bytecode.LocalAccessor) subjects.getFirst();
+
+            assertEquals("directCaseSubject",
+                    accessor.getLocalName(comparisons.getFirst().getBytecodeNode()));
+
+            assertFalse(region.stream().anyMatch(instruction ->
+                            instruction.getName().startsWith("dup")
+                                    || instruction.getName().startsWith("load.stackvalue")),
+                    "Literal alternatives must not transport the subject on the stack");
+
+            assertFalse(region.stream().anyMatch(instruction ->
+                            instruction.getName().equals("c.CaseLongEquals")),
+                    "The admitted table must not transport dynamic keys");
+            List<Instruction> instructions =
+                    lower(EXPLICIT).getBytecodeNode().getInstructionsAsList().stream()
+                            .filter(instruction ->
+                                    !instruction.getName().startsWith("trace.")
+                                    && !instruction.getName().startsWith("tag."))
+                            .toList();
+
+            int factoryAdmission = -1;
+            int anyAdmission = -1;
+            int factoryRead = -1;
+            int anyRead = -1;
+
+            for (int index = 0; index < instructions.size(); index++) {
+                Instruction instruction = instructions.get(index);
+                String name = ProtosInstructionNames.of(instruction);
+
+                if (name.endsWith("AdmitsDirectLongCaseOf")) {
+                    factoryAdmission = index;
+                }
+                if (name.endsWith("AdmitsStandardCaseAny")) {
+                    anyAdmission = index;
+                    break;
+                }
+
+                if (!name.startsWith("c.Lookup")) {
+                    continue;
+                }
+
+                for (Instruction.Argument argument : instruction.getArguments()) {
+                    if (argument.getKind() != Instruction.Argument.Kind.CONSTANT) {
+                        continue;
+                    }
+                    if ("Map".equals(argument.asConstant())) {
+                        factoryRead = index;
+                    }
+                    if ("Any".equals(argument.asConstant())) {
+                        anyRead = index;
+                    }
+                }
+            }
+
+            assertTrue(factoryRead >= 0);
+            assertTrue(factoryAdmission > factoryRead);
+            assertTrue(anyRead > factoryAdmission);
+            assertTrue(anyAdmission > anyRead);
+
+            for (List<Instruction> operandRegion : List.of(
+                    instructions.subList(factoryRead + 1, factoryAdmission),
+                    instructions.subList(anyRead + 1, anyAdmission))) {
+                assertFalse(operandRegion.stream().anyMatch(instruction ->
+                                instruction.getName().startsWith("store.local")),
+                        () -> "Admission operand must not be staged: " + operandRegion);
+            }
+
+            assertFalse(operations.stream().anyMatch(
+                    name -> name.startsWith("merge.conditional")),
+                    "Each selected action writes directly to the shared result");
             for (String forbidden : List.of("MakeMap", "PrepareMapInitialDefinition",
                     "StructuredTryStandardKeyOperation", "GetCaseOfSnapshot", "StructuredMatcher",
                     "StructuredHasNext", "StructuredAcceptChildOutcome", "CaseOfCommitted",
@@ -466,8 +567,18 @@ final class ProtosPerf044MatchingInlineTest {
             }
             assertTrue(region.stream().anyMatch(instruction -> instruction.getName().equals("branch")),
                     "successful admission branches past ordinary Map construction");
-            assertTrue(region.stream().anyMatch(instruction -> instruction.getName().equals("clear.local")),
-                    "admission releases the factory and Any before executing an action");
+            Object retainedFactory =
+                    instructions.get(factoryAdmission).getArguments().stream()
+                            .filter(argument -> argument.getName().equals("evaluatedFactory"))
+                            .findFirst().orElseThrow().asConstant();
+
+            Object releasedFactory =
+                    instructions.get(anyAdmission).getArguments().stream()
+                            .filter(argument -> argument.getName().equals("evaluatedFactory"))
+                            .findFirst().orElseThrow().asConstant();
+
+            assertEquals(retainedFactory.toString(), releasedFactory.toString(),
+                    "Final admission releases the exact retained factory");
             return null;
         });
     }
@@ -485,6 +596,84 @@ final class ProtosPerf044MatchingInlineTest {
             assertEquals(21, count(region, "CaseLongEquals"));
             assertEquals(1, count(region, "CaseOfNoSelection"));
             assertEquals(0, count(region, "StructuredMatcher"));
+            return null;
+        });
+    }
+
+    @Test
+    void evaluatedSubjectIsRetainedAcrossMatchingAdmissions() throws Exception {
+        String program = """
+                state: { visits: 0 }
+                subject: () => {
+                    state.visits = state.visits + 1
+                    2
+                }
+                selected: match(subject()) {
+                    0: 11
+                    1: 23
+                    2: 37
+                    Any: 53
+                }
+                (selected == 37) && (state.visits == 1)
+                """;
+
+        assertSame(Boolean.TRUE, run(program));
+
+        assertSame(Boolean.TRUE, run(
+                "Any: { match: (subject) => true }\n" + program));
+
+        assertSame(Boolean.TRUE, run("""
+                state: { visits: 0 }
+                subject: () => {
+                    state.visits = state.visits + 1
+                    {
+                        caseOf: (table) => table[1]()
+                    }
+                }
+                selected: match(subject()) {
+                    0: 11
+                    1: 23
+                    Any: 53
+                }
+                (selected == 23) && (state.visits == 1)
+                """));
+    }
+
+    @Test
+    void matchingAdmissionReadsTheRetainedSubjectDirectly() {
+        ProtosTestExecutionSupport.callEntered(() -> {
+            ProtosBytecodeRootNode root = lower(EXPLICIT);
+            List<Instruction> instructions =
+                    root.getBytecodeNode().getInstructionsAsList();
+
+            Instruction admission = instructions.stream()
+                    .filter(instruction -> instruction.getName()
+                            .startsWith("c.AdmitsDirectLongCaseOf"))
+                    .findFirst().orElseThrow();
+
+            Object subject = admission.getArguments().stream()
+                    .filter(argument -> argument.getName().equals("subject"))
+                    .findFirst().orElseThrow().asConstant();
+
+            assertTrue(subject instanceof
+                    com.oracle.truffle.api.bytecode.LocalAccessor);
+
+            List<Instruction> comparisons = directRegion(root).stream()
+                    .filter(instruction -> instruction.getName()
+                            .startsWith("c.LiteralCaseLongEquals"))
+                    .toList();
+
+            assertEquals(3, comparisons.size());
+
+            for (Instruction comparison : comparisons) {
+                Object comparisonSubject = comparison.getArguments().stream()
+                        .filter(argument -> argument.getName().equals("subject"))
+                        .findFirst().orElseThrow().asConstant();
+
+                assertEquals(subject, comparisonSubject,
+                        "Admission and recognition must use the same subject");
+            }
+
             return null;
         });
     }
@@ -510,6 +699,21 @@ final class ProtosPerf044MatchingInlineTest {
                 }
                 """;
         assertEquals(1, count(names(source), "AdmitsDirectLongCaseOf"));
+        ProtosTestExecutionSupport.callEntered(() -> {
+            List<Object> literalKeys = directRegion(lower(source)).stream()
+                    .filter(instruction -> instruction.getName()
+                            .startsWith("c.LiteralCaseLongEquals"))
+                    .map(instruction -> instruction.getArguments().stream()
+                            .filter(argument -> argument.getName().equals("key"))
+                            .findFirst().orElseThrow().asConstant())
+                    .toList();
+
+            assertEquals(List.of(Long.MIN_VALUE, -1L, Long.MAX_VALUE),
+                    literalKeys);
+
+            return null;
+        });
+
         assertEquals(11L, run(source));
         assertEquals(23L, run(source.replace("value: -9223372036854775808", "value: -1")));
         assertEquals(37L, run(source.replace("value: -9223372036854775808", "value: 9223372036854775807")));
@@ -559,6 +763,59 @@ final class ProtosPerf044MatchingInlineTest {
                 selected: match(subject) { 0: 11; 1: 23; Any: 53 }
                 (selected == 7) && (saved.table[0]() == 11) && (saved.table[Any]() == 53)
                 """));
+    }
+
+    @Test
+    void inlineRegionKeepsItsOwnLexicalMatcher() throws Exception {
+        String program = """
+                run: () => {
+                    i: 0
+                    sink: 0
+                    while(i < 2) {
+                        Any: 9
+                        result: match(9) {
+                            0: 11
+                            Any: 53
+                        }
+                        sink = sink + result
+                        i = i + 1
+                    }
+                    sink
+                }
+                run()
+                """;
+
+        assertEquals(106L, run(program));
+
+        assertThrows(ProtosSignalException.class,
+                () -> run(program.replace("match(9)", "match(8)")));
+    }
+
+    @Test
+    void enclosingInlineRegionKeepsItsOwnLexicalMatcher() throws Exception {
+        String program = """
+                run: () => {
+                    i: 0
+                    sink: 0
+                    while(i < 2) {
+                        Any: 9
+                        if(true) {
+                            sink = sink + match(9) {
+                                0: 11
+                                Any: 53
+                            }
+                        }
+                        i = i + 1
+                    }
+                    sink
+                }
+                run()
+                """;
+
+        assertEquals(106L, run(program));
+
+        assertThrows(ProtosSignalException.class,
+                () -> run(program.replace("match(9)", "match(8)")));
     }
 
     @Test
@@ -679,6 +936,88 @@ final class ProtosPerf044MatchingInlineTest {
         }
     }
 
+    @Test
+    void sourceBackedPercentSharesPrimitiveRemainder() throws Exception {
+        assertEquals(1L, run("5 % 4"));
+        assertEquals(-1L, run("(-5) % 4"));
+        assertEquals(1L, run("5 % (-4)"));
+        assertEquals(-1L, run("(-5) % (-4)"));
+        assertEquals(0L, run("(-9223372036854775808) % (-1)"));
+        assertThrows(ProtosSignalException.class, () -> run("1 % 0"));
+
+        assertEquals(1, count(names("5 % 4"), "NumberRemainder"));
+        assertEquals(1, count(names("5.mod(4)"), "NumberRemainder"));
+
+        ProtosPrelude core = new ProtosCoreBootstrap().bootstrap(CORE);
+        var selected = ProtosNumericSelectionNode.selectNumeric(
+                core.smallIntegerPrototype(), "%");
+
+        assertTrue(core.isStandardIntegerPercentForRuntime(selected.read()));
+        assertTrue(ProtosNumericSelectionNode.frozenSourceBackedPercent(
+                selected, core));
+
+        ProtosPrelude synthetic = new ProtosPrelude(
+                core.bindings(), core.contextPrototype());
+
+        assertFalse(ProtosNumericSelectionNode.frozenSourceBackedPercent(
+                selected, synthetic));
+        assertEquals(1L, ProtosTestExecutionSupport.evaluate(
+                "5 % 4", synthetic.newModuleActivation()));
+    }
+
+    @Test
+    void percentPreservesRedefinedSelection() throws Exception {
+        ProtosPrelude core = new ProtosCoreBootstrap().bootstrap(CORE);
+        ProtosObjectValue custom = new ProtosObjectValue(
+                core.smallIntegerPrototype());
+
+        AtomicInteger calls = new AtomicInteger();
+
+        custom.createLocalSlot("%", ProtosClosureValue.nativeClosure(
+                (activation, supplied) -> {
+                    calls.incrementAndGet();
+                    return 91L;
+                }));
+        custom.freeze();
+
+        ProtosPrelude prelude = matchingPrelude(core, custom);
+        var selected = ProtosNumericSelectionNode.selectNumeric(custom, "%");
+
+        assertFalse(ProtosNumericSelectionNode.frozenSourceBackedPercent(
+                selected, prelude));
+
+        assertEquals(91L, ProtosTestExecutionSupport.evaluate(
+                "5 % 4", prelude.newModuleActivation()));
+        assertEquals(1, calls.get());
+    }
+
+    @Test
+    void percentAdmissionRequiresCanonicalInnerSelections() throws Exception {
+        ProtosPrelude core = new ProtosCoreBootstrap().bootstrap(CORE);
+
+        for (String selector : List.of("+", "mod")) {
+            ProtosObjectValue custom = new ProtosObjectValue(
+                    core.smallIntegerPrototype());
+
+            custom.createLocalSlot(selector,
+                    ProtosClosureValue.nativeClosure(
+                            (activation, supplied) -> 91L));
+            custom.freeze();
+
+            ProtosPrelude prelude = matchingPrelude(core, custom);
+
+            var selected = ProtosNumericSelectionNode.selectNumeric(
+                    custom, "%");
+
+            assertTrue(prelude.isStandardIntegerPercentForRuntime(
+                    selected.read()));
+
+            assertFalse(ProtosNumericSelectionNode.frozenSourceBackedPercent(
+                    selected, prelude),
+                    "The source-backed operation must not elide custom " + selector);
+        }
+    }
+
     /* Retain real bootstrap certificates while changing only the tested primitive delegation. */
     private static ProtosPrelude matchingPrelude(ProtosPrelude core, ProtosObjectValue smallInteger) {
         ProtosObjectValue bindings = new ProtosObjectValue(core.contextPrototype());
@@ -693,7 +1032,8 @@ final class ProtosPerf044MatchingInlineTest {
                 any, (ProtosClosureValue) any.readLocalSlot("match").orElseThrow(),
                 (ProtosClosureValue) root.readLocalSlot("match").orElseThrow(),
                 (ProtosClosureValue) root.readLocalSlot("==").orElseThrow(),
-                (ProtosClosureValue) core.integerPrototype().readLocalSlot("negated").orElseThrow());
+                (ProtosClosureValue) core.integerPrototype().readLocalSlot("negated").orElseThrow(),
+                (ProtosClosureValue) core.integerPrototype().readLocalSlot("%").orElseThrow());
     }
 
     /* Follow admission's false branch; ordinary instructions remain outside this interval. */

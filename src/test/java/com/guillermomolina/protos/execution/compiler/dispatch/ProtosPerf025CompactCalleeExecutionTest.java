@@ -83,24 +83,31 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                 ProtosClosureValue reader = new ProtosClosureValue(
                         template.definition(), List.of(owner), newObject(), null, null,
                         module.prelude().orElseThrow(), template.executionPlan().orElseThrow());
-                assertContains(instructionNames(reader), "c.Lookup");
-                assertContains(instructionNames(reader), "EnsureCurrentClosureLexicalView");
+                List<String> operations = instructionNames(reader);
+                assertContains(operations, "c.Lookup");
+                if (!observesContext) {
+                    assertFalse(operations.stream().anyMatch(
+                            name -> name.contains("EnsureCurrentClosureLexicalView")),
+                            "An unobserved inline lexical read must not eagerly publish its activation");
+                }
                 for (int attempt = 0; attempt < 8; attempt++) {
                     Object[] arguments = ProtosFrameArguments.compactDirectClosureCall(
                             reader, module, null, new Object[0]);
                     assertSame(reader, arguments[0]);
                     assertSame(expected, target(reader).call(arguments));
-                    ProtosActivation published = assertInstanceOf(ProtosActivation.class, arguments[0]);
-                    assertNotNull(published.publishedClosureLexicalAuthorityForRuntime());
                     if (observesContext) {
+                        ProtosActivation published =
+                                assertInstanceOf(ProtosActivation.class, arguments[0]);
+                        assertNotNull(published.publishedClosureLexicalAuthorityForRuntime());
                         ProtosObjectValue observed = published.materializedContextOrNullForRuntime();
                         assertNotNull(observed);
                         assertSame(observed, published.context());
                         assertSame(expected, observed.readLocalSlot("selected").orElseThrow());
+                        assertSame(published, arguments[0]);
                     } else {
-                        assertNull(published.materializedContextOrNullForRuntime());
+                        assertSame(reader, arguments[0],
+                                "A proved inline lexical read must preserve compact invocation state");
                     }
-                    assertSame(published, arguments[0]);
                     assertSame(expected, owner.readLocalSlot("liveName").orElseThrow());
                 }
             }
@@ -151,10 +158,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                             builder.emitLoadArgument(ProtosFrameArguments.SUPPLIED_ARGUMENT_OFFSET);
                             builder.endStoreLocal();
                             builder.beginReturn();
-                            builder.beginAccessNamedLexical(access);
-                            builder.emitLoadConstant(true);
-                            builder.emitLoadConstant("liveName");
-                            builder.endAccessNamedLexical();
+                            builder.emitAccessNamedLexicalCurrent(access, "liveName");
                             builder.endReturn();
                             builder.endRoot();
                         }).getNode(0);
@@ -331,10 +335,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                         builder.emitLoadConstant(ProtosNullValue.INSTANCE);
                         builder.endYield();
                         builder.beginReturn();
-                        builder.beginAccessNamedLexical(ProtosNamedLexicalAccess.LOOKUP);
-                        builder.emitLoadConstant(true);
-                        builder.emitLoadConstant("liveName");
-                        builder.endAccessNamedLexical();
+                        builder.emitAccessNamedLexicalCurrent(ProtosNamedLexicalAccess.LOOKUP, "liveName");
                         builder.endReturn();
                         builder.endRoot();
                     }).getNode(0);

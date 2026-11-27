@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.runtime;
 
+import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.dsl.NonIdempotent;
@@ -111,6 +112,22 @@ public final class ProtosModuleBindingLocation {
                 && executionContext.lexicalBindingAuthorityForRuntime()
                         instanceof ProtosMapBackedLexicalBindingAuthority mapBacked
                 && mapBacked.storage() == store;
+    }
+
+    /**
+     * Specialization-time proof that this independent physical store
+     * remains installed as the Context's lexical authority.
+     *
+     * The proof says nothing about the presence or value of a binding.
+     * Its Shape and the actual binding contents remain independently live.
+     */
+    @TruffleBoundary
+    public Assumption storageInstallationAssumption() {
+        if (!(store instanceof ProtosMapBackedLexicalBindingAuthority.Store independent)
+                || !hasCurrentStorage()) {
+            return Assumption.NEVER_VALID;
+        }
+        return independent.installationAssumption();
     }
 
     /** The current guest value of the binding, or {@code null} when it is absent. */

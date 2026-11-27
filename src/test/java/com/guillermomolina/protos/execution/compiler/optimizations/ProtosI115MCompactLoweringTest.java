@@ -110,7 +110,7 @@ final class ProtosI115MCompactLoweringTest {
     }
 
     @Test
-    void inlineDynamicSelectionPreparesBeforeValueOperands() throws Exception {
+    void inlineDynamicSelectionUsesCurrentFrameWithoutPublication() throws Exception {
         try (ProtosStandaloneHostedSession session = openSession(
                 "inline-dynamic-operands", """
                 run: () => {
@@ -120,20 +120,16 @@ final class ProtosI115MCompactLoweringTest {
                 """)) {
             ProtosBytecodeRootNode root = selectedRoot(session.prepareTopLevel("run"));
             List<Instruction> instructions = root.getBytecodeNode().getInstructionsAsList();
-            int preparation = -1;
             int selection = -1;
             for (int index = 0; index < instructions.size(); index++) {
                 String operation = ProtosInstructionNames.of(instructions.get(index));
-                if (operation.contains("EnsureCurrentClosureLexicalView")) {
-                    preparation = index;
-                }
+                assertFalse(operation.contains("EnsureCurrentClosureLexicalView"),
+                        instructions.toString());
+                assertFalse(operation.contains("CurrentActivation"),
+                        instructions.toString());
                 if (operation.equals("c.Lookup")) {
-                    assertEquals("c.AccessNamedLexical", instructions.get(index).getName());
-                    assertTrue(index >= 2 && preparation >= 0 && preparation < index - 2,
-                            "Frame preparation must precede both value operands: " + instructions);
-                    assertTrue(ProtosInstructionNames.of(instructions.get(index - 2))
-                            .contains("CurrentActivation"), instructions.toString());
-                    assertEquals("lateBoundName", loadedConstant(instructions.get(index - 1)));
+                    assertEquals("c.AccessNamedLexicalCurrent", instructions.get(index).getName());
+                    assertEquals("lateBoundName", lexicalName(instructions.get(index)));
                     assertEquals(ProtosNamedLexicalAccess.LOOKUP,
                             instructions.get(index).getArguments().stream()
                                     .filter(argument -> argument.getName().equals("access"))
@@ -304,16 +300,15 @@ final class ProtosI115MCompactLoweringTest {
                 int lookup = -1;
                 int construction = -1;
                 int constructions = 0;
-                for (int index = 2; index < instructions.size(); index++) {
+                for (int index = 0; index < instructions.size(); index++) {
                     String operation = names.get(index);
                     if (operation.equals("c.Lookup")) {
-                        assertEquals("c.AccessNamedLexical", instructions.get(index).getName());
+                        assertEquals("c.AccessNamedLexicalCurrent", instructions.get(index).getName());
                         assertEquals(ProtosNamedLexicalAccess.LOOKUP,
                                 instructions.get(index).getArguments().stream()
                                         .filter(argument -> argument.getName().equals("access"))
                                         .findFirst().orElseThrow().asConstant());
-                        assertEquals("Array", loadedConstant(instructions.get(index - 1)));
-                        assertEquals(Boolean.TRUE, loadedConstant(instructions.get(index - 2)));
+                        assertEquals("Array", lexicalName(instructions.get(index)));
                         lookup = index;
                     }
                     if (operation.contains(entry.getValue())) {
@@ -611,15 +606,14 @@ final class ProtosI115MCompactLoweringTest {
             List<Instruction> instructions = run.getBytecodeNode().getInstructionsAsList();
             List<String> names = instructions.stream().map(ProtosInstructionNames::of).toList();
             int lookup = -1;
-            for (int index = 2; index < instructions.size(); index++) {
+            for (int index = 0; index < instructions.size(); index++) {
                 if (names.get(index).equals("c.Lookup")) {
-                    assertEquals("c.AccessNamedLexical", instructions.get(index).getName());
+                    assertEquals("c.AccessNamedLexicalCurrent", instructions.get(index).getName());
                     assertEquals(ProtosNamedLexicalAccess.LOOKUP,
                             instructions.get(index).getArguments().stream()
                                     .filter(argument -> argument.getName().equals("access"))
                                     .findFirst().orElseThrow().asConstant());
-                    assertEquals("lateBoundName", loadedConstant(instructions.get(index - 1)));
-                    assertEquals(Boolean.TRUE, loadedConstant(instructions.get(index - 2)));
+                    assertEquals("lateBoundName", lexicalName(instructions.get(index)));
                     lookup = index;
                 }
             }
@@ -655,15 +649,14 @@ final class ProtosI115MCompactLoweringTest {
             List<Instruction> instructions = root.getBytecodeNode().getInstructionsAsList();
             List<String> names = instructions.stream().map(ProtosInstructionNames::of).toList();
             int lookup = -1;
-            for (int index = 2; index < instructions.size(); index++) {
+            for (int index = 0; index < instructions.size(); index++) {
                 if (names.get(index).equals("c.Lookup")) {
-                    assertEquals("c.AccessNamedLexical", instructions.get(index).getName());
+                    assertEquals("c.AccessNamedLexicalCurrent", instructions.get(index).getName());
                     assertEquals(ProtosNamedLexicalAccess.LOOKUP,
                             instructions.get(index).getArguments().stream()
                                     .filter(argument -> argument.getName().equals("access"))
                                     .findFirst().orElseThrow().asConstant());
-                    assertEquals("lateBoundName", loadedConstant(instructions.get(index - 1)));
-                    assertEquals(Boolean.TRUE, loadedConstant(instructions.get(index - 2)));
+                    assertEquals("lateBoundName", lexicalName(instructions.get(index)));
                     lookup = index;
                 }
             }
@@ -705,15 +698,15 @@ final class ProtosI115MCompactLoweringTest {
             List<Instruction> instructions = run.getBytecodeNode().getInstructionsAsList();
             List<String> names = instructions.stream().map(ProtosInstructionNames::of).toList();
             boolean explicitOwner = false;
-            for (int index = 2; index < names.size(); index++) {
+            for (int index = 1; index < names.size(); index++) {
                 if (names.get(index).equals("c.Lookup")
-                        && names.get(index - 2).startsWith("load.local")) {
+                        && names.get(index - 1).startsWith("load.local")) {
                     assertEquals("c.AccessNamedLexical", instructions.get(index).getName());
                     assertEquals(ProtosNamedLexicalAccess.LOOKUP,
                             instructions.get(index).getArguments().stream()
                                     .filter(argument -> argument.getName().equals("access"))
                                     .findFirst().orElseThrow().asConstant());
-                    assertEquals("lateBoundName", loadedConstant(instructions.get(index - 1)));
+                    assertEquals("lateBoundName", lexicalName(instructions.get(index)));
                     explicitOwner = true;
                 }
             }
@@ -1383,11 +1376,9 @@ final class ProtosI115MCompactLoweringTest {
         assertTrue(longs >= minimum, name + " Long literals: " + longs);
     }
 
-    private static Object loadedConstant(Instruction instruction) {
-        assertTrue(ProtosInstructionNames.of(instruction).startsWith("load.constant"),
-                instruction.toString());
+    private static Object lexicalName(Instruction instruction) {
         return instruction.getArguments().stream()
-                .filter(argument -> argument.getKind() == Instruction.Argument.Kind.CONSTANT)
+                .filter(argument -> argument.getName().equals("name"))
                 .findFirst().orElseThrow().asConstant();
     }
 
@@ -1604,6 +1595,7 @@ final class ProtosI115MCompactLoweringTest {
                     && !names.get(j).startsWith("c.RichCompare"); j++) {
                 Instruction candidate = instructions.get(j);
                 if ((names.get(j).startsWith("c.LoadAndClearTempLocal")
+                                || names.get(j).startsWith("c.RequireCanonicalBooleanResultFromLocal")
                                 || names.get(j).startsWith("c.StoreCellFromLocal"))
                         && candidate.getArguments().stream().anyMatch(argument ->
                                 argument.getKind() == Instruction.Argument.Kind.CONSTANT
@@ -1642,7 +1634,9 @@ final class ProtosI115MCompactLoweringTest {
                 String name = names.get(j);
                 if (backward < 0 && name.startsWith("branch.backward")) {
                     backward = j;
-                } else if (backward >= 0 && name.startsWith("c.LoadAndClearTempLocal")) {
+                } else if (backward >= 0
+                        && (name.startsWith("c.LoadAndClearTempLocal")
+                                || name.startsWith("c.RequireCanonicalBooleanResultFromLocal"))) {
                     release = j;
                 } else if (name.startsWith("c.StoreCellFromLocal")) {
                     assertFalse(ordering, label + " validates an ordering result first: " + names);

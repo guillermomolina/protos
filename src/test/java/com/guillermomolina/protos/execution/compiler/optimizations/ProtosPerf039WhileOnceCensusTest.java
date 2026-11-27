@@ -293,7 +293,9 @@ final class ProtosPerf039WhileOnceCensusTest {
                             .filter(argument -> argument.getKind()
                                     == Instruction.Argument.Kind.LOCAL_OFFSET)
                             .forEach(argument -> clearedOffsets.add(argument.asLocalOffset()));
-                } else if (instructionName.equals("c.LoadAndClearTempLocal")) {
+                } else if (instructionName.equals("c.LoadAndClearTempLocal")
+                        || instructionName.startsWith(
+                                "c.RequireCanonicalBooleanResultFromLocal")) {
                     for (Instruction.Argument argument : instruction.getArguments()) {
                         if (argument.getKind() == Instruction.Argument.Kind.CONSTANT
                                 && argument.asConstant()

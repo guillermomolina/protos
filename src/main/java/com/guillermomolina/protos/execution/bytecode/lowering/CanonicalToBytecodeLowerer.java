@@ -2428,13 +2428,49 @@ final class CanonicalToBytecodeLowerer {
      */
     /** Classify against the same owned LOCAL/CELL storage used to record the root layout. */
     private boolean usesCompactLexicalSelection(String name) {
-        return currentActivationLocal == null
-                && currentRootTopScope != null
-                && currentRootTopScope.kind() == CanonicalLexicalScope.Kind.CLOSURE
-                && !currentInlineClosureCallBody
-                && currentNormalCallbackScalarLocals.isEmpty()
-                && !currentRootTopScope.declaredNames().contains(name)
-                && !currentRootFrameLocals.containsKey(name);
+        return usesCompactLexicalSelection(name, null);
+    }
+
+    private boolean usesCompactLexicalSelection(
+            String name, CanonicalLookup read) {
+        if (currentActivationLocal != null
+                || currentRootTopScope == null
+                || currentRootTopScope.kind() != CanonicalLexicalScope.Kind.CLOSURE
+                || currentRootTopScope.declaredNames().contains(name)
+                || currentRootFrameLocals.containsKey(name)) {
+            return false;
+        }
+
+        if (!currentInlineClosureCallBody
+                && currentNormalCallbackScalarLocals.isEmpty()) {
+            return true;
+        }
+
+        if (read == null
+                || currentRootAnalysis == null
+                || currentNormalCallbackScalarScope == null
+                || currentNormalCallbackScalarScope.observesContext()
+                || currentInlineContextCache != null) {
+            return false;
+        }
+
+        // Every skipped lexical scope must be a proven inline region
+        // that cannot introduce or publish a nearer binding of this name.
+        CanonicalLexicalScope scope =
+                currentRootAnalysis.lookupSiteScopes().get(read);
+        if (scope == null || scope == currentRootTopScope) {
+            return false;
+        }
+        while (scope != currentRootTopScope) {
+            if (scope == null
+                    || !enclosingInlineRegionLocals.containsKey(scope)
+                    || scope.observesContext()
+                    || scope.declaresName(name)) {
+                return false;
+            }
+            scope = scope.outwardScope();
+        }
+        return true;
     }
 
     private boolean needsLexicalSelectionPreparation(String name) {
@@ -2444,13 +2480,18 @@ final class CanonicalToBytecodeLowerer {
                 && currentRootTopScope.kind() == CanonicalLexicalScope.Kind.CLOSURE;
     }
 
-    /** Emits only the value operand; any required frame-view preparation precedes its consumer. */
-    private void emitLexicalSelectionState(
-            ProtosBytecodeRootNodeGen.Builder builder, String name) {
-        if (usesCompactLexicalSelection(name)) {
-            builder.emitLoadConstant(true);
+    /** Select the physical operand form without publishing a compact activation. */
+    private void emitNamedLexicalAccess(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            ProtosNamedLexicalAccess access,
+            String name,
+            boolean compact) {
+        if (compact) {
+            builder.emitAccessNamedLexicalCurrent(access, name);
         } else {
+            builder.beginAccessNamedLexical(access, name);
             emitCurrentActivation(builder);
+            builder.endAccessNamedLexical();
         }
     }
 
@@ -6176,7 +6217,7 @@ final class CanonicalToBytecodeLowerer {
         if (storage.cell() != null
                 && result == null
                 && value instanceof CanonicalSend numeric
-                && directCellNumericValue(numeric)
+                && directNumericWriteValue(numeric)
                 && !isComparisonSelector(numeric.message())) {
             /*
              * The producer commits and releases a synchronous result itself.
@@ -6197,7 +6238,7 @@ final class CanonicalToBytecodeLowerer {
         if (storage.cell() != null
                 && result == null
                 && value instanceof CanonicalSend numeric
-                && directCellNumericValue(numeric)) {
+                && directNumericWriteValue(numeric)) {
             /*
              * An ordering result is validated as a canonical Boolean first.
              * The cell is a constant operand of StoreCell, so no cell
@@ -6227,11 +6268,11 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * Whether a discarded CELL write may take {@code send} as the direct
-     * operand of StoreCell: exactly the sends the staged form lowers as a
-     * direct numeric operation stored unchanged into its target.
+     * Whether a physical binding write may consume the numeric producer
+     * directly: exactly the sends the staged form lowers as a direct numeric
+     * operation whose completed result is stored unchanged into its target.
      */
-    private boolean directCellNumericValue(CanonicalSend send) {
+    private boolean directNumericWriteValue(CanonicalSend send) {
         return !send.contextual()
                 && primitiveNumericSendCandidate(send)
                 && !isEliminableControl(send)
@@ -6348,10 +6389,9 @@ final class CanonicalToBytecodeLowerer {
             builder.emitEnsureCurrentClosureLexicalView();
         }
         builder.beginStoreLocal(mutationTarget);
-        builder.beginAccessNamedLexical(ProtosNamedLexicalAccess.RESOLVE_WRITE);
-        emitLexicalSelectionState(builder, assign.name());
-        builder.emitLoadConstant(assign.name());
-        builder.endAccessNamedLexical();
+        emitNamedLexicalAccess(
+                builder, ProtosNamedLexicalAccess.RESOLVE_WRITE,
+                assign.name(), usesCompactLexicalSelection(assign.name()));
         builder.endStoreLocal();
     }
 
@@ -7503,10 +7543,18 @@ final class CanonicalToBytecodeLowerer {
         java.util.List<String> names =
                 new java.util.ArrayList<>(scope.declaredNames());
         java.util.Collections.sort(names);
+        java.util.List<BytecodeLocal> freshLocals = new java.util.ArrayList<>();
         for (String name : names) {
             BytecodeLocal bound = boundParameters.get(name);
-            locals.put(name, bound != null ? bound : builder.createLocal(
-                    NORMAL_INLINE_CALLBACK_BINDING_LOCAL_PREFIX + name, currentInlineCallbackRegion));
+            if (bound != null) {
+                locals.put(name, bound);
+            } else {
+                BytecodeLocal local = builder.createLocal(
+                        NORMAL_INLINE_CALLBACK_BINDING_LOCAL_PREFIX + name,
+                        currentInlineCallbackRegion);
+                locals.put(name, local);
+                freshLocals.add(local);
+            }
         }
         /*
          * Root-scoped physical locals are reused, but every inline callback invocation starts
@@ -7518,10 +7566,11 @@ final class CanonicalToBytecodeLowerer {
         if (mode == InlineBodyResult.STACK) {
             builder.beginBlock();
         }
-        for (String name : names) {
-            if (!boundParameters.containsKey(name)) {
-                builder.emitResetInlineCallbackLocal(locals.get(name));
-            }
+        if (freshLocals.size() == 1) {
+            builder.emitResetInlineCallbackLocal(freshLocals.getFirst());
+        } else if (!freshLocals.isEmpty()) {
+            builder.emitResetInlineCallbackLocals(
+                    freshLocals.toArray(BytecodeLocal[]::new));
         }
         /*
          * A callback that observes its context gets, per inline invocation,
@@ -9741,16 +9790,17 @@ final class CanonicalToBytecodeLowerer {
                 }
             }
         }
-        boolean prepare = needsLexicalSelectionPreparation(lookup.name());
+        boolean compact = usesCompactLexicalSelection(lookup.name(), lookup);
+        boolean prepare = !compact
+                && needsLexicalSelectionPreparation(lookup.name());
         if (prepare) {
             // The block supplies one value to any enclosing expression consumer.
             builder.beginBlock();
             builder.emitEnsureCurrentClosureLexicalView();
         }
-        builder.beginAccessNamedLexical(ProtosNamedLexicalAccess.LOOKUP);
-        emitLexicalSelectionState(builder, lookup.name());
-        builder.emitLoadConstant(lookup.name());
-        builder.endAccessNamedLexical();
+        emitNamedLexicalAccess(
+                builder, ProtosNamedLexicalAccess.LOOKUP,
+                lookup.name(), compact);
         if (prepare) {
             builder.endBlock();
         }
@@ -9894,7 +9944,7 @@ final class CanonicalToBytecodeLowerer {
 
     private static boolean primitiveNumericSelector(String selector) {
         return switch (selector) {
-            case "+", "-", "*", "/", "div", "mod", "<", "<=", ">", ">=", "==" -> true;
+            case "+", "-", "*", "/", "div", "mod", "%", "<", "<=", ">", ">=", "==" -> true;
             default -> false;
         };
     }
@@ -9924,6 +9974,16 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
+        if (expression instanceof CanonicalSend numeric
+                && directNumericWriteValue(numeric)
+                && !isComparisonSelector(numeric.message())) {
+            builder.beginSourceSection(
+                    numeric.span().startOffset(), numeric.span().length());
+            emitNumericSend(builder, numeric, target,
+                    preparedCall, childResult, resumeValue, true);
+            builder.endSourceSection();
+            return;
+        }
         if (isDirectNumericOperand(expression)) {
             builder.beginStoreLocal(target);
             emitPrimitiveNumericOperandValue(
@@ -10094,9 +10154,7 @@ final class CanonicalToBytecodeLowerer {
 
         // The result local is read and cleared at its only use, the Block's value.
         if (isOrderingSelector(send.message())) {
-            builder.beginRequireCanonicalBooleanResult();
-            builder.emitLoadAndClearTempLocal(numericResult);
-            builder.endRequireCanonicalBooleanResult();
+            builder.emitRequireCanonicalBooleanResultFromLocal(numericResult);
         } else {
             builder.emitLoadAndClearTempLocal(numericResult);
         }
@@ -10131,12 +10189,29 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal resumeValue,
             BytecodeLocal commitCell,
             SourceSection assignmentSection) {
+        return emitCompletedNumericResult(
+                builder, send, preparedCall, childResult, resumeValue,
+                commitCell, null, assignmentSection);
+    }
+
+    private BytecodeLocal emitCompletedNumericResult(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalSend send,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue,
+            BytecodeLocal commitCell,
+            BytecodeLocal commitLocal,
+            SourceSection assignmentSection) {
         noteDynamicInvocation();
         BytecodeLocal numericResult = builder.createLocal("numericResult", null);
         BytecodeLocal numericResume = builder.createLocal("numericResume", null);
         builder.beginIfThen();
+        BytecodeLocal destination = commitCell != null
+                ? commitCell
+                : commitLocal != null ? commitLocal : numericResult;
         beginNumericOperation(builder, send.message(), false, numericResult,
-                commitCell == null ? numericResult : commitCell, commitCell != null, assignmentSection);
+                destination, commitCell != null, assignmentSection);
         emitPrimitiveNumericOperandValue(
                 builder, send.receiver(), preparedCall, childResult, resumeValue);
         emitPrimitiveNumericOperandValue(
@@ -10149,6 +10224,11 @@ final class CanonicalToBytecodeLowerer {
             builder.beginSourceSection(assignmentSection.getCharIndex(), assignmentSection.getCharLength());
             builder.emitStoreCellFromLocal(commitCell, numericResult);
             builder.endSourceSection();
+        } else if (commitLocal != null) {
+            // Only a genuinely suspended selection reaches this write.
+            builder.beginStoreLocal(commitLocal);
+            builder.emitLoadAndClearTempLocal(numericResult);
+            builder.endStoreLocal();
         }
         builder.endBlock();
         builder.endIfThen();
@@ -10251,7 +10331,7 @@ final class CanonicalToBytecodeLowerer {
             case "*" -> builder.beginNumberMultiply(terminal, outcome, commitCell, commitToCell, assignmentSection);
             case "/" -> builder.beginNumberDivide(terminal, outcome, commitCell, commitToCell, assignmentSection);
             case "div" -> builder.beginNumberQuotient(terminal, outcome, commitCell, commitToCell, assignmentSection);
-            case "mod" -> builder.beginNumberRemainder(terminal, outcome, commitCell, commitToCell, assignmentSection);
+            case "mod", "%" -> builder.beginNumberRemainder(selector, terminal, outcome, commitCell, commitToCell, assignmentSection);
             case "<" -> builder.beginRichCompareLt(outcome);
             case "<=" -> builder.beginRichCompareLe(outcome);
             case ">" -> builder.beginRichCompareGt(outcome);
@@ -10269,7 +10349,7 @@ final class CanonicalToBytecodeLowerer {
             case "*" -> builder.endNumberMultiply();
             case "/" -> builder.endNumberDivide();
             case "div" -> builder.endNumberQuotient();
-            case "mod" -> builder.endNumberRemainder();
+            case "mod", "%" -> builder.endNumberRemainder();
             case "<" -> builder.endRichCompareLt();
             case "<=" -> builder.endRichCompareLe();
             case ">" -> builder.endRichCompareGt();
@@ -10724,12 +10804,23 @@ final class CanonicalToBytecodeLowerer {
                     && admittedInlineCreationValue(identity.right());
             case CanonicalNotIdentity identity -> admittedInlineCreationValue(identity.left())
                     && admittedInlineCreationValue(identity.right());
-            case CanonicalSend send -> !send.contextual()
-                    && send.arguments().size() == 1
-                    && java.util.Set.of("+", "-", "*", "/", "<", "<=", ">", ">=")
-                            .contains(send.message())
-                    && admittedInlineCreationValue(send.receiver())
-                    && admittedInlineCreationValue(send.arguments().get(0));
+            case CanonicalSend send -> caseOfSend(send)
+                    ? send.arguments().get(0) instanceof CanonicalMapConstruction table
+                            && admittedInlineCreationValue(send.receiver())
+                            && admittedInlineCreationValue(table.factory())
+                            && table.entries().stream().allMatch(entry ->
+                                    admittedInlineCreationValue(entry.key())
+                                    && entry.value() instanceof CanonicalClosure action
+                                    && action.parameters().isEmpty()
+                                    && action.body().expressions().size() == 1
+                                    && action.body().expressions().get(0) instanceof CanonicalLiteral)
+                    : !send.contextual()
+                            && send.arguments().size() == 1
+                            && !hasVectorArgument(send.arguments())
+                            && java.util.Set.of("+", "-", "*", "/", "%", "<", "<=", ">", ">=")
+                                    .contains(send.message())
+                            && admittedInlineCreationValue(send.receiver())
+                            && admittedInlineCreationValue(send.arguments().get(0));
             default -> false;
         };
     }
@@ -10797,6 +10888,16 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal childResult,
             BytecodeLocal resumeValue,
             boolean primitiveCarrierResult) {
+        if (!isComparisonSelector(send.message())) {
+            builder.beginBlock();
+            emitCompletedNumericResult(
+                    builder, send, scratch, childResult, resumeValue,
+                    null, result,
+                    source.createSection(send.span().startOffset(), send.span().length()));
+            builder.endBlock();
+            return;
+        }
+
         builder.beginStoreLocal(result);
         emitDirectNumericSendValue(
                 builder, send, scratch, childResult, resumeValue, primitiveCarrierResult);
@@ -10828,9 +10929,7 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal scratch,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
-        builder.beginStoreLocal(result);
-        emitDirectNumericOperation(builder, send, scratch, childResult, resumeValue);
-        builder.endStoreLocal();
+        emitNumericSend(builder, send, result, scratch, childResult, resumeValue, false);
     }
 
     /**
@@ -11206,62 +11305,77 @@ final class CanonicalToBytecodeLowerer {
         currentRootMayRequirePrelude = true;
         builder.beginTag(StandardTags.CallTag.class);
         builder.beginBlock();
-        Runnable loadSubject;
+        BytecodeLocal subject = builder.createLocal("directCaseSubject", null);
         if (isDirectUnaryOperand(send.receiver())) {
-            builder.beginBindStackValue();
+            builder.beginStoreLocal(subject);
             emitDirectUnaryOperand(builder, send.receiver(), false);
-            StackValue subject = builder.endBindStackValue();
-            loadSubject = () -> builder.emitLoadStackValue(subject);
+            builder.endStoreLocal();
         } else {
-            BytecodeLocal subject = builder.createLocal("directCaseSubject", null);
             stageOperand(builder, send.receiver(), subject, scratch, childResult, resumeValue,
                     this::emitBodyExpressionToLocal);
-            loadSubject = () -> builder.emitLoadLocal(subject);
         }
+        Runnable loadSubject = () -> builder.emitLoadLocal(subject);
         BytecodeLocal factory = builder.createLocal("directCaseFactory", null);
-        stageOperand(builder, table.factory(), factory, scratch, childResult, resumeValue,
-                this::emitBodyExpressionToLocal);
         BytecodeLocal any = hasAny ? builder.createLocal("directCaseAny", null) : null;
         BytecodeLocal anyEvaluated = hasAny ? builder.createLocal("directCaseAnyEvaluated", null) : null;
-        if (hasAny) {
-            builder.beginStoreLocal(anyEvaluated);
-            builder.emitLoadConstant(false);
-            builder.endStoreLocal();
-        }
         BytecodeLabel end = builder.createLabel();
-        builder.beginIfThen();
-        builder.beginAdmitsDirectLongCaseOf(negatedKeys);
-        builder.emitLoadLocal(factory);
-        loadSubject.run();
-        builder.endAdmitsDirectLongCaseOf();
-        builder.beginBlock();
+
         if (hasAny) {
-            // Earlier entries are now proven pure, before this ordinary lexical evaluation.
-            stageOperand(builder, table.entries().get(keys.length).key(), any,
-                    scratch, childResult, resumeValue, this::emitBodyExpressionToLocal);
-            builder.beginStoreLocal(anyEvaluated);
-            builder.emitLoadConstant(true);
-            builder.endStoreLocal();
+            builder.beginIfThenElse();
+        } else {
             builder.beginIfThen();
-            builder.beginAdmitsStandardCaseAny();
-            builder.emitLoadLocal(any);
-            builder.endAdmitsStandardCaseAny();
-            builder.beginBlock();
-            builder.emitClearLocal(any);
-            builder.emitClearLocal(anyEvaluated);
         }
-        builder.emitClearLocal(factory);
-        builder.beginStoreLocal(result);
-        emitDirectLongCaseAlternatives(builder, table, keys, loadSubject,
-                scratch, childResult, resumeValue, primitiveCarrierResult);
-        builder.endStoreLocal();
-        builder.emitBranch(end);
+
+        builder.beginAdmitsDirectLongCaseOf(negatedKeys, factory, subject);
+        emitExpressionValue(builder, table.factory(),
+                scratch, childResult, resumeValue, false);
+        builder.endAdmitsDirectLongCaseOf();
+
+        builder.beginBlock();
+
+        if (hasAny) {
+            // Earlier entries are proven pure before the ordinary
+            // lexical evaluation of the final matcher.
+            builder.beginIfThen();
+            builder.beginAdmitsStandardCaseAny(any, factory);
+            emitExpressionValue(builder, table.entries().get(keys.length).key(),
+                    scratch, childResult, resumeValue, false);
+            builder.endAdmitsStandardCaseAny();
+
+            builder.beginBlock();
+        }
+
+        if (!hasAny) {
+            builder.emitClearLocal(factory);
+        }
+
+        emitDirectLongCaseAlternatives(builder, table, keys, subject,
+                result, end, scratch, childResult, resumeValue,
+                primitiveCarrierResult);
+
         if (hasAny) {
             builder.endBlock();
             builder.endIfThen();
+
+            // Only a rejected final matcher reaches this statement.
+            builder.beginStoreLocal(anyEvaluated);
+            builder.emitLoadConstant(true);
+            builder.endStoreLocal();
         }
+
         builder.endBlock();
-        builder.endIfThen();
+
+        if (hasAny) {
+            // The first admission failed: the final matcher has not
+            // been evaluated and must retain ordinary construction order.
+            builder.beginStoreLocal(anyEvaluated);
+            builder.emitLoadConstant(false);
+            builder.endStoreLocal();
+            builder.endIfThenElse();
+        } else {
+            builder.endIfThen();
+        }
+
         emitOrdinaryCaseOfSend(builder, send, result, scratch, childResult, resumeValue,
                 primitiveCarrierResult, loadSubject, factory, any, anyEvaluated);
         builder.emitClearLocal(factory);
@@ -11270,6 +11384,7 @@ final class CanonicalToBytecodeLowerer {
             builder.emitClearLocal(anyEvaluated);
         }
         builder.emitLabel(end);
+        builder.emitClearLocal(subject);
         builder.endBlock();
         builder.endTag(StandardTags.CallTag.class);
     }
@@ -11323,33 +11438,41 @@ final class CanonicalToBytecodeLowerer {
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalMapConstruction table,
             long[] keys,
-            Runnable loadSubject,
+            BytecodeLocal subject,
+            BytecodeLocal result,
+            BytecodeLabel end,
             BytecodeLocal scratch,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue,
             boolean primitiveCarrierResult) {
         for (int position = 0; position < keys.length; position++) {
-            builder.beginConditional();
-            builder.beginCaseLongEquals();
-            builder.emitLoadConstant(keys[position]);
-            loadSubject.run();
-            builder.endCaseLongEquals();
+            builder.beginIfThen();
+
+            builder.emitLiteralCaseLongEquals(keys[position], subject);
+
+            builder.beginBlock();
             emitInlineControlClosureBody(builder,
                     (CanonicalClosure) table.entries().get(position).value(),
-                    InlineBodyResult.STACK, null, scratch, childResult, resumeValue,
-                    primitiveCarrierResult);
+                    InlineBodyResult.STORE, result, scratch, childResult,
+                    resumeValue, primitiveCarrierResult);
+            builder.emitBranch(end);
+            builder.endBlock();
+
+            builder.endIfThen();
         }
+
         if (keys.length < table.entries().size()) {
             emitInlineControlClosureBody(builder,
                     (CanonicalClosure) table.entries().get(keys.length).value(),
-                    InlineBodyResult.STACK, null, scratch, childResult, resumeValue,
-                    primitiveCarrierResult);
+                    InlineBodyResult.STORE, result, scratch, childResult,
+                    resumeValue, primitiveCarrierResult);
         } else {
+            builder.beginStoreLocal(result);
             builder.emitCaseOfNoSelection();
+            builder.endStoreLocal();
         }
-        for (int position = 0; position < keys.length; position++) {
-            builder.endConditional();
-        }
+
+        builder.emitBranch(end);
     }
 
     private void emitOrdinaryCaseOfSend(
