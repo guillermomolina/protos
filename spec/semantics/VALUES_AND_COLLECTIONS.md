@@ -5239,3 +5239,12 @@ automatic P transfer contract. The rules of `../concurrency/ACTORS.md` §16,
 unchanged; an Actor-local foreign module facade does not make the underlying
 foreign state or resource transferable. Converted scalars transfer as ordinary
 values of their Protos family.
+
+## Resolved module references as ordinary objects
+
+The authenticated resolved references owned by `MODULES.md` are immutable,
+slotless ordinary objects, not a primitive value family. Their delegation,
+identity, equality, hashing, collection-key and mutation behavior follows the
+existing ordinary object rules. Their narrow creation-transfer exception is
+owned by `../concurrency/ACTORS.md` §8; it does not make arbitrary sealed objects
+transferable or alter other isolation boundaries.

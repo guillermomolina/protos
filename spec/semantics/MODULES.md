@@ -12,7 +12,7 @@ The material below is migrated without intended semantic change from `../PROTOS_
 
 The language has no special semantic category of global variables.
 
-D242 distinguishes exactly two source-backed import target kinds, **MODULE** and **SOURCE**, both reached through the one ordinary `import(String)` facility. Every source executes inside an ordinary execution-context object; the kinds differ only in which object is the import result.
+D242 distinguishes exactly two source-backed import target kinds, **MODULE** and **SOURCE**, both reached through the one ordinary `import` facility. Every source executes inside an ordinary execution-context object; the kinds differ only in which object is the import result.
 
 - A **SOURCE** executes in its own `moduleContext`. Bindings created at its top level are local slots of that `moduleContext`, and importing the SOURCE yields that complete context, including every top-level binding.
 - A **MODULE** is a logical module directory containing a mandatory `module.protos` initializer. A directory without that file is not an importable logical module. Its initializer executes in a separate **private initializer context**; bindings created at its top level with bare `:` are local slots of that private context and remain private. Importing the MODULE yields its distinct **public module object**, an ordinary object that delegates to `Object` and carries no export metadata.
@@ -145,7 +145,7 @@ once, in ordinary left-to-right argument-evaluation order, before `import`
 validates or resolves its value. Effects completed while evaluating the
 specifier are not rolled back if validation or later resolution fails.
 
-Core v0.1 accepts as a module specifier **exactly a semantic `String` value**.
+Core v0.1 accepts a module specifier that is **a semantic `String` value or a genuine resolved module reference**.
 Semantic String-family membership is the value-family membership defined by the
 Core value model; delegation to a String value or to the standard `String`
 prototype does not make an ordinary child object a semantic String. No other
@@ -154,7 +154,7 @@ object is accepted merely because it defines String-like messages.
 `import` performs no implicit conversion, coercion, formatting, `toString`
 dispatch, parsing, invocation, or other user behavior to obtain a specifier.
 Consequently `null`, either Boolean, every Number value, Arrays, ordinary
-objects, and ordinary objects that merely delegate to String-family objects are
+objects other than genuine resolved references, and ordinary objects that merely delegate to String-family objects are
 invalid specifiers. An invalid specifier signals an `Error` before the host
 module resolver is invoked. Unless another normative specification names a more
 specific standard Error prototype, the portable error category is exactly the
@@ -201,6 +201,49 @@ it must not make an ordinary `import` call observably suspend/re-enter the Actor
 unless another normative facility explicitly supplies such a suspension
 operation.
 
+### Explicit resolved module references
+
+`import.resolve(specifier)` accepts exactly a semantic String and resolves it
+in the acquiring application's existing lexical module-resolution environment,
+using the same spelling, authority and canonicalization rules as String import.
+It returns a genuine resolved module reference for a source-backed MODULE or
+SOURCE target. FOREIGN acquisition is rejected with `Error`; String-based
+FOREIGN imports remain unchanged. Invalid arguments and resolution failures
+follow the existing import Error contract.
+
+Resolution does not load or execute source, initialize a module, insert an
+Actor-local cache entry, or create a pending initialization. Successful
+resolution neither proves source existence nor pins mutable workspace bytes.
+
+A reference is an authenticated, immutable, slotless ordinary object delegating
+to `Object`, with private canonical target identity. `ModuleRef` names this
+semantic concept, not a Prelude prototype, public class or constructor.
+`import.isReference(value)` returns a Boolean by exact authentication, without
+resolution, initialization, guest lookup or invocation. An ordinary object,
+including one delegating to a genuine reference, is not a reference.
+
+Contextual String spelling, canonical target identity, reference-object identity
+and Actor-local module instance are distinct. Separate acquisitions may produce
+different reference objects for one target. References retain ordinary object
+identity, equality and hashing; no new value family is introduced.
+
+`import(reference)` validates the exact resolution-environment association and
+applicable Process scope, then loads the retained canonical target without
+resolving the original spelling. It uses the same authority checks before cache
+observation and the same Actor-local cache, initialization, cycles, failure
+eviction and retry rules as String import. MODULE results expose only their
+public own exports; SOURCE results retain complete context visibility.
+
+An explicitly delegated reference grants access to its exact authorized target,
+including a private MODULE, without granting package-resolution authority or
+access to other private targets. It contains no Closure, module instance,
+Context, Activation, Task, pending initialization or mutable module record.
+Transfer is admitted only through the same-Process Actor creation contract in
+`../concurrency/ACTORS.md` §8, within the exact authorized resolution
+environment. Ordinary Actor and GroupRef communication, isolated P and
+unrelated cross-context transfer reject references. No cross-Process transport,
+serialization format, revocation or additional lifetime contract is defined.
+
 ### Actor-Local Module Instances
 
 A module instance belongs to one Actor. Each Actor owns an independent module cache.
@@ -231,20 +274,27 @@ The runtime may physically share immutable implementation artifacts between Acto
 
 ### Canonical Module Identity
 
-Module import uses three distinct concepts:
+Module import distinguishes four concepts:
 
 ```text
-module specifier
-    value written by the program
+String specifier
+    contextual spelling supplied by the program for resolution
+
+resolved module reference
+    authenticated ordinary object retaining an already selected canonical target
 
 ModuleKey
-    canonical internal identity produced by the module resolver
+    canonical internal target identity, distinct from reference-object identity
 
 module instance
     Actor-local module object returned by import
 ```
 
-A module specifier is resolved relative to the importing module and the host/module-resolution environment. Resolution produces a canonical `ModuleKey`.
+A String specifier is resolved relative to the importing module and the
+host/module-resolution environment. Resolution produces a canonical `ModuleKey`.
+An already acquired resolved module reference supplies its retained canonical
+target without another resolution. Both loading forms then use the same
+Actor-local module-instance lifecycle.
 
 The exact external form of a `ModuleKey` is host-defined, but it must provide stable identity. Examples might include canonicalized file URIs, standard-library identifiers, or package identifiers. Two import requests that the resolver determines refer to the same module must produce the same `ModuleKey`.
 
@@ -252,13 +302,19 @@ The exact external form of a `ModuleKey` is host-defined, but it must provide st
 
 A canonical `ModuleKey` carries its resolved **target kind** — MODULE, SOURCE, or FOREIGN (Foreign module instances) — as part of its identity. The resolver, not the spelling of a specifier prefix, determines the kind. A MODULE key identifies one logical module directory and its `module.protos` initializer; a SOURCE key identifies one exact authorized `.protos` file within its canonical owner. Keys of different kinds never denote the same cache entry, even when a SOURCE file is physically adjacent to a MODULE initializer.
 
-Resolution of source-backed targets obeys these rules:
+String resolution of source-backed targets obeys these rules:
 
 - **Module-directory discovery.** A MODULE route resolves to exactly one logical directory containing `module.protos`. No `.protos` suffix is appended to a MODULE name, no neighbouring file is consulted as a fallback, no search path is traversed, and importing a MODULE never initializes a parent directory's MODULE automatically. A parent aggregate exists only when a parent directory has its own explicitly authored `module.protos`.
 - **Explicit relative SOURCE imports.** A specifier beginning with `./` or `../` and ending in `.protos` names an exact SOURCE file relative to the physical location of the importing MODULE initializer or SOURCE. Resolution stays within the importing target's authorized owner (its package, Standard Library distribution, tool, or direct-file root); traversal outside that owner is rejected.
 - **No direct SOURCE import of an initializer.** A `module.protos` file is never resolvable as SOURCE, so a MODULE initializer cannot execute a second time under a different identity.
 - **Namespace collisions and spelling.** Exact spelling is required. Case-fold-ambiguous, case-variant, reserved, or symlink-escaping paths are rejected rather than resolved to a nearby target.
-- **Package authority.** A package's own MODULEs are reached through `self:<logical-path>`. A dependency's MODULE is reached only through `dep:<alias>/<export>` where `<export>` is declared in that dependency's `[exports]` mapping; each `[exports]` value is a logical module directory, never a `.protos` file name. A `dep:` route never reaches a dependency's SOURCE file or an undeclared module directory.
+- **Package authority for String routes.** A package's own authorized MODULEs are reached through `self:<logical-path>`. A dependency's MODULE is reached only through `dep:<alias>/<export>` where `<export>` is declared in that dependency's `[exports]` mapping; each `[exports]` value is a logical module directory, never a `.protos` file name. A `dep:` route never reaches a dependency's SOURCE file or an undeclared module directory.
+
+These String-route restrictions do not prohibit the explicit delegation of an
+already authorized resolved reference under Explicit resolved module references
+above. That delegation authorizes only its retained target; it expands no
+`self:`, `dep:` or relative SOURCE resolution authority and preserves the
+existing authority checks before cache access.
 
 The distinction is:
 

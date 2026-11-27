@@ -102,3 +102,21 @@ ranges: () => {
         }
     }
 }
+
+// The module instance is local to each Worker, even for the same acquired target.
+referenceCount: 0
+referenceModule: context
+referenceHolder: (first, second) => {
+    held: first
+    alias: second
+    {
+        valid: () => {
+            import.isReference(held) && (held === alias) && (import(held) === referenceModule)
+        }
+        replyReference: () => held
+        increment: () => {
+            referenceCount = referenceCount + 1
+            referenceCount
+        }
+    }
+}

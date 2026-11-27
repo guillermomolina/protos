@@ -8,6 +8,14 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.231-SNAPSHOT
+
+- **I180-A / I180-B / D265-D.** Add source-backed `import.resolve(String)`, `import.isReference(value)` and `import(reference)` over authenticated, immutable resolved MODULE and SOURCE references; resolution does not initialize a module, and reference loading reuses the existing Actor-local cache and structured initialization path.
+- Admit exact resolved targets in same-Process Actor bootstrap and initialization arguments through existing spawn delegation, preserving aliases, collection keys, destination-local module state and authority checks; ordinary Actor and GroupRef communication, isolated P transfer and unrelated cross-context transfer continue rejecting references.
+- Accept resolved handler and factory module references in HTTP Host composition while preserving semantic String bindings, listener custody, Worker readiness, lifecycle and ordinary factory initialization-payload transfer.
+- Extend module, package-authority, Actor, isolation and real HTTP regressions; cover direct SOURCE and private package MODULE targets with both Host construction variants through JVM and Native executable smoke fixtures, including explicit Network denial, exact 200/404 responses and repeated requests.
+- Reconcile module, Actor and HTTP documentation, preserve independent String regressions and classify the auxiliary reference-initialization fixture for repository completeness.
+
 ## 0.4.230-SNAPSHOT
 
 - **GITHUB026.** Distribute mandatory Protos suite validation across four independent CI runners using authoritative I178 Case sharding and two workers per runner.

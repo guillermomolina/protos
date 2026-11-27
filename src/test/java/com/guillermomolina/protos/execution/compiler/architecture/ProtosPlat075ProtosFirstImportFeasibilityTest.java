@@ -142,6 +142,43 @@ final class ProtosPlat075ProtosFirstImportFeasibilityTest {
         }
     }
 
+    @Test
+    void resolvedReferencesUseStructuredInitializationCyclesCacheAndFailureRetry() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            AtomicInteger attempts = new AtomicInteger();
+            MemoryResolver resolver = new MemoryResolver()
+                    .module("a", "before: 10\nb: import(import.resolve(\"b\"))\nafter: 20")
+                    .module("b", "a: import(import.resolve(\"a\"))\nseen: a.before")
+                    .module("retry", "unused")
+                    .dynamicSource("retry", () -> attempts.getAndIncrement() == 0
+                            ? "Error().signal()" : "ok: 42");
+            Fixture f = fixture(resolver);
+            ProtosTask acquired = f.run(scope, "import.resolve(\"a\")", "reference-acquire.protos");
+            assertEquals(ProtosTask.State.COMPLETED, acquired.state());
+            Object reference = acquired.result().orElseThrow();
+            assertEquals(0, resolver.totalLoads());
+            assertTrue(f.state.lookup(ProtosModuleKey.source("a")).isEmpty());
+            ProtosTask loaded = f.run(scope, Map.of("reference", reference),
+                    "a: import(reference)\n(a === a.b.a) && (a.b.seen == 10) && (a.after == 20)",
+                    "reference-cycle.protos");
+            assertEquals(ProtosTask.State.COMPLETED, loaded.state());
+            assertSame(Boolean.TRUE, loaded.result().orElseThrow());
+            int resolutions = resolver.resolveCalls.get();
+            ProtosTask hit = f.run(scope, Map.of("reference", reference),
+                    "import(reference) === import(reference)", "reference-hit.protos");
+            assertSame(Boolean.TRUE, hit.result().orElseThrow());
+            assertEquals(resolutions, resolver.resolveCalls.get());
+            Object retry = f.run(scope, "import.resolve(\"retry\")", "reference-retry-acquire.protos")
+                    .result().orElseThrow();
+            assertFailed(f.run(scope, Map.of("reference", retry), "import(reference)", "reference-fail.protos"));
+            assertTrue(f.state.lookup(ProtosModuleKey.source("retry")).isEmpty());
+            ProtosTask retried = f.run(scope, Map.of("reference", retry), "import(reference).ok", "reference-retry.protos");
+            assertEquals(ProtosTask.State.COMPLETED, retried.state());
+            assertEquals("42", decimal(retried.result().orElseThrow()));
+            assertEquals(2, resolver.loads("retry"));
+        }
+    }
+
     // ---- Case B: validation and resolution ----
 
     @Test
@@ -528,7 +565,13 @@ final class ProtosPlat075ProtosFirstImportFeasibilityTest {
                     .readLocalSlot(ProtosStandardImportProtocol.IMPORT_BRIDGE_SLOT).isEmpty());
             ProtosObjectValue facility =
                     (ProtosObjectValue) f.prelude.bindings().readLocalSlot("import").orElseThrow();
-            assertEquals(Set.of("call"), facility.localSlotsSnapshot().keySet());
+            assertEquals(Set.of("call", "resolve", "isReference"), facility.localSlotsSnapshot().keySet());
+            for (String selector : List.of("call", "resolve", "isReference")) {
+                ProtosClosureValue closure = (ProtosClosureValue) facility.readLocalSlot(selector).orElseThrow();
+                assertTrue(closure.nativeBody().isEmpty());
+                assertTrue(closure.definition() != null);
+                assertTrue(closure.executionPlan().isPresent());
+            }
             assertTrue(facility.isFrozen());
             assertFailed(f.run(scope, "_coreImportBridge", "plat075-i-unreachable.protos"));
         }
@@ -551,6 +594,11 @@ final class ProtosPlat075ProtosFirstImportFeasibilityTest {
 
             ProtosTask denied = f.run(scope, "import(\"std:inspect\")", "plat075-j-inspect.protos");
             assertFailed(denied);
+            assertFailed(f.run(scope, "import.resolve(\"std:inspect\")", "reference-inspect-denied.protos"));
+            Object reference = com.guillermomolina.protos.runtime.ProtosModuleReferenceSupport.mint(
+                    ProtosInspectFacility.MODULE_KEY, f.activation(Map.of()));
+            assertFailed(f.run(scope, Map.of("reference", reference),
+                    "import(reference)", "reference-cached-inspect-denied.protos"));
             assertSame(record, f.state.lookup(ProtosInspectFacility.MODULE_KEY).orElseThrow());
             assertEquals(0, resolver.totalLoads());
         }
@@ -638,6 +686,14 @@ final class ProtosPlat075ProtosFirstImportFeasibilityTest {
             ProtosClosureValue guestCall = importCall(fixture.prelude);
             assertTrue(guestCall.nativeBody().isEmpty(), "import.call must be the guest policy");
 
+            ProtosExecutionOutcome deniedReference = fixture.context.executeModuleSource(
+                    ProtosModuleSource.fromCharacters(ProtosModuleKey.source("reference-entry"),
+                            "import.resolve(\"test:foo\")"),
+                    fixture.prelude.newModuleActivation(fixture.root.actorModuleState(),
+                            ProtosModuleKey.source("reference-entry"), fixture.prelude.newExecutionContext(),
+                            fixture.root.executionDomain()));
+            assertEquals(ProtosExecutionOutcome.State.FAILED, deniedReference.state());
+            assertEquals(0, test.acquisitions("foo"));
             ProtosModuleKey foo = ProtosForeignModuleKey.encode("test", "foo");
             ProtosObjectValue first = fixture.importValue("test:foo");
             ProtosObjectValue alias = fixture.importValue("test:alias-of-foo");

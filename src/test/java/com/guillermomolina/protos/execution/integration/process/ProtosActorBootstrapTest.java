@@ -406,6 +406,37 @@ final class ProtosActorBootstrapTest {
         assertEquals(0, x.backend.accepts.get());
     }
 
+    @Test
+    void referenceBootstrapAndInitializationArgumentsRetainExactTargetsAndLocalState() throws Exception {
+        SpawnHarness x = spawnHarness();
+        Object reference = ProtosTestExecutionSupport.evaluate("import.resolve(\"app\")", x.activation);
+        ProtosActorRefValue actorRef = assertInstanceOf(ProtosActorRefValue.class,
+                ProtosInvocation.invokeMessage(x.actorObject, "spawn",
+                        List.of(reference, new ProtosStringValue("boot"), reference, reference, reference),
+                        x.activation));
+        x.executor.drain();
+        java.lang.reflect.Method local = ProtosActorRefValue.class.getDeclaredMethod("localActorForRuntime");
+        local.setAccessible(true);
+        ProtosActor spawned = (ProtosActor) local.invoke(actorRef);
+        assertEquals(ProtosActor.LifecycleState.READY, spawned.lifecycleState());
+        ProtosObjectValue behavior = spawned.currentBehavior().orElseThrow();
+        Object delivered = behavior.readLocalSlot("first").orElseThrow();
+        assertNotSame(reference, delivered);
+        assertSame(delivered, behavior.readLocalSlot("second").orElseThrow());
+        assertSame(delivered, behavior.readLocalSlot("nested").orElseThrow());
+        var key = com.guillermomolina.protos.runtime.ProtosModuleReferenceSupport.requireKey(
+                delivered, x.activationOf(spawned));
+        assertEquals(ProtosModuleKey.source("canonical:app"), key);
+        assertTrue(spawned.moduleState().lookup(key).isPresent());
+        assertTrue(x.activation.actorModuleState().lookup(key).isEmpty());
+        // Initialization-argument delegation is independent of String bootstrap admission.
+        ProtosActor stringBoot = x.spawn(reference, reference, reference);
+        assertTrue(com.guillermomolina.protos.runtime.ProtosModuleReferenceSupport.isReference(
+                stringBoot.currentBehavior().orElseThrow().readLocalSlot("first").orElseThrow()));
+        assertNotSame(spawned.moduleState().lookup(key).orElseThrow().instance(),
+                stringBoot.moduleState().lookup(key).orElseThrow().instance());
+    }
+
     private static SpawnHarness spawnHarness() throws Exception {
         ProtosModuleResolver resolver =
                 new ProtosModuleResolver() {

@@ -267,12 +267,38 @@ semantics are owned by `DISTRIBUTED_RUNTIME.md` §50A. Adding this selector does
 make `Actor` a Group controller or grant it Group membership-management Authority.
 
 `Actor` is not syntax, an Actor instance, a scheduler handle, or host authority.
-`moduleSpecifier` and `bindingName` must be semantic `String` values after ordinary
-left-to-right argument evaluation; no coercion or String-like delegation occurs.
-The specifier is resolved once in the creator's module-resolution environment
+`bindingName` must be a semantic `String`; `moduleSpecifier` must be a semantic
+`String` or a genuine resolved module reference (`../semantics/MODULES.md`).
+Ordinary left-to-right argument evaluation applies; no coercion or String-like
+delegation occurs. A String specifier is resolved once in the creator's module-resolution environment
 using the `import(specifier)` host boundary. Failure signals `Error` and creates no
 Actor. Success fixes the canonical module identity used by the destination; the
 destination does not reinterpret the original spelling.
+
+A resolved reference instead supplies its exact acquired canonical target,
+without resolving again. The bootstrap module argument is authenticated and
+checked against the creator's hosting Process and exact authorized resolution
+environment before the creation cutover. References in initialization arguments
+are separately authenticated and scope-checked as part of the complete atomic
+creation snapshot before that cutover. A scope mismatch is a validation failure,
+not a lack of execution capacity. The existing creation snapshot preserves
+aliases, distinct reference identities, cycles, delegation parents and collection
+keys, reconstructing fresh authentic
+references in the destination. No module instance crosses: initialization and
+exact binding selection remain destination-local. Acquisition does not grant
+resolution authority for other private targets. Outside this creation scope,
+references remain non-transferable, including messages, requests, replies and
+GroupRef communication.
+
+The same-Process and resolution-environment association is a hard compatibility
+requirement for subsequent placement and admission, alongside any TcpAcceptor
+same-Process constraint below. Temporary absence of compatible execution capacity
+does not make an otherwise valid reference or snapshot fail synchronously. After
+the creation cutover the fixed incarnation waits for compatible admission under
+`DISTRIBUTED_RUNTIME.md` §43; no alternate Process or resolution environment may
+be substituted to bypass the constraint. Destination-local reference
+reconstruction and module initialization retain these scope requirements and the
+existing initialization lifecycle.
 
 The complete initialization argument graph is then transferred/delegated before
 `spawn` returns. `NonTransferableValue` is synchronous and creates no observable
@@ -692,6 +718,7 @@ Transferability currently follows these rules:
 -   TcpListener: not transferable
 -   TcpConnection: not transferable
 -   TcpAcceptor: explicitly delegable only for same-Process `Actor.spawn` initialization arguments, through the contract owned by `../io/NETWORK.md` §11; not transferable through `send()`/`request()` payloads or replies, and its delegation authorizes no transfer of any other resource
+-   Resolved module reference: not transferable outside the same-Process creation scope of §8
 -   Closure: not transferable
 -   Future: not transferable
 -   ExecutionContext: not transferable

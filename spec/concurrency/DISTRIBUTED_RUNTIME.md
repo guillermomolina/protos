@@ -419,6 +419,22 @@ The public Actor-creation contract is owned by `ACTORS.md` §8:
 Actor.spawn(...) -> ActorRef
 ```
 
+Resolved module references (`../semantics/MODULES.md`) are initially admitted
+only for same-Process creation in the exact authorized resolution environment,
+as specified by `ACTORS.md` §8. Bootstrap-reference validation and the atomic
+initialization-argument snapshot precede the creation cutover. Their retained
+scope is a hard placement/admission compatibility requirement, as the
+TcpAcceptor contract independently constrains placement to its Process. A scope
+mismatch is a validation failure; temporary absence of compatible capacity is
+post-cutover admission/backpressure, never a new synchronous spawn failure.
+Reference-bearing creation cannot reconsider an incompatible Process or
+resolution environment under the candidate-placement rule below. Destination
+initialization remains local to the admitted incarnation.
+
+References introduce no cross-Process serialization, public placement selector
+or distributed reference mechanism. Existing
+String-based spawn, placement sequencing and admission remain unchanged.
+
 After that section's synchronous validation, module-identity resolution, and
 initialization-value transfer have succeeded, the creation cutover has already
 established exactly one Actor incarnation, its identity, and its `ActorRef`.

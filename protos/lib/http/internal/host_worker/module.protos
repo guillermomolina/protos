@@ -21,8 +21,8 @@
 //! initialization arguments are the delegated TcpAcceptor, the handler module
 //! specifier and binding name, the Worker's fixed quotas and the captured
 //! limits; no listener, connection, Closure, Future or module instance crosses
-//! into the Worker. The handler module is resolved inside this Actor, which
-//! owns its own instance of it.
+//! into the Worker. A String is resolved inside this Actor; a genuine reference
+//! preserves the application's selected target. This Actor owns its own instance.
 //!
 //! `startWithFactory` is the bootstrap binding of `Host.owningWithFactory`
 //! (D225-A, HTTP.md §15.13). It receives the same arguments with a factory
@@ -286,8 +286,8 @@ gate: () => {
 // Answers the callable own top-level binding bindingName of this Actor's
 // instance of moduleSpecifier. A missing module, missing own binding, or
 // non-invokable binding signals, failing this Actor's initialization (HTTP.md
-// §15.4). The module is imported by this module, so a specifier is resolved
-// relative to it (MODULES.md).
+// §15.4). A String is resolved relative to this module (MODULES.md); a genuine
+// reference retains its acquired canonical target through ordinary import.
 ownCallable: (moduleSpecifier, bindingName) => {
     module: import(moduleSpecifier)
     if(!module.hasSlot(bindingName)) {

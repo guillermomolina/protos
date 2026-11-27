@@ -380,6 +380,18 @@ final class ProtosHttpHostFactoryFixtureSources {
             site: import("app:factory")
             loopback: IpAddress(4, 2130706433)
             service: Actor.spawn("app:service", "start")
+            referenceMode: false
+            configureReferences: (mode) => {
+                referenceMode = mode == "reference"
+                true
+            }
+            selectModule: (specifier) => {
+                selected: specifier
+                if(referenceMode) {
+                    selected = import.resolve(specifier)
+                }
+                selected
+            }
             listener: null
             host: null
             state: null
@@ -537,7 +549,7 @@ final class ProtosHttpHostFactoryFixtureSources {
             start: (binding, workerCount, connectionLimit) => {
                 phase = "construction"
                 site.markCreator()
-                host = http.Host.owningWithFactory(listener, "app:factory", binding, initialization(), workers: workerCount, maxConnections: connectionLimit)
+                host = http.Host.owningWithFactory(listener, selectModule("app:factory"), binding, initialization(), workers: workerCount, maxConnections: connectionLimit)
                 // Mutations after construction never reach a Worker's copy.
                 state.label = "mutated"
                 state.hits = 7
@@ -549,7 +561,7 @@ final class ProtosHttpHostFactoryFixtureSources {
             }
             startOther: () => {
                 phase = "other construction"
-                other = http.Host.owningWithFactory(otherListener, "app:factory", "make", initialization())
+                other = http.Host.owningWithFactory(otherListener, selectModule("app:factory"), "make", initialization())
                 phase = "other host.ready()"
                 ready: other.ready().value() === other
                 phase = "running"
@@ -617,7 +629,12 @@ final class ProtosHttpHostFactoryFixtureSources {
             }
             startFailing: (moduleSpecifier, binding) => {
                 listener = listen()
-                host = http.Host.owningWithFactory(listener, moduleSpecifier, binding, initialization(), workers: 3, maxConnections: 3)
+                selected: moduleSpecifier
+                // Unavailable-target controls intentionally retain String resolution failure.
+                if(moduleSpecifier == "app:factory") {
+                    selected = selectModule(moduleSpecifier)
+                }
+                host = http.Host.owningWithFactory(listener, selected, binding, initialization(), workers: 3, maxConnections: 3)
                 hostFailureKinds() && closed(listener)
             }
             // A valid construction whose initialization cannot cross an
@@ -627,6 +644,9 @@ final class ProtosHttpHostFactoryFixtureSources {
                 listener = listen()
                 extra: null
                 hostile: null
+                if(kind == "reference") {
+                    hostile = { nested: [import.resolve("app:factory")] }
+                }
                 if(kind == "closure") {
                     holder: {
                         run: () => { 1 }
@@ -657,7 +677,7 @@ final class ProtosHttpHostFactoryFixtureSources {
                         resource: extra.acceptCapability()
                     }
                 }
-                host = http.Host.owningWithFactory(listener, "app:factory", "make", hostile, workers: 2, maxConnections: 2)
+                host = http.Host.owningWithFactory(listener, selectModule("app:factory"), "make", hostile, workers: 2, maxConnections: 2)
                 rejected: hostFailureKinds() && closed(listener)
                 if(extra !== null) {
                     // The caller keeps custody of its own other listener and
@@ -672,7 +692,7 @@ final class ProtosHttpHostFactoryFixtureSources {
             }
             // Constructs without waiting for readiness.
             startSuspended: (binding) => {
-                host = http.Host.owningWithFactory(listener, "app:factory", binding, initialization())
+                host = http.Host.owningWithFactory(listener, selectModule("app:factory"), binding, initialization())
                 host !== null
             }
             // Abort while the factory is suspended: the shutdown succeeds and

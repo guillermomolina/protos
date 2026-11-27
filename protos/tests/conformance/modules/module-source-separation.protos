@@ -23,6 +23,27 @@ Assertions: import("std:test/assertions")
 Test: import("std:test/test")
 
 tests: [
+    Test("resolved references authenticate exactly and remain immutable", () => {
+        ref: import.resolve("./fixtures/range/Range.protos")
+        other: import.resolve("./fixtures/range/../range/Range.protos")
+        Assertions.require(import.isReference(ref))
+        Assertions.require(!import.isReference(ref {}))
+        Assertions.require(!import.isReference({}))
+        Assertions.require(ref.slotNames().size() == 0)
+        Assertions.require(import(ref) === import(other))
+        Assertions.require(import(ref) === import("./fixtures/range/Range.protos"))
+        Assertions.require(import(ref).privateHelper == 42)
+        Assertions.signals(Error, () => ref.createSlot("forged", true))
+        Assertions.signals(Error, () => import(ref {}))
+        null
+    }),
+    Test("resolution does not execute a failing SOURCE initializer", () => {
+        ref: import.resolve("./fixtures/reference/Uninitialized.protos")
+        Assertions.require(import.isReference(ref))
+        Assertions.signals(Error, () => import(ref))
+        Assertions.signals(Error, () => import(ref))
+        null
+    }),
     Test("source import exposes every top-level binding", () => {
         source: import("./fixtures/range/Range.protos")
         Assertions.require(source.hasSlot("privateHelper"))
@@ -69,6 +90,29 @@ tests: [
         escaped: counter.lastEscaped
         Assertions.require(escaped.marker == 1)
         retried: import("./fixtures/failure/failing.protos")
+        Assertions.require(retried.marker == 2)
+        Assertions.require(retried !== escaped)
+        Assertions.require(escaped.marker == 1)
+        null
+    }),
+    Test("resolved source references observe the partial context in cycles", () => {
+        a: import(import.resolve("./fixtures/cycle/a.protos"))
+        b: import("./fixtures/cycle/b.protos")
+        Assertions.require(b.sawX)
+        Assertions.require(b.sawY === false)
+        Assertions.require(b.partial === a)
+        Assertions.require(a.y == 20)
+        null
+    }),
+    Test("failed source reference import is evicted and retried", () => {
+        ref: import.resolve("./fixtures/failure/failing.protos")
+        Assertions.signals(Error, () => {
+            import(ref)
+        })
+        counter: import("./fixtures/failure/counter.protos")
+        escaped: counter.lastEscaped
+        Assertions.require(escaped.marker == 1)
+        retried: import(ref)
         Assertions.require(retried.marker == 2)
         Assertions.require(retried !== escaped)
         Assertions.require(escaped.marker == 1)

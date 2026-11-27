@@ -63,6 +63,48 @@ final class ProtosWorkspacePackageAuthorityIsolationIntegrationTest {
     @TempDir Path temp;
 
     @Test
+    void applicationDelegatesOnlyItsExactPrivateModuleToADependencyWorker() throws Exception {
+        Path project = materializeProject();
+        assumeSecureConfinement(project);
+        Files.createDirectories(project.resolve("Private"));
+        Files.createDirectories(project.resolve("Other"));
+        Files.writeString(project.resolve("Private/module.protos"),
+                "secret: 91\nthis.value: 17\n");
+        Files.writeString(project.resolve("Other/module.protos"), "this.value: 23\n");
+        Files.writeString(project.resolve("Main/module.protos"), """
+                ref: import.resolve("self:Private")
+                consumer: import.resolve("dep:local/Public")
+                worker: Actor.spawn(consumer, "start", ref)
+                worker.request("check").value()
+                """);
+        Files.writeString(project.resolve("libs/a/internal/Thing/module.protos"), """
+                this.start: (reference) => {
+                    target: import(reference)
+                    deniedResolution: (specifier) => Error.handle(
+                        () => { import.resolve(specifier); false }, (error) => true)
+                    deniedImport: (specifier) => Error.handle(
+                        () => { import(specifier); false }, (error) => true)
+                    {
+                        check: () => {
+                            (target.value == 17) && !target.hasSlot("secret") &&
+                                (target === import(reference)) &&
+                                deniedImport("dep:rootdep/Private") &&
+                                deniedResolution("dep:rootdep/Private") &&
+                                deniedImport("dep:rootdep/Other") &&
+                                deniedResolution("dep:rootdep/Other")
+                        }
+                    }
+                }
+                """);
+        ProtosStandardLibraryModuleResolver standard = new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
+        ProtosPackageExecutionPlan plan = ProtosWorkspacePackagePreflight.build(CORE, TOOL_ROOT, project, standard);
+        ProtosExecutionOutcome outcome = ProtosWorkspacePackageApplicationExecution.execute(
+                request(project, plan, standard, "Main"));
+        assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
+        assertSame(Boolean.TRUE, outcome.value());
+    }
+
+    @Test
     void detachedPlanCrossesFromTerminatedToolProcessIntoDistinctApplicationProcess()
             throws Exception {
         Path project = materializeProject();

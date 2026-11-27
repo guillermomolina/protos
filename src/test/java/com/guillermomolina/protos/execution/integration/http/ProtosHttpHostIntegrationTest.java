@@ -97,6 +97,10 @@ final class ProtosHttpHostIntegrationTest {
                     headers: []
                     body: digit(peak)
                 }
+                if(Encoding.Latin1.decode(request.target) == "/missing") {
+                    response.status = 404
+                    response.body = Encoding.Latin1.encode("missing")
+                }
                 response
             }
             // CALLABLES.md "Callability inspection": every object inherits the
@@ -120,6 +124,18 @@ final class ProtosHttpHostIntegrationTest {
             http: import("std:http/host")
             IpAddress: import("std:network/ip_addresses").IpAddress
             loopback: IpAddress(4, 2130706433)
+            referenceMode: false
+            configureReferences: (mode) => {
+                referenceMode = mode == "reference"
+                true
+            }
+            selectModule: (specifier) => {
+                selected: specifier
+                if(referenceMode) {
+                    selected = import.resolve(specifier)
+                }
+                selected
+            }
             listener: null
             host: null
             openListener: () => {
@@ -135,7 +151,7 @@ final class ProtosHttpHostIntegrationTest {
             start: (workerCount, connectionLimit) => {
                 host = http.Host.owning(
                     listener,
-                    "app:site",
+                    selectModule("app:site"),
                     "handle",
                     workers: workerCount,
                     maxConnections: connectionLimit
@@ -143,6 +159,11 @@ final class ProtosHttpHostIntegrationTest {
                 workerCount = 3
                 connectionLimit = 64
                 host.ready().value() === host
+            }
+            rejectImpostor: () => {
+                reference: import.resolve("app:site")
+                fake: reference {}
+                rejected(() => http.Host.owning(listener, fake, "handle"))
             }
             drain: () => {
                 host.shutdown("drain").value() === host
@@ -228,7 +249,7 @@ final class ProtosHttpHostIntegrationTest {
                 fresh && (kinds[0] == "startup") && (kinds[1] == "startup") && (kinds[2] == "startup")
             }
             startFailing: (binding) => {
-                host = http.Host.owning(listener, "app:site", binding)
+                host = http.Host.owning(listener, selectModule("app:site"), binding)
                 hostFailureKinds()
             }
             rejected: (attempt) => {
@@ -253,27 +274,27 @@ final class ProtosHttpHostIntegrationTest {
             }
             invalidWithLiveListener: () => {
                 pending: rejected(() => {
-                    http.Host.owning(listener, "app:site", "handle", workers: 2, maxPendingAccepts: 1)
+                    http.Host.owning(listener, selectModule("app:site"), "handle", workers: 2, maxPendingAccepts: 1)
                 })
                 unknown: associationRejected(() => {
-                    http.Host.owning(listener, "app:site", "handle", workers: 1, deadline: 5)
+                    http.Host.owning(listener, selectModule("app:site"), "handle", workers: 1, deadline: 5)
                 })
                 badWorkers: rejected(() => {
-                    http.Host.owning(listener, "app:site", "handle", workers: {})
+                    http.Host.owning(listener, selectModule("app:site"), "handle", workers: {})
                 })
                 badLimits: rejected(() => {
-                    http.Host.owning(listener, "app:site", "handle", limits: [])
+                    http.Host.owning(listener, selectModule("app:site"), "handle", limits: [])
                 })
                 pending && unknown && badWorkers && badLimits
             }
             defaultsAfterRejection: () => {
-                host = http.Host.owning(listener, "app:site", "handle")
+                host = http.Host.owning(listener, selectModule("app:site"), "handle")
                 host.ready().value() === host
             }
             startPending: (workerCount, connectionLimit, pendingLimit) => {
                 host = http.Host.owning(
                     listener,
-                    "app:site",
+                    selectModule("app:site"),
                     "handle",
                     workers: workerCount,
                     maxConnections: connectionLimit,
@@ -284,7 +305,7 @@ final class ProtosHttpHostIntegrationTest {
             // HTTP.md §15.7: a shutdown while STARTING precludes RUNNING, so
             // readiness fails, while the requested shutdown itself completes.
             shutdownWhileStarting: (mode) => {
-                host = http.Host.owning(listener, "app:site", "handle", workers: 2)
+                host = http.Host.owning(listener, selectModule("app:site"), "handle", workers: 2)
                 requested: host.shutdown(mode)
                 repeated: host.shutdown("drain")
                 notReady: http.HostError.handle(
@@ -342,7 +363,7 @@ final class ProtosHttpHostIntegrationTest {
                     },
                     (error) => { true }
                 )
-                host = http.Host.owning(listener, "app:site", "showMarker", workers: 2)
+                host = http.Host.owning(listener, selectModule("app:site"), "showMarker", workers: 2)
                 closureRejected && (host.ready().value() === host)
             }
             // FUTURES_AND_TASKS.md §24: the hosting Tasks belong to the Task
@@ -351,7 +372,7 @@ final class ProtosHttpHostIntegrationTest {
             owner: null
             startOwned: () => {
                 owner = (() => {
-                    host = http.Host.owning(listener, "app:site", "handle")
+                    host = http.Host.owning(listener, selectModule("app:site"), "handle")
                     host.termination().value()
                 }).future()
                 0
@@ -385,7 +406,7 @@ final class ProtosHttpHostIntegrationTest {
             closedListenerRejected: () => {
                 listener.close().value()
                 rejected(() => {
-                    http.Host.owning(listener, "app:site", "handle")
+                    http.Host.owning(listener, selectModule("app:site"), "handle")
                 })
             }
             0
@@ -393,9 +414,10 @@ final class ProtosHttpHostIntegrationTest {
 
     // ------------------------------------------------------------ tests
 
-    @Test
-    void oneWorkerServesARealRequestThroughServeOneOwningAndDrains() throws Exception {
-        try (Fixture x = new Fixture()) {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void oneWorkerServesARealRequestThroughServeOneOwningAndDrains(boolean references) throws Exception {
+        try (Fixture x = new Fixture(references)) {
             assertTrue(x.call("start", 1, 64), "ready() resolves with the identical host");
             assertEquals(response('1'), x.get("/"));
             // The exact single-request Server framing, including its rejection path.
@@ -428,9 +450,10 @@ final class ProtosHttpHostIntegrationTest {
         }
     }
 
-    @Test
-    void severalWorkersAcceptIndependently() throws Exception {
-        try (Fixture x = new Fixture()) {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void severalWorkersAcceptIndependently(boolean references) throws Exception {
+        try (Fixture x = new Fixture(references)) {
             // maxConnections 2 over 2 Workers: one connection quota unit each.
             assertTrue(x.call("start", 2, 2));
             try (Socket held = x.connect(); Socket other = x.connect()) {
@@ -464,9 +487,10 @@ final class ProtosHttpHostIntegrationTest {
         }
     }
 
-    @Test
-    void drainClosesTheListenerAndWaitsForTheAdmittedSession() throws Exception {
-        try (Fixture x = new Fixture()) {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void drainClosesTheListenerAndWaitsForTheAdmittedSession(boolean references) throws Exception {
+        try (Fixture x = new Fixture(references)) {
             assertTrue(x.call("start", 1, 4));
             try (Socket held = x.connect()) {
                 send(held, post());
@@ -485,9 +509,10 @@ final class ProtosHttpHostIntegrationTest {
         }
     }
 
-    @Test
-    void abortCancelsAdmittedSessionsAndCleansUp() throws Exception {
-        try (Fixture x = new Fixture()) {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void abortCancelsAdmittedSessionsAndCleansUp(boolean references) throws Exception {
+        try (Fixture x = new Fixture(references)) {
             assertTrue(x.call("start", 1, 4));
             try (Socket held = x.connect()) {
                 send(held, post());
@@ -513,10 +538,11 @@ final class ProtosHttpHostIntegrationTest {
         }
     }
 
-    @Test
-    void startupFailureFailsEveryObserverAndReleasesTheListener() throws Exception {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void startupFailureFailsEveryObserverAndReleasesTheListener(boolean references) throws Exception {
         for (String binding : new String[] {"missing", "notCallable", "Encoding"}) {
-            try (Fixture x = new Fixture()) {
+            try (Fixture x = new Fixture(references)) {
                 assertTrue(x.call("startFailing", binding), binding);
                 assertTrue(x.call("listenerClosed"), binding);
             }
@@ -558,9 +584,10 @@ final class ProtosHttpHostIntegrationTest {
         }
     }
 
-    @Test
-    void successiveConnectionsAreServedOneAfterAnother() throws Exception {
-        try (Fixture x = new Fixture()) {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void successiveConnectionsAreServedOneAfterAnother(boolean references) throws Exception {
+        try (Fixture x = new Fixture(references)) {
             assertTrue(x.call("start", 2, 4));
             for (int index = 0; index < 8; index++) {
                 assertEquals(response('1'), x.get("/"), "connection " + index);
@@ -679,9 +706,10 @@ final class ProtosHttpHostIntegrationTest {
         }
     }
 
-    @Test
-    void handlerModulesAreResolvedPerWorkerUnderTheExistingModuleRules() throws Exception {
-        try (Fixture x = new Fixture()) {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void handlerModulesAreResolvedPerWorkerUnderTheExistingModuleRules(boolean references) throws Exception {
+        try (Fixture x = new Fixture(references)) {
             assertTrue(x.call("isolatedModule"));
             assertEquals(marker("worker"), x.get("/"), "a Worker never sees the creator's instance");
             assertEquals(marker("worker"), x.get("/"));
@@ -717,6 +745,17 @@ final class ProtosHttpHostIntegrationTest {
     }
 
     // ------------------------------------------------------------ fixture
+
+    @Test
+    void resolvedReferenceServesNotFoundAndRejectsAnImpostorBeforeCustody() throws Exception {
+        try (Fixture x = new Fixture(true)) {
+            assertTrue(x.call("rejectImpostor"));
+            assertTrue(x.call("start", 1, 4));
+            assertEquals("HTTP/1.1 404 \r\nContent-Length: 7\r\nConnection: close\r\n\r\nmissing", x.get("/missing"));
+            assertEquals(response('1'), x.get("/"));
+            assertTrue(x.call("drain"));
+        }
+    }
 
     private static String marker(String value) {
         return "HTTP/1.1 200 \r\nContent-Length: "
@@ -759,6 +798,10 @@ final class ProtosHttpHostIntegrationTest {
         final int port;
 
         Fixture() {
+            this(false);
+        }
+
+        Fixture(boolean references) {
             context =
                     Context.newBuilder(ProtosLanguage.ID)
                             .option("protos.CoreRoot", CORE)
@@ -767,6 +810,7 @@ final class ProtosHttpHostIntegrationTest {
                             .build();
             ProtosEmbeddedModules.install(context, Map.of("app:site", SITE));
             context.eval(ProtosLanguage.ID, PROGRAM);
+            call("configureReferences", references ? "reference" : "string");
             port = member("openListener").execute().asInt();
         }
 

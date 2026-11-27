@@ -37,6 +37,29 @@ final class ProtosWorkspacePackageDependencyRoutingTest {
             Path.of("src", "test", "resources", "workspace-package-dep");
 
     @Test
+    void referencesPreservePackageEnvironmentAndExactDependencyAliasIdentity() throws Exception {
+        ProtosWorkspacePackageModuleResolver resolver = resolver(plan());
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+        var root = prelude.newModuleActivation(new com.guillermomolina.protos.runtime.ProtosActorModuleState(),
+                resolver.entryModule("Main"), prelude.newExecutionContext(),
+                new com.guillermomolina.protos.runtime.ProtosActorExecutionDomain());
+        var other = prelude.newModuleActivation(new com.guillermomolina.protos.runtime.ProtosActorModuleState(),
+                ProtosWorkspacePackageModuleKey.encode(ProtosModuleKey.Kind.MODULE, "other-pkg", "Main"),
+                prelude.newExecutionContext(), new com.guillermomolina.protos.runtime.ProtosActorExecutionDomain());
+        Object rootRef = ProtosTestExecutionSupport.evaluate("import.resolve(\"self:Main\")", root);
+        Object otherRef = ProtosTestExecutionSupport.evaluate("import.resolve(\"self:Main\")", other);
+        org.junit.jupiter.api.Assertions.assertNotEquals(
+                com.guillermomolina.protos.runtime.ProtosModuleReferenceSupport.requireKey(rootRef, root),
+                com.guillermomolina.protos.runtime.ProtosModuleReferenceSupport.requireKey(otherRef, other));
+        Object result = ProtosTestExecutionSupport.evaluate("""
+                first: import.resolve("dep:member/Api")
+                second: import.resolve("dep:alternate/Facade")
+                (import(first) === import(second)) && (import(first).result == 88)
+                """, root);
+        org.junit.jupiter.api.Assertions.assertSame(Boolean.TRUE, result);
+    }
+
+    @Test
     void realProtosDepImportUsesTargetExportAndTargetSelfContext() throws Exception {
         ProtosWorkspacePackageModuleResolver resolver = resolver(plan());
         ProtosModuleKey rootEntry = resolver.entryModule("Main");

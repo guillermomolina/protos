@@ -19,9 +19,38 @@ rather than creating parallel language subsystems. Modules follow that rule too.
 
 The central idea is:
 
-> One `import(String)` loads either a **SOURCE** (the entire source execution
-> context) or a **MODULE** (a distinct public object). The resolver selects the
-> target kind; the spelling of a prefix alone does not define it.
+> One ordinary `import` facility loads either a **SOURCE** (the entire source
+> execution context) or a **MODULE** (a distinct public object). It accepts a
+> semantic String for contextual resolution or a genuine resolved reference for
+> an already selected target. The resolved target kind determines the result.
+
+## Resolve explicitly before loading or delegating
+
+A String is interpreted in its lexical module-resolution environment. A resolved
+reference retains that selected canonical target without running its initializer:
+
+```protos
+ref: import.resolve("self:Prices")
+import.isReference(ref)     // true
+prices: import(ref)         // this Actor's canonical cached module instance
+actor: Actor.spawn(ref, "start")
+```
+
+For direct files, use an explicit relative SOURCE spelling such as
+`import.resolve("./prices.protos")`. Resolution does not prove the source exists
+or pin its bytes. Loading later uses the ordinary cache, cycle and retry rules.
+Separate reference objects may denote the same target and load the same instance
+within one Actor; another Actor initializes its own instance. MODULE exports and
+SOURCE context visibility remain unchanged.
+
+References are authenticated immutable ordinary objects; there is no public
+ModuleRef constructor. An object delegating to one is not itself a reference.
+A reference can explicitly delegate one private target through same-Process
+`Actor.spawn` bootstrap or initialization arguments, within the same resolution
+environment. This grants no authority to resolve the package's other private
+targets. Messages, requests, replies, GroupRef communication and isolated P reject
+references, including inside nested graphs. String imports and spawning keep
+their existing behavior; FOREIGN reference acquisition is not supported.
 
 ## SOURCE: its top-level context is importable
 
@@ -174,18 +203,26 @@ must be MODULEs or all local files must be SOURCEs. The resolved, authorized
 **target kind** determines MODULE versus SOURCE. For this reason do not invent
 an import declaration or copy JavaScript `export` syntax into Protos.
 
-## Import accepts exactly a semantic String
+## Import accepts semantic Strings and genuine resolved references
 
-The `specifier` argument to standard `import` must be a semantic String value.
+The `specifier` argument to standard `import` admits two domains: an exact
+semantic String or a genuine resolved module reference. String import performs
+contextual resolution. `import.resolve(String)` performs that resolution without
+initialization, and `import(reference)` uses the retained canonical identity
+without resolving again. Both loading forms converge on the same Actor-local
+cache and initialization rules.
 
 This is valid:
 
 ```protos
 import("std:collections/array")
+ref: import.resolve("std:collections/array")
+import(ref)
 ```
 
 An arbitrary object does not become a module specifier merely because it looks
-String-like or defines conversion behavior.
+String-like or defines conversion behavior. Delegating to a String or a genuine
+reference does not authenticate the child as a valid specifier.
 
 Core performs no implicit:
 
@@ -322,7 +359,8 @@ future resolver additions rather than alternate meanings of `import`.
 
 ## Specifier, ModuleKey, and module instance are different concepts
 
-Module loading has three distinct layers:
+String loading follows these layers; a resolved reference enters at its retained
+canonical ModuleKey without another resolution:
 
 ```text
 specifier String
@@ -338,7 +376,10 @@ module instance
 
 The **specifier** is the exact String supplied by the program.
 
-The **ModuleKey** is the canonical identity produced by the resolver.
+A **resolved reference** is an authenticated ordinary object holding an already
+selected target; its object identity is separate from that target's identity.
+
+The **ModuleKey** is the canonical internal target identity produced by the resolver.
 
 The **module instance** is the Actor-local Protos object returned by `import`.
 
@@ -738,7 +779,7 @@ available today.
 
 ## Practical rules to remember
 
-1. `import` is one ordinary eager call whose exact semantic String is passed to the resolver.
+1. `import(String)` resolves contextually; `import.resolve(String)` resolves without initialization; `import(reference)` loads the retained canonical identity. Both loading forms share the Actor-local cache and initialization rules.
 2. A SOURCE returns its complete top-level execution context, not a filtered export.
 3. A MODULE requires a directory with `module.protos`; it returns its separate public object.
 4. Bare initializer slots stay private; `this.Name: value` publishes an own slot immediately.

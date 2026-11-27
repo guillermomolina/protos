@@ -1079,3 +1079,13 @@ with `NonParallelValue`; creating a parallel computation does not inherit a
 caller Actor's `execution` slot. Authority-free results, such as an
 `ExitStatus`, Bytes read from an endpoint and Integers, keep their ordinary P
 value rules.
+
+## Resolved module reference boundary
+
+Resolved module references (`../semantics/MODULES.md`) cannot be supplied as
+arguments or returned through P, including nested graphs and delegation parents.
+Such transfer fails under the existing `NonParallelValue` contract. Caller
+captures never cross under parallel Closure projection, including captured
+references; an unsatisfied bare lookup in projected code follows the ordinary
+lookup-failure rule above. The Actor.spawn creation exception grants no
+isolated-parallel transfer authority.

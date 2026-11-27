@@ -23,6 +23,15 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.517] - 2026-11-27
+
+### D265-D / I180 — Explicit resolved module references and HTTP Host composition
+
+- Primary owner `semantics/MODULES.md`: specify `import.resolve(String)`, exact `import.isReference(value)` authentication and `import(reference)`; distinguish contextual String resolution, ordinary reference-object identity, retained canonical MODULE/SOURCE identity and Actor-local module instances. Resolution performs no initialization or cache insertion, FOREIGN reference acquisition is excluded, and explicit delegation grants only the acquired target without broadening package resolution authority or changing cache, cycle, visibility, failure-eviction or retry rules.
+- Update `concurrency/ACTORS.md` and `concurrency/DISTRIBUTED_RUNTIME.md` for same-Process reference bootstrap and initialization-argument delegation within the exact authorized resolution environment, preserving atomic pre-cutover validation, post-cutover placement/admission, graph identity and destination-local initialization. Ordinary Actor and GroupRef communication retain their non-transferability rules; no cross-Process representation or placement API is introduced.
+- Update `concurrency/PARALLEL_EXECUTION.md` to exclude reference argument and result transfer under `NonParallelValue`, preserving parallel Closure projection and ordinary lookup failure for unavailable caller captures; reconcile `semantics/VALUES_AND_COLLECTIONS.md` with ordinary reference identity, hashing, delegation and immutability.
+- Update `io/HTTP.md` §15 to admit semantic Strings or genuine resolved references for handler/factory modules while retaining semantic String bindings, listener custody, readiness, lifecycle and mandatory cleanup. Factory initialization remains an ordinary request payload without spawn-only reference delegation.
+
 ## [0.1.516] - 2026-11-25
 
 ### D263-C / I176 — Contextual match with implicit lazy action Closures

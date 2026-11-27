@@ -349,6 +349,34 @@ No extra Task is created per read or per chunk.
 
 ## Host: continuous hosting with Workers
 
+Handler and factory module arguments accept a semantic String or a genuine
+resolved reference. Handler and factory binding arguments always require a
+semantic String. For an application-owned module in a packaged application,
+prefer explicit acquisition through `import.resolve("self:Handler")` so Workers
+load the exact canonical target selected by the application:
+
+```protos
+Host: import("std:http/host").Host
+handlerRef: import.resolve("self:Handler")
+host: Host.owning(listener, handlerRef, "handle", workers: 4)
+```
+
+For a direct-file application, acquire `import.resolve("./Handler.protos")`.
+The factory variant accepts the same reference form:
+
+```protos
+factoryRef: import.resolve("self:Handler")
+host: Host.owningWithFactory(listener, factoryRef, "make", initialization, workers: 4)
+```
+
+Each Worker initializes its own module instance and calls its factory once.
+Existing String arguments remain valid and are resolved in the Worker's existing
+module environment. References preserve the application's exact selection,
+including an explicitly delegated private target. The factory initialization
+payload still crosses as an ordinary request: references anywhere in it are
+rejected through startup failure and mandatory cleanup.
+
+
 ```text
 Host.owning(listener, handlerModule, handlerBinding,
             workers: 1, maxConnections: 64,
@@ -383,22 +411,28 @@ host.ready().value()
 host.shutdown("drain").value()
 ```
 
-**The handler is named, not passed.** `handlerModule` and `handlerBinding` are
-Strings. Each [Worker Actor](../10-actors-actorrefs-and-groups.md) imports its
-own instance of that module and calls that top-level binding, which receives
-the same Request and returns the same Response as with `serveOne`. A Closure is
-rejected in their place; this keeps mutable state out of the Workers. The module
+**The handler is selected by target and binding.** `handlerModule` is a semantic
+String or genuine resolved reference; `handlerBinding` is a semantic String.
+Each [Worker Actor](../10-actors-actorrefs-and-groups.md) imports its own instance
+of that module and calls that top-level binding, which receives the same Request
+and returns the same Response as with `serveOne`. A Closure is
+rejected in their place; this keeps mutable state out of the Workers. A String
 specifier is resolved by the Worker under the
 [ordinary module rules](../06-modules-and-imports.md#module-instances-are-actor-local),
-not relative to your file. In practice, use a specifier every Actor can resolve,
-such as an [`app:` module](../embedding/application-modules.md) supplied by the
-embedding host. A missing module or binding is not a construction error; it
-fails `ready()` with a `HostError` of kind `"startup"`.
+not relative to your file. For String-based selection, use a specifier every
+Worker can resolve, such as an [`app:` module](../embedding/application-modules.md)
+supplied by the embedding host. For application-owned package modules, prefer
+an explicitly acquired `self:` reference as shown above. A missing module or
+binding is not a construction error; it fails `ready()` with a `HostError` of kind
+`"startup"`.
 
 **Building each Worker's handler from data you pass.** When the handler needs
 configuration or a reference to one of your own service Actors, use
 `Host.owningWithFactory`. Instead of naming the handler, you name a *factory*
-binding and pass an `initialization` value:
+binding and pass an `initialization` value. `factoryModule` accepts the same
+String-or-reference domain as `handlerModule`; `factoryBinding` remains a
+semantic String. The module reference travels through creation, while
+`initialization` is a separate ordinary request payload:
 
 ```protos
 // app:site-handler

@@ -20,10 +20,12 @@
 //! custody of a live `TcpListener` of the calling Actor and services
 //! successive TCP connections with `workers` Worker Actors of the same
 //! Process. Each Worker receives only a `TcpAcceptor` derived from the
-//! listener, resolves `handlerModule` and its own binding `handlerBinding`
+//! listener, imports `handlerModule` and selects its own binding `handlerBinding`
 //! itself, accepts by itself, and services each accepted connection exactly
 //! once with `Server.serveOne.owning`. Admission is bounded by the fixed
 //! per-Worker quotas of `maxConnections` and `maxPendingAccepts`.
+//! Module arguments accept a semantic String resolved by the Worker, or a
+//! genuine reference acquired explicitly by the application with import.resolve.
 //!
 //! `Host.owningWithFactory(listener, factoryModule, factoryBinding,
 //! initialization, workers: 1, maxConnections: 64, maxPendingAccepts: workers,
@@ -34,7 +36,8 @@
 //! copy before it becomes ready. `initialization` may carry ordinary
 //! transferable data and `ActorRef` values; live resources, Closures, Futures
 //! and every other non-transferable value, including a `TcpAcceptor`, are
-//! rejected as at any ordinary Actor boundary.
+//! rejected as at any ordinary Actor boundary. Resolved references in that
+//! initialization payload are also rejected; it has no spawn delegation scope.
 //!
 //! The returned host is an Actor-local control object: `ready()`,
 //! `shutdown("drain")`, `shutdown("abort")` and `termination()` answer fresh
@@ -58,7 +61,7 @@ this.Host: ((facility) => {
     // and one TcpAcceptor per Worker.
     admit: (listener, moduleSpecifier, bindingName, options) => {
         config: HostConfig.capture(facility, options)
-        valid: (config !== null) && String.recognizes(moduleSpecifier) && String.recognizes(bindingName)
+        valid: (config !== null) && (String.recognizes(moduleSpecifier) || import.isReference(moduleSpecifier)) && String.recognizes(bindingName)
         acceptors: null
         if(valid) {
             acceptors = HostConfig.acceptors(facility, listener, config.workers)
@@ -94,8 +97,9 @@ this.Host: ((facility) => {
         }
         admitted: admit(listener, handlerModule, handlerBinding, options)
         config: admitted.config
-        // Only the acceptor, the handler Strings, the quotas and the
-        // captured limits cross into a Worker (HTTP.md §15.4).
+        // Only the acceptor, the handler module String or genuine resolved
+        // reference, the semantic String binding, the quotas and captured
+        // limits cross into a Worker (HTTP.md §15.4).
         spawnWorker: (acceptor, connectionQuota, pendingQuota) => {
             Actor.spawn(
                 "std:http/internal/host_worker",
@@ -112,13 +116,14 @@ this.Host: ((facility) => {
     }
 
     // HTTP.md §15.13: initialization is not a structural argument and is
-    // never an Actor.spawn argument, whose TcpAcceptor delegation stays
-    // reserved for the acceptor derived here. Each Worker receives it as the
-    // argument of its "serve" request, an ordinary Actor transfer: one
-    // independent copy per Worker, and a non-transferable value, including a
-    // caller-supplied TcpAcceptor, signals NonTransferableValue while the
-    // Workers are created, which HostLifecycle reports as a startup failure
-    // with its mandatory cleanup.
+    // never an Actor.spawn argument. Creation delegation applies only to the
+    // derived acceptor and the selected factory module reference. Each Worker
+    // receives initialization as the argument of its "serve" request, an
+    // ordinary Actor transfer: one independent copy per Worker. A
+    // non-transferable value, including a
+    // caller-supplied TcpAcceptor or resolved module reference, signals
+    // NonTransferableValue while the Workers are created, which HostLifecycle
+    // reports as a startup failure with its mandatory cleanup.
     owningWithFactory: (
         listener,
         factoryModule,

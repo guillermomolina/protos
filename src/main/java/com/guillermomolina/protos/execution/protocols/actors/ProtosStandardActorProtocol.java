@@ -30,6 +30,7 @@ import com.guillermomolina.protos.runtime.ProtosGroupRefValue;
 import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosModuleReferenceSupport;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
@@ -189,8 +190,9 @@ public final class ProtosStandardActorProtocol {
 
         Object moduleSpecifier = supplied.get(0);
         Object bindingValue = supplied.get(1);
-        if (!(moduleSpecifier instanceof ProtosStringValue)
-                || !(bindingValue instanceof ProtosStringValue)) {
+        if (!(bindingValue instanceof ProtosStringValue)
+                || (!(moduleSpecifier instanceof ProtosStringValue)
+                        && !ProtosModuleReferenceSupport.isReference(moduleSpecifier))) {
             throw error(activation);
         }
 
@@ -200,7 +202,16 @@ public final class ProtosStandardActorProtocol {
                                 () ->
                                         new IllegalStateException(
                                                 "Actor.spawn requires an owning Core prelude"));
-        ProtosModuleKey moduleKey = moduleRuntime.resolveModuleKey(moduleSpecifier, activation);
+        ProtosModuleKey moduleKey;
+        if (moduleSpecifier instanceof ProtosStringValue) {
+            moduleKey = moduleRuntime.resolveModuleKey(moduleSpecifier, activation);
+        } else {
+            try {
+                moduleKey = ProtosModuleReferenceSupport.requireSpawnKey(moduleSpecifier, activation);
+            } catch (IllegalArgumentException | IllegalStateException rejected) {
+                throw error(activation);
+            }
+        }
         String bindingName = ((ProtosStringValue) bindingValue).value();
         List<Object> transferredArguments =
                 ProtosActorValueTransfer.snapshotSpawnArguments(

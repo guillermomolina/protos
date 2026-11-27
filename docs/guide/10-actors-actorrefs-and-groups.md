@@ -121,6 +121,26 @@ For example, the shipped tutorial uses:
 worker: Actor.spawn("std:collections/set", "construct", 1, 2, 3)
 ```
 
+You can also select the application-owned module explicitly before passing it to
+creation code in a reusable library:
+
+```protos
+workerModule: import.resolve("self:Worker")
+worker: Actor.spawn(workerModule, "start")
+```
+
+The reference preserves the application's selected canonical target, so library
+composition does not reinterpret its String spelling in a different module
+environment. The destination still initializes its own Actor-local module
+instance and selects its own `start` binding.
+
+Resolved references may cross only through the specified same-Process creation
+boundary, as the bootstrap module argument or within initialization arguments,
+and only in the exact authorized resolution environment. This can delegate one
+private target without granting resolution authority for the package's other
+private targets. An ordinary Actor message, request or reply is not an
+alternative delegation mechanism: it rejects references, including nested ones.
+
 The important boundary is what **does not** happen:
 
 ```text

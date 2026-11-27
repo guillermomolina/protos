@@ -41,6 +41,44 @@ import org.junit.jupiter.api.parallel.ResourceLock;
 @ResourceLock(ProtosPackageRunDriverTestSupport.RESOURCE_LOCK)
 final class ProtosPackageRunDriverMixedApplicationTest extends ProtosPackageRunDriverTestSupport {
     @Test
+    void resolvedReferencesUseTheMixedApplicationCanonicalCache() throws Exception {
+        Path project = project("mixed-references");
+        Files.writeString(moduleFile(project, "Main"), """
+                first: import.resolve("dep:reg/Api")
+                second: import.resolve("dep:reg/Api")
+                module: import(first)
+                import.isReference(first) && (module === import(second)) &&
+                    (module === import("dep:reg/Api")) && (module.total == 1026)
+                """, StandardCharsets.UTF_8);
+        RecordingProvider provider = new RecordingProvider(materializations("mixed-references"));
+        RecordingStages stages = new RecordingStages();
+        ProtosExecutionOutcome outcome = ProtosPackageRunDriver.execute(
+                request(project, null), provider,
+                ProtosWorkspacePackageApplicationExecution.NetworkGrant.NONE, stages);
+        assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
+        org.junit.jupiter.api.Assertions.assertSame(Boolean.TRUE, outcome.value());
+        // The two versions of external-a and the registry/Git identities of external-c
+        // must stay distinct in the destination cache, even where captured bytes coincide.
+        var cache = stages.hosted.get(0).rootActorForRuntime().moduleState();
+        var firstVersion = cache.lookup(ProtosExternalPackageModuleKey.encode(
+                com.guillermomolina.protos.runtime.modules.ProtosModuleKey.Kind.MODULE, a1, "Api"))
+                .orElseThrow().instance();
+        var secondVersion = cache.lookup(ProtosExternalPackageModuleKey.encode(
+                com.guillermomolina.protos.runtime.modules.ProtosModuleKey.Kind.MODULE, a2, "Api"))
+                .orElseThrow().instance();
+        var registryModule = cache.lookup(ProtosExternalPackageModuleKey.encode(
+                com.guillermomolina.protos.runtime.modules.ProtosModuleKey.Kind.MODULE, cRegistry, "Api"))
+                .orElseThrow().instance();
+        var gitModule = cache.lookup(ProtosExternalPackageModuleKey.encode(
+                com.guillermomolina.protos.runtime.modules.ProtosModuleKey.Kind.MODULE, cGit, "Api"))
+                .orElseThrow().instance();
+        org.junit.jupiter.api.Assertions.assertNotSame(firstVersion, secondVersion);
+        org.junit.jupiter.api.Assertions.assertNotSame(registryModule, gitModule);
+        assertEquals(4, new HashSet<>(provider.calls).size());
+        assertMixedLifecycleUnchanged(provider, stages);
+    }
+
+    @Test
     void mixedApplicationRunsOverExactlySelectedVerifiedCapturesAndClosesScopeAfterTermination()
             throws Exception {
         Path project = project("success");

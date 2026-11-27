@@ -1460,6 +1460,78 @@ final class ProtosActorValueTransferTest {
         }
     }
 
+    @Test
+    void moduleReferencesUseOnlySpawnDelegationAndPreserveGraphIdentityAndKeys() throws Exception {
+        SpawnFixture x = spawnFixture();
+        var key = com.guillermomolina.protos.runtime.modules.ProtosModuleKey.module("private:target");
+        ProtosSealedValue first = ProtosModuleReferenceSupport.mint(key, x.source);
+        ProtosSealedValue twin = ProtosModuleReferenceSupport.mint(key, x.source);
+        ProtosObjectValue child = new ProtosObjectValue(first);
+        ProtosObjectValue holder = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        holder.createLocalSlot("self", holder);
+        holder.createLocalSlot("reference", first);
+        ProtosMapValue map = x.prelude.newMap();
+        ProtosIdentityMapValue identities = new ProtosIdentityMapValue(x.prelude.identityMapPrototype());
+        for (Object value : List.of(first, twin, child)) {
+            ProtosInvocation.invokeMessage(map, "atPut", List.of(value, value), x.source);
+            ProtosInvocation.invokeMessage(identities, "atPut", List.of(value, value), x.source);
+        }
+        List<?> delivered = x.spawn(List.of(first, first, twin, child, holder, map, identities));
+        Object copy = delivered.get(0);
+        assertTrue(ProtosModuleReferenceSupport.isReference(copy));
+        assertNotSame(first, copy);
+        assertSame(copy, delivered.get(1));
+        assertNotSame(copy, delivered.get(2));
+        assertEquals(key, ProtosModuleReferenceSupport.requireKey(copy, x.destination));
+        assertSame(copy, ((ProtosObjectValue) delivered.get(3)).parent().orElseThrow());
+        assertFalse(ProtosModuleReferenceSupport.isReference(delivered.get(3)));
+        ProtosObjectValue copiedHolder = (ProtosObjectValue) delivered.get(4);
+        assertSame(copiedHolder, copiedHolder.readLocalSlot("self").orElseThrow());
+        assertSame(copy, copiedHolder.readLocalSlot("reference").orElseThrow());
+        for (Object value : List.of(copy, delivered.get(2), delivered.get(3))) {
+            assertSame(value, ProtosInvocation.invokeMessage(delivered.get(5), "at", List.of(value), x.destination));
+            assertSame(value, ProtosInvocation.invokeMessage(delivered.get(6), "at", List.of(value), x.destination));
+        }
+        assertThrows(ProtosSignalException.class,
+                () -> ProtosActorValueTransfer.snapshotArguments(List.of(first), x.source));
+        assertThrows(ProtosSignalException.class,
+                () -> ProtosActorValueTransfer.snapshotValue(first, x.source));
+        assertThrows(ProtosSignalException.class,
+                () -> com.guillermomolina.protos.execution.ProtosDetachedExecutionValue.snapshot(first, x.destination));
+        assertThrows(ProtosSignalException.class,
+                () -> ProtosActorValueTransfer.snapshotArguments(List.of(holder), x.source));
+    }
+
+    @Test
+    void moduleReferenceDescriptorsFailClosedOutsideTheirExactCreationScope() throws Exception {
+        SpawnFixture x = spawnFixture();
+        var key = com.guillermomolina.protos.runtime.modules.ProtosModuleKey.source("exact:source");
+        Object reference = ProtosModuleReferenceSupport.mint(key, x.source);
+        Object descriptor = ProtosModuleReferenceSupport.prepareSpawnDelegation(reference, x.source);
+        assertThrows(ProtosSignalException.class,
+                () -> ProtosActorValueTransfer.snapshotSpawnArguments(List.of(descriptor), x.source));
+        assertThrows(ProtosSignalException.class,
+                () -> ProtosActorValueTransfer.snapshotArguments(List.of(descriptor), x.source));
+        ProtosProcessRuntime otherProcess = new ProtosProcessRuntime(x.prelude.actorRefPrototypeForRuntime());
+        ProtosActivation foreign = actorActivation(x.prelude, otherProcess.rootActorForRuntime());
+        assertThrows(IllegalArgumentException.class,
+                () -> ProtosModuleReferenceSupport.requireSpawnKey(reference, foreign));
+        List<Object> snapshot = ProtosActorValueTransfer.snapshotSpawnArguments(List.of(reference), x.source);
+        assertThrows(IllegalStateException.class,
+                () -> ProtosActorValueTransfer.materializeArguments(snapshot, foreign));
+        ProtosActivation otherRuntime = actorActivation(core(),
+                x.destination.executionDomain().currentActorForRuntime().orElseThrow());
+        assertThrows(IllegalStateException.class,
+                () -> ProtosActorValueTransfer.materializeArguments(snapshot, otherRuntime));
+        ProtosActivation unhosted = x.prelude.newModuleActivation();
+        Object local = ProtosModuleReferenceSupport.mint(key, unhosted);
+        assertEquals(key, ProtosModuleReferenceSupport.requireKey(local, unhosted));
+        assertThrows(IllegalArgumentException.class,
+                () -> ProtosModuleReferenceSupport.requireSpawnKey(local, unhosted));
+        assertThrows(ProtosSignalException.class,
+                () -> ProtosActorValueTransfer.snapshotSpawnArguments(List.of(local), unhosted));
+    }
+
     private static SpawnFixture spawnFixture() throws Exception {
         ProtosPrelude prelude = core();
         ProtosProcessRuntime process = new ProtosProcessRuntime(prelude.actorRefPrototypeForRuntime());

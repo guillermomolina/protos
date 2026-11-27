@@ -384,6 +384,26 @@ final class ProtosI158ActorBootstrapSuspensionTest {
 
     // ---- harness -------------------------------------------------------------------------
 
+    @Test
+    void referenceBootstrapUsesTheExistingSuspendibleInitializationPath() throws Exception {
+        Harness x = Harness.create("app", ProtosModuleKey.source("canonical:app"),
+                "boot: (acceptor) => {\n"
+                        + "    Error.handle(() => acceptor.accept().value(), (error) => null)\n"
+                        + "    { completed: true }\n}");
+        Object reference = ProtosTestExecutionSupport.evaluate("import.resolve(\"app\")", x.activation());
+        ProtosActorRefValue actorRef = assertInstanceOf(ProtosActorRefValue.class,
+                ProtosInvocation.invokeMessage(x.actorObject(), "spawn",
+                        List.of(reference, new ProtosStringValue("boot"), x.acquire()), x.activation()));
+        ProtosActor actor = x.local(actorRef);
+        x.executor().drain();
+        assertEquals(ProtosActor.LifecycleState.INITIALIZING, actor.lifecycleState());
+        assertTrue(actor.currentBehavior().isEmpty());
+        x.backend().pending.pollFirst().failed();
+        x.executor().drain();
+        assertEquals(ProtosActor.LifecycleState.READY, actor.lifecycleState());
+        assertSame(Boolean.TRUE, actor.currentBehavior().orElseThrow().readLocalSlot("completed").orElseThrow());
+    }
+
     record Harness(
             ProtosPrelude prelude,
             ProtosProcessRuntime process,

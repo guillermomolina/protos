@@ -24,6 +24,7 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.callables.ProtosNativeClosureBody;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
+import com.guillermomolina.protos.runtime.ProtosModuleReferenceSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -55,9 +56,9 @@ final class ProtosStandardImportProtocol {
 
     /**
      * Validates and freezes the source-created Core import facility. It must delegate directly to
-     * Object, still be open, and declare exactly one slot, {@code call}, holding the source-backed
-     * Closure of {@code protos/lib/core/import.protos}. That {@code call} is kept as is; the
-     * private bridge it uses is a bootstrap-local lexical anchor installed by the caller, never a
+     * Object, still be open, and declare exactly the source-backed {@code call}, {@code resolve}, and
+     * {@code isReference} Closures of {@code protos/lib/core/import.protos}. They are kept as is;
+     * their private bridge is a bootstrap-local lexical anchor installed by the caller, never a
      * slot of the facility.
      */
     static ProtosObjectValue installImportFacility(ProtosObjectValue facility) {
@@ -70,9 +71,12 @@ final class ProtosStandardImportProtocol {
             throw new IllegalArgumentException("source-created Core import facility must begin open");
         }
         java.util.Map<String, Object> slots = facility.localSlotsSnapshot();
-        if (slots.size() != 1 || !isSourceBackedClosure(slots.get("call"))) {
+        if (slots.size() != 3
+                || !isSourceBackedClosure(slots.get("call"))
+                || !isSourceBackedClosure(slots.get("resolve"))
+                || !isSourceBackedClosure(slots.get("isReference"))) {
             throw new IllegalArgumentException(
-                    "source-created Core import facility must declare exactly a source-backed call");
+                    "source-created Core import facility must declare exactly source-backed call, resolve, and isReference");
         }
         return facility.freeze();
     }
@@ -212,6 +216,44 @@ final class ProtosStandardImportProtocol {
                                         ProtosCoreErrors.newError(activation));
                             }
                             return new PendingInitializationToken(runtime, token.key, activation);
+                        }));
+        bridge.createLocalSlot(
+                "publishReference",
+                ProtosClosureValue.nativeClosure(
+                        (activation, supplied) -> {
+                            requireBridgeCall(bridge, activation, supplied);
+                            ResolvedModuleToken token =
+                                    requireResolvedToken(runtime, supplied.get(0), activation);
+                            if (token.key.isForeign()) {
+                                throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
+                            }
+                            ProtosInspectFacility.requireAuthorizedImport(token.key, activation);
+                            try {
+                                return ProtosModuleReferenceSupport.mint(token.key, activation);
+                            } catch (IllegalArgumentException | IllegalStateException rejected) {
+                                throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
+                            }
+                        }));
+        bridge.createLocalSlot(
+                "bindReference",
+                ProtosClosureValue.nativeClosure(
+                        (activation, supplied) -> {
+                            requireBridgeCall(bridge, activation, supplied);
+                            try {
+                                return new ResolvedModuleToken(
+                                        runtime,
+                                        ProtosModuleReferenceSupport.requireKey(supplied.get(0), activation),
+                                        activation);
+                            } catch (IllegalArgumentException | IllegalStateException rejected) {
+                                throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
+                            }
+                        }));
+        bridge.createLocalSlot(
+                "recognizesReference",
+                ProtosClosureValue.nativeClosure(
+                        (activation, supplied) -> {
+                            requireBridgeCall(bridge, activation, supplied);
+                            return ProtosModuleReferenceSupport.isReference(supplied.get(0));
                         }));
         bridge.createLocalSlot("execute", ProtosClosureValue.nativeClosure(executeBody));
         return bridge.freeze();

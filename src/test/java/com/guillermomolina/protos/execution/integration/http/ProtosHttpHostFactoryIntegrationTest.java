@@ -84,9 +84,10 @@ final class ProtosHttpHostFactoryIntegrationTest {
         }
     }
 
-    @Test
-    void eachWorkerBuildsItsHandlerOnceFromItsOwnCopy() throws Exception {
-        try (Fixture x = new Fixture()) {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void eachWorkerBuildsItsHandlerOnceFromItsOwnCopy(boolean references) throws Exception {
+        try (Fixture x = new Fixture(references)) {
             // Two Workers with one connection unit each: two held sessions run in distinct
             // Workers.
             assertTrue(x.call("start", "make", 2, 2), "multi-Worker readiness");
@@ -161,9 +162,10 @@ final class ProtosHttpHostFactoryIntegrationTest {
         }
     }
 
-    @Test
-    void abortCancelsASessionWaitingOnTheServiceAndALateReplyChangesNothing() throws Exception {
-        try (Fixture x = new Fixture()) {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void abortCancelsASessionWaitingOnTheServiceAndALateReplyChangesNothing(boolean references) throws Exception {
+        try (Fixture x = new Fixture(references)) {
             assertTrue(x.call("start", "make", 1, 4));
             try (Socket waiting = x.connect()) {
                 send(waiting, "GET /slow HTTP/1.1\r\nHost: a\r\n\r\n");
@@ -184,9 +186,10 @@ final class ProtosHttpHostFactoryIntegrationTest {
         }
     }
 
-    @Test
-    void drainLetsAnAdmittedSessionOfTheBuiltHandlerFinish() throws Exception {
-        try (Fixture x = new Fixture()) {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void drainLetsAnAdmittedSessionOfTheBuiltHandlerFinish(boolean references) throws Exception {
+        try (Fixture x = new Fixture(references)) {
             assertTrue(x.call("start", "make", 1, 4));
             try (Socket held = x.connect()) {
                 send(held, post("/"));
@@ -202,9 +205,10 @@ final class ProtosHttpHostFactoryIntegrationTest {
         }
     }
 
-    @Test
-    void factoryAndResultFailuresAreStartupFailuresWithFullCleanup() throws Exception {
-        try (Fixture x = new Fixture()) {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void factoryAndResultFailuresAreStartupFailuresWithFullCleanup(boolean references) throws Exception {
+        try (Fixture x = new Fixture(references)) {
             String[][] cases = {
                 {"app:factory", "failing"},
                 {"app:factory", "failingAfterSuspension"},
@@ -372,6 +376,13 @@ final class ProtosHttpHostFactoryIntegrationTest {
         return "POST " + target + " HTTP/1.1\r\nHost: a\r\nContent-Length: 1\r\n\r\n";
     }
 
+    @Test
+    void moduleReferenceInOrdinaryFactoryInitializationFailsAndCleansUp() throws Exception {
+        try (Fixture x = new Fixture(true)) {
+            assertTrue(x.call("rejectedInitialization", "reference"));
+        }
+    }
+
     private static void send(Socket socket, String text) throws IOException {
         socket.getOutputStream().write(text.getBytes(StandardCharsets.ISO_8859_1));
         socket.getOutputStream().flush();
@@ -398,6 +409,10 @@ final class ProtosHttpHostFactoryIntegrationTest {
         final int port;
 
         Fixture() {
+            this(false);
+        }
+
+        Fixture(boolean references) {
             context =
                     Context.newBuilder(ProtosLanguage.ID)
                             .option("protos.CoreRoot", CORE)
@@ -411,6 +426,7 @@ final class ProtosHttpHostFactoryIntegrationTest {
                             "app:service",
                             ProtosHttpHostFactoryFixtureSources.SERVICE));
             context.eval(ProtosLanguage.ID, ProtosHttpHostFactoryFixtureSources.PROGRAM);
+            call("configureReferences", references ? "reference" : "string");
             port = execute("openListener").asInt();
         }
 

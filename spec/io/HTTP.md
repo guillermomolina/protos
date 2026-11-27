@@ -1129,8 +1129,9 @@ operation alters the public surface or semantics of `Server.serveOne` or
 Actor. It is supplied explicitly by the caller, ordinarily after acquisition
 using its own `Network` authority; `Host` itself never acquires `Network`,
 calls `listenTcp`, chooses an address or port, or inherits a capability.
-`handlerModule` and `handlerBinding` are semantic Strings identifying the
-module and its local callable top-level binding for each destination Actor;
+`handlerModule` is a semantic String or genuine resolved module reference
+(`../semantics/MODULES.md`); `handlerBinding` is a semantic String identifying
+its local callable top-level binding for each destination Actor;
 the worker does not receive a Closure or module instance from the caller.
 Module identity and binding lookup obey the `Actor.spawn` bootstrap and
 module-resolution rules. An invalid module or bootstrap may fail
@@ -1187,8 +1188,10 @@ owned by `NETWORK.md` §8. No central Actor accepts connections on their behalf.
 
 The host starts exactly `workers` Worker Actor incarnations, all constrained
 to the same Process by the supplied `TcpAcceptor`. Their bootstrap code lives
-in the Standard Library; each Worker resolves `handlerModule` and
-`handlerBinding` within its own Actor-local module instance. A missing
+in the Standard Library; each Worker imports `handlerModule` and selects
+`handlerBinding` within its own Actor-local module instance. A String is
+interpreted under the Worker's existing module-resolution environment; a
+reference preserves the exact target explicitly selected by the application. A missing
 module, missing local binding or non-callable binding is a startup failure.
 Under `Host.owningWithFactory` each Worker instead builds its handler with its
 own factory binding as §15.13 specifies. Neither the handler Closure, a
@@ -1419,7 +1422,8 @@ the use of `Server.serveOne.owning` for every admitted connection.
 **Construction.** Argument association and its D237 `Error` follow §15.2.
 `listener`, `factoryModule`, `factoryBinding` and the four named options are
 validated exactly as the corresponding arguments of `Host.owning` (§15.2):
-`factoryModule` and `factoryBinding` must be semantic Strings, and an invalid
+`factoryModule` must be a semantic String or genuine resolved reference, and
+`factoryBinding` must be a semantic String. An invalid
 argument signals a fresh `InvalidIOArgument` synchronously, without listener
 custody, Workers or I/O. `initialization` may be any value. It remains one
 separate payload value: it is never a group of named arguments and never
@@ -1442,12 +1446,13 @@ that Worker under the ordinary Actor pass-by-value rules
   with an explicit Actor-transfer contract keeps that contract; and
 - every value that is non-transferable at an ordinary Actor boundary is
   rejected, including a Closure, a Future, `Network`, a Resolver, a
-  `TcpListener`, a `TcpConnection` and a `TcpAcceptor`.
+  `TcpListener`, a `TcpConnection`, a `TcpAcceptor` and a resolved module reference.
 
 The `Actor.spawn`-only `TcpAcceptor` delegation (`../concurrency/ACTORS.md`
-§8, `NETWORK.md` §11) is used solely for the acceptor the host itself derives
-(§15.3). It never applies to `initialization`: a caller-supplied
-`TcpAcceptor` anywhere in it is non-transferable. A non-transferable
+§8, `NETWORK.md` §11) applies solely to the acceptor the host derives (§15.3).
+Module-reference creation delegation applies to the selected factory target.
+Neither creation exception applies to `initialization`, whose complete payload
+follows the ordinary request-transfer rules above. A non-transferable
 `initialization` is a synchronous failure while creating the Workers (§15.2):
 `Host.owningWithFactory` still returns `host`, no Worker receives any part of
 `initialization`, no factory is invoked, and the hosting Futures report a

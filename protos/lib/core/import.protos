@@ -17,8 +17,8 @@
 // sole implementation of `import`; bootstrap freezes the facility without
 // replacing it.
 //
-// The policy decides here: semantic String admission, cache hit versus miss on
-// the canonical identity, and when a new initialization begins. A READY or
+// The policy decides here: semantic String or resolved reference admission,
+// cache hit versus miss on the canonical identity, and when a new initialization begins. A READY or
 // INITIALIZING instance is answered immediately, so a cycle observes the partial
 // object without waiting. `_coreImportBridge` is a private bootstrap-local anchor
 // whose primitives re-check every argument and keep no module state of their own;
@@ -27,10 +27,12 @@
 // initializer's final value.
 import: {
     call: (specifier) => {
-        String.recognizes(specifier).ifFalse(() => {
-            Error().signal()
-        })
-        key: _coreImportBridge.resolve(specifier)
+        key: null
+        if(String.recognizes(specifier)) {
+            key = _coreImportBridge.resolve(specifier)
+        } else {
+            key = _coreImportBridge.bindReference(specifier)
+        }
         cached: _coreImportBridge.lookup(key)
 
         result: cached
@@ -41,4 +43,11 @@ import: {
 
         result
     }
+    resolve: (specifier) => {
+        if(!String.recognizes(specifier)) {
+            Error().signal()
+        }
+        _coreImportBridge.publishReference(_coreImportBridge.resolve(specifier))
+    }
+    isReference: (value) => _coreImportBridge.recognizesReference(value)
 }

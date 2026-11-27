@@ -34,7 +34,10 @@ import java.util.Objects;
  * transfer reject them instead of copying them into ordinary objects that would silently lose
  * their family. The exceptions are the Core Fraction and Complex families (D197-C, I090), whose
  * values cross only as inert descriptors that the destination rematerializes by value
- * ({@link ProtosNumericValueSupport}, {@link ProtosComplexNumericSupport}).
+ * ({@link ProtosNumericValueSupport}, {@link ProtosComplexNumericSupport}). Core resolved
+ * module references additionally admit only same-Process spawn delegation through private
+ * descriptors ({@link ProtosModuleReferenceSupport}); ordinary message and parallel transfer
+ * still reject them.
  */
 public final class ProtosSealedValue extends ProtosObjectValue {
     private final Object family;

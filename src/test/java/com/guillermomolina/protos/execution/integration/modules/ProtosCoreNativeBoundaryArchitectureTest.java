@@ -82,9 +82,8 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/protocols/values/ProtosStandardStringProtocol.java", 6),
                     Map.entry("execution/protocols/io/ProtosStandardBufferedByteIoProtocol.java", 4),
                     Map.entry("execution/protocols/actors/ProtosStandardErrorProtocol.java", 2),
-                    // I167: private import bridge primitives (resolve, lookup, begin, execute)
-                    // behind the source-backed public import.call; no public native import.
-                    Map.entry("execution/protocols/actors/ProtosStandardImportProtocol.java", 4),
+                    // Seven private primitives behind the three source-backed public selectors.
+                    Map.entry("execution/protocols/actors/ProtosStandardImportProtocol.java", 7),
                     Map.entry("execution/protocols/numeric/ProtosStandardIntegerProtocol.java", 3),
                     Map.entry("execution/protocols/actors/ProtosStandardFutureProtocol.java", 2),
                     Map.entry("execution/protocols/numeric/ProtosStandardFloatProtocol.java", 2),
@@ -232,7 +231,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
 
         assertEquals(EXPECTED_NATIVE_PROVIDERS, actualCore);
         assertEquals(39, actualCore.size());
-        assertEquals(153, actualCore.values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(156, actualCore.values().stream().mapToInt(Integer::intValue).sum());
         assertEquals(EXPECTED_NON_CORE_NATIVE_PROVIDERS, actualNonCore);
 
     }
@@ -527,12 +526,15 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         ProtosObjectValue importFacility = ordinaryBinding(prelude, "import");
         assertNativeSelectors("import", importFacility, Set.of());
         assertEquals(
-                Set.of("call"),
+                Set.of("call", "resolve", "isReference"),
                 importFacility.localSlotsSnapshot().keySet(),
                 "unexpected standard import surface");
         assertTrue(importFacility.isFrozen(), "standard import facility must be frozen");
-        assertSourceBacked(importFacility, "call");
-        for (String privateName : List.of("_coreImportBridge", "resolve", "lookup", "begin", "execute")) {
+        for (String selector : List.of("call", "resolve", "isReference")) {
+            assertSourceBacked(importFacility, selector);
+        }
+        for (String privateName : List.of("_coreImportBridge", "lookup", "begin", "execute",
+                "publishReference", "bindReference", "recognizesReference")) {
             assertFalse(
                     importFacility.hasLocalSlot(privateName),
                     privateName + " must not be a public import member");

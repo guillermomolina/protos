@@ -78,7 +78,8 @@ public final class ProtosActorValueTransfer {
 
     /**
      * Actor.spawn initialization snapshot (D217, I125-B): {@link #snapshotArguments} plus the
-     * spawn-only delegation of physical TcpAcceptor capabilities. No other boundary may use it.
+     * spawn-only delegation of physical TcpAcceptor capabilities and authenticated resolved
+     * module references. No other boundary may use it.
      */
     public static List<Object> snapshotSpawnArguments(List<?> values, ProtosActivation source) {
         return snapshotArgumentVector(values, source, true);
@@ -343,6 +344,31 @@ public final class ProtosActorValueTransfer {
             }
             if (value instanceof ProtosProcessStandardStreamValue stream) {
                 return remember(value, stream.rematerializeForActorTransfer());
+            }
+
+            if (ProtosModuleReferenceSupport.isReference(value)) {
+                if (materializing || !spawnDelegation) {
+                    throw nonTransferable();
+                }
+                try {
+                    Object descriptor =
+                            ProtosModuleReferenceSupport.prepareSpawnDelegation(value, source);
+                    semanticRecords = true;
+                    return remember(value, descriptor);
+                } catch (IllegalArgumentException | IllegalStateException rejected) {
+                    throw nonTransferable();
+                }
+            }
+            if (ProtosModuleReferenceSupport.isSpawnDelegation(value)) {
+                if (!materializing || !spawnDelegation) {
+                    throw nonTransferable();
+                }
+                try {
+                    return remember(value,
+                            ProtosModuleReferenceSupport.materializeSpawnDelegation(value, source));
+                } catch (IllegalArgumentException | IllegalStateException rejected) {
+                    throw nonTransferable();
+                }
             }
 
             if (value instanceof ProtosTcpAcceptorValue acceptor) {
@@ -614,7 +640,8 @@ public final class ProtosActorValueTransfer {
                     current = candidate.parent().orElse(null);
                 } else if (current instanceof ProtosSemanticTransferRecord
                         || current instanceof ProtosPathComponents
-                        || current instanceof ProtosTcpAcceptorValue.SpawnDelegation) {
+                        || current instanceof ProtosTcpAcceptorValue.SpawnDelegation
+                        || ProtosModuleReferenceSupport.isSpawnDelegation(current)) {
                     current = memo.get(current);
                 } else {
                     return false;

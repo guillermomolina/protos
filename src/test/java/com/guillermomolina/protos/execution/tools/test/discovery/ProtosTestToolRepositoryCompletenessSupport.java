@@ -127,27 +127,40 @@ final class ProtosTestToolRepositoryCompletenessSupport {
 
     /** Auxiliary modules imported by suite-native sources; they declare no Tests of their own. */
     static final Map<String, String> AUXILIARY_MODULES =
-            Map.of(
-                    "conformance/actor/modules/workers.protos",
-                    "auxiliary module bound as tool002-actor:workers",
-                    "conformance/group/modules/workers.protos",
-                    "auxiliary module bound as tool002-group:workers",
-                    "conformance/library/toml/official/suite/Harness.protos",
-                    "auxiliary harness of the toml-official suite sources",
-                    "conformance/modules/fixtures/cycle/a.protos",
-                    "D242 conformance module import fixture",
-                    "conformance/modules/fixtures/cycle/b.protos",
-                    "D242 conformance module import fixture",
-                    "conformance/modules/fixtures/failure/counter.protos",
-                    "D242 conformance module import fixture",
-                    "conformance/modules/fixtures/failure/failing.protos",
-                    "D242 conformance module import fixture",
-                    "conformance/modules/fixtures/range/Range.protos",
-                    "D242 conformance module import fixture",
-                    "conformance/modules/fixtures/range/module.protos",
-                    "D242 conformance module import fixture",
-                    "conformance/modules/fixtures/reflective/Dynamic.protos",
-                    "D262-A conformance source import fixture");
+            Map.ofEntries(
+                    Map.entry(
+                            "conformance/actor/modules/workers.protos",
+                            "auxiliary module bound as tool002-actor:workers"),
+                    Map.entry(
+                            "conformance/group/modules/workers.protos",
+                            "auxiliary module bound as tool002-group:workers"),
+                    Map.entry(
+                            "conformance/library/toml/official/suite/Harness.protos",
+                            "auxiliary harness of the toml-official suite sources"),
+                    Map.entry(
+                            "conformance/modules/fixtures/cycle/a.protos",
+                            "D242 conformance module import fixture"),
+                    Map.entry(
+                            "conformance/modules/fixtures/cycle/b.protos",
+                            "D242 conformance module import fixture"),
+                    Map.entry(
+                            "conformance/modules/fixtures/failure/counter.protos",
+                            "D242 conformance module import fixture"),
+                    Map.entry(
+                            "conformance/modules/fixtures/failure/failing.protos",
+                            "D242 conformance module import fixture"),
+                    Map.entry(
+                            "conformance/modules/fixtures/range/Range.protos",
+                            "D242 conformance module import fixture"),
+                    Map.entry(
+                            "conformance/modules/fixtures/range/module.protos",
+                            "D242 conformance module import fixture"),
+                    Map.entry(
+                            "conformance/modules/fixtures/reference/Uninitialized.protos",
+                            "resolved module reference initialization fixture"),
+                    Map.entry(
+                            "conformance/modules/fixtures/reflective/Dynamic.protos",
+                            "D262-A conformance source import fixture"));
 
     /**
      * A JUnit-owned boundary: a source under {@code directory} that declares no suite-native

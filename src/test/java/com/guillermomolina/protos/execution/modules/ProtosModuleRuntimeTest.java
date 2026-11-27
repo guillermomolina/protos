@@ -36,7 +36,7 @@ class ProtosModuleRuntimeTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
 
     @Test
-    void coreImportFacilityIsFrozenWithOnlySourceBackedCall()
+    void coreImportFacilityIsFrozenWithExactlyThreeSourceBackedSelectors()
             throws Exception {
         MemoryResolver resolver = new MemoryResolver();
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
@@ -47,7 +47,7 @@ class ProtosModuleRuntimeTest {
 
         assertSame(ProtosObjectValue.rootObject(), facility.parent().orElseThrow());
         assertTrue(facility.isFrozen());
-        assertEquals(java.util.Set.of("call"), facility.localSlotsSnapshot().keySet());
+        assertEquals(java.util.Set.of("call", "resolve", "isReference"), facility.localSlotsSnapshot().keySet());
         ProtosClosureValue call =
                 assertInstanceOf(
                         ProtosClosureValue.class,
@@ -69,6 +69,103 @@ class ProtosModuleRuntimeTest {
                 () -> ProtosStandardImportProtocol.installImportFacility(supplied));
         assertTrue(supplied.isOpen());
         assertTrue(supplied.localSlotsSnapshot().isEmpty());
+    }
+
+    @Test
+    void importInstallationRejectsNativeMissingAndAdditionalSelectors() throws Exception {
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, new MemoryResolver());
+        ProtosObjectValue original = (ProtosObjectValue)
+                prelude.bindings().readLocalSlot("import").orElseThrow();
+        for (String selector : java.util.List.of("call", "resolve", "isReference")) {
+            ProtosClosureValue closure = (ProtosClosureValue)
+                    original.readLocalSlot(selector).orElseThrow();
+            assertTrue(closure.nativeBody().isEmpty());
+            assertNotNull(closure.definition());
+            assertTrue(closure.executionPlan().isPresent());
+            for (boolean missing : java.util.List.of(true, false)) {
+                ProtosObjectValue invalid = new ProtosObjectValue(ProtosObjectValue.rootObject());
+                original.localSlotsSnapshot().forEach((name, value) -> {
+                    if (!name.equals(selector)) invalid.createLocalSlot(name, value);
+                });
+                if (!missing) invalid.createLocalSlot(selector,
+                        ProtosClosureValue.nativeClosure((activation, supplied) -> true));
+                assertThrows(IllegalArgumentException.class,
+                        () -> ProtosStandardImportProtocol.installImportFacility(invalid));
+                assertTrue(invalid.isOpen());
+            }
+        }
+        ProtosObjectValue extra = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        original.localSlotsSnapshot().forEach(extra::createLocalSlot);
+        extra.createLocalSlot("unexpected", true);
+        assertThrows(IllegalArgumentException.class,
+                () -> ProtosStandardImportProtocol.installImportFacility(extra));
+    }
+
+    @Test
+    void referenceResolutionDoesNotLoadAndCanonicalLoadsDoNotResolveAgain() throws Exception {
+        MemoryResolver resolver = new MemoryResolver()
+                .source("source", "value: 7")
+                .publicModule("module", "secret: 9\nthis.value: 8")
+                .alias("alias", "source");
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+        ProtosActivation actor = prelude.newModuleActivation();
+        Object ref = ProtosTestExecutionSupport.evaluate("import.resolve(\"source\")", actor);
+        assertEquals(1, resolver.resolveCalls.get());
+        assertEquals(0, resolver.loads("source"));
+        assertTrue(actor.actorModuleState().lookup(ProtosModuleKey.source("source")).isEmpty());
+        actor.context().createLocalSlot("ref", ref);
+        assertProtosTrue("import.isReference(ref) && !import.isReference(ref {}) && !import.isReference({})", actor);
+        assertEquals(1, resolver.resolveCalls.get());
+        Object first = ProtosTestExecutionSupport.evaluate("import(ref)", actor);
+        assertSame(first, ProtosTestExecutionSupport.evaluate("import(ref)", actor));
+        assertEquals(1, resolver.resolveCalls.get());
+        assertEquals(1, resolver.loads("source"));
+        assertSame(first, ProtosTestExecutionSupport.evaluate("import(import.resolve(\"alias\"))", actor));
+        assertSame(first, ProtosTestExecutionSupport.evaluate("import(\"source\")", actor));
+        assertProtosTrue("import(ref).value == 7", actor);
+        assertProtosTrue("m: import(import.resolve(\"module\"))\n(m.value == 8) && !m.hasSlot(\"secret\") && (m !== import(ref))", actor);
+        assertThrows(ProtosSignalException.class,
+                () -> ProtosTestExecutionSupport.evaluate("import(ref {})", actor));
+    }
+
+    @Test
+    void referenceTargetsKeepKindsAndLoadingScopeAndDoNotPinSource() throws Exception {
+        MemoryResolver resolver = new MemoryResolver();
+        ProtosModuleKey moduleKey = ProtosModuleKey.module("same");
+        ProtosModuleKey sourceKey = ProtosModuleKey.source("same");
+        resolver.aliases.put("module", "module");
+        resolver.aliases.put("source", "source");
+        resolver.keys.put("module", moduleKey);
+        resolver.keys.put("source", sourceKey);
+        resolver.sources.put(moduleKey, "secret: 9\nthis.value: 1");
+        resolver.sources.put(sourceKey, "secret: 9\nvalue: 2");
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+        ProtosActivation actor = prelude.newModuleActivation();
+        assertProtosTrue("""
+                moduleRef: import.resolve("module")
+                sourceRef: import.resolve("source")
+                (import(moduleRef) !== import(sourceRef)) &&
+                    !import(moduleRef).hasSlot("secret") && import(sourceRef).hasSlot("secret")
+                """, actor);
+        assertTrue(actor.actorModuleState().lookup(moduleKey).isPresent());
+        assertTrue(actor.actorModuleState().lookup(sourceKey).isPresent());
+        int resolved = resolver.resolveCalls.get();
+        assertThrows(ProtosSignalException.class,
+                () -> ProtosTestExecutionSupport.evaluate("import.resolve({})", actor));
+        assertEquals(resolved, resolver.resolveCalls.get());
+        ProtosActivation foreignRuntime = new ProtosCoreBootstrap().bootstrap(CORE, resolver).newModuleActivation();
+        Object ref = ProtosTestExecutionSupport.evaluate("import.resolve(\"source\")", actor);
+        foreignRuntime.context().createLocalSlot("ref", ref);
+        assertThrows(ProtosSignalException.class,
+                () -> ProtosTestExecutionSupport.evaluate("import(ref)", foreignRuntime));
+        resolver.source("later", "Error().signal()");
+        actor.context().createLocalSlot("later", ProtosTestExecutionSupport.evaluate("import.resolve(\"later\")", actor));
+        resolver.sources.remove(ProtosModuleKey.source("later"));
+        assertThrows(ProtosSignalException.class,
+                () -> ProtosTestExecutionSupport.evaluate("import(later)", actor));
+        assertTrue(actor.actorModuleState().lookup(ProtosModuleKey.source("later")).isEmpty());
+        resolver.sources.put(ProtosModuleKey.source("later"), "updated: true");
+        assertProtosTrue("import(later).updated", actor);
     }
 
     @Test
