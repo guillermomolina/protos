@@ -679,6 +679,94 @@ final class ProtosPerf044MatchingInlineTest {
     }
 
     @Test
+    void literalMatchingReleasesSubjectAtItsLastUse() {
+        ProtosTestExecutionSupport.callEntered(() -> {
+            ProtosBytecodeRootNode root = lower(EXPLICIT);
+            List<Instruction> instructions =
+                    root.getBytecodeNode().getInstructionsAsList();
+            List<Instruction> region = directRegion(root);
+
+            List<Instruction> comparisons = region.stream()
+                    .filter(instruction -> instruction.getName()
+                            .startsWith("c.LiteralCaseLongEquals"))
+                    .toList();
+
+            assertEquals(3, comparisons.size());
+
+            List<Object> lastKeys = comparisons.stream()
+                    .map(instruction -> instruction.getArguments().stream()
+                            .filter(argument -> argument.getName().equals("lastKey"))
+                            .findFirst().orElseThrow().asConstant())
+                    .toList();
+
+            assertEquals(List.of(false, false, true), lastKeys);
+
+            List<Instruction> explicitSubjectClears = instructions.stream()
+                    .filter(instruction -> instruction.getName().startsWith("clear.local"))
+                    .filter(instruction -> instruction.getArguments().stream()
+                            .anyMatch(argument -> {
+                                int offset;
+                                if (argument.getKind()
+                                        == Instruction.Argument.Kind.LOCAL_OFFSET) {
+                                    offset = argument.asLocalOffset();
+                                } else if (argument.getKind()
+                                        == Instruction.Argument.Kind.LOCAL_INDEX) {
+                                    offset = argument.asLocalIndex();
+                                } else {
+                                    return false;
+                                }
+                                return "directCaseSubject".equals(
+                                        root.getBytecodeNode().getLocalName(
+                                                instruction.getBytecodeIndex(), offset));
+                            }))
+                    .toList();
+
+            assertEquals(1, explicitSubjectClears.size(),
+                    "Only the ordinary path explicitly clears the subject");
+
+            Instruction successfulBranch = region.stream()
+                    .filter(instruction -> instruction.getName().equals("branch"))
+                    .findFirst().orElseThrow();
+
+            int join = successfulBranch.getArguments().stream()
+                    .filter(argument -> argument.getKind()
+                            == Instruction.Argument.Kind.BYTECODE_INDEX)
+                    .findFirst().orElseThrow().asBytecodeIndex();
+
+            assertTrue(explicitSubjectClears.getFirst().getBytecodeIndex() < join,
+                    "The admitted path branches past ordinary subject cleanup");
+
+            return null;
+        });
+    }
+
+    @Test
+    void repeatedSubjectReleasePreservesAlternativesAndOrdinaryFallback() throws Exception {
+        assertSame(Boolean.TRUE, run("""
+                select: (subject) => match(subject) {
+                    0: 11
+                    1: 23
+                    2: 37
+                    Any: 53
+                }
+                first: select(0)
+                ordinary: select("other")
+                middle: select(1)
+                last: select(2)
+                missing: select(9)
+                repeated: select(0)
+                (first == 11) && (ordinary == 53) &&
+                    (middle == 23) && (last == 37) &&
+                    (missing == 53) && (repeated == 11)
+                """));
+
+        assertEquals(53L, run("7.caseOf(%{ Any: () => 53 })"));
+        assertEquals(11L, run("0.caseOf(%{ 0: () => 11 })"));
+        assertThrows(ProtosSignalException.class,
+                () -> run("7.caseOf(%{})"));
+    }
+
+    @Test
     void dynamicIntegerSubjectsSelectEveryPositionAndDefault() throws Exception {
         for (long value : new long[] {0, 1, 2, 9}) {
             long expected = switch ((int) value) { case 0 -> 11; case 1 -> 23; case 2 -> 37; default -> 53; };
