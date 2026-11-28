@@ -1,0 +1,77 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+XML: import("std:xml/xml")
+F: import("./Fixtures.protos")
+
+tests: [
+    Test("PI target termination and separated question-mark data preserve exact fields", () => {
+        cases: [
+            { source: "<?p?>"; data: "" },
+            { source: "<?p ?>"; data: "" },
+            { source: "<?p data?>"; data: "data" },
+            { source: "<?p ?data?>"; data: "?data" },
+            { source: "<?p ??data?>"; data: "??data" },
+            { source: "<?p data??>"; data: "data?" },
+            { source: "<?p ???>"; data: "??" }
+        ]
+        for(item in cases) {
+            pi: XML.parse(item.source.concat("<r/>")).prolog[0]
+            Assertions.require(pi.target == "p"); Assertions.require(pi.data == item.data)
+        }
+        true
+    }),
+    Test("declaration whitespace quoting and ordered optional fields are accepted", () => {
+        cases: [
+            { source: "<?xml version='1.0'?>"; encoding: null; standalone: null },
+            { source: "<?xml\tversion \n= \t\"1.0\" \r\n?>"; encoding: null; standalone: null },
+            { source: "<?xml version='1.0' encoding = \"Utf-8\"?>"; encoding: "Utf-8"; standalone: null },
+            { source: "<?xml version='1.0' standalone='yes'?>"; encoding: null; standalone: true },
+            { source: "<?xml version=\"1.0\" encoding='A_0.-' standalone = \"no\" ?>"; encoding: "A_0.-"; standalone: false }
+        ]
+        for(item in cases) {
+            declaration: XML.parse(item.source.concat("<r/>")).declaration
+            Assertions.require(declaration.version == "1.0")
+            Assertions.require(declaration.encoding == item.encoding)
+            Assertions.require(declaration.standalone === item.standalone)
+        }
+        true
+    }),
+    Test("both element spellings and mixed lexical forms share one tree contract", () => {
+        Assertions.require(F.equal(XML.parse("<r/>"), XML.parse("<r></r>")))
+        doc: XML.parse("<?xml version = '1.0' encoding='UTF-8' standalone='no'?> \n<!--before--><?p  data?><r a = '&quot;&apos;' b='&#9;&#xA;&#13;'>&amp;&lt;&gt;<![CDATA[<x>]]>tail</r><?after?>")
+        Assertions.require(doc.declaration.encoding == "UTF-8")
+        Assertions.require(doc.declaration.standalone === false)
+        Assertions.require(doc.prolog.size() == 2)
+        Assertions.require(doc.prolog[1].data == "data")
+        Assertions.require(doc.epilog.size() == 1)
+        Assertions.require(XML.attribute(doc.root, null, "a") == "\"'")
+        Assertions.require(XML.attribute(doc.root, null, "b") == "\t\n\r")
+        Assertions.require(doc.root.children.size() == 1)
+        Assertions.require(XML.textContent(doc.root) == "&<><x>tail")
+        true
+    }),
+    Test("empty CDATA adds no Text and xml-stylesheet remains inert PI", () => {
+        doc: XML.parse("<?xml-stylesheet href='unused'?><r><![CDATA[]]><a/>x<![CDATA[]]>y</r>")
+        Assertions.require(doc.declaration === null)
+        Assertions.require(doc.prolog[0].target == "xml-stylesheet")
+        Assertions.require(doc.root.children.size() == 2)
+        Assertions.require(doc.root.children[1].value == "xy")
+        true
+    })
+]
+tests.freeze()

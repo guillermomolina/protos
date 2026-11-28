@@ -203,6 +203,7 @@ final class ProtosTestToolTool011ProgressGroupingTest {
         paths.add("library/collections/tool011.protos");
         paths.add("library/collections/nested/tool011.protos");
         paths.add("library/json/tool011.protos");
+        paths.add("library/xml/tool011.protos");
         paths.add("library/text/tool011.protos");
         paths.add("library/test/nested/tool011.protos");
         paths.add("library/toml/tool011.protos");
@@ -421,7 +422,7 @@ final class ProtosTestToolTool011ProgressGroupingTest {
             return "conformance/standard-library/collections";
         }
         for (String data : List.of(
-                "library/json", "library/text", "library/test", "library/runtime",
+                "library/json", "library/xml", "library/text", "library/test", "library/runtime",
                 "library/inspect")) {
             if (directory.equals(data) || directory.startsWith(data + "/")) {
                 return "conformance/standard-library/data-text-test";

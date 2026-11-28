@@ -24,6 +24,7 @@ ArrayAccumulator: import("./ArrayAccumulator.protos")
 canonicalOwners: Array(
     "collections",
     "json",
+    "xml",
     "text",
     "test",
     "runtime",

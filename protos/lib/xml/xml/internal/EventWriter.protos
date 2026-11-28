@@ -1,0 +1,97 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! One event writer validates the entire contribution before invoking its consumer.
+create: (errors, budgeting, records, namespaces, escaping) => {
+    {
+        eventWriter: (emit, limits: null) => {
+            bounds: budgeting.snapshot(limits)
+            lifecycle: "OPEN"; phase: "before"; eligible: true
+            stack: null; depth: 0; nodes: 0; produced: 0; textRun: false
+            scope: namespaces.scope()
+            writer: null
+            ready: () => { if(lifecycle != "OPEN") { errors.lifecycle() } }
+            writer = {
+                feed: (event) => {
+                    ready(); records.event(event)
+                    lifecycle = "ACTIVE"
+                    completed: false
+                    (() => {
+                        kind: event.kind
+                        undo: null
+                        node: false
+                        if(kind == "declaration") {
+                            if(!eligible || (phase != "before")) { errors.syntax(null) }
+                        }
+                        if(kind == "startElement") {
+                            if(phase == "after") { errors.syntax(null) }
+                            undo = scope.enter(event.namespaceDeclarations, null)
+                            scope.checkName(event.name, false, null)
+                            scope.attributes(event.attributes, null)
+                            budgeting.check(bounds, "maxAttributesPerElement", event.attributes.size(), null)
+                            budgeting.check(bounds, "maxNamespaceDeclarationsPerElement", event.namespaceDeclarations.size(), null)
+                            budgeting.check(bounds, "maxDepth", depth + 1, null)
+                            node = true
+                        }
+                        if(kind == "endElement") {
+                            if(stack === null) { errors.syntax(null) }
+                            scope.checkName(event.name, false, null)
+                            if((scope.lexical(event.name) != stack.lexical) || (event.name.namespaceURI != stack.uri)) { errors.namespace(null) }
+                        }
+                        if(kind == "text") {
+                            if(phase != "inside") { errors.syntax(null) }
+                            node = !textRun
+                        }
+                        if((kind == "comment") || (kind == "processingInstruction")) { node = true }
+                        if(node) { budgeting.check(bounds, "maxNodes", nodes + 1, null) }
+                        contribution: escaping.render(event, bounds, produced, scope.slotValue("lexical"))
+                        // Retain stable scalars rather than the caller's mutable event graph.
+                        if(kind == "startElement") {
+                            spelling: scope.lexical(event.name); namespaceURI: event.name.namespaceURI
+                            stack = { lexical: spelling; uri: namespaceURI; restoration: undo; next: stack }
+                            depth = depth + 1; phase = "inside"
+                        }
+                        if(kind == "endElement") {
+                            scope.leave(stack.restoration); stack = stack.next; depth = depth - 1
+                            if(depth == 0) { phase = "after" }
+                        }
+                        if(node) { nodes = nodes + 1 }
+                        textRun = kind == "text"; eligible = false
+                        produced = produced + contribution.size()
+                        emit(contribution)
+                        completed = true
+                    }).ensure(() => {
+                        lifecycle = "FAILED"
+                        if(completed) { lifecycle = "OPEN" }
+                    })
+                    writer
+                }
+                finish: () => {
+                    ready(); lifecycle = "ACTIVE"
+                    completed: false
+                    (() => {
+                        if((phase != "after") || (stack !== null)) { errors.syntax(null) }
+                        completed = true
+                    }).ensure(() => {
+                        lifecycle = "FAILED"
+                        if(completed) { lifecycle = "FINISHED" }
+                    })
+                    writer
+                }
+            }
+            writer
+        }
+    }
+}

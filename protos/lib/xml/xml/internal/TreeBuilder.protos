@@ -1,0 +1,62 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Tree materialization consumes only validated events from EventParser.
+Builders: import("./Builders.protos")
+create: (records) => {
+    {
+        builder: () => {
+            declaration: null
+            before: Builders.array(); after: Builders.array()
+            root: null; stack: null
+            flush: () => {
+                if((stack !== null) && (stack.text !== null)) {
+                    Builders.push(stack.children, records.makeValue("text", Builders.string(stack.text)))
+                    stack.text = null
+                }
+            }
+            attach: (node) => {
+                if(stack !== null) { Builders.push(stack.children, node) }
+                if(stack === null) {
+                    if(root === null) { Builders.push(before, node) }
+                    if(root !== null) { Builders.push(after, node) }
+                }
+            }
+            {
+                accept: (event) => {
+                    kind: event.kind
+                    if(kind == "text") {
+                        if(stack.text === null) { stack.text = Builders.text() }
+                        Builders.append(stack.text, event.value)
+                    }
+                    if(kind != "text") { flush() }
+                    if(kind == "declaration") { declaration = event }
+                    if(kind == "startElement") {
+                        stack = { start: event; children: Builders.array(); text: null; next: stack }
+                    }
+                    if(kind == "endElement") {
+                        start: stack.start
+                        node: records.makeElement(start.name, start.attributes, start.namespaceDeclarations, Builders.finish(stack.children))
+                        stack = stack.next
+                        if(stack === null) { root = node }
+                        if(stack !== null) { Builders.push(stack.children, node) }
+                    }
+                    if((kind == "comment") || (kind == "processingInstruction")) { attach(event) }
+                }
+                document: () => { records.makeDocument(declaration, Builders.finish(before), root, Builders.finish(after)) }
+            }
+        }
+    }
+}

@@ -1,0 +1,137 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+XML: import("std:xml/xml")
+F: import("./Fixtures.protos")
+
+tests: [
+    Test("parser argument rejection leaves OPEN and lifecycle checks take precedence", () => {
+        parser: XML.eventParser((event) => null)
+        F.error("argument", () => { parser.feed(3) })
+        Assertions.require(parser.feed("") === parser)
+        Assertions.require(parser.feed("<r/>") === parser)
+        Assertions.require(parser.finish() === parser)
+        a: F.error("lifecycle", () => { parser.feed(3) })
+        b: F.error("lifecycle", () => { parser.finish() })
+        Assertions.require(a !== b)
+        failed: XML.eventParser((event) => null)
+        Assertions.signals(XML.XmlError, () => { failed.finish() })
+        F.error("lifecycle", () => { failed.feed("") })
+        true
+    }),
+    Test("caught reentry continues the original parser and writer operations", () => {
+        calls: 0; parser: null
+        parser = XML.eventParser((event) => {
+            F.error("lifecycle", () => { parser.feed(null) })
+            F.error("lifecycle", () => { parser.finish() }); calls = calls + 1
+        })
+        parser.feed("<r/>"); parser.finish(); Assertions.require(calls == 2)
+        writer: null
+        writer = XML.eventWriter((text) => { F.error("lifecycle", () => { writer.feed(null) }) })
+        F.error("argument", () => { writer.feed(null) })
+        expandedName: { namespaceURI: null; localName: "r"; prefix: null }
+        writer.feed({ kind: "startElement"; name: expandedName; attributes: []; namespaceDeclarations: [] })
+        writer.feed({ kind: "endElement"; name: expandedName }); Assertions.require(writer.finish() === writer)
+        F.error("lifecycle", () => { writer.feed(null) })
+        true
+    }),
+    Test("escaping callback errors retain exact identity and make operations terminal", () => {
+        original: Error {}
+        parser: XML.eventParser((event) => { original.signal() })
+        failure: Assertions.signals(Error, () => { parser.feed("<r/>") })
+        Assertions.require(failure === original)
+        F.error("lifecycle", () => { parser.finish() })
+        writer: XML.eventWriter((text) => { original.signal() })
+        failure = Assertions.signals(Error, () => { writer.feed({ kind: "comment"; value: "x" }) })
+        Assertions.require(failure === original)
+        F.error("lifecycle", () => { writer.finish() })
+        true
+    }),
+    Test("callback Future results are ignored and independent parsers interleave", () => {
+        calls: 0
+        first: XML.eventParser((event) => { calls = calls + 1; Future.all() })
+        second: XML.eventParser((event) => null)
+        first.feed("<r>"); second.feed("<s/>"); first.feed("x</r>")
+        second.finish(); first.finish(); Assertions.require(calls == 3)
+        true
+    }),
+    Test("callback suspension retains exclusivity without replay", () => {
+        calls: 0; parser: null
+        parser = XML.eventParser((event) => {
+            calls = calls + 1
+            dependency: Future.all().then((values) => {
+                F.error("lifecycle", () => { parser.finish() }); 7
+            })
+            Assertions.require(dependency.value() == 7)
+        })
+        running: (() => { parser.feed("<r/>"); parser.finish(); true }).future()
+        Assertions.require(running.value() === true); Assertions.require(calls == 2)
+        true
+    }),
+    Test("callback non-local return leaves the parser terminal", () => {
+        parser: null
+        Assertions.require(F.abandon((created) => { parser = created }) == 41)
+        F.error("lifecycle", () => { parser.feed("") })
+        true
+    }),
+    Test("writer suspension and ignored Future returns retain ordinary callback semantics", () => {
+        calls: 0; writer: null
+        writer = XML.eventWriter((text) => {
+            calls = calls + 1
+            dependency: Future.all().then((values) => {
+                F.error("lifecycle", () => { writer.finish() }); 7
+            })
+            Assertions.require(dependency.value() == 7)
+            Future.all()
+        })
+        running: (() => {
+            for(event in F.collect("<r/>", [])) { writer.feed(event) }
+            writer.finish(); true
+        }).future()
+        Assertions.require(running.value() === true); Assertions.require(calls == 2)
+        true
+    }),
+    Test("writer callback non-local return leaves it terminal", () => {
+        writer: null
+        Assertions.require(F.abandonWriter((created) => { writer = created }) == 42)
+        F.error("lifecycle", () => { writer.finish() })
+        true
+    }),
+    Test("cooperative cancellation at writer callback suspension leaves it terminal", () => {
+        writer: null; running: null
+        running = (() => {
+            dependency: Future.all().then((values) => 7)
+            writer = XML.eventWriter((text) => { running.cancel(); dependency.value() })
+            writer.feed({ kind: "comment"; value: "x" })
+        }).future()
+        Assertions.signals(Cancelled, () => { running.value() })
+        F.error("lifecycle", () => { writer.finish() })
+        true
+    }),
+    Test("cooperative cancellation at callback suspension leaves parser terminal", () => {
+        parser: null; running: null
+        running = (() => {
+            dependency: Future.all().then((values) => 7)
+            parser = XML.eventParser((event) => { running.cancel(); dependency.value() })
+            parser.feed("<r/>")
+        }).future()
+        Assertions.signals(Cancelled, () => { running.value() })
+        F.error("lifecycle", () => { parser.finish() })
+        true
+    })
+]
+tests.freeze()

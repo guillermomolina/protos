@@ -1,0 +1,74 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+XML: import("std:xml/xml")
+F: import("./Fixtures.protos")
+
+tests: [
+    Test("every reachable parser record and Array is individually frozen", () => {
+        document: XML.parse("<?xml version='1.0'?><!--p--><r xmlns:p='u' p:a='v'>text<a/><?p data?></r>")
+        work: { node: document; next: null }
+        while(work !== null) {
+            item: work.node; work = work.next
+            if(Array.recognizes(item)) {
+                Assertions.signals(Error, () => { item.extra: true })
+                for(child in item) { work = { node: child; next: work } }
+                if(item.size() > 0) { Assertions.signals(Error, () => { item[0] = null }) }
+            }
+            if(!Array.recognizes(item) && !String.recognizes(item) && (item !== null) && (item !== true) && (item !== false)) {
+                Assertions.require(item.parent() === Object)
+                Assertions.signals(Error, () => { item.extra: true })
+                for(key in item.slotNames()) {
+                    child: item.slotValue(key); work = { node: child; next: work }
+                }
+            }
+        }
+        other: XML.parse("<r/>")
+        Assertions.require(document !== other)
+        Assertions.require(document.root.children !== other.root.children)
+        true
+    }),
+    Test("retained events stay stable and queries return exact existing references", () => {
+        saved: null
+        parser: XML.eventParser((event) => { if(saved === null) { saved = event } })
+        parser.feed("<r xmlns:p='u' p:a='v'>")
+        parser.feed("<p:a/></r>"); parser.finish()
+        Assertions.require(saved.name.localName == "r")
+        Assertions.require(saved.attributes[0].value == "v")
+        Assertions.signals(Error, () => { saved.name.localName = "other" })
+        Assertions.signals(Error, () => { saved.attributes[0].value = "other" })
+        Assertions.signals(Error, () => { saved.namespaceDeclarations[0].namespaceURI = "other" })
+        document: XML.parse("<r><a/></r>")
+        result: XML.elements(document.root, null, "a")
+        Assertions.require(result[0] === document.root.children[0])
+        result.extra: true
+        true
+    }),
+    Test("XML ordinary frozen graphs cross existing Actor request boundaries", () => {
+        document: XML.parse("<r xmlns='u'><a>😀</a></r>")
+        worker: Actor.spawn("./Transfer.protos", "echo")
+        copy: null
+        (() => { copy = worker.request("echo", document).value() }).ensure(() => { worker.stop() })
+        Assertions.require(copy !== document)
+        Assertions.require(copy.parent() === Object)
+        Assertions.require(F.equal(copy, document))
+        Assertions.require(XML.textContent(copy.root) == "😀")
+        Assertions.signals(Error, () => { copy.root.name.localName = "changed" })
+        true
+    })
+]
+tests.freeze()

@@ -1,0 +1,76 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Incremental one-pass references never re-enter the markup grammar.
+create: (errors, characters, limits) => {
+    {
+        decoder: (bounds, opening) => {
+            length: 1
+            mode: "first"
+            radix: 10
+            value: 0
+            digits: 0
+            named: ""
+            {
+                charge: (position) => { length = length + 1; limits.check(bounds, "maxTokenScalars", length, position) }
+                accept: (c) => {
+                    result: null
+                    handled: false
+                    if(c == 59) {
+                        handled = true
+                        if(mode == "named") {
+                            if(named == "amp") { result = 38 }
+                            if(named == "lt") { result = 60 }
+                            if(named == "gt") { result = 62 }
+                            if(named == "apos") { result = 39 }
+                            if(named == "quot") { result = 34 }
+                            if(result === null) { errors.syntax(opening) }
+                        }
+                        if(mode != "named") {
+                            if((digits == 0) || !characters.char(value)) { errors.syntax(opening) }
+                            result = value
+                        }
+                    }
+                    if(!handled && (mode == "first")) {
+                        if(c == 35) { mode = "numeric"; handled = true }
+                        if(c != 35) { mode = "named" }
+                    }
+                    if(!handled && (mode == "named")) {
+                        handled = true
+                        // All admitted names are at most four ASCII letters.
+                        if((named.size() >= 4) || !(((c >= 65) && (c <= 90)) || ((c >= 97) && (c <= 122)))) { errors.syntax(opening) }
+                        limits.check(bounds, "maxNameScalars", named.size() + 1, opening + length - 1)
+                        letters: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+                        index: c - 65
+                        if(c >= 97) { index = c - 97 + 26 }
+                        named = named.concat(letters[index])
+                    }
+                    if(!handled && (mode == "numeric")) {
+                        mode = "digits"
+                        if(c == 120) { radix = 16; handled = true }
+                    }
+                    if(!handled) {
+                        digit: characters.digit(c, radix)
+                        if(digit < 0) { errors.syntax(opening) }
+                        if(value > (1114111 - digit).div(radix)) { errors.syntax(opening) }
+                        value = value * radix + digit
+                        digits = digits + 1
+                    }
+                    result
+                }
+            }
+        }
+    }
+}

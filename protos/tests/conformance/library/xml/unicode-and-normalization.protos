@@ -1,0 +1,62 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+XML: import("std:xml/xml")
+F: import("./Fixtures.protos")
+
+tests: [
+    Test("scalar indexing and physical line normalization survive every CRLF split", () => {
+        source: "<r a='\t\r\n&#9;&#10;&#13;'>😀\r\nA\rB\u{feff}</r>"
+        doc: XML.parse(source)
+        Assertions.require(XML.attribute(doc.root, null, "a") == "  \t\n\r")
+        Assertions.require(XML.textContent(doc.root) == "😀\nA\nB\u{feff}")
+        expected: F.collect(source, [])
+        i: 0
+        while(i <= source.size()) { Assertions.require(F.equal(expected, F.collect(source, [i]))); i = i + 1 }
+        F.error("syntax", () => { XML.parse("\u{feff}<r/>") }, 0)
+        F.error("syntax", () => { XML.parse("<r>😀\u{1}</r>") }, 4)
+        F.error("syntax", () => { XML.parse("<r>\r\n😀\u{1}</r>") }, 6)
+        true
+    }),
+    Test("XML name intervals admit boundary scalars and reject holes", () => {
+        for(expandedName in ["_", "A", "z", "À", "Ö", "Ø", "ö", "ø", "\u{2ff}", "\u{370}", "\u{37d}", "\u{37f}", "\u{1fff}", "\u{200c}", "\u{200d}", "\u{2070}", "\u{218f}", "\u{2c00}", "\u{2fef}", "\u{3001}", "\u{d7ff}", "\u{f900}", "\u{fdcf}", "\u{fdf0}", "\u{fffd}", "\u{10000}", "\u{effff}", "a\u{b7}", "a\u{300}"]) {
+            Assertions.require(XML.parse("<".concat(expandedName, "/>")).root.name.localName == expandedName)
+        }
+        for(expandedName in ["0", "-", ".", "\u{b7}", "×", "÷", "\u{37e}", "\u{200b}", "\u{f0000}"]) {
+            Assertions.signals(XML.XmlError, () => { XML.parse("<".concat(expandedName, "/>")) })
+        }
+        for(character in ["\u{0}", "\u{8}", "\u{b}", "\u{c}", "\u{1f}", "\u{fffe}", "\u{ffff}"]) {
+            F.error("syntax", () => { XML.parse("<r>".concat(character, "</r>")) }, 3)
+        }
+        Assertions.require(XML.textContent(XML.parse("<r>&#x10FFFF;&#x10000;</r>").root) == "\u{10ffff}\u{10000}")
+        true
+    }),
+    Test("XML Char repertoire boundaries apply equally to literal and referenced scalars", () => {
+        for(character in ["\t", "\n", " ", "\u{d7ff}", "\u{e000}", "\u{fffd}", "\u{10000}", "\u{10ffff}"]) {
+            Assertions.require(XML.textContent(XML.parse("<r>".concat(character, "</r>")).root) == character)
+        }
+        for(reference in ["&#xD800;", "&#xDFFF;", "&#xFFFE;", "&#xFFFF;", "&#x110000;", "&#-1;", "&#x;", "&#xG;"]) {
+            F.error("syntax", () => { XML.parse("<r>".concat(reference, "</r>")) }, 3)
+        }
+        true
+    }),
+    Test("replacement text is interpreted once and literal forbidden sequences stay distinct", () => {
+        Assertions.require(XML.textContent(XML.parse("<r>&amp;lt;&lt;x&gt;]]&gt;<![CDATA[]]>></r>").root) == "&lt;<x>]]>>")
+        true
+    })
+]
+tests.freeze()

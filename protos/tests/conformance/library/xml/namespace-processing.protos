@@ -1,0 +1,75 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+XML: import("std:xml/xml")
+F: import("./Fixtures.protos")
+
+tests: [
+    Test("lexical completion precedes duplicate attribute and namespace admission", () => {
+        for(prefix in ["<r a='' a=''", "<r xmlns:p='u' xmlns:p='v'"]) {
+            parser: XML.eventParser((event) => null)
+            parser.feed(prefix)
+            F.error("syntax", () => { parser.finish() }, prefix.size())
+            F.error("syntax", () => { XML.parse(prefix.concat("@>")) }, 0)
+            F.error("namespace", () => { XML.parse(prefix.concat("/>")) }, 0)
+            F.error("namespace", () => { XML.parse(prefix.concat("/>"), { maxAttributesPerElement: 1; maxNamespaceDeclarationsPerElement: 1 }) }, 0)
+            F.error("limit", () => { XML.parse(prefix.concat(" />"), { maxDocumentScalars: prefix.size() }) }, prefix.size(), "maxDocumentScalars")
+        }
+        true
+    }),
+    Test("QName namespace failures wait for complete start and end tags", () => {
+        for(prefix in ["<a:b:c ", "<r a:b:c=''", "<r></a:b:c "]) {
+            parser: XML.eventParser((event) => null)
+            parser.feed(prefix)
+            F.error("syntax", () => { parser.finish() }, prefix.size())
+        }
+        F.error("syntax", () => { XML.parse("<a:b:c @>") }, 0)
+        F.error("namespace", () => { XML.parse("<a:b:c/>") }, 0)
+        F.error("namespace", () => { XML.parse("<r></a:b:c>") }, 3)
+        F.error("syntax", () => { XML.parse("<r></a:b:c @>") }, 3)
+        true
+    }),
+    Test("same-tag declarations precede expansion and nested scope restores for siblings", () => {
+        doc: XML.parse("<p:r p:a='1' xmlns:p='urn:outer' xmlns='urn:default'><p:c xmlns:p='urn:inner'/><p:c/><c xmlns='' id=''/></p:r>")
+        elementRoot: doc.root
+        Assertions.require(elementRoot.name.namespaceURI == "urn:outer")
+        Assertions.require(elementRoot.attributes[0].name.namespaceURI == "urn:outer")
+        Assertions.require(elementRoot.children[0].name.namespaceURI == "urn:inner")
+        Assertions.require(elementRoot.children[1].name.namespaceURI == "urn:outer")
+        Assertions.require(elementRoot.children[2].name.namespaceURI === null)
+        Assertions.require(elementRoot.children[2].attributes[0].name.namespaceURI === null)
+        Assertions.require(elementRoot.namespaceDeclarations.size() == 2)
+        Assertions.require(XML.parse("<r xmlns:xml='http://www.w3.org/XML/1998/namespace' xml:lang='en'/>").root.attributes[0].name.prefix == "xml")
+        true
+    }),
+    Test("reserved bindings, QNames and lexical and expanded duplicates are rejected", () => {
+        for(source in ["<p:r/>", "<a:b:c/>", "<:r/>", "<r a='1' a='2'/>", "<r xmlns:p='a' xmlns:p='b'/>", "<r xmlns:p='u' xmlns:q='u' p:a='1' q:a='2'/>", "<r xmlns:p=''/>", "<r xmlns:xml='wrong'/>", "<r xmlns='http://www.w3.org/XML/1998/namespace'/>", "<r xmlns:p='http://www.w3.org/XML/1998/namespace'/>", "<r xmlns:xmlns='u'/>", "<r xmlns='http://www.w3.org/2000/xmlns/'/>", "<xmlns:r/>"]) {
+            F.error("namespace", () => { XML.parse(source) }, 0)
+        }
+        source: "<p:r xmlns:p='u' xmlns:q='u'></q:r>"
+        F.error("syntax", () => { XML.parse(source) }, source.size() - 6)
+        true
+    }),
+    Test("URI spelling stays exact and nonreserved xml-like prefixes remain legal", () => {
+        elementRoot: XML.parse("<r xmlns:p='URN:a' xmlns:q='urn:a' xmlns:xmlThing='relative'><p:a/><q:a/><xmlThing:a/></r>").root
+        Assertions.require(XML.elements(elementRoot, "URN:a", "a").size() == 1)
+        Assertions.require(XML.elements(elementRoot, "urn:a", "a").size() == 1)
+        Assertions.require(elementRoot.children[2].name.namespaceURI == "relative")
+        true
+    })
+]
+tests.freeze()

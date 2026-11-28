@@ -1,0 +1,74 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+XML: import("std:xml/xml")
+F: import("./Fixtures.protos")
+
+tests: [
+    Test("PI data requires a whitespace separator after the target", () => {
+        for(source in ["<?p?data?><r/>", "<?p??><r/>", "<?p? ?><r/>"]) {
+            F.error("syntax", () => { XML.parse(source) }, 0)
+        }
+        true
+    }),
+    Test("declaration lexical impossibilities fail before consuming unrelated later content", () => {
+        for(prefix in [
+            "<?xml encoding", "<?xml versX", "<?xml version!", "<?xml version=1",
+            "<?xml version='x", "<?xml version='1.x", "<?xml version='1.'",
+            "<?xml version='1.0'x", "<?xml version='1.0' unknown",
+            "<?xml version='1.0' version", "<?xml version='1.0' encoding='9",
+            "<?xml version='1.0' encoding='UTF 8", "<?xml version='1.0' standalone='m",
+            "<?xml version='1.0' standalone='ye'", "<?xml version='1.0' standalone='no' encoding"
+        ]) {
+            source: prefix.concat(F.repeat("x", 80))
+            F.error("syntax", () => { XML.parse(source, { maxTokenScalars: prefix.size() + 1 }) }, 0)
+        }
+        F.error("syntax", () => { XML.parse("<?xml version='1.1x'?><r/>") }, 0)
+        F.error("unsupported", () => { XML.parse("<?xml version='1.10'?><r/>") }, 0)
+        true
+    }),
+    Test("valid unfinished declaration prefixes stay resumable until semantic EOF", () => {
+        for(source in ["<?xml ", "<?xml ver", "<?xml version ", "<?xml version=", "<?xml version='1.", "<?xml version='1.0' enc", "<?xml version='1.0' encoding='UTF-", "<?xml version='1.0' standalone='ye", "<?xml version='1.0'?" ]) {
+            parser: XML.eventParser((event) => null)
+            parser.feed(source)
+            F.error("syntax", () => { parser.finish() }, source.size())
+        }
+        true
+    }),
+    Test("malformed documents reject syntax without a partial successful document", () => {
+        for(source in ["", " ", "<r/><s/>", "<r></s>", "<r a=x/>", "<r a='x'b='y'/>", "<r>&amp</r>", "<r>&unknown;</r>", "<r>&#;</r>", "<r>&#X41;</r>", "<r>&#x110000;</r>", "<r>&#0;</r>", "<r>]]></r>", "<!--a--b--><r/>", "<!--a---><r/>", "<?XML version='1.0'?><r/>", "<?p:x?><r/>", " <?xml version='1.0'?><r/>", "<?xml encoding='UTF-8' version='1.0'?><r/>", "<?xml version='1.0' standalone='maybe'?><r/>"] ) {
+            failure: Assertions.signals(XML.XmlError, () => { XML.parse(source) })
+            Assertions.require(failure.kind == "syntax")
+        }
+        true
+    }),
+    Test("unsupported XML profile and anchored reference and tag failures", () => {
+        F.error("unsupported", () => { XML.parse("<!DOCTYPE r><r/>") }, 0)
+        F.error("unsupported", () => { XML.parse("<?xml version='1.1'?><r/>") }, 0)
+        F.error("syntax", () => { XML.parse("<r>&bogus;</r>") }, 3)
+        F.error("syntax", () => { XML.parse("<r></s>") }, 3)
+        F.error("syntax", () => { XML.parse("<r a='<x'/>") }, 0)
+        true
+    }),
+    Test("all unfinished lexical states diagnose original EOF length", () => {
+        for(source in ["<", "<r", "<r ", "<r a", "<r a=", "<r a='", "<r/", "<r>&amp", "<r><!--x", "<r><![CDATA[x", "<r><?p data", "<r></r", "<?xml version='1.0'"]) {
+            F.error("syntax", () => { XML.parse(source) }, source.size())
+        }
+        true
+    })
+]
+tests.freeze()

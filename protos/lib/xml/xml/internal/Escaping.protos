@@ -1,0 +1,120 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Bounded per-event lexical output; internal UTF-8 bytes never count as scalars.
+Builders: import("./Builders.protos")
+create: (errors, characters, limits) => {
+    {
+        render: (event, bounds, produced, lexical) => {
+            output: Builders.text()
+            count: 0
+            token: event.kind != "text"
+            append: (text) => {
+                for(character in text) {
+                    limits.check(bounds, "maxDocumentScalars", produced + count + 1, null)
+                    if(token) { limits.check(bounds, "maxTokenScalars", count + 1, null) }
+                    Builders.append(output, character); count = count + 1
+                }
+            }
+            name: (expanded) => {
+                spelling: lexical(expanded)
+                limits.check(bounds, "maxNameScalars", spelling.size(), null)
+                append(spelling)
+            }
+            escaped: (text, attribute) => {
+                for(character in text) {
+                    c: characters.scalar(character)
+                    if(!characters.char(c)) { errors.syntax(null) }
+                    replacement: character
+                    if(c == 38) { replacement = "&amp;" }
+                    if(c == 60) { replacement = "&lt;" }
+                    if(c == 62) { replacement = "&gt;" }
+                    if(c == 13) { replacement = "&#xD;" }
+                    if(attribute && (c == 34)) { replacement = "&quot;" }
+                    if(attribute && (c == 9)) { replacement = "&#x9;" }
+                    if(attribute && (c == 10)) { replacement = "&#xA;" }
+                    if(replacement != character) {
+                        limits.check(bounds, "maxTokenScalars", replacement.size(), null)
+                        if((c == 38) || (c == 60) || (c == 62) || (attribute && (c == 34))) {
+                            limits.check(bounds, "maxNameScalars", replacement.size() - 2, null)
+                        }
+                    }
+                    append(replacement)
+                }
+            }
+            kind: event.kind
+            if(kind == "text") { escaped(event.value, false) }
+            if(kind == "startElement") {
+                append("<"); name(event.name)
+                for(binding in event.namespaceDeclarations) {
+                    spelling: "xmlns"
+                    if(binding.prefix !== null) { spelling = spelling.concat(":", binding.prefix) }
+                    limits.check(bounds, "maxNameScalars", spelling.size(), null)
+                    append(" "); append(spelling); append("=\"")
+                    value: ""
+                    if(binding.namespaceURI !== null) { value = binding.namespaceURI }
+                    limits.check(bounds, "maxAttributeScalars", value.size(), null)
+                    escaped(value, true); append("\"")
+                }
+                for(attribute in event.attributes) {
+                    limits.check(bounds, "maxAttributeScalars", attribute.value.size(), null)
+                    append(" "); name(attribute.name); append("=\"")
+                    escaped(attribute.value, true); append("\"")
+                }
+                append(">")
+            }
+            if(kind == "endElement") { append("</"); name(event.name); append(">") }
+            if(kind == "comment") {
+                append("<!--")
+                previous: false
+                for(character in event.value) {
+                    c: characters.scalar(character)
+                    if(!characters.char(c) || (c == 13) || (previous && (c == 45))) { errors.syntax(null) }
+                    append(character); previous = c == 45
+                }
+                if(previous) { errors.syntax(null) }
+                append("-->")
+            }
+            if(kind == "processingInstruction") {
+                if(!characters.ncName(event.target) || characters.reservedTarget(event.target)) { errors.syntax(null) }
+                limits.check(bounds, "maxNameScalars", event.target.size(), null)
+                append("<?"); append(event.target)
+                if(event.data.size() > 0) {
+                    if(characters.space(characters.scalar(event.data[0]))) { errors.syntax(null) }
+                    append(" ")
+                }
+                previous: false
+                for(character in event.data) {
+                    c: characters.scalar(character)
+                    if(!characters.char(c) || (c == 13) || (previous && (c == 62))) { errors.syntax(null) }
+                    append(character); previous = c == 63
+                }
+                append("?>")
+            }
+            if(kind == "declaration") {
+                limits.check(bounds, "maxNameScalars", 3, null)
+                append("<?xml version=\"1.0\"")
+                if(event.standalone !== null) {
+                    append(" standalone=\"")
+                    if(event.standalone === true) { append("yes") }
+                    if(event.standalone === false) { append("no") }
+                    append("\"")
+                }
+                append("?>")
+            }
+            Builders.string(output)
+        }
+    }
+}

@@ -1,0 +1,47 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+XML: import("std:xml/xml")
+F: import("./Fixtures.protos")
+
+// These fixtures are original synthetic documents, not captured service responses.
+tests: [
+    Test("synthetic Atom is queried by expanded names and ordinary attributes", () => {
+        atom: "http://www.w3.org/2005/Atom"
+        document: XML.parse("<feed xmlns='http://www.w3.org/2005/Atom'><title>News</title><entry><title>A &amp; B</title><author><name>Ada</name></author><link href='https://example.invalid/a'/></entry></feed>")
+        entry: XML.firstElement(document.root, atom, "entry")
+        Assertions.require(XML.elements(document.root, atom, "entry").size() == 1)
+        Assertions.require(XML.textContent(XML.firstElement(entry, atom, "title")) == "A & B")
+        author: XML.firstElement(entry, atom, "author")
+        Assertions.require(XML.textContent(XML.firstElement(author, atom, "name")) == "Ada")
+        Assertions.require(XML.attribute(XML.firstElement(entry, atom, "link"), null, "href") == "https://example.invalid/a")
+        true
+    }),
+    Test("synthetic sitemap generation preserves namespaces and escaped URL text", () => {
+        uri: "http://www.sitemaps.org/schemas/sitemap/0.9"
+        expandedName: (local) => { { namespaceURI: uri; localName: local; prefix: null } }
+        location: { kind: "element"; name: expandedName("loc"); attributes: []; namespaceDeclarations: []; children: [{ kind: "text"; value: "https://example.invalid/?a=1&b=2" }] }
+        url: { kind: "element"; name: expandedName("url"); attributes: []; namespaceDeclarations: []; children: [location] }
+        elementRoot: { kind: "element"; name: expandedName("urlset"); attributes: []; namespaceDeclarations: [{ prefix: null; namespaceURI: uri }]; children: [url] }
+        document: { kind: "document"; declaration: null; prolog: []; root: elementRoot; epilog: [] }
+        encoded: XML.encode(document)
+        Assertions.require(encoded == "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\"><url><loc>https://example.invalid/?a=1&amp;b=2</loc></url></urlset>")
+        Assertions.require(F.equal(XML.parse(encoded), document))
+        true
+    })
+]
+tests.freeze()

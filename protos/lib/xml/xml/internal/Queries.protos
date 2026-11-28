@@ -1,0 +1,85 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Direct expanded-name selection and iterative ancestor-aware descendant text.
+Builders: import("./Builders.protos")
+create: (errors, characters, records) => {
+    query: (element, namespaceURI, localName) => {
+        records.element(element); records.optionalString(namespaceURI)
+        if(!characters.ncName(localName)) { errors.argument() }
+    }
+    matches: (expanded, namespaceURI, localName) => { records.name(expanded); (expanded.namespaceURI == namespaceURI) && (expanded.localName == localName) }
+    childKind: (child) => {
+        if(!child.hasSlot("kind") || !String.recognizes(child.kind)) { errors.argument() }
+        if(child.kind == "element") { records.element(child) }
+        if(child.kind != "element") {
+            if((child.kind != "text") && (child.kind != "comment") && (child.kind != "processingInstruction")) { errors.argument() }
+            records.event(child)
+        }
+        child.kind
+    }
+    elements: (element, namespaceURI, localName) => {
+        query(element, namespaceURI, localName)
+        found: Builders.array()
+        for(child in element.children) {
+            if((childKind(child) == "element") && matches(child.name, namespaceURI, localName)) { Builders.push(found, child) }
+        }
+        Builders.finish(found)
+    }
+    firstElement: (element, namespaceURI, localName) => {
+        query(element, namespaceURI, localName)
+        found: null; index: 0
+        while((found === null) && (index < element.children.size())) {
+            child: element.children[index]; index = index + 1
+            if((childKind(child) == "element") && matches(child.name, namespaceURI, localName)) { found = child }
+        }
+        found
+    }
+    attribute: (element, namespaceURI, localName) => {
+        query(element, namespaceURI, localName)
+        found: null; index: 0
+        while((found === null) && (index < element.attributes.size())) {
+            item: element.attributes[index]; index = index + 1
+            if(matches(item.name, namespaceURI, localName)) { found = item.value }
+        }
+        found
+    }
+    textContent: (element) => {
+        records.element(element)
+        output: Builders.text(); active: IdentityMap()
+        active[element] = true
+        stack: { node: element; index: 0; next: null }
+        while(stack !== null) {
+            frame: stack
+            if(frame.index == frame.node.children.size()) {
+                active.remove(frame.node); stack = frame.next
+            }
+            if(stack === frame) {
+                child: frame.node.children[frame.index]; frame.index = frame.index + 1
+                kind: childKind(child)
+                if(kind == "text") { Builders.append(output, child.value) }
+                if(kind == "element") {
+                    if(active.containsKey(child)) { errors.argument() }
+                    active[child] = true; stack = { node: child; index: 0; next: frame }
+                }
+            }
+        }
+        Builders.string(output)
+    }
+    result: {}
+    result.createSlot("elements", elements); result.createSlot("firstElement", firstElement)
+    result.createSlot("attribute", attribute); result.createSlot("textContent", textContent)
+    result
+}

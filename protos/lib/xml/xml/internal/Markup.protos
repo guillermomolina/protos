@@ -1,0 +1,428 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Persistent lexical states retain bounded tokens, never complete input feeds.
+Builders: import("./Builders.protos")
+create: (errors, characters, limits, references, records) => {
+    {
+        lexer: (bounds, deliver, text, beginCDATA) => {
+            state: "idle"
+            opening: 0
+            length: 0
+            buffer: null
+            nameBuffer: null
+            nameLength: 0
+            tagName: null
+            attributeName: null
+            attributeValue: null
+            attributeLength: 0
+            attributes: null
+            quote: 0
+            reference: null
+            probe: ""
+            pending: 0
+            target: null
+            separator: false
+            question: false
+            closing: false
+            declarationStage: 0
+            declarationField: null
+            fieldIndex: 0
+            fieldLength: 0
+            fieldBuffer: null
+            supportedVersion: true
+            standaloneWord: null
+            declaredEncoding: null
+            declaredStandalone: null
+            startName: (c, position) => {
+                if(!characters.start(c)) { errors.syntax(opening) }
+                nameBuffer = Builders.text(); nameLength = 0
+                nameLength = nameLength + 1
+                limits.check(bounds, "maxNameScalars", nameLength, position)
+                Builders.scalar(nameBuffer, c)
+            }
+            addName: (c, position) => {
+                nameLength = nameLength + 1
+                limits.check(bounds, "maxNameScalars", nameLength, position)
+                Builders.scalar(nameBuffer, c)
+            }
+            addValue: (scalar, position) => {
+                attributeLength = attributeLength + 1
+                limits.check(bounds, "maxAttributeScalars", attributeLength, position)
+                Builders.scalar(attributeValue, scalar)
+            }
+            saveAttribute: () => {
+                savedName: attributeName
+                savedValue: Builders.string(attributeValue)
+                Builders.push(attributes, { lexical: savedName; value: savedValue })
+            }
+            endTag: (empty, position) => {
+                // QName and duplicate admission belongs to a completed lexical tag.
+                if(characters.qName(tagName) === null) { errors.namespace(opening) }
+                state = "idle"
+                if(closing) { deliver({ kind: "close"; lexical: tagName }, opening, position) }
+                if(!closing) {
+                    ordinary: Builders.array(); bindings: Builders.array(); seen: Map()
+                    for(attribute in Builders.finish(attributes)) {
+                        spelling: attribute.lexical
+                        parts: characters.qName(spelling)
+                        if(parts === null) { errors.namespace(opening) }
+                        if(seen.containsKey(spelling)) { errors.namespace(opening) }
+                        seen[spelling] = true
+                        if((spelling == "xmlns") || (parts.prefix == "xmlns")) {
+                            prefix: parts.localName
+                            if(spelling == "xmlns") { prefix = null }
+                            uri: attribute.value
+                            if(uri.size() == 0) { uri = null }
+                            Builders.push(bindings, records.makeNamespace(prefix, uri))
+                        }
+                        if((spelling != "xmlns") && (parts.prefix != "xmlns")) { Builders.push(ordinary, attribute) }
+                    }
+                    ordinaryAttributes: Builders.finish(ordinary)
+                    namespaceBindings: Builders.finish(bindings); isEmpty: empty
+                    deliver({ kind: "open"; lexical: tagName; attributes: ordinaryAttributes; namespaceDeclarations: namespaceBindings; empty: isEmpty }, opening, position)
+                }
+                buffer = null; nameBuffer = null; attributeValue = null; attributes = null
+            }
+            startDeclarationField: (c) => {
+                declarationField = null
+                if((declarationStage == 0) && (c == 118)) { declarationField = "version" }
+                if((declarationStage == 1) && (c == 101)) { declarationField = "encoding" }
+                if(((declarationStage == 1) || (declarationStage == 2)) && (c == 115)) { declarationField = "standalone" }
+                if(declarationField === null) { errors.syntax(opening) }
+                fieldIndex = 1; state = "declarationField"
+            }
+            finishDeclarationField: () => {
+                if(declarationField == "version") {
+                    if(fieldLength < 3) { errors.syntax(opening) }
+                    if(!supportedVersion) { errors.unsupported(opening) }
+                    declarationStage = 1
+                }
+                if(declarationField == "encoding") {
+                    if(fieldLength == 0) { errors.syntax(opening) }
+                    declaredEncoding = Builders.string(fieldBuffer); declarationStage = 2
+                }
+                if(declarationField == "standalone") {
+                    if((standaloneWord === null) || (fieldLength != standaloneWord.size())) { errors.syntax(opening) }
+                    declaredStandalone = standaloneWord == "yes"; declarationStage = 3
+                }
+                fieldBuffer = null; declarationField = null; state = "declarationAfterValue"
+            }
+            endPI: (position) => {
+                event: records.makePI(target, Builders.string(buffer))
+                state = "idle"; buffer = null; nameBuffer = null
+                deliver(event, opening, position)
+            }
+            {
+                active: () => { state != "idle" }
+                start: (position) => {
+                    opening = position; length = 1; state = "lt"
+                    limits.check(bounds, "maxTokenScalars", length, position)
+                }
+                charge: (position) => {
+                    if((state != "idle") && (state != "cdata")) {
+                        length = length + 1; limits.check(bounds, "maxTokenScalars", length, position)
+                    }
+                    if(reference !== null) { reference.charge(position) }
+                }
+                accept: (c, position) => {
+                    // A transition consumes this scalar even when it changes state.
+                    // Normal completion must not target the captured factory activation.
+                    handled: false
+                    if(reference !== null) {
+                        handled = true
+                        decoded: reference.accept(c)
+                        if(decoded !== null) { reference = null; addValue(decoded, position) }
+                    }
+                    if(!handled && (state == "cdata")) {
+                        handled = true
+                        ending: (c == 62) && (pending == 2)
+                        if(c == 93) {
+                            pending = pending + 1
+                            if(pending > 2) { text(93, position); pending = 2 }
+                        }
+                        if(ending) {
+                            limits.check(bounds, "maxTokenScalars", 3, position)
+                            pending = 0; state = "idle"
+                        }
+                        if((c != 93) && !ending) {
+                            while(pending > 0) { text(93, position); pending = pending - 1 }
+                            text(c, position)
+                        }
+                    }
+                    if(!handled && (state == "lt")) {
+                        handled = true; closing = false
+                        if(c == 47) { closing = true; state = "closeFirst" }
+                        if(c == 33) { probe = "<!"; state = "bang" }
+                        if(c == 63) { state = "piFirst"; buffer = Builders.text(); separator = false; question = false }
+                        if((c != 47) && (c != 33) && (c != 63)) {
+                            startName(c, position); state = "tagName"
+                            attributes = Builders.array()
+                        }
+                    }
+                    if(!handled && (state == "closeFirst")) {
+                        handled = true; startName(c, position); state = "tagName"
+                    }
+                    if(!handled && (state == "bang")) {
+                        handled = true
+                        output: Builders.text(); Builders.scalar(output, c); probe = probe.concat(Builders.string(output))
+                        if(probe == "<!DOCTYPE") { errors.unsupported(opening) }
+                        if(probe == "<!--") { state = "comment"; buffer = Builders.text(); pending = 0 }
+                        if(probe == "<![CDATA[") { beginCDATA(opening); state = "cdata"; pending = 0 }
+                        if((probe != "<!--") && (probe != "<![CDATA[")) {
+                            expected: false
+                            for(candidate in ["<!--", "<![CDATA[", "<!DOCTYPE"]) {
+                                if(probe.size() <= candidate.size()) {
+                                    match: true; i: 0
+                                    while(i < probe.size()) { if(probe[i] != candidate[i]) { match = false }; i = i + 1 }
+                                    if(match) { expected = true }
+                                }
+                            }
+                            if(!expected) { errors.syntax(opening) }
+                        }
+                    }
+                    if(!handled && (state == "comment")) {
+                        handled = true
+                        ending: pending == 2
+                        if(ending) {
+                            if(c != 62) { errors.syntax(opening) }
+                            event: records.makeValue("comment", Builders.string(buffer))
+                            state = "idle"; buffer = null; deliver(event, opening, position)
+                        }
+                        if(!ending) {
+                            if(c == 45) { pending = pending + 1 }
+                            if(c != 45) {
+                                if(pending == 1) { Builders.append(buffer, "-"); pending = 0 }
+                                Builders.scalar(buffer, c)
+                            }
+                        }
+                    }
+                    if(!handled && (state == "piFirst")) {
+                        handled = true; startName(c, position); state = "piName"
+                    }
+                    if(!handled && (state == "piName")) {
+                        handled = true
+                        continuing: characters.name(c)
+                        if(continuing) { addName(c, position) }
+                        if(!continuing) {
+                            target = Builders.string(nameBuffer)
+                            if(!characters.ncName(target)) { errors.syntax(opening) }
+                            reserved: characters.reservedTarget(target)
+                            if(reserved) {
+                                if((target != "xml") || !characters.space(c)) { errors.syntax(opening) }
+                                buffer = null; nameBuffer = null
+                                declarationStage = 0; declaredEncoding = null; declaredStandalone = null
+                                state = "declarationBeforeField"
+                            }
+                            if(!reserved) {
+                                if(c == 63) { state = "piClose" }
+                                if(c != 63) {
+                                    if(!characters.space(c)) { errors.syntax(opening) }
+                                    state = "piData"; separator = true
+                                }
+                            }
+                        }
+                    }
+                    if(!handled && (state == "piClose")) {
+                        handled = true
+                        if(c != 62) { errors.syntax(opening) }
+                        endPI(position)
+                    }
+                    if(!handled && (state == "declarationBeforeField")) {
+                        handled = true
+                        if(!characters.space(c)) {
+                            ending: (c == 63) && (declarationStage > 0)
+                            if(ending) { state = "declarationClose" }
+                            if(!ending) { startDeclarationField(c) }
+                        }
+                    }
+                    if(!handled && (state == "declarationField")) {
+                        handled = true
+                        continuing: fieldIndex < declarationField.size()
+                        if(continuing) {
+                            if(c != characters.scalar(declarationField[fieldIndex])) { errors.syntax(opening) }
+                            fieldIndex = fieldIndex + 1
+                        }
+                        if(!continuing) {
+                            if(c == 61) { state = "declarationQuote" }
+                            if(c != 61) {
+                                if(!characters.space(c)) { errors.syntax(opening) }
+                                state = "declarationEquals"
+                            }
+                        }
+                    }
+                    if(!handled && (state == "declarationEquals")) {
+                        handled = true
+                        if(!characters.space(c)) {
+                            if(c != 61) { errors.syntax(opening) }
+                            state = "declarationQuote"
+                        }
+                    }
+                    if(!handled && (state == "declarationQuote")) {
+                        handled = true
+                        if(!characters.space(c)) {
+                            if((c != 34) && (c != 39)) { errors.syntax(opening) }
+                            quote = c; fieldLength = 0; supportedVersion = true; standaloneWord = null
+                            if(declarationField == "encoding") { fieldBuffer = Builders.text() }
+                            state = "declarationValue"
+                        }
+                    }
+                    if(!handled && (state == "declarationValue")) {
+                        handled = true
+                        ending: c == quote
+                        if(ending) { finishDeclarationField() }
+                        if(!ending) {
+                            if(declarationField == "version") {
+                                if((fieldLength == 0) && (c != 49)) { errors.syntax(opening) }
+                                if((fieldLength == 1) && (c != 46)) { errors.syntax(opening) }
+                                if(fieldLength >= 2) {
+                                    if(characters.digit(c, 10) < 0) { errors.syntax(opening) }
+                                    if((fieldLength != 2) || (c != 48)) { supportedVersion = false }
+                                }
+                            }
+                            if(declarationField == "encoding") {
+                                letter: ((c >= 65) && (c <= 90)) || ((c >= 97) && (c <= 122))
+                                if(!letter && ((fieldLength == 0) || !((characters.digit(c, 10) >= 0) || (c == 46) || (c == 95) || (c == 45)))) { errors.syntax(opening) }
+                                Builders.scalar(fieldBuffer, c)
+                            }
+                            if(declarationField == "standalone") {
+                                if(fieldLength == 0) {
+                                    if(c == 121) { standaloneWord = "yes" }
+                                    if(c == 110) { standaloneWord = "no" }
+                                }
+                                if((standaloneWord === null) || (fieldLength >= standaloneWord.size())) { errors.syntax(opening) }
+                                if(c != characters.scalar(standaloneWord[fieldLength])) { errors.syntax(opening) }
+                            }
+                            fieldLength = fieldLength + 1
+                        }
+                    }
+                    if(!handled && (state == "declarationAfterValue")) {
+                        handled = true
+                        if(c == 63) { state = "declarationClose" }
+                        if(c != 63) {
+                            if(!characters.space(c)) { errors.syntax(opening) }
+                            state = "declarationBeforeField"
+                        }
+                    }
+                    if(!handled && (state == "declarationClose")) {
+                        handled = true
+                        if(c != 62) { errors.syntax(opening) }
+                        event: records.makeDeclaration(declaredEncoding, declaredStandalone)
+                        state = "idle"; fieldBuffer = null; nameBuffer = null
+                        deliver(event, opening, position)
+                    }
+                    if(!handled && (state == "piData")) {
+                        handled = true
+                        ending: question && (c == 62)
+                        if(ending) { endPI(position) }
+                        if(!ending) {
+                            if(question) { Builders.append(buffer, "?"); question = false; separator = false }
+                            if(c == 63) { question = true }
+                            if(c != 63) {
+                                if(!(separator && characters.space(c))) {
+                                    separator = false; Builders.scalar(buffer, c)
+                                }
+                            }
+                        }
+                    }
+                    if(!handled && (state == "tagName")) {
+                        handled = true
+                        continuing: characters.name(c)
+                        if(continuing) { addName(c, position) }
+                        if(!continuing) {
+                            tagName = Builders.string(nameBuffer)
+                            state = "between"
+                            if(closing) { state = "closeSpace" }
+                            if(c == 62) { endTag(false, position) }
+                            if(c != 62) {
+                                if((c == 47) && !closing) { state = "empty" }
+                                if((c != 47) || closing) {
+                                    if(!characters.space(c)) { errors.syntax(opening) }
+                                }
+                            }
+                        }
+                    }
+                    if(!handled && (state == "closeSpace")) {
+                        handled = true
+                        if(c == 62) { endTag(false, position) }
+                        if(c != 62) { if(!characters.space(c)) { errors.syntax(opening) } }
+                    }
+                    if(!handled && (state == "empty")) {
+                        handled = true
+                        if(c != 62) { errors.syntax(opening) }
+                        endTag(true, position)
+                    }
+                    if(!handled && (state == "between")) {
+                        handled = true
+                        if(!characters.space(c)) {
+                            if(c == 62) { endTag(false, position) }
+                            if(c == 47) { state = "empty" }
+                            if((c != 62) && (c != 47)) { startName(c, position); state = "attributeName" }
+                        }
+                    }
+                    if(!handled && (state == "attributeName")) {
+                        handled = true
+                        continuing: characters.name(c)
+                        if(continuing) { addName(c, position) }
+                        if(!continuing) {
+                            attributeName = Builders.string(nameBuffer); state = "equals"
+                            if(c == 61) { state = "quote" }
+                            if(c != 61) { if(!characters.space(c)) { errors.syntax(opening) } }
+                        }
+                    }
+                    if(!handled && (state == "equals")) {
+                        handled = true
+                        if(c == 61) { state = "quote" }
+                        if(c != 61) { if(!characters.space(c)) { errors.syntax(opening) } }
+                    }
+                    if(!handled && (state == "quote")) {
+                        handled = true
+                        if(!characters.space(c)) {
+                            if((c != 34) && (c != 39)) { errors.syntax(opening) }
+                            quote = c; attributeValue = Builders.text(); attributeLength = 0; state = "value"
+                        }
+                    }
+                    if(!handled && (state == "value")) {
+                        handled = true
+                        if(c == quote) { saveAttribute(); state = "afterValue" }
+                        if(c != quote) {
+                            if(c == 60) { errors.syntax(opening) }
+                            if(c == 38) {
+                                reference = references.decoder(bounds, position)
+                                limits.check(bounds, "maxTokenScalars", 1, position)
+                            }
+                            if(c != 38) {
+                                normalized: c
+                                if((c == 9) || (c == 10)) { normalized = 32 }
+                                addValue(normalized, position)
+                            }
+                        }
+                    }
+                    if(!handled && (state == "afterValue")) {
+                        handled = true
+                        if(c == 62) { endTag(false, position) }
+                        if(c == 47) { state = "empty" }
+                        if((c != 62) && (c != 47)) {
+                            if(!characters.space(c)) { errors.syntax(opening) }
+                            state = "between"
+                        }
+                    }
+                    if(!handled) { errors.syntax(opening) }
+                    null
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,112 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+XML: import("std:xml/xml")
+F: import("./Fixtures.protos")
+
+tests: [
+    Test("Document Element Declaration and traversal discriminants require genuine Strings", () => {
+        calls: 0
+        source: { equals: (other) => { calls = calls + 1; true } }
+        impostor: source.alias("equals", "==")
+        valid: XML.parse("<r/>").root
+        for(supplied in [null, 1, true, {}, impostor]) {
+            invalidDocument: { kind: supplied; declaration: null; prolog: []; root: valid; epilog: [] }
+            F.error("argument", () => { XML.encode(invalidDocument) })
+            invalidElement: { kind: supplied; name: valid.name; attributes: []; namespaceDeclarations: []; children: [] }
+            document: { kind: "document"; declaration: null; prolog: []; root: invalidElement; epilog: [] }
+            F.error("argument", () => { XML.encode(document) })
+            document.root = valid
+            document.declaration = { kind: supplied; version: "1.0"; encoding: null; standalone: null }
+            F.error("argument", () => { XML.encode(document) })
+            document.declaration = null
+            miscellaneous: { kind: supplied; value: "x" }
+            document.prolog = [miscellaneous]
+            F.error("argument", () => { XML.encode(document) })
+            document.prolog = []; document.epilog = [miscellaneous]
+            F.error("argument", () => { XML.encode(document) })
+            document.epilog = []
+            document.root = { kind: "element"; name: valid.name; attributes: []; namespaceDeclarations: []; children: [miscellaneous] }
+            F.error("argument", () => { XML.encode(document) })
+        }
+        Assertions.require(calls == 0)
+        true
+    }),
+    Test("non-String event discriminants are rejected before writer admission", () => {
+        calls: 0
+        source: { equals: (other) => { calls = calls + 1; true } }
+        impostor: source.alias("equals", "==")
+        writer: XML.eventWriter((chunk) => null)
+        for(supplied in [null, 1, true, {}, impostor]) {
+            F.error("argument", () => { writer.feed({ kind: supplied; value: "x" }) })
+        }
+        for(event in F.collect("<r/>", [])) { writer.feed(event) }
+        writer.finish(); Assertions.require(calls == 0)
+        true
+    }),
+    Test("writer preserves category order prefixes and exact escaping", () => {
+        document: XML.parse("<?xml version='1.0' encoding='UTF-8' standalone='yes'?><!--p--><?app data?><p:r b='&quot;&#9;&#10;&#13;' xmlns:p='u' a='&amp;'>&lt;&gt;&amp;&#13;\t\n</p:r>")
+        Assertions.require(XML.encode(document) == "<?xml version=\"1.0\" standalone=\"yes\"?><!--p--><?app data?><p:r xmlns:p=\"u\" b=\"&quot;&#x9;&#xA;&#xD;\" a=\"&amp;\">&lt;&gt;&amp;&#xD;\t\n</p:r>")
+        Assertions.require(XML.encode(XML.parse("<r/>")) == "<r></r>")
+        true
+    }),
+    Test("every accepted event contributes exactly one chunk and finish contributes none", () => {
+        chunks: []; writer: XML.eventWriter((text) => { chunks = Array(...chunks, text) })
+        events: F.collect("<r>text<a/></r>", [])
+        for(event in events) { Assertions.require(writer.feed(event) === writer) }
+        writer.finish(); Assertions.require(chunks.size() == events.size())
+        for(chunk in chunks) { Assertions.require(String.recognizes(chunk) && (chunk.size() > 0)) }
+        true
+    }),
+    Test("malformed event arguments do not poison an OPEN writer", () => {
+        writer: XML.eventWriter((text) => null)
+        for(event in [{}, { kind: "text"; value: "" }, { kind: "unknown" }, { kind: "comment"; value: 3 }, { kind: "endElement"; name: {} }]) {
+            F.error("argument", () => { writer.feed(event) })
+        }
+        for(event in F.collect("<r/>", [])) { writer.feed(event) }
+        writer.finish()
+        true
+    }),
+    Test("unrepresentable comments PI and invalid characters emit no partial contribution", () => {
+        for(event in [{ kind: "comment"; value: "a--b" }, { kind: "comment"; value: "a-" }, { kind: "comment"; value: "a\r" }, { kind: "processingInstruction"; target: "XML"; data: "" }, { kind: "processingInstruction"; target: "p"; data: "x?>y" }, { kind: "processingInstruction"; target: "p"; data: " leading" }, { kind: "processingInstruction"; target: "p"; data: "\r" }, { kind: "comment"; value: "\u{0}" }]) {
+            count: 0; writer: XML.eventWriter((text) => { count = count + 1 })
+            F.error("syntax", () => { writer.feed(event) })
+            Assertions.require(count == 0)
+            F.error("lifecycle", () => { writer.finish() })
+        }
+        true
+    }),
+    Test("writer validates namespace coherence and exact lexical closing names", () => {
+        expandedName: { namespaceURI: "u"; localName: "r"; prefix: "p" }
+        writer: XML.eventWriter((text) => null)
+        F.error("namespace", () => { writer.feed({ kind: "startElement"; name: expandedName; attributes: []; namespaceDeclarations: [] }) })
+        writer = XML.eventWriter((text) => null)
+        writer.feed({ kind: "startElement"; name: expandedName; attributes: []; namespaceDeclarations: [{ prefix: "p"; namespaceURI: "u" }, { prefix: "q"; namespaceURI: "u" }] })
+        F.error("namespace", () => { writer.feed({ kind: "endElement"; name: { namespaceURI: "u"; localName: "r"; prefix: "q" } }) })
+        true
+    }),
+    Test("writer accepts arbitrarily partitioned nonempty caller text contributions", () => {
+        output: ""; writer: XML.eventWriter((text) => { output = output.concat(text) }, { maxNodes: 2 })
+        writer.feed(F.collect("<r/>", [])[0])
+        writer.feed({ kind: "text"; value: F.repeat("x", 5000) })
+        writer.feed({ kind: "text"; value: "y" })
+        writer.feed(F.collect("<r/>", [])[1]); writer.finish()
+        Assertions.require(XML.textContent(XML.parse(output).root).size() == 5001)
+        true
+    })
+]
+tests.freeze()

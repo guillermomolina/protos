@@ -1,0 +1,130 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+XML: import("std:xml/xml")
+F: import("./Fixtures.protos")
+
+tests: [
+    Test("borrowed reader performs one read per operation including empty chunks and EOF", () => {
+        chunks: ["", "<r>", "x</r>", null]; calls: 0; seen: []
+        reader: { readText: () => {
+            value: chunks[calls]; calls = calls + 1
+            Future.all().then((ignored) => { value })
+        } }
+        adapter: XML.readEvents(reader, (event) => { seen = Array(...seen, event) })
+        first: adapter.read()
+        F.error("lifecycle", () => { adapter.read() })
+        Assertions.require(first.value() === true)
+        Assertions.require(adapter.read().value() === true)
+        Assertions.require(adapter.read().value() === true)
+        Assertions.require(adapter.read().value() === false)
+        F.error("lifecycle", () => { adapter.read() })
+        Assertions.require(calls == 4)
+        Assertions.require(F.equal(seen, F.collect("<r>x</r>", [])))
+        true
+    }),
+    Test("borrowed writer orders one stable String per event and one empty finish barrier", () => {
+        calls: []; sink: { writeText: (chunk) => {
+            calls = Array(...calls, chunk); Future.all()
+        } }
+        adapter: XML.writeEvents(sink)
+        events: F.collect("<r>x</r>", [])
+        first: adapter.feed(events[0])
+        F.error("lifecycle", () => { adapter.finish() })
+        Assertions.require(first.value() === adapter)
+        mutable: { kind: "text"; value: "accepted" }
+        pending: adapter.feed(mutable); mutable.value = "changed"
+        Assertions.require(pending.value() === adapter)
+        Assertions.require(adapter.feed(events[2]).value() === adapter)
+        Assertions.require(adapter.finish().value() === adapter)
+        Assertions.require(F.equal(calls, ["<r>", "accepted", "</r>", ""]))
+        F.error("lifecycle", () => { adapter.finish() })
+        true
+    }),
+    Test("reader and writer preserve source failure identities and remain terminal", () => {
+        original: Error {}
+        reader: { readText: () => { Future.all().then((ignored) => { original.signal() }) } }
+        adapter: XML.readEvents(reader, (event) => null)
+        failure: Assertions.signals(Error, () => { adapter.read().value() })
+        Assertions.require(failure === original)
+        F.error("lifecycle", () => { adapter.read() })
+        sink: { writeText: (chunk) => { Future.all().then((ignored) => { original.signal() }) } }
+        output: XML.writeEvents(sink)
+        failure = Assertions.signals(Error, () => { output.feed({ kind: "comment"; value: "x" }).value() })
+        Assertions.require(failure === original)
+        F.error("lifecycle", () => { output.finish() })
+        true
+    }),
+    Test("synchronous external failures and consumer errors keep original identity", () => {
+        original: Error {}
+        adapter: XML.readEvents({ readText: () => { original.signal() } }, (event) => null)
+        Assertions.require(Assertions.signals(Error, () => { adapter.read() }) === original)
+        F.error("lifecycle", () => { adapter.read() })
+        adapter = XML.readEvents({ readText: () => { Future.all().then((ignored) => "<r/>") } }, (event) => { original.signal() })
+        Assertions.require(Assertions.signals(Error, () => { adapter.read().value() }) === original)
+        F.error("lifecycle", () => { adapter.read() })
+        true
+    }),
+    Test("pre-start downstream cancellation never reopens or cancels the upstream read", () => {
+        upstream: Future.all().then((ignored) => "<r/>")
+        calls: 0
+        adapter: XML.readEvents({ readText: () => { calls = calls + 1; upstream } }, (event) => null)
+        downstream: adapter.read(); downstream.cancel()
+        Assertions.signals(Cancelled, () => { downstream.value() })
+        Assertions.require(upstream.value() == "<r/>")
+        F.error("lifecycle", () => { adapter.read() }); Assertions.require(calls == 1)
+        true
+    }),
+    Test("pre-start write cancellation keeps adapter terminal without upstream cancellation", () => {
+        upstream: Future.all().then((ignored) => 7)
+        calls: 0
+        adapter: XML.writeEvents({ writeText: (chunk) => { calls = calls + 1; upstream } })
+        downstream: adapter.feed({ kind: "comment"; value: "x" }); downstream.cancel()
+        Assertions.signals(Cancelled, () => { downstream.value() })
+        Assertions.require(upstream.value() == 7)
+        F.error("lifecycle", () => { adapter.finish() }); Assertions.require(calls == 1)
+        true
+    }),
+    Test("upstream cancellation propagates without running a continuation or permitting retry", () => {
+        source: Future.all().then((ignored) => "<r/>"); source.cancel()
+        adapter: XML.readEvents({ readText: () => { source } }, (event) => null)
+        Assertions.signals(Cancelled, () => { adapter.read().value() })
+        F.error("lifecycle", () => { adapter.read() })
+        output: XML.writeEvents({ writeText: (chunk) => { source } })
+        Assertions.signals(Cancelled, () => { output.feed({ kind: "comment"; value: "x" }).value() })
+        F.error("lifecycle", () => { output.finish() })
+        true
+    }),
+    Test("EOF validates the existing parser and invalid completion leaves the adapter terminal", () => {
+        calls: 0
+        adapter: XML.readEvents({ readText: () => {
+            calls = calls + 1
+            Future.all().then((ignored) => null)
+        } }, (event) => null)
+        F.error("syntax", () => { adapter.read().value() }, 0)
+        F.error("lifecycle", () => { adapter.read() }); Assertions.require(calls == 1)
+        true
+    }),
+    Test("writer adapter rejects invalid pre-admission arguments without poisoning", () => {
+        adapter: XML.writeEvents({ writeText: (chunk) => { Future.all() } })
+        F.error("argument", () => { adapter.feed({ kind: "text"; value: "" }) })
+        for(event in F.collect("<r/>", [])) { Assertions.require(adapter.feed(event).value() === adapter) }
+        Assertions.require(adapter.finish().value() === adapter)
+        true
+    })
+]
+tests.freeze()

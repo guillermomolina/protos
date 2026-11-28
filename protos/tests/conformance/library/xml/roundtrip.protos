@@ -1,0 +1,52 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+XML: import("std:xml/xml")
+F: import("./Fixtures.protos")
+
+tests: [
+    Test("representable documents round-trip with declared encoding deliberately omitted", () => {
+        for(source in ["<r/>", "<?xml version='1.0' standalone='no'?><r a='&#13;'>&lt;😀<![CDATA[x]]><!--c--><?p data?><a/>tail</r>", "<r xmlns='u' xmlns:p='v'><p:a xmlns:p='w'/><p:a/><a xmlns=''/></r>"]) {
+            original: XML.parse(source); copy: XML.parse(XML.encode(original))
+            Assertions.require(F.equal(original, copy))
+        }
+        document: XML.parse("<?xml version='1.0' encoding='UTF-8'?><r/>")
+        Assertions.require(XML.parse(XML.encode(document)).declaration.encoding === null)
+        true
+    }),
+    Test("acyclic alias appearances serialize independently while cycles are rejected", () => {
+        leaf: XML.parse("<a>x</a>").root
+        elementRoot: { kind: "element"; name: leaf.name; attributes: []; namespaceDeclarations: []; children: [leaf, leaf] }
+        document: { kind: "document"; declaration: null; prolog: []; root: elementRoot; epilog: [] }
+        Assertions.require(XML.encode(document) == "<a><a>x</a><a>x</a></a>")
+        elementRoot.children = [elementRoot]
+        F.error("argument", () => { XML.encode(document) })
+        true
+    }),
+    Test("canonical tree encoding rejects adjacent or empty Text and invalid misc nodes", () => {
+        original: XML.parse("<r/>")
+        elementRoot: { kind: "element"; name: original.root.name; attributes: []; namespaceDeclarations: []; children: [{ kind: "text"; value: "a" }, { kind: "text"; value: "b" }] }
+        document: { kind: "document"; declaration: null; prolog: []; root: elementRoot; epilog: [] }
+        F.error("argument", () => { XML.encode(document) })
+        elementRoot.children = [{ kind: "text"; value: "" }]
+        F.error("argument", () => { XML.encode(document) })
+        elementRoot.children = []; document.prolog = [elementRoot]
+        F.error("argument", () => { XML.encode(document) })
+        true
+    })
+]
+tests.freeze()

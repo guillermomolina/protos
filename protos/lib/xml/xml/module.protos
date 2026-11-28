@@ -1,0 +1,82 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Secure DTD-free XML 1.0 and Namespaces 1.0, in ordinary Actor-local Protos.
+//! Importing this module acquires no I/O authority. See spec/semantics/XML.md.
+
+/// Prototype of XML-owned failures, with own kind, offset and limit payload slots.
+this.XmlError: Error {}
+ErrorsSource: import("./internal/Errors.protos")
+Errors: ErrorsSource.create(XmlError)
+Characters: import("./internal/Characters.protos")
+LimitsSource: import("./internal/Limits.protos")
+Limits: LimitsSource.create(Errors)
+RecordsSource: import("./internal/Records.protos")
+Records: RecordsSource.create(Errors, Characters)
+NamespacesSource: import("./internal/Namespaces.protos")
+Namespaces: NamespacesSource.create(Errors, Characters, Records)
+ReferencesSource: import("./internal/References.protos")
+References: ReferencesSource.create(Errors, Characters, Limits)
+MarkupSource: import("./internal/Markup.protos")
+Markup: MarkupSource.create(Errors, Characters, Limits, References, Records)
+ParserSource: import("./internal/EventParser.protos")
+Parser: ParserSource.create(Errors, Characters, Limits, References, Records, Namespaces, Markup)
+
+/// Creates a parser with feed(String) and finish(), delivering frozen events.
+/// Limits are snapshotted; text blocks contain exactly 4096 scalars plus residuals.
+this.eventParser: Parser.slotValue("eventParser")
+
+TreeSource: import("./internal/TreeBuilder.protos")
+Tree: TreeSource.create(Records)
+/// Parses one complete String into a fresh, individually frozen ordinary XML tree.
+this.parse: (text, limits: null) => {
+    if(!String.recognizes(text)) { Errors.argument() }
+    builder: Tree.builder()
+    parser: eventParser(builder.slotValue("accept"), limits)
+    parser.feed(text); parser.finish(); builder.document()
+}
+
+QueriesSource: import("./internal/Queries.protos")
+Queries: QueriesSource.create(Errors, Characters, Records)
+/// Returns a fresh open Array of matching direct Element children, in order.
+this.elements: Queries.slotValue("elements")
+/// Returns the first matching direct Element child, or null.
+this.firstElement: Queries.slotValue("firstElement")
+/// Returns an ordinary attribute's String value, or null when absent.
+this.attribute: Queries.slotValue("attribute")
+/// Concatenates descendant Text in order, ignoring comments and PI; rejects cycles.
+this.textContent: Queries.slotValue("textContent")
+
+EscapingSource: import("./internal/Escaping.protos")
+Escaping: EscapingSource.create(Errors, Characters, Limits)
+WriterSource: import("./internal/EventWriter.protos")
+Writer: WriterSource.create(Errors, Limits, Records, Namespaces, Escaping)
+/// Creates a writer delivering one validated nonempty String per accepted event.
+/// finish() checks completion without emitting output; errors leave it terminal.
+this.eventWriter: Writer.slotValue("eventWriter")
+EncoderSource: import("./internal/TreeEncoder.protos")
+Encoder: EncoderSource.create(Errors, Records, () => eventWriter)
+/// Encodes a canonical document through eventWriter; omits declaration encoding.
+this.encode: Encoder.slotValue("encode")
+
+ReaderSource: import("./internal/ReaderAdapter.protos")
+Reader: ReaderSource.create(Errors, () => eventParser)
+/// Borrows a reader; each read() performs one readText() and returns Future<Boolean>.
+this.readEvents: Reader.slotValue("readEvents")
+WriterAdapterSource: import("./internal/WriterAdapter.protos")
+WriterAdapter: WriterAdapterSource.create(Errors, Records, () => eventWriter)
+/// Borrows a writer; feed/finish return Futures of the adapter. finish writes "" once.
+/// Neither adapter closes, flushes, retries, rewinds, or cancels its upstream operation.
+this.writeEvents: WriterAdapter.slotValue("writeEvents")

@@ -1,0 +1,210 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+XML: import("std:xml/xml")
+F: import("./Fixtures.protos")
+
+// Repeated letters produce unique NCNames without numeric conversion. Even
+// the largest count fixtures stay below the default name, token and input bounds.
+attributeCountSource: (count) => {
+    result: "<r"; index: 0
+    while(index < count) {
+        lexicalName: F.repeat("a", index + 1)
+        result = result.concat(" ", lexicalName, "=''")
+        index = index + 1
+    }
+    result.concat("/>")
+}
+
+namespaceCountSource: (count) => {
+    result: "<r"; index: 0
+    while(index < count) {
+        lexicalPrefix: F.repeat("p", index + 1)
+        result = result.concat(" xmlns:", lexicalPrefix, "='u'")
+        index = index + 1
+    }
+    result.concat("/>")
+}
+
+explicitBoundary: (key, bound, source) => {
+    options: {}; options.createSlot(key, bound)
+    XML.parse(source(bound - 1), options)
+    XML.parse(source(bound), options)
+    failure: Assertions.signals(XML.XmlError, () => { XML.parse(source(bound + 1), options) })
+    Assertions.require(failure.parent() === XML.XmlError)
+    Assertions.require(failure.kind == "limit"); Assertions.require(failure.limit == key)
+    Assertions.require(Integer.recognizes(failure.offset)); Assertions.require(failure.offset >= 0)
+}
+
+defaultBoundary: (key, bound, source) => {
+    for(delta in [-1, 0]) {
+        parser: XML.eventParser((event) => null)
+        parser.feed(source(bound + delta)); parser.finish()
+    }
+    parser: XML.eventParser((event) => null)
+    failure: Assertions.signals(XML.XmlError, () => { parser.feed(source(bound + 1)); parser.finish() })
+    Assertions.require(failure.parent() === XML.XmlError)
+    Assertions.require(failure.kind == "limit"); Assertions.require(failure.limit == key)
+}
+
+tests: [
+    Test("incomplete duplicates cannot supersede document or token budget crossings", () => {
+        prefix: "<r a='' a=''"
+        F.error("limit", () => { XML.parse(prefix.concat(" />"), { maxDocumentScalars: prefix.size() }) }, prefix.size(), "maxDocumentScalars")
+        F.error("limit", () => { XML.parse(prefix.concat(" />"), { maxTokenScalars: prefix.size() }) }, prefix.size(), "maxTokenScalars")
+        F.error("syntax", () => { XML.parse("<?xml versX".concat(F.repeat("x", 30)), { maxTokenScalars: 12 }) }, 0)
+        true
+    }),
+    Test("decoded attributes charge one scalar while preserving reference whitespace", () => {
+        document: XML.parse("<r a='&#x1F600;' b='\r\n' c='&#9;&#10;&#13;'/>", { maxAttributeScalars: 3 })
+        Assertions.require(XML.attribute(document.root, null, "a") == "😀")
+        Assertions.require(XML.attribute(document.root, null, "b") == " ")
+        Assertions.require(XML.attribute(document.root, null, "c") == "\t\n\r")
+        XML.parse("<r a='&#x1F600;'/>", { maxAttributeScalars: 1 })
+        XML.parse("<r a='\r\n'/>", { maxAttributeScalars: 1 })
+        source: "<r a='&#x1F600;x'/>"
+        F.error("limit", () => { XML.parse(source, { maxAttributeScalars: 1 }) }, 15, "maxAttributeScalars")
+        text: XML.textContent(XML.parse("<r>\r\n&#9;&#10;&#13;😀</r>", { maxNodes: 2 }).root)
+        Assertions.require(text == "\n\t\n\r😀"); Assertions.require(text.size() == 5)
+        true
+    }),
+    Test("XML declaration target has matching parser and writer name bounds", () => {
+        declaration: { kind: "declaration"; version: "1.0"; encoding: null; standalone: null }
+        F.error("limit", () => { XML.parse("<?xml version='1.0'?><r/>", { maxNameScalars: 2 }) }, 4, "maxNameScalars")
+        seen: 0
+        writer: XML.eventWriter((chunk) => { seen = seen + 1 }, { maxNameScalars: 2 })
+        F.error("limit", () => { writer.feed(declaration) }, null, "maxNameScalars")
+        Assertions.require(seen == 0)
+        document: XML.parse("<?xml version='1.0'?><r/>", { maxNameScalars: 3 })
+        Assertions.require(XML.encode(document, { maxNameScalars: 3 }) == "<?xml version=\"1.0\"?><r></r>")
+        true
+    }),
+    Test("explicit maxDocumentScalars inclusive boundary", () => {
+        explicitBoundary("maxDocumentScalars", 5, (n) => { "<r/>".concat(F.repeat(" ", n - 4)) })
+        true
+    }),
+    Test("explicit maxDepth inclusive boundary", () => {
+        explicitBoundary("maxDepth", 3, (n) => { F.repeat("<r>", n).concat(F.repeat("</r>", n)) })
+        true
+    }),
+    Test("explicit maxAttributesPerElement inclusive boundary", () => {
+        explicitBoundary("maxAttributesPerElement", 3, attributeCountSource)
+        true
+    }),
+    Test("explicit maxNamespaceDeclarationsPerElement inclusive boundary", () => {
+        explicitBoundary("maxNamespaceDeclarationsPerElement", 3, namespaceCountSource)
+        true
+    }),
+    Test("explicit maxNameScalars inclusive boundary", () => {
+        explicitBoundary("maxNameScalars", 3, (n) => { "<".concat(F.repeat("r", n), "/>") })
+        true
+    }),
+    Test("explicit maxAttributeScalars inclusive boundary", () => {
+        explicitBoundary("maxAttributeScalars", 3, (n) => { "<r a='".concat(F.repeat("v", n), "'/>") })
+        true
+    }),
+    Test("explicit maxTokenScalars inclusive boundary", () => {
+        explicitBoundary("maxTokenScalars", 9, (n) => { "<!--".concat(F.repeat("v", n - 7), "--><r/>") })
+        true
+    }),
+    Test("explicit maxNodes inclusive boundary", () => {
+        explicitBoundary("maxNodes", 3, (n) => { "<r>".concat(F.repeat("<a/>", n - 1), "</r>") })
+        true
+    }),
+    Test("default maxDocumentScalars inclusive boundary", () => {
+        defaultBoundary("maxDocumentScalars", 2097152, (n) => { "<r>".concat(F.repeat("x", n - 7), "</r>") })
+        true
+    }),
+    Test("default maxDepth inclusive boundary", () => {
+        defaultBoundary("maxDepth", 256, (n) => { F.repeat("<r>", n).concat(F.repeat("</r>", n)) })
+        true
+    }),
+    Test("default maxAttributesPerElement inclusive boundary", () => {
+        defaultBoundary("maxAttributesPerElement", 256, attributeCountSource)
+        true
+    }),
+    Test("default maxNamespaceDeclarationsPerElement inclusive boundary", () => {
+        defaultBoundary("maxNamespaceDeclarationsPerElement", 128, namespaceCountSource)
+        true
+    }),
+    Test("default maxNameScalars inclusive boundary", () => {
+        defaultBoundary("maxNameScalars", 1024, (n) => { "<".concat(F.repeat("r", n), "/>") })
+        true
+    }),
+    Test("default maxAttributeScalars inclusive boundary", () => {
+        defaultBoundary("maxAttributeScalars", 262144, (n) => { "<r a='".concat(F.repeat("v", n), "'/>") })
+        true
+    }),
+    Test("default maxTokenScalars inclusive boundary", () => {
+        defaultBoundary("maxTokenScalars", 1048576, (n) => { "<!--".concat(F.repeat("v", n - 7), "--><r/>") })
+        true
+    }),
+    Test("default maxNodes inclusive boundary", () => {
+        defaultBoundary("maxNodes", 250000, (n) => { "<r>".concat(F.repeat("<a/>", n - 1), "</r>") })
+        true
+    }),
+    Test("options validate own slots and snapshot positive semantic Integers", () => {
+        for(value in [0, -1, 1.0, true, null, "3"]) {
+            F.error("argument", () => { XML.eventParser((event) => null, { maxDepth: value }) })
+        }
+        F.error("argument", () => { XML.parse("<r/>", { unknown: 1 }) })
+        for(value in ["", [], 3, false]) { F.error("argument", () => { XML.parse("<r/>", value) }) }
+        options: { maxDepth: 1 }
+        parser: XML.eventParser((event) => null, options)
+        options.maxDepth = 100
+        parser.feed("<r>")
+        F.error("limit", () => { parser.feed("<a/>") }, 6, "maxDepth")
+        XML.parse("<r/>", { maxDocumentScalars: 1000000000000000000000000000000 })
+        inherited: { maxDepth: 1 }
+        own: inherited {}
+        XML.parse("<r><a/></r>", own)
+        true
+    }),
+    Test("budget precedence and visible event prefix follow logical consumption", () => {
+        F.error("limit", () => { XML.parse("<r/>", { maxDocumentScalars: 3; maxTokenScalars: 3 }) }, 3, "maxDocumentScalars")
+        seen: 0
+        parser: XML.eventParser((event) => { seen = seen + 1 }, { maxDocumentScalars: 4 })
+        F.error("limit", () => { parser.feed("<r/>x") }, 4, "maxDocumentScalars")
+        Assertions.require(seen == 2)
+        source: "<r a='1' b='2' xmlns:p='u' xmlns:q='v'/>"
+        F.error("limit", () => { XML.parse(source, { maxAttributesPerElement: 1; maxNamespaceDeclarationsPerElement: 1; maxNodes: 1 }) }, source.size() - 1, "maxAttributesPerElement")
+        true
+    }),
+    Test("logical Text node accounting ignores event and CDATA partitions", () => {
+        source: "<r>".concat(F.repeat("x", 8192), "&amp;<![CDATA[y]]></r>")
+        XML.parse(source, { maxNodes: 2 })
+        source = "<r>".concat(F.repeat("x", 4096), "<!--c-->y</r>")
+        failure: Assertions.signals(XML.XmlError, () => { XML.parse(source, { maxNodes: 3 }) })
+        Assertions.require(failure.limit == "maxNodes")
+        true
+    }),
+    Test("reference lexical budgets also constrain generated writer escapes", () => {
+        F.error("limit", () => { XML.parse("<r>&amp;</r>", { maxNameScalars: 2 }) }, 6, "maxNameScalars")
+        writer: XML.eventWriter((text) => null, { maxTokenScalars: 4 })
+        writer.feed(F.collect("<r/>", [])[0])
+        F.error("limit", () => { writer.feed({ kind: "text"; value: "&" }) }, null, "maxTokenScalars")
+        true
+    }),
+    Test("writer charges escaped scalars atomically", () => {
+        seen: ""; writer: XML.eventWriter((text) => { seen = seen.concat(text) }, { maxDocumentScalars: 7 })
+        writer.feed({ kind: "startElement"; name: { namespaceURI: null; localName: "r"; prefix: null }; attributes: []; namespaceDeclarations: [] })
+        F.error("limit", () => { writer.feed({ kind: "text"; value: "&" }) }, null, "maxDocumentScalars")
+        Assertions.require(seen == "<r>")
+        true
+    })
+]
+tests.freeze()

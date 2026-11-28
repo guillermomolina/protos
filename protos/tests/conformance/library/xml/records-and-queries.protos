@@ -1,0 +1,77 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+XML: import("std:xml/xml")
+F: import("./Fixtures.protos")
+
+tests: [
+    Test("Element discriminants require genuine Strings without invoking custom equality", () => {
+        calls: 0
+        source: { equals: (other) => { calls = calls + 1; true } }
+        impostor: source.alias("equals", "==")
+        valid: XML.parse("<r/>").root
+        for(supplied in [null, 1, true, {}, impostor]) {
+            element: { kind: supplied; name: valid.name; attributes: []; namespaceDeclarations: []; children: [] }
+            F.error("argument", () => { XML.elements(element, null, "r") })
+            F.error("argument", () => { XML.firstElement(element, null, "r") })
+            F.error("argument", () => { XML.attribute(element, null, "a") })
+            F.error("argument", () => { XML.textContent(element) })
+        }
+        Assertions.require(calls == 0)
+        true
+    }),
+    Test("ordinary frozen records have exact fields and direct-child query semantics", () => {
+        document: XML.parse("<r id=''><a>one<b>two</b><!--ignored--><?p ignored?>three</a><b/></r>")
+        Assertions.require(document.parent() === Object)
+        Assertions.require(document.slotNames().size() == 5)
+        elementRoot: document.root
+        Assertions.require(elementRoot.parent() === Object)
+        Assertions.require(elementRoot.slotNames().size() == 5)
+        Assertions.require(elementRoot.name.slotNames().size() == 3)
+        Assertions.require(Array.recognizes(elementRoot.children))
+        Assertions.require(XML.attribute(elementRoot, null, "id") == "")
+        Assertions.require(XML.attribute(elementRoot, null, "missing") === null)
+        Assertions.require(XML.elements(elementRoot, null, "b").size() == 1)
+        Assertions.require(XML.firstElement(elementRoot, null, "b") === elementRoot.children[1])
+        Assertions.require(XML.firstElement(elementRoot, "urn:other", "b") === null)
+        Assertions.require(XML.textContent(elementRoot) == "onetwothree")
+        first: XML.elements(elementRoot, null, "a"); second: XML.elements(elementRoot, null, "a")
+        Assertions.require(first !== second)
+        first.extra: true; first[0] = elementRoot
+        Assertions.require(second[0] === elementRoot.children[0])
+        true
+    }),
+    Test("queries admit caller records and reject malformed relevant shapes", () => {
+        expandedName: { namespaceURI: null; localName: "r"; prefix: null }
+        elementRoot: { kind: "element"; name: expandedName; attributes: []; namespaceDeclarations: []; children: [{ kind: "text"; value: "hello" }] }
+        Assertions.require(XML.textContent(elementRoot) == "hello")
+        F.error("argument", () => { XML.elements(elementRoot, "", "r") })
+        F.error("argument", () => { XML.elements(elementRoot, null, "p:r") })
+        F.error("argument", () => { XML.attribute({}, null, "r") })
+        F.error("argument", () => { XML.textContent({ kind: "element" }) })
+        true
+    }),
+    Test("textContent counts repeated acyclic appearances and rejects ancestor cycles", () => {
+        leaf: XML.parse("<a>x</a>").root
+        elementRoot: { kind: "element"; name: leaf.name; attributes: []; namespaceDeclarations: []; children: [leaf, leaf] }
+        Assertions.require(XML.textContent(elementRoot) == "xx")
+        elementRoot.children = [elementRoot]
+        F.error("argument", () => { XML.textContent(elementRoot) })
+        true
+    })
+]
+tests.freeze()

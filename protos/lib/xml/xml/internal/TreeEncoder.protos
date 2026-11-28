@@ -1,0 +1,70 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Iterative canonical tree traversal delegates all lexical output to EventWriter.
+Builders: import("./Builders.protos")
+create: (errors, records, selectWriter) => {
+    {
+        encode: (document, limits: null) => {
+            records.shape(document, ["kind", "declaration", "prolog", "root", "epilog"])
+            if(records.kind(document) != "document") { errors.argument() }
+            records.array(document.prolog); records.array(document.epilog); records.element(document.root)
+            output: Builders.text()
+            writer: (selectWriter())((chunk) => { Builders.append(output, chunk) }, limits)
+            if(document.declaration !== null) { records.declaration(document.declaration); writer.feed(document.declaration) }
+            misc: (items) => {
+                for(item in items) {
+                    kind: records.kind(item)
+                    if((kind != "comment") && (kind != "processingInstruction")) { errors.argument() }
+                    writer.feed(item)
+                }
+            }
+            misc(document.prolog)
+            active: IdentityMap()
+            enter: (element, nextFrame) => {
+                records.element(element)
+                if(active.containsKey(element)) { errors.argument() }
+                active[element] = true
+                writer.feed({ kind: "startElement"; name: element.name; attributes: element.attributes; namespaceDeclarations: element.namespaceDeclarations })
+                { node: element; index: 0; lastText: false; next: nextFrame }
+            }
+            stack: enter(document.root, null)
+            while(stack !== null) {
+                frame: stack
+                if(frame.index == frame.node.children.size()) {
+                    writer.feed({ kind: "endElement"; name: frame.node.name })
+                    active.remove(frame.node); stack = frame.next
+                }
+                if(stack === frame) {
+                    child: frame.node.children[frame.index]; frame.index = frame.index + 1
+                    kind: records.kind(child)
+                    if(kind == "text") {
+                        if(frame.lastText) { errors.argument() }
+                        frame.lastText = true; writer.feed(child)
+                    }
+                    if(kind != "text") {
+                        frame.lastText = false
+                        if(kind == "element") { stack = enter(child, frame) }
+                        if(kind != "element") {
+                            if((kind != "comment") && (kind != "processingInstruction")) { errors.argument() }
+                            writer.feed(child)
+                        }
+                    }
+                }
+            }
+            misc(document.epilog); writer.finish(); Builders.string(output)
+        }
+    }
+}

@@ -1,0 +1,112 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Frozen publication and exact local schema validation; no provenance registry.
+create: (errors, characters) => {
+    shape: (record, fields) => {
+        if(record.parent() !== Object) { errors.argument() }
+        if(record.slotNames().size() != fields.size()) { errors.argument() }
+        for(field in fields) { if(!record.hasSlot(field)) { errors.argument() } }
+        record
+    }
+    string: (value) => { if(!String.recognizes(value)) { errors.argument() }; value }
+    discriminant: (record) => {
+        if(!record.hasSlot("kind")) { errors.argument() }
+        string(record.slotValue("kind"))
+    }
+    optionalString: (value) => {
+        if(value !== null) { string(value); if(value.size() == 0) { errors.argument() } }
+    }
+    array: (value) => { if(!Array.recognizes(value)) { errors.argument() }; value }
+    name: (value) => {
+        shape(value, ["namespaceURI", "localName", "prefix"])
+        optionalString(value.namespaceURI)
+        if(!characters.ncName(value.localName)) { errors.argument() }
+        if((value.prefix !== null) && !characters.ncName(value.prefix)) { errors.argument() }
+        value
+    }
+    declaration: (value) => {
+        shape(value, ["kind", "version", "encoding", "standalone"])
+        if(discriminant(value) != "declaration") { errors.argument() }
+        string(value.version)
+        if(value.version != "1.0") { errors.unsupported(null) }
+        if((value.encoding !== null) && !characters.encName(value.encoding)) { errors.argument() }
+        if((value.standalone !== null) && (value.standalone !== true) && (value.standalone !== false)) { errors.argument() }
+    }
+    event: (value) => {
+        if(!value.hasSlot("kind") || !String.recognizes(value.slotValue("kind"))) { errors.argument() }
+        kind: value.kind
+        handled: false
+        if(kind == "declaration") { declaration(value); handled = true }
+        if(kind == "startElement") {
+            shape(value, ["kind", "name", "attributes", "namespaceDeclarations"])
+            name(value.name); array(value.attributes); array(value.namespaceDeclarations)
+            for(attribute in value.attributes) {
+                shape(attribute, ["name", "value"]); name(attribute.name); string(attribute.value)
+            }
+            for(binding in value.namespaceDeclarations) {
+                shape(binding, ["prefix", "namespaceURI"])
+                if((binding.prefix !== null) && !characters.ncName(binding.prefix)) { errors.argument() }
+                optionalString(binding.namespaceURI)
+            }
+            handled = true
+        }
+        if(kind == "endElement") { shape(value, ["kind", "name"]); name(value.name); handled = true }
+        if((kind == "text") || (kind == "comment")) {
+            shape(value, ["kind", "value"]); string(value.value)
+            if((kind == "text") && (value.value.size() == 0)) { errors.argument() }
+            handled = true
+        }
+        if(kind == "processingInstruction") {
+            shape(value, ["kind", "target", "data"]); string(value.target); string(value.data); handled = true
+        }
+        if(!handled) { errors.argument() }
+        value
+    }
+    element: (value) => {
+        shape(value, ["kind", "name", "attributes", "namespaceDeclarations", "children"])
+        if(discriminant(value) != "element") { errors.argument() }
+        name(value.name); array(value.attributes); array(value.namespaceDeclarations); array(value.children)
+        event({ kind: "startElement"; name: value.name; attributes: value.attributes; namespaceDeclarations: value.namespaceDeclarations })
+        value
+    }
+    result: {
+        makeName: (uri, local, lexicalPrefix) => { { namespaceURI: uri; localName: local; prefix: lexicalPrefix }.freeze() }
+        makeAttribute: (expanded, content) => { { name: expanded; value: content }.freeze() }
+        makeNamespace: (lexicalPrefix, uri) => { { prefix: lexicalPrefix; namespaceURI: uri }.freeze() }
+        makeValue: (category, content) => { { kind: category; value: content }.freeze() }
+        makePI: (application, content) => { { kind: "processingInstruction"; target: application; data: content }.freeze() }
+        makeDeclaration: (codec, alone) => { { kind: "declaration"; version: "1.0"; encoding: codec; standalone: alone }.freeze() }
+        makeStart: (expanded, ordinary, bindings) => {
+            ordinary.freeze(); bindings.freeze()
+            { kind: "startElement"; name: expanded; attributes: ordinary; namespaceDeclarations: bindings }.freeze()
+        }
+        makeEnd: (expanded) => { { kind: "endElement"; name: expanded }.freeze() }
+        makeElement: (expanded, ordinary, bindings, content) => {
+            ordinary.freeze(); bindings.freeze(); content.freeze()
+            { kind: "element"; name: expanded; attributes: ordinary; namespaceDeclarations: bindings; children: content }.freeze()
+        }
+        makeDocument: (declared, before, elementRoot, after) => {
+            before.freeze(); after.freeze()
+            { kind: "document"; declaration: declared; prolog: before; root: elementRoot; epilog: after }.freeze()
+        }
+    }
+    result.createSlot("kind", discriminant)
+    result.createSlot("shape", shape); result.createSlot("string", string)
+    result.createSlot("optionalString", optionalString); result.createSlot("array", array)
+    result.createSlot("name", name); result.createSlot("declaration", declaration)
+    result.createSlot("event", event); result.createSlot("element", element)
+    result
+}

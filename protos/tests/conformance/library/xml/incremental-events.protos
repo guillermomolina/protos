@@ -1,0 +1,143 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+XML: import("std:xml/xml")
+F: import("./Fixtures.protos")
+
+tests: [
+    Test("legal PI and declaration states survive every transport split", () => {
+        for(source in ["<?p?><r/>", "<?p ?><r/>", "<?p data?><r/>", "<?p ?data?><r/>", "<?p ??data?><r/>", "<?p data??><r/>", "<?p ???><r/>", "<?xml\tversion = \"1.0\" encoding='UTF-8' standalone='no' ?><r/>"]) {
+            expected: F.collect(source, [])
+            cut: 0
+            while(cut <= source.size()) {
+                Assertions.require(F.equal(expected, F.collect(source, [cut]))); cut = cut + 1
+            }
+        }
+        true
+    }),
+    Test("new lexical failures preserve diagnostic payloads and event prefixes at every split", () => {
+        fixtures: [
+            { source: "<?p?data?><r/>"; limits: null },
+            { source: "<?p??><r/>"; limits: null },
+            { source: "<?p? ?><r/>"; limits: null },
+            { source: "<r a='' a=''"; limits: null },
+            { source: "<r a='' a=''@>"; limits: null },
+            { source: "<r a='' a=''/>"; limits: null },
+            { source: "<r xmlns:p='u' xmlns:p='v'"; limits: null },
+            { source: "<r xmlns:p='u' xmlns:p='v'/>"; limits: null },
+            { source: "<r xmlns:p='u' xmlns:p='v'@>"; limits: null },
+            { source: "<r a='' a='' />"; limits: { maxDocumentScalars: 12 } },
+            { source: "<r>residual<?p?data?>"; limits: null },
+            { source: "<?xml versXxxxxxxxxxxxxxxxxxxxxxxxx"; limits: { maxTokenScalars: 12 } }
+        ]
+        for(item in fixtures) {
+            baselineEvents: []; baseline: null
+            baseline = Assertions.signals(XML.XmlError, () => {
+                parser: XML.eventParser((event) => { baselineEvents = Array(...baselineEvents, event) }, item.limits)
+                parser.feed(item.source); parser.finish()
+            })
+            cut: 0
+            while(cut <= item.source.size()) {
+                seen: []
+                failure: Assertions.signals(XML.XmlError, () => {
+                    parser: XML.eventParser((event) => { seen = Array(...seen, event) }, item.limits)
+                    parser.feed(F.slice(item.source, 0, cut)); parser.feed("")
+                    parser.feed(F.slice(item.source, cut, item.source.size())); parser.finish()
+                })
+                Assertions.require(failure.kind == baseline.kind)
+                Assertions.require(failure.offset == baseline.offset)
+                Assertions.require(failure.limit == baseline.limit)
+                Assertions.require(F.equal(seen, baselineEvents)); cut = cut + 1
+            }
+        }
+        true
+    }),
+    Test("literal reference and CDATA scalars share block segmentation and node accounting", () => {
+        source: "<r>".concat(F.repeat("x", 4094), "&#x1F600;<![CDATA[\u{feff}]]>😀&#xFEFF;</r>")
+        expected: F.collect(source, [])
+        Assertions.require(expected.size() == 4)
+        Assertions.require(expected[1].value == F.repeat("x", 4094).concat("😀\u{feff}"))
+        Assertions.require(expected[2].value == "😀\u{feff}")
+        seen: []; parser: XML.eventParser((event) => { seen = Array(...seen, event) }, { maxNodes: 2 })
+        for(character in source) { parser.feed(character) }
+        parser.finish(); Assertions.require(F.equal(seen, expected))
+        Assertions.require(XML.parse(source, { maxNodes: 2 }).root.children[0].value.size() == 4098)
+        leadingSource: "<r>".concat(F.repeat("x", 4094), "&#x1F600;<![CDATA[😀]]>&#xFEFF;<![CDATA[\u{feff}]]></r>")
+        leadingEvents: F.collect(leadingSource, [4095, 4105, 4115])
+        Assertions.require(leadingEvents[1].value == F.repeat("x", 4094).concat("😀😀"))
+        Assertions.require(leadingEvents[2].value == "\u{feff}\u{feff}")
+        Assertions.require(XML.parse(leadingSource, { maxNodes: 2 }).root.children[0].value.size() == 4098)
+        true
+    }),
+    Test("all split points and scalar feeds produce structurally equal ordered events", () => {
+        for(source in ["<?xml version='1.0'?><!--p--><r xmlns:p='u' p:a='&amp;'>&#x1F600;<![CDATA[x]]><?p data?><p:c/></r>", "<r a='\r\n'>x\r\ny&amp;z</r>"]) {
+            expected: F.collect(source, [])
+            i: 0
+            while(i <= source.size()) { Assertions.require(F.equal(expected, F.collect(source, [i]))); i = i + 1 }
+            seen: []; parser: XML.eventParser((event) => { seen = Array(...seen, event) })
+            for(character in source) { parser.feed(""); parser.feed(character) }
+            parser.finish(); Assertions.require(F.equal(expected, seen))
+        }
+        true
+    }),
+    Test("text block boundaries are independent of references CDATA and feeds", () => {
+        for(count in [4095, 4096, 4097]) {
+            source: "<r>".concat(F.repeat("x", count - 1), "&#x1F600;<![CDATA[]]></r>")
+            events: F.collect(source, [3, 100, count])
+            Assertions.require(events[1].kind == "text")
+            expected: count
+            if(count > 4096) { expected = 4096 }
+            Assertions.require(events[1].value.size() == expected)
+            if(count == 4097) { Assertions.require(events[2].value == "😀") }
+            Assertions.require(XML.parse(source).root.children.size() == 1)
+        }
+        true
+    }),
+    Test("invalid prospective structure suppresses residual text but preserves complete blocks", () => {
+        for(tail in ["</wrong>", "<p:x/>", "<!--bad--x-->", "<a x='' x=''/>", "<a xmlns:p='u' xmlns:p='v'/>"]) {
+            count: 0; textCount: 0
+            parser: XML.eventParser((event) => { count = count + 1; if(event.kind == "text") { textCount = textCount + event.value.size() } })
+            parser.feed("<r>".concat(F.repeat("x", 4097)))
+            Assertions.signals(XML.XmlError, () => { parser.feed(tail) })
+            Assertions.require(count == 2); Assertions.require(textCount == 4096)
+        }
+        true
+    }),
+    Test("invalid fixtures preserve diagnostic anchors and emitted prefixes at every split", () => {
+        for(source in ["<r>text</s>", "<r>😀&bad;</r>", "<r a='x' a='y'/>", "<r><![CDATA[x", "<r>\r\n<bad a=x>"]) {
+            baselineEvents: []; baseline: null
+            Error.handle(() => {
+                parser: XML.eventParser((event) => { baselineEvents = Array(...baselineEvents, event) })
+                parser.feed(source); parser.finish()
+            }, (failure) => { baseline = failure })
+            cut: 0
+            while(cut <= source.size()) {
+                seen: []; failure: null
+                Error.handle(() => {
+                    parser: XML.eventParser((event) => { seen = Array(...seen, event) })
+                    parser.feed(F.slice(source, 0, cut)); parser.feed("")
+                    parser.feed(F.slice(source, cut, source.size())); parser.finish()
+                }, (error) => { failure = error })
+                Assertions.require(failure.kind == baseline.kind)
+                Assertions.require(failure.offset == baseline.offset)
+                Assertions.require(F.equal(seen, baselineEvents)); cut = cut + 1
+            }
+        }
+        true
+    })
+]
+tests.freeze()

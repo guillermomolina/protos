@@ -1,0 +1,118 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/assertions")
+Test: import("std:test/test")
+XML: import("std:xml/xml")
+F: import("./Fixtures.protos")
+
+tests: [
+    Test("explicit empty options construct an incremental parser", () => {
+        parser: XML.eventParser((event) => null, {})
+        parser.feed("<r/>"); parser.finish()
+        true
+    }),
+    Test("explicit depth options admit a complete document within the bound", () => {
+        parser: XML.eventParser((event) => null, { maxDepth: 2 })
+        parser.feed("<r><a/></r>"); parser.finish()
+        true
+    }),
+    Test("named explicit options produce an eager document", () => {
+        document: XML.parse(text: "<r/>", limits: { maxDepth: 1 })
+        Assertions.require(document.root.name.localName == "r")
+        true
+    }),
+    Test("explicit node options construct a writer and permit one complete root", () => {
+        writer: XML.eventWriter((chunk) => null, { maxNodes: 1 })
+        for(event in F.collect("<r/>", [])) { writer.feed(event) }
+        writer.finish()
+        true
+    }),
+    Test("explicit depth excess signals the module XmlError with its exact payload", () => {
+        F.error("limit", () => { XML.parse("<r><a/></r>", { maxDepth: 1 }) }, 6, "maxDepth")
+        true
+    }),
+    Test("incremental parser construction and empty-element feed complete normally", () => {
+        calls: 0
+        parser: XML.eventParser((event) => { calls = calls + 1 })
+        Assertions.require(parser.feed("<r/>") === parser)
+        Assertions.require(calls == 2)
+        parser.finish()
+        true
+    }),
+    Test("incremental parser finish observes exactly the empty-element start and end", () => {
+        events: []
+        parser: XML.eventParser((event) => { events = Array(...events, event) })
+        parser.feed("<r/>")
+        Assertions.require(parser.finish() === parser)
+        Assertions.require(events.size() == 2)
+        Assertions.require(events[0].kind == "startElement")
+        Assertions.require(events[1].kind == "endElement")
+        Assertions.require(events[0].name.localName == "r")
+        Assertions.require(events[1].name.localName == "r")
+        true
+    }),
+    Test("eager empty-element parsing produces a complete document", () => {
+        document: XML.parse("<r/>")
+        Assertions.require(document.kind == "document")
+        Assertions.require(document.declaration === null)
+        Assertions.require(document.prolog.size() == 0)
+        Assertions.require(document.root.kind == "element")
+        Assertions.require(document.root.name.localName == "r")
+        Assertions.require(document.root.children.size() == 0)
+        Assertions.require(document.epilog.size() == 0)
+        true
+    }),
+    Test("escaped reference decoders complete predefined decimal and hexadecimal references", () => {
+        document: XML.parse("<r>&amp;&#65;&#x42;</r>")
+        Assertions.require(document.root.children.size() == 1)
+        Assertions.require(document.root.children[0].value == "&AB")
+        Assertions.require(XML.textContent(document.root) == "&AB")
+        true
+    }),
+    Test("independent parsers consume input after both factories have returned", () => {
+        firstCalls: 0; secondCalls: 0
+        first: XML.eventParser((event) => { firstCalls = firstCalls + 1 })
+        second: XML.eventParser((event) => { secondCalls = secondCalls + 1 })
+        first.feed("<r"); second.feed("<s/>"); first.feed("/>")
+        first.finish(); second.finish()
+        Assertions.require(firstCalls == 2)
+        Assertions.require(secondCalls == 2)
+        true
+    }),
+    Test("XML has exactly eleven public bindings and one ordinary Error prototype", () => {
+        names: ["parse", "eventParser", "readEvents", "elements", "firstElement", "attribute", "textContent", "encode", "eventWriter", "writeEvents", "XmlError"]
+        Assertions.require(XML.slotNames().size() == names.size())
+        for(expandedName in names) { Assertions.require(XML.hasSlot(expandedName)) }
+        Assertions.require(XML.XmlError.parent() === Error)
+        again: import("std:xml/xml")
+        Assertions.require(again === XML)
+        true
+    }),
+    Test("public parameter names support ordinary named arguments", () => {
+        document: XML.parse(text: "<r><a/></r>", limits: { maxDepth: 2 })
+        Assertions.require(XML.elements(element: document.root, namespaceURI: null, localName: "a").size() == 1)
+        Assertions.require(XML.firstElement(element: document.root, namespaceURI: null, localName: "a") === document.root.children[0])
+        Assertions.require(XML.attribute(element: document.root, namespaceURI: null, localName: "id") === null)
+        Assertions.require(XML.textContent(element: document.root) == "")
+        parser: XML.eventParser(emit: (event) => null, limits: { maxDepth: 1 })
+        parser.feed(text: "<r/>"); parser.finish()
+        writer: XML.eventWriter(emit: (text) => null, limits: { maxDepth: 1 })
+        for(event in F.collect("<r/>", [])) { writer.feed(event: event) }; writer.finish()
+        Assertions.require(XML.encode(document: document, limits: { maxDepth: 2 }) == "<r><a></a></r>")
+        true
+    })
+]
+tests.freeze()

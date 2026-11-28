@@ -1,0 +1,183 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Single incremental grammar with original scalar diagnostics and deterministic text blocks.
+Builders: import("./Builders.protos")
+create: (errors, characters, budgeting, references, records, namespaces, markup) => {
+    {
+        eventParser: (emit, limits: null) => {
+            bounds: budgeting.snapshot(limits)
+            lifecycle: "OPEN"
+            phase: "before"
+            eligible: true
+            rawOffset: 0
+            afterCR: false
+            stack: null
+            depth: 0
+            nodes: 0
+            scope: namespaces.scope()
+            textRun: false
+            textBuffer: Builders.text()
+            textLength: 0
+            brackets: 0
+            reference: null
+            parser: null
+            chargeNode: (position) => {
+                budgeting.check(bounds, "maxNodes", nodes + 1, position)
+                nodes = nodes + 1
+            }
+            textScalar: (scalar, position) => {
+                if(phase != "inside") { errors.syntax(position) }
+                if(!textRun) { chargeNode(position); textRun = true }
+                Builders.scalar(textBuffer, scalar); textLength = textLength + 1
+                if(textLength == 4096) {
+                    event: records.makeValue("text", Builders.string(textBuffer))
+                    textBuffer = Builders.text(); textLength = 0
+                    emit(event)
+                }
+            }
+            flush: () => {
+                if(textLength > 0) {
+                    event: records.makeValue("text", Builders.string(textBuffer))
+                    textBuffer = Builders.text(); textLength = 0
+                    emit(event)
+                }
+                textRun = false
+            }
+            deliver: (token, opening, position) => {
+                kind: token.kind
+                if(kind == "open") {
+                    if(phase == "after") { errors.syntax(opening) }
+                    undo: scope.enter(token.namespaceDeclarations, opening)
+                    expanded: scope.resolve(token.lexical, false, opening)
+                    ordinary: Builders.array()
+                    for(attribute in token.attributes) {
+                        Builders.push(ordinary, records.makeAttribute(scope.resolve(attribute.lexical, true, opening), attribute.value))
+                    }
+                    attributes: Builders.finish(ordinary)
+                    scope.attributes(attributes, opening)
+                    budgeting.check(bounds, "maxAttributesPerElement", attributes.size(), position)
+                    budgeting.check(bounds, "maxNamespaceDeclarationsPerElement", token.namespaceDeclarations.size(), position)
+                    budgeting.check(bounds, "maxDepth", depth + 1, position)
+                    chargeNode(position)
+                    event: records.makeStart(expanded, attributes, token.namespaceDeclarations)
+                    flush()
+                    lexicalName: token.lexical
+                    stack = { lexical: lexicalName; name: expanded; restoration: undo; next: stack }
+                    depth = depth + 1; phase = "inside"; eligible = false
+                    emit(event)
+                    if(token.empty) {
+                        emit(records.makeEnd(expanded))
+                        scope.leave(undo); stack = stack.next; depth = depth - 1
+                        if(depth == 0) { phase = "after" }
+                    }
+                }
+                if(kind == "close") {
+                    if((stack === null) || (stack.lexical != token.lexical)) { errors.syntax(opening) }
+                    event: records.makeEnd(stack.name)
+                    flush(); emit(event)
+                    scope.leave(stack.restoration); stack = stack.next; depth = depth - 1
+                    if(depth == 0) { phase = "after" }
+                    eligible = false
+                }
+                if(kind == "declaration") {
+                    if(!eligible || (opening != 0) || (phase != "before")) { errors.syntax(opening) }
+                    eligible = false; emit(token)
+                }
+                if((kind == "comment") || (kind == "processingInstruction")) {
+                    chargeNode(position)
+                    flush(); eligible = false; emit(token)
+                }
+            }
+            lexer: markup.lexer(bounds, deliver, textScalar, (opening) => {
+                if(phase != "inside") { errors.syntax(opening) }
+                eligible = false; brackets = 0
+            })
+            accept: (c, position) => {
+                handled: false
+                if(lexer.active()) { lexer.accept(c, position); handled = true }
+                if(!handled && (reference !== null)) {
+                    value: reference.accept(c)
+                    if(value !== null) { reference = null; textScalar(value, position) }
+                    handled = true
+                }
+                if(!handled && (c == 60)) {
+                    brackets = 0; lexer.start(position); handled = true
+                }
+                if(!handled && (c == 38)) {
+                    if(phase != "inside") { errors.syntax(position) }
+                    brackets = 0; reference = references.decoder(bounds, position)
+                    budgeting.check(bounds, "maxTokenScalars", 1, position); handled = true
+                }
+                if(!handled) {
+                    eligible = false
+                    if(phase != "inside") {
+                        if(!characters.space(c)) { errors.syntax(position) }
+                    }
+                    if(phase == "inside") {
+                        if((c == 62) && (brackets >= 2)) { errors.syntax(position) }
+                        if(c == 93) { brackets = brackets + 1 }
+                        if(c != 93) { brackets = 0 }
+                        textScalar(c, position)
+                    }
+                }
+            }
+            ready: () => { if(lifecycle != "OPEN") { errors.lifecycle() } }
+            parser = {
+                feed: (text) => {
+                    ready()
+                    if(!String.recognizes(text)) { errors.argument() }
+                    lifecycle = "ACTIVE"
+                    completed: false
+                    (() => {
+                        for(character in text) {
+                            position: rawOffset
+                            budgeting.check(bounds, "maxDocumentScalars", rawOffset + 1, position)
+                            c: characters.scalar(character)
+                            rawOffset = rawOffset + 1
+                            suppress: afterCR && (c == 10)
+                            afterCR = c == 13
+                            if(c == 13) { c = 10 }
+                            if(!suppress) {
+                                lexer.charge(position)
+                                if(reference !== null) { reference.charge(position) }
+                                if(!characters.char(c)) { errors.syntax(position) }
+                                accept(c, position)
+                            }
+                        }
+                        completed = true
+                    }).ensure(() => {
+                        lifecycle = "FAILED"
+                        if(completed) { lifecycle = "OPEN" }
+                    })
+                    parser
+                }
+                finish: () => {
+                    ready(); lifecycle = "ACTIVE"
+                    completed: false
+                    (() => {
+                        if(lexer.active() || (reference !== null) || (stack !== null) || (phase != "after")) { errors.syntax(rawOffset) }
+                        completed = true
+                    }).ensure(() => {
+                        lifecycle = "FAILED"
+                        if(completed) { lifecycle = "FINISHED" }
+                    })
+                    parser
+                }
+            }
+            parser
+        }
+    }
+}

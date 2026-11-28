@@ -1,0 +1,108 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! XML scalar classes, independent of Protos identifier and locale rules.
+scalar: (character) => {
+    bytes: Encoding.UTF8.encode(character)
+    head: bytes[0]
+    value: head
+    if(head >= 192) { value = head - 192 }
+    if(head >= 224) { value = head - 224 }
+    if(head >= 240) { value = head - 240 }
+    i: 1
+    while(i < bytes.size()) { value = value * 64 + bytes[i] - 128; i = i + 1 }
+    value
+}
+char: (c) => {
+    (c == 9) || (c == 10) || (c == 13) ||
+    ((c >= 32) && (c <= 55295)) || ((c >= 57344) && (c <= 65533)) ||
+    ((c >= 65536) && (c <= 1114111))
+}
+space: (c) => { (c == 32) || (c == 9) || (c == 10) || (c == 13) }
+start: (c) => {
+    (c == 58) || (c == 95) || ((c >= 65) && (c <= 90)) || ((c >= 97) && (c <= 122)) ||
+    ((c >= 192) && (c <= 214)) || ((c >= 216) && (c <= 246)) ||
+    ((c >= 248) && (c <= 767)) || ((c >= 880) && (c <= 893)) ||
+    ((c >= 895) && (c <= 8191)) || ((c >= 8204) && (c <= 8205)) ||
+    ((c >= 8304) && (c <= 8591)) || ((c >= 11264) && (c <= 12271)) ||
+    ((c >= 12289) && (c <= 55295)) || ((c >= 63744) && (c <= 64975)) ||
+    ((c >= 65008) && (c <= 65533)) || ((c >= 65536) && (c <= 983039))
+}
+name: (c) => {
+    start(c) || (c == 45) || (c == 46) || ((c >= 48) && (c <= 57)) ||
+    (c == 183) || ((c >= 768) && (c <= 879)) || ((c >= 8255) && (c <= 8256))
+}
+digit: (c, radix) => {
+    value: -1
+    if((c >= 48) && (c <= 57)) { value = c - 48 }
+    if((c >= 65) && (c <= 70)) { value = c - 55 }
+    if((c >= 97) && (c <= 102)) { value = c - 87 }
+    if(value >= radix) { value = -1 }
+    value
+}
+ncName: (text) => {
+    if(!String.recognizes(text)) { ^false }
+    if(text.size() == 0) { ^false }
+    i: 0
+    for(character in text) {
+        c: scalar(character)
+        if((c == 58) || !name(c) || ((i == 0) && !start(c))) { ^false }
+        i = i + 1
+    }
+    true
+}
+qName: (text) => {
+    if(!String.recognizes(text)) { ^null }
+    prefix: null
+    local: ""
+    left: Encoding.UTF8.encode("\u{feff}")
+    right: Encoding.UTF8.encode("\u{feff}")
+    colon: false
+    for(character in text) {
+        if(character == ":") {
+            if(colon) { ^null }
+            colon = true
+            prefix = Encoding.UTF8.decode(left)
+        }
+        if(character != ":") {
+            destination: left
+            if(colon) { destination = right }
+            for(octet in Encoding.UTF8.encode(character)) { destination.add(octet) }
+        }
+    }
+    local = Encoding.UTF8.decode(left)
+    if(colon) { local = Encoding.UTF8.decode(right) }
+    if(!ncName(local)) { ^null }
+    if(colon && !ncName(prefix)) { ^null }
+    lexicalPrefix: prefix
+    { prefix: lexicalPrefix; localName: local }
+}
+encName: (text) => {
+    if(!String.recognizes(text) || (text.size() == 0)) { ^false }
+    i: 0
+    for(character in text) {
+        c: scalar(character)
+        letter: ((c >= 65) && (c <= 90)) || ((c >= 97) && (c <= 122))
+        if(!letter && ((i == 0) || !(((c >= 48) && (c <= 57)) || (c == 46) || (c == 95) || (c == 45)))) { ^false }
+        i = i + 1
+    }
+    true
+}
+reservedTarget: (text) => {
+    if(text.size() != 3) { ^false }
+    ((text[0] == "x") || (text[0] == "X")) &&
+    ((text[1] == "m") || (text[1] == "M")) &&
+    ((text[2] == "l") || (text[2] == "L"))
+}

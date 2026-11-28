@@ -1,0 +1,95 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Original test fixtures and independent structural comparisons over public data.
+Assertions: import("std:test/assertions")
+XML: import("std:xml/xml")
+repeat: (text, count) => {
+    result: ""; chunk: text; remaining: count
+    while(remaining > 0) {
+        if(remaining % 2 == 1) { result = result.concat(chunk) }
+        remaining = remaining.div(2)
+        if(remaining > 0) { chunk = chunk.concat(chunk) }
+    }
+    result
+}
+slice: (text, begin, end) => {
+    result: Encoding.UTF8.encode("\u{feff}"); index: begin
+    while(index < end) {
+        for(octet in Encoding.UTF8.encode(text[index])) { result.add(octet) }
+        index = index + 1
+    }
+    Encoding.UTF8.decode(result)
+}
+equal: (left, right) => {
+    work: { a: left; b: right; next: null }
+    while(work !== null) {
+        pair: work; work = pair.next; a: pair.a; b: pair.b
+        if(a !== b) {
+            primitive: String.recognizes(a) || Integer.recognizes(a) || (a === null) || (a === true) || (a === false)
+            if(primitive) { if(a != b) { ^false } }
+            if(!primitive) {
+                if(Array.recognizes(a)) {
+                    if(!Array.recognizes(b) || (a.size() != b.size())) { ^false }
+                    i: 0
+                    while(i < a.size()) {
+                        leftItem: a[i]; rightItem: b[i]
+                        work = { a: leftItem; b: rightItem; next: work }; i = i + 1
+                    }
+                }
+                if(!Array.recognizes(a)) {
+                    if(a.slotNames().size() != b.slotNames().size()) { ^false }
+                    for(key in a.slotNames()) {
+                        if(!b.hasSlot(key)) { ^false }
+                        leftItem: a.slotValue(key); rightItem: b.slotValue(key)
+                        work = { a: leftItem; b: rightItem; next: work }
+                    }
+                }
+            }
+        }
+    }
+    true
+}
+error: (category, body, offset: null, limit: null) => {
+    failure: Assertions.signals(XML.XmlError, body)
+    Assertions.require(failure.parent() === XML.XmlError)
+    Assertions.require(failure.slotNames().size() == 3)
+    Assertions.require(failure.kind == category)
+    Assertions.require(failure.offset == offset)
+    Assertions.require(failure.limit == limit)
+    failure
+}
+collect: (source, cuts) => {
+    events: Map(); count: 0
+    parser: XML.eventParser((event) => { events[count] = event; count = count + 1 })
+    previous: 0
+    for(cut in cuts) { parser.feed(slice(source, previous, cut)); previous = cut }
+    parser.feed(slice(source, previous, source.size())); parser.finish()
+    result: []
+    i: 0
+    while(i < count) { result = Array(...result, events[i]); i = i + 1 }
+    result
+}
+
+// The callback deliberately returns from this active module-level invocation.
+abandon: (save) => {
+    parser: XML.eventParser((event) => { ^41 })
+    save(parser); parser.feed("<r/>"); 0
+}
+
+abandonWriter: (save) => {
+    writer: XML.eventWriter((text) => { ^42 })
+    save(writer); writer.feed({ kind: "comment"; value: "x" }); 0
+}
