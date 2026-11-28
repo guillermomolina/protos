@@ -20,7 +20,6 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
-import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
@@ -85,9 +84,9 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
                     "isSourceFunction(callable)",
                     "isSingleContext()",
                     "callable == cachedCallable",
-                    "cachedTarget != null"
+                    "callNode != null"
             },
-            assumptions = {"cachedCodeStable", "cachedCallerNeedsStable"},
+            assumptions = {"cachedCallable.codeStableAssumptionForRuntime()", "cachedCallee.callerNeedsStability()"},
             excludeForUncached = true,
             limit = "3")
     static Object callDirectSourceSend(
@@ -100,37 +99,24 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
             @Bind Node inliningTarget,
             @Bind("bytecodeOf($node)") BytecodeNode bytecode,
             @Bind("bytecode.getBytecodeIndex(frame)") int bytecodeIndex,
-            @Bind("rootOf($node)") ProtosBytecodeRootNode root,
             @Cached(value = "callable", weak = true)
                     ProtosClosureValue cachedCallable,
-            @Cached("cachedCallable.codeStableAssumptionForRuntime()")
-                    Assumption cachedCodeStable,
-            @Cached("singleContextTargetOrNull(cachedCallable, root)")
-                    RootCallTarget cachedTarget,
-            @Cached("createDirectCallNodeOrNull(cachedTarget)")
+            @Cached("createDirectCallNodeOrNull(singleContextTargetOrNull(cachedCallable, rootOf($node)))")
                     DirectCallNode callNode,
             @Cached(
-                    value = "calleeRootOrNull(cachedTarget)",
+                    value = "calleeRootOrNull(callNode)",
                     adopt = false)
                     ProtosBytecodeRootNode cachedCallee,
-            @Cached("cachedCallee.callerNeedsStability()")
-                    Assumption cachedCallerNeedsStable,
             @Cached("classifyReturnHome(cachedCallable, cachedCallee)")
                     ProtosFunctionCallDispatchers.ReturnHomeMode cachedHomeMode,
             @Exclusive @Cached ProtosFunctionCallDispatchers.FunctionDirectInvokeNode invoke,
-            @Exclusive @Cached InlinedConditionProfile taskPresence,
-            @Exclusive @Cached InlinedConditionProfile explicitTaskPresence,
-            @Exclusive @Cached InlinedConditionProfile publishedActivationPresence,
-            @Exclusive @Cached InlinedConditionProfile closureHeaderPresence,
-            @Exclusive @Cached InlinedConditionProfile callerActivationPresence,
+            @Exclusive @Cached ProtosFunctionCallDispatchers.PrepareInvocationTaskNode prepareTask,
             @Exclusive @Cached InlinedConditionProfile suspensionPresence) {
         Object[] arguments = ProtosFrameArguments.dispatchedCall1(
                 null, receiver, receiverHomeOrNull(receiver),
                 null, null, a0);
         Object outcome = ProtosFunctionCallDispatchers.invokeCachedClosure(
-                frame, inliningTarget, cachedHomeMode, taskPresence, explicitTaskPresence,
-                publishedActivationPresence, closureHeaderPresence,
-                callerActivationPresence, suspensionPresence, invoke,
+                frame, inliningTarget, cachedHomeMode, prepareTask, suspensionPresence, invoke,
                 callNode, cachedCallee, callable, arguments, null);
         // The cached effective root's compilation-final proof: a proven body
         // never yields a suspended outcome, so no terminal classification.
@@ -160,9 +146,9 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
                     "isSingleContext()",
                     "canonicalCallSelected(callable, rootSelection, cachedShape, cachedLocalCallGetter)",
                     "callable == cachedCallable",
-                    "cachedTarget != null"
+                    "callNode != null"
             },
-            assumptions = {"cachedCodeStable", "cachedCallerNeedsStable"},
+            assumptions = {"cachedCallable.codeStableAssumptionForRuntime()", "cachedCallee.callerNeedsStability()"},
             excludeForUncached = true,
             limit = "3")
     static Object callCachedClosure(
@@ -175,7 +161,6 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
             @Bind Node inliningTarget,
             @Bind("bytecodeOf($node)") BytecodeNode bytecode,
             @Bind("bytecode.getBytecodeIndex(frame)") int bytecodeIndex,
-            @Bind("rootOf($node)") ProtosBytecodeRootNode root,
             @Cached(value = "callable", weak = true)
                     ProtosClosureValue cachedCallable,
             @Exclusive @Cached(value = "rootCallSelection()", allowUncached = true)
@@ -186,32 +171,20 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
                     value = "callSlotGetter(cachedShape)",
                     allowUncached = true)
                     PropertyGetter cachedLocalCallGetter,
-            @Cached("cachedCallable.codeStableAssumptionForRuntime()")
-                    Assumption cachedCodeStable,
-            @Cached("singleContextTargetOrNull(cachedCallable, root)")
-                    RootCallTarget cachedTarget,
-            @Cached("createDirectCallNodeOrNull(cachedTarget)")
+            @Cached("createDirectCallNodeOrNull(singleContextTargetOrNull(cachedCallable, rootOf($node)))")
                     DirectCallNode callNode,
-            @Cached(value = "calleeRootOrNull(cachedTarget)", adopt = false)
+            @Cached(value = "calleeRootOrNull(callNode)", adopt = false)
                     ProtosBytecodeRootNode cachedCallee,
-            @Cached("cachedCallee.callerNeedsStability()")
-                    Assumption cachedCallerNeedsStable,
             @Cached("classifyReturnHome(cachedCallable, cachedCallee)")
                     ProtosFunctionCallDispatchers.ReturnHomeMode cachedHomeMode,
             @Exclusive @Cached ProtosFunctionCallDispatchers.FunctionDirectInvokeNode invoke,
-            @Exclusive @Cached InlinedConditionProfile taskPresence,
-            @Exclusive @Cached InlinedConditionProfile explicitTaskPresence,
-            @Exclusive @Cached InlinedConditionProfile publishedActivationPresence,
-            @Exclusive @Cached InlinedConditionProfile closureHeaderPresence,
-            @Exclusive @Cached InlinedConditionProfile callerActivationPresence,
+            @Exclusive @Cached ProtosFunctionCallDispatchers.PrepareInvocationTaskNode prepareTask,
             @Exclusive @Cached InlinedConditionProfile suspensionPresence) {
         Object[] arguments = ProtosFrameArguments.dispatchedCall2(
                 null, ProtosFrameArguments.functionCallMarker(),
                 null, null, null, a0, a1);
         Object outcome = ProtosFunctionCallDispatchers.invokeCachedClosure(
-                frame, inliningTarget, cachedHomeMode, taskPresence, explicitTaskPresence,
-                publishedActivationPresence, closureHeaderPresence,
-                callerActivationPresence, suspensionPresence, invoke,
+                frame, inliningTarget, cachedHomeMode, prepareTask, suspensionPresence, invoke,
                 callNode, cachedCallee, callable, arguments, null);
         // The cached effective root's compilation-final proof: a proven body
         // never yields a suspended outcome, so no terminal classification.
@@ -466,8 +439,11 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
     }
 
     static ProtosBytecodeRootNode calleeRootOrNull(
-            RootCallTarget target) {
-        return ProtosFunctionCallDispatchers.calleeRootOrNull(target);
+            DirectCallNode callNode) {
+        return ProtosFunctionCallDispatchers.calleeRootOrNull(
+                callNode == null
+                        ? null
+                        : (RootCallTarget) callNode.getCallTarget());
     }
 
     static ProtosObjectValue receiverHomeOrNull(Object receiver) {

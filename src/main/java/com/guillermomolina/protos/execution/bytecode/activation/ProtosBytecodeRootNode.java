@@ -9096,14 +9096,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     @Operation
-    public static final class TextReaderInitialNeedInput {
-        @Specialization
-        public static Object perform() {
-            return ProtosTextReaderCPrimeExecution.Advance.needInput();
-        }
-    }
-
-    @Operation
     public static final class ApplyTextReaderLowerOutcome {
         @Specialization
         public static Object perform(

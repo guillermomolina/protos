@@ -632,9 +632,9 @@ final class ProtosFunctionCallDispatchers {
                     "cachedTarget != null"
                 },
                 assumptions = {
-                    "cachedCodeStable",
-                    "cachedProjectionStable",
-                    "cachedCallerNeedsStable"
+                    "cachedClosure.codeStableAssumptionForRuntime()",
+                    "cachedClosure.contextProjectionStabilityForRuntime()",
+                    "cachedCallee.callerNeedsStability()"
                 },
                 limit = "3")
         static Object callFunctionCached(
@@ -650,30 +650,18 @@ final class ProtosFunctionCallDispatchers {
                         ProtosClosureValue cachedClosure,
                 @Cached(value = "enteredContext", weak = true)
                         ProtosLanguageContext cachedContext,
-                @Cached("cachedClosure.codeStableAssumptionForRuntime()")
-                        Assumption cachedCodeStable,
-                @Cached("cachedClosure.contextProjectionStabilityForRuntime()")
-                        Assumption cachedProjectionStable,
                 @Cached("functionCallTarget(cachedClosure, enteredContext)")
                         RootCallTarget cachedTarget,
                 @Cached("createDirectCallNodeOrNull(cachedTarget)") DirectCallNode callNode,
                 @Cached(value = "calleeRootOrNull(cachedTarget)", adopt = false)
                         ProtosBytecodeRootNode cachedCallee,
-                @Cached("cachedCallee.callerNeedsStability()")
-                        Assumption cachedCallerNeedsStable,
                 @Cached("classifyReturnHome(cachedClosure, cachedCallee)")
                         ReturnHomeMode cachedHomeMode,
                 @Exclusive @Cached FunctionDirectInvokeNode invoke,
-                @Exclusive @Cached InlinedConditionProfile taskPresence,
-                @Exclusive @Cached InlinedConditionProfile explicitTaskPresence,
-                @Exclusive @Cached InlinedConditionProfile publishedActivationPresence,
-                @Exclusive @Cached InlinedConditionProfile closureHeaderPresence,
-                @Exclusive @Cached InlinedConditionProfile callerActivationPresence,
+                @Exclusive @Cached PrepareInvocationTaskNode prepareTask,
                 @Exclusive @Cached InlinedConditionProfile suspensionPresence) {
             return invokeCachedClosure(
-                    frame, inliningTarget, cachedHomeMode, taskPresence, explicitTaskPresence,
-                    publishedActivationPresence, closureHeaderPresence,
-                    callerActivationPresence, suspensionPresence, invoke,
+                    frame, inliningTarget, cachedHomeMode, prepareTask, suspensionPresence, invoke,
                     callNode, cachedCallee, closure, arguments, callerReference);
         }
 
@@ -704,7 +692,7 @@ final class ProtosFunctionCallDispatchers {
                     "cachedTarget != null",
                     "currentPlan.bytecodeActivationTargetForComposition() == cachedTarget"
                 },
-                assumptions = "cachedCallerNeedsStable",
+                assumptions = "cachedCallee.callerNeedsStability()",
                 limit = "3",
                 replaces = "callFunctionCached")
         static Object callFunctionCachedCt(
@@ -725,19 +713,11 @@ final class ProtosFunctionCallDispatchers {
                 @Cached("createDirectCallNodeOrNull(cachedTarget)") DirectCallNode callNode,
                 @Cached(value = "calleeRootOrNull(cachedTarget)", adopt = false)
                         ProtosBytecodeRootNode cachedCallee,
-                @Cached("cachedCallee.callerNeedsStability()")
-                        Assumption cachedCallerNeedsStable,
                 @Exclusive @Cached FunctionDirectInvokeNode invoke,
-                @Exclusive @Cached InlinedConditionProfile taskPresence,
-                @Exclusive @Cached InlinedConditionProfile explicitTaskPresence,
-                @Exclusive @Cached InlinedConditionProfile publishedActivationPresence,
-                @Exclusive @Cached InlinedConditionProfile closureHeaderPresence,
-                @Exclusive @Cached InlinedConditionProfile callerActivationPresence,
+                @Exclusive @Cached PrepareInvocationTaskNode prepareTask,
                 @Exclusive @Cached InlinedConditionProfile suspensionPresence) {
             return invokeSharedTarget(
-                    frame, inliningTarget, taskPresence, explicitTaskPresence,
-                    publishedActivationPresence, closureHeaderPresence,
-                    callerActivationPresence, suspensionPresence, invoke, callNode,
+                    frame, inliningTarget, prepareTask, suspensionPresence, invoke, callNode,
                     cachedCallee, closure, arguments, callerReference);
         }
 
@@ -1060,11 +1040,7 @@ final class ProtosFunctionCallDispatchers {
             VirtualFrame frame,
             Node inliningTarget,
             ReturnHomeMode homeMode,
-            InlinedConditionProfile taskPresence,
-            InlinedConditionProfile explicitTaskPresence,
-            InlinedConditionProfile publishedActivationPresence,
-            InlinedConditionProfile closureHeaderPresence,
-            InlinedConditionProfile callerActivationPresence,
+            PrepareInvocationTaskNode prepareTask,
             InlinedConditionProfile suspensionPresence,
             FunctionDirectInvokeNode invoke,
             DirectCallNode callNode,
@@ -1074,16 +1050,12 @@ final class ProtosFunctionCallDispatchers {
             Object explicitCaller) {
         if (homeMode == ReturnHomeMode.UNOBSERVABLE) {
             return invokeUnobservableHome(
-                    frame, inliningTarget, taskPresence, explicitTaskPresence,
-                    publishedActivationPresence, closureHeaderPresence,
-                    callerActivationPresence, suspensionPresence,
+                    frame, inliningTarget, prepareTask, suspensionPresence,
                     callNode, callee, closure, arguments, explicitCaller);
         }
         if (homeMode == ReturnHomeMode.CAPTURED) {
             return invokeCapturedHome(
-                    frame, inliningTarget, taskPresence, explicitTaskPresence,
-                    publishedActivationPresence, closureHeaderPresence,
-                    callerActivationPresence, suspensionPresence,
+                    frame, inliningTarget, prepareTask, suspensionPresence,
                     callNode, callee, closure, arguments, explicitCaller);
         }
         return invoke.execute(
@@ -1135,11 +1107,7 @@ final class ProtosFunctionCallDispatchers {
     static Object invokeUnobservableHome(
             VirtualFrame frame,
             Node inliningTarget,
-            InlinedConditionProfile taskPresence,
-            InlinedConditionProfile explicitTaskPresence,
-            InlinedConditionProfile publishedActivationPresence,
-            InlinedConditionProfile closureHeaderPresence,
-            InlinedConditionProfile callerActivationPresence,
+            PrepareInvocationTaskNode prepareTask,
             InlinedConditionProfile suspensionPresence,
             DirectCallNode callNode,
             ProtosBytecodeRootNode callee,
@@ -1150,11 +1118,16 @@ final class ProtosFunctionCallDispatchers {
         ProtosFrameArguments.completeDispatchedHeader(
                 arguments, closure, caller, ProtosReturnHome.unobservable());
         if (!omitsTaskTransport(frame, callee, explicitCaller)) {
-            prepareInvocationTask(
-                    frame, arguments, explicitCaller, inliningTarget, taskPresence, explicitTaskPresence,
-                    publishedActivationPresence, closureHeaderPresence, callerActivationPresence);
+            prepareTask.execute(frame, inliningTarget, arguments, explicitCaller);
         }
-        Object outcome = callNode.call(arguments);
+        Object outcome;
+        if (frame != null
+                && callee instanceof ProtosBytecodeRootNodeGen) {
+            outcome = callNode.call(
+                    ProtosBytecodeRootNodeGen.class, -1, arguments);
+        } else {
+            outcome = callNode.call(arguments);
+        }
         if (callee != null && callee.provablyNonSuspendingBody()) {
             return outcome;
         }
@@ -1172,11 +1145,7 @@ final class ProtosFunctionCallDispatchers {
     static Object invokeCapturedHome(
             VirtualFrame frame,
             Node inliningTarget,
-            InlinedConditionProfile taskPresence,
-            InlinedConditionProfile explicitTaskPresence,
-            InlinedConditionProfile publishedActivationPresence,
-            InlinedConditionProfile closureHeaderPresence,
-            InlinedConditionProfile callerActivationPresence,
+            PrepareInvocationTaskNode prepareTask,
             InlinedConditionProfile suspensionPresence,
             DirectCallNode callNode,
             ProtosBytecodeRootNode callee,
@@ -1187,9 +1156,7 @@ final class ProtosFunctionCallDispatchers {
         ProtosFrameArguments.completeDispatchedHeader(
                 arguments, closure, caller,
                 closure.capturedReturnHomeOrNullForRuntime());
-        prepareInvocationTask(
-                frame, arguments, explicitCaller, inliningTarget, taskPresence, explicitTaskPresence,
-                publishedActivationPresence, closureHeaderPresence, callerActivationPresence);
+        prepareTask.execute(frame, inliningTarget, arguments, explicitCaller);
         Object outcome = callNode.call(arguments);
         if (callee != null && callee.provablyNonSuspendingBody()) {
             return outcome;
@@ -1210,11 +1177,7 @@ final class ProtosFunctionCallDispatchers {
     static Object invokeSharedTarget(
             VirtualFrame frame,
             Node inliningTarget,
-            InlinedConditionProfile taskPresence,
-            InlinedConditionProfile explicitTaskPresence,
-            InlinedConditionProfile publishedActivationPresence,
-            InlinedConditionProfile closureHeaderPresence,
-            InlinedConditionProfile callerActivationPresence,
+            PrepareInvocationTaskNode prepareTask,
             InlinedConditionProfile suspensionPresence,
             FunctionDirectInvokeNode invoke,
             DirectCallNode callNode,
@@ -1224,9 +1187,7 @@ final class ProtosFunctionCallDispatchers {
             Object explicitCaller) {
         if (closure.capturedReturnHomeOrNullForRuntime() != null) {
             return invokeCapturedHome(
-                    frame, inliningTarget, taskPresence, explicitTaskPresence,
-                    publishedActivationPresence, closureHeaderPresence,
-                    callerActivationPresence, suspensionPresence,
+                    frame, inliningTarget, prepareTask, suspensionPresence,
                     callNode, callee, closure, arguments, explicitCaller);
         }
         if (!closure.hasNativeBody()
@@ -1234,9 +1195,7 @@ final class ProtosFunctionCallDispatchers {
                 && callee != null
                 && callee.returnHomeProvenUnobservable()) {
             return invokeUnobservableHome(
-                    frame, inliningTarget, taskPresence, explicitTaskPresence,
-                    publishedActivationPresence, closureHeaderPresence,
-                    callerActivationPresence, suspensionPresence,
+                    frame, inliningTarget, prepareTask, suspensionPresence,
                     callNode, callee, closure, arguments, explicitCaller);
         }
         return invoke.execute(
@@ -1261,6 +1220,41 @@ final class ProtosFunctionCallDispatchers {
                 && callee.admitsTaskTransportOmission()
                 && frame != null
                 && !(explicitCaller instanceof ProtosActivation);
+    }
+
+
+    /**
+     * Prepares invocation Task provenance before entering
+     * the callee.
+     */
+    @GenerateInline
+    @GenerateUncached
+    @GenerateCached(false)
+    abstract static class PrepareInvocationTaskNode extends Node {
+
+        abstract void execute(
+                VirtualFrame frame,
+                Node inliningTarget,
+                Object[] arguments,
+                Object explicitCaller);
+
+        @Specialization
+        static void prepare(
+                VirtualFrame frame,
+                Node inliningTarget,
+                Object[] arguments,
+                Object explicitCaller,
+                @Cached InlinedConditionProfile taskPresence,
+                @Cached InlinedConditionProfile explicitTaskPresence,
+                @Cached InlinedConditionProfile publishedActivationPresence,
+                @Cached InlinedConditionProfile closureHeaderPresence,
+                @Cached InlinedConditionProfile callerActivationPresence) {
+            prepareInvocationTask(
+                    frame, arguments, explicitCaller, inliningTarget,
+                    taskPresence, explicitTaskPresence,
+                    publishedActivationPresence, closureHeaderPresence,
+                    callerActivationPresence);
+        }
     }
 
     /** Preserve Task reachability even when the callee needs no caller state. */

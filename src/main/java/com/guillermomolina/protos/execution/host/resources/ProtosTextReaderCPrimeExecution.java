@@ -226,7 +226,7 @@ public final class ProtosTextReaderCPrimeExecution {
                             BytecodeLocal yielded = builder.createLocal("textReaderLowerYielded", null);
 
                             builder.beginStoreLocal(advance);
-                            builder.emitTextReaderInitialNeedInput();
+                            builder.emitLoadConstant(Advance.needInput());
                             builder.endStoreLocal();
 
                             builder.beginWhile();

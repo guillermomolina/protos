@@ -2409,11 +2409,8 @@ final class ProtosI115BDeferredCallerTest {
             Object[] unobservable =
                     ProtosFrameArguments.functionCallArguments(new Object[] {SUPPLIED});
             Object identityOutcome = ProtosFunctionCallDispatchers.invokeUnobservableHome(
-                    frame, null, com.oracle.truffle.api.profiles.InlinedConditionProfile.getUncached(),
-                    com.oracle.truffle.api.profiles.InlinedConditionProfile.getUncached(),
-                    com.oracle.truffle.api.profiles.InlinedConditionProfile.getUncached(),
-                    com.oracle.truffle.api.profiles.InlinedConditionProfile.getUncached(),
-                    com.oracle.truffle.api.profiles.InlinedConditionProfile.getUncached(),
+                    frame, null,
+                    ProtosFunctionCallDispatchersFactory.PrepareInvocationTaskNodeGen.getUncached(),
                     com.oracle.truffle.api.profiles.InlinedConditionProfile.getUncached(),
                     com.oracle.truffle.api.nodes.DirectCallNode.create(identityTarget),
                     identityRoot, identity, unobservable, null);
@@ -2439,11 +2436,8 @@ final class ProtosI115BDeferredCallerTest {
                         Object[] arguments = ProtosFrameArguments.functionCallArguments(
                                 new Object[] {supplied.get(1)});
                         Object outcome = ProtosFunctionCallDispatchers.invokeCapturedHome(
-                                null, null, com.oracle.truffle.api.profiles.InlinedConditionProfile.getUncached(),
-                                com.oracle.truffle.api.profiles.InlinedConditionProfile.getUncached(),
-                                com.oracle.truffle.api.profiles.InlinedConditionProfile.getUncached(),
-                                com.oracle.truffle.api.profiles.InlinedConditionProfile.getUncached(),
-                                com.oracle.truffle.api.profiles.InlinedConditionProfile.getUncached(),
+                                null, null,
+                                ProtosFunctionCallDispatchersFactory.PrepareInvocationTaskNodeGen.getUncached(),
                                 com.oracle.truffle.api.profiles.InlinedConditionProfile.getUncached(),
                                 com.oracle.truffle.api.nodes.DirectCallNode.create(target),
                                 root, callee, arguments, activation);
@@ -2856,11 +2850,8 @@ final class ProtosI115BDeferredCallerTest {
                 Object[] structured =
                         ProtosFrameArguments.functionCallArguments(new Object[] {SUPPLIED});
                 ProtosFunctionCallDispatchers.invokeUnobservableHome(
-                        frame, null, com.oracle.truffle.api.profiles.InlinedConditionProfile.getUncached(),
-                        com.oracle.truffle.api.profiles.InlinedConditionProfile.getUncached(),
-                        com.oracle.truffle.api.profiles.InlinedConditionProfile.getUncached(),
-                        com.oracle.truffle.api.profiles.InlinedConditionProfile.getUncached(),
-                        com.oracle.truffle.api.profiles.InlinedConditionProfile.getUncached(),
+                        frame, null,
+                        ProtosFunctionCallDispatchersFactory.PrepareInvocationTaskNodeGen.getUncached(),
                         com.oracle.truffle.api.profiles.InlinedConditionProfile.getUncached(),
                         com.oracle.truffle.api.nodes.DirectCallNode.create(otherTarget),
                         otherRoot, other, structured, publishedCaller);
@@ -3318,11 +3309,8 @@ final class ProtosI115BDeferredCallerTest {
             Object[] arguments,
             Object explicitCaller) {
         return ProtosFunctionCallDispatchers.invokeUnobservableHome(
-                frame, null, com.oracle.truffle.api.profiles.InlinedConditionProfile.getUncached(),
-                com.oracle.truffle.api.profiles.InlinedConditionProfile.getUncached(),
-                com.oracle.truffle.api.profiles.InlinedConditionProfile.getUncached(),
-                com.oracle.truffle.api.profiles.InlinedConditionProfile.getUncached(),
-                com.oracle.truffle.api.profiles.InlinedConditionProfile.getUncached(),
+                frame, null,
+                ProtosFunctionCallDispatchersFactory.PrepareInvocationTaskNodeGen.getUncached(),
                 com.oracle.truffle.api.profiles.InlinedConditionProfile.getUncached(),
                 com.oracle.truffle.api.nodes.DirectCallNode.create(directTarget(callee)),
                 root, callee, arguments, explicitCaller);
@@ -3335,11 +3323,8 @@ final class ProtosI115BDeferredCallerTest {
             ProtosClosureValue callee,
             Object[] arguments) {
         return ProtosFunctionCallDispatchers.invokeUnobservableHome(
-                frame, null, com.oracle.truffle.api.profiles.InlinedConditionProfile.getUncached(),
-                com.oracle.truffle.api.profiles.InlinedConditionProfile.getUncached(),
-                com.oracle.truffle.api.profiles.InlinedConditionProfile.getUncached(),
-                com.oracle.truffle.api.profiles.InlinedConditionProfile.getUncached(),
-                com.oracle.truffle.api.profiles.InlinedConditionProfile.getUncached(),
+                frame, null,
+                ProtosFunctionCallDispatchersFactory.PrepareInvocationTaskNodeGen.getUncached(),
                 com.oracle.truffle.api.profiles.InlinedConditionProfile.getUncached(),
                 com.oracle.truffle.api.nodes.DirectCallNode.create(target),
                 root, callee, arguments, null);

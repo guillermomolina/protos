@@ -19,7 +19,6 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
-import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
@@ -81,7 +80,7 @@ abstract class ProtosCallQuaternaryMethodNode extends Node {
                     "callable == cachedCallable",
                     "cachedTarget != null"
             },
-            assumptions = {"cachedCodeStable", "cachedCallerNeedsStable"},
+            assumptions = {"cachedCallable.codeStableAssumptionForRuntime()", "cachedCallee.callerNeedsStability()"},
             excludeForUncached = true,
             limit = "4")
     static Object callCachedClosure(
@@ -95,7 +94,6 @@ abstract class ProtosCallQuaternaryMethodNode extends Node {
             @Bind Node inliningTarget,
             @Bind("bytecodeOf($node)") BytecodeNode bytecode,
             @Bind("bytecode.getBytecodeIndex(frame)") int bytecodeIndex,
-            @Bind("rootOf($node)") ProtosBytecodeRootNode root,
             @Cached(value = "callable", weak = true)
                     ProtosClosureValue cachedCallable,
             @Exclusive @Cached(value = "rootCallSelection()", allowUncached = true)
@@ -106,32 +104,22 @@ abstract class ProtosCallQuaternaryMethodNode extends Node {
                     value = "callSlotGetter(cachedShape)",
                     allowUncached = true)
                     PropertyGetter cachedLocalCallGetter,
-            @Cached("cachedCallable.codeStableAssumptionForRuntime()")
-                    Assumption cachedCodeStable,
-            @Cached("singleContextTargetOrNull(cachedCallable, root)")
+            @Cached("singleContextTargetOrNull(cachedCallable, rootOf($node))")
                     RootCallTarget cachedTarget,
             @Cached("createDirectCallNodeOrNull(cachedTarget)")
                     DirectCallNode callNode,
             @Cached(value = "calleeRootOrNull(cachedTarget)", adopt = false)
                     ProtosBytecodeRootNode cachedCallee,
-            @Cached("cachedCallee.callerNeedsStability()")
-                    Assumption cachedCallerNeedsStable,
             @Cached("classifyReturnHome(cachedCallable, cachedCallee)")
                     ProtosFunctionCallDispatchers.ReturnHomeMode cachedHomeMode,
             @Exclusive @Cached ProtosFunctionCallDispatchers.FunctionDirectInvokeNode invoke,
-            @Exclusive @Cached InlinedConditionProfile taskPresence,
-            @Exclusive @Cached InlinedConditionProfile explicitTaskPresence,
-            @Exclusive @Cached InlinedConditionProfile publishedActivationPresence,
-            @Exclusive @Cached InlinedConditionProfile closureHeaderPresence,
-            @Exclusive @Cached InlinedConditionProfile callerActivationPresence,
+            @Exclusive @Cached ProtosFunctionCallDispatchers.PrepareInvocationTaskNode prepareTask,
             @Exclusive @Cached InlinedConditionProfile suspensionPresence) {
         Object[] arguments = ProtosFrameArguments.dispatchedCall4(
                 null, ProtosFrameArguments.functionCallMarker(),
                 null, null, null, a0, a1, a2, a3);
         Object outcome = ProtosFunctionCallDispatchers.invokeCachedClosure(
-                frame, inliningTarget, cachedHomeMode, taskPresence, explicitTaskPresence,
-                publishedActivationPresence, closureHeaderPresence,
-                callerActivationPresence, suspensionPresence, invoke,
+                frame, inliningTarget, cachedHomeMode, prepareTask, suspensionPresence, invoke,
                 callNode, cachedCallee, callable, arguments, null);
         // The cached effective root's compilation-final proof: a proven body
         // never yields a suspended outcome, so no terminal classification.
