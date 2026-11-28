@@ -1,0 +1,209 @@
+{
+  "atom": {
+    "acquisition_date": null,
+    "acquisition_date_note": "Independent local acquisition timestamp was not observed; HTTP response Date is recorded separately. Do not infer timestamps from filesystem metadata.",
+    "byte_length": 205055,
+    "content_type": "application/atom+xml; charset=utf-8",
+    "http_response_date": "2026-11-28T05:58:23Z",
+    "http_status": 200,
+    "local_path": "upstream/github-atom/announcements.atom",
+    "metadata_source": "Human acquisition handoff; not independently fetched by these tools.",
+    "sha256": "51098074360646159a7de1e9857fbce15ee30d80fdf98b25af9285e04c0ce112",
+    "url": "https://github.com/guillermomolina/protos/discussions/categories/announcements.atom"
+  },
+  "differential_and_installed_acceptance": {
+    "captured_atom": {
+      "atom_sha256": "51098074360646159a7de1e9857fbce15ee30d80fdf98b25af9285e04c0ce112",
+      "general_web016_implementation": false,
+      "jvm": {
+        "failed": 0,
+        "passed": 1,
+        "system_seconds": 4.443,
+        "user_seconds": 267.162,
+        "wall_seconds": 67.948
+      },
+      "native": {
+        "failed": 0,
+        "included_in_complete_xml_execution": true,
+        "passed": 1
+      },
+      "njs_version": "1.0.2",
+      "normalized_entries": 20,
+      "reference_sha256": "e3dc9163f809c1a21134c425bb4e668d24d0290f25474ffc8e02168a813ad727",
+      "scope": "Exact captured-feed parser and consumer parity",
+      "source_entries": 25,
+      "source_sha256": "0e29bdd99e8e2344b073227b3f77d1d111d576dafeed5cef3ff564d6a54630f9",
+      "status": "PASS_REPORTED_BY_OWNER",
+      "website_revision": "67d8e311452b98fa997d738cf5852c312e539e01"
+    },
+    "differential": {
+      "admission_classifications": {
+        "PROFILE_DIFFERENCE": 1,
+        "REFERENCE_DIFFERENCE": 26
+      },
+      "admission_comparisons": 933,
+      "admission_divergences_adjudicated": 27,
+      "admission_divergent_documents": 17,
+      "common_profile_documents": 311,
+      "declaration_metadata_compared": false,
+      "protos_defects_identified": 0,
+      "reference_structures": 201,
+      "references": {
+        "dotnet": {
+          "agreements": 294,
+          "divergences": 17,
+          "version": "10.0.15"
+        },
+        "expat": {
+          "agreements": 301,
+          "divergences": 10,
+          "version": "2.7.3"
+        },
+        "libxml2": {
+          "agreements": 311,
+          "divergences": 0,
+          "version": "2.12.5"
+        }
+      },
+      "structural_divergences_adjudicated": 2,
+      "structural_divergent_documents": 2,
+      "structural_documents": 74
+    },
+    "jvm": {
+      "captured_atom_tests": 1,
+      "failed": 0,
+      "official_w3c_tests": 1983,
+      "own_tests": 105,
+      "passed": 2163,
+      "structural_differential_tests": 74
+    },
+    "local_evidence_sha256": {
+      "ATOM-EXECUTION.json": "2b9653d3ec9e6d6dd37c331333b220113c83008b38dddce051fd88b88a5bf86a",
+      "ATOM-LOCAL-REGISTRATION.json": "43e6c8040dad64d60db9f383d0e6722aa7a69e067e55fd5ebc47c5e7359bb4e8",
+      "ATOM-NJS.json": "e3dc9163f809c1a21134c425bb4e668d24d0290f25474ffc8e02168a813ad727",
+      "DIFFERENTIAL-ADJUDICATIONS.json": "286fbc758de3d5ad7a409d83e8991d449d5e8ad7ccfb944229733da941b31162",
+      "DIFFERENTIAL-DOTNET.json": "2c7f16e1a1049e62035bb08005d3c398318e190a752b121ba14a79a12f3caca4",
+      "DIFFERENTIAL.json": "a9ec319532927f6fe9385dc06b7418e909f123faa351de3b77ecd98a105fe2d4",
+      "DOTNET-IMAGE.txt": "c58430b9bc75ea34c4ca20d7d9e7d56f614126376ea700d749771031403a3e17",
+      "EXPAT-DIVERGENCES.json": "7eafee3966c7b491aea865dfc17033319bc0b6f945311d766e5ed6abcc331211",
+      "NATIVE-EXECUTION.json": "db8263efe36a4fe42366a0a0b80157843b83debad159fe1b1ca1db0be274d869",
+      "NATIVE-INSTALLATION.json": "7bfcc581009324acb4b427ca9a195cf6d25716e5148af5edff86cdf98d5b02df",
+      "NATIVE-XML-EXECUTION.log": "eda69ff54a449f32dc2eae2bc3c69b8ac5512aca83a1c1c3bf866cc0f74f9cc2",
+      "STRUCTURAL-EXECUTION.json": "494b07953b38297c7c5aef0de4dffa0d984fbaf28a1d3fc76ae02fa5577a9706",
+      "STRUCTURAL-REFERENCES.json": "0086d652eab8459957835667253eb0c52cff6a3bd827bdcb22caeaf510329c2b"
+    },
+    "native_installed": {
+      "archive_sha256": "7a66097504e18fa0ef7b3920c69664d26e9c6db727bd32c9f701309ec9e1768c",
+      "captured_atom_tests": 1,
+      "failed": 0,
+      "implementation_version": "0.4.256-SNAPSHOT",
+      "installed_native_sha256": "48b575fb35bd2a678db167f7eb6fbd285222318b177f5edcb515f499fc38807d",
+      "log_sha256": "eda69ff54a449f32dc2eae2bc3c69b8ac5512aca83a1c1c3bf866cc0f74f9cc2",
+      "manifest_sha256": "0ed4b27a18e03cf785205e4b87d0fd9003f079af619b4ed822678960f9d89d34",
+      "official_w3c_tests": 1983,
+      "own_xml_tests": 105,
+      "passed": 2089,
+      "publication_permitted": false,
+      "return_code": 0,
+      "source_revision": "348a2bdd55b7e4c82b4a7572914030f0c8104d4b",
+      "status": "PASS_REPORTED_BY_OWNER",
+      "structural_differential_tests_executed": false,
+      "wall_seconds": 216.372
+    },
+    "profile": "XML 1.0 Fifth Edition and Namespaces 1.0 Third Edition; DTD-free semantic String input",
+    "schema_version": 1,
+    "status": "PASS_REPORTED_BY_OWNER",
+    "total_test_executions_failed": 0,
+    "total_test_executions_passed": 4252
+  },
+  "evidence": {
+    "acceptance": "JVM_PROFILE_CORPUS_PASS_REPORTED",
+    "acquisition": "Reported by human executor. Tool commands verify pinned bytes offline before use.",
+    "differential": "PENDING_REFERENCE_COMPARISON",
+    "inventory": "Maintainer-reported complete inventory: 2585 logical cases, 2584 distinct input members, 1983 executable and 602 nonexecutable cases; zero unresolved references or classifications. Inventory generation does not constitute executable acceptance.",
+    "jvm_profile_corpus": {
+      "acceptance_tree": "Implementation commit plus subsequent local suite-native projection and Test Tool integration changes.",
+      "command": "time bin/protos test --jobs 8 --directory protos/tests/conformance/library/xml",
+      "date": "2026-11-28",
+      "failed": 0,
+      "graalvm": "CE 25.6.5.1+2.1",
+      "implementation_commit_prefix": "348a2bdd5",
+      "java": "25.0.5.1",
+      "limitations": "Selected JVM XML profile only; not unrestricted XML conformance, W3C certification, differential acceptance, website consumer parity or installed Native Image acceptance.",
+      "official_source_count": 33,
+      "official_total": 1983,
+      "ordinary_xml": 105,
+      "passed": 2088,
+      "profile_reject": 1672,
+      "progress_group_count": 34,
+      "source": "Human executor reported actual Test Tool execution.",
+      "supported_accept": 74,
+      "supported_reject": 237,
+      "system_seconds": 36.013,
+      "user_seconds": 1843.845,
+      "wall_seconds": 157.435
+    },
+    "native_image": "NOT_EXECUTED",
+    "website_consumer": "PENDING_REFERENCE"
+  },
+  "licensing": {
+    "local_path": "upstream/w3c-20130923/LICENSE.html",
+    "original_notices": "Preserved without changes inside the original ZIP, including xmlconf/xmltest/readme.html and xmlconf/ibm/ibm_oasis_readme.txt; this list is not exhaustive.",
+    "policy": "Conservative local-only fixture publication policy. Do not publish acquired third-party inputs, fixture-bearing generated suite sources or their local manifest registrations. Original tooling, authored harnesses and reviewed metadata remain versionable. Preserve all executable cases. Hashes identify bytes and do not establish licensing permission.",
+    "redistribution_status": "PENDING_RECONCILIATION",
+    "review_date": "2026-11-28",
+    "review_findings": {
+      "ibm": "The reviewed contributor notice contains no additional explicit redistribution permission.",
+      "w3c": "The downloaded general license does not establish that historical contributor restrictions have been superseded.",
+      "xmltest": "The historical contributor notice permits internal use and redistribution of the unchanged original xmltest.zip, but does not grant distribution permission in other forms."
+    },
+    "reviewed_notice_sha256": {
+      "xmlconf/ibm/ibm_oasis_readme.txt": "27524d515249fc305c0729ff63e6f13ac6bf3d1de1d8d53e6c313401d62fe190",
+      "xmlconf/xmltest/readme.html": "177d19f580f2ca934e32de21116a5aa3ff48f381591c23991039aa1a1ed2e981"
+    },
+    "sha256": "d4eedcb04dc16687b6d56b49ed06e1b55f599b8bd8e518af9773d1b7d2cf5c76",
+    "url": "https://www.w3.org/Consortium/Legal/copyright-software-19980720",
+    "url_note": "Exact download URL supplied by the human executor."
+  },
+  "profile": {
+    "namespaces": "Namespaces in XML 1.0 Third Edition (2009-12-08)",
+    "processing": "nonvalidating, DTD-free, namespace-aware semantic String input",
+    "xml": "XML 1.0 Fifth Edition (2008-11-26)"
+  },
+  "schema_version": 1,
+  "w3c": {
+    "acquisition_date": null,
+    "catalog": "xmlconf/xmlconf.xml",
+    "catalog_dtd": "xmlconf/testcases.dtd",
+    "contributors": {
+      "eduni": {
+        "executable_cases": 485,
+        "logical_cases": 565
+      },
+      "ibm": {
+        "executable_cases": 619,
+        "logical_cases": 1136
+      },
+      "japanese": {
+        "executable_cases": 12,
+        "logical_cases": 12
+      },
+      "oasis": {
+        "executable_cases": 348,
+        "logical_cases": 348
+      },
+      "sun": {
+        "executable_cases": 159,
+        "logical_cases": 159
+      },
+      "xmltest": {
+        "executable_cases": 360,
+        "logical_cases": 365
+      }
+    },
+    "local_path": "upstream/w3c-20130923/xmlts20130923.zip",
+    "release": "20130923",
+    "sha256": "f9510b3532926e1b4c2e54855b021e4b8a66ec98a5337dcf4ff07e8a41968deb",
+    "url": "https://www.w3.org/XML/Test/xmlts20130923.zip"
+  }
+}

@@ -16,7 +16,7 @@
 Assertions: import("std:test/assertions")
 Test: import("std:test/test")
 XML: import("std:xml/xml")
-F: import("./Fixtures.protos")
+F: import("./official/suite/Fixtures.protos")
 
 tests: [
     Test("scalar indexing and physical line normalization survive every CRLF split", () => {

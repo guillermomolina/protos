@@ -61,6 +61,8 @@ final class ProtosTestToolTool011ProgressGroupingTest {
                     + "leaves: SuiteGraph.flattenLeaves(RepositorySuite.root)\n"
                     + "conformance: Arrays.filter(leaves, (leaf) => leaf.id == \"protos/conformance\")[0]\n";
 
+    private static final String XML_OFFICIAL = "conformance/standard-library/xml-official";
+
     private static final String TOML_OFFICIAL = "conformance/standard-library/toml-official";
 
     /** Selector used where only the casePath matters; TOOL012 subdivides toml-official by it. */
@@ -75,6 +77,7 @@ final class ProtosTestToolTool011ProgressGroupingTest {
                     "conformance/io",
                     "conformance/standard-library/toml",
                     "conformance/standard-library/markdown",
+                    "conformance/standard-library/xml",
                     "conformance/standard-library/collections",
                     "conformance/standard-library/data-text-test",
                     "conformance/language-surface",
@@ -156,7 +159,7 @@ final class ProtosTestToolTool011ProgressGroupingTest {
 
         assertEquals(expected, actual);
         // LIB025: the subdivided HTTP leaf presents no group without retained Cases.
-        assertEquals(41, actual.values().stream().mapToInt(List::size).sum());
+        assertEquals(42, actual.values().stream().mapToInt(List::size).sum());
     }
 
     @Test
@@ -204,6 +207,11 @@ final class ProtosTestToolTool011ProgressGroupingTest {
         paths.add("library/collections/nested/tool011.protos");
         paths.add("library/json/tool011.protos");
         paths.add("library/xml/tool011.protos");
+        paths.add("library/xml/parser-positive.protos");
+        paths.add("library/xml/resource-limits.protos");
+        paths.add("library/xml/official/suite/accept-00.protos");
+        paths.add("library/xml/official/suite/reject-03.protos");
+        paths.add("library/xml/official/suite/profile-reject-26.protos");
         paths.add("library/text/tool011.protos");
         paths.add("library/test/nested/tool011.protos");
         paths.add("library/toml/tool011.protos");
@@ -255,7 +263,70 @@ final class ProtosTestToolTool011ProgressGroupingTest {
         expectedGroups.add(TOML_OFFICIAL + "/invalid/tool011");
         expectedGroups.add(
                 "conformance/standard-library/markdown-official/invalid/tool011");
+        expectedGroups.add(XML_OFFICIAL + "/accept-00");
+        expectedGroups.add(XML_OFFICIAL + "/reject-03");
+        expectedGroups.add(XML_OFFICIAL + "/profile-reject-26");
+        for (String path : paths.subList(synthetic, paths.size())) {
+            if (path.substring(0, path.lastIndexOf('/')).equals("library/xml/official/suite")) {
+                expectedGroups.add(expectedConformanceGroup(path));
+            }
+        }
         assertEquals(expectedGroups, observedGroups);
+    }
+
+    @Test
+    void xmlSourceGroupsPreserveSelectedOrderAndAssignmentIndexes() throws Exception {
+        ProtosArrayValue result =
+                assertInstanceOf(
+                        ProtosArrayValue.class,
+                        completed(
+                                PRELUDE
+                                        + """
+                                        keys: Array(
+                                            Array("library/xml/official/suite/reject-03.protos", "catalog/first"),
+                                            Array("library/xml/official/suite/accept-00.protos", "catalog/first"),
+                                            Array("library/xml/official/suite/reject-03.protos", "different/deep/catalog/second"),
+                                            Array("library/xml/official/suite/profile-reject-26.protos", "flat"),
+                                            Array("library/xml/parser-positive.protos", "xml/parse"),
+                                            Array("library/xml/resource-limits.protos", "xml/limits"),
+                                            Array("library/toml/official/suite/example.protos", "invalid/array/one"),
+                                            Array("library/markdown/official/suite/example.protos", "commonmark/blocks/one")
+                                        )
+                                        assignment: RepositorySuite.progressGroupAssignment(conformance, keys)
+                                        index: 0
+                                        for(key in keys) {
+                                            (path, selector): key
+                                            groupIndex: assignment.caseGroupIndexes[index]
+                                            if(assignment.names[groupIndex] != RepositorySuite.progressGroupName(conformance, path, selector)) {
+                                                Error().signal()
+                                            }
+                                            if(groupIndex != RepositorySuite.progressGroupIndex(conformance, assignment.names, path, selector)) {
+                                                Error().signal()
+                                            }
+                                            index = index + 1
+                                        }
+                                        Array(assignment.names, Arrays.map(assignment.caseGroupIndexes, (index) => assignment.names[index]))
+                                        """));
+
+        List<String> expected = new ArrayList<>(CONFORMANCE_GROUPS);
+        expected.add(4, TOML_OFFICIAL + "/invalid/array");
+        expected.add(6, "conformance/standard-library/markdown-official/commonmark/blocks");
+        expected.addAll(8, List.of(
+                XML_OFFICIAL + "/reject-03",
+                XML_OFFICIAL + "/accept-00",
+                XML_OFFICIAL + "/profile-reject-26"));
+        assertEquals(expected, strings(arrayAt(result, 0)));
+        assertEquals(
+                List.of(
+                        XML_OFFICIAL + "/reject-03",
+                        XML_OFFICIAL + "/accept-00",
+                        XML_OFFICIAL + "/reject-03",
+                        XML_OFFICIAL + "/profile-reject-26",
+                        "conformance/standard-library/xml",
+                        "conformance/standard-library/xml",
+                        TOML_OFFICIAL + "/invalid/array",
+                        "conformance/standard-library/markdown-official/commonmark/blocks"),
+                strings(arrayAt(result, 1)));
     }
 
     @Test
@@ -267,6 +338,10 @@ final class ProtosTestToolTool011ProgressGroupingTest {
 
     @Test
     void libraryPathsOutsideTheStandardLibraryGroupsFailClosed() throws Exception {
+        assertFailed(conformanceGroupName("library/xml/other/a.protos"));
+        assertFailed(conformanceGroupName("library/xml/official/a.protos"));
+        assertFailed(conformanceGroupName("library/xml/official/upstream/a.protos"));
+        assertFailed(conformanceGroupName("library/xml/official/suite/nested/a.protos"));
         assertFailed(conformanceGroupName("library/a.protos"));
         assertFailed(conformanceGroupName("library/unknown/a.protos"));
         assertFailed(conformanceGroupName("library/toml/other/a.protos"));
@@ -403,6 +478,14 @@ final class ProtosTestToolTool011ProgressGroupingTest {
     /** Test-side oracle mirroring the ratified TOOL011 conformance policy. */
     private static String expectedConformanceGroup(String path) {
         String directory = path.substring(0, path.lastIndexOf('/'));
+        if (directory.equals("library/xml")) {
+            return "conformance/standard-library/xml";
+        }
+        if (directory.equals("library/xml/official/suite")) {
+            return XML_OFFICIAL
+                    + "/"
+                    + path.substring(path.lastIndexOf('/') + 1, path.length() - ".protos".length());
+        }
         if (directory.equals("library/toml/official")
                 || directory.startsWith("library/toml/official/")) {
             return TOML_OFFICIAL + "/invalid/tool011";
@@ -422,7 +505,7 @@ final class ProtosTestToolTool011ProgressGroupingTest {
             return "conformance/standard-library/collections";
         }
         for (String data : List.of(
-                "library/json", "library/xml", "library/text", "library/test", "library/runtime",
+                "library/json", "library/text", "library/test", "library/runtime",
                 "library/inspect")) {
             if (directory.equals(data) || directory.startsWith(data + "/")) {
                 return "conformance/standard-library/data-text-test";

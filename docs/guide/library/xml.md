@@ -10,8 +10,9 @@ XML.textContent(title) // "A & B"
 The normative authority is [Standard Library XML processing](../../../spec/semantics/XML.md).
 The module uses a namespace-aware, non-validating, DTD-free profile of XML 1.0
 Fifth Edition and Namespaces 1.0 Third Edition. Importing it grants no authority.
-This implementation is awaiting human-executed conformance and acceptance
-validation; its presence in source is not evidence of a passing validation run.
+The maintainer reported 2088/2088 XML tests passing on the JVM on
+2026-11-28, including all 1983 executable official profile cases. See the
+acceptance evidence below; installed Native Image acceptance remains separate.
 
 ## Public API
 
@@ -148,3 +149,91 @@ URI values and processing instructions remain inert data.
 See the original synthetic [Atom query](../../../protos/examples/xml/atom-query.protos),
 [incremental parser](../../../protos/examples/xml/incremental-parser.protos), and
 [sitemap encoder](../../../protos/examples/xml/sitemap-encoding.protos) examples.
+
+## External profile acceptance
+
+The [offline acceptance documentation](../../../protos/tests/conformance/library/xml/official/README.md)
+describes the pinned W3C release and captured real Atom input. Python performs
+only acquisition metadata processing, deterministic fixture projection and
+integrity checking. It never executes Protos tests or starts test processes.
+
+The ordinary Test Tool executes one Test per full executable catalog identity.
+Projection groups the current 1983 Tests by classification into 33 sources of at
+most 64 Tests each: 2 accept, 4 reject and 27 profile-reject sources. The 602
+nonexecutable cases remain in inventory metadata, with reasons and no passing
+status. Each Test constructs its own exact fixture chunks inside its body; suite
+discovery does not materialize all fixtures. The shared canonical harness retains
+eager, whole-input and partitioned parsing, empty feeds, exact XML-owned rejection
+checks, diagnostic/event-prefix equivalence and independent encoder/eventWriter
+round-trips. Successful completion returns canonical `true`; unexpected Errors
+and assertion failures escape to the Test Tool.
+
+The canonical `Harness.protos` and `Fixtures.protos` are co-located in
+`official/suite/`. Official tests import `./Harness.protos`, which imports
+`./Fixtures.protos`; ordinary XML tests import `./official/suite/Fixtures.protos`.
+The Test Tool confines direct-file SOURCE resolution to the selected entry's
+parent directory. The shared helpers are authored once, never generated or
+registered as Tests, and preserved by projection cleanup. No resolver authority
+is widened.
+
+The existing [Test Tool](../tools/test-tool.md) supplies discovery, fresh semantic
+Process isolation, bounded `--jobs` parallelism, progress, failure classification
+and distributed sharding. `--file` selects one generated source; `--directory`
+selects the suite or XML subtree. The existing `make test-protos-lib LIB=xml`
+owner scope includes registered official descendants. For exact selection, obtain
+an opaque CaseRef with `--list-cases` and use `--case`; the catalog identity is
+the Test name. No separate XML execution or scheduling mechanism is introduced.
+
+Ordinary sources directly in `library/xml` present as
+`conformance/standard-library/xml`. Official sources directly in
+`library/xml/official/suite` present independently as
+`conformance/standard-library/xml-official/<source>`, using the source filename
+without `.protos` (for example `accept-00` or `profile-reject-26`). Each generated
+source contains at most 64 Tests. Only sources with retained Cases contribute
+official subgroups; selector directories and catalog identities do not define
+groups. Existing file, directory, owner scope and shard selection still apply.
+Progress grouping is presentation only and changes no identities, scheduling,
+isolation or result classification. The maintainer's ordinary XML result was
+105/105 under the former `data-text-test` label, taking 117 seconds. The later
+suite-native run passed all 34 groups (33 official and one ordinary XML group).
+
+Contributor redistribution rights remain unresolved. The publication policy is
+conservative: keep the original W3C acquisition and fixture-bearing sources local;
+version only original tooling, reviewed metadata and authored helpers. W3C
+inventory, generation and checking verify the pinned archive and license offline
+and do not require the independent historical Atom capture. `tools/xml/xml_test_projection.py generate` materializes
+ignored local suite sources and registers only their exact suite-native rows in
+the local conformance manifest. The permanent committed manifest remains valid
+without acquisitions. Do not publish local rows or fixture-bearing sources.
+`check` is read-only; explicit `cleanup` removes only owned registrations and
+hash-verified generated sources, including obsolete standalone projection files.
+It preserves canonical helpers, acquisitions, metadata and historical evidence.
+Conflicts, unknown legacy files and modified owned sources fail safely.
+
+Historical maintainer evidence includes 105/105 ordinary XML tests, 10/10 Test Tool
+integration tests, 54/54 initial Python projection tests, GraalVM 25.6.5.1 alignment,
+build, generation and artifact checking PASS. The former standalone path passed
+its first regenerated case, `rmt-ns10-017`, and subsequently 65/65 Python
+projection/executor tests, artifact integrity and official smoke 10/10.
+
+The suite-native replacement subsequently passed 57/57 Python projection tests
+and 27/27 focal Java tests, build, discovery, generation and artifact checking.
+Inventory is COMPLETE: 2585 logical cases, 2584 distinct input members, 1983
+executable and 602 nonexecutable cases, with zero unresolved references or
+classifications. On 2026-11-28 the maintainer ran:
+
+```sh
+time bin/protos test --jobs 8 --directory protos/tests/conformance/library/xml
+```
+
+The reported result was **2088 passed, 0 failed**: 105 ordinary XML tests, 74
+SUPPORTED_ACCEPT, 237 SUPPORTED_REJECT and 1672 PROFILE_REJECT. Wall-clock time
+was 157.435 seconds (user 30m43.845s, sys 0m36.013s). The earlier standalone
+duration was only an estimate, not a controlled benchmark. Generated metadata
+continues to report NOT_EXECUTED; the execution evidence is independent.
+
+Testing targets the approved DTD-free profile, not unrestricted XML conformance or
+W3C certification. D268-R1 differential acceptance remains an outstanding
+obligation. Mandatory real Atom and website-consumer parity require the independent
+consumer result and exact website revision; generic parser agreement is insufficient.
+Installed Native Image acceptance has not been established.

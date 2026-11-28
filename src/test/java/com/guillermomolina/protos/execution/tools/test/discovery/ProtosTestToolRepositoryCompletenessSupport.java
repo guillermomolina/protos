@@ -139,6 +139,15 @@ public final class ProtosTestToolRepositoryCompletenessSupport {
                             "conformance/library/toml/official/suite/Harness.protos",
                             "auxiliary harness of the toml-official suite sources"),
                     Map.entry(
+                            "conformance/library/xml/official/suite/Fixtures.protos",
+                            "auxiliary fixture construction and structural comparison for XML suites"),
+                    Map.entry(
+                            "conformance/library/xml/Transfer.protos",
+                            "auxiliary Actor SOURCE bootstrap for XML transfer tests"),
+                    Map.entry(
+                            "conformance/library/xml/official/suite/Harness.protos",
+                            "auxiliary acceptance harness of the XML official suite sources"),
+                    Map.entry(
                             "conformance/library/markdown/Fixtures.protos",
                             "auxiliary fixture construction for the markdown suite sources"),
                     Map.entry(

@@ -191,12 +191,12 @@ root: SuiteGraph.suite(
     )
 )
 
-// TOOL011 repository progress presentation policy. Progress groups are a
+// Repository progress presentation policy. Progress groups are a
 // presentation projection over final retained Logical Cases only: they never
 // select a CorpusId, ExecutionRequirementId, schedule, Process or Case identity.
 // Every policy violation fails closed; there is no catch-all group.
 //
-// TOOL012: a subdivided conformance group presents no group under its own
+// A selector-subdivided conformance group presents no group under its own
 // name. Each of its Cases presents under "<name>/<directory>", where directory
 // is the Case's D153 selector without its final segment (for toml-official,
 // the upstream toml-test direction and directory such as "invalid/array",
@@ -214,7 +214,7 @@ policyError: () => {
 // One conformance progress group. A casePath belongs to it when the path's
 // directory equals or lies below one of `subtrees`, or equals exactly one of
 // `directories`.
-progressGroupDescriptor: (name, subtrees, directories, subdivided) => {
+progressGroupDescriptor: (name, subtrees, directories, subdivided, sourceSubdivided: false) => {
     subtreeValues: Array(...subtrees)
     subtreeValues.freeze()
     directoryValues: Array(...directories)
@@ -225,6 +225,7 @@ progressGroupDescriptor: (name, subtrees, directories, subdivided) => {
         subtrees: subtreeValues
         directories: directoryValues
         subdivided: subdivided
+        sourceSubdivided: sourceSubdivided
     }
     descriptor.freeze()
 }
@@ -233,7 +234,7 @@ conformanceProgressGroup: (name, subtrees, directories) => {
     progressGroupDescriptor(name, subtrees, directories, false)
 }
 
-// TOOL012: membership is matched exactly as for conformanceProgressGroup; only
+// Membership is matched exactly as for conformanceProgressGroup; only
 // presentation is subdivided by selector directory.
 subdividedConformanceProgressGroup: (name, subtrees) => {
     progressGroupDescriptor(name, subtrees, Array(), true)
@@ -302,6 +303,18 @@ conformanceProgressGroups: Array(
         Array(),
         Array("library/markdown")
     ),
+    progressGroupDescriptor(
+        "conformance/standard-library/xml-official",
+        Array(),
+        Array("library/xml/official/suite"),
+        true,
+        true
+    ),
+    conformanceProgressGroup(
+        "conformance/standard-library/xml",
+        Array(),
+        Array("library/xml")
+    ),
     conformanceProgressGroup(
         "conformance/standard-library/collections",
         Array("library/collections"),
@@ -309,7 +322,7 @@ conformanceProgressGroups: Array(
     ),
     conformanceProgressGroup(
         "conformance/standard-library/data-text-test",
-        Array("library/json", "library/xml", "library/text", "library/test", "library/runtime", "library/inspect"),
+        Array("library/json", "library/text", "library/test", "library/runtime", "library/inspect"),
         Array()
     ),
     conformanceProgressGroup(
@@ -493,10 +506,31 @@ conformanceDescriptorIndex: (casePath) => {
     matches[0]
 }
 
-caseGroupName: (group, selector) => {
+caseGroupName: (group, casePath, selector) => {
     name: group.name
     if(group.subdivided) {
-        name = name + "/" + selectorDirectory(selector)
+        suffix: null
+        if(group.sourceSubdivided) {
+            directory: pathDirectory(casePath)
+            filename: substringFrom(casePath, directory.size() + 1)
+            extension: ".protos"
+            (filename.size() > extension.size()).ifFalse(() => {
+                policyError()
+            })
+            (substringFrom(filename, filename.size() - extension.size()) == extension).ifFalse(() => {
+                policyError()
+            })
+            suffix = ""
+            index: 0
+            while(index < (filename.size() - extension.size())) {
+                suffix = suffix + filename[index]
+                index = index + 1
+            }
+        }
+        group.sourceSubdivided.ifFalse(() => {
+            suffix = selectorDirectory(selector)
+        })
+        name = name + "/" + suffix
     }
     name
 }
@@ -534,8 +568,8 @@ progressGroupAssignment: (leaf, caseKeys) => {
         for(key in caseKeys) {
             caseDescriptorIndex: caseDescriptorIndexes[caseIndex]
             caseGroup: conformanceProgressGroups[caseDescriptorIndex]
-            (ignoredPath, selector): key
-            caseName: caseGroupName(caseGroup, selector)
+            (casePath, selector): key
+            caseName: caseGroupName(caseGroup, casePath, selector)
             caseNames[caseIndex] = caseName
             if(caseGroup.subdivided) {
                 seen: descriptorSeen[caseDescriptorIndex]
@@ -627,6 +661,7 @@ progressGroupName: (leaf, casePath, selector) => {
         name =
             caseGroupName(
                 conformanceProgressGroups[conformanceDescriptorIndex(casePath)],
+                casePath,
                 selector
             )
     }

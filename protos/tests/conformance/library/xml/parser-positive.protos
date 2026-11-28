@@ -16,7 +16,7 @@
 Assertions: import("std:test/assertions")
 Test: import("std:test/test")
 XML: import("std:xml/xml")
-F: import("./Fixtures.protos")
+F: import("./official/suite/Fixtures.protos")
 
 tests: [
     Test("PI target termination and separated question-mark data preserve exact fields", () => {

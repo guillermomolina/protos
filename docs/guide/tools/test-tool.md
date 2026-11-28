@@ -679,6 +679,26 @@ Guest `stdout` and `stderr` remain private captured streams for the individual
 case execution. Test Tool progress is written on the Tool's own standard-error
 channel.
 
+Repository XML conformance progress uses `conformance/standard-library/xml`
+for sources directly in `library/xml`. Official sources directly in
+`library/xml/official/suite` use `conformance/standard-library/xml-official/<source>`,
+where `<source>` is the authoritative filename without `.protos`, for example
+`accept-00`, `reject-03` or `profile-reject-26`. The 1983 official Tests are
+projected into 33 sources with at most 64 Tests per source. Only official sources
+with retained Cases contribute subgroups, in first-retained-Case order within
+the descriptor's position. Catalog identities and selector directories do not
+determine these subgroup names. TOML and Markdown retain selector-directory
+subdivision. Unknown XML subdirectories fail closed.
+
+Grouping is presentation only, after existing file, directory, scope, Case and
+shard selection; it changes no Case identity, scheduling, Process isolation or
+result classification. The maintainer reported the ordinary XML scope passing
+105/105 under the former `data-text-test` label (117 seconds). On 2026-11-28
+the maintainer reported 2088/2088 passing in 157.435 seconds using the ordinary
+Test Tool with `--jobs 8`, including all 33 official groups and the ordinary XML
+group. This is JVM acceptance of the selected XML profile; the remaining
+independent acceptance obligations are documented in the XML guide.
+
 Current progress records have shapes such as:
 
 ```text

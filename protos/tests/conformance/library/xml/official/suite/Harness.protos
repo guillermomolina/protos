@@ -1,0 +1,110 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Public-interface checks for locally projected suite-native XML acceptance cases.
+XML: import("std:xml/xml")
+Assertions: import("std:test/assertions")
+F: import("./Fixtures.protos")
+
+// Balanced materialization avoids growing-prefix Array and String accumulation.
+join: (pieces, begin, end) => {
+    if(begin == end) { ^"" }
+    if(end - begin == 1) { ^pieces[begin] }
+    middle: begin + (end - begin).div(2)
+    join(pieces, begin, middle).concat(join(pieces, middle, end))
+}
+array: (items, begin, end) => {
+    if(begin == end) { ^[] }
+    if(end - begin == 1) { ^[items[begin]] }
+    middle: begin + (end - begin).div(2)
+    left: array(items, begin, middle); right: array(items, middle, end)
+    Array(...left, ...right)
+}
+
+// Only XML-owned failures are captured. Assertions and infrastructure errors escape.
+capture: (body) => {
+    XML.XmlError.handle(() => {
+        value: body()
+        { outcome: "accept"; value: value; diagnostic: null }
+    }, (failure) => {
+        Assertions.require(failure.parent() === XML.XmlError)
+        slots: failure.slotNames()
+        Assertions.require(slots.size() == 3)
+        for(key in slots) {
+            Assertions.require((key == "kind") || (key == "offset") || (key == "limit"))
+        }
+        diagnostic: { kind: failure.kind; offset: failure.offset; limit: failure.limit }
+        { outcome: "reject"; value: null; diagnostic: diagnostic }
+    })
+}
+eager: (source) => { capture(() => { XML.parse(source) }) }
+incremental: (chunks, count) => {
+    events: Map(); size: 0
+    result: capture(() => {
+        parser: XML.eventParser((event) => { events[size] = event; size = size + 1 })
+        parser.feed("")
+        index: 0
+        while(index < count) { parser.feed(chunks[index]); index = index + 1 }
+        parser.feed(""); parser.finish()
+        null
+    })
+    // A rejected parse still retains the exact public prefix already emitted.
+    { outcome: result.outcome; diagnostic: result.diagnostic; events: array(events, 0, size) }
+}
+
+// The sole round-trip adjustment is the specified declaration encoding omission.
+withoutEncoding: (document) => {
+    declaration: null
+    if(document.declaration !== null) {
+        original: document.declaration
+        declaration = { kind: original.kind; version: original.version; encoding: null; standalone: original.standalone }
+    }
+    { kind: document.kind; declaration: declaration; prolog: document.prolog; root: document.root; epilog: document.epilog }
+}
+serialize: (events, document) => {
+    chunks: Map(); count: 0
+    writer: XML.eventWriter((chunk) => { chunks[count] = chunk; count = count + 1 })
+    for(event in events) { writer.feed(event) }
+    writer.finish()
+    text: join(chunks, 0, count)
+    reparsed: XML.parse(text)
+    Assertions.require(F.equal(withoutEncoding(document), reparsed))
+    text
+}
+// Unexpected failures escape to the ordinary Test Tool.
+run: (identity, expected, source, chunks, count) => {
+    Assertions.require((expected == "accept") || (expected == "reject"))
+    original: eager(source)
+    Assertions.require(original.outcome == expected)
+    whole: incremental([source], 1)
+    partitioned: incremental(chunks, count)
+    Assertions.require(whole.outcome == expected)
+    Assertions.require(partitioned.outcome == expected)
+    Assertions.require(F.equal(whole.events, partitioned.events))
+    serialized: null
+    diagnostic: original.diagnostic
+    if(expected == "reject") {
+        Assertions.require(F.equal(diagnostic, whole.diagnostic))
+        Assertions.require(F.equal(diagnostic, partitioned.diagnostic))
+    }
+    if(expected == "accept") {
+        // Exercise eager serialization independently of the collected event stream.
+        encoded: XML.encode(original.value)
+        Assertions.require(F.equal(withoutEncoding(original.value), XML.parse(encoded)))
+        serialized = serialize(whole.events, original.value)
+        Assertions.require(serialize(partitioned.events, original.value) == serialized)
+    }
+    true
+}

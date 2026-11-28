@@ -8,6 +8,12 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.257-SNAPSHOT
+
+- **I182-C.** Add the pinned W3C XML Conformance Test Suite as official XML conformance: 1983 provenance-recorded Tests projected into 33 generated Protos sources of at most 64 Tests, with a shared harness, classification overrides and catalog reconciliations.
+- Add `tools/xml/` projection tooling (`inventory`, `generate`) with fail-closed archive, catalog and classification validation, plus its unit tests; move the shared XML fixtures under `official/suite`.
+- Present XML progress as the ordinary `xml` group plus one `xml-official/<source>` subgroup per official source, without changing Case identity, scheduling, isolation or classification; document the grouping and the XML acceptance status.
+
 ## 0.4.256-SNAPSHOT
 
 - **DIST028.** Adopt GraalVM Community and Truffle 25.6.5.1 with JDK 25.0.5.1 across Maven dependencies, development and CI images, portable distribution tooling and documentation.

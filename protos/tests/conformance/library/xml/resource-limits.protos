@@ -16,7 +16,7 @@
 Assertions: import("std:test/assertions")
 Test: import("std:test/test")
 XML: import("std:xml/xml")
-F: import("./Fixtures.protos")
+F: import("./official/suite/Fixtures.protos")
 
 // Repeated letters produce unique NCNames without numeric conversion. Even
 // the largest count fixtures stay below the default name, token and input bounds.

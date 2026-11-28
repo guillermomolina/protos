@@ -1,0 +1,11 @@
+# Acquired third-party inputs: redistribution reconciliation is pending.
+/upstream/w3c-20130923/xmlts20130923.zip
+/upstream/w3c-20130923/LICENSE.html
+/upstream/w3c-20130923/xmlconf/
+/upstream/github-atom/announcements.atom
+# Inventories, extracted inputs, generated sources, logs and reports stay local.
+/work/
+# Local fixture-bearing suite sources; canonical authored helpers stay versionable.
+/suite/accept-*.protos
+/suite/reject-*.protos
+/suite/profile-reject-*.protos

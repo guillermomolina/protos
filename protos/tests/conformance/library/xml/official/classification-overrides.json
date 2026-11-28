@@ -1,0 +1,1003 @@
+{
+  "xmlconf/eduni/errata-2e/errata2e.xml#rmt-e2e-57": {
+    "expected": "accept",
+    "final_classification": "SUPPORTED_ACCEPT",
+    "identity": "xmlconf/eduni/errata-2e/errata2e.xml#rmt-e2e-57",
+    "input_member": "xmlconf/eduni/errata-2e/E57.xml",
+    "input_sha256": "728295f82bdc949f0ecad8d59074bdb46e47e3cdcbe40fe65fdd14db9c31d8db",
+    "normative_reason": "The complete original is DTD-free and well-formed; xml is prebound. XML 1.0 Fifth Edition section 2.10 permits reporting an erroneous xml:space value; the Protos contract imposes no application-level value validation.",
+    "previous_classification": "REQUIRES_REVIEW",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition"
+  },
+  "xmlconf/eduni/errata-2e/errata2e.xml#rmt-e2e-61": {
+    "derived_profile_case": {
+      "encoding": "utf-8",
+      "execution": "OPTIONAL_NOT_GENERATED",
+      "expected": "accept",
+      "identity": "xmlconf/eduni/errata-2e/errata2e.xml#rmt-e2e-61::semantic-utf-8",
+      "reason": "Explicit caller-selected strict decoding yields a well-formed DTD-free semantic String; encoding spelling is preserved, not certified against bytes.",
+      "semantic_string_sha256": "ff6abbe1012405bf727942aacac975423362e809e4641ad38fab1d282d4cd8ea",
+      "transport_prefix_bytes_consumed": 0
+    },
+    "expected": null,
+    "final_classification": "OUTSIDE_TRANSPORT_REQUIREMENT",
+    "identity": "xmlconf/eduni/errata-2e/errata2e.xml#rmt-e2e-61",
+    "input_member": "xmlconf/eduni/errata-2e/E61.xml",
+    "input_sha256": "ff6abbe1012405bf727942aacac975423362e809e4641ad38fab1d282d4cd8ea",
+    "normative_reason": "ASCII-compatible bytes declare UTF-16 without a matching transport. Upstream expects byte-level rejection; semantic String parsing cannot establish byte/declaration consistency.",
+    "previous_classification": "REQUIRES_REVIEW",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition",
+    "upstream_expected": "reject"
+  },
+  "xmlconf/eduni/misc/ht-bh.xml#hst-bh-001": {
+    "expected": "reject",
+    "final_classification": "PROFILE_REJECT",
+    "identity": "xmlconf/eduni/misc/ht-bh.xml#hst-bh-001",
+    "input_member": "xmlconf/eduni/misc/001.xml",
+    "input_sha256": "b2ca9dde9200bcdaefa3283086042873e4324c7bfac24f020fef8dc3acafc6fc",
+    "normative_reason": "The complete original contains a real DOCTYPE; the DTD-free profile rejects it without processing its subset. Its hexadecimal reference FF000000F6 exceeds U+10FFFF.",
+    "previous_classification": "PROFILE_REJECT",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition"
+  },
+  "xmlconf/eduni/misc/ht-bh.xml#hst-bh-002": {
+    "expected": "reject",
+    "final_classification": "PROFILE_REJECT",
+    "identity": "xmlconf/eduni/misc/ht-bh.xml#hst-bh-002",
+    "input_member": "xmlconf/eduni/misc/002.xml",
+    "input_sha256": "7481b3fc7c50b7adb7ff28a82664ec7293c1453f042a9b7f4da0eb3dcc3a97b5",
+    "normative_reason": "The complete original contains a real DOCTYPE; the DTD-free profile rejects it without processing its subset. Its decimal reference 4294967542 exceeds U+10FFFF.",
+    "previous_classification": "PROFILE_REJECT",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition"
+  },
+  "xmlconf/eduni/misc/ht-bh.xml#hst-bh-003": {
+    "expected": "reject",
+    "final_classification": "PROFILE_REJECT",
+    "identity": "xmlconf/eduni/misc/ht-bh.xml#hst-bh-003",
+    "input_member": "xmlconf/eduni/misc/003.xml",
+    "input_sha256": "1227d4d627648bd055521a734caeb3ee1aee65af27a4f570b23b6433bd56e27a",
+    "normative_reason": "The complete original contains a real DOCTYPE; the DTD-free profile rejects it without processing its subset. Its hexadecimal reference FFFFFFFF000000F6 exceeds U+10FFFF.",
+    "previous_classification": "PROFILE_REJECT",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition"
+  },
+  "xmlconf/eduni/misc/ht-bh.xml#hst-bh-004": {
+    "expected": "reject",
+    "final_classification": "PROFILE_REJECT",
+    "identity": "xmlconf/eduni/misc/ht-bh.xml#hst-bh-004",
+    "input_member": "xmlconf/eduni/misc/004.xml",
+    "input_sha256": "e350568ae35e236404b102baf397d754e2750d708e06cf7f289dc1c5315292dd",
+    "normative_reason": "The complete original contains a real DOCTYPE; the DTD-free profile rejects it without processing its subset. Its decimal reference 18446744073709551862 exceeds U+10FFFF.",
+    "previous_classification": "PROFILE_REJECT",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition"
+  },
+  "xmlconf/eduni/misc/ht-bh.xml#hst-bh-005": {
+    "expected": "reject",
+    "final_classification": "PROFILE_REJECT",
+    "identity": "xmlconf/eduni/misc/ht-bh.xml#hst-bh-005",
+    "input_member": "xmlconf/eduni/misc/005.xml",
+    "input_sha256": "c930086b623e842c8ba1ad0463f026b0059a9c301eaef4762a71ea9e9cf698fd",
+    "normative_reason": "The complete original contains a real DOCTYPE; the DTD-free profile rejects it without processing its subset. Validity of the namespace attribute declaration does not override the DOCTYPE prohibition.",
+    "previous_classification": "PROFILE_REJECT",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition"
+  },
+  "xmlconf/eduni/misc/ht-bh.xml#hst-bh-006": {
+    "expected": "reject",
+    "final_classification": "PROFILE_REJECT",
+    "identity": "xmlconf/eduni/misc/ht-bh.xml#hst-bh-006",
+    "input_member": "xmlconf/eduni/misc/006.xml",
+    "input_sha256": "72e049020e89f3d3aa9557294feff27bc67f4e35f277d772c3e25f41fe055791",
+    "normative_reason": "The complete original contains a real DOCTYPE; the DTD-free profile rejects it without processing its subset. Validity of the namespace attribute declaration does not override the DOCTYPE prohibition.",
+    "previous_classification": "PROFILE_REJECT",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition"
+  },
+  "xmlconf/eduni/misc/ht-bh.xml#hst-lhs-007": {
+    "derived_profile_case": {
+      "encoding": "utf-8",
+      "execution": "OPTIONAL_NOT_GENERATED",
+      "expected": "accept",
+      "identity": "xmlconf/eduni/misc/ht-bh.xml#hst-lhs-007::semantic-utf-8",
+      "reason": "Explicit caller-selected strict decoding yields a well-formed DTD-free semantic String; encoding spelling is preserved, not certified against bytes.",
+      "semantic_string_sha256": "6246b7004137134a717881fd2e631b03a78078f6ff29331e505d2aa5196b981b",
+      "transport_prefix_bytes_consumed": 3
+    },
+    "expected": null,
+    "final_classification": "OUTSIDE_TRANSPORT_REQUIREMENT",
+    "identity": "xmlconf/eduni/misc/ht-bh.xml#hst-lhs-007",
+    "input_member": "xmlconf/eduni/misc/007.xml",
+    "input_sha256": "0fcc1fc486096eda1651958a907dfaa8c10c9602ba2c0e506dd4db19853d68ce",
+    "normative_reason": "UTF-8 BOM conflicts with the ISO-8859-1 declaration. Upstream expects byte-level rejection; semantic String parsing cannot establish byte/declaration consistency.",
+    "previous_classification": "REQUIRES_REVIEW",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition",
+    "upstream_expected": "reject"
+  },
+  "xmlconf/eduni/misc/ht-bh.xml#hst-lhs-008": {
+    "derived_profile_case": {
+      "encoding": "utf-16-be",
+      "execution": "OPTIONAL_NOT_GENERATED",
+      "expected": "accept",
+      "identity": "xmlconf/eduni/misc/ht-bh.xml#hst-lhs-008::semantic-utf-16-be",
+      "reason": "Explicit caller-selected strict decoding yields a well-formed DTD-free semantic String; encoding spelling is preserved, not certified against bytes.",
+      "semantic_string_sha256": "7b215d3f4f65d2c63a2b6fab2ebaf4f1aa98bb480c20337603f71125dd8dbe41",
+      "transport_prefix_bytes_consumed": 2
+    },
+    "expected": null,
+    "final_classification": "OUTSIDE_TRANSPORT_REQUIREMENT",
+    "identity": "xmlconf/eduni/misc/ht-bh.xml#hst-lhs-008",
+    "input_member": "xmlconf/eduni/misc/008.xml",
+    "input_sha256": "b79f9e33fed1756114406089b89d7dd77edd7d5e10512703c6d35cd1281f8783",
+    "normative_reason": "UTF-16BE BOM and content conflict with the UTF-8 declaration. Upstream expects byte-level rejection; semantic String parsing cannot establish byte/declaration consistency.",
+    "previous_classification": "REQUIRES_REVIEW",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition",
+    "upstream_expected": "reject"
+  },
+  "xmlconf/eduni/misc/ht-bh.xml#hst-lhs-009": {
+    "derived_profile_case": {
+      "encoding": "utf-8",
+      "execution": "OPTIONAL_NOT_GENERATED",
+      "expected": "reject",
+      "identity": "xmlconf/eduni/misc/ht-bh.xml#hst-lhs-009::semantic-utf-8",
+      "reason": "XML declaration lacks the required version pseudo-attribute.",
+      "semantic_string_sha256": "63ee83e714a6e93fd359af47adea474a597d85294d05f4a532c4fe0d578aee3c",
+      "transport_prefix_bytes_consumed": 2
+    },
+    "expected": null,
+    "final_classification": "OUTSIDE_TRANSPORT_REQUIREMENT",
+    "identity": "xmlconf/eduni/misc/ht-bh.xml#hst-lhs-009",
+    "input_member": "xmlconf/eduni/misc/009.xml",
+    "input_sha256": "56e5b24929e94ad20dd3c8038391554253fd7a26cd5cb2c14078b939fad09375",
+    "normative_reason": "UTF-16BE BOM is followed by UTF-8 byte content, not UTF-16 content. Upstream expects byte-level rejection; semantic String parsing cannot establish byte/declaration consistency.",
+    "previous_classification": "OUTSIDE_STRING_DOMAIN",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition",
+    "upstream_expected": "reject"
+  },
+  "xmlconf/eduni/namespaces/1.0/rmt-ns10.xml#rmt-ns10-004": {
+    "conditional_namespace_expectation": "accept only if the complete original satisfies all remaining profile requirements",
+    "expected": "reject",
+    "final_classification": "PROFILE_REJECT",
+    "identity": "xmlconf/eduni/namespaces/1.0/rmt-ns10.xml#rmt-ns10-004",
+    "input_member": "xmlconf/eduni/namespaces/1.0/004.xml",
+    "input_sha256": "6cc982131ac3ce84997b5359ad5410bb4f6cf820941f148aba93a84acba8ddcb",
+    "normative_reason": "Relative namespace URI is accepted as an opaque value. Inspection of the complete pinned original also establishes a real DOCTYPE, which still requires rejection. No DTD is removed to enable this adjudication.",
+    "previous_classification": "PROFILE_REJECT",
+    "reference": "spec/semantics/XML.md \u00a7\u00a71, 4, 6; Namespaces 1.0 Third Edition \u00a72.2"
+  },
+  "xmlconf/eduni/namespaces/1.0/rmt-ns10.xml#rmt-ns10-005": {
+    "conditional_namespace_expectation": "accept only if the complete original satisfies all remaining profile requirements",
+    "expected": "reject",
+    "final_classification": "PROFILE_REJECT",
+    "identity": "xmlconf/eduni/namespaces/1.0/rmt-ns10.xml#rmt-ns10-005",
+    "input_member": "xmlconf/eduni/namespaces/1.0/005.xml",
+    "input_sha256": "88b32168a25d64933cde5d0e8e30f01ab1e5c6795f99637506063bdc5cee6a72",
+    "normative_reason": "Same-document relative namespace URI is accepted as an opaque value. Inspection of the complete pinned original also establishes a real DOCTYPE, which still requires rejection. No DTD is removed to enable this adjudication.",
+    "previous_classification": "PROFILE_REJECT",
+    "reference": "spec/semantics/XML.md \u00a7\u00a71, 4, 6; Namespaces 1.0 Third Edition \u00a72.2"
+  },
+  "xmlconf/eduni/namespaces/1.0/rmt-ns10.xml#rmt-ns10-006": {
+    "conditional_namespace_expectation": "accept only if the complete original satisfies all remaining profile requirements",
+    "expected": "reject",
+    "final_classification": "PROFILE_REJECT",
+    "identity": "xmlconf/eduni/namespaces/1.0/rmt-ns10.xml#rmt-ns10-006",
+    "input_member": "xmlconf/eduni/namespaces/1.0/006.xml",
+    "input_sha256": "2bfb967623cb35d22aa796498824d321d03178315fb1f9f9b253a9f0d73017ec",
+    "normative_reason": "An IRI namespace name alone is not grounds for rejection. Inspection of the complete pinned original also establishes a real DOCTYPE, which still requires rejection. No DTD is removed to enable this adjudication.",
+    "previous_classification": "PROFILE_REJECT",
+    "reference": "spec/semantics/XML.md \u00a7\u00a71, 4, 6; Namespaces 1.0 Third Edition \u00a72.2"
+  },
+  "xmlconf/eduni/namespaces/1.0/rmt-ns10.xml#rmt-ns10-017": {
+    "expected": "accept",
+    "final_classification": "SUPPORTED_ACCEPT",
+    "identity": "xmlconf/eduni/namespaces/1.0/rmt-ns10.xml#rmt-ns10-017",
+    "input_member": "xmlconf/eduni/namespaces/1.0/017.xml",
+    "input_sha256": "92bc5636cbf15fc1805f9af2cbcb1a5d753c8dac841f7be254dc238eaa71f52c",
+    "normative_reason": "Complete original is DTD-free, well-formed and namespace-conformant. No namespace is required. Validity checking is outside this nonvalidating profile.",
+    "previous_classification": "REQUIRES_REVIEW",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition"
+  },
+  "xmlconf/eduni/namespaces/1.0/rmt-ns10.xml#rmt-ns10-018": {
+    "expected": "accept",
+    "final_classification": "SUPPORTED_ACCEPT",
+    "identity": "xmlconf/eduni/namespaces/1.0/rmt-ns10.xml#rmt-ns10-018",
+    "input_member": "xmlconf/eduni/namespaces/1.0/018.xml",
+    "input_sha256": "7553ea188d8a9f48894513012f470d8ed2708330bacba84617cca20ee41e1a91",
+    "normative_reason": "Complete original is DTD-free, well-formed and namespace-conformant. A default namespace is supported. Validity checking is outside this nonvalidating profile.",
+    "previous_classification": "REQUIRES_REVIEW",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition"
+  },
+  "xmlconf/eduni/namespaces/1.0/rmt-ns10.xml#rmt-ns10-019": {
+    "expected": "accept",
+    "final_classification": "SUPPORTED_ACCEPT",
+    "identity": "xmlconf/eduni/namespaces/1.0/rmt-ns10.xml#rmt-ns10-019",
+    "input_member": "xmlconf/eduni/namespaces/1.0/019.xml",
+    "input_sha256": "30870398793901d9f2bf29afdf1a4d201753806d87b2535d86879dc2b73ac31b",
+    "normative_reason": "Complete original is DTD-free, well-formed and namespace-conformant. The element prefix a is declared on the same start tag. Validity checking is outside this nonvalidating profile.",
+    "previous_classification": "REQUIRES_REVIEW",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition"
+  },
+  "xmlconf/eduni/namespaces/1.0/rmt-ns10.xml#rmt-ns10-020": {
+    "expected": "accept",
+    "final_classification": "SUPPORTED_ACCEPT",
+    "identity": "xmlconf/eduni/namespaces/1.0/rmt-ns10.xml#rmt-ns10-020",
+    "input_member": "xmlconf/eduni/namespaces/1.0/020.xml",
+    "input_sha256": "4e2a874b1f498459612513f9f2df2786d5cd1965b39ee255fd744e3b1558ef06",
+    "normative_reason": "Complete original is DTD-free, well-formed and namespace-conformant. The ordinary attribute prefix a is declared. Validity checking is outside this nonvalidating profile.",
+    "previous_classification": "REQUIRES_REVIEW",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition"
+  },
+  "xmlconf/eduni/namespaces/1.0/rmt-ns10.xml#rmt-ns10-021": {
+    "expected": "accept",
+    "final_classification": "SUPPORTED_ACCEPT",
+    "identity": "xmlconf/eduni/namespaces/1.0/rmt-ns10.xml#rmt-ns10-021",
+    "input_member": "xmlconf/eduni/namespaces/1.0/021.xml",
+    "input_sha256": "2640a64e246c774fbeebb4988cb73614e2585096b08c88c2687ac73ec7c1254e",
+    "normative_reason": "Complete original is DTD-free, well-formed and namespace-conformant. An inner default namespace clearing declaration is permitted. Validity checking is outside this nonvalidating profile.",
+    "previous_classification": "REQUIRES_REVIEW",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition"
+  },
+  "xmlconf/eduni/namespaces/1.0/rmt-ns10.xml#rmt-ns10-022": {
+    "expected": "accept",
+    "final_classification": "SUPPORTED_ACCEPT",
+    "identity": "xmlconf/eduni/namespaces/1.0/rmt-ns10.xml#rmt-ns10-022",
+    "input_member": "xmlconf/eduni/namespaces/1.0/022.xml",
+    "input_sha256": "eb1608f45edbe1e891d56ef8d5ed295024003fe58da43cdb3f6c98df4e93b003",
+    "normative_reason": "Complete original is DTD-free, well-formed and namespace-conformant. An inner default namespace rebinding is lexical. Validity checking is outside this nonvalidating profile.",
+    "previous_classification": "REQUIRES_REVIEW",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition"
+  },
+  "xmlconf/eduni/namespaces/1.0/rmt-ns10.xml#rmt-ns10-024": {
+    "expected": "accept",
+    "final_classification": "SUPPORTED_ACCEPT",
+    "identity": "xmlconf/eduni/namespaces/1.0/rmt-ns10.xml#rmt-ns10-024",
+    "input_member": "xmlconf/eduni/namespaces/1.0/024.xml",
+    "input_sha256": "b132e36f940d41123d5588acde29ab7c0bb4a733a0941f71b6527eec3b207cfe",
+    "normative_reason": "Complete original is DTD-free, well-formed and namespace-conformant. An inner prefix rebinding is lexical and the outer binding is restored. Validity checking is outside this nonvalidating profile.",
+    "previous_classification": "REQUIRES_REVIEW",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition"
+  },
+  "xmlconf/eduni/namespaces/1.0/rmt-ns10.xml#rmt-ns10-027": {
+    "expected": "accept",
+    "final_classification": "SUPPORTED_ACCEPT",
+    "identity": "xmlconf/eduni/namespaces/1.0/rmt-ns10.xml#rmt-ns10-027",
+    "input_member": "xmlconf/eduni/namespaces/1.0/027.xml",
+    "input_sha256": "37201b398a41bef883c8f058b924a71b0c885f8648d8f78703d97acd78d85ca4",
+    "normative_reason": "Complete original is DTD-free, well-formed and namespace-conformant. The xml prefix is prebound; xml:lang needs no declaration. Validity checking is outside this nonvalidating profile.",
+    "previous_classification": "REQUIRES_REVIEW",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition"
+  },
+  "xmlconf/eduni/namespaces/1.0/rmt-ns10.xml#rmt-ns10-028": {
+    "expected": "accept",
+    "final_classification": "SUPPORTED_ACCEPT",
+    "identity": "xmlconf/eduni/namespaces/1.0/rmt-ns10.xml#rmt-ns10-028",
+    "input_member": "xmlconf/eduni/namespaces/1.0/028.xml",
+    "input_sha256": "7ab821f1f5505bb4b177ce3185b4eadb54255f8ca66a0bbba3869c4eaeb42814",
+    "normative_reason": "Complete original is DTD-free, well-formed and namespace-conformant. The explicit xml binding uses the exact reserved XML namespace URI. Validity checking is outside this nonvalidating profile.",
+    "previous_classification": "REQUIRES_REVIEW",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition"
+  },
+  "xmlconf/eduni/namespaces/1.0/rmt-ns10.xml#rmt-ns10-034": {
+    "expected": "accept",
+    "final_classification": "SUPPORTED_ACCEPT",
+    "identity": "xmlconf/eduni/namespaces/1.0/rmt-ns10.xml#rmt-ns10-034",
+    "input_member": "xmlconf/eduni/namespaces/1.0/034.xml",
+    "input_sha256": "f8d035695aeba297ac17252602989eb2f3756b4364ee23d5e9715abf4da80719",
+    "normative_reason": "Complete original is DTD-free, well-formed and namespace-conformant. The prefix xml2 is not forbidden solely for beginning with xml. Validity checking is outside this nonvalidating profile.",
+    "previous_classification": "REQUIRES_REVIEW",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition"
+  },
+  "xmlconf/eduni/namespaces/1.0/rmt-ns10.xml#rmt-ns10-037": {
+    "expected": "accept",
+    "final_classification": "SUPPORTED_ACCEPT",
+    "identity": "xmlconf/eduni/namespaces/1.0/rmt-ns10.xml#rmt-ns10-037",
+    "input_member": "xmlconf/eduni/namespaces/1.0/037.xml",
+    "input_sha256": "43e727c68d00f8f7f69bb0809e5c1a4a02a1bb0dfea4c3d4b641f60fe8924c9f",
+    "normative_reason": "Complete original is DTD-free, well-formed and namespace-conformant. The two prefixed attributes have distinct namespace URIs and distinct expanded names. Validity checking is outside this nonvalidating profile.",
+    "previous_classification": "REQUIRES_REVIEW",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition"
+  },
+  "xmlconf/eduni/namespaces/1.0/rmt-ns10.xml#rmt-ns10-038": {
+    "expected": "accept",
+    "final_classification": "SUPPORTED_ACCEPT",
+    "identity": "xmlconf/eduni/namespaces/1.0/rmt-ns10.xml#rmt-ns10-038",
+    "input_member": "xmlconf/eduni/namespaces/1.0/038.xml",
+    "input_sha256": "79977d740500941275ced9bd9be883d1c31fbc972dfc2559d6b20b0f4259474e",
+    "normative_reason": "Complete original is DTD-free, well-formed and namespace-conformant. The prefixed and unprefixed attributes have distinct expanded names. Validity checking is outside this nonvalidating profile.",
+    "previous_classification": "REQUIRES_REVIEW",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition"
+  },
+  "xmlconf/eduni/namespaces/1.0/rmt-ns10.xml#rmt-ns10-039": {
+    "expected": "accept",
+    "final_classification": "SUPPORTED_ACCEPT",
+    "identity": "xmlconf/eduni/namespaces/1.0/rmt-ns10.xml#rmt-ns10-039",
+    "input_member": "xmlconf/eduni/namespaces/1.0/039.xml",
+    "input_sha256": "1a8cc7d5962271c8dc4197e8daca681359e47f88c334cf4fdd9308b101203899",
+    "normative_reason": "Complete original is DTD-free, well-formed and namespace-conformant. The default namespace does not apply to the unprefixed ordinary attribute. Validity checking is outside this nonvalidating profile.",
+    "previous_classification": "REQUIRES_REVIEW",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition"
+  },
+  "xmlconf/eduni/namespaces/1.0/rmt-ns10.xml#rmt-ns10-040": {
+    "expected": "accept",
+    "final_classification": "SUPPORTED_ACCEPT",
+    "identity": "xmlconf/eduni/namespaces/1.0/rmt-ns10.xml#rmt-ns10-040",
+    "input_member": "xmlconf/eduni/namespaces/1.0/040.xml",
+    "input_sha256": "051d767fc95489601c86cb04589070859a2c55a157b88f02518597d9787a1eb5",
+    "normative_reason": "Complete original is DTD-free, well-formed and namespace-conformant. The element default namespace does not apply to its unprefixed ordinary attribute. Validity checking is outside this nonvalidating profile.",
+    "previous_classification": "REQUIRES_REVIEW",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition"
+  },
+  "xmlconf/eduni/namespaces/1.0/rmt-ns10.xml#rmt-ns10-041": {
+    "expected": "accept",
+    "final_classification": "SUPPORTED_ACCEPT",
+    "identity": "xmlconf/eduni/namespaces/1.0/rmt-ns10.xml#rmt-ns10-041",
+    "input_member": "xmlconf/eduni/namespaces/1.0/041.xml",
+    "input_sha256": "ba24c9a10d3a32279d4b1682941e7938969ce4106a7ade3f45b7d5bd70333fa5",
+    "normative_reason": "Complete original is DTD-free, well-formed and namespace-conformant. Element and prefixed attribute share a namespace while the unprefixed ordinary attribute has none. Validity checking is outside this nonvalidating profile.",
+    "previous_classification": "REQUIRES_REVIEW",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition"
+  },
+  "xmlconf/oasis/oasis.xml#o-p03fail1": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/oasis/oasis.xml#o-p03fail1",
+    "input_member": "xmlconf/oasis/p03fail1.xml",
+    "input_sha256": "e74340b284574b3577a1a42318b11a94858dc093a308e7bbe53da623d00e522e",
+    "normative_reason": "Literal U+0000 at original scalar offset 0 is outside Fifth Edition Char [2].",
+    "previous_classification": "SUPPORTED_REJECT",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition",
+    "scalar_evidence": [
+      {
+        "offset": 0,
+        "scalar": "U+0000"
+      }
+    ]
+  },
+  "xmlconf/oasis/oasis.xml#o-p03fail10": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/oasis/oasis.xml#o-p03fail10",
+    "input_member": "xmlconf/oasis/p03fail10.xml",
+    "input_sha256": "9fe9df2284b7420ec96cc3b362b48e019171f5635d75fb9abad862053db9db7d",
+    "normative_reason": "Literal U+000B at original scalar offset 0 is outside Fifth Edition Char [2].",
+    "previous_classification": "SUPPORTED_REJECT",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition",
+    "scalar_evidence": [
+      {
+        "offset": 0,
+        "scalar": "U+000B"
+      }
+    ]
+  },
+  "xmlconf/oasis/oasis.xml#o-p03fail11": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/oasis/oasis.xml#o-p03fail11",
+    "input_member": "xmlconf/oasis/p03fail11.xml",
+    "input_sha256": "d066ec27714be6391a7ff041e59d32d5759fb3182278243356f41b8afc87a0a3",
+    "normative_reason": "Literal U+000C at original scalar offset 0 is outside Fifth Edition Char [2].",
+    "previous_classification": "SUPPORTED_REJECT",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition",
+    "scalar_evidence": [
+      {
+        "offset": 0,
+        "scalar": "U+000C"
+      }
+    ]
+  },
+  "xmlconf/oasis/oasis.xml#o-p03fail12": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/oasis/oasis.xml#o-p03fail12",
+    "input_member": "xmlconf/oasis/p03fail12.xml",
+    "input_sha256": "4d64d4c4c76fe2b1781c68c3d9778c64edc37a80885ea23eb708349c3c26588d",
+    "normative_reason": "Literal U+000E at original scalar offset 0 is outside Fifth Edition Char [2].",
+    "previous_classification": "SUPPORTED_REJECT",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition",
+    "scalar_evidence": [
+      {
+        "offset": 0,
+        "scalar": "U+000E"
+      }
+    ]
+  },
+  "xmlconf/oasis/oasis.xml#o-p03fail13": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/oasis/oasis.xml#o-p03fail13",
+    "input_member": "xmlconf/oasis/p03fail13.xml",
+    "input_sha256": "335f3faf5f31b703c82c02704bc3e4d50de5a73a79e45c2731f8c2d7b0ce9c4f",
+    "normative_reason": "Literal U+000F at original scalar offset 0 is outside Fifth Edition Char [2].",
+    "previous_classification": "SUPPORTED_REJECT",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition",
+    "scalar_evidence": [
+      {
+        "offset": 0,
+        "scalar": "U+000F"
+      }
+    ]
+  },
+  "xmlconf/oasis/oasis.xml#o-p03fail14": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/oasis/oasis.xml#o-p03fail14",
+    "input_member": "xmlconf/oasis/p03fail14.xml",
+    "input_sha256": "8d7f10ca7a31cb24da7f21118864b240998f24ca06242005c68e4a9e11ea19d0",
+    "normative_reason": "Literal U+0010 at original scalar offset 0 is outside Fifth Edition Char [2].",
+    "previous_classification": "SUPPORTED_REJECT",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition",
+    "scalar_evidence": [
+      {
+        "offset": 0,
+        "scalar": "U+0010"
+      }
+    ]
+  },
+  "xmlconf/oasis/oasis.xml#o-p03fail15": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/oasis/oasis.xml#o-p03fail15",
+    "input_member": "xmlconf/oasis/p03fail15.xml",
+    "input_sha256": "93970c30aba257d6c092b26be169fb201c8d5856ef6214fed07982c45b31113a",
+    "normative_reason": "Literal U+0011 at original scalar offset 0 is outside Fifth Edition Char [2].",
+    "previous_classification": "SUPPORTED_REJECT",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition",
+    "scalar_evidence": [
+      {
+        "offset": 0,
+        "scalar": "U+0011"
+      }
+    ]
+  },
+  "xmlconf/oasis/oasis.xml#o-p03fail16": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/oasis/oasis.xml#o-p03fail16",
+    "input_member": "xmlconf/oasis/p03fail16.xml",
+    "input_sha256": "ac0d18301f3d9db30081eb19db21e2017e9c87b1486637f5a856d7bc781b456f",
+    "normative_reason": "Literal U+0012 at original scalar offset 0 is outside Fifth Edition Char [2].",
+    "previous_classification": "SUPPORTED_REJECT",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition",
+    "scalar_evidence": [
+      {
+        "offset": 0,
+        "scalar": "U+0012"
+      }
+    ]
+  },
+  "xmlconf/oasis/oasis.xml#o-p03fail17": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/oasis/oasis.xml#o-p03fail17",
+    "input_member": "xmlconf/oasis/p03fail17.xml",
+    "input_sha256": "cbdfb9732e1a8622fd0e6424d0763de03c8a77b47f61e089430a0119bdebcbd6",
+    "normative_reason": "Literal U+0013 at original scalar offset 0 is outside Fifth Edition Char [2].",
+    "previous_classification": "SUPPORTED_REJECT",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition",
+    "scalar_evidence": [
+      {
+        "offset": 0,
+        "scalar": "U+0013"
+      }
+    ]
+  },
+  "xmlconf/oasis/oasis.xml#o-p03fail18": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/oasis/oasis.xml#o-p03fail18",
+    "input_member": "xmlconf/oasis/p03fail18.xml",
+    "input_sha256": "81cde841d064b66d0b6481d2bbb4c217b4a6dcd6ff9b15e69e5323a56a9513f4",
+    "normative_reason": "Literal U+0014 at original scalar offset 0 is outside Fifth Edition Char [2].",
+    "previous_classification": "SUPPORTED_REJECT",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition",
+    "scalar_evidence": [
+      {
+        "offset": 0,
+        "scalar": "U+0014"
+      }
+    ]
+  },
+  "xmlconf/oasis/oasis.xml#o-p03fail19": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/oasis/oasis.xml#o-p03fail19",
+    "input_member": "xmlconf/oasis/p03fail19.xml",
+    "input_sha256": "e84bc1e505e92f82b086a97281c0e5cb1c41ead22b0f902db7f3fe1ef1e60754",
+    "normative_reason": "Literal U+0015 at original scalar offset 0 is outside Fifth Edition Char [2].",
+    "previous_classification": "SUPPORTED_REJECT",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition",
+    "scalar_evidence": [
+      {
+        "offset": 0,
+        "scalar": "U+0015"
+      }
+    ]
+  },
+  "xmlconf/oasis/oasis.xml#o-p03fail2": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/oasis/oasis.xml#o-p03fail2",
+    "input_member": "xmlconf/oasis/p03fail2.xml",
+    "input_sha256": "1bbe92be0a8f23ec5a9545972e32300cd03247e74f8eb6ec30ddc3866e051ab3",
+    "normative_reason": "Literal U+0001 at original scalar offset 0 is outside Fifth Edition Char [2].",
+    "previous_classification": "SUPPORTED_REJECT",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition",
+    "scalar_evidence": [
+      {
+        "offset": 0,
+        "scalar": "U+0001"
+      }
+    ]
+  },
+  "xmlconf/oasis/oasis.xml#o-p03fail20": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/oasis/oasis.xml#o-p03fail20",
+    "input_member": "xmlconf/oasis/p03fail20.xml",
+    "input_sha256": "5a0a523addcd8ee0e16aa68118a5e37aa762a51b41775b0f5f49f50ef030cc33",
+    "normative_reason": "Literal U+0016 at original scalar offset 0 is outside Fifth Edition Char [2].",
+    "previous_classification": "SUPPORTED_REJECT",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition",
+    "scalar_evidence": [
+      {
+        "offset": 0,
+        "scalar": "U+0016"
+      }
+    ]
+  },
+  "xmlconf/oasis/oasis.xml#o-p03fail21": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/oasis/oasis.xml#o-p03fail21",
+    "input_member": "xmlconf/oasis/p03fail21.xml",
+    "input_sha256": "d71ce70f2c0544171c72ad129b5b0d905ed96e01a21ff7ae435c3d1b41f35b7f",
+    "normative_reason": "Literal U+0017 at original scalar offset 0 is outside Fifth Edition Char [2].",
+    "previous_classification": "SUPPORTED_REJECT",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition",
+    "scalar_evidence": [
+      {
+        "offset": 0,
+        "scalar": "U+0017"
+      }
+    ]
+  },
+  "xmlconf/oasis/oasis.xml#o-p03fail22": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/oasis/oasis.xml#o-p03fail22",
+    "input_member": "xmlconf/oasis/p03fail22.xml",
+    "input_sha256": "60e2145bcfceec267f9d47b3aa5331856c358d38d9d2168c904c008fdf4fa92d",
+    "normative_reason": "Literal U+0018 at original scalar offset 0 is outside Fifth Edition Char [2].",
+    "previous_classification": "SUPPORTED_REJECT",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition",
+    "scalar_evidence": [
+      {
+        "offset": 0,
+        "scalar": "U+0018"
+      }
+    ]
+  },
+  "xmlconf/oasis/oasis.xml#o-p03fail23": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/oasis/oasis.xml#o-p03fail23",
+    "input_member": "xmlconf/oasis/p03fail23.xml",
+    "input_sha256": "957466c3ec5f8728cc853c678ef99786b84415b05a32f8f02c46ee94edbfe3d8",
+    "normative_reason": "Literal U+0019 at original scalar offset 0 is outside Fifth Edition Char [2].",
+    "previous_classification": "SUPPORTED_REJECT",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition",
+    "scalar_evidence": [
+      {
+        "offset": 0,
+        "scalar": "U+0019"
+      }
+    ]
+  },
+  "xmlconf/oasis/oasis.xml#o-p03fail24": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/oasis/oasis.xml#o-p03fail24",
+    "input_member": "xmlconf/oasis/p03fail24.xml",
+    "input_sha256": "2497f7960a29c866ce2c25d5572f22a72c8e430bfbb625c42d13ace7c1e921ef",
+    "normative_reason": "Literal U+001A at original scalar offset 0 is outside Fifth Edition Char [2].",
+    "previous_classification": "SUPPORTED_REJECT",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition",
+    "scalar_evidence": [
+      {
+        "offset": 0,
+        "scalar": "U+001A"
+      }
+    ]
+  },
+  "xmlconf/oasis/oasis.xml#o-p03fail25": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/oasis/oasis.xml#o-p03fail25",
+    "input_member": "xmlconf/oasis/p03fail25.xml",
+    "input_sha256": "c1d84e3de29bec9b0926a9de9d259974e600009487044acf741655b201531b9f",
+    "normative_reason": "Literal U+001B at original scalar offset 0 is outside Fifth Edition Char [2].",
+    "previous_classification": "SUPPORTED_REJECT",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition",
+    "scalar_evidence": [
+      {
+        "offset": 0,
+        "scalar": "U+001B"
+      }
+    ]
+  },
+  "xmlconf/oasis/oasis.xml#o-p03fail26": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/oasis/oasis.xml#o-p03fail26",
+    "input_member": "xmlconf/oasis/p03fail26.xml",
+    "input_sha256": "12d866c0b259cd5275515e014d5401c599caf4b20f9c8c1a173111178ea1211c",
+    "normative_reason": "Literal U+001C at original scalar offset 0 is outside Fifth Edition Char [2].",
+    "previous_classification": "SUPPORTED_REJECT",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition",
+    "scalar_evidence": [
+      {
+        "offset": 0,
+        "scalar": "U+001C"
+      }
+    ]
+  },
+  "xmlconf/oasis/oasis.xml#o-p03fail27": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/oasis/oasis.xml#o-p03fail27",
+    "input_member": "xmlconf/oasis/p03fail27.xml",
+    "input_sha256": "7c2ea659f6dc3b3f8e7d4f697c25d204ab909996f00a1bae74bd7905218f62a8",
+    "normative_reason": "Literal U+001D at original scalar offset 0 is outside Fifth Edition Char [2].",
+    "previous_classification": "SUPPORTED_REJECT",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition",
+    "scalar_evidence": [
+      {
+        "offset": 0,
+        "scalar": "U+001D"
+      }
+    ]
+  },
+  "xmlconf/oasis/oasis.xml#o-p03fail28": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/oasis/oasis.xml#o-p03fail28",
+    "input_member": "xmlconf/oasis/p03fail28.xml",
+    "input_sha256": "d3023c88e695c5687077fffd530b379670247117067b98aff913bf3a70cb9e5b",
+    "normative_reason": "Literal U+001E at original scalar offset 0 is outside Fifth Edition Char [2].",
+    "previous_classification": "SUPPORTED_REJECT",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition",
+    "scalar_evidence": [
+      {
+        "offset": 0,
+        "scalar": "U+001E"
+      }
+    ]
+  },
+  "xmlconf/oasis/oasis.xml#o-p03fail29": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/oasis/oasis.xml#o-p03fail29",
+    "input_member": "xmlconf/oasis/p03fail29.xml",
+    "input_sha256": "e026489ab4ef514b9de315a8b403247a27dafed1c19a9f6ec37074c6fcaaea6c",
+    "normative_reason": "Literal U+001F at original scalar offset 0 is outside Fifth Edition Char [2].",
+    "previous_classification": "SUPPORTED_REJECT",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition",
+    "scalar_evidence": [
+      {
+        "offset": 0,
+        "scalar": "U+001F"
+      }
+    ]
+  },
+  "xmlconf/oasis/oasis.xml#o-p03fail3": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/oasis/oasis.xml#o-p03fail3",
+    "input_member": "xmlconf/oasis/p03fail3.xml",
+    "input_sha256": "641c0f77f370a4905b63e93a04bf2f027f30ce0a3d04962eafba2018a6157977",
+    "normative_reason": "Literal U+0002 at original scalar offset 0 is outside Fifth Edition Char [2].",
+    "previous_classification": "SUPPORTED_REJECT",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition",
+    "scalar_evidence": [
+      {
+        "offset": 0,
+        "scalar": "U+0002"
+      }
+    ]
+  },
+  "xmlconf/oasis/oasis.xml#o-p03fail4": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/oasis/oasis.xml#o-p03fail4",
+    "input_member": "xmlconf/oasis/p03fail4.xml",
+    "input_sha256": "6dccd8f27322ba19ab3f5f42424931fe11950b8aad72b10e5c53cdc4e2ae1159",
+    "normative_reason": "Literal U+0003 at original scalar offset 0 is outside Fifth Edition Char [2].",
+    "previous_classification": "SUPPORTED_REJECT",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition",
+    "scalar_evidence": [
+      {
+        "offset": 0,
+        "scalar": "U+0003"
+      }
+    ]
+  },
+  "xmlconf/oasis/oasis.xml#o-p03fail5": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/oasis/oasis.xml#o-p03fail5",
+    "input_member": "xmlconf/oasis/p03fail5.xml",
+    "input_sha256": "88ff88b606f044b498de7b6e9a0a0eb55bed5c7baa3d319e7e1bef1f2cea3c60",
+    "normative_reason": "Literal U+0004 at original scalar offset 0 is outside Fifth Edition Char [2].",
+    "previous_classification": "SUPPORTED_REJECT",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition",
+    "scalar_evidence": [
+      {
+        "offset": 0,
+        "scalar": "U+0004"
+      }
+    ]
+  },
+  "xmlconf/oasis/oasis.xml#o-p03fail7": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/oasis/oasis.xml#o-p03fail7",
+    "input_member": "xmlconf/oasis/p03fail7.xml",
+    "input_sha256": "db9cffc9807dd764de1a959c59b553e4af349f2cae7db9c06c9b0848c0f53742",
+    "normative_reason": "Literal U+0006 at original scalar offset 0 is outside Fifth Edition Char [2].",
+    "previous_classification": "SUPPORTED_REJECT",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition",
+    "scalar_evidence": [
+      {
+        "offset": 0,
+        "scalar": "U+0006"
+      }
+    ]
+  },
+  "xmlconf/oasis/oasis.xml#o-p03fail8": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/oasis/oasis.xml#o-p03fail8",
+    "input_member": "xmlconf/oasis/p03fail8.xml",
+    "input_sha256": "5da22f72c6e3b935df4ea62d91bd57475efa06ec4387e1855c2f38cb4b8462fb",
+    "normative_reason": "Literal U+0007 at original scalar offset 0 is outside Fifth Edition Char [2].",
+    "previous_classification": "SUPPORTED_REJECT",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition",
+    "scalar_evidence": [
+      {
+        "offset": 0,
+        "scalar": "U+0007"
+      }
+    ]
+  },
+  "xmlconf/oasis/oasis.xml#o-p03fail9": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/oasis/oasis.xml#o-p03fail9",
+    "input_member": "xmlconf/oasis/p03fail9.xml",
+    "input_sha256": "cb6a9aee62b51f4646b201de14f17618678a6b301392c2f038535b494362579c",
+    "normative_reason": "Literal U+0008 at original scalar offset 0 is outside Fifth Edition Char [2].",
+    "previous_classification": "SUPPORTED_REJECT",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition",
+    "scalar_evidence": [
+      {
+        "offset": 0,
+        "scalar": "U+0008"
+      }
+    ]
+  },
+  "xmlconf/oasis/oasis.xml#o-p04fail1": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/oasis/oasis.xml#o-p04fail1",
+    "input_member": "xmlconf/oasis/p04fail1.xml",
+    "input_sha256": "732b1032e071aa111e172c3a87f5f81597e5afb74b659ca8f7fcb434b072279d",
+    "normative_reason": "Element name contains U+0040 at scalar offset 2, excluded from NameChar.",
+    "previous_classification": "REQUIRES_REVIEW",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition"
+  },
+  "xmlconf/oasis/oasis.xml#o-p04fail2": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/oasis/oasis.xml#o-p04fail2",
+    "input_member": "xmlconf/oasis/p04fail2.xml",
+    "input_sha256": "b0ec75d8c08f4d36685d8b96cc570f985e8e7e8aa2024218bc30b2f6b711edbe",
+    "normative_reason": "Element name contains U+0023 at scalar offset 2, excluded from NameChar.",
+    "previous_classification": "REQUIRES_REVIEW",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition"
+  },
+  "xmlconf/oasis/oasis.xml#o-p04fail3": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/oasis/oasis.xml#o-p04fail3",
+    "input_member": "xmlconf/oasis/p04fail3.xml",
+    "input_sha256": "3e45352ed06487ee198894a2ec53474283e14966158cfd223e35b2b38c033b6b",
+    "normative_reason": "Element name contains U+0024 at scalar offset 2, excluded from NameChar.",
+    "previous_classification": "REQUIRES_REVIEW",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition"
+  },
+  "xmlconf/oasis/oasis.xml#o-p04pass1": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/oasis/oasis.xml#o-p04pass1",
+    "input_member": "xmlconf/oasis/p04pass1.xml",
+    "input_sha256": "be4956318cb6fedc8b6b39865efb4e1ac519b7f2dce2530ffe0f7d393ba30746",
+    "normative_reason": "The final element QName has prefix A.- without a declaration and a local part beginning U+0300. Mandatory namespace processing rejects both the unbound prefix and invalid NCName start; XML Name acceptance with namespaces disabled is insufficient.",
+    "previous_classification": "REQUIRES_REVIEW",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition"
+  },
+  "xmlconf/oasis/oasis.xml#o-p05fail1": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/oasis/oasis.xml#o-p05fail1",
+    "input_member": "xmlconf/oasis/p05fail1.xml",
+    "input_sha256": "3a038537cab331e525ce387407773cba622740c7871eb57c72e586b9680dd0fe",
+    "normative_reason": "Element name starts with U+0030, a NameChar but not NameStartChar.",
+    "previous_classification": "REQUIRES_REVIEW",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition"
+  },
+  "xmlconf/oasis/oasis.xml#o-p05fail2": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/oasis/oasis.xml#o-p05fail2",
+    "input_member": "xmlconf/oasis/p05fail2.xml",
+    "input_sha256": "458be354e90fdc8687b5327f3c28141bab37cb03d942342b7692f26d538b9acc",
+    "normative_reason": "Element name starts with U+002E, a NameChar but not NameStartChar.",
+    "previous_classification": "REQUIRES_REVIEW",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition"
+  },
+  "xmlconf/oasis/oasis.xml#o-p05fail3": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/oasis/oasis.xml#o-p05fail3",
+    "input_member": "xmlconf/oasis/p05fail3.xml",
+    "input_sha256": "2b739bc018c00927e9f7568fdf4d38024b8ebe14ab4ade16d9f94cb92d634db5",
+    "normative_reason": "Element name starts with U+002D, a NameChar but not NameStartChar.",
+    "previous_classification": "REQUIRES_REVIEW",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition"
+  },
+  "xmlconf/oasis/oasis.xml#o-p05fail4": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/oasis/oasis.xml#o-p05fail4",
+    "input_member": "xmlconf/oasis/p05fail4.xml",
+    "input_sha256": "8601db2868e39f5f47b53e7a63de3c08034097232eff905ee980e87674999676",
+    "normative_reason": "Element name starts with U+0300 at scalar offset 1. Fifth Edition admits it only in NameChar, not NameStartChar; NCName also excludes it initially.",
+    "previous_classification": "REQUIRES_REVIEW",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition"
+  },
+  "xmlconf/oasis/oasis.xml#o-p05fail5": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/oasis/oasis.xml#o-p05fail5",
+    "input_member": "xmlconf/oasis/p05fail5.xml",
+    "input_sha256": "245c23617d65c9dfd4a89881a19394bda93c37e46d9649299ca5c89e57b378b4",
+    "normative_reason": "Element name starts with U+00B7 at scalar offset 1. Fifth Edition admits it only in NameChar, not NameStartChar; NCName also excludes it initially.",
+    "previous_classification": "REQUIRES_REVIEW",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition"
+  },
+  "xmlconf/oasis/oasis.xml#o-p05pass1": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/oasis/oasis.xml#o-p05pass1",
+    "input_member": "xmlconf/oasis/p05pass1.xml",
+    "input_sha256": "7d53d0ed6845fea1b2dd53ce52191b5f76db43d4941b40748aa516700d45f5ca",
+    "normative_reason": "The original contains QNames with local parts beginning U+002E, multiple colons, and a lone colon. These fail NCName/QName constraints; A and _ prefixes are also unbound.",
+    "previous_classification": "REQUIRES_REVIEW",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition"
+  },
+  "xmlconf/oasis/oasis.xml#o-p10fail1": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/oasis/oasis.xml#o-p10fail1",
+    "input_member": "xmlconf/oasis/p10fail1.xml",
+    "input_sha256": "15bc101c84308fe48d90f23faa6161447e9cf9d1f39eaf47732cbf791083f454",
+    "normative_reason": "Attribute value contains a literal U+003C less-than, violating AttValue [10].",
+    "previous_classification": "SUPPORTED_REJECT",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition"
+  },
+  "xmlconf/oasis/oasis.xml#o-p10fail2": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/oasis/oasis.xml#o-p10fail2",
+    "input_member": "xmlconf/oasis/p10fail2.xml",
+    "input_sha256": "f3f8c5b20355226503fb60e16f35ae49ccf43e1635e2bc8a5270bcd51b5db360",
+    "normative_reason": "Attribute value contains a bare U+0026 ampersand before its closing quote.",
+    "previous_classification": "SUPPORTED_REJECT",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition"
+  },
+  "xmlconf/oasis/oasis.xml#o-p10fail3": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/oasis/oasis.xml#o-p10fail3",
+    "input_member": "xmlconf/oasis/p10fail3.xml",
+    "input_sha256": "8d667afe0d32db43be873c031c9750fba802d90cda2889c93f0f9efd670c58db",
+    "normative_reason": "Attribute value opens with a single quote but has only a double quote before EOF.",
+    "previous_classification": "SUPPORTED_REJECT",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition"
+  },
+  "xmlconf/xmltest/xmltest.xml#not-wf-sa-002": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/xmltest/xmltest.xml#not-wf-sa-002",
+    "input_member": "xmlconf/xmltest/not-wf/sa/002.xml",
+    "input_sha256": "4f2607e43da9c9477811338c428f9b6fdddcdb25507f1d995384e521b41c884f",
+    "normative_reason": "Element name starts with U+002E, excluded from NameStartChar.",
+    "previous_classification": "REQUIRES_REVIEW",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition"
+  },
+  "xmlconf/xmltest/xmltest.xml#not-wf-sa-008": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/xmltest/xmltest.xml#not-wf-sa-008",
+    "input_member": "xmlconf/xmltest/not-wf/sa/008.xml",
+    "input_sha256": "a524830ed8cd602089f74510d60242669dec71872d088a79ed1e6ec09c4352f2",
+    "normative_reason": "Entity reference name starts with U+002E, excluded from NameStartChar.",
+    "previous_classification": "REQUIRES_REVIEW",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition"
+  },
+  "xmlconf/xmltest/xmltest.xml#not-wf-sa-012": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/xmltest/xmltest.xml#not-wf-sa-012",
+    "input_member": "xmlconf/xmltest/not-wf/sa/012.xml",
+    "input_sha256": "123439eebea52b8ff7fb39f95129ade5e36d889b88a718d20c25ddafc81a7fbe",
+    "normative_reason": "Attribute value is unquoted, violating AttValue [10].",
+    "previous_classification": "SUPPORTED_REJECT",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition"
+  },
+  "xmlconf/xmltest/xmltest.xml#not-wf-sa-013": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/xmltest/xmltest.xml#not-wf-sa-013",
+    "input_member": "xmlconf/xmltest/not-wf/sa/013.xml",
+    "input_sha256": "30f4b929abf8eb0ef5e0d459f4e87cd3cce27242a62d74d7e177ae178683feb6",
+    "normative_reason": "Attribute opening double quote has no matching closing double quote.",
+    "previous_classification": "SUPPORTED_REJECT",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition"
+  },
+  "xmlconf/xmltest/xmltest.xml#not-wf-sa-014": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/xmltest/xmltest.xml#not-wf-sa-014",
+    "input_member": "xmlconf/xmltest/not-wf/sa/014.xml",
+    "input_sha256": "01cdd05cd60496c4ab3975f1985bf10df9b4c596e76a8eaedca376aa585f3aa2",
+    "normative_reason": "Attribute value contains a literal U+003C less-than.",
+    "previous_classification": "SUPPORTED_REJECT",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition"
+  },
+  "xmlconf/xmltest/xmltest.xml#not-wf-sa-020": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/xmltest/xmltest.xml#not-wf-sa-020",
+    "input_member": "xmlconf/xmltest/not-wf/sa/020.xml",
+    "input_sha256": "f7e9792328ac1339699201dfa0bdcf5ce7e2fdfd46d7029f508faea754f0f7c0",
+    "normative_reason": "Attribute value contains a bare U+0026 ampersand followed by whitespace.",
+    "previous_classification": "SUPPORTED_REJECT",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition"
+  },
+  "xmlconf/xmltest/xmltest.xml#not-wf-sa-021": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/xmltest/xmltest.xml#not-wf-sa-021",
+    "input_member": "xmlconf/xmltest/not-wf/sa/021.xml",
+    "input_sha256": "f0a727a0a0df998d33650560c816660ef2135d618b85de0dca3062bff54f738b",
+    "normative_reason": "Attribute value contains an incomplete entity reference without a semicolon.",
+    "previous_classification": "SUPPORTED_REJECT",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition"
+  },
+  "xmlconf/xmltest/xmltest.xml#not-wf-sa-023": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/xmltest/xmltest.xml#not-wf-sa-023",
+    "input_member": "xmlconf/xmltest/not-wf/sa/023.xml",
+    "input_sha256": "26ba7ab33b998e87ed1411ac6045d997a66134c9120e9ca9d9080d7e83607f1f",
+    "normative_reason": "Attribute name starts with U+0031, excluded from NameStartChar.",
+    "previous_classification": "REQUIRES_REVIEW",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition"
+  },
+  "xmlconf/xmltest/xmltest.xml#not-wf-sa-024": {
+    "expected": "reject",
+    "final_classification": "SUPPORTED_REJECT",
+    "identity": "xmlconf/xmltest/xmltest.xml#not-wf-sa-024",
+    "input_member": "xmlconf/xmltest/not-wf/sa/024.xml",
+    "input_sha256": "6ea4b838a87b5f6f98b0a4fc9f51c61693e55b8429957438cdaa8077b666c219",
+    "normative_reason": "Element name starts with U+0031, excluded from NameStartChar.",
+    "previous_classification": "REQUIRES_REVIEW",
+    "reference": "spec/semantics/XML.md sections 1, 4, 5, 6; XML 1.0 Fifth Edition; Namespaces 1.0 Third Edition"
+  }
+}
