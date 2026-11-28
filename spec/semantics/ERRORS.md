@@ -457,7 +457,11 @@ standard prototype listed above.
 | `TlsError` | `Error` | `std:tls/client` / `../io/TLS.md` §9 |
 | `JwtError` | `Error` | `std:auth/jwt` / `../auth/JWT.md` |
 | `MarkdownLimitError` | `Error` | `std:markdown` / `MARKDOWN.md` |
+| `XmlError` | `Error` | `std:xml/xml` / `XML.md` |
 | `ResolutionError` | `Error` | `std:network/resolvers` / `../io/NETWORK.md` §14.7 |
+
+[XML.md](XML.md) owns the XML-specific `XmlError` kind, offset and limit
+payload contract.
 
 Every `ResolutionError` occurrence is fresh and carries an own `kind` slot whose
 value is exactly one of `"noAddress"`, `"unavailable"`, `"denied"` or

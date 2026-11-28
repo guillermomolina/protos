@@ -23,6 +23,21 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.520] - 2026-11-28
+
+### D268-R1 / I182-A — Secure namespace-aware XML Standard Library contract
+
+- Establish `semantics/XML.md` as the normative owner of the ordinary
+  `std:xml/xml` MODULE, the DTD-free XML 1.0 and Namespaces 1.0 profile,
+  ordinary XML records, expanded-name queries, deterministic incremental
+  events, explicit resource budgets, diagnostics, serialization and
+  borrowed text-I/O adapters.
+- Extend `semantics/ERRORS.md` only with the module-specific `XmlError`
+  prototype and its normative ownership reference.
+- Update `PROTOS_LANGUAGE_SPEC.md` and the canonical normative ownership
+  map without introducing Core types, Prelude bindings, grammar changes
+  or implicit I/O authority.
+
 ## [0.1.519] - 2026-11-27
 
 ### D266-D1 / I183 — Reusable semantic Markdown parser

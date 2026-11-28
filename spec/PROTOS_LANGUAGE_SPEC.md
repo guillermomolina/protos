@@ -17,6 +17,10 @@ type nor a global storage capability.
 The independently importable Standard Library `std:markdown` is normatively owned by
 [`semantics/MARKDOWN.md`](semantics/MARKDOWN.md); it adds no Core or Prelude binding.
 
+The independently importable ordinary Standard Library MODULE `std:xml/xml` is
+normatively owned by [`semantics/XML.md`](semantics/XML.md); it introduces
+neither a Core type nor a Prelude binding nor external authority.
+
 Normative concurrency-domain semantics are defined by the modular specifications
 under `concurrency/`. Non-normative unresolved concurrency design notes live in
 `../docs/design/CONCURRENCY_DESIGN.md` and are not a source of observable behavior.

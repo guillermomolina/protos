@@ -195,6 +195,9 @@ Domain owners:
 - spec/semantics/CRYPTO.md — ordinary Actor-local Standard Library
   HMAC-SHA256 module operations, exact Bytes admission, limits, full-tag
   verification, and private backend failure semantics (D244-C).
+- spec/semantics/XML.md — secure DTD-free XML 1.0 Standard Library processing,
+  namespace-aware data records, incremental parsing and serialization,
+  resource budgets, and explicit text-I/O composition (D268-R1).
 - spec/semantics/MATCHING.md — matching protocol, matcher outcomes,
   structural projection.
 - spec/io/IO_CORE.md — cross-cutting I/O capability, commitment, lifecycle,
