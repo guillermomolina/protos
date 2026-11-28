@@ -29,13 +29,13 @@ TOOLCHAIN = {
     "java": {"bytecode_release": 25},
     "graalvm": {
         "distribution": "graalvm-community",
-        "release": "25.5.5.0.3",
+        "release": "25.6.5.1",
         "jdk_feature": 25,
-        "jdk_version": "25.0.5.0.3",
-        "container_channel": "25i5",
-        "container_image": "ghcr.io/graalvm/native-image-community:25i5-25.0.5.0.3-ol10@sha256:2800b5bd11cbb9bf11c92591d05ea37d9a735522bdc0e86827302d998843ad79",
+        "jdk_version": "25.0.5.1",
+        "container_channel": "25i6",
+        "container_image": "ghcr.io/graalvm/native-image-community:25i6-25.0.5.1-ol10@sha256:821333cda14e1f820a6905960f2ff415c6c8ef9fa4ee0978e5b04083bbea0feb",
     },
-    "graal_components": {"version": "25.5.5.0.3"},
+    "graal_components": {"version": "25.6.5.1"},
     "maven": {"minimum_version": "3.9.9", "supported_major": 3},
     "policy": {
         "primary_runtime_alignment": "development-ci-distribution",
@@ -317,7 +317,7 @@ def make_fixture(
         json.dumps(CI_IMAGE_LOCK, indent=2) + "\n",
     )
 
-    components = "24.0.0" if old_c_state else "25.5.5.0.3"
+    components = "24.0.0" if old_c_state else "25.6.5.1"
     graal_dependencies = """<dependencies>
 <dependency><groupId>org.graalvm.sdk</groupId><artifactId>graal-sdk</artifactId><version>${graalvm.version}</version></dependency>
 <dependency><groupId>org.graalvm.polyglot</groupId><artifactId>polyglot</artifactId><version>${graalvm.version}</version></dependency>
@@ -398,12 +398,12 @@ def make_fixture(
         graal_release = "24.0.0"
         launcher = "expected_feature=$(sed -n 's/^java_feature=//p' \"$RUNTIME_META\")\n"
     else:
-        dist_components = "25.5.5.0.3"
+        dist_components = "25.6.5.1"
         feature = "25"
-        java_version = "25.0.5.0.3"
-        graal_release = "25.5.5.0.3"
+        java_version = "25.0.5.1"
+        graal_release = "25.6.5.1"
         launcher = """expected_version=$(sed -n 's/^java_version=//p' "$RUNTIME_META")
-actual_version=25.0.5.0.3
+actual_version=25.0.5.1
 [ "$actual_version" = "$expected_version" ] || supported=0
 """
 
@@ -489,12 +489,12 @@ def main():
 
     good_maven_output = """Apache Maven 3.9.10 (Red Hat 3.9.10-1)
 Maven home: /usr/share/maven
-Java version: 25.0.5.0.3, vendor: GraalVM Community, runtime: /opt/graalvm-community-java25i5
+Java version: 25.0.5.1, vendor: GraalVM Community, runtime: /opt/graalvm-community-java25i6
 """
     runtime_rows = evaluate_maven_runtime(
         TOOLCHAIN,
         good_maven_output,
-        "/opt/graalvm-community-java25i5",
+        "/opt/graalvm-community-java25i6",
         ["maven-3.9.10-1.el10.noarch", "maven-unbound-3.9.10-1.el10.noarch"],
     )
     require(
@@ -505,7 +505,7 @@ Java version: 25.0.5.0.3, vendor: GraalVM Community, runtime: /opt/graalvm-commu
     below_floor_rows = evaluate_maven_runtime(
         TOOLCHAIN,
         good_maven_output.replace("Apache Maven 3.9.10", "Apache Maven 3.9.8"),
-        "/opt/graalvm-community-java25i5",
+        "/opt/graalvm-community-java25i6",
         [],
     )
     require(
@@ -519,7 +519,7 @@ Java version: 25.0.5.0.3, vendor: GraalVM Community, runtime: /opt/graalvm-commu
     wrong_java_rows = evaluate_maven_runtime(
         TOOLCHAIN,
         good_maven_output.replace("vendor: GraalVM Community", "vendor: Oracle"),
-        "/opt/graalvm-community-java25i5",
+        "/opt/graalvm-community-java25i6",
         [],
     )
     require(
@@ -533,10 +533,10 @@ Java version: 25.0.5.0.3, vendor: GraalVM Community, runtime: /opt/graalvm-commu
     wrong_runtime_rows = evaluate_maven_runtime(
         TOOLCHAIN,
         good_maven_output.replace(
-            "runtime: /opt/graalvm-community-java25i5",
+            "runtime: /opt/graalvm-community-java25i6",
             "runtime: /usr/lib/jvm/java-25-openjdk",
         ),
-        "/opt/graalvm-community-java25i5",
+        "/opt/graalvm-community-java25i6",
         [],
     )
     require(
@@ -550,7 +550,7 @@ Java version: 25.0.5.0.3, vendor: GraalVM Community, runtime: /opt/graalvm-commu
     redundant_jdk_rows = evaluate_maven_runtime(
         TOOLCHAIN,
         good_maven_output,
-        "/opt/graalvm-community-java25i5",
+        "/opt/graalvm-community-java25i6",
         ["java-25-openjdk-headless-25.0.1.0.8-1.el10.x86_64"],
     )
     require(

@@ -8,6 +8,12 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.256-SNAPSHOT
+
+- **DIST028.** Adopt GraalVM Community and Truffle 25.6.5.1 with JDK 25.0.5.1 across Maven dependencies, development and CI images, portable distribution tooling and documentation.
+- Remove redundant explicit nullable cache defaults from method-call specializations while retaining explicit node binding required by the existing static partial-evaluation guard.
+- Pin the new CI image by digest and validate JVM and Native Image compatibility, guest Tier-2 compilation, FFM and Native TLS without changing compilerability gates or PE baselines.
+
 ## 0.4.255-SNAPSHOT
 
 - **I187.** Replace CommandLine's private Java Array builder with invocation-local Protos occurrence buffers that grow geometrically and materialize exact-sized Arrays through the existing Array slice operation.

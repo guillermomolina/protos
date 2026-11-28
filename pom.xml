@@ -5,7 +5,7 @@
 
     <groupId>com.guillermomolina</groupId>
     <artifactId>protos</artifactId>
-    <version>0.4.255-SNAPSHOT</version>
+    <version>0.4.256-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <name>Protos</name>
@@ -23,7 +23,7 @@
     <properties>
         <maven.compiler.release>25</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <graalvm.version>25.5.5.0.3</graalvm.version>
+        <graalvm.version>25.6.5.1</graalvm.version>
         <lsp4j.version>1.0.0</lsp4j.version>
         <protos.shade.skip>false</protos.shade.skip>
         <!-- TEST008: the slow-test confirmation run reports separately. -->

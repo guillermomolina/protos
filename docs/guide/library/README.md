@@ -119,7 +119,7 @@ signals an ordinary `Error` (see [Runtime inspection](inspect.md)):
   `std:runtime` deliberately reports which distribution is running through its
   `platform` field.
 - **Portable JVM** — runs on the supported external runtime, GraalVM
-  25.5.5.0.3 (JDK 25.0.5.0.3), with the optimizing runtime and guest JIT.
+  25.6.5.1 (JDK 25.0.5.1), with the optimizing runtime and guest JIT.
 
 Both distributions execute the same Standard Library modules and support guest
 optimization, each under its own runtime contract.

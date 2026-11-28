@@ -327,7 +327,7 @@ exact required GraalVM/JDK identity from that release's manifest and extracted
 `RUNTIME.txt`; do not assume any generic Java 21+ or arbitrary JVM works.
 New DIST022/PLAT073-C portable artifacts additionally declare
 `java_bytecode_release=25` (Java classfile major 69). They require the
-selected exact GraalVM Community 25.5.5.0.3 / JDK 25.0.5.0.3, not a
+selected exact GraalVM Community 25.6.5.1 / JDK 25.0.5.1, not a
 Java 21 runtime or an arbitrary Java 25 implementation. Check older
 published artifacts against their own manifests, not this new baseline.
 

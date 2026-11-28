@@ -58,7 +58,7 @@ jobs:
       protos_matrix: ${{ steps.impact.outputs.matrix }}
       protos_planning_matrix: ${{ steps.impact.outputs.planning_matrix }}
     container:
-      image: ghcr.io/guillermomolina/protos-ci@sha256:44e03c759ccd2b57135f5c0bdbb5060563e858601daa73958ab6cbba2ffc5fe3
+      image: ghcr.io/guillermomolina/protos-ci@sha256:9b409221c6f08424e00fa60fd2538acb8b1fc62a7de6439504f73ffdcb698b0c
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -172,7 +172,7 @@ jobs:
     timeout-minutes: 120
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/guillermomolina/protos-ci@sha256:44e03c759ccd2b57135f5c0bdbb5060563e858601daa73958ab6cbba2ffc5fe3
+      image: ghcr.io/guillermomolina/protos-ci@sha256:9b409221c6f08424e00fa60fd2538acb8b1fc62a7de6439504f73ffdcb698b0c
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -247,7 +247,7 @@ jobs:
       JAVA_TEST_SHARD_COUNT: ${{ needs.prepare.outputs.count }}
       JAVA_TEST_SHARD_INDEX: ${{ matrix.shard }}
     container:
-      image: ghcr.io/guillermomolina/protos-ci@sha256:44e03c759ccd2b57135f5c0bdbb5060563e858601daa73958ab6cbba2ffc5fe3
+      image: ghcr.io/guillermomolina/protos-ci@sha256:9b409221c6f08424e00fa60fd2538acb8b1fc62a7de6439504f73ffdcb698b0c
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -323,7 +323,7 @@ jobs:
       JAVA_TEST_SHARD_INDEX: "1"
       JAVA_SERIAL_REPORTS: target/java-test-reports/serial
     container:
-      image: ghcr.io/guillermomolina/protos-ci@sha256:44e03c759ccd2b57135f5c0bdbb5060563e858601daa73958ab6cbba2ffc5fe3
+      image: ghcr.io/guillermomolina/protos-ci@sha256:9b409221c6f08424e00fa60fd2538acb8b1fc62a7de6439504f73ffdcb698b0c
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -401,7 +401,7 @@ jobs:
     env:
       PROTOS_REPOSITORY_TEST_SCOPE: ${{ matrix.scope }}
     container:
-      image: ghcr.io/guillermomolina/protos-ci@sha256:44e03c759ccd2b57135f5c0bdbb5060563e858601daa73958ab6cbba2ffc5fe3
+      image: ghcr.io/guillermomolina/protos-ci@sha256:9b409221c6f08424e00fa60fd2538acb8b1fc62a7de6439504f73ffdcb698b0c
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -493,7 +493,7 @@ jobs:
       PROTOS_REPOSITORY_TEST_SCOPE: ${{ matrix.scope }}
       PROTOS_TEST_SHARD_INDEX: ${{ matrix.shard }}
     container:
-      image: ghcr.io/guillermomolina/protos-ci@sha256:44e03c759ccd2b57135f5c0bdbb5060563e858601daa73958ab6cbba2ffc5fe3
+      image: ghcr.io/guillermomolina/protos-ci@sha256:9b409221c6f08424e00fa60fd2538acb8b1fc62a7de6439504f73ffdcb698b0c
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -593,7 +593,7 @@ jobs:
     timeout-minutes: 120
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/guillermomolina/protos-ci@sha256:44e03c759ccd2b57135f5c0bdbb5060563e858601daa73958ab6cbba2ffc5fe3
+      image: ghcr.io/guillermomolina/protos-ci@sha256:9b409221c6f08424e00fa60fd2538acb8b1fc62a7de6439504f73ffdcb698b0c
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -662,7 +662,7 @@ jobs:
     timeout-minutes: 120
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/guillermomolina/protos-ci@sha256:44e03c759ccd2b57135f5c0bdbb5060563e858601daa73958ab6cbba2ffc5fe3
+      image: ghcr.io/guillermomolina/protos-ci@sha256:9b409221c6f08424e00fa60fd2538acb8b1fc62a7de6439504f73ffdcb698b0c
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}

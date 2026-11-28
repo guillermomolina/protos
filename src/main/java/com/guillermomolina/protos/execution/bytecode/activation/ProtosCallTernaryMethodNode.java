@@ -103,8 +103,7 @@ abstract class ProtosCallTernaryMethodNode extends Node {
                     Shape cachedShape,
             @Exclusive @Cached(
                     value = "callSlotGetter(cachedShape)",
-                    allowUncached = true,
-                    neverDefault = false)
+                    allowUncached = true)
                     PropertyGetter cachedLocalCallGetter,
             @Cached("cachedCallable.codeStableAssumptionForRuntime()")
                     Assumption cachedCodeStable,
@@ -175,8 +174,7 @@ abstract class ProtosCallTernaryMethodNode extends Node {
                     Shape cachedShape,
             @Exclusive @Cached(
                     value = "callSlotGetter(cachedShape)",
-                    allowUncached = true,
-                    neverDefault = false)
+                    allowUncached = true)
                     PropertyGetter cachedLocalCallGetter,
             @Exclusive @Cached ProtosFunctionCallDispatchers.FunctionCachedCallNode call) {
         Object outcome = call.execute(

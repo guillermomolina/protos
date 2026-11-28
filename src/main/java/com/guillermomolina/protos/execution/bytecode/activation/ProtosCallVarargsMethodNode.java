@@ -82,8 +82,7 @@ abstract class ProtosCallVarargsMethodNode extends Node {
                     Shape cachedShape,
             @Exclusive @Cached(
                     value = "callSlotGetter(cachedShape)",
-                    allowUncached = true,
-                    neverDefault = false)
+                    allowUncached = true)
                     PropertyGetter cachedLocalCallGetter,
             @Exclusive @Cached ProtosFunctionCallDispatchers.FunctionCachedCallNode call) {
         Object outcome = call.execute(

@@ -1,4 +1,4 @@
-FROM ghcr.io/graalvm/native-image-community:25i5-25.0.5.0.3-ol10@sha256:2800b5bd11cbb9bf11c92591d05ea37d9a735522bdc0e86827302d998843ad79
+FROM ghcr.io/graalvm/native-image-community:25i6-25.0.5.1-ol10@sha256:821333cda14e1f820a6905960f2ff415c6c8ef9fa4ee0978e5b04083bbea0feb
 
 # Native Image bases default to the native-image launcher. This shared dev/CI
 # image must accept arbitrary commands supplied by Docker and GitHub Actions.

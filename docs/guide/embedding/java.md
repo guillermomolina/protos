@@ -37,7 +37,7 @@ relying on it, check the release notes of the distribution you actually use.
 
 ## Prerequisites
 
-- The exact supported GraalVM Community 25.5.5.0.3 / JDK 25.0.5.0.3
+- The exact supported GraalVM Community 25.6.5.1 / JDK 25.0.5.1
   required by the current PLAT073-C/DIST022 portable runtime. Protos
   implementation classes target Java 25 (classfile major 69); a Java 21
   runtime cannot load them. Older releases keep their published runtime

@@ -34,7 +34,7 @@ if str(DIST) not in sys.path:
 import build_ffm_provider
 from build_ffm_provider import BuildError, IMAGE_INFO, SERVICE
 
-SDK_API = "org.graalvm.sdk.nativeimage-25.5.5.0.3.jar"
+SDK_API = "org.graalvm.sdk.nativeimage-25.6.5.1.jar"
 PROVIDER_CLASS = "com/guillermomolina/protos/ffm/FfmForeignProvider.class"
 
 
@@ -66,7 +66,7 @@ def fake_javac(root: Path) -> tuple[str, Path]:
 def installation(root: Path, sdk_jars: dict[str, bool]) -> Path:
     install = root / "protos-portable"
     write_jar(install / "lib" / "protos.jar", {"com/guillermomolina/protos/spi/X.class": b"x"})
-    write_jar(install / "lib" / "runtime" / "org.graalvm.sdk.graal-sdk-25.5.5.0.3.jar",
+    write_jar(install / "lib" / "runtime" / "org.graalvm.sdk.graal-sdk-25.6.5.1.jar",
               {"org/graalvm/other/Other.class": b"x"})
     for name, holds in sdk_jars.items():
         write_jar(install / "lib" / "runtime" / name,

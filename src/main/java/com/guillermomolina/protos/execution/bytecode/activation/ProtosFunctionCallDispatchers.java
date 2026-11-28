@@ -229,8 +229,7 @@ final class ProtosFunctionCallDispatchers {
                     Shape cachedShape,
                 @Exclusive @Cached(
                         value = "callSlotGetter(cachedShape)",
-                        allowUncached = true,
-                        neverDefault = false)
+                        allowUncached = true)
                     PropertyGetter cachedLocalCallGetter,
                 @Cached FunctionCachedCallNode cachedCall) {
             return cachedCall.execute(
@@ -257,8 +256,7 @@ final class ProtosFunctionCallDispatchers {
                     Shape cachedShape,
                 @Exclusive @Cached(
                         value = "callSlotGetter(cachedShape)",
-                        allowUncached = true,
-                        neverDefault = false)
+                        allowUncached = true)
                     PropertyGetter cachedLocalCallGetter,
                 @Cached BuiltinFunctionCachedCallNode cachedCall) {
             return cachedCall.execute(

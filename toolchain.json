@@ -5,14 +5,14 @@
   },
   "graalvm": {
     "distribution": "graalvm-community",
-    "release": "25.5.5.0.3",
+    "release": "25.6.5.1",
     "jdk_feature": 25,
-    "jdk_version": "25.0.5.0.3",
-    "container_channel": "25i5",
-    "container_image": "ghcr.io/graalvm/native-image-community:25i5-25.0.5.0.3-ol10@sha256:2800b5bd11cbb9bf11c92591d05ea37d9a735522bdc0e86827302d998843ad79"
+    "jdk_version": "25.0.5.1",
+    "container_channel": "25i6",
+    "container_image": "ghcr.io/graalvm/native-image-community:25i6-25.0.5.1-ol10@sha256:821333cda14e1f820a6905960f2ff415c6c8ef9fa4ee0978e5b04083bbea0feb"
   },
   "graal_components": {
-    "version": "25.5.5.0.3"
+    "version": "25.6.5.1"
   },
   "maven": {
     "minimum_version": "3.9.9",
